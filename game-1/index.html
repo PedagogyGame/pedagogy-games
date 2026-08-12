@@ -1,1 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AI Labs 101 — 30 AI Terms. One Very Normal Day at the Lab.</title>
+<style>
+  :root{
+    --ink:#dfe7f0;
+    --dim:#8a99ad;
+    --panel:#0d131b;
+    --edge:#2b3a4d;
+    --grn:#69d97f;
+    --ylw:#f2c65a;
+    --red:#e8604e;
+    --cyn:#79c8e8;
+    --bg:#070a0e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);overflow:hidden}
+  body{
+    display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
+    color:var(--ink);-webkit-font-smoothing:none;
+  }
+  #wrap{
+    position:relative;width:100%;max-width:1200px;aspect-ratio:16/9;
+    font-size:10px; /* set by JS */
+    background:#000;overflow:hidden;
+    box-shadow:0 0 0 0.2em #111820, 0 1em 4em rgba(0,0,0,.8);
+  }
+  canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;image-rendering:crisp-edges}
 
+  /* ---------- HUD ---------- */
+  #hud{position:absolute;inset:0;pointer-events:none}
+  #hpbox{position:absolute;left:1.2em;top:1.1em;width:20em}
+  #hplabel{font-size:1.05em;letter-spacing:.18em;color:var(--dim)}
+  #hptrack{margin-top:.35em;height:1.4em;background:#0b1119;border:0.2em solid #29384a;position:relative}
+  #hpfill{position:absolute;left:0;top:0;bottom:0;width:100%;background:var(--grn);transition:width .28s ease, background .28s ease}
+  #hpnum{position:absolute;right:.4em;top:.05em;font-size:1em;color:#03121a;mix-blend-mode:normal;font-weight:700}
+  #round{position:absolute;right:1.2em;top:1.1em;font-size:1.3em;letter-spacing:.14em;color:var(--dim)}
+  #beat{position:absolute;left:1.4em;bottom:1.2em;font-size:1.1em;color:#7d8ea3;opacity:0;transition:opacity .5s}
+  #mute{
+    position:absolute;right:1.2em;bottom:1.1em;pointer-events:auto;cursor:pointer;
+    background:#0d131b;color:#8a99ad;border:0.2em solid #29384a;font:inherit;font-size:1em;
+    padding:.25em .6em;letter-spacing:.1em;
+  }
+  #mute:hover{color:var(--ink)}
+
+  /* ---------- QUESTION PANEL ---------- */
+  #panel{
+    position:absolute;left:3em;right:3em;bottom:3.4em;
+    background:rgba(9,14,20,.94);border:0.2em solid var(--edge);
+    box-shadow:0 0 0 0.2em rgba(0,0,0,.6), 0 0 3em rgba(0,0,0,.7);
+    padding:.9em 1.1em 1em;display:none;
+  }
+  #panel.on{display:block}
+  #prow{display:flex;justify-content:space-between;align-items:baseline;gap:1em}
+  #ptitle{font-size:1.15em;letter-spacing:.22em;color:var(--cyn)}
+  #pdiff{font-size:.95em;letter-spacing:.2em;color:var(--dim)}
+  #psit{margin-top:.5em;font-size:1.15em;line-height:1.45;color:#aab8c9}
+  #pdefbox{margin-top:.7em;border-left:0.3em solid var(--cyn);padding:.15em 0 .15em .8em}
+  #pdeflab{font-size:.9em;letter-spacing:.24em;color:var(--dim)}
+  #pdef{font-size:1.75em;line-height:1.3;margin-top:.15em}
+  #pinrow{margin-top:.85em;display:flex;align-items:stretch;gap:.8em}
+  #pin{
+    flex:1;font:inherit;font-size:1.6em;letter-spacing:.06em;
+    background:#050a0f;color:var(--grn);border:0.15em solid #2f4256;
+    padding:.35em .55em;outline:none;text-transform:uppercase;
+  }
+  #pin:focus{border-color:var(--grn)}
+  #ptimer{
+    width:4.2em;display:flex;align-items:center;justify-content:center;
+    font-size:1.6em;border:0.15em solid #2f4256;background:#050a0f;
+  }
+  #ptrack{margin-top:.5em;height:.55em;background:#0b1119;border:0.15em solid #24313f}
+  #ptfill{height:100%;width:0%;background:var(--grn)}
+  #pfeed{display:none;margin-top:.85em;font-size:1.7em;letter-spacing:.1em}
+  #pfeed.on{display:block}
+  #pfeed small{display:block;font-size:.58em;letter-spacing:.16em;margin-top:.4em;color:var(--dim)}
+  #phint{margin-top:.45em;font-size:.9em;color:#5f7086;letter-spacing:.08em}
+
+  /* ---------- FULL SCREENS ---------- */
+  .screen{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;
+    background:rgba(4,7,11,.82);padding:2em;
+  }
+  .screen.on{display:flex}
+  .screen h1{font-size:5.2em;letter-spacing:.3em;font-weight:700;text-shadow:0 .06em 0 #1b6b3a}
+  .screen h2{font-size:2.4em;letter-spacing:.24em;font-weight:700}
+  .sub{margin-top:.9em;font-size:1.35em;color:#93a3b6;letter-spacing:.06em}
+  .btns{margin-top:2.2em;display:flex;gap:1.2em;flex-wrap:wrap;justify-content:center}
+  button.big{
+    font:inherit;font-size:1.5em;letter-spacing:.2em;cursor:pointer;
+    background:#0e1a14;color:var(--grn);border:0.18em solid var(--grn);
+    padding:.6em 1.4em;
+  }
+  button.big:hover{background:var(--grn);color:#05100a}
+  button.ghost{background:#0d131b;color:#93a3b6;border-color:#3b4c60}
+  button.ghost:hover{background:#3b4c60;color:#fff}
+  button.big:focus-visible,#mute:focus-visible,#pin:focus-visible{outline:0.2em solid var(--cyn);outline-offset:.2em}
+  .rules{margin-top:1.4em;text-align:left;font-size:1.25em;line-height:1.85;color:#b6c3d2;max-width:34em}
+  .rules b{color:var(--ink)}
+  .rules .neg{color:var(--red)}
+  .rules .pos{color:var(--grn)}
+  #stats{margin-top:1.6em;font-size:1.4em;line-height:1.9;letter-spacing:.1em;color:#b6c3d2}
+  #stats span{color:var(--ink)}
+  .tiny{margin-top:2em;font-size:1em;color:#57687c;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="480" height="270"></canvas>
+
+  <div id="hud">
+    <div id="hpbox">
+      <div id="hplabel">LAB HEALTH</div>
+      <div id="hptrack"><div id="hpfill"></div><div id="hpnum">100%</div></div>
+    </div>
+    <div id="round">1 / 30</div>
+    <div id="beat"></div>
+    <button id="mute" title="Sound on/off">SOUND ON</button>
+  </div>
+
+  <div id="panel">
+    <div id="prow"><span id="ptitle">EXPERIMENT ALERT</span><span id="pdiff">EASY</span></div>
+    <div id="psit"></div>
+    <div id="pdefbox">
+      <div id="pdeflab">AI TERM</div>
+      <div id="pdef"></div>
+    </div>
+    <div id="pinrow">
+      <input id="pin" type="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" placeholder="TYPE ANSWER">
+      <div id="ptimer">0</div>
+    </div>
+    <div id="ptrack"><div id="ptfill"></div></div>
+    <div id="phint">ENTER TO SUBMIT</div>
+    <div id="pfeed"></div>
+  </div>
+
+  <div class="screen on" id="scr-title">
+    <h1>LAB HEALTH</h1>
+    <div class="sub">30 AI Terms. One Very Normal Day at the Lab.</div>
+    <div class="btns">
+      <button class="big" id="btn-start">START SHIFT</button>
+      <button class="big ghost" id="btn-how">HOW TO PLAY</button>
+    </div>
+    <div class="tiny">KEYBOARD REQUIRED · THE LAB IS QUIET TODAY</div>
+  </div>
+
+  <div class="screen" id="scr-how">
+    <h2>HOW TO PLAY</h2>
+    <div class="rules">
+      A definition appears. Type the matching AI term before <b>15 seconds</b> expires.<br>
+      Correct by 10 seconds: <span class="pos">+10% Lab Health</span><br>
+      Wrong or timeout — Easy: <span class="neg">-35%</span> · Medium: <span class="neg">-30%</span> · Hard: <span class="neg">-25%</span><br>
+      Missing something basic hurts the lab more than missing something hard.<br>
+      Keep the lab alive through all 30 terms.
+    </div>
+    <div class="btns"><button class="big" id="btn-start2">START SHIFT</button></div>
+  </div>
+
+  <div class="screen" id="scr-end">
+    <h2 id="end-title">LAB SURVIVED</h2>
+    <div class="sub" id="end-sub"></div>
+    <div id="stats"></div>
+    <div class="btns"><button class="big" id="btn-again">PLAY AGAIN</button></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   LAB HEALTH — a very normal day at an AI lab
+   Single file. No dependencies. Canvas pixel art + DOM panel.
+   ============================================================ */
+
+/* ---------- tiny 3x5 bitmap font (for in-world screens) ---------- */
+const FONT = {
+ A:"010101111101101",B:"110101110101110",C:"011100100100011",D:"110101101101110",
+ E:"111100110100111",F:"111100110100100",G:"011100101101011",H:"101101111101101",
+ I:"111010010010111",J:"001001001101010",K:"101101110101101",L:"100100100100111",
+ M:"101111111101101",N:"101111101101101",O:"010101101101010",P:"110101110100100",
+ Q:"010101101111011",R:"110101110101101",S:"011100010001110",T:"111010010010010",
+ U:"101101101101011",V:"101101101101010",W:"101101111111101",X:"101101010101101",
+ Y:"101101010010010",Z:"111001010100111",
+ "0":"111101101101111","1":"010110010010111","2":"111001111100111","3":"111001111001111",
+ "4":"101101111001001","5":"111100111001111","6":"111100111101111","7":"111001001001001",
+ "8":"111101111101111","9":"111101111001111",
+ " ":"000000000000000",".":"000000000000010",":":"000010000010000","-":"000000111000000",
+ "!":"010010010000010","%":"101001010100101","/":"001001010100100","+":"000010111010000",
+ "?":"110001010000010","<":"001010100010001",">":"100010001010100","=":"000111000111000",
+ "*":"000101010101000","(":"001010010010001",")":"100010010010100",",":"000000000010100"
+};
+function ftext(str, x, y, col, sc){
+  sc = sc||1; ctx.fillStyle = col;
+  str = String(str).toUpperCase();
+  let cx = x;
+  for(const ch of str){
+    const g = FONT[ch];
+    if(g){
+      for(let r=0;r<5;r++) for(let q=0;q<3;q++)
+        if(g[r*3+q]==="1") ctx.fillRect(cx+q*sc, y+r*sc, sc, sc);
+    }
+    cx += 4*sc;
+  }
+}
+function ftw(str,sc){ return String(str).length*4*(sc||1); }
+
+/* ---------- canvas basics ---------- */
+const W=480, H=270;
+const cvs=document.getElementById('c');
+const ctx=cvs.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(x|0,y|0,w|0,h|0); }
+
+const P = {
+  wallTop:"#1b2430", wall:"#222d3b", wallLo:"#1a232e", trim:"#2f3d4e",
+  floor:"#2a2119", floor2:"#312820", rug:"#26323f",
+  desk:"#4a3a2a", deskTop:"#5c4934", metal:"#39485a", metalHi:"#4d5f74",
+  glass:"rgba(120,190,220,0.10)", glassEdge:"#3d5c6e",
+  screen:"#08131c", screenLit:"#0d2130", grn:"#69d97f", cyn:"#79c8e8",
+  ylw:"#f2c65a", red:"#e8604e", pink:"#e08fb0", white:"#e6edf5",
+  board:"#dfe6ea", boardInk:"#3a4a5a",
+  skinA:"#e0a878", skinB:"#a9714a", skinC:"#f0c9a0", skinD:"#8a5a3c",
+  hairA:"#2b2b30", hairB:"#5a3720", hairC:"#c9b48a", hairD:"#3b2a45",
+  shirtA:"#4f7fa8", shirtB:"#9c5f7a", shirtC:"#6a8f62", shirtD:"#b0763c",
+  pants:"#2c3440", plant:"#3d7a4a", plantLo:"#2e5c39", pot:"#7a4a34",
+  cricket:"#7fae5a", sky:"#7fb6cf", water:"#4fa3c4", deck:"#8a6b47"
+};
+
+const FLOOR_Y = 138;
+
+/* ---------- 30 QUESTIONS ---------- */
+const Q = [
+/* EASY */
+{t:"Model",d:"Learned mathematical system mapping inputs to outputs.",
+ s:"A dashboard shows an input going into a system and a prediction coming out. A coworker points at the whole thing.",
+ dif:0,ev:"desk",ti:"MORNING DASHBOARD",art:"dashboard",alt:["model"]},
+{t:"Parameter",d:"Learned numerical value inside a model.",
+ s:"A config window fills with thousands of tiny changing numbers. You zoom in on one highlighted value and blink.",
+ dif:0,ev:"desk",ti:"CONFIG WINDOW",art:"numbers",alt:["parameter","parameters","weight","weights"]},
+{t:"Training",d:"Adjusting parameters from examples.",
+ s:"Examples pour into the system over and over while the numbers update. A progress bar creeps forward.",
+ dif:0,ev:"desk",ti:"EXPERIMENT RUNNING",art:"progress",alt:["training","train","model training"]},
+{t:"Inference",d:"Using a trained model to produce outputs.",
+ s:"The run is finished. Somebody sends one fresh input into the model and everyone waits for the output.",
+ dif:0,ev:"desk",ti:"RUN COMPLETE",art:"io",alt:["inference","infer","inferencing"]},
+{t:"Loss function",d:"Measure of prediction error.",
+ s:"A graph of prediction error is showing a very large number. A coworker points at it with obvious concern.",
+ dif:0,ev:"graph",ti:"DASHBOARD ANOMALY",art:"loss",alt:["loss function","loss","cost function","objective function","error function"]},
+{t:"Overfitting",d:"Learning training data too specifically.",
+ s:"The model is wonderful on the training dashboard and terrible on the new-data dashboard. Two coworkers stare at the mismatch.",
+ dif:0,ev:"coworker",ti:"WORKPLACE DISCUSSION",art:"compare",alt:["overfitting","overfit","overfitted","over fitting"]},
+{t:"Generalization",d:"Performance on previously unseen data.",
+ s:"A fresh dataset marked NEW enters the system. Everyone watches to see whether performance holds up.",
+ dif:0,ev:"desk",ti:"NEW DATA ARRIVES",art:"compare",alt:["generalization","generalisation","generalize","generalise","generalizing"]},
+{t:"Tokenization",d:"Dividing input into model-readable units.",
+ s:"A sentence on the monitor visibly breaks apart into smaller colored chunks.",
+ dif:0,ev:"desk",ti:"TEXT PIPELINE",art:"tokens",alt:["tokenization","tokenisation","tokenizing","tokenize","tokenising"]},
+{t:"Multimodal",d:"Processing more than one information modality.",
+ s:"An email lands: text, an image, and an audio waveform all going into the same system. You raise an eyebrow.",
+ dif:0,ev:"email",ti:"INCOMING EMAIL",art:"multi",alt:["multimodal","multi modal","multimodality","multi modality"]},
+{t:"Hallucination",d:"Plausible but unsupported model output.",
+ s:"The model answers with total confidence. A coworker checks the source, turns slowly toward you, and points at the screen.",
+ dif:0,ev:"coworker",ti:"FACT CHECK",art:"text",alt:["hallucination","hallucinations","hallucinating","hallucinate"]},
+/* MEDIUM */
+{t:"Gradient descent",d:"Optimization by following decreasing error.",
+ s:"A graph shaped like a landscape appears. A marker walks steadily downhill toward lower error.",
+ dif:1,ev:"graph",ti:"OPTIMIZATION VIEW",art:"hill",alt:["gradient descent","stochastic gradient descent","sgd","gradient decent"]},
+{t:"Backpropagation",d:"Computing gradients through a neural network.",
+ s:"A network diagram goes up on the whiteboard. A coworker traces a line backward from the output all the way to the start.",
+ dif:1,ev:"whiteboard",ti:"WHITEBOARD DEBATE",art:"net",alt:["backpropagation","back propagation","backprop","back prop","backpropogation"]},
+{t:"Learning rate",d:"Size of each optimization step.",
+ s:"Someone turns a knob a bit too far. The graph jumps off the top of the chart and a small warning light comes on.",
+ dif:1,ev:"alarm",ti:"SYSTEM WARNING",art:"spike",alt:["learning rate","step size","lr"]},
+{t:"Regularization",d:"Methods discouraging overfitting.",
+ s:"Training performance has become suspiciously perfect, so you add a constraint to the experiment and rerun it.",
+ dif:1,ev:"desk",ti:"SUSPICIOUSLY PERFECT",art:"loss",alt:["regularization","regularisation","regularize","regularise","weight decay"]},
+{t:"Embedding",d:"Dense numerical representation of meaning or features.",
+ s:"Words on the screen turn into rows of numbers, then into nearby points floating in a visual space.",
+ dif:1,ev:"desk",ti:"VECTOR SPACE",art:"vectors",alt:["embedding","embeddings","vector embedding","word embedding","embedding vector"]},
+{t:"Transformer",d:"Neural architecture built around attention.",
+ s:"A large architecture diagram covers the whiteboard. A coworker walks in and emphatically circles the attention blocks.",
+ dif:1,ev:"whiteboard",ti:"WHITEBOARD DEBATE",art:"net",alt:["transformer","transformers","transformer architecture"]},
+{t:"Attention",d:"Mechanism weighting relevant information dynamically.",
+ s:"While the model processes one word, other words in the sentence light up at different intensities.",
+ dif:1,ev:"desk",ti:"MODEL INTERNALS",art:"tokens",alt:["attention","attention mechanism","self attention","selfattention"]},
+{t:"Context window",d:"Information a model can consider simultaneously.",
+ s:"You keep pasting more text in until a capacity bar on the monitor hits its limit and stops.",
+ dif:1,ev:"desk",ti:"CAPACITY LIMIT",art:"bar",alt:["context window","context length","context limit","context size","context"]},
+{t:"Fine-tuning",d:"Further training for a specific task or domain.",
+ s:"A general model is loaded, then trained further on one small, very specialized dataset.",
+ dif:1,ev:"desk",ti:"SPECIALIZED RUN",art:"progress",alt:["fine tuning","finetuning","fine tune","finetune","fine tuned","sft"]},
+{t:"Zero-shot",d:"Performing a task without task-specific examples.",
+ s:"An email arrives with a completely new task for the model. The example panel beside it is conspicuously empty.",
+ dif:1,ev:"email",ti:"INCOMING EMAIL",art:"io",alt:["zero shot","zeroshot","zero shot learning","zero shot prompting","0 shot"]},
+/* HARD */
+{t:"Transfer learning",d:"Reusing learned knowledge for another task.",
+ s:"A trained model gets dragged out of one project window and into a different task instead of starting over.",
+ dif:2,ev:"desk",ti:"PROJECT REUSE",art:"io",alt:["transfer learning","transfer","knowledge transfer"]},
+{t:"Reinforcement learning",d:"Learning behavior through rewards.",
+ s:"A model picks between actions and collects positive or negative signals. A coworker watches the reward graph without blinking.",
+ dif:2,ev:"coworker",ti:"REWARD WATCH",art:"hill",alt:["reinforcement learning","rl","reward learning"]},
+{t:"RLHF",d:"Reinforcement learning from human feedback.",
+ s:"Human preference choices feed into a training pipeline. You click between two candidate outputs, again and again.",
+ dif:2,ev:"desk",ti:"PREFERENCE LABELING",art:"compare",
+ alt:["rlhf","reinforcement learning from human feedback","reinforcement learning with human feedback","rl from human feedback"]},
+{t:"Reward model",d:"Model estimating preferred behavior.",
+ s:"Two possible responses appear side by side and a separate system quietly assigns each one a preference score.",
+ dif:2,ev:"desk",ti:"SCORING RUN",art:"compare",alt:["reward model","preference model","reward modeling","reward modelling","rm"]},
+{t:"Distillation",d:"Training a smaller model from a larger one.",
+ s:"In the server room, a very large model feeds into a noticeably smaller one. The small model comes online.",
+ dif:2,ev:"server",ti:"SERVER ROOM",art:"io",alt:["distillation","knowledge distillation","model distillation","distill","distilling","distil"]},
+{t:"Quantization",d:"Reducing numerical precision to save resources.",
+ s:"A resource meter in the server room is dangerously high. You change the numerical precision and the bar drops.",
+ dif:2,ev:"server",ti:"SYSTEM WARNING",art:"bar",alt:["quantization","quantisation","quantize","quantise","quantizing","int8 quantization"]},
+{t:"RAG",d:"Generating answers using retrieved external information.",
+ s:"PLEASE LOOK AT THIS. Before answering, the system searches an external document collection and feeds what it finds into the model.",
+ dif:2,ev:"email",ti:"INCOMING EMAIL",art:"docs",
+ alt:["rag","retrieval augmented generation","retrieval augmented gen","retrieval augmentation","retrieval-augmented generation"]},
+{t:"Few-shot",d:"Learning from a few examples in context.",
+ s:"A prompt is assembled with several example input/output pairs, then one new question at the bottom.",
+ dif:2,ev:"desk",ti:"PROMPT WORKBENCH",art:"tokens",alt:["few shot","fewshot","few shot learning","few shot prompting","in context learning","n shot"]},
+{t:"Grounding",d:"Tying output to verifiable information.",
+ s:"A generated answer is visibly linked back to its supporting documents. A coworker checks the evidence and gives a small nod.",
+ dif:2,ev:"coworker",ti:"EVIDENCE CHECK",art:"docs",alt:["grounding","grounded","groundedness","ground","grounding the output"]},
+{t:"Agent",d:"AI system that selects actions toward goals.",
+ s:"An email hands the system a goal. It starts choosing among several tools and actions on its own.",
+ dif:2,ev:"email",ti:"INCOMING EMAIL",art:"actions",alt:["agent","agents","ai agent","agentic","agentic system"]}
+];
+const DIFNAME=["EASY","MEDIUM","HARD"];
+const PENALTY=[35,30,25];
+
+/* ---------- answer matching ---------- */
+function norm(s){
+  return String(s).toLowerCase()
+    .replace(/[\u2010-\u2015]/g,"-")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\b(the|a|an|its|it s)\b/g," ")
+    .replace(/\s+/g," ").trim();
+}
+function isCorrect(input, q){
+  const n = norm(input);
+  if(!n) return false;
+  const keys = [q.t, ...(q.alt||[])].map(norm);
+  return keys.includes(n);
+}
+
+/* ---------- AUDIO (restrained, synthesized) ---------- */
+const A = { ctx:null, on:true, hum:null, fan:null, fanGain:null, master:null };
+function audioInit(){
+  if(A.ctx) return;
+  const AC = window.AudioContext||window.webkitAudioContext;
+  if(!AC) return;
+  A.ctx = new AC();
+  A.master = A.ctx.createGain(); A.master.gain.value = A.on?1:0; A.master.connect(A.ctx.destination);
+  // room hum
+  const nb = noiseBuffer(2);
+  const hum = A.ctx.createBufferSource(); hum.buffer=nb; hum.loop=true;
+  const hf = A.ctx.createBiquadFilter(); hf.type="lowpass"; hf.frequency.value=110;
+  const hg = A.ctx.createGain(); hg.gain.value=0.05;
+  hum.connect(hf); hf.connect(hg); hg.connect(A.master); hum.start();
+  A.hum = hg;
+  // server fan bed (rises in server room)
+  const fan = A.ctx.createBufferSource(); fan.buffer=nb; fan.loop=true;
+  const ff = A.ctx.createBiquadFilter(); ff.type="bandpass"; ff.frequency.value=520; ff.Q.value=0.7;
+  const fg = A.ctx.createGain(); fg.gain.value=0.006;
+  fan.connect(ff); ff.connect(fg); fg.connect(A.master); fan.start();
+  A.fanGain = fg;
+}
+function noiseBuffer(sec){
+  const n = A.ctx.sampleRate*sec, b = A.ctx.createBuffer(1,n,A.ctx.sampleRate), d=b.getChannelData(0);
+  let last=0;
+  for(let i=0;i<n;i++){ const w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.5; }
+  return b;
+}
+function blip(freq, dur, type, vol, slideTo){
+  if(!A.ctx||!A.on) return;
+  const o=A.ctx.createOscillator(), g=A.ctx.createGain();
+  o.type=type||"square"; o.frequency.value=freq;
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, A.ctx.currentTime+dur);
+  g.gain.value=0; g.gain.linearRampToValueAtTime(vol||0.05, A.ctx.currentTime+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001, A.ctx.currentTime+dur);
+  o.connect(g); g.connect(A.master); o.start(); o.stop(A.ctx.currentTime+dur+0.02);
+}
+function click(vol){
+  if(!A.ctx||!A.on) return;
+  const src=A.ctx.createBufferSource(); src.buffer=noiseBuffer(0.03);
+  const f=A.ctx.createBiquadFilter(); f.type="highpass"; f.frequency.value=1800;
+  const g=A.ctx.createGain(); g.gain.value=vol||0.035;
+  g.gain.exponentialRampToValueAtTime(0.0001, A.ctx.currentTime+0.035);
+  src.connect(f); f.connect(g); g.connect(A.master); src.start(); src.stop(A.ctx.currentTime+0.05);
+}
+function thud(){
+  if(!A.ctx||!A.on) return;
+  const o=A.ctx.createOscillator(), g=A.ctx.createGain();
+  o.type="sine"; o.frequency.value=90; o.frequency.exponentialRampToValueAtTime(50,A.ctx.currentTime+0.09);
+  g.gain.value=0.05; g.gain.exponentialRampToValueAtTime(0.0001,A.ctx.currentTime+0.1);
+  o.connect(g); g.connect(A.master); o.start(); o.stop(A.ctx.currentTime+0.12);
+}
+function chime(){ blip(880,0.09,"sine",0.06); setTimeout(()=>blip(1320,0.12,"sine",0.05),90); }
+function alarmBeep(){ blip(640,0.09,"square",0.04); setTimeout(()=>blip(640,0.09,"square",0.04),200); }
+function goodSound(){ blip(660,0.07,"square",0.045); setTimeout(()=>blip(990,0.14,"square",0.04),75); }
+function fastSound(){ blip(880,0.06,"square",0.045); setTimeout(()=>blip(1180,0.06,"square",0.04),60); setTimeout(()=>blip(1560,0.16,"square",0.04),120); }
+function badSound(){ blip(220,0.22,"square",0.045,120); }
+function tick(){ click(0.018); }
+function cricketChirp(){
+  if(!A.ctx||!A.on) return;
+  const t0=A.ctx.currentTime;
+  for(let k=0;k<2;k++){
+    const o=A.ctx.createOscillator(), g=A.ctx.createGain();
+    o.type="triangle"; o.frequency.value=4400+Math.random()*300;
+    const st=t0+k*0.13;
+    g.gain.setValueAtTime(0,st);
+    for(let i=0;i<5;i++){
+      g.gain.linearRampToValueAtTime(0.022, st+i*0.012+0.005);
+      g.gain.linearRampToValueAtTime(0.0,   st+i*0.012+0.011);
+    }
+    o.connect(g); g.connect(A.master); o.start(st); o.stop(st+0.09);
+  }
+}
+
+/* ---------- WORLD STATE ---------- */
+let T = 0;                 // global seconds
+const rnd = (a,b)=>a+Math.random()*(b-a);
+const ri  = (a,b)=>Math.floor(rnd(a,b+1));
+
+const hero = {
+  x:216, y:176,       // seated anchor (head-top y)
+  mode:"desk",        // desk | walking | terminal | returning
+  pose:"type",        // type | sip | idle | surprise | turn | stand | walk | terminal | talk
+  poseUntil:0,
+  wx:0, wy:0, path:null, pathT:0
+};
+const coA = {x:56, y:150, pose:"type"};
+const coB = {x:182, y:112, pose:"board"};
+const coC = {visible:false, x:300, y:218, tx:150, pose:"walk", face:0, timer:0};
+
+const cricket = {spot:0, x:334, y:229, hopAt:0, chirpAt:3};
+const CRICKET_SPOTS = [[334,229],[214,94],[100,246],[42,132],[300,254],[168,168]];
+
+let alarmOn=false, alarmT=0;
+let emailPop=0;          // 0..1 slide-in
+let screenArt="dashboard";
+let screenFlash=0;
+let heroReact=0;         // surprise timer
+
+/* ---------- STATIC BACKGROUND (prerendered) ---------- */
+const bg = document.createElement('canvas'); bg.width=W; bg.height=H;
+const bx = bg.getContext('2d');
+function bpx(x,y,w,h,c){ bx.fillStyle=c; bx.fillRect(x|0,y|0,w|0,h|0); }
+function bline(x1,y1,x2,y2,c){ // rough pixel line
+  const n=Math.max(Math.abs(x2-x1),Math.abs(y2-y1));
+  for(let i=0;i<=n;i++) bpx(x1+(x2-x1)*i/n, y1+(y2-y1)*i/n,1,1,c);
+}
+function buildBG(){
+  // walls
+  bpx(0,0,W,FLOOR_Y,P.wall);
+  bpx(0,0,W,26,P.wallTop);
+  bpx(0,FLOOR_Y-6,W,6,P.trim);
+  // ceiling lights
+  for(let i=0;i<5;i++){ bpx(30+i*96,4,44,4,"#3b4b5e"); bpx(32+i*96,8,40,2,"#5b7186"); }
+  // floor
+  bpx(0,FLOOR_Y,W,H-FLOOR_Y,P.floor);
+  for(let y=FLOOR_Y;y<H;y+=8) for(let x=(y%16===0?0:8);x<W;x+=16) bpx(x,y,8,8,P.floor2);
+  // rug under main desk
+  bpx(168,208,164,44,P.rug); bpx(170,210,160,40,"#2b3947");
+
+  /* --- FRIDGE + SNACK BAR (left) --- */
+  bpx(8,62,32,76,"#b9c3cc"); bpx(8,62,32,3,"#8f9aa4"); bpx(10,64,28,32,"#c9d3dc"); bpx(10,98,28,38,"#c9d3dc");
+  bpx(35,80,3,10,"#6d7883"); bpx(35,104,3,10,"#6d7883");
+  const notes=[[12,68,"#f2c65a"],[24,72,"#e8917a"],[16,84,"#8fd6a0"],[27,90,"#f2c65a"],[13,104,"#9fc0e8"],[26,112,"#e8917a"],[18,124,"#f2c65a"]];
+  for(const n of notes){ bpx(n[0],n[1],7,7,n[2]); bpx(n[0]+1,n[1]+2,5,1,"rgba(0,0,0,.25)"); bpx(n[0]+1,n[1]+4,4,1,"rgba(0,0,0,.25)"); }
+  bpx(44,132,54,6,"#5a6b7d"); bpx(44,138,54,14,"#3b4858"); // counter
+  bpx(50,110,14,22,"#2f3d4e"); bpx(52,113,10,8,P.screen); bpx(53,114,3,3,P.grn); bpx(52,126,10,3,"#1b242e"); // coffee machine
+  bpx(66,120,7,12,"#c4ccd4"); bpx(67,118,5,3,"#8f9aa4"); // carafe
+  bpx(76,122,9,10,"#b0763c"); bpx(78,124,5,2,"#e6d3a8"); // snack box
+  bpx(87,124,8,8,"#6a8f62"); // snack box 2
+  bpx(46,126,5,6,"#c9d3dc"); // cups
+
+  /* --- WHITEBOARD --- */
+  bpx(100,26,96,78,"#8e9aa5"); bpx(102,28,92,74,P.board);
+  const ink=P.boardInk;
+  // architecture sketch
+  for(let i=0;i<3;i++){ bx.fillStyle=ink; bx.fillRect(108+i*22,40,12,8); }
+  bline(120,44,130,44,ink); bline(142,44,152,44,ink); bline(164,44,172,44,ink);
+  bpx(174,38,12,12,ink);
+  bline(112,52,112,62,ink); bline(134,52,134,62,ink); bline(156,52,156,62,ink);
+  // equations
+  for(let r=0;r<4;r++){
+    let x=108;
+    for(let k=0;k<ri(5,9);k++){ const w=ri(3,8); bpx(x,68+r*8,w,2,ink); x+=w+3; if(x>186) break; }
+  }
+  // loss curve doodle
+  for(let i=0;i<28;i++) bpx(108+i,96-Math.round(14*Math.exp(-i/9)),1,1,"#c0554a");
+  bline(106,96,106,80,ink); bline(106,96,138,96,ink);
+  // tiny doodle beside the giant diagram
+  bpx(180,88,2,2,ink); bpx(186,88,2,2,ink); bpx(180,94,8,1,ink); bpx(178,84,12,1,"#7f8b98");
+  bpx(122,30,20,2,ink); bpx(146,30,10,2,ink); // header scrawl
+  bpx(102,100,92,2,"#b9c3cc"); bpx(160,102,14,3,"#c0554a"); bpx(176,102,10,3,"#3a6ea5"); // marker tray
+
+  /* --- WINDOW TO THE PATIO --- */
+  bpx(206,24,86,72,"#4a5b6d"); bpx(208,26,82,68,P.sky);
+  bpx(208,26,82,22,"#9fcede");                    // sky band
+  bpx(208,48,82,10,"#6d9e79");                    // hedge
+  bpx(208,58,82,36,P.deck);                       // deck
+  for(let x=208;x<290;x+=6) bpx(x,58,1,36,"#7a5d3e");
+  bpx(228,64,40,20,"#3f7f96"); bpx(230,66,36,16,P.water);   // jacuzzi
+  for(let i=0;i<5;i++) bpx(233+i*7,68+((i%2)*3),4,1,"#a8dcef");
+  bpx(226,62,44,2,"#c9d3dc");
+  bpx(214,70,8,3,"#c9d3dc"); bpx(215,73,2,8,"#c9d3dc"); bpx(220,73,2,8,"#c9d3dc"); // lounge chair
+  bpx(276,62,4,16,P.pot); bpx(272,52,12,12,P.plant); bpx(274,50,8,6,P.plantLo);     // patio plant
+  bpx(206,24,86,2,"#5f7385"); bpx(248,26,2,68,"#5f7385"); bpx(208,58,82,1,"#5f7385");
+
+  /* --- WALL DASHBOARDS --- */
+  for(let d=0; d<2; d++){
+    const X=300+d*24, Y=30+d*30;
+    bpx(X,Y,22,26,"#111a24"); bpx(X+1,Y+1,20,24,P.screenLit);
+  }
+  bpx(300,30,22,26,"#111a24"); bpx(301,31,20,24,P.screenLit);
+  for(let i=0;i<9;i++) bpx(302+i*2,52-ri(2,16),1,ri(2,16),P.cyn);
+  bpx(326,34,20,24,"#111a24"); bpx(327,35,18,22,P.screenLit);
+  for(let i=0;i<16;i++) bpx(328+i,54-Math.round(16*Math.exp(-i/6)),1,1,P.grn);
+  bpx(302,62,44,4,"#2b3644"); bpx(303,63,26,2,P.ylw);
+
+  /* --- BOOKSHELF --- */
+  bpx(104,110,46,28,"#4a3a2a"); bpx(106,112,42,11,"#2e2419"); bpx(106,125,42,11,"#2e2419");
+  const bookc=["#c0554a","#3a6ea5","#6a8f62","#b0763c","#8a5f9c","#c9b48a"];
+  for(let s=0;s<2;s++){ let x=107; while(x<146){ const w=ri(2,4); bpx(x,113+s*13,w,9,bookc[ri(0,5)]); x+=w+1; } }
+
+  /* --- SERVER ROOM (right) --- */
+  bpx(350,0,W-350,H,"#151d27");
+  bpx(352,FLOOR_Y-4,W-352,H-FLOOR_Y+4,"#202934");
+  for(let y=FLOOR_Y;y<H;y+=8) for(let x=352+((y%16===0)?0:8);x<W;x+=16) bpx(x,y,8,8,"#242e3a");
+  for(let r=0;r<3;r++){ const X=378+r*26; bpx(X,88,20,80,"#2b3644"); bpx(X+1,90,18,76,"#141c26"); }
+  bpx(452,140,24,4,"#4a3a2a"); bpx(452,144,24,16,"#3b2f22");
+  bpx(454,120,20,18,"#111a24"); bpx(455,121,18,16,P.screen);
+  // glass wall + door frame
+  bpx(348,0,4,H,"#3d5c6e");
+  bx.fillStyle=P.glass; bx.fillRect(352,0,W-352,190);
+  bpx(348,0,2,190,"#4f7d92"); bpx(348,240,2,30,"#4f7d92");
+  bpx(346,186,8,2,"#4f7d92"); bpx(346,238,8,2,"#4f7d92");
+  bpx(400,0,1,H,"rgba(140,200,225,.07)");
+  // alarm lamp on wall by the door
+  bpx(340,18,8,7,"#3b4858"); bpx(341,20,6,4,"#5a2b28");
+
+  /* --- MAIN DESK --- */
+  bpx(176,196,136,6,P.deskTop); bpx(176,202,136,30,P.desk); bpx(176,232,136,3,"#33281c");
+  bpx(182,235,4,14,"#33281c"); bpx(302,235,4,14,"#33281c");
+  bpx(176,196,136,1,"#6d5840");
+  bpx(196,196,42,4,"#2b3644"); // keyboard
+  for(let i=0;i<13;i++) bpx(198+i*3,197,2,2,"#48586b");
+  bpx(242,197,6,4,"#2b3644"); bpx(243,197,2,2,"#48586b"); // mouse
+  bpx(160,214,14,18,"#3b4858"); bpx(162,212,10,4,"#2b3644"); // backpack under desk
+  bpx(314,206,10,26,"#2f3d4e"); bpx(315,210,8,3,"#48586b"); bpx(315,216,8,3,"#48586b"); // drawers
+
+  /* --- COWORKER A DESK (left) --- */
+  bpx(30,178,74,5,P.deskTop); bpx(30,183,74,24,P.desk); bpx(32,207,4,10,"#33281c"); bpx(98,207,4,10,"#33281c");
+  bpx(78,152,26,26,"#2b3644"); bpx(79,153,24,22,P.screenLit); bpx(88,175,6,3,"#2b3644");
+  bpx(40,178,22,3,"#2b3644"); bpx(66,179,5,3,"#2b3644");
+  bpx(70,170,6,8,"#c9d3dc"); // water bottle
+  bpx(24,186,7,8,"#6a8f62"); // mug
+
+  /* --- POOL TABLE (foreground left) --- */
+  bpx(8,232,112,34,"#4a3a2a"); bpx(12,236,104,26,"#2f6b4a"); bpx(14,238,100,22,"#3a7f58");
+  bpx(14,238,4,4,"#22523a"); bpx(110,238,4,4,"#22523a"); bpx(14,256,4,4,"#22523a"); bpx(110,256,4,4,"#22523a");
+  bpx(60,246,3,3,"#e6edf5"); bpx(74,244,3,3,"#f2c65a"); bpx(80,250,3,3,"#c0554a"); bpx(48,252,3,3,"#3a6ea5");
+  bpx(16,266,6,4,"#33281c"); bpx(106,266,6,4,"#33281c");
+  bline(22,262,96,240,"#c9b48a");
+
+  /* --- PLANTS / CABLES / DETAIL --- */
+  bpx(328,216,14,16,P.pot); bpx(326,196,18,20,P.plant); bpx(330,190,10,10,P.plantLo); bpx(333,186,4,6,P.plant);
+  bpx(120,160,10,12,P.pot); bpx(118,146,14,14,P.plant); bpx(122,142,7,6,P.plantLo);
+  bpx(176,232,26,2,"#1b2029"); bpx(200,234,30,2,"#1b2029"); // cables
+  bpx(128,196,10,3,"#c9d3dc"); bpx(128,199,10,1,"#8f9aa4"); // side table with papers
+  bpx(124,200,18,3,"#5a6b7d"); bpx(128,203,3,12,"#3b4858"); bpx(136,203,3,12,"#3b4858");
+  bpx(258,190,9,4,"#c0554a"); // headphones hook on monitor arm (drawn later too)
+}
+buildBG();
+
+/* ---------- SPRITES ---------- */
+function drawPerson(x,y,pal,pose,face,ph){
+  // x = left of 10px-wide body, y = top of head. Sprite ~ 10 x 22
+  const sk=pal.sk, hr=pal.hr, sh=pal.sh, pa=P.pants;
+  const bob = (pose==="type") ? (Math.floor(ph*7)%2) : 0;
+  // head
+  px(x+2,y,6,6,sk);
+  px(x+2,y-1,6,2,hr);
+  px(x+1,y+1,1,3,hr); px(x+8,y+1,1,3,hr);
+  // face (only if facing camera)
+  if(face===0||face===2){
+    const eye = (pose==="surprise")?"#101820":"#101820";
+    if(pose==="surprise"){ px(x+3,y+2,2,2,"#f4f8fb"); px(x+6,y+2,2,2,"#f4f8fb"); px(x+3,y+2,1,1,eye); px(x+6,y+2,1,1,eye);
+      px(x+4,y+5,2,1,"#6b3b3b"); }
+    else if(pose==="talk"){ px(x+3,y+3,1,1,eye); px(x+6,y+3,1,1,eye); px(x+4,y+5,2,1,(Math.floor(ph*4)%2)?"#6b3b3b":"#3a2222"); }
+    else { px(x+3,y+3,1,1,eye); px(x+6,y+3,1,1,eye); px(x+4,y+5,2,1,"#c08a6a"); }
+  }
+  // torso
+  px(x+1,y+6,8,10,sh);
+  px(x+1,y+6,8,1,"#00000022");
+  // arms
+  const ay = y+8;
+  if(pose==="type"){
+    px(x-1,ay+bob,2,6,sh); px(x+9,ay+(1-bob),2,6,sh);
+    px(x-1,ay+6+bob,2,2,sk); px(x+9,ay+6+(1-bob),2,2,sk);
+  } else if(pose==="sip"){
+    px(x-1,ay,2,6,sh); px(x+7,ay-3,2,5,sh); px(x+7,ay-5,3,3,"#c0554a"); px(x+8,ay-6,1,1,"#e6edf5");
+  } else if(pose==="point"){
+    const d = face<0 ? -1 : 1;
+    px(x+(d<0?-3:9),ay,3,2,sh); px(x+(d<0?-5:12),ay-1,2,2,sk);
+    px(x+(d<0?9:-1),ay,2,6,sh);
+  } else if(pose==="cross"){
+    px(x,ay+3,10,3,sh); px(x+1,ay+3,2,2,pal.sk); px(x+7,ay+3,2,2,pal.sk);
+  } else if(pose==="shrug"){
+    px(x-2,ay-1,2,4,sh); px(x+10,ay-1,2,4,sh); px(x-3,ay+3,2,2,sk); px(x+11,ay+3,2,2,sk);
+  } else if(pose==="board"){
+    px(x+9,ay-4,2,6,sh); px(x+10,ay-6,2,2,sk); px(x+11,ay-8,1,2,"#c0554a");
+    px(x-1,ay+2,2,5,sh);
+  } else if(pose==="surprise"){
+    px(x-2,ay-2,2,5,sh); px(x+10,ay-2,2,5,sh); px(x-3,ay-4,2,2,sk); px(x+11,ay-4,2,2,sk);
+  } else if(pose==="terminal"){
+    px(x-1,ay+bob,2,6,sh); px(x+9,ay+(1-bob),2,6,sh);
+    px(x-1,ay+6,2,2,sk); px(x+9,ay+6,2,2,sk);
+  } else {
+    px(x-1,ay,2,7,sh); px(x+9,ay,2,7,sh); px(x-1,ay+7,2,2,sk); px(x+9,ay+7,2,2,sk);
+  }
+  // legs
+  if(pose==="walk"){
+    const s=Math.floor(ph*8)%2;
+    px(x+1,y+16,3,6,pa); px(x+6,y+16,3,6,pa);
+    px(x+(s?0:1),y+21,4,2,"#1b2029"); px(x+(s?7:6),y+21,4,2,"#1b2029");
+  } else if(pose==="sit"||pose==="type"||pose==="sip"||pose==="surprise"||pose==="terminal"){
+    px(x+1,y+16,8,4,pa);
+  } else {
+    px(x+1,y+16,3,6,pa); px(x+6,y+16,3,6,pa);
+    px(x+1,y+21,3,2,"#1b2029"); px(x+6,y+21,3,2,"#1b2029");
+  }
+}
+const PAL_HERO={sk:P.skinC,hr:P.hairA,sh:P.shirtA};
+const PAL_A={sk:P.skinB,hr:P.hairB,sh:P.shirtB};
+const PAL_B={sk:P.skinA,hr:P.hairC,sh:P.shirtC};
+const PAL_C={sk:P.skinD,hr:P.hairD,sh:P.shirtD};
+
+function drawChair(x,y){
+  px(x,y,22,4,"#2b3644"); px(x+2,y+4,18,22,"#33404f"); px(x+9,y+26,4,10,"#2b3644");
+  px(x+4,y+36,14,3,"#2b3644"); px(x+3,y+39,3,3,"#1b2029"); px(x+16,y+39,3,3,"#1b2029");
+}
+
+/* ---------- MONITOR SCREEN CONTENT ---------- */
+function drawScreenArt(kind, sx, sy, sw, sh, t){
+  px(sx,sy,sw,sh,P.screen);
+  const g = P.grn, c = P.cyn, y0=sy+2, x0=sx+2;
+  switch(kind){
+    case "dashboard":
+      for(let i=0;i<7;i++){ const hgt=4+((i*5+Math.floor(t*2))%14); px(x0+i*4,sy+sh-4-hgt,3,hgt,c); }
+      px(sx+32,y0+2,14,2,g); px(sx+32,y0+6,10,2,"#2b4a5e"); px(sx+32,y0+10,16,2,"#2b4a5e");
+      ftext("RUN 041",sx+30,sy+sh-9,"#4a7f96",1); break;
+    case "numbers":
+      for(let r=0;r<5;r++) for(let k=0;k<7;k++){
+        const v=(Math.floor(t*3)+r*7+k)%10;
+        ftext(String(v)+".",x0+k*7,y0+r*5,(r===2&&k===3)?P.ylw:"#2f6a86",1);
+      } break;
+    case "progress":{
+      const p=(t*0.22)%1;
+      px(x0,sy+sh/2-3,sw-4,6,"#12212c"); px(x0+1,sy+sh/2-2,(sw-6)*p,4,g);
+      ftext("TRAINING",x0,y0+1,"#4a7f96",1); ftext(Math.floor(p*100)+"%",x0+sw-22,sy+sh/2+6,g,1); break; }
+    case "io":
+      px(x0,sy+sh/2-4,10,8,c); ftext(">",x0+12,sy+sh/2-2,g,1);
+      px(x0+18,sy+sh/2-7,14,14,"#1e3c4c"); px(x0+20,sy+sh/2-5,10,10,"#2b5a70");
+      ftext(">",x0+34,sy+sh/2-2,g,1); px(x0+40,sy+sh/2-4,8,8,(Math.floor(t*2)%2)?g:"#2f6a46"); break;
+    case "loss":{
+      px(x0,sy+sh-6,sw-4,1,"#2b4a5e"); px(x0,y0,1,sh-8,"#2b4a5e");
+      for(let i=0;i<40;i++){ const v=Math.exp(-i/11)*(sh-12)+Math.sin(i+t)*1.2; px(x0+1+i,sy+sh-7-v,1,1,P.red); }
+      ftext("LOSS",x0+2,y0,"#4a7f96",1); break; }
+    case "compare":
+      px(x0,y0,(sw-8)/2,sh-6,"#12212c"); px(x0+(sw-8)/2+4,y0,(sw-8)/2,sh-6,"#12212c");
+      for(let i=0;i<8;i++){ px(x0+2+i*2,sy+sh-8-(i%4+2)*2,1,(i%4+2)*2,g); px(x0+(sw-8)/2+6+i*2,sy+sh-8-((7-i)%3+1)*2,1,((7-i)%3+1)*2,P.red); }
+      ftext("A",x0+2,y0+1,"#4a7f96",1); ftext("B",x0+(sw-8)/2+6,y0+1,"#4a7f96",1); break;
+    case "tokens":{
+      const cols=[c,g,P.ylw,P.pink,"#9fc0e8"];
+      let x=x0; for(let i=0;i<9;i++){ const w=3+((i*3)%5); const lit=(Math.floor(t*3)%9)===i;
+        px(x,sy+sh/2-4,w,8,lit?P.white:cols[i%5]); x+=w+2; if(x>sx+sw-6) break; }
+      ftext("TOKENS",x0,y0,"#4a7f96",1); break; }
+    case "multi":
+      ftext("TXT",x0,y0+1,c,1); px(x0,y0+8,16,10,"#2b5a70"); px(x0+2,y0+13,5,4,g);
+      for(let i=0;i<20;i++) px(x0+22+i,sy+sh/2-Math.abs(Math.sin(i*0.6+t*3))*7,1,Math.abs(Math.sin(i*0.6+t*3))*14,P.ylw);
+      break;
+    case "text":
+      for(let r=0;r<4;r++) px(x0,y0+r*5,sw-6-(r%2)*8,2,r===2?P.ylw:"#2f6a86");
+      ftext("SOURCE?",x0,y0+22,P.red,1); break;
+    case "hill":{
+      px(x0,sy+sh-6,sw-4,1,"#2b4a5e");
+      for(let i=0;i<44;i++){ const v=(Math.cos(i/7)*6+10); px(x0+i,sy+sh-7-v,1,1,c); }
+      const mi=Math.floor((t*7)%36); const mv=(Math.cos(mi/7)*6+10);
+      px(x0+mi-1,sy+sh-10-mv,3,3,P.ylw); break; }
+    case "net":{
+      const lay=[3,4,4,2];
+      for(let l=0;l<4;l++) for(let n=0;n<lay[l];n++){
+        const nx=x0+4+l*13, ny=sy+6+n*6+(4-lay[l])*3;
+        px(nx,ny,3,3,(Math.floor(t*3)%4)===(3-l)?P.ylw:c);
+        if(l>0) for(let m=0;m<lay[l-1];m++){
+          const py=sy+7+m*6+(4-lay[l-1])*3;
+          px(nx-6,(ny+py)/2,5,1,"#245066");
+        }
+      } break; }
+    case "spike":
+      px(x0,sy+sh-6,sw-4,1,"#2b4a5e");
+      for(let i=0;i<26;i++) px(x0+i,sy+sh-8-Math.sin(i)*1.5,1,1,c);
+      for(let i=26;i<44;i++) px(x0+i,sy+sh-8-(i-26)*1.6-Math.random()*2,1,2,P.red);
+      ftext("!",x0+sw-12,y0,P.red,2); break;
+    case "vectors":{
+      for(let i=0;i<14;i++){
+        const ax=x0+((i*13)%(sw-8)), ay=y0+((i*7)%(sh-8));
+        px(ax,ay,2,2,i%3===0?P.ylw:c);
+      }
+      ftext("0.42",x0,sy+sh-8,"#4a7f96",1); break; }
+    case "bar":{
+      const p=0.35+0.55*Math.abs(Math.sin(t*0.7));
+      px(x0,sy+sh/2-5,sw-4,10,"#12212c"); px(x0+1,sy+sh/2-4,(sw-6)*p,8,p>0.8?P.red:g);
+      ftext("CAPACITY",x0,y0,"#4a7f96",1); break; }
+    case "docs":
+      for(let i=0;i<3;i++){ const dx=x0+i*13; px(dx,y0+3,10,14,"#2b5a70"); px(dx+1,y0+5,8,1,c); px(dx+1,y0+8,6,1,c); px(dx+1,y0+11,8,1,c); }
+      ftext(">>",x0+40,y0+8,g,1); px(x0+50,y0+4,8,12,(Math.floor(t*2)%2)?g:"#2f6a46"); break;
+    case "actions":{
+      ftext("GOAL",x0,y0,P.ylw,1);
+      for(let i=0;i<3;i++){ const lit=(Math.floor(t*2)%3)===i;
+        px(x0+i*17,y0+8,15,10,lit?"#2f6a46":"#12212c"); px(x0+i*17+1,y0+9,13,8,lit?g:"#1b3a4a"); }
+      break; }
+  }
+  // scanline + glass
+  for(let y=sy;y<sy+sh;y+=3) px(sx,y,sw,1,"rgba(0,0,0,0.10)");
+}
+
+/* ---------- FRAME RENDER ---------- */
+function render(dt){
+  T += dt;
+  ctx.drawImage(bg,0,0);
+
+  /* server LEDs */
+  for(let r=0;r<3;r++){
+    const X=380+r*26;
+    for(let i=0;i<9;i++){
+      const on = (Math.sin(T*(2+r*0.6)+i*1.7)>0.1);
+      px(X+2,92+i*8,3,2, on?P.grn:"#1c3a2a");
+      px(X+7,92+i*8,3,2, ((i+r)%3===0 && Math.sin(T*3+i)>0)?P.ylw:"#3a3320");
+      px(X+13,92+i*8,4,2,"#243040");
+    }
+  }
+  /* server terminal text */
+  for(let i=0;i<4;i++) px(456,124+i*4,(6+((i*5+Math.floor(T*2))%12)),1,P.grn);
+
+  /* patio steam */
+  for(let i=0;i<4;i++){
+    const yy = 64 - ((T*6+i*7)%14);
+    px(234+i*9, yy, 2,1,"rgba(220,240,255,0.25)");
+  }
+
+  /* alarm lamp */
+  if(alarmOn){
+    const pulse = (Math.sin(T*6)+1)/2;
+    px(341,20,6,4, pulse>0.5?P.red:"#5a2b28");
+    ctx.fillStyle=`rgba(200,60,45,${0.05+0.07*pulse})`; ctx.fillRect(0,0,W,H);
+  }
+
+  /* --- background coworkers --- */
+  drawChair(coA.x-10, coA.y+2);
+  const aPose = (Math.floor(T/6)%5===0)?"sip":"type";
+  drawPerson(coA.x, coA.y, PAL_A, aPose, 0, T);
+  // coworker B at the whiteboard, occasionally steps
+  const bStep = Math.sin(T*0.4)*4;
+  drawPerson(coB.x+bStep, coB.y, PAL_B, (Math.floor(T/7)%3===0)?"walk":"board", 1, T);
+
+  /* --- hero --- */
+  drawChair(206, 178);
+  if(hero.mode==="desk"){
+    drawPerson(210, hero.y, PAL_HERO, hero.pose, 0, T);
+  } else {
+    drawPerson(hero.wx, hero.wy, PAL_HERO,
+      hero.mode==="terminal" ? "terminal" : "walk",
+      hero.mode==="returning"?-1:1, T);
+  }
+
+  /* --- desk redrawn in front of the hero, then the monitor on top --- */
+  px(176,196,136,6,P.deskTop); px(176,202,136,30,P.desk); px(176,232,136,3,"#33281c");
+  px(176,196,136,1,"#6d5840"); px(182,235,4,14,"#33281c"); px(302,235,4,14,"#33281c");
+  px(196,196,42,4,"#2b3644");
+  for(let i=0;i<13;i++) px(198+i*3,197,2,2,"#48586b");
+  px(242,197,6,4,"#2b3644"); px(243,197,2,2,"#48586b");
+  px(314,206,10,26,"#2f3d4e"); px(315,210,8,3,"#48586b"); px(315,216,8,3,"#48586b");
+  px(176,232,26,2,"#1b2029"); px(200,234,30,2,"#1b2029");
+
+  /* --- monitor (sits on the desk) --- */
+  px(238,156,58,40,"#1a222c"); px(239,157,56,38,"#0f1720");
+  drawScreenArt(screenArt, 241, 159, 52, 34, T);
+  px(264,196,6,4,"#1a222c"); px(258,199,18,3,"#232d3a");
+  px(236,160,3,5,"#f2c65a"); px(236,168,3,5,"#e8917a"); // sticky notes on bezel
+  px(294,162,4,10,"#c0554a");                            // headphones on bezel
+  px(228,192,7,6,"#c0554a"); px(229,191,5,1,"#e6edf5");  // mug
+  px(300,192,12,5,"#c9d3dc"); px(301,193,10,1,"#8f9aa4");// notebook
+
+  /* --- debate coworker: foreground, in front of the desk --- */
+  if(coC.visible) drawPerson(coC.x, coC.y, PAL_C, coC.pose, 0, T);
+
+  if(screenFlash>0){
+    ctx.fillStyle=`rgba(255,255,255,${screenFlash*0.25})`; ctx.fillRect(241,159,52,34);
+    screenFlash=Math.max(0,screenFlash-dt*3);
+  }
+
+  /* --- email popup over the screen --- */
+  if(emailPop>0.01){
+    const w=40, h=20, ex=250, ey=163 - 8 + 8*emailPop;
+    ctx.globalAlpha=Math.min(1,emailPop*1.4);
+    px(ex-1,ey-1,w+2,h+2,"#0a0f14"); px(ex,ey,w,h,"#f2e6c8"); px(ex,ey,w,5,"#c0554a");
+    ftext("MAIL",ex+2,ey+1,"#f6f0e0",1);
+    px(ex+2,ey+8,20,2,"#5a4a38"); px(ex+2,ey+12,32,2,"#5a4a38"); px(ex+2,ey+16,16,2,"#5a4a38");
+    ctx.globalAlpha=1;
+  }
+
+  /* --- cricket --- */
+  if(T>cricket.hopAt){
+    cricket.hopAt = T + rnd(4,11);
+    if(Math.random()<0.5){ const s=CRICKET_SPOTS[ri(0,CRICKET_SPOTS.length-1)]; cricket.x=s[0]; cricket.y=s[1]; }
+    else cricket.x += ri(-4,4);
+  }
+  px(cricket.x,cricket.y,2,1,P.cricket);
+  px(cricket.x+2,cricket.y-1,1,1,P.cricket);
+  if(Math.floor(T*6)%2===0) px(cricket.x-1,cricket.y+1,1,1,"#5c8a3f");
+
+  /* vignette */
+  ctx.fillStyle="rgba(0,0,0,0.16)";
+  ctx.fillRect(0,0,W,6); ctx.fillRect(0,H-6,W,6); ctx.fillRect(0,0,6,H); ctx.fillRect(W-6,0,6,H);
+}
+
+/* ---------- HERO SCRIPTED MOVEMENT ---------- */
+const DESK_STAND=[196,214], DOOR=[344,216], TERM=[438,152];
+function walkTo(dest, back){
+  hero.mode = back?"returning":"walking";
+  hero.path = dest; hero.pathT=0;
+  if(hero.wx===0){ hero.wx=196; hero.wy=214; }
+}
+function updateHero(dt){
+  if(hero.mode==="walking"||hero.mode==="returning"){
+    const [tx,ty]=hero.path;
+    const dx=tx-hero.wx, dy=ty-hero.wy, d=Math.hypot(dx,dy);
+    const sp=78*dt;
+    if(d<=sp){ hero.wx=tx; hero.wy=ty; hero.onArrive&&hero.onArrive(); }
+    else { hero.wx+=dx/d*sp; hero.wy+=dy/d*sp;
+      if(Math.floor(T*6)%3===0 && Math.random()<0.25) thud(); }
+  }
+  if(A.fanGain){
+    const target = (hero.mode==="terminal"||hero.mode==="walking") ? 0.028 : 0.006;
+    A.fanGain.gain.value += (target - A.fanGain.gain.value)*Math.min(1,dt*2);
+  }
+  if(heroReact>0){ heroReact-=dt; if(heroReact<=0 && hero.mode==="desk") hero.pose="type"; }
+}
+
+/* ---------- GAME STATE ---------- */
+const el = id=>document.getElementById(id);
+const wrap=el('wrap'), panel=el('panel'), pin=el('pin');
+let state="title";       // title | how | play | end
+let phase="idle";        // intro | ask | feedback | interlude
+let order=[], idx=0, cur=null;
+let health=100, nCorrect=0, nFast=0, nWrong=0;
+let qStart=0, elapsed=0, phaseT=0, lastTickSec=-1;
+let running=false, lastFrame=0;
+
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=ri(0,i); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function buildOrder(){
+  const g=[[],[],[]];
+  Q.forEach((q,i)=>g[q.dif].push(i));
+  order = [...shuffle(g[0]),...shuffle(g[1]),...shuffle(g[2])];
+}
+
+function setHealth(v){
+  health=Math.max(0,Math.min(100,v));
+  el('hpfill').style.width=health+"%";
+  el('hpfill').style.background = health>60?"var(--grn)":health>30?"var(--ylw)":"var(--red)";
+  el('hpnum').textContent=Math.round(health)+"%";
+  el('hpnum').style.color = health>18 ? "#03121a" : "#e8e0d8";
+}
+
+function showBeat(txt){
+  const b=el('beat'); b.textContent=txt; b.style.opacity="1";
+  setTimeout(()=>{ b.style.opacity="0"; }, 1400);
+}
+
+function startGame(){
+  audioInit(); if(A.ctx && A.ctx.state==="suspended") A.ctx.resume();
+  buildOrder(); idx=0; nCorrect=0; nFast=0; nWrong=0; setHealth(100);
+  el('scr-title').classList.remove('on'); el('scr-how').classList.remove('on'); el('scr-end').classList.remove('on');
+  state="play";
+  nextQuestion(0.6);
+}
+
+function nextQuestion(delay){
+  phase="interlude"; phaseT=delay||1.2;
+  panel.classList.remove('on');
+  coC.visible=false; alarmOn=false; emailPop=0;
+  if(hero.mode==="desk") hero.pose = Math.random()<0.3 ? "sip" : "type";
+  const beats=["typing…","coffee sip…","chirp…","the HVAC cycles on…","a chair rolls…","someone laughs quietly…","whiteboard marker squeaks…","notification…"];
+  const b=beats[ri(0,beats.length-1)];
+  if(Math.random()<0.55){
+    showBeat(b);
+    if(b==="chirp…") cricketChirp();
+    if(b==="notification…") setTimeout(chime,300);
+  }
+}
+
+function beginQuestion(){
+  cur = Q[order[idx]];
+  screenArt = cur.art;
+  screenFlash = 1;
+  el('ptitle').textContent = cur.ti;
+  el('pdiff').textContent = DIFNAME[cur.dif];
+  el('psit').textContent = cur.s;
+  el('pdef').textContent = '"'+cur.d+'"';
+  el('round').textContent = (idx+1)+" / 30";
+  el('pfeed').classList.remove('on'); el('pinrow').style.display="flex";
+  el('ptrack').style.display="block"; el('phint').style.display="block";
+  pin.value=""; pin.disabled=false;
+
+  // stage the situation
+  phase="intro";
+  switch(cur.ev){
+    case "email":
+      phaseT=1.5; emailPop=0.001; chime();
+      hero.pose="surprise"; heroReact=1.0; break;
+    case "alarm":
+      phaseT=1.7; alarmOn=true; alarmBeep();
+      hero.pose="surprise"; heroReact=1.2; break;
+    case "graph":
+      phaseT=1.4; hero.pose="surprise"; heroReact=1.1; break;
+    case "coworker":
+      phaseT=2.5; coC.visible=true; coC.x=300; coC.pose="walk";
+      hero.pose="idle"; break;
+    case "whiteboard":
+      phaseT=2.6; coC.visible=true; coC.x=300; coC.pose="walk";
+      hero.pose="idle"; break;
+    case "server":
+      phaseT=3.9; alarmOn=true; alarmBeep();
+      hero.mode="walking"; hero.wx=210; hero.wy=196;
+      hero.onArrive=()=>{
+        if(hero.path===DESK_STAND){ hero.path=DOOR; }
+        else if(hero.path===DOOR){ hero.path=TERM; }
+        else { hero.mode="terminal"; hero.onArrive=null; }
+      };
+      hero.path=DESK_STAND;
+      break;
+    default:
+      phaseT=1.1; hero.pose="type";
+      if(Math.random()<0.25){ hero.pose="surprise"; heroReact=0.8; }
+  }
+}
+
+function askNow(){
+  phase="ask";
+  qStart=performance.now()/1000; elapsed=0; lastTickSec=-1;
+  panel.classList.add('on');
+  setTimeout(()=>{ try{ pin.focus({preventScroll:true}); }catch(e){ pin.focus(); } }, 40);
+  updateTimerUI(0);
+}
+
+let CC=null;
+function colors(){ if(!CC) CC={g:getCSS('--grn'),y:getCSS('--ylw'),r:getCSS('--red')}; return CC; }
+function updateTimerUI(e){
+  const sec=Math.min(15,Math.floor(e));
+  el('ptimer').textContent=sec;
+  const K=colors();
+  const col = e<8 ? K.g : e<10 ? K.y : K.r;
+  el('ptimer').style.color=col;
+  el('ptimer').style.borderColor=col;
+  el('ptfill').style.background=col;
+  el('ptfill').style.width=Math.min(100,(e/15)*100)+"%";
+}
+function getCSS(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function submitAnswer(){
+  if(phase!=="ask") return;
+  const val=pin.value;
+  if(!val.trim()) return;
+  resolve(isCorrect(val,cur) ? (elapsed<=10 ? "fast" : "ok") : "wrong");
+}
+
+function resolve(kind){
+  phase="feedback"; phaseT=1.9;
+  pin.disabled=true;
+  panel.classList.add('on');
+  el('pinrow').style.display="none"; el('ptrack').style.display="none"; el('phint').style.display="none";
+  const f=el('pfeed'); f.classList.add('on');
+  const term=cur.t.toUpperCase();
+
+  if(kind==="wrong"||kind==="timeout"){
+    nWrong++;
+    const pen=PENALTY[cur.dif];
+    setHealth(health-pen);
+    f.style.color=getCSS('--red');
+    f.innerHTML = (kind==="timeout" ? "TIME'S UP — " : "INCORRECT — ") + term +
+      "<small>-"+pen+"% LAB HEALTH</small>";
+    badSound();
+    hero.pose="surprise"; heroReact=1.6;
+    if(coC.visible) coC.pose="shrug";
+  } else {
+    nCorrect++;
+    f.style.color=getCSS('--grn');
+    if(kind==="fast"){
+      nFast++; setHealth(health+10);
+      f.innerHTML = "CORRECT — "+term+"<small style='color:var(--grn)'>FAST ANSWER +10% LAB HEALTH</small>";
+      fastSound();
+    } else {
+      f.innerHTML = "CORRECT — "+term+"<small>LAB HEALTH HOLDS AT "+Math.round(health)+"%</small>";
+      goodSound();
+    }
+    if(coC.visible) coC.pose="cross";
+    hero.pose = hero.mode==="desk" ? "type" : hero.pose;
+  }
+  alarmOn=false;
+}
+
+function afterFeedback(){
+  // send hero home if they were in the server room
+  if(hero.mode==="terminal"){
+    hero.mode="returning"; hero.path=DOOR;
+    hero.onArrive=()=>{
+      if(hero.path===DOOR){ hero.path=DESK_STAND; }
+      else { hero.mode="desk"; hero.pose="type"; hero.onArrive=null; }
+    };
+  }
+  if(health<=0){ endGame(false); return; }
+  idx++;
+  if(idx>=order.length){ endGame(true); return; }
+  nextQuestion(hero.mode!=="desk" ? 4.2 : 1.3);
+}
+
+function endGame(won){
+  state="end"; phase="idle"; panel.classList.remove('on');
+  coC.visible=false; alarmOn=false;
+  el('end-title').textContent = won ? "LAB SURVIVED" : "THE LAB HAS STOPPED THRIVING";
+  el('end-title').style.color = won ? getCSS('--grn') : getCSS('--red');
+  el('end-sub').textContent = won
+    ? "Everyone goes back to their desks. The cricket is still in here somewhere."
+    : "LAB HEALTH: 0% — Somebody quietly refills the coffee machine.";
+  el('stats').innerHTML =
+    "FINAL LAB HEALTH <span>"+Math.round(health)+"%</span><br>"+
+    "CORRECT ANSWERS <span>"+nCorrect+"</span><br>"+
+    "FAST ANSWERS <span>"+nFast+"</span><br>"+
+    "INCORRECT ANSWERS <span>"+nWrong+"</span>";
+  el('btn-again').textContent = won ? "PLAY AGAIN" : "TRY AGAIN";
+  el('scr-end').classList.add('on');
+  if(won){ blip(660,0.1,"square",0.05); setTimeout(()=>blip(880,0.1,"square",0.05),120); setTimeout(()=>blip(1320,0.3,"square",0.045),240); }
+  else { blip(300,0.2,"square",0.045,150); setTimeout(()=>blip(200,0.4,"square",0.04,100),200); }
+}
+
+/* ---------- MAIN LOOP ---------- */
+function loop(ts){
+  requestAnimationFrame(loop);
+  const now=ts/1000;
+  let dt = lastFrame ? Math.min(0.05, now-lastFrame) : 0.016;
+  lastFrame=now;
+
+  // coworker C approach animation
+  if(coC.visible){
+    if(coC.pose==="walk"){
+      coC.x -= 70*dt;
+      if(coC.x<=coC.tx){ coC.x=coC.tx; coC.pose="point"; }
+    } else if(phase==="ask"){
+      const cyc=Math.floor(T*0.7)%3;
+      coC.pose = cyc===0?"point":cyc===1?"cross":"talk";
+    }
+  }
+
+  updateHero(dt);
+
+  if(state==="play"){
+    if(phase==="intro"||phase==="feedback"||phase==="interlude"){
+      phaseT-=dt;
+      if(phase==="intro" && emailPop>0) emailPop=Math.min(1,emailPop+dt*3);
+      if(phaseT<=0){
+        if(phase==="interlude") beginQuestion();
+        else if(phase==="intro") askNow();
+        else afterFeedback();
+      }
+    } else if(phase==="ask"){
+      elapsed = performance.now()/1000 - qStart;
+      updateTimerUI(elapsed);
+      const s=Math.floor(elapsed);
+      if(s!==lastTickSec){ lastTickSec=s; if(s>=10 && s<15) tick(); }
+      if(elapsed>=15) resolve("timeout");
+    }
+  }
+  render(dt);
+}
+requestAnimationFrame(loop);
+
+/* ---------- UI WIRING ---------- */
+function fitFont(){
+  const w=wrap.clientWidth;
+  wrap.style.fontSize=(w/48)+"px";
+}
+new ResizeObserver(fitFont).observe(wrap); fitFont();
+
+pin.addEventListener('keydown', e=>{
+  if(e.key==="Enter"){ e.preventDefault(); submitAnswer(); }
+  else if(e.key.length===1 || e.key==="Backspace"){ click(0.03); }
+});
+wrap.addEventListener('pointerdown', ()=>{ if(phase==="ask") pin.focus(); });
+document.addEventListener('keydown', e=>{
+  if(state==="play" && phase==="ask" && document.activeElement!==pin && e.key.length===1) pin.focus();
+});
+
+el('btn-start').onclick=startGame;
+el('btn-start2').onclick=startGame;
+el('btn-again').onclick=startGame;
+el('btn-how').onclick=()=>{ el('scr-title').classList.remove('on'); el('scr-how').classList.add('on'); };
+el('mute').onclick=()=>{
+  audioInit(); A.on=!A.on;
+  if(A.master) A.master.gain.value=A.on?1:0;
+  el('mute').textContent = A.on ? "SOUND ON" : "SOUND OFF";
+};
+
+/* idle ambience on the title screen */
+setInterval(()=>{
+  if(state!=="play" || phase==="interlude"){
+    if(Math.random()<0.25) cricketChirp();
+  }
+}, 9000);
+
+setHealth(100);
+</script>
+</body>
+</html>
