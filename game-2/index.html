@@ -3,668 +3,769 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tutti — Thirty Questions Around the Orchestra</title>
+<title>The Hundred · A Music Theory Game</title>
 <style>
   :root{
-    --hall:#0a0b14;
-    --hall-2:#141733;
-    --brass:#e8b33c;
-    --string:#c8763a;
-    --wood:#3fa8a0;
-    --perc:#b8455a;
-    --cream:#f2ecdc;
-    --dim:#8f92ad;
-    --good:#5fd39a;
-    --bad:#e2606a;
-    --panel:rgba(8,9,20,.92);
-    --display:"Haettenschweiler","Arial Narrow Bold","Impact","Oswald",sans-serif;
-    --body:"Segoe UI",system-ui,-apple-system,sans-serif;
-    --hud:ui-monospace,"SFMono-Regular","Consolas","Courier New",monospace;
+    --void:#07060c;
+    --cream:#f3ecdd;
+    --brass:#d9a445;
+    --brass-lo:#8a6220;
+    --ink:#100e18;
+    --good:#7ce0ad;
+    --miss:#f0776a;
+    --rule:rgba(243,236,221,.16);
+    --serif:"Palatino Linotype","Book Antiqua",Palatino,"Iowan Old Style",Georgia,serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;overflow:hidden}
-  body{
-    background:radial-gradient(ellipse at 50% 30%, #1b1f42 0%, var(--hall) 62%, #05060d 100%);
-    font-family:var(--body);
-    color:var(--cream);
-    -webkit-font-smoothing:none;
-  }
+  html,body{height:100%}
+  body{background:var(--void);color:var(--cream);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+  #app{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
 
-  /* ---------- 3D HALL ---------- */
-  #stage{position:fixed;inset:0;perspective:1000px;perspective-origin:50% 44%;overflow:hidden}
-  #world{
-    position:absolute;left:50%;top:56%;
-    transform-style:preserve-3d;
-    transition:transform 1500ms cubic-bezier(.66,.02,.22,1);
-  }
-  #floor{
-    position:absolute;left:-1400px;top:0;width:2800px;height:2800px;
-    transform-origin:50% 0%;transform:rotateX(-90deg);
-    background:
-      repeating-linear-gradient(90deg,rgba(255,255,255,.045) 0 2px,transparent 2px 88px),
-      repeating-linear-gradient(0deg,rgba(255,255,255,.045) 0 2px,transparent 2px 88px),
-      linear-gradient(#20203c,#0a0b16 60%);
-  }
-  #podium{
-    position:absolute;left:-46px;top:-26px;width:92px;height:26px;
-    background:linear-gradient(#2c2f55,#171a33);
-    border:2px solid #3d4272;transform-style:preserve-3d;
-  }
+  .hud{display:flex;align-items:baseline;gap:22px;padding:12px 20px;border-bottom:1px solid var(--rule);
+       background:linear-gradient(180deg,#0b0912,rgba(11,9,18,0));z-index:5;flex-wrap:wrap}
+  .hud .mark{font-family:var(--serif);font-size:1.02rem;letter-spacing:.16em;text-transform:uppercase;color:var(--brass)}
+  .hud .mark em{font-style:normal;opacity:.55;color:var(--cream)}
+  .hud .spacer{flex:1}
+  .stat{font-family:var(--mono);font-size:.82rem;letter-spacing:.09em;white-space:nowrap}
+  .stat b{display:block;font-size:1.18rem;font-weight:600;letter-spacing:.04em}
+  .stat span{opacity:.5;text-transform:uppercase;font-size:.68rem}
 
-  .musician{
-    position:absolute;left:0;top:0;width:46px;height:92px;
-    margin-left:-23px;margin-top:-92px;
-    transform-style:preserve-3d;
-  }
-  .musician i{position:absolute;display:block}
+  .viewport{position:relative;overflow:hidden;background:var(--void)}
+  #stage{position:absolute;top:0;left:0;width:1700px;height:1000px;transform-origin:0 0;
+         transition:transform 1400ms cubic-bezier(.62,.03,.24,1);will-change:transform}
+  #stage svg{display:block;width:1700px;height:1000px}
+  .dimmer{transition:opacity 700ms ease}
+  .stand{opacity:.85}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+  .breathe{animation:bob 3.6s ease-in-out infinite}
 
-  .head{width:16px;height:16px;left:15px;top:2px;background:var(--skin);border:2px solid rgba(0,0,0,.5)}
-  .hair{width:18px;height:7px;left:14px;top:0;background:var(--hair)}
-  .torso{width:26px;height:38px;left:10px;top:18px;background:var(--sect);border:2px solid rgba(0,0,0,.45)}
-  .collar{width:26px;height:5px;left:10px;top:18px;background:rgba(255,255,255,.75)}
-  .arm{width:7px;height:26px;top:21px;background:var(--sect);border:2px solid rgba(0,0,0,.4)}
-  .arm-l{left:3px;transform-origin:50% 0}
-  .arm-r{left:36px;transform-origin:50% 0}
-  .legs{width:24px;height:34px;left:11px;top:56px;background:#181a2e;border:2px solid rgba(0,0,0,.5)}
-  .chair{width:30px;height:16px;left:8px;top:74px;background:#22243f;border:2px solid #12131f}
+  .console{position:relative;z-index:4;border-top:1px solid var(--rule);
+           background:linear-gradient(180deg,#0e0c17,#08070e);padding:14px 20px 18px;display:grid;gap:10px}
+  .chair{font-family:var(--mono);font-size:.74rem;letter-spacing:.16em;text-transform:uppercase;color:var(--brass);opacity:.9}
+  .chair i{font-style:normal;color:var(--cream);opacity:.45}
+  .prompt{font-family:var(--serif);font-size:clamp(1.32rem,3.1vw,2.15rem);line-height:1.28;max-width:46ch}
+  .answerRow{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+  #answer{flex:1;min-width:220px;font-family:var(--serif);font-size:clamp(1.1rem,2.4vw,1.5rem);
+          padding:.55em .7em;color:var(--cream);background:#15121f;border:1px solid var(--rule);
+          border-bottom:2px solid var(--brass-lo);border-radius:4px;outline:none}
+  #answer:focus{border-bottom-color:var(--brass);background:#1a1626}
+  #answer::placeholder{color:#6d6480}
+  .btn{font-family:var(--sans);font-size:.92rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+       padding:.7em 1.5em;cursor:pointer;color:var(--ink);background:var(--brass);border:none;border-radius:4px}
+  .btn:hover{background:#ecba5f}
+  :focus-visible{outline:2px solid var(--brass);outline-offset:3px}
 
-  /* instruments */
-  .ins{background:var(--ins)}
-  .i-violin{width:22px;height:8px;left:-2px;top:26px;transform:rotate(-24deg);border:2px solid rgba(0,0,0,.5)}
-  .i-bow{width:26px;height:3px;left:-4px;top:34px;transform:rotate(14deg);background:#e8e0c8}
-  .i-cello{width:14px;height:34px;left:2px;top:24px;border-radius:6px 6px 9px 9px;border:2px solid rgba(0,0,0,.5)}
-  .i-bass{width:18px;height:52px;left:-2px;top:12px;border-radius:8px 8px 12px 12px;border:2px solid rgba(0,0,0,.5)}
-  .i-wind{width:5px;height:30px;left:20px;top:16px;border:2px solid rgba(0,0,0,.5)}
-  .i-brass{width:20px;height:20px;left:26px;top:20px;border-radius:50%;border:4px solid var(--ins);background:transparent}
-  .i-stem{width:14px;height:4px;left:18px;top:28px;background:var(--ins)}
-  .i-perc{width:34px;height:12px;left:6px;top:44px;border-radius:50%;border:2px solid rgba(0,0,0,.5)}
-  .i-mallet{width:3px;height:16px;left:12px;top:30px;background:#e8e0c8;transform:rotate(22deg)}
-  .i-harp{width:20px;height:40px;left:-4px;top:16px;border-left:5px solid var(--ins);border-top:5px solid var(--ins);border-radius:20px 0 0 0}
-  .i-baton{width:20px;height:3px;left:34px;top:18px;background:#f6f1e2;transform:rotate(-28deg)}
+  .meter{height:5px;background:#1c1728;border-radius:3px;overflow:hidden}
+  .meter i{display:block;height:100%;width:100%;background:var(--brass);transform-origin:left;
+           transition:transform 100ms linear,background 250ms}
+  .meter.warn i{background:var(--miss)}
+  .clock{font-family:var(--mono);font-size:.76rem;letter-spacing:.12em;opacity:.6}
 
-  .sect-str{--sect:#8a4f2c;--ins:var(--string)}
-  .sect-wnd{--sect:#215a58;--ins:var(--wood)}
-  .sect-brs{--sect:#5d4a17;--ins:var(--brass)}
-  .sect-prc{--sect:#5c2334;--ins:var(--perc)}
-  .sect-con{--sect:#1a1c34;--ins:#f6f1e2}
+  .tag{font-family:var(--sans);font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+       display:inline-block;margin-right:.7em;padding:.28em .6em;border-radius:3px;color:var(--ink);vertical-align:.18em}
+  .tag.ok{background:var(--good)}
+  .tag.no{background:var(--miss)}
+  .note{font-size:.94rem;opacity:.62;max-width:60ch;line-height:1.5;margin-top:.5em;font-family:var(--sans)}
+  .note b{color:var(--brass);font-weight:600}
 
-  /* PS1-flavoured choppy idle */
-  @keyframes sway{
-    0%{transform:translateY(0px) rotate(0deg)}
-    33%{transform:translateY(-1px) rotate(.7deg)}
-    66%{transform:translateY(1px) rotate(-.7deg)}
-    100%{transform:translateY(0px) rotate(0deg)}
-  }
-  @keyframes bowing{
-    0%{transform:rotate(6deg)}50%{transform:rotate(-16deg)}100%{transform:rotate(6deg)}
-  }
-  .figure{position:absolute;inset:0;
-    filter:brightness(.6) saturate(.68);transition:filter 700ms ease;
-    animation:sway 2.4s steps(3,end) infinite}
-  .musician.lit .figure{filter:brightness(1.28) saturate(1.15)}
-  .musician.lit .arm-r{animation:bowing .7s steps(2,end) infinite}
-
-  .spot{
-    position:absolute;left:-44px;top:88px;width:88px;height:88px;
-    transform:rotateX(-90deg);transform-origin:50% 0;
-    background:radial-gradient(ellipse at 50% 20%,rgba(255,238,190,.5),transparent 68%);
-    opacity:0;transition:opacity 600ms ease;pointer-events:none;
-  }
-  .musician.lit .spot{opacity:1}
-
-  #haze{position:fixed;inset:0;pointer-events:none;
-    background:radial-gradient(ellipse at 50% 45%,transparent 26%,rgba(5,6,14,.55) 68%,rgba(5,6,14,.95) 100%)}
-  #scan{position:fixed;inset:0;pointer-events:none;opacity:.35;
-    background:repeating-linear-gradient(0deg,rgba(0,0,0,.5) 0 1px,transparent 1px 3px)}
-
-  /* ---------- HUD ---------- */
-  #hud{
-    position:fixed;top:0;left:0;right:0;padding:14px 20px;
-    display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
-    font-family:var(--hud);font-size:.78rem;letter-spacing:.14em;
-    background:linear-gradient(rgba(5,6,14,.9),transparent);z-index:5;
-  }
-  #hud b{display:block;font-size:1.5rem;letter-spacing:.06em;color:var(--cream);font-weight:700}
-  #hud span{color:var(--dim)}
-  .hud-right{text-align:right}
-  #chairName{color:var(--brass);font-size:1rem;letter-spacing:.2em}
-
-  #timerWrap{position:fixed;top:74px;left:20px;right:20px;height:8px;
-    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);z-index:5}
-  #timerBar{height:100%;width:100%;background:var(--brass);transition:background .3s}
-  #timerBar.warn{background:var(--bad)}
-
-  /* ---------- PANEL ---------- */
-  #panel{
-    position:fixed;left:0;right:0;bottom:0;z-index:6;
-    padding:26px 20px 30px;
-    background:linear-gradient(transparent,rgba(5,6,14,.82) 18%,var(--panel) 46%);
-  }
-  .inner{max-width:840px;margin:0 auto}
-  .eyebrow{font-family:var(--hud);font-size:.72rem;letter-spacing:.28em;color:var(--dim);margin-bottom:10px}
-  #definition{
-    font-size:clamp(1.5rem,3.4vw,2.3rem);line-height:1.32;font-weight:600;
-    color:#fff;margin-bottom:20px;text-wrap:balance;
-  }
-  #hint{font-family:var(--hud);font-size:1rem;letter-spacing:.32em;color:var(--brass);
-    min-height:1.4em;margin-bottom:14px}
-  .answer-row{display:flex;gap:12px;flex-wrap:wrap}
-  #answer{
-    flex:1;min-width:240px;font-family:var(--body);font-size:1.35rem;font-weight:600;
-    padding:14px 18px;color:#fff;background:rgba(255,255,255,.07);
-    border:2px solid rgba(255,255,255,.28);outline:none;
-  }
-  #answer:focus{border-color:var(--brass);background:rgba(255,255,255,.12)}
-  button{
-    font-family:var(--hud);font-size:.9rem;letter-spacing:.16em;font-weight:700;
-    padding:14px 26px;color:#0a0b14;background:var(--brass);
-    border:none;cursor:pointer;transition:transform .15s ease,filter .15s ease;
-  }
-  button:hover{filter:brightness(1.12)}
-  button:active{transform:translateY(2px)}
-  button.ghost{background:transparent;color:var(--dim);border:2px solid rgba(255,255,255,.2)}
-  button.ghost:hover{color:var(--cream);border-color:var(--cream)}
-  :focus-visible{outline:3px solid var(--brass);outline-offset:3px}
-
-  /* ---------- VERDICT ---------- */
-  #verdict{display:none;text-align:left}
-  #verdict.show{display:block}
-  .mark{font-family:var(--hud);font-size:.8rem;letter-spacing:.28em;margin-bottom:8px}
-  .mark.ok{color:var(--good)}
-  .mark.no{color:var(--bad)}
-  #answerWas{font-family:var(--display);font-size:clamp(2.2rem,6vw,3.6rem);
-    letter-spacing:.02em;text-transform:uppercase;line-height:1;margin-bottom:12px;color:var(--brass)}
-  #quip{font-size:1.1rem;line-height:1.5;color:var(--cream);opacity:.9;max-width:62ch}
-
-  /* ---------- SCREENS ---------- */
-  .screen{
-    position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;
-    padding:32px 24px;background:rgba(5,6,14,.93);overflow-y:auto;
-  }
-  .screen[hidden]{display:none}
-  .card{max-width:720px;width:100%}
-  .card h1{font-family:var(--display);font-size:clamp(3.4rem,13vw,7rem);line-height:.86;
-    letter-spacing:.02em;text-transform:uppercase;color:var(--cream);margin-bottom:6px}
-  .card h1 em{font-style:normal;color:var(--brass)}
-  .card .lede{font-size:1.2rem;line-height:1.55;color:var(--cream);opacity:.88;margin:18px 0 26px;max-width:56ch}
-  .rules{font-family:var(--hud);font-size:.85rem;letter-spacing:.06em;color:var(--dim);
-    line-height:2;margin-bottom:28px;border-left:3px solid var(--brass);padding-left:18px}
-  .rules b{color:var(--cream);font-weight:700}
-  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-  .toggle{font-family:var(--hud);font-size:.8rem;letter-spacing:.1em;color:var(--dim);
-    display:flex;align-items:center;gap:8px;cursor:pointer}
-  .score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:18px;margin:24px 0}
-  .stat{border-top:2px solid var(--brass);padding-top:10px}
-  .stat span{display:block;font-family:var(--hud);font-size:.7rem;letter-spacing:.2em;color:var(--dim)}
-  .stat b{font-family:var(--display);font-size:2.6rem;letter-spacing:.02em}
-  #missed{margin:8px 0 26px}
-  #missed h3{font-family:var(--hud);font-size:.78rem;letter-spacing:.2em;color:var(--dim);margin-bottom:12px}
-  #missed ul{list-style:none;display:grid;gap:8px}
-  #missed li{padding:10px 14px;background:rgba(255,255,255,.05);border-left:3px solid var(--bad);font-size:1rem}
-  #missed li b{color:var(--brass)}
+  .curtain{position:absolute;inset:0;z-index:20;display:grid;place-items:center;
+           background:radial-gradient(ellipse at 50% 42%,#171128 0%,#07060c 72%);padding:28px;text-align:center}
+  .curtain[hidden]{display:none}
+  .curtain h1{font-family:var(--serif);font-weight:400;font-size:clamp(2.3rem,7vw,4.6rem);line-height:.98}
+  .curtain h1 em{display:block;font-style:normal;font-size:.26em;letter-spacing:.42em;text-transform:uppercase;
+                 color:var(--brass);margin-bottom:.9em;padding-left:.42em}
+  .curtain p{max-width:52ch;margin:1.3em auto 0;line-height:1.6;opacity:.72;font-size:1.02rem}
+  .rules{margin:1.6em auto 0;max-width:52ch;text-align:left;font-family:var(--mono);font-size:.82rem;line-height:2;opacity:.62}
+  .rules b{color:var(--brass);font-weight:400;margin-right:.7em}
+  .curtain .btn{margin-top:2em}
+  .scoreline{font-family:var(--mono);font-size:1.1rem;letter-spacing:.1em;margin-top:1.4em}
+  .scoreline b{font-size:2.6rem;display:block;color:var(--brass);letter-spacing:0}
+  .missed{margin:1.5em auto 0;max-width:60ch;text-align:left;display:grid;gap:.35em;font-size:.9rem;
+          line-height:1.4;max-height:26vh;overflow:auto}
+  .missed div{display:flex;gap:.8em;border-bottom:1px solid var(--rule);padding-bottom:.35em}
+  .missed b{color:var(--brass);font-weight:600;min-width:11ch}
+  .missed span{opacity:.65}
 
   @media (max-width:640px){
-    #hud{font-size:.68rem;padding:10px 14px}
-    #hud b{font-size:1.15rem}
-    #panel{padding:18px 14px 22px}
-    #answer{font-size:1.1rem}
+    .hud{gap:14px;padding:10px 14px}
+    .console{padding:12px 14px 16px}
+    .btn{padding:.7em 1.1em;font-size:.82rem}
   }
   @media (prefers-reduced-motion:reduce){
-    #world{transition-duration:1ms}
-    .figure,.musician.lit .arm-r{animation:none}
+    #stage{transition-duration:220ms}
+    .breathe{animation:none}
   }
-  body.calm #world{transition-duration:1ms}
-  body.calm .figure,body.calm .musician.lit .arm-r{animation:none}
 </style>
 </head>
 <body>
+<div id="app">
 
-<div id="stage">
-  <div id="world">
-    <div id="floor"></div>
-    <div id="podium"></div>
+  <div class="hud">
+    <div class="mark">The Hundred <em>· music theory</em></div>
+    <div class="spacer"></div>
+    <div class="stat"><span>Chair</span><b id="hQ">—</b></div>
+    <div class="stat"><span>Correct</span><b id="hC">0</b></div>
+    <div class="stat"><span>Streak</span><b id="hS">0</b></div>
+    <div class="stat"><span>Score</span><b id="hP">0</b></div>
   </div>
-</div>
-<div id="haze"></div>
-<div id="scan"></div>
 
-<header id="hud">
-  <div>
-    <span>MOVEMENT</span>
-    <b><i id="qNum">01</i> / 30</b>
-  </div>
-  <div style="text-align:center">
-    <span id="chairSection">PODIUM</span>
-    <b id="chairName">THE COMPOSER</b>
-  </div>
-  <div class="hud-right">
-    <span>SCORE</span>
-    <b id="score">0</b>
-  </div>
-</header>
-<div id="timerWrap"><div id="timerBar"></div></div>
+  <div class="viewport" id="viewport">
+    <div id="stage"></div>
 
-<section id="panel">
-  <div class="inner">
-    <div id="ask">
-      <p class="eyebrow" id="askEyebrow">NAME THE TERM</p>
-      <p id="definition">—</p>
-      <p id="hint"></p>
-      <div class="answer-row">
-        <input id="answer" type="text" autocomplete="off" autocapitalize="off"
-               spellcheck="false" placeholder="Type the term, press Enter">
-        <button id="submit">ANSWER</button>
-        <button id="skip" class="ghost">PASS</button>
+    <div class="curtain" id="titleCard">
+      <div>
+        <h1><em>One hundred players</em>The Hundred</h1>
+        <p>A full orchestra is seated and waiting. The composer opens, then the camera moves around the room chair by chair. Each player hands you a definition. You give back the term.</p>
+        <div class="rules">
+          <div><b>30</b>terms — composer first, composer last</div>
+          <div><b>15s</b>per chair, typed answer</div>
+          <div><b>&#8629;</b>Enter to answer</div>
+        </div>
+        <button class="btn" id="startBtn">Raise the baton</button>
       </div>
     </div>
-    <div id="verdict">
-      <p class="mark" id="mark">CORRECT</p>
-      <p id="answerWas">TONIC</p>
-      <p id="quip"></p>
-    </div>
-  </div>
-</section>
 
-<div class="screen" id="startScreen">
-  <div class="card">
-    <h1>Tutti<em>.</em></h1>
-    <p class="lede">A hundred players are seated and waiting. You are the one being examined.
-      Thirty definitions, thirty chairs — the composer opens, the orchestra answers,
-      and the composer has the last word.</p>
-    <div class="rules">
-      <b>You get a definition.</b> Type the musical term it belongs to.<br>
-      <b>Fifteen seconds a chair.</b> A hint surfaces at seven.<br>
-      <b>Faster is worth more.</b> Nobody is thrown out for missing one.
-    </div>
-    <div class="row">
-      <button id="begin">RAISE THE BATON</button>
-      <label class="toggle"><input type="checkbox" id="calm"> Reduce camera motion</label>
+    <div class="curtain" id="endCard" hidden>
+      <div>
+        <h1 id="endTitle"><em>Final chord</em>Curtain</h1>
+        <div class="scoreline"><b id="endScore">0</b><span id="endCount">0 of 30</span></div>
+        <div class="missed" id="endMissed"></div>
+        <button class="btn" id="againBtn">Play again</button>
+      </div>
     </div>
   </div>
-</div>
 
-<div class="screen" id="endScreen" hidden>
-  <div class="card">
-    <h1 id="grade">Bravo<em>.</em></h1>
-    <p class="lede" id="endLine">The hall empties.</p>
-    <div class="score-grid">
-      <div class="stat"><span>FINAL SCORE</span><b id="fScore">0</b></div>
-      <div class="stat"><span>NAMED</span><b id="fRight">0</b></div>
-      <div class="stat"><span>FASTEST</span><b id="fFast">—</b></div>
+  <div class="console">
+    <div class="chair" id="chairLine">Take your seat</div>
+    <div class="prompt" id="promptLine">The hall is dark. Raise the baton to begin.</div>
+    <div class="answerRow">
+      <input id="answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="Type the term..." disabled aria-label="Your answer">
+      <button class="btn" id="submitBtn" disabled>Answer</button>
     </div>
-    <div id="missed"></div>
-    <div class="row">
-      <button id="again">PLAY AGAIN</button>
-      <a href="../" style="text-decoration:none"><button class="ghost">BACK TO ARCADE</button></a>
-    </div>
+    <div class="meter" id="meter"><i id="meterFill"></i></div>
+    <div class="clock" id="clockLine">&nbsp;</div>
   </div>
+
 </div>
 
 <script>
-"use strict";
-
-/* ============ THE CHAIRS ============
-   theta = degrees around the podium (negative = house left)
-   r     = distance from the podium                          */
-const CHAIRS = [
-  {id:"composer",   name:"THE COMPOSER",   sect:"PODIUM",      cls:"sect-con", ins:"baton",  t:0,   r:0},
-  {id:"violin1",    name:"CONCERTMASTER",  sect:"FIRST VIOLIN",cls:"sect-str", ins:"violin", t:-58, r:150},
-  {id:"violin2",    name:"SECOND VIOLIN",  sect:"STRINGS",     cls:"sect-str", ins:"violin", t:-40, r:200},
-  {id:"viola",      name:"VIOLA",          sect:"STRINGS",     cls:"sect-str", ins:"violin", t:-14, r:205},
-  {id:"cello",      name:"CELLO",          sect:"STRINGS",     cls:"sect-str", ins:"cello",  t:18,  r:195},
-  {id:"bass",       name:"DOUBLE BASS",    sect:"STRINGS",     cls:"sect-str", ins:"bass",   t:52,  r:300},
-  {id:"harp",       name:"HARP",           sect:"STRINGS",     cls:"sect-str", ins:"harp",   t:-66, r:285},
-  {id:"flute",      name:"FIRST FLUTE",    sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:-14, r:285},
-  {id:"flute2",     name:"SECOND FLUTE",   sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:-6,  r:288},
-  {id:"piccolo",    name:"PICCOLO",        sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:-22, r:302},
-  {id:"oboe",       name:"OBOE",           sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:2,   r:285},
-  {id:"enghorn",    name:"ENGLISH HORN",   sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:10,  r:302},
-  {id:"clarinet",   name:"CLARINET",       sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:14,  r:285},
-  {id:"bassclar",   name:"BASS CLARINET",  sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:20,  r:302},
-  {id:"bassoon",    name:"BASSOON",        sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:24,  r:285},
-  {id:"contra",     name:"CONTRABASSOON",  sect:"WOODWIND",    cls:"sect-wnd", ins:"wind",   t:30,  r:302},
-  {id:"horn",       name:"FRENCH HORN",    sect:"BRASS",       cls:"sect-brs", ins:"brass",  t:-34, r:355},
-  {id:"trumpet",    name:"TRUMPET",        sect:"BRASS",       cls:"sect-brs", ins:"brass",  t:-12, r:360},
-  {id:"trombone",   name:"TROMBONE",       sect:"BRASS",       cls:"sect-brs", ins:"brass",  t:6,   r:360},
-  {id:"basstbn",    name:"BASS TROMBONE",  sect:"BRASS",       cls:"sect-brs", ins:"brass",  t:14,  r:366},
-  {id:"tuba",       name:"TUBA",           sect:"BRASS",       cls:"sect-brs", ins:"brass",  t:26,  r:366},
-  {id:"timpani",    name:"TIMPANI",        sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:0,   r:432},
-  {id:"snare",      name:"SNARE DRUM",     sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:-18, r:440},
-  {id:"bassdrum",   name:"BASS DRUM",      sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:16,  r:445},
-  {id:"cymbals",    name:"CYMBALS",        sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:26,  r:445},
-  {id:"tamtam",     name:"TAM-TAM",        sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:34,  r:450},
-  {id:"glock",      name:"GLOCKENSPIEL",   sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:-34, r:445},
-  {id:"xylo",       name:"XYLOPHONE",      sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:-44, r:450},
-  {id:"celesta",    name:"CELESTA",        sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:-52, r:432},
-  {id:"tambourine", name:"TAMBOURINE",     sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:40,  r:445},
-  {id:"triangle",   name:"TRIANGLE",       sect:"PERCUSSION",  cls:"sect-prc", ins:"perc",   t:44,  r:452}
+/* ============================================================
+   1. CONTENT - 30 terms, each seated with a player who fits it
+   ============================================================ */
+var ROUND = [
+  {t:"Tonic", d:"The tonal center - the home pitch or home chord everything is measured against.",
+   a:["tonic"], inst:"composer", note:"Everything on the composer's desk is measured against home."},
+  {t:"Dominant", d:"The fifth scale degree, and the harmonic function built on it.",
+   a:["dominant","v","dominant chord"], inst:"trumpet", note:"A trumpet's natural harmonics land on the fifth long before anything else."},
+  {t:"Subdominant", d:"The fourth scale degree, or the predominant function built on it.",
+   a:["subdominant","iv","predominant","pre dominant"], inst:"trumpet", note:"One step below the pull of the dominant, and a step gentler about it."},
+  {t:"Cadence", d:"A harmonic gesture that marks closure or a pause.",
+   a:["cadence"], inst:"timpani", note:"At a full close, the timpani's job is to make the ending unmistakable."},
+  {t:"Modulation", d:"Establishing a new key.",
+   a:["modulation","modulate","modulating"], inst:"horn", note:"Before valves, horn players swapped crooks by hand to change key."},
+  {t:"Tonicization", d:"Temporarily treating another chord as if it were the tonic.",
+   a:["tonicization","tonicisation","tonicize","tonicise"], inst:"clarinet", note:"A borrowed home, gone before the ear has time to settle in."},
+  {t:"Mode", d:"A scale type defined by its interval pattern and its center.",
+   a:["mode","modes","modality"], inst:"englishhorn", note:"That plaintive color made the English horn the standing voice for modal writing."},
+  {t:"Scale degree", d:"A note's numbered position within a scale.",
+   a:["scale degree","scale degrees","degree"], inst:"flute", note:"Counting up from one - and the flute usually has the top of the count."},
+  {t:"Interval", d:"The pitch distance between two notes.",
+   a:["interval","intervals"], inst:"harp", note:"On a harp you can see it: every string a fixed distance from its neighbor."},
+  {t:"Voice leading", d:"The movement of individual musical lines from one harmony to the next.",
+   a:["voice leading"], inst:"viola", note:"The inner voice, where smooth motion matters most and nobody notices."},
+  {t:"Counterpoint", d:"Combining independent melodic lines.",
+   a:["counterpoint","contrapuntal"], inst:"violin2", note:"Independence from the first violins is the entire assignment."},
+  {t:"Species counterpoint", d:"The formal method for studying contrapuntal writing, taught in graded stages.",
+   a:["species counterpoint","species"], inst:"cello", note:"Fux taught it note against note, and the cello line is where students start."},
+  {t:"Consonance", d:"A relatively stable interval or harmony.",
+   a:["consonance","consonant"], inst:"violin", note:"Stable and settled - the sound the whole section tunes toward."},
+  {t:"Dissonance", d:"A relatively unstable interval that seeks resolution.",
+   a:["dissonance","dissonant"], inst:"oboe", note:"The reed that gives the tuning A also gives the sharpest rub."},
+  {t:"Suspension", d:"A held-over note that creates a dissonance and then resolves it.",
+   a:["suspension","suspensions"], inst:"cymbal", note:"Hung, held, and finally allowed to resolve - ask the suspended cymbal."},
+  {t:"Sequence", d:"A pattern repeated at different pitch levels.",
+   a:["sequence","sequences","sequencing"], inst:"piccolo", note:"The same figure, kicked up a step, then up another."},
+  {t:"Ostinato", d:"A persistently repeated musical pattern.",
+   a:["ostinato","ostinati"], inst:"bass", note:"Down here a repeated figure can hold an entire movement together."},
+  {t:"Pedal point", d:"A sustained note held beneath changing harmony.",
+   a:["pedal point","pedal","pedal tone","pedal note"], inst:"tuba", note:"The lowest instrument sits on one note while everything above it moves."},
+  {t:"Harmonic rhythm", d:"The rate at which the harmonies change.",
+   a:["harmonic rhythm","harmonic rate"], inst:"piano", note:"At the keyboard you hear exactly how often the chord actually turns over."},
+  {t:"Secondary dominant", d:"A dominant chord aimed temporarily at a chord other than the tonic.",
+   a:["secondary dominant","secondary dominants","applied dominant"], inst:"trombone", note:"A dominant pointed somewhere other than home."},
+  {t:"Modal mixture", d:"Borrowing chords from the parallel mode.",
+   a:["modal mixture","mixture","borrowed chord","borrowed chords","modal borrowing"], inst:"bassoon", note:"Borrowing the parallel minor's shade, which is the bassoon's whole business."},
+  {t:"Chromaticism", d:"The use of pitches outside the prevailing scale.",
+   a:["chromaticism","chromatic","chromatics"], inst:"bassclarinet", note:"Sliding down into the cracks between the scale's steps."},
+  {t:"Orchestration", d:"Assigning musical material to particular instruments.",
+   a:["orchestration","orchestrate","orchestrating"], inst:"celesta", note:"Deciding this line belongs on the celesta and not in the violins."},
+  {t:"Timbre", d:"The characteristic color or quality of a sound.",
+   a:["timbre","tone color","tone colour"], inst:"glockenspiel", note:"Same pitch as the flute, entirely different color."},
+  {t:"Texture", d:"The relationship among simultaneous musical layers.",
+   a:["texture","textures"], inst:"cello2", note:"How many layers are sounding at once, and how they sit against each other."},
+  {t:"Motif", d:"A short recurring musical idea.",
+   a:["motif","motive","motifs","motives"], inst:"snare", note:"A short figure, repeated until you cannot unhear it."},
+  {t:"Phrase", d:"A coherent musical unit that works like a sentence.",
+   a:["phrase","phrases"], inst:"altoflute", note:"One breath, one complete thought."},
+  {t:"Syncopation", d:"Accentuation of metrically unexpected positions.",
+   a:["syncopation","syncopated","syncopate"], inst:"woodblock", note:"The accent lands exactly where the beat is not."},
+  {t:"Polyrhythm", d:"Simultaneous contrasting rhythmic divisions.",
+   a:["polyrhythm","polyrhythms","cross rhythm"], inst:"marimba", note:"Three against two, both hands, one bar."},
+  {t:"Form", d:"The large-scale organization of a composition.",
+   a:["form","musical form"], inst:"composer", note:"Back at the desk - the shape of the whole thing."}
 ];
 
-/* ============ THE THIRTY ============ */
-const ROUNDS = [
-  {chair:"composer", term:"Tonic", def:"The tonal centre — the home pitch or chord everything else is measured against.",
-   accepts:["tonic","i","the tonic"],
-   quip:"The composer sets it before a single bow moves. Everything in the next twenty-nine chairs is heard as a distance from here."},
+var INST_NAME = {
+  composer:"The Composer",
+  violin:"Concertmaster, Violin I", violin2:"Violin II", viola:"Viola",
+  cello:"Cello", cello2:"Cello, second desk", bass:"Double Bass",
+  flute:"Flute", piccolo:"Piccolo", altoflute:"Alto Flute",
+  oboe:"Oboe", englishhorn:"English Horn",
+  clarinet:"Clarinet", bassclarinet:"Bass Clarinet",
+  bassoon:"Bassoon", contrabassoon:"Contrabassoon",
+  horn:"French Horn", trumpet:"Trumpet", trombone:"Trombone",
+  basstrombone:"Bass Trombone", tuba:"Tuba",
+  timpani:"Timpani", snare:"Snare Drum", bassdrum:"Bass Drum",
+  cymbal:"Suspended Cymbal", woodblock:"Woodblock",
+  glockenspiel:"Glockenspiel", marimba:"Marimba",
+  harp:"Harp", piano:"Piano", celesta:"Celesta"
+};
 
-  {chair:"trumpet", term:"Dominant", def:"The fifth scale degree, and the harmonic function built on it.",
-   accepts:["dominant","v","the dominant"],
-   quip:"The trumpet's natural harmonics hand it the fifth before anything else. Fanfares live there because the instrument got there first."},
-
-  {chair:"trombone", term:"Subdominant", def:"The fourth scale degree, or the predominant function built on it.",
-   accepts:["subdominant","iv","the subdominant","pre-dominant","predominant"],
-   quip:"Slide position one to the fourth: the trombone measures this interval with its arm. Church and chorale weight, one step below the dominant's brightness."},
-
-  {chair:"timpani", term:"Cadence", def:"A harmonic gesture that marks closure or a pause.",
-   accepts:["cadence","cadences","a cadence"],
-   quip:"Two drums, tuned to tonic and dominant. The timpanist is literally holding the two poles of the closing gesture."},
-
-  {chair:"harp", term:"Modulation", def:"The act of leaving one key and establishing a new one.",
-   accepts:["modulation","modulate","modulating","to modulate"],
-   quip:"Seven pedals, three positions each. The harpist changes key with both feet — the most physical modulation in the hall."},
-
-  {chair:"horn", term:"Tonicization", def:"Treating some other chord as a temporary home without truly leaving the key.",
-   accepts:["tonicization","tonicisation","tonicize","tonicise","tonicizing"],
-   quip:"The horn's stopped notes bend a pitch just far enough to sound like it belongs somewhere else. A visit, not a move."},
-
-  {chair:"oboe", term:"Mode", def:"A scale type defined by its interval pattern and its centre.",
-   accepts:["mode","modes","a mode","modal"],
-   quip:"The oboe gives the tuning A and the whole hall orients to it. Give the same seven notes a different centre and you have a different world."},
-
-  {chair:"glock", term:"Scale degree", def:"A note's numbered position within its scale.",
-   accepts:["scale degree","scale degrees","degree","scale-degree","scale step"],
-   quip:"Numbered bars laid out in a row, struck by position rather than by feel. The glockenspiel is a scale you can point at."},
-
-  {chair:"violin1", term:"Interval", def:"The pitch distance between two notes.",
-   accepts:["interval","intervals","an interval"],
-   quip:"The concertmaster tunes in perfect fifths across four strings, then plays double stops all night. Nobody measures distance more often."},
-
-  {chair:"viola", term:"Voice leading", def:"How individual musical lines move from one harmony to the next.",
-   accepts:["voice leading","voice-leading","voiceleading","part writing","part-writing"],
-   quip:"The viola almost never has the tune. It has the inner line — the one that has to move smoothly or the whole chord change shows its seams."},
-
-  {chair:"cello", term:"Counterpoint", def:"The art of combining independent melodic lines.",
-   accepts:["counterpoint","contrapuntal"],
-   quip:"Bach wrote six suites for this instrument alone and made a single line imply three. The cello section knows what independence costs."},
-
-  {chair:"violin2", term:"Species counterpoint", def:"The formal, graded method for studying contrapuntal writing.",
-   accepts:["species counterpoint","species","first species","species-counterpoint"],
-   quip:"Second violins spend their lives as the second voice against a given first. That is the exercise, professionalised."},
-
-  {chair:"flute", term:"Consonance", def:"A relatively stable interval or harmony, at rest.",
-   accepts:["consonance","consonant","consonances"],
-   quip:"Nearly pure tone, very little upper-partial grit. When the flute doubles a line at the octave, the two notes almost stop being two."},
-
-  {chair:"bassclar", term:"Dissonance", def:"A relatively unstable interval that seems to want resolution.",
-   accepts:["dissonance","dissonant","dissonances"],
-   quip:"Low, reedy, and full of buzz in the overtones. Composers reach for the bass clarinet exactly when the chord should feel unsettled."},
-
-  {chair:"enghorn", term:"Suspension", def:"A note held over from the previous chord, briefly clashing, then stepping down to fit.",
-   accepts:["suspension","suspensions","suspended","susp"],
-   quip:"The English horn's long, aching held notes are famous for hanging on one beat too long. That ache has a name and this is it."},
-
-  {chair:"clarinet", term:"Sequence", def:"A pattern repeated at different pitch levels.",
-   accepts:["sequence","sequences","sequential","sequencing"],
-   quip:"The widest range in the woodwinds, and a clean break between registers. Composers run the same figure up through all of them."},
-
-  {chair:"bass", term:"Ostinato", def:"A pattern repeated persistently, over and over.",
-   accepts:["ostinato","ostinati","ostinatos"],
-   quip:"Eight basses on the same four-note figure for ninety bars. Nobody in the hall can commit to repetition like the back left corner."},
-
-  {chair:"tuba", term:"Pedal point", def:"A sustained note held underneath changing harmony.",
-   accepts:["pedal point","pedal","pedal tone","pedal-point","pedal note","organ point"],
-   quip:"The tuba sits on a low C while everything above it changes shape. The name comes from the organ, but the job lives down here."},
-
-  {chair:"snare", term:"Harmonic rhythm", def:"The rate at which the harmonies themselves change.",
-   accepts:["harmonic rhythm","harmonic-rhythm","harmonic pace","rate of harmonic change"],
-   quip:"The snare hears the piece as a grid of pulses. Harmony has its own, slower pulse laid across that one."},
-
-  {chair:"bassoon", term:"Secondary dominant", def:"A dominant chord aimed temporarily at some chord other than the tonic.",
-   accepts:["secondary dominant","applied dominant","secondary dominants","v of v","five of five"],
-   quip:"The bassoon is the woodwind that keeps stepping into other sections' territory — cello line here, horn colour there. Borrowed function, borrowed seat."},
-
-  {chair:"celesta", term:"Modal mixture", def:"Borrowing chords from the parallel major or minor.",
-   accepts:["modal mixture","mixture","borrowed chords","borrowed chord","mode mixture","modal borrowing"],
-   quip:"A keyboard that sounds like a bell and is filed under percussion. The celesta is itself borrowed from a neighbouring world."},
-
-  {chair:"xylo", term:"Chromaticism", def:"Use of pitches from outside the prevailing scale.",
-   accepts:["chromaticism","chromatic","chromatics","chromaticism."],
-   quip:"Two rows of bars: the naturals below, the sharps and flats raised behind them. The out-of-key notes are physically a step up."},
-
-  {chair:"contra", term:"Orchestration", def:"Deciding which instruments carry which musical material.",
-   accepts:["orchestration","orchestrate","orchestrating","instrumentation"],
-   quip:"Sixteen feet of tubing folded four times to reach the bottom of the range. Knowing this chair exists, and when it is worth waking, is the whole craft."},
-
-  {chair:"tamtam", term:"Timbre", def:"The characteristic colour or quality of a sound.",
-   accepts:["timbre","tone colour","tone color","colour","color","tambre"],
-   quip:"No pitch to speak of, no rhythm to hold. The tam-tam contributes nothing but colour, which is how you know colour is a real parameter."},
-
-  {chair:"piccolo", term:"Texture", def:"The relationship among the musical layers sounding at once.",
-   accepts:["texture","textures","textural"],
-   quip:"The piccolo rides on top of everything. From up there you can hear exactly how many layers are underneath and how they are stacked."},
-
-  {chair:"basstbn", term:"Motif", def:"A short musical idea that keeps coming back.",
-   accepts:["motif","motive","motifs","motives","motiv"],
-   quip:"Four notes, low and dark, returning whenever the piece remembers something it would rather forget. The bass trombone's whole career."},
-
-  {chair:"flute2", term:"Phrase", def:"A coherent musical unit that behaves rather like a sentence.",
-   accepts:["phrase","phrases","a phrase"],
-   quip:"A wind player's phrase ends where the breath does. Strings can fake it forever; the second flute cannot, which is why winds teach phrasing."},
-
-  {chair:"bassdrum", term:"Syncopation", def:"Accent placed where the metre does not expect it.",
-   accepts:["syncopation","syncopated","syncope","syncopations"],
-   quip:"One stroke in the wrong place from this instrument and the entire hall's sense of the downbeat lurches. Maximum leverage, minimum notes."},
-
-  {chair:"tambourine", term:"Polyrhythm", def:"Contrasting rhythmic divisions sounding at the same time.",
-   accepts:["polyrhythm","polyrhythms","polyrhythmic","cross rhythm","cross-rhythm"],
-   quip:"Thumb roll against shake against strike — three rates of division from one frame, in one hand."},
-
-  {chair:"composer", term:"Form", def:"The large-scale organisation of an entire composition.",
-   accepts:["form","musical form","the form","structure"],
-   quip:"Back to the podium. Every chair you visited was a local decision; this is the one that decides what all of them add up to."}
+/* ============================================================
+   2. SEATING - five arcs, one hundred chairs
+   ============================================================ */
+var ROWS = [
+ ["violin","violin","violin","violin","violin","violin","viola","viola","viola","cello","cello","cello","cello","cello"],
+ ["violin","violin","violin","violin","violin","violin","violin","viola","viola","viola","viola","cello","cello","cello","cello","bass","bass","bass"],
+ ["violin","violin","violin","harp","piano","celesta","flute","flute","altoflute","oboe","oboe","clarinet","clarinet","bassoon","bassoon","viola","cello","bass","bass","violin"],
+ ["violin","violin","viola","piccolo","flute","flute","oboe","englishhorn","clarinet","clarinet","bassclarinet","bassoon","bassoon","contrabassoon","horn","horn","horn","horn","cello","bass","bass","violin"],
+ ["horn","horn","trumpet","trumpet","trumpet","trumpet","trombone","trombone","trombone","basstrombone","tuba","tuba","timpani","timpani","snare","bassdrum","cymbal","cymbal","woodblock","glockenspiel","marimba","marimba","glockenspiel","snare","woodblock","cymbal"]
 ];
+var STANDING = ["bass","timpani","snare","bassdrum","cymbal","woodblock","glockenspiel","marimba"];
+var CX = 850;
 
-/* ============ BUILD THE HALL ============ */
-const world = document.getElementById("world");
-const RAD = Math.PI/180;
-const chairEls = {};
-const HAIRS = ["#2b2016","#4a3524","#161821","#6b5233","#8a8a94","#3a1f1a"];
-const SKINS = ["#e8bb92","#c98d62","#8d5a3b","#f0d0ad","#6b432b","#d9a074"];
-
-function riserFor(r){ return Math.max(0, (r-240)*0.075); }
-
-function makeMusician(cfg, idx){
-  const el = document.createElement("div");
-  el.className = "musician " + cfg.cls;
-  const x = Math.sin(cfg.t*RAD) * cfg.r;
-  const z = -Math.cos(cfg.t*RAD) * cfg.r;
-  const y = -riserFor(cfg.r);
-  el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, ${z.toFixed(1)}px) rotateY(${(-cfg.t).toFixed(1)}deg)`;
-  el.style.setProperty("--skin", SKINS[idx % SKINS.length]);
-  el.style.setProperty("--hair", HAIRS[(idx*3+1) % HAIRS.length]);
-
-  let ins = "";
-  if(cfg.ins==="violin") ins = `<i class="ins i-violin"></i><i class="i-bow"></i>`;
-  else if(cfg.ins==="cello") ins = `<i class="ins i-cello"></i>`;
-  else if(cfg.ins==="bass") ins = `<i class="ins i-bass"></i>`;
-  else if(cfg.ins==="wind") ins = `<i class="ins i-wind"></i>`;
-  else if(cfg.ins==="brass") ins = `<i class="i-brass"></i><i class="ins i-stem"></i>`;
-  else if(cfg.ins==="perc") ins = `<i class="ins i-perc"></i><i class="i-mallet"></i>`;
-  else if(cfg.ins==="harp") ins = `<i class="i-harp"></i>`;
-  else if(cfg.ins==="baton") ins = `<i class="i-baton"></i>`;
-
-  el.innerHTML =
-    `<div class="spot"></div>
-     <div class="figure">
-       <i class="chair"></i><i class="legs"></i>
-       <i class="torso"></i><i class="collar"></i>
-       <i class="arm arm-l"></i><i class="arm arm-r"></i>
-       <i class="head"></i><i class="hair"></i>
-       ${ins}
-     </div>`;
-  el.querySelector(".figure").style.animationDelay = ((idx%9)*0.27).toFixed(2)+"s";
-  world.appendChild(el);
-  return el;
-}
-
-CHAIRS.forEach((c,i)=>{ chairEls[c.id] = makeMusician(c, i); });
-
-/* fill the rest of the hundred */
-const FILL = [
-  {n:16, cls:"sect-str", ins:"violin", t0:-70, t1:-30, r0:150, r1:260},
-  {n:14, cls:"sect-str", ins:"violin", t0:-44, t1:-6,  r0:180, r1:280},
-  {n:12, cls:"sect-str", ins:"violin", t0:-10, t1:22,  r0:190, r1:280},
-  {n:10, cls:"sect-str", ins:"cello",  t0:16,  t1:48,  r0:180, r1:270},
-  {n:6,  cls:"sect-str", ins:"bass",   t0:46,  t1:72,  r0:290, r1:350},
-  {n:6,  cls:"sect-wnd", ins:"wind",   t0:-26, t1:32,  r0:296, r1:322},
-  {n:8,  cls:"sect-brs", ins:"brass",  t0:-46, t1:34,  r0:348, r1:392}
-];
-let fillIdx = CHAIRS.length;
-FILL.forEach(g=>{
-  for(let k=0;k<g.n;k++){
-    const t = g.t0 + (g.t1-g.t0) * ((k+0.5)/g.n) + (Math.random()*5-2.5);
-    const r = g.r0 + (g.r1-g.r0) * ((k%3)/2.4) + Math.random()*14;
-    makeMusician({cls:g.cls, ins:g.ins, t:t, r:r}, fillIdx++);
-  }
-});
-
-/* ============ CAMERA ============ */
-function lookAt(chairId, wide){
-  const c = CHAIRS.find(x=>x.id===chairId);
-  const x = Math.sin(c.t*RAD) * c.r;
-  const z = -Math.cos(c.t*RAD) * c.r;
-  const y = -(riserFor(c.r) + 62);
-  const dist = wide ? 210 : 545;
-  const yaw  = (-c.t * 0.45).toFixed(2);
-  world.style.transform =
-    `translateZ(${dist}px) rotateX(7deg) rotateY(${yaw}deg) ` +
-    `translate3d(${(-x).toFixed(1)}px, ${(-y).toFixed(1)}px, ${(-z).toFixed(1)}px)`;
-  Object.values(chairEls).forEach(el=>el.classList.remove("lit"));
-  if(chairEls[chairId]) chairEls[chairId].classList.add("lit");
-}
-lookAt("composer", true);
-
-/* ============ GAME ============ */
-const LIMIT = 15000, HINT_AT = 7000;
-const $ = id => document.getElementById(id);
-let i = 0, score = 0, right = 0, fastest = null, missed = [], t0 = 0, raf = 0, live = false;
-
-const norm = s => s.toLowerCase().trim()
-  .replace(/[.,!?'"`’]/g,"").replace(/[-_]/g," ")
-  .replace(/\s+/g," ").replace(/^(the|a|an) /,"");
-
-function present(){
-  const q = ROUNDS[i], c = CHAIRS.find(x=>x.id===q.chair);
-  const finale = (i === ROUNDS.length-1);
-  lookAt(q.chair, q.chair==="composer");
-  $("qNum").textContent = String(i+1).padStart(2,"0");
-  $("chairName").textContent = c.name;
-  $("chairSection").textContent = c.sect;
-  $("askEyebrow").textContent = finale ? "THE LAST WORD" : "NAME THE TERM";
-  $("definition").textContent = q.def;
-  $("hint").textContent = "";
-  $("answer").value = "";
-  $("verdict").classList.remove("show");
-  $("ask").style.display = "";
-  $("timerBar").style.width = "100%";
-  $("timerBar").classList.remove("warn");
-  const wait = document.body.classList.contains("calm") ? 120 : 1150;
-  setTimeout(()=>{ $("answer").focus(); startClock(); }, wait);
-}
-
-function startClock(){
-  live = true; t0 = performance.now();
-  $("timerBar").classList.remove("warn");
-  const tick = ()=>{
-    if(!live) return;
-    const gone = performance.now() - t0;
-    const left = Math.max(0, LIMIT - gone);
-    $("timerBar").style.width = (left/LIMIT*100).toFixed(2) + "%";
-    if(left < 5000) $("timerBar").classList.add("warn");
-    if(gone > HINT_AT && !$("hint").textContent){
-      const t = ROUNDS[i].term;
-      $("hint").textContent = t[0].toUpperCase() + " " +
-        t.slice(1).replace(/[a-z]/gi,"_").split("").join(" ");
+function buildSeats(){
+  var seats=[], n=0;
+  for(var k=0;k<ROWS.length;k++){
+    var row=ROWS[k];
+    var baseY = 646 - k*86;
+    var half  = 372 + k*106;
+    var curve = 34 + k*9;
+    var scale = 1 - k*0.108;
+    for(var i=0;i<row.length;i++){
+      var t = i/(row.length-1);
+      var x = CX - half + t*half*2;
+      var y = baseY - Math.sin(Math.PI*t)*curve;
+      seats.push({id:n++, inst:row[i], x:x, y:y, scale:scale, row:k, t:t,
+                  ang:Math.atan2(y-560, x-CX)});
     }
-    if(left <= 0){ resolve(null); return; }
-    raf = requestAnimationFrame(tick);
-  };
-  raf = requestAnimationFrame(tick);
+  }
+  return seats;
+}
+var SEATS = buildSeats();
+var PODIUM = {id:-1, inst:"composer", x:CX, y:812, scale:1.3, row:-1, ang:0};
+
+/* ============================================================
+   3. LOW-POLY FIGURES
+   ============================================================ */
+var SKIN=["#e9c49c","#dba97a","#bd8452","#8e5c35","#5f3b21","#f2d2b2","#a06f42"];
+var HAIR=["#231a13","#3e2b1a","#6d4b2a","#a37d4c","#cbb68c","#151317","#7b6a59","#4a2f1c"];
+var SUIT="#161522", SUITL="#212033", SHIRT="#e7e3d7";
+var WOOD="#7d3d1d", WOOD_D="#552713", SILVER="#c6cad3", BRASS="#d6a24a", BRASS_D="#9a6f22";
+
+function rnd(i){ var s=Math.sin(i*127.1+311.7)*43758.5453; return s-Math.floor(s); }
+
+function limb(sx,sy,hx,hy,w,fill){
+  var dx=hx-sx, dy=hy-sy, L=Math.sqrt(dx*dx+dy*dy)||1;
+  var nx=-dy/L*w, ny=dx/L*w;
+  return '<polygon points="'+(sx+nx)+','+(sy+ny)+' '+(hx+nx*.65)+','+(hy+ny*.65)+' '+
+         (hx-nx*.65)+','+(hy-ny*.65)+' '+(sx-nx)+','+(sy-ny)+'" fill="'+fill+'"/>';
+}
+function octa(cx,cy,r,fill){
+  var p=[];
+  for(var i=0;i<8;i++){var a=Math.PI/8+i*Math.PI/4; p.push((cx+Math.cos(a)*r).toFixed(1)+','+(cy+Math.sin(a)*r*1.08).toFixed(1));}
+  return '<polygon points="'+p.join(" ")+'" fill="'+fill+'"/>';
 }
 
-function resolve(given){
-  if(!live) return;
-  live = false; cancelAnimationFrame(raf);
-  const q = ROUNDS[i];
-  const secs = (performance.now() - t0)/1000;
-  const ok = given !== null && q.accepts.includes(norm(given));
+var POSE = {
+  rest:  [[-21,-46],[21,-46]],
+  bow:   [[-25,-89],[-15,-73]],
+  cello: [[-17,-63],[13,-57]],
+  bass:  [[-19,-92],[9,-70]],
+  wind:  [[-8,-63],[7,-52]],
+  brass: [[5,-84],[16,-80]],
+  flute: [[10,-90],[27,-87]],
+  perc:  [[-18,-58],[18,-58]],
+  keys:  [[-15,-53],[15,-53]],
+  harp:  [[-22,-74],[-11,-56]],
+  baton: [[-24,-98],[20,-104]]
+};
 
-  if(ok){
-    const bonus = Math.round(Math.max(0, LIMIT/1000 - secs) * 10);
-    score += 100 + bonus; right++;
-    if(fastest === null || secs < fastest) fastest = secs;
-    $("mark").textContent = "CORRECT  +" + (100+bonus);
-    $("mark").className = "mark ok";
+function figure(i, pose, standing){
+  var skin=SKIN[Math.floor(rnd(i)*SKIN.length)];
+  var hair=HAIR[Math.floor(rnd(i+7)*HAIR.length)];
+  var up = standing ? -20 : 0;
+  var shY = -72+up, hipY = -30+up*1.4, headY = -90+up;
+  var s = "";
+
+  if(!standing){
+    s += '<polygon points="-16,'+(hipY+2)+' 16,'+(hipY+2)+' 16,'+(hipY+9)+' -16,'+(hipY+9)+'" fill="#0e0d16"/>';
+    s += '<polygon points="-13,'+(hipY+9)+' -9,'+(hipY+9)+' -8,0 -14,0" fill="#0b0a12"/>';
+    s += '<polygon points="9,'+(hipY+9)+' 13,'+(hipY+9)+' 14,0 8,0" fill="#0b0a12"/>';
+    s += '<polygon points="-13,'+hipY+' -2,'+hipY+' -3,-15 -6,0 -14,0" fill="'+SUIT+'"/>';
+    s += '<polygon points="2,'+hipY+' 13,'+hipY+' 14,0 6,0 3,-15" fill="'+SUITL+'"/>';
   } else {
-    missed.push(q);
-    $("mark").textContent = given === null ? "TIME" : "NOT QUITE";
-    $("mark").className = "mark no";
+    s += '<polygon points="-12,'+hipY+' -1,'+hipY+' -2,0 -12,0" fill="'+SUIT+'"/>';
+    s += '<polygon points="1,'+hipY+' 12,'+hipY+' 12,0 2,0" fill="'+SUITL+'"/>';
   }
-  $("score").textContent = score;
-  $("answerWas").textContent = q.term;
-  $("quip").textContent = q.quip;
-  $("ask").style.display = "none";
-  $("verdict").classList.add("show");
-  $("timerBar").style.width = "0%";
 
-  setTimeout(()=>{
-    i++;
-    if(i >= ROUNDS.length) finish(); else present();
-  }, 3000);
+  s += '<polygon points="-16,'+shY+' 16,'+shY+' 13,'+(hipY+4)+' -13,'+(hipY+4)+'" fill="'+SUIT+'"/>';
+  s += '<polygon points="-16,'+shY+' -3,'+shY+' -4,'+(hipY+4)+' -13,'+(hipY+4)+'" fill="'+SUITL+'"/>';
+  s += '<polygon points="-6,'+(shY-2)+' 6,'+(shY-2)+' 0,'+(shY+17)+'" fill="'+SHIRT+'"/>';
+
+  var P = POSE[pose]||POSE.rest;
+  var lift = standing ? -18 : 0;
+  var lx=P[0][0], ly=P[0][1]+lift, rx=P[1][0], ry=P[1][1]+lift;
+  s += limb(-14,shY+4, lx,ly, 4.6, SUIT);
+  s += limb( 14,shY+4, rx,ry, 4.6, SUITL);
+  s += octa(lx,ly,3.4,skin) + octa(rx,ry,3.4,skin);
+
+  s += '<polygon points="-4,'+(shY+2)+' 4,'+(shY+2)+' 4,'+(shY-6)+' -4,'+(shY-6)+'" fill="'+skin+'"/>';
+  s += octa(0,headY,10,skin);
+  s += '<polygon points="-10,'+(headY-2)+' -10,'+(headY-7)+' -6,'+(headY-9)+' 6,'+(headY-9)+' 10,'+(headY-7)+
+       ' 10,'+(headY-2)+' 7,'+(headY-6)+' -7,'+(headY-6)+'" fill="'+hair+'"/>';
+  return s;
+}
+
+function bars(n,w,y1,y2,x0,cA,cB){
+  var out="";
+  for(var i=0;i<n;i++){
+    var x=x0+i*w;
+    out+='<polygon points="'+x+','+y1+' '+(x+w-1.5)+','+y1+' '+(x+w-1.5)+','+y2+' '+x+','+y2+'" fill="'+(i%2?cA:cB)+'"/>';
+  }
+  return out;
+}
+function strings(){
+  var out="";
+  for(var n=0;n<9;n++){
+    var x1=-28+n*2.2, y1=-108+n*7.4, x2=-11+n*0.7, y2=-40+n*1.2;
+    out+='<polygon points="'+x1+','+y1+' '+x2+','+y2+' '+(x2+1.3)+','+y2+' '+(x1+1.3)+','+y1+'" fill="#e6dcbb" opacity=".85"/>';
+  }
+  return out;
+}
+
+var INSTRUMENT = {
+  violin:function(){return {pose:"bow", front:
+    '<polygon points="-5,-85 -23,-93 -30,-86 -12,-78" fill="'+WOOD+'"/>'+
+    '<polygon points="-23,-93 -33,-95 -30,-86" fill="'+WOOD_D+'"/>'+
+    '<polygon points="-7,-77 -36,-99 -37,-96 -8,-74" fill="#e2d6b8"/>'};},
+  viola:function(){return {pose:"bow", front:
+    '<polygon points="-5,-86 -25,-95 -33,-87 -13,-77" fill="#6d3318"/>'+
+    '<polygon points="-25,-95 -36,-97 -33,-87" fill="'+WOOD_D+'"/>'+
+    '<polygon points="-7,-76 -38,-101 -39,-98 -8,-73" fill="#e2d6b8"/>'};},
+  cello:function(){return {pose:"cello", front:
+    '<polygon points="-11,-58 3,-59 6,-22 -13,-21" fill="#8f4a1e"/>'+
+    '<polygon points="-11,-58 -4,-58 -6,-21 -13,-21" fill="#5e2c10"/>'+
+    '<polygon points="-8,-58 -4,-59 -11,-100 -14,-99" fill="#4a230d"/>'+
+    '<polygon points="-14,-101 -9,-102 -8,-96 -13,-95" fill="#6d3a18"/>'+
+    '<polygon points="-4,-52 -2,-52 -4,-30 -6,-30" fill="#2a1206"/>'+
+    '<polygon points="11,-55 13,-54 -7,-33 -9,-35" fill="#e2d6b8"/>'};},
+  bass:function(){return {pose:"bass", stand:true, front:
+    '<polygon points="-12,-80 3,-81 7,-24 -15,-23" fill="#7c3d17"/>'+
+    '<polygon points="-12,-80 -5,-80 -8,-23 -15,-23" fill="#50260e"/>'+
+    '<polygon points="-9,-80 -5,-81 -13,-132 -17,-131" fill="#43200c"/>'+
+    '<polygon points="-17,-133 -11,-134 -10,-127 -16,-126" fill="#653517"/>'+
+    '<polygon points="-5,-72 -3,-72 -6,-34 -8,-34" fill="#261005"/>'};},
+  flute:function(){return {pose:"flute", front:
+    '<polygon points="6,-92 40,-91 40,-87 6,-88" fill="'+SILVER+'"/>'+
+    '<polygon points="6,-92 40,-91 40,-89.5 6,-90.5" fill="#eef1f6"/>'};},
+  piccolo:function(){return {pose:"flute", front:
+    '<polygon points="6,-92 26,-91 26,-88 6,-89" fill="'+SILVER+'"/>'};},
+  altoflute:function(){return {pose:"flute", front:
+    '<polygon points="6,-92 46,-90 46,-85 6,-87" fill="#b9bec8"/>'+
+    '<polygon points="0,-95 10,-94 10,-89 0,-90" fill="'+SILVER+'"/>'};},
+  oboe:function(){return {pose:"wind", front:
+    '<polygon points="-3,-88 3,-88 5,-46 -5,-46" fill="#1d1512"/>'+
+    '<polygon points="-6,-46 6,-46 8,-38 -8,-38" fill="#1d1512"/>'+
+    '<polygon points="-3,-88 0,-88 1,-46 -2,-46" fill="#3a2a22"/>'};},
+  englishhorn:function(){return {pose:"wind", front:
+    '<polygon points="-3,-88 3,-88 6,-48 -4,-48" fill="#221813"/>'+
+    '<polygon points="-7,-48 8,-48 11,-34 -9,-34" fill="#221813"/>'+
+    '<polygon points="-9,-34 11,-34 8,-28 -6,-28" fill="#2e211a"/>'};},
+  clarinet:function(){return {pose:"wind", front:
+    '<polygon points="-3,-88 3,-88 5,-44 -5,-44" fill="#12100f"/>'+
+    '<polygon points="-7,-44 7,-44 10,-34 -10,-34" fill="#12100f"/>'+
+    '<polygon points="-3,-88 0,-88 1,-44 -2,-44" fill="#2b2624"/>'};},
+  bassclarinet:function(){return {pose:"wind", front:
+    '<polygon points="-3,-90 3,-90 7,-30 -5,-30" fill="#12100f"/>'+
+    '<polygon points="-8,-30 9,-30 16,-18 12,-12 -2,-16" fill="#1b1817"/>'+
+    '<polygon points="-3,-90 0,-90 2,-30 -1,-30" fill="#2b2624"/>'};},
+  bassoon:function(){return {pose:"wind", front:
+    '<polygon points="-4,-116 3,-116 8,-32 -2,-32" fill="#5e3016"/>'+
+    '<polygon points="-4,-116 -1,-116 3,-32 -2,-32" fill="#7a4020"/>'+
+    '<polygon points="-6,-124 2,-124 3,-114 -5,-114" fill="'+SILVER+'"/>'};},
+  contrabassoon:function(){return {pose:"wind", front:
+    '<polygon points="-6,-128 2,-128 8,-28 -3,-28" fill="#4e2712"/>'+
+    '<polygon points="-6,-128 -2,-128 2,-28 -3,-28" fill="#6b3819"/>'+
+    '<polygon points="4,-128 14,-128 14,-118 4,-118" fill="'+BRASS_D+'"/>'};},
+  horn:function(){return {pose:"brass", front:
+    '<circle cx="14" cy="-66" r="15" fill="none" stroke="'+BRASS_D+'" stroke-width="4"/>'+
+    '<circle cx="14" cy="-66" r="9" fill="none" stroke="'+BRASS+'" stroke-width="3"/>'+
+    '<polygon points="22,-54 38,-46 38,-30 20,-42" fill="'+BRASS+'"/>'+
+    '<polygon points="22,-54 30,-50 30,-36 20,-42" fill="'+BRASS_D+'"/>'};},
+  trumpet:function(){return {pose:"brass", front:
+    '<polygon points="4,-84 30,-83 30,-79 4,-80" fill="'+BRASS+'"/>'+
+    '<polygon points="30,-88 44,-92 44,-72 30,-76" fill="'+BRASS+'"/>'+
+    '<polygon points="30,-88 37,-90 37,-74 30,-76" fill="'+BRASS_D+'"/>'};},
+  trombone:function(){return {pose:"brass", front:
+    '<polygon points="2,-84 42,-83 42,-80 2,-81" fill="'+SILVER+'"/>'+
+    '<polygon points="42,-89 60,-94 60,-70 42,-75" fill="'+BRASS+'"/>'+
+    '<polygon points="42,-89 51,-91 51,-72 42,-75" fill="'+BRASS_D+'"/>'};},
+  basstrombone:function(){return {pose:"brass", front:
+    '<polygon points="2,-84 44,-83 44,-79 2,-80" fill="'+SILVER+'"/>'+
+    '<polygon points="44,-92 66,-98 66,-66 44,-73" fill="'+BRASS+'"/>'+
+    '<polygon points="44,-92 55,-95 55,-69 44,-73" fill="'+BRASS_D+'"/>'};},
+  tuba:function(){return {pose:"brass", front:
+    '<polygon points="3,-54 15,-54 16,-24 2,-24" fill="'+BRASS_D+'"/>'+
+    '<polygon points="3,-54 8,-54 8,-24 2,-24" fill="'+BRASS+'"/>'+
+    '<polygon points="4,-54 18,-54 25,-82 9,-82" fill="'+BRASS+'"/>'+
+    '<polygon points="4,-54 10,-54 13,-82 9,-82" fill="#e8bd68"/>'+
+    '<polygon points="9,-82 25,-82 26,-78 8,-78" fill="#f0cd85"/>'};},
+  timpani:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-44,-58 -8,-58 -12,-14 -40,-14" fill="#b5762c"/>'+
+    '<polygon points="-44,-58 -26,-58 -28,-14 -40,-14" fill="#d09a4c"/>'+
+    '<ellipse cx="-26" cy="-58" rx="18" ry="5" fill="#e8dcc4"/>'+
+    '<polygon points="10,-54 42,-54 38,-14 14,-14" fill="#b5762c"/>'+
+    '<ellipse cx="26" cy="-54" rx="16" ry="4.5" fill="#e8dcc4"/>'};},
+  snare:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-16,-52 16,-52 16,-36 -16,-36" fill="#cdd2d9"/>'+
+    '<ellipse cx="0" cy="-52" rx="16" ry="4.5" fill="#efe9db"/>'+
+    '<polygon points="-2,-36 2,-36 2,-4 -2,-4" fill="#3a3a44"/>'};},
+  bassdrum:function(){return {pose:"perc", stand:true, front:
+    '<circle cx="0" cy="-46" r="30" fill="#e3d8c2"/>'+
+    '<circle cx="0" cy="-46" r="30" fill="none" stroke="#7a4a22" stroke-width="5"/>'};},
+  cymbal:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-24,-62 24,-58 24,-55 -24,-59" fill="'+BRASS+'"/>'+
+    '<polygon points="-24,-62 0,-60 0,-57 -24,-59" fill="#efc978"/>'+
+    '<polygon points="-1,-58 1,-58 1,-4 -1,-4" fill="#3a3a44"/>'};},
+  woodblock:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-14,-52 14,-52 14,-42 -14,-42" fill="#a9682f"/>'+
+    '<polygon points="-14,-52 0,-52 0,-42 -14,-42" fill="#c98a45"/>'+
+    '<polygon points="-1,-42 1,-42 1,-4 -1,-4" fill="#3a3a44"/>'};},
+  glockenspiel:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-26,-54 26,-52 26,-40 -26,-42" fill="#2a2a34"/>'+
+    bars(7,7,-53,-42,-24,"#cfd4dc","#eef1f6")+
+    '<polygon points="-2,-40 2,-40 2,-4 -2,-4" fill="#3a3a44"/>'};},
+  marimba:function(){return {pose:"perc", stand:true, front:
+    '<polygon points="-32,-54 32,-52 32,-40 -32,-42" fill="#3a2a1e"/>'+
+    bars(8,8,-53,-42,-30,"#b98a52","#d5a86a")+
+    bars(8,8,-40,-18,-29,"#7c848f","#6d7580")};},
+  harp:function(){return {pose:"harp", front:
+    '<polygon points="-33,-22 -28,-116 -20,-116 -25,-22" fill="#6d4520"/>'+
+    '<polygon points="-28,-116 -20,-116 -6,-38 -13,-34" fill="#8e5c2c"/>'+
+    '<polygon points="-28,-116 -24,-116 -10,-36 -13,-34" fill="#a3703a"/>'+
+    strings()+
+    '<polygon points="-14,-40 -4,-36 -2,-20 -12,-20" fill="#5a3719"/>'+
+    '<polygon points="-36,-22 -2,-20 -4,-12 -34,-14" fill="#4a2c13"/>'};},
+  piano:function(){return {pose:"keys", behind:
+    '<polygon points="-70,-40 34,-46 58,-24 -66,-18" fill="#141420"/>'+
+    '<polygon points="-70,-40 -10,-43 -8,-22 -66,-18" fill="#1e1e2e"/>'+
+    '<polygon points="-62,-24 26,-28 28,-20 -60,-16" fill="#e9e6dc"/>'+
+    bars(11,8,-27,-22,-58,"#16161f","#16161f")};},
+  celesta:function(){return {pose:"keys", front:
+    '<polygon points="-24,-46 24,-46 24,-20 -24,-20" fill="#2c2032"/>'+
+    '<polygon points="-24,-46 0,-46 0,-20 -24,-20" fill="#3a2b42"/>'+
+    '<polygon points="-20,-30 20,-30 20,-24 -20,-24" fill="#e9e6dc"/>'};},
+  composer:function(){return {pose:"baton", stand:true,
+    front:'<polygon points="20,-122 42,-136 43,-134 21,-120" fill="#efe6cf"/>',
+    behind:'<polygon points="-46,-30 46,-30 40,0 -40,0" fill="#1a1424"/>'+
+           '<polygon points="-46,-30 0,-30 -2,0 -40,0" fill="#241c31"/>'};}
+};
+INSTRUMENT.violin2 = INSTRUMENT.violin;
+INSTRUMENT.cello2  = INSTRUMENT.cello;
+
+var NO_STAND = ["timpani","snare","bassdrum","cymbal","woodblock","glockenspiel","marimba","piano","harp","composer","celesta","tuba"];
+
+function seatSVG(seat){
+  var make = INSTRUMENT[seat.inst] || INSTRUMENT.violin;
+  var kit = make();
+  var standing = (kit.stand !== undefined) ? kit.stand : (STANDING.indexOf(seat.inst) >= 0);
+  var body = figure(seat.id+13, kit.pose, standing);
+  var delay = (rnd(seat.id+3)*3.4).toFixed(2);
+  var stand = "";
+  if(NO_STAND.indexOf(seat.inst) < 0){
+    stand = '<g class="stand"><polygon points="-13,-46 13,-44 13,-38 -13,-40" fill="#191925"/>'+
+            '<polygon points="-11,-45 11,-43 11,-39 -11,-41" fill="#ded8c6"/>'+
+            '<polygon points="-1,-39 1,-39 1,-8 -1,-8" fill="#232330"/></g>';
+  }
+  var face = (seat.x > CX + 30) ? -1 : 1;   // right half turns in toward the podium
+  return '<g class="seat" data-id="'+seat.id+'" transform="translate('+seat.x.toFixed(1)+','+seat.y.toFixed(1)+
+         ') scale('+(seat.scale*face).toFixed(3)+','+seat.scale.toFixed(3)+')">'+
+         (kit.behind||"")+
+         '<g class="breathe" style="animation-delay:-'+delay+'s">'+body+(kit.front||"")+'</g>'+
+         stand+
+         '<ellipse cx="0" cy="2" rx="24" ry="5" fill="#000" opacity=".34"/>'+
+         '</g>';
+}
+
+function buildStage(){
+  var order = SEATS.slice().sort(function(a,b){ return a.row===b.row ? a.t-b.t : b.row-a.row; });
+  var hall =
+    '<defs>'+
+      '<radialGradient id="glowA" cx="50%" cy="20%" r="70%">'+
+        '<stop offset="0%" stop-color="#3a2a4a"/><stop offset="100%" stop-color="#0a0812"/>'+
+      '</radialGradient>'+
+      '<linearGradient id="floorG" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0%" stop-color="#2a1a10"/><stop offset="100%" stop-color="#4a3220"/>'+
+      '</linearGradient>'+
+      '<mask id="spotmask">'+
+        '<rect width="1700" height="1000" fill="#fff"/>'+
+        '<ellipse id="spothole" cx="850" cy="500" rx="1400" ry="1000" fill="#000"/>'+
+      '</mask>'+
+    '</defs>'+
+    '<rect width="1700" height="1000" fill="url(#glowA)"/>';
+
+  for(var k=4;k>=0;k--){
+    var y = 646 - k*86;
+    hall += '<polygon points="0,'+(y+16)+' 1700,'+(y+16)+' 1700,'+(y+30)+' 0,'+(y+30)+'" fill="#1d1409" opacity="'+(.5+k*.06)+'"/>';
+  }
+  hall += '<polygon points="0,690 1700,690 1700,1000 0,1000" fill="url(#floorG)"/>';
+  hall += '<polygon points="700,760 1000,760 1030,830 670,830" fill="#241a2e"/>'+
+          '<polygon points="700,760 850,760 850,830 670,830" fill="#2e2239"/>';
+
+  var seats = order.map(seatSVG).join("");
+  var composer = seatSVG(PODIUM);
+  var dim = '<rect class="dimmer" id="dimmer" width="1700" height="1000" fill="#04030a" opacity="0" mask="url(#spotmask)"/>';
+  return '<svg viewBox="0 0 1700 1000" xmlns="http://www.w3.org/2000/svg">'+hall+seats+composer+dim+'</svg>';
+}
+
+/* ============================================================
+   4. CAMERA
+   ============================================================ */
+var stageEl = document.getElementById("stage");
+var viewEl  = document.getElementById("viewport");
+var baseFit = 1;
+
+function fit(){
+  var w = viewEl.clientWidth, h = viewEl.clientHeight;
+  if(!w || !h){                      // layout not settled yet - retry next frame
+    baseFit = 0.6;
+    requestAnimationFrame(function(){ fit(); if(phase==="idle") wideShot(0); });
+    return;
+  }
+  baseFit = Math.min(w/1700, h/1000);
+}
+function camera(fx, fy, zoom, ms, tilt){
+  var w = viewEl.clientWidth, h = viewEl.clientHeight;
+  var s = baseFit*zoom;
+  stageEl.style.transitionDuration = ms+"ms";
+  stageEl.style.transform =
+    "translate("+(w/2)+"px,"+(h/2)+"px) rotate("+(tilt||0).toFixed(2)+"deg) scale("+s+") translate("+(-fx)+"px,"+(-fy)+"px)";
+}
+function wideShot(ms){
+  camera(850, 470, 1, ms===undefined?800:ms, 0);
+  var d = document.getElementById("dimmer");
+  if(d) d.setAttribute("opacity","0");
+}
+function focusSeat(seat, ms){
+  var zoom = Math.min(7.4, 3.5/seat.scale);
+  var fy = seat.y - 62*seat.scale;
+  var tilt = (rnd(seat.id+41)-0.5)*4.4;
+  camera(seat.x, fy, zoom, ms, tilt);
+  var hole = document.getElementById("spothole");
+  var d = document.getElementById("dimmer");
+  if(hole){
+    hole.setAttribute("cx", seat.x);
+    hole.setAttribute("cy", seat.y-46*seat.scale);
+    hole.setAttribute("rx", 92*seat.scale);
+    hole.setAttribute("ry", 84*seat.scale);
+  }
+  if(d) d.setAttribute("opacity",".76");
+}
+
+/* ============================================================
+   5. GAME
+   ============================================================ */
+function el(id){ return document.getElementById(id); }
+var ui = {
+  q:el("hQ"), c:el("hC"), s:el("hS"), p:el("hP"),
+  chair:el("chairLine"), prompt:el("promptLine"),
+  input:el("answer"), submit:el("submitBtn"),
+  meter:el("meter"), fill:el("meterFill"), clock:el("clockLine"),
+  title:el("titleCard"), end:el("endCard"),
+  endScore:el("endScore"), endCount:el("endCount"), endMissed:el("endMissed"), endTitle:el("endTitle")
+};
+
+var LIMIT = 15;
+var plan=[], idx=0, score=0, correct=0, streak=0, best=0, missed=[];
+var ticker=null, deadline=0, phase="idle";
+
+function norm(s){
+  return String(s).toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+}
+
+function assignSeats(){
+  var taken = {};
+  function pick(inst){
+    var want = inst==="violin2" ? "violin" : inst==="cello2" ? "cello" : inst;
+    var pool = SEATS.filter(function(s){ return s.inst===want && !taken[s.id]; });
+    var chosen;
+    if(pool.length){
+      chosen = pool[Math.floor(Math.random()*pool.length)];
+    } else {
+      var spare = SEATS.filter(function(s){ return !taken[s.id]; });
+      chosen = spare[Math.floor(Math.random()*spare.length)];
+    }
+    taken[chosen.id] = true;
+    return chosen;
+  }
+
+  var middle = [];
+  for(var i=1;i<=28;i++){
+    middle.push({q:ROUND[i], seat:pick(ROUND[i].inst)});
+  }
+
+  middle.sort(function(a,b){ return a.seat.ang - b.seat.ang; });
+  var start = Math.floor(Math.random()*middle.length);
+  var dir = Math.random()<.5 ? 1 : -1;
+  var swept = [];
+  for(var j=0;j<middle.length;j++){
+    swept.push(middle[((start + dir*j) % middle.length + middle.length) % middle.length]);
+  }
+
+  return [{q:ROUND[0], seat:PODIUM}].concat(swept, [{q:ROUND[29], seat:PODIUM}]);
+}
+
+function setHUD(){
+  ui.q.textContent = String(Math.min(idx+1,30)).replace(/^(\d)$/,"0$1")+" / 30";
+  ui.c.textContent = correct;
+  ui.s.textContent = streak;
+  ui.p.textContent = score.toLocaleString();
+}
+
+function startRun(){
+  plan = assignSeats();
+  idx=0; score=0; correct=0; streak=0; best=0; missed=[];
+  ui.title.hidden = true; ui.end.hidden = true;
+  setHUD();
+  wideShot(900);
+  setTimeout(askNext, 1000);
+}
+
+function askNext(){
+  if(idx >= plan.length){ finish(); return; }
+  phase = "moving";
+  setHUD();
+  var step = plan[idx], seat = step.seat, q = step.q;
+  ui.input.value=""; ui.input.disabled=true; ui.submit.disabled=true;
+  ui.fill.style.transform="scaleX(1)"; ui.meter.classList.remove("warn");
+  ui.clock.innerHTML="&nbsp;";
+  ui.chair.textContent = (seat===PODIUM) ? "The podium" : "Chair "+(seat.id+1);
+  ui.prompt.textContent = "...";
+
+  var legA = idx>0 ? 620 : 0;
+  if(legA) wideShot(legA);
+
+  setTimeout(function(){
+    focusSeat(seat, 1250);
+    setTimeout(function(){ beginQuestion(q, seat); }, 1250);
+  }, legA);
+}
+
+function beginQuestion(q, seat){
+  phase="answering";
+  var label = (seat===PODIUM) ? "The podium" : "Chair "+(seat.id+1)+" · Row "+(seat.row+1);
+  ui.chair.innerHTML = label + ' <i>·</i> ' + (INST_NAME[q.inst] || INST_NAME[seat.inst] || "Player");
+  ui.prompt.textContent = q.d;
+  ui.input.disabled=false; ui.submit.disabled=false;
+  ui.input.focus();
+  deadline = Date.now() + LIMIT*1000;
+  clearInterval(ticker);
+  ticker = setInterval(tick, 90);
+  tick();
+}
+
+function tick(){
+  var left = Math.max(0, deadline - Date.now());
+  var frac = left/(LIMIT*1000);
+  ui.fill.style.transform = "scaleX("+frac+")";
+  if(frac < .28) ui.meter.classList.add("warn"); else ui.meter.classList.remove("warn");
+  ui.clock.textContent = (left/1000).toFixed(1)+"s";
+  if(left <= 0){ clearInterval(ticker); resolve(false, true); }
+}
+
+function submitAnswer(){
+  if(phase!=="answering") return;
+  var given = norm(ui.input.value);
+  if(!given) return;
+  var q = plan[idx].q;
+  var hit = q.a.some(function(x){ return norm(x) === given; });
+  clearInterval(ticker);
+  resolve(hit, false);
+}
+
+function resolve(hit, timeout){
+  phase="reveal";
+  ui.input.disabled=true; ui.submit.disabled=true;
+  var q = plan[idx].q;
+  var left = Math.max(0, deadline - Date.now())/1000;
+
+  if(hit){
+    correct++; streak++; if(streak>best) best=streak;
+    var pts = 100 + Math.round(left*12) + (streak>=3 ? streak*10 : 0);
+    score += pts;
+    ui.prompt.innerHTML = '<span class="tag ok">Correct</span>'+q.t+
+      '<div class="note">'+q.note+' <b>+'+pts+'</b></div>';
+  } else {
+    streak = 0;
+    missed.push(q);
+    ui.prompt.innerHTML = '<span class="tag no">'+(timeout?"Out of time":"Not it")+'</span>'+q.t+
+      '<div class="note">'+q.d+' &mdash; '+q.note+'</div>';
+  }
+  ui.fill.style.transform="scaleX(0)";
+  ui.clock.innerHTML="&nbsp;";
+  setHUD();
+  idx++;
+  setTimeout(askNext, hit ? 1900 : 2900);
 }
 
 function finish(){
-  const pct = right / ROUNDS.length;
-  const grade = pct >= .9 ? "Bravo" : pct >= .7 ? "Well played" : pct >= .45 ? "Keep at it" : "Back to the desk";
-  const line = pct >= .9 ? "The hall stands. You knew the room."
-             : pct >= .7 ? "A strong reading with a few smudged corners."
-             : pct >= .45 ? "The shape was there. The details need another pass."
-             : "Every one of these is learnable. Start with the list below.";
-  $("grade").innerHTML = grade + "<em>.</em>";
-  $("endLine").textContent = line;
-  $("fScore").textContent = score;
-  $("fRight").textContent = right + " / " + ROUNDS.length;
-  $("fFast").textContent = fastest === null ? "—" : fastest.toFixed(1) + "s";
-
-  const box = $("missed");
-  if(missed.length){
-    box.innerHTML = "<h3>TERMS TO REVISIT</h3><ul>" +
-      missed.map(m=>`<li><b>${m.term}</b> — ${m.def}</li>`).join("") + "</ul>";
-  } else {
-    box.innerHTML = "<h3>NOTHING MISSED. ALL THIRTY NAMED.</h3>";
-  }
-  lookAt("composer", true);
-  $("endScreen").hidden = false;
+  phase="done";
+  wideShot(1500);
+  ui.chair.textContent = "The hall empties";
+  ui.prompt.textContent = "That is the whole orchestra.";
+  ui.endScore.textContent = score.toLocaleString();
+  ui.endCount.textContent = correct+" of 30 terms · longest streak "+best;
+  ui.endTitle.innerHTML = correct===30 ? '<em>Every chair</em>Clean sweep'
+    : correct>=24 ? '<em>Final chord</em>Well played'
+    : correct>=15 ? '<em>Final chord</em>Curtain'
+    : '<em>Back to the practice room</em>Curtain';
+  ui.endMissed.innerHTML = missed.length
+    ? '<div style="border:none;opacity:.55;font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase">Worth another look</div>'+
+      missed.map(function(m){ return '<div><b>'+m.t+'</b><span>'+m.d+'</span></div>'; }).join("")
+    : '<div style="border:none;opacity:.7">Nothing missed. Nothing to review.</div>';
+  setTimeout(function(){ ui.end.hidden=false; }, 900);
 }
 
-/* ============ WIRING ============ */
-$("submit").addEventListener("click", ()=> resolve($("answer").value));
-$("skip").addEventListener("click", ()=> resolve(""));
-$("answer").addEventListener("keydown", e=>{
-  if(e.key === "Enter"){ e.preventDefault(); resolve($("answer").value); }
+/* ---------- wiring ---------- */
+stageEl.innerHTML = buildStage();
+fit();
+wideShot(0);
+window.addEventListener("resize", function(){
+  fit();
+  if(phase==="answering" || phase==="reveal"){
+    focusSeat(plan[Math.min(idx, plan.length-1)].seat, 0);
+  } else {
+    wideShot(0);
+  }
 });
-$("calm").addEventListener("change", e=>{
-  document.body.classList.toggle("calm", e.target.checked);
-});
-$("begin").addEventListener("click", ()=>{
-  $("startScreen").hidden = true;
-  present();
-});
-$("again").addEventListener("click", ()=>{
-  i = 0; score = 0; right = 0; fastest = null; missed = [];
-  $("score").textContent = "0";
-  $("endScreen").hidden = true;
-  present();
-});
+el("startBtn").addEventListener("click", startRun);
+el("againBtn").addEventListener("click", startRun);
+ui.submit.addEventListener("click", submitAnswer);
+ui.input.addEventListener("keydown", function(e){ if(e.key==="Enter") submitAnswer(); });
 </script>
 </body>
 </html>
