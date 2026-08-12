@@ -1,92 +1,786 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pedagogy Game</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>ORTIZ BUILD — Engineering Watch</title>
 <style>
   :root{
-    --bg:#0b0f14;
-    --surface:#121a23;
-    --surface-hi:#182330;
-    --edge:#26333f;
-    --ink:#e3eaf2;
-    --dim:#8496a8;
-    --accent:#69d97f;
+    --bg:#07090d;
+    --panel:#10151d;
+    --ink:#e8f1ff;
+    --muted:#8ea0b8;
+    --green:#66ff8d;
+    --yellow:#ffd45a;
+    --red:#ff5f5f;
+    --cyan:#70e5ff;
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html{-webkit-text-size-adjust:100%}
-  body{
-    min-height:100vh;background:var(--bg);color:var(--ink);
-    font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
-    display:flex;align-items:center;justify-content:center;padding:6vh 1.5rem;
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#05070a;color:var(--ink);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;overflow:hidden}
+  body{display:grid;place-items:center}
+  #shell{
+    width:min(100vw,1600px);
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    background:#06080c;
   }
-  main{width:100%;max-width:34rem}
-
-  header{border-bottom:1px solid var(--edge);padding-bottom:1.5rem;margin-bottom:2.5rem}
-  h1{font-size:clamp(1.9rem,6vw,2.6rem);font-weight:600;letter-spacing:.18em;text-transform:uppercase}
-  .tagline{margin-top:.7rem;color:var(--dim);font-size:.95rem;letter-spacing:.06em}
-
-  .eyebrow{
-    display:block;margin-bottom:.9rem;color:var(--dim);
-    font-size:.75rem;letter-spacing:.22em;text-transform:uppercase;
+  #topbar{
+    height:44px;
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 14px;
+    border-bottom:2px solid #243041;
+    background:#0b0f16;
+    letter-spacing:.06em;
+    font-size:13px;
   }
-
-  .card{
-    display:block;position:relative;text-decoration:none;color:inherit;
-    background:var(--surface);border:1px solid var(--edge);border-radius:10px;
-    padding:1.6rem 1.7rem;
-    transition:background .18s ease,border-color .18s ease,transform .18s ease;
+  #topbar b{color:#b8dfff}
+  #topbar .hint{color:#708198}
+  #gamewrap{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    background:#000;
+    display:grid;
+    place-items:center;
   }
-  .card::before{
-    content:"";position:absolute;left:0;top:1.6rem;bottom:1.6rem;width:2px;
-    background:var(--accent);border-radius:2px;opacity:.65;transition:opacity .18s ease;
+  canvas{
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    background:#03060a;
+    outline:none;
   }
-  .card:hover,.card:focus-visible{
-    background:var(--surface-hi);border-color:#3a4d5e;transform:translateY(-2px);
+  #touchHelp{
+    position:absolute;
+    left:50%;
+    bottom:8px;
+    transform:translateX(-50%);
+    background:rgba(7,10,15,.78);
+    border:1px solid #2a3b52;
+    padding:7px 10px;
+    font-size:11px;
+    color:#9eb0c6;
+    pointer-events:none;
+    opacity:.0;
+    transition:opacity .2s;
   }
-  .card:hover::before,.card:focus-visible::before{opacity:1}
-  .card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
-
-  .card-row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
-  .card h2{font-size:1.35rem;font-weight:600;letter-spacing:.05em}
-  .arrow{color:var(--accent);font-size:1.2rem;transition:transform .18s ease}
-  .card:hover .arrow{transform:translateX(3px)}
-  .card p{margin-top:.6rem;color:var(--dim);font-size:.92rem;line-height:1.6}
-  .meta{margin-top:1.1rem;display:flex;flex-wrap:wrap;gap:.5rem}
-  .meta span{
-    font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);
-    border:1px solid var(--edge);border-radius:999px;padding:.28rem .7rem;
+  @media (pointer:coarse){
+    #touchHelp{opacity:1}
   }
-
-  footer{margin-top:2.5rem;color:#5d6d7d;font-size:.75rem;letter-spacing:.12em}
-
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>Pedagogy Game</h1>
-    <p class="tagline">Learn the vocabulary by living the workday.</p>
-  </header>
+<div id="shell">
+  <div id="topbar">
+    <div><b>ORTIZ BUILD</b> / ENGINEERING WATCH</div>
+    <div class="hint">TYPE ANSWER · ENTER SUBMIT · BACKSPACE EDIT · M MUTE</div>
+  </div>
+  <div id="gamewrap">
+    <canvas id="game" width="960" height="540" tabindex="0" aria-label="Ortiz Build engineering game"></canvas>
+    <div id="touchHelp">Tap the game, then use your keyboard.</div>
+  </div>
+</div>
 
-  <span class="eyebrow">Available now</span>
+<script>
+(() => {
+"use strict";
 
-  <a class="card" href="ai-labs-101.html">
-    <div class="card-row">
-      <h2>AI Labs 101</h2>
-      <span class="arrow" aria-hidden="true">&rarr;</span>
-    </div>
-    <p>Thirty core AI and machine-learning terms, taught across one very normal day at a research lab. Type the term before the timer runs out and keep the lab alive.</p>
-    <div class="meta">
-      <span>30 terms</span>
-      <span>15-second rounds</span>
-      <span>Keyboard</span>
-    </div>
-  </a>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
 
-  <footer>BEAMWORTHY</footer>
-</main>
+const W = canvas.width, H = canvas.height;
+const WORLD_W = 2600;
+const TOP_Y = 284;
+const LOWER_Y = 455;
+const STAIR_X = 1260;
+
+const COLORS = {
+  bg:"#05070a", hull:"#18202a", hull2:"#222c38", floor:"#56606c", floorDark:"#303945",
+  line:"#7c8795", green:"#66ff8d", yellow:"#ffd45a", red:"#ff5f5f", cyan:"#70e5ff",
+  white:"#e8f1ff", muted:"#8ea0b8", blue:"#5da9ff", orange:"#ff9f54", purple:"#b58cff",
+  brown:"#8b6f58", glass:"#0b1724", shadow:"#040506"
+};
+
+const stations = {
+  command:    {x:260,  y:TOP_Y,   label:"COMMAND / NAV", level:"top"},
+  control:    {x:650,  y:TOP_Y,   label:"CONTROL", level:"top"},
+  diagnostic: {x:960,  y:TOP_Y,   label:"DIAGNOSTICS", level:"top"},
+  structure:  {x:1180, y:TOP_Y,   label:"STRUCTURE", level:"top"},
+  fluids:     {x:1480, y:LOWER_Y, label:"FLUID SYSTEMS", level:"lower"},
+  mechanical: {x:1810, y:LOWER_Y, label:"MECHANICAL", level:"lower"},
+  thermal:    {x:2110, y:LOWER_Y, label:"THERMAL / POWER", level:"lower"},
+  aft:        {x:2380, y:TOP_Y,   label:"AFT SYSTEMS", level:"top"},
+};
+
+const events = [
+  {term:"Factor of safety",definition:"Ratio between a system's capacity and its expected design load.",difficulty:"easy",station:"structure",problem:"A cargo-restraint frame is carrying much more load than planned. The captain wants to know how much reserve capacity remains before the frame reaches its limit.",action:"checks the load margin on a structural panel"},
+  {term:"Yield strength",definition:"Stress at which permanent deformation begins.",difficulty:"easy",station:"structure",problem:"A landing-brace sample has been stressed during a hard maneuver. It sprang back at first, but the next increment may leave it permanently bent.",action:"compares stress readings with the material limit"},
+  {term:"Shear",definition:"Loading that tends to slide adjacent material layers past one another.",difficulty:"easy",station:"structure",problem:"Two bolted plates near the maneuvering thruster are trying to slide sideways across each other under load.",action:"inspects the joint and fastener loads"},
+  {term:"Torsion",definition:"Twisting produced by torque about an axis.",difficulty:"easy",station:"mechanical",problem:"The auxiliary drive shaft begins twisting under a sudden torque spike from the pump motor.",action:"checks the drive shaft and torque coupling"},
+  {term:"Moment",definition:"Rotational tendency produced by a force about a point or axis.",difficulty:"easy",station:"structure",problem:"A heavy sensor boom is pulling on its mount far from the attachment point, trying to rotate the bracket.",action:"marks the force arm on a structural display"},
+  {term:"Fatigue",definition:"Progressive damage caused by repeated or fluctuating loading.",difficulty:"easy",station:"structure",problem:"Repeated main-engine burns have produced a growing hairline crack around the number-three engine mounting bracket.",action:"opens the mount inspection panel and checks the crack"},
+  {term:"Creep",definition:"Time-dependent deformation under sustained stress, often accelerated by heat.",difficulty:"intermediate",station:"thermal",problem:"A hot support around the reactor feed assembly has slowly sagged even though its load never exceeded the short-term material limit.",action:"checks temperature history and long-term deformation"},
+  {term:"Stress concentration",definition:"Localized amplification of stress around geometric discontinuities.",difficulty:"intermediate",station:"structure",problem:"A crack is beginning beside a sharp-cornered access cutout even though the surrounding hull panel is lightly loaded.",action:"traces the high-stress region around the cutout"},
+  {term:"Buckling",definition:"Instability causing a compressed member to deflect laterally.",difficulty:"easy",station:"structure",problem:"A slender compression strut suddenly bows sideways while the axial load is still below its crushing strength.",action:"checks the bowed support member"},
+  {term:"Second moment of area",definition:"Geometric property measuring a cross-section's resistance to bending.",difficulty:"advanced",station:"structure",problem:"Two replacement beams use the same material and mass, but one cross-section resists bending much better. The engineer must identify the geometric property responsible.",action:"compares beam cross-sections on the analysis screen"},
+  {term:"Modulus of elasticity",definition:"Stiffness expressed as stress divided by elastic strain.",difficulty:"intermediate",station:"diagnostic",problem:"A replacement antenna mast is not yielding, but it bends far more under the same load than the original mast.",action:"checks the material stiffness data"},
+  {term:"Poisson's ratio",definition:"Ratio of transverse strain to axial strain under uniaxial loading.",difficulty:"advanced",station:"diagnostic",problem:"A test coupon stretches lengthwise and becomes thinner sideways. The diagnostic console asks for the property relating those two strains.",action:"measures axial and transverse strain"},
+  {term:"Tolerance",definition:"Allowable variation from a nominal dimension.",difficulty:"easy",station:"mechanical",problem:"A replacement bearing sleeve measures slightly above its drawing dimension. The engineer must decide whether the part is still acceptable.",action:"checks the dimensional acceptance limits"},
+  {term:"Kinematics",definition:"Description of motion without considering its causes.",difficulty:"easy",station:"diagnostic",problem:"A robotic inspection arm is following the wrong path. Before considering forces or motor torques, the crew needs to describe its position, velocity, and motion.",action:"plots the inspection arm motion"},
+  {term:"Degrees of freedom",definition:"Independent coordinates needed to describe a system's configuration.",difficulty:"intermediate",station:"control",problem:"A maintenance manipulator can translate and rotate in several independent ways. The control computer asks how many independent motions define its configuration.",action:"counts the manipulator's independent motions"},
+  {term:"Statically indeterminate",definition:"Having more unknown reactions than equilibrium equations can determine.",difficulty:"advanced",station:"structure",problem:"A reinforced equipment rack is supported at so many points that ordinary force and moment balance cannot determine every reaction load.",action:"flags the over-constrained support model"},
+  {term:"Reynolds number",definition:"Dimensionless ratio of inertial to viscous effects in fluid flow.",difficulty:"intermediate",station:"fluids",problem:"Coolant flow behavior changes after a pump-speed increase. The engineer needs the dimensionless quantity that predicts whether inertia or viscosity dominates.",action:"reads flow speed, density, viscosity, and pipe size"},
+  {term:"Laminar / turbulent flow",definition:"Orderly layered flow versus irregular, strongly mixed flow.",difficulty:"easy",station:"fluids",problem:"A transparent coolant section changes from smooth, layered motion to chaotic mixing after the flow rate rises.",action:"watches the transparent coolant line"},
+  {term:"Boundary layer",definition:"Thin fluid region near a surface where viscous effects are important.",difficulty:"intermediate",station:"fluids",problem:"External cooling calculations are wrong near the hull skin because the fluid right next to the surface behaves differently from the free stream.",action:"checks the near-wall flow display"},
+  {term:"Head loss",definition:"Reduction of mechanical energy in flowing fluid due mainly to friction and disturbances.",difficulty:"intermediate",station:"fluids",problem:"Pressure at the far end of a long coolant loop is lower after flow passes through bends, valves, and rough pipe.",action:"compares upstream and downstream pressure"},
+  {term:"Cavitation",definition:"Formation and collapse of vapor cavities caused by locally low pressure.",difficulty:"easy",station:"fluids",problem:"A feed pump suddenly rattles and the sight glass shows flashing bubbles near the impeller inlet even though the fluid is not boiling in the tank.",action:"reduces pump demand and checks inlet pressure"},
+  {term:"Damping",definition:"Dissipation that reduces oscillation amplitude.",difficulty:"easy",station:"mechanical",problem:"After a maneuver, an equipment platform keeps oscillating. The engineer needs the property that removes energy from the motion so the vibration dies away.",action:"adjusts the vibration isolator"},
+  {term:"Resonance",definition:"Strong response when forcing occurs near a system's natural frequency.",difficulty:"easy",station:"mechanical",problem:"A fan vibration becomes dramatically stronger only at one narrow motor speed and fades when the speed changes.",action:"backs the fan away from the critical speed"},
+  {term:"Hysteresis",definition:"Dependence of a system's output on its prior state as well as current input.",difficulty:"advanced",station:"control",problem:"A thermal valve opens at one temperature while heating, but does not close again until a lower temperature while cooling.",action:"plots the valve's different opening and closing paths"},
+  {term:"PID control",definition:"Feedback control using proportional, integral, and derivative error terms.",difficulty:"intermediate",station:"control",problem:"Cabin pressure control is overshooting its target. The controller has three tuning terms that respond to present error, accumulated error, and rate of change.",action:"retunes the three controller gains"},
+  {term:"Derating",definition:"Deliberately operating equipment below its nominal rating.",difficulty:"easy",station:"thermal",problem:"A power converter is running in a hotter compartment than expected. The engineer lowers its permitted output to improve reliability.",action:"reduces the converter's allowed output"},
+  {term:"Fail-safe",definition:"Design whose failure tends toward a safer condition.",difficulty:"easy",station:"control",problem:"A propellant valve loses electrical power. The crew wants the valve to move automatically to the condition that leaves the ship safest.",action:"checks the valve's loss-of-power position"},
+  {term:"Redundancy",definition:"Duplication of components or functions to improve reliability.",difficulty:"easy",station:"aft",problem:"The navigation computer is mission-critical. The captain asks why a second independent computer is installed beside the first.",action:"checks the backup computer status"},
+  {term:"Single point of failure",definition:"One component whose failure disables the whole system or critical function.",difficulty:"easy",station:"aft",problem:"Two backup pumps share one electrical relay. If that relay fails, every pump stops despite the apparent backups.",action:"identifies the shared relay on the system diagram"},
+  {term:"Tribology",definition:"Study of friction, wear, and lubrication between interacting surfaces.",difficulty:"intermediate",station:"mechanical",problem:"A bearing assembly is overheating and shedding metallic particles. The problem involves surface friction, lubricant condition, and wear.",action:"samples lubricant and inspects the bearing"},
+  {term:"Strain",definition:"Deformation expressed relative to an object's original dimension.",difficulty:"easy",station:"diagnostic",problem:"A hull gauge reports that a one-meter member lengthened by a tiny fraction under load. The engineer needs the normalized measure of that deformation.",action:"reads the bonded deformation gauge"},
+  {term:"Fracture toughness",definition:"Resistance of a material to crack propagation.",difficulty:"advanced",station:"structure",problem:"Two alloys have similar strength, but one can tolerate a much larger existing crack before unstable fracture begins.",action:"compares crack-growth resistance data"},
+  {term:"Finite element analysis",definition:"Numerical approximation of stresses, temperatures, flow, or other field behavior across a discretized model.",difficulty:"intermediate",station:"diagnostic",problem:"A complicated engine bracket cannot be solved accurately with a simple hand calculation. The analysis computer divides it into many small connected elements.",action:"runs the discretized bracket model"},
+  {term:"Thermal expansion",definition:"Dimensional change caused by temperature change.",difficulty:"easy",station:"thermal",problem:"A long coolant pipe grows enough when hot that its rigid supports begin to bind during reactor startup.",action:"checks the pipe expansion allowance"},
+  {term:"Natural frequency",definition:"Frequency at which a system tends to oscillate when disturbed.",difficulty:"intermediate",station:"mechanical",problem:"An instrument rack is tapped during diagnostics and rings at its own characteristic vibration rate even after the forcing stops.",action:"measures the free-vibration frequency"},
+  {term:"Impedance",definition:"Opposition a system presents to oscillatory or alternating excitation.",difficulty:"advanced",station:"control",problem:"An alternating drive signal produces much less motion than expected because the system resists the oscillatory input through combined dynamic effects.",action:"checks the frequency-response analyzer"},
+  {term:"Tolerance stack-up",definition:"Cumulative dimensional variation produced by multiple toleranced parts.",difficulty:"advanced",station:"mechanical",problem:"Five individually acceptable parts assemble into a mechanism whose final alignment can still miss the target because all dimensional variations accumulate.",action:"adds the dimensional limits across the assembly"},
+  {term:"Verification / validation",definition:"Confirming the design was built correctly versus confirming the correct design was built.",difficulty:"advanced",station:"diagnostic",problem:"A new oxygen controller matches its drawings perfectly, but the captain also needs proof that the controller actually satisfies the crew's real mission need.",action:"compares test evidence with both design and mission requirements"},
+  {term:"Root-cause analysis",definition:"Systematic identification of the underlying cause of a failure.",difficulty:"intermediate",station:"diagnostic",problem:"A breaker keeps tripping. Resetting it restores power briefly, but the engineer must determine the underlying reason it keeps happening.",action:"traces evidence backward through the failure chain"},
+  {term:"Feedback control",definition:"Regulating a system by using measured output to adjust its input.",difficulty:"easy",station:"control",problem:"A heater continuously measures cabin temperature and changes its own power to keep the measured result near the commanded temperature.",action:"checks the sensor-to-controller loop"},
+];
+
+const difficultyPenalty = {easy:25, intermediate:30, advanced:33};
+const difficultyLabel = {easy:"EASY", intermediate:"INTERMEDIATE", advanced:"ADVANCED"};
+
+let state = "title";
+let order = [];
+let roundIndex = 0;
+let current = null;
+let phaseStart = 0;
+let promptStart = 0;
+let lastTime = performance.now();
+let elapsed = 0;
+let input = "";
+let feedback = "";
+let feedbackUntil = 0;
+let score = 0;
+let energy = 100;
+let streak = 0;
+let correctCount = 0;
+let fastCount = 0;
+let muted = false;
+let cameraX = 0;
+let cameraTargetX = 0;
+let resolutionSuccess = false;
+let resolveAt = 0;
+let eventSeed = 1;
+
+const engineer = {
+  x:420, y:TOP_Y, dir:1, moving:false, path:[], target:null, anim:0, activity:"idle"
+};
+
+const captain = {x:145, y:TOP_Y};
+
+const stars = Array.from({length:100},(_,i)=>({
+  x:(i*97)%WORLD_W,
+  y:38+(i*53)%122,
+  s:1+((i*7)%3),
+  p:.3+((i%5)*.15)
+}));
+
+function normalize(s){
+  return s.toLowerCase()
+    .replace(/[’']/g,"")
+    .replace(/\//g," ")
+    .replace(/-/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function answersFor(term){
+  const base = [term];
+  if(term==="Laminar / turbulent flow") base.push("laminar turbulent flow","laminar and turbulent flow","laminar vs turbulent flow");
+  if(term==="Verification / validation") base.push("verification validation","verification and validation","verification vs validation");
+  if(term==="PID control") base.push("pid");
+  if(term==="Poisson's ratio") base.push("poissons ratio","poisson ratio");
+  if(term==="Finite element analysis") base.push("fea");
+  if(term==="Root-cause analysis") base.push("root cause analysis");
+  if(term==="Second moment of area") base.push("area moment of inertia");
+  return base.map(normalize);
+}
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+let audioCtx = null;
+function ensureAudio(){
+  if(muted) return null;
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==="suspended") audioCtx.resume();
+  return audioCtx;
+}
+function beep(freq=440,dur=.08,type="square",vol=.04){
+  if(muted) return;
+  const a=ensureAudio(); if(!a) return;
+  const o=a.createOscillator(), g=a.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol,a.currentTime);
+  g.gain.exponentialRampToValueAtTime(.0001,a.currentTime+dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(); o.stop(a.currentTime+dur);
+}
+function successSound(){beep(660,.07);setTimeout(()=>beep(880,.1),70)}
+function failSound(){beep(150,.14,"sawtooth",.06);setTimeout(()=>beep(100,.18,"sawtooth",.05),90)}
+
+function startGame(){
+  ensureAudio();
+  order = shuffle(events.map((_,i)=>i));
+  roundIndex=0; score=0; energy=100; streak=0; correctCount=0; fastCount=0;
+  engineer.x=420; engineer.y=TOP_Y; engineer.path=[]; engineer.moving=false; engineer.activity="idle";
+  cameraX=0; cameraTargetX=0;
+  beginRound();
+}
+
+function beginRound(){
+  if(roundIndex>=order.length){ state="victory"; successSound(); return; }
+  current = events[order[roundIndex]];
+  input=""; feedback="";
+  state="problem";
+  phaseStart=performance.now();
+  eventSeed = (order[roundIndex]+1)*13;
+  sendEngineerTo(current.station);
+  beep(310,.05);
+  setTimeout(()=>beep(410,.05),80);
+}
+
+function beginPrompt(){
+  if(state!=="problem") return;
+  state="prompt";
+  promptStart=performance.now();
+  input="";
+  feedback="";
+  beep(520,.04);
+}
+
+function submitAnswer(){
+  if(state!=="prompt" || !input.trim()) return;
+  const n=normalize(input);
+  if(answersFor(current.term).includes(n)){
+    const t=(performance.now()-promptStart)/1000;
+    const fast=t<=10;
+    const timeBonus=fast?Math.max(0,Math.round((10-t)*110)):0;
+    const streakBonus=Math.min(1000,streak*75);
+    score += 1000 + timeBonus + streakBonus;
+    if(fast){
+      fastCount++;
+      energy=Math.min(100,energy+Math.max(2,Math.round((10-t)*.65)));
+    }
+    streak++;
+    correctCount++;
+    resolutionSuccess=true;
+    state="resolve";
+    resolveAt=performance.now()+2400;
+    engineer.activity="work";
+    feedback=fast?"CORRECT — FAST RESPONSE":"CORRECT";
+    successSound();
+  }else{
+    feedback="NOT QUITE — KEEP TRYING";
+    feedbackUntil=performance.now()+800;
+    input="";
+    beep(180,.08,"square",.035);
+  }
+}
+
+function timeoutFailure(){
+  if(state!=="prompt") return;
+  energy=Math.max(0,energy-difficultyPenalty[current.difficulty]);
+  streak=0;
+  resolutionSuccess=false;
+  state="resolve";
+  resolveAt=performance.now()+2600;
+  engineer.activity="fail";
+  feedback="ENGINEERING RESPONSE FAILED";
+  failSound();
+}
+
+function nextRound(){
+  engineer.activity="idle";
+  roundIndex++;
+  if(energy<=0){
+    state="gameover";
+    return;
+  }
+  beginRound();
+}
+
+function sendEngineerTo(stationKey){
+  const s=stations[stationKey];
+  engineer.target=stationKey;
+  const sameLevel = (engineer.y===TOP_Y && s.level==="top") || (engineer.y===LOWER_Y && s.level==="lower");
+  const path=[];
+  if(sameLevel){
+    path.push({x:s.x,y:s.y});
+  } else {
+    path.push({x:STAIR_X,y:engineer.y});
+    path.push({x:STAIR_X,y:s.y});
+    path.push({x:s.x,y:s.y});
+  }
+  engineer.path=path;
+  engineer.moving=true;
+  engineer.activity="run";
+  cameraTargetX = clamp(s.x-W*.55,0,WORLD_W-W);
+}
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+
+function updateEngineer(dt){
+  engineer.anim += dt*10;
+  if(!engineer.moving || engineer.path.length===0) return;
+  const p=engineer.path[0];
+  const dx=p.x-engineer.x, dy=p.y-engineer.y;
+  const dist=Math.hypot(dx,dy);
+  const speed = Math.abs(dy)>4 ? 115 : 150;
+  if(dist<speed*dt+1){
+    engineer.x=p.x; engineer.y=p.y; engineer.path.shift();
+    if(engineer.path.length===0){
+      engineer.moving=false;
+      if(state==="problem"||state==="prompt") engineer.activity="inspect";
+    }
+  } else {
+    engineer.dir = dx!==0 ? Math.sign(dx) : engineer.dir;
+    engineer.x += dx/dist*speed*dt;
+    engineer.y += dy/dist*speed*dt;
+  }
+}
+
+function update(now){
+  const dt=Math.min(.05,(now-lastTime)/1000); lastTime=now;
+  elapsed += dt;
+  updateEngineer(dt);
+  cameraX=lerp(cameraX,cameraTargetX,1-Math.pow(.002,dt));
+
+  if(state==="problem" && now-phaseStart>3300) beginPrompt();
+  if(state==="prompt"){
+    const t=(now-promptStart)/1000;
+    if(t>=15) timeoutFailure();
+  }
+  if(state==="resolve" && now>=resolveAt) nextRound();
+}
+
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}
+function line(x1,y1,x2,y2,c,w=1){ctx.strokeStyle=c;ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(Math.round(x1),Math.round(y1));ctx.lineTo(Math.round(x2),Math.round(y2));ctx.stroke()}
+function text(str,x,y,size=14,c=COLORS.white,align="left"){
+  ctx.font=`${size}px ui-monospace, Menlo, Consolas, monospace`;
+  ctx.fillStyle=c;ctx.textAlign=align;ctx.textBaseline="top";ctx.fillText(str,Math.round(x),Math.round(y));
+}
+function wrapText(str,x,y,maxW,lineH,size=14,c=COLORS.white,align="left"){
+  ctx.font=`${size}px ui-monospace, Menlo, Consolas, monospace`;
+  ctx.fillStyle=c;ctx.textAlign=align;ctx.textBaseline="top";
+  const words=str.split(" "); let lineTxt="", yy=y;
+  for(const word of words){
+    const test=lineTxt?lineTxt+" "+word:word;
+    if(ctx.measureText(test).width>maxW && lineTxt){
+      ctx.fillText(lineTxt,Math.round(x),Math.round(yy)); yy+=lineH; lineTxt=word;
+    } else lineTxt=test;
+  }
+  if(lineTxt) ctx.fillText(lineTxt,Math.round(x),Math.round(yy));
+  return yy+lineH;
+}
+
+function drawPixelPerson(wx,wy,kind="engineer",activity="idle",dir=1){
+  const x=Math.round(wx-cameraX), y=Math.round(wy);
+  if(x<-30||x>W+30) return;
+  const bob=(activity==="run"?Math.floor(Math.sin(engineer.anim)*2):0);
+  const flip=dir<0?-1:1;
+  ctx.save();
+  ctx.translate(x,y+bob);
+  ctx.scale(flip,1);
+  const skin="#e3b77f";
+  const suit=kind==="captain"?"#6aa7ff":"#f0b64a";
+  rect(-5,-25,10,7,skin);
+  rect(-6,-18,12,11,suit);
+  rect(-5,-7,4,8,"#9ca7b3"); rect(1,-7,4,8,"#9ca7b3");
+  rect(-9,-17,3,8,suit); rect(6,-17,3,8,suit);
+  rect(-4,-22,2,2,"#17202a"); rect(2,-22,2,2,"#17202a");
+  rect(-5,-27,10,3,kind==="captain"?"#2f5a8f":"#7a5b22");
+  if(activity==="inspect"||activity==="work"){
+    rect(8,-16,5,3,"#b9d6ff"); line(12,-15,18,-18,COLORS.cyan,1);
+  }
+  if(activity==="fail"){
+    line(-10,-27,-6,-32,COLORS.red,2); line(10,-27,6,-32,COLORS.red,2);
+  }
+  ctx.restore();
+}
+
+function drawCrew(wx,wy,i){
+  const x=wx-cameraX,y=wy;
+  if(x<-20||x>W+20)return;
+  const phase=elapsed*2+i;
+  const suit=["#7398c8","#8ca66b","#aa7f99"][i%3];
+  rect(x-4,y-23,8,6,"#d5ad7f");
+  rect(x-5,y-17,10,10,suit);
+  rect(x-4,y-7,3,7,"#707d8b");rect(x+1,y-7,3,7,"#707d8b");
+  if(Math.sin(phase)>0.8) rect(x+6,y-15,4,2,COLORS.cyan);
+}
+
+function drawShip(){
+  rect(0,0,W,H,COLORS.bg);
+
+  // World-space ship shell.
+  const ox=-cameraX;
+  rect(ox,18,WORLD_W,490,"#111821");
+  rect(ox,24,WORLD_W,12,"#384453");
+  rect(ox,500,WORLD_W,18,"#2d3744");
+
+  // Forward observation glass only in command section.
+  rect(ox+20,45,560,126,COLORS.glass);
+  rect(ox+28,53,544,110,"#08111d");
+  for(const s of stars){
+    const sx=s.x-cameraX*(s.p*.22);
+    if(sx>20&&sx<580) rect(sx,45+s.y%115,s.s,s.s,(s.s===3?COLORS.cyan:"#d4e8ff"));
+  }
+  line(ox+165,45,ox+165,171,"#3b566b",5);
+  line(ox+385,45,ox+385,171,"#3b566b",5);
+  text("FORWARD OBSERVATION",ox+300,178,10,"#5f8199","center");
+
+  // Floors and two-deck structure.
+  rect(ox,302,WORLD_W,18,COLORS.floorDark);
+  rect(ox,320,WORLD_W,8,COLORS.floor);
+  rect(ox+1100,330,1500,12,COLORS.hull2);
+  rect(ox+1100,485,1500,14,COLORS.floorDark);
+  rect(ox+1100,499,1500,6,COLORS.floor);
+
+  // Supports / ribs.
+  for(let x=80;x<WORLD_W;x+=220){
+    rect(ox+x,36,7,266,"#283341");
+    rect(ox+x+4,43,3,252,"#3b4654");
+  }
+
+  // Command consoles.
+  drawConsole(ox+100,230,170,52,"NAV");
+  drawConsole(ox+310,230,175,52,"FLIGHT");
+  drawRadar(ox+525,222,68,58);
+
+  // Control section.
+  drawPanel(ox+610,190,150,95,"CONTROL");
+  for(let i=0;i<5;i++){
+    rect(ox+625+i*24,212,8,8,((Math.floor(elapsed*2)+i)%3===0)?COLORS.green:"#334251");
+    rect(ox+625+i*24,232,8,8,((Math.floor(elapsed*1.5)+i)%4===0)?COLORS.red:"#334251");
+  }
+  drawOscilloscope(ox+795,205,110,58);
+
+  // Diagnostic.
+  drawPanel(ox+910,187,150,98,"DIAGNOSTICS");
+  drawOscilloscope(ox+930,210,112,52);
+
+  // Structure bay.
+  rect(ox+1090,165,170,118,"#1d2631");
+  text("FRAME 03",ox+1175,174,11,"#9aabbe","center");
+  line(ox+1110,260,ox+1240,195,"#6f7f92",7);
+  line(ox+1120,195,ox+1235,260,"#6f7f92",7);
+  rect(ox+1134,218,10,10,COLORS.orange);
+
+  // Stair shaft.
+  rect(ox+1235,320,52,165,"#0d1218");
+  for(let y=337;y<475;y+=14) line(ox+1244,y,ox+1278,y-8,"#788697",3);
+  text("SERVICE",ox+1260,335,9,COLORS.muted,"center");
+
+  // Fluid bay.
+  drawPipes(ox+1350,350);
+  drawPump(ox+1510,414);
+  drawTank(ox+1600,365);
+
+  // Mechanical bay.
+  drawMachine(ox+1760,390);
+  drawMachine(ox+1900,405,true);
+
+  // Thermal/power.
+  drawPanel(ox+2040,365,145,95,"POWER");
+  drawHeatCore(ox+2210,415);
+
+  // Aft upper.
+  drawPanel(ox+2290,190,170,95,"AFT SYSTEMS");
+  drawRadar(ox+2340,210,70,58);
+
+  // labels.
+  Object.values(stations).forEach(s=>{
+    const x=s.x-cameraX;
+    if(x>-120&&x<W+120) text(s.label,x,s.level==="top"?292:466,10,"#7f91a7","center");
+  });
+
+  // Crew.
+  drawPixelPerson(captain.x,captain.y,"captain","idle",1);
+  drawCrew(360,TOP_Y,0);
+  drawCrew(730,TOP_Y,1);
+  drawCrew(2350,TOP_Y,2);
+
+  drawPixelPerson(engineer.x,engineer.y,"engineer",engineer.activity,engineer.dir);
+}
+
+function drawConsole(x,y,w,h,label){
+  rect(x,y,w,h,"#252f3c"); rect(x+6,y+6,w-12,h-12,"#0f1720");
+  text(label,x+w/2,y+8,10,"#9db3c7","center");
+  for(let i=0;i<8;i++) rect(x+12+i*18,y+h-18,8,6,((i+Math.floor(elapsed*2))%4===0)?COLORS.green:"#3d4b5b");
+}
+function drawPanel(x,y,w,h,label){
+  rect(x,y,w,h,"#2a3542"); rect(x+6,y+6,w-12,h-12,"#121922");
+  text(label,x+w/2,y+8,10,"#a9bed3","center");
+}
+function drawRadar(x,y,w,h){
+  rect(x,y,w,h,"#24313b"); rect(x+6,y+6,w-12,h-12,"#061d17");
+  const cx=x+w/2, cy=y+h/2+1, r=Math.min(w,h)*.35;
+  ctx.strokeStyle="#2f8a5d";ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+  const a=elapsed*1.4;
+  line(cx,cy,cx+Math.cos(a)*r,cy+Math.sin(a)*r,COLORS.green,1);
+  rect(cx+Math.cos(a+.7)*r*.65,cy+Math.sin(a+.7)*r*.65,2,2,COLORS.green);
+}
+function drawOscilloscope(x,y,w,h){
+  rect(x,y,w,h,"#293440");rect(x+5,y+5,w-10,h-10,"#07130f");
+  ctx.strokeStyle=COLORS.green;ctx.lineWidth=1;ctx.beginPath();
+  for(let i=0;i<w-12;i++){
+    const xx=x+6+i, yy=y+h/2+Math.sin(i*.15+elapsed*3)*8+Math.sin(i*.035+elapsed)*4;
+    if(i===0)ctx.moveTo(xx,yy);else ctx.lineTo(xx,yy);
+  }ctx.stroke();
+}
+function drawPipes(x,y){
+  line(x,y+20,x+220,y+20,"#47688f",10);
+  line(x+35,y+50,x+220,y+50,"#8c5d46",8);
+  line(x+90,y+80,x+220,y+80,"#5b805e",9);
+  for(let i=0;i<4;i++){
+    const px=x+35+i*50;
+    rect(px-3,y+11,6,18,"#a1abb8");
+    rect(px-4,y+43,8,14,"#a1abb8");
+  }
+  const pulse=(elapsed*60)%180;
+  rect(x+pulse,y+17,13,5,COLORS.cyan);
+}
+function drawPump(x,y){
+  rect(x-30,y-25,60,45,"#3c4854");
+  rect(x-22,y-17,44,29,"#121a21");
+  const a=elapsed*5;
+  line(x,y-2,x+Math.cos(a)*14,y-2+Math.sin(a)*14,"#b4c1ce",3);
+  text("PUMP",x,y+24,9,COLORS.muted,"center");
+}
+function drawTank(x,y){
+  rect(x,y,80,95,"#313d48");rect(x+7,y+10,66,70,"#182631");
+  const fill=28+Math.sin(elapsed*.8)*5;
+  rect(x+10,y+78-fill,60,fill,"#244b60");
+  text("COOLANT",x+40,y+84,9,COLORS.muted,"center");
+}
+function drawMachine(x,y,large=false){
+  const w=large?120:95,h=large?70:58;
+  rect(x,y-h,w,h,"#35414d");rect(x+8,y-h+8,w-16,h-16,"#151b22");
+  const cx=x+w/2,cy=y-h/2;
+  ctx.strokeStyle="#a4afba";ctx.lineWidth=4;ctx.beginPath();ctx.arc(cx,cy,large?22:18,0,Math.PI*2);ctx.stroke();
+  const a=elapsed*(large?2.2:3.4);
+  line(cx,cy,cx+Math.cos(a)*(large?20:16),cy+Math.sin(a)*(large?20:16),COLORS.orange,4);
+}
+function drawHeatCore(x,y){
+  rect(x-55,y-48,110,75,"#3f3a34"); rect(x-44,y-37,88,53,"#211612");
+  for(let i=0;i<5;i++){
+    const glow=(Math.sin(elapsed*3+i)+1)/2;
+    rect(x-36+i*17,y-27,8,34,glow>.55?COLORS.orange:"#783c22");
+  }
+  text("THERMAL",x,y+30,9,COLORS.muted,"center");
+}
+
+function drawHUD(){
+  rect(0,0,W,34,"rgba(5,8,12,.94)");
+  line(0,34,W,34,"#2e3d50",2);
+  text(`ROUND ${Math.min(roundIndex+1,40).toString().padStart(2,"0")} / 40`,14,10,13,COLORS.white);
+  text(`SCORE ${score.toString().padStart(7,"0")}`,172,10,13,COLORS.cyan);
+  text(`STREAK ${streak}`,360,10,13,streak>0?COLORS.yellow:COLORS.muted);
+  text("MISSION ENERGY",520,10,12,COLORS.muted);
+  rect(650,10,210,14,"#17202a");
+  rect(652,12,206*(energy/100),10,energy>55?COLORS.green:energy>25?COLORS.yellow:COLORS.red);
+  text(`${Math.round(energy)}%`,875,10,13,COLORS.white);
+}
+
+function panel(x,y,w,h,title){
+  rect(x+4,y+4,w,h,"rgba(0,0,0,.55)");
+  rect(x,y,w,h,"rgba(12,17,24,.96)");
+  line(x,y,x+w,y,"#637487",2);line(x,y+h,x+w,y+h,"#263646",2);
+  rect(x+8,y+8,w-16,26,"#1a2531");
+  text(title,x+18,y+14,13,COLORS.cyan);
+}
+
+function drawProblemBoard(){
+  const pw=760,ph=196,x=(W-pw)/2,y=76;
+  panel(x,y,pw,ph,"SHIP SYSTEM ALERT");
+  text(stations[current.station].label,x+24,y+50,12,COLORS.yellow);
+  wrapText(current.problem,x+24,y+78,pw-48,21,15,COLORS.white);
+  text(`ENGINEER EN ROUTE: ${current.action.toUpperCase()}`,x+24,y+151,10,COLORS.muted);
+  const dots=".".repeat(1+(Math.floor(elapsed*2)%3));
+  text(`ANALYZING${dots}`,x+24,y+171,11,COLORS.green);
+}
+
+function timerColor(t){
+  if(t<8) return COLORS.green;
+  if(t<=10) return COLORS.yellow;
+  return COLORS.red;
+}
+function drawPromptBoard(now){
+  // Compact bottom-right quiz board so the ship and engineer remain visible.
+  const margin=18;
+  const pw=590, ph=226;
+  const x=W-pw-margin, y=H-ph-margin;
+
+  panel(x,y,pw,ph,"ENGINEERING IDENTIFICATION");
+
+  text(
+    `${difficultyLabel[current.difficulty]} TERM`,
+    x+20,y+45,10,
+    current.difficulty==="advanced"
+      ? COLORS.red
+      : current.difficulty==="intermediate"
+        ? COLORS.yellow
+        : COLORS.green
+  );
+
+  const t=Math.min(15,(now-promptStart)/1000);
+  const c=timerColor(t);
+  text(`${t.toFixed(1)} s`,x+pw-20,y+42,22,c,"right");
+
+  wrapText(
+    current.definition,
+    x+20,y+68,
+    pw-40,
+    20,
+    14,
+    COLORS.white
+  );
+
+  rect(x+20,y+128,pw-40,2,"#2a3b4d");
+
+  text(
+    "> "+input+(Math.floor(now/350)%2===0?"_":""),
+    x+20,y+145,18,COLORS.cyan
+  );
+
+  text(
+    "TYPE TERM · ENTER TO SUBMIT",
+    x+20,y+181,10,COLORS.muted
+  );
+
+  text(
+    "BONUS ≤ 10 s · AUTO FAIL 15 s",
+    x+pw-20,y+181,10,c,"right"
+  );
+
+  if(feedback && now<feedbackUntil){
+    text(feedback,x+20,y+201,10,COLORS.red);
+  }
+}
+
+function drawResolve(){
+  const pw=720,ph=160,x=(W-pw)/2,y=83;
+  panel(x,y,pw,ph,resolutionSuccess?"RESPONSE ACCEPTED":"SYSTEM DAMAGE");
+  text(feedback,x+pw/2,y+56,22,resolutionSuccess?COLORS.green:COLORS.red,"center");
+  text(current.term.toUpperCase(),x+pw/2,y+91,18,COLORS.white,"center");
+  text(
+    resolutionSuccess?`Engineer ${current.action}.`:`Mission energy reduced by ${difficultyPenalty[current.difficulty]}%.`,
+    x+pw/2,y+125,12,COLORS.muted,"center"
+  );
+}
+
+function drawTitle(){
+  rect(0,0,W,H,"#05070b");
+  // stars
+  for(let i=0;i<85;i++){
+    const x=(i*113 + Math.floor(elapsed*10*(1+(i%3))))%W;
+    const y=40+(i*67)%440;
+    rect(x,y,1+(i%3===0),1+(i%3===0),"#a9c9e7");
+  }
+  // stylized ship bridge silhouette
+  rect(92,290,776,102,"#18212b");
+  rect(140,213,530,80,"#18212b");
+  rect(162,228,420,52,"#0b1927");
+  for(let i=0;i<6;i++) line(180+i*75,228,170+i*75,280,"#31475c",4);
+  drawPixelPerson(500,390,"engineer","idle",1);
+  text("ORTIZ BUILD",W/2,90,42,COLORS.white,"center");
+  text("ENGINEERING WATCH",W/2,145,20,COLORS.cyan,"center");
+  text("40 SYSTEMS. 15 SECONDS. KEEP THE SHIP ALIVE.",W/2,178,12,COLORS.muted,"center");
+  rect(W/2-175,430,350,42,"#17222e");
+  line(W/2-175,430,W/2+175,430,COLORS.cyan,2);
+  text("PRESS ENTER TO BEGIN MISSION",W/2,443,15,COLORS.green,"center");
+  text("You observe the engineer. Your knowledge drives the response.",W/2,490,11,COLORS.muted,"center");
+}
+
+function drawEnd(victory){
+  rect(0,0,W,H,"rgba(4,7,10,.93)");
+  text(victory?"MISSION COMPLETE":"MISSION FAILURE",W/2,105,36,victory?COLORS.green:COLORS.red,"center");
+  text(victory?"All 40 engineering events resolved.":"Ship energy reached zero.",W/2,158,14,COLORS.white,"center");
+  text(`FINAL SCORE  ${score}`,W/2,224,22,COLORS.cyan,"center");
+  text(`CORRECT      ${correctCount} / ${roundIndex + (victory?0:0)}`,W/2,263,15,COLORS.white,"center");
+  text(`FAST ANSWERS ${fastCount}`,W/2,293,15,COLORS.white,"center");
+  const acc = roundIndex>0 ? Math.round(correctCount/Math.max(1,roundIndex)*100) : 0;
+  text(`MISSION ENERGY ${Math.round(energy)}%`,W/2,323,15,energy>0?COLORS.green:COLORS.red,"center");
+  rect(W/2-165,390,330,40,"#17222e");
+  text("PRESS ENTER TO RESTART",W/2,402,14,COLORS.yellow,"center");
+}
+
+function draw(now){
+  if(state==="title"){drawTitle();return}
+  drawShip();
+  drawHUD();
+  if(state==="problem") drawProblemBoard();
+  if(state==="prompt") drawPromptBoard(now);
+  if(state==="resolve") drawResolve();
+  if(state==="victory") drawEnd(true);
+  if(state==="gameover") drawEnd(false);
+}
+
+function loop(now){
+  update(now); draw(now); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+window.addEventListener("keydown",(e)=>{
+  if(e.key.toLowerCase()==="m"){
+    muted=!muted; if(!muted) beep(520,.05); return;
+  }
+  if(state==="title" && e.key==="Enter"){startGame();return}
+  if((state==="victory"||state==="gameover") && e.key==="Enter"){startGame();return}
+  if(state==="problem" && (e.key==="Enter"||e.key===" ")){beginPrompt();e.preventDefault();return}
+  if(state!=="prompt") return;
+
+  if(e.key==="Enter"){submitAnswer();e.preventDefault();return}
+  if(e.key==="Backspace"){input=input.slice(0,-1);e.preventDefault();return}
+  if(e.key==="Escape"){input="";return}
+  if(e.key.length===1 && input.length<38 && /[a-zA-Z0-9 '\-\/]/.test(e.key)){
+    input+=e.key;
+    beep(760,.018,"square",.012);
+    e.preventDefault();
+  }
+});
+
+canvas.addEventListener("pointerdown",()=>{
+  canvas.focus(); ensureAudio();
+  if(state==="title") startGame();
+});
+canvas.focus();
+
+})();
+</script>
 </body>
 </html>
