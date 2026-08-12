@@ -63,7 +63,7 @@ body{background:var(--ink);color:var(--bone);font-family:var(--ui);overflow:hidd
 .band-1{height:32vh;bottom:7vh;opacity:.5}
 .cook{position:absolute;bottom:0;width:48px;height:100%}
 .cook i{position:absolute;background:#030507;display:block}
-.cook .toque{width:22px;height:17px;border-radius:7px 7px 2px 2px;left:13px;bottom:calc(61%+16px)}
+.cook .toque{width:22px;height:17px;border-radius:7px 7px 2px 2px;left:13px;bottom:calc(61% + 16px)}
 .cook .head{width:19px;height:20px;border-radius:50% 50% 43% 43%;left:15px;bottom:61%}
 .cook .torso{width:30px;height:43%;border-radius:10px 10px 2px 2px;left:9px;bottom:15%}
 .cook .arm{width:7px;height:24%;left:3px;bottom:35%;border-radius:4px;transform-origin:top center;animation:work .38s infinite ease-in-out}
@@ -752,15 +752,18 @@ function setWash(id){
 function fmt(n){ return Math.max(0,Math.round(n)).toLocaleString("en-US"); }
 
 function bumpRep(next, up){
-  standEl.className = up ? "up" : "down";
+  standEl.classList.remove("up","down");
+  standEl.classList.add(up ? "up" : "down");
   rep = next;
   standVal.textContent = fmt(rep);
-  setTimeout(()=>standEl.className="", 900);
+  setTimeout(()=>standEl.classList.remove("up","down"), 900);
 }
 
 function paintTimer(v){
   timerVal.textContent = v;
-  timerEl.className = "hud-cell" + (v>=14?" hot":v>=11?" warn":"");
+  timerEl.classList.remove("warn","hot");
+  if(v >= 14) timerEl.classList.add("hot");
+  else if(v >= 11) timerEl.classList.add("warn");
 }
 
 function buildPips(){
@@ -795,6 +798,7 @@ function nextQ(){
   if(qi >= order.length){ finish(); return; }
   const sc = SCENARIOS[order[qi]];
   locked=false; answered=false; tick=0;
+  room.classList.remove("frozen");
 
   famEl.textContent = sc.family;
   tFam.textContent  = sc.family.toUpperCase();
@@ -823,54 +827,82 @@ function nextQ(){
   ticketEl.classList.remove("hidden");
 }
 
-function onChoose(idx){
-  if(locked) return;
-  const sc=SCENARIOS[order[qi]];
-  const ch=sc.choices[idx];
-  locked=true;
-  clearInterval(timerId);
-
-  // reveal all choices
+function revealAll(sc, chosenIdx){
   Array.from(choicesEl.children).forEach(btn=>{
-    const i=parseInt(btn.dataset.idx);
-    const c=sc.choices[i];
-    btn.disabled=true;
-    if(c.correct) btn.classList.add("correct");
-    else if(i===idx) btn.classList.add("wrong");
+    const i = parseInt(btn.dataset.idx, 10);
+    btn.disabled = true;
+    if(sc.choices[i].correct) btn.classList.add("correct");
+    else if(i === chosenIdx) btn.classList.add("wrong");
     else btn.classList.add("dimmed");
   });
+}
 
-  // show ruling
-  const ruling = ch.correct
-    ? sc.choices.find(c=>c.correct).ruling
-    : ch.ruling + " — " + sc.choices.find(c=>c.correct).ruling;
-  whyEl.textContent = ruling;
-  whyEl.style.display="block";
+function showWhy(text){
+  whyEl.textContent = text;
+  whyEl.style.display = "block";
+}
 
+function advance(delay){
+  qi++;
+  setTimeout(()=>{ room.classList.remove("frozen"); nextQ(); }, delay);
+}
+
+function onChoose(idx){
+  if(locked) return;
+  const sc = SCENARIOS[order[qi]];
+  const ch = sc.choices[idx];
+  const right = sc.choices.find(c=>c.correct);
+  const btn = Array.from(choicesEl.children).find(b=>parseInt(b.dataset.idx,10)===idx);
+
+  /* ── correct ─────────────────────────────── */
   if(ch.correct){
+    locked = true;
+    clearInterval(timerId);
+    revealAll(sc, idx);
+
     if(!answered){
       firstTry++;
-      const bonusTime = tick < FAST_SECS;
-      if(bonusTime){ fast++; bumpRep(rep*BONUS_MULTI*HIT_MULTI, true); }
-      else{ bumpRep(rep*HIT_MULTI, true); }
-      speak(bonusTime ? pick(SAID_FAST) : pick(SAID_SLOW), "good");
+      const quick = tick < FAST_SECS;
+      if(quick){ fast++; bumpRep(rep * HIT_MULTI * BONUS_MULTI, true); }
+      else      { bumpRep(rep * HIT_MULTI, true); }
+      speak(quick ? pick(SAID_FAST) : pick(SAID_SLOW), "good");
+      setPip(qi, "hit");
+      showWhy(right.ruling);
+    }else{
+      /* recovered after a miss — no reward, ruling still shown */
+      speak("Now you see it.", "good");
+      showWhy(right.ruling);
     }
-    setPip(qi,"hit");
-    room.classList.remove("frozen");
-    qi++;
-    setTimeout(nextQ, 1600);
-  } else {
-    if(!answered){
-      answered=true;
-      missed++;
-      missedItems.push(sc);
-      bumpRep(rep*MISS_MULTI, false);
-      room.classList.add("frozen");
-      speak(pick(SAID_MISS), "bad");
-      setPip(qi,"miss");
-    }
-    // let them try again — unlock for second attempt but mark as answered
-    setTimeout(()=>{ locked=false; }, 1800);
+    advance(2100);
+    return;
+  }
+
+  /* ── wrong ───────────────────────────────── */
+  const live = Array.from(choicesEl.children).filter(b=>!b.disabled);
+
+  if(!answered){
+    answered = true;
+    missed++;
+    missedItems.push(sc);
+    bumpRep(rep * MISS_MULTI, false);
+    room.classList.add("frozen");
+    speak(pick(SAID_MISS), "bad");
+    setPip(qi, "miss");
+  }
+
+  /* eliminate only the door they just closed */
+  if(btn){ btn.disabled = true; btn.classList.add("wrong"); }
+  showWhy(ch.ruling);
+
+  /* if only the correct answer is left, there is nothing to reason about */
+  if(live.length <= 2){
+    locked = true;
+    clearInterval(timerId);
+    setTimeout(()=>{
+      revealAll(sc, idx);
+      showWhy(ch.ruling + "  " + right.ruling);
+      advance(2400);
+    }, 1500);
   }
 }
 
@@ -904,14 +936,16 @@ function onTimeout(){
 
 /* ═══════════════ END ════════════════════════ */
 const VERDICT_WIN = [
-  "She looks at the board, then at you. "Tomorrow you're on sauce."",
+  "She looks at the board, then at you. \u201CTomorrow you\u2019re on sauce.\u201D",
   "She signs the dupe without looking up. That is the whole ceremony.",
-  ""Same time tomorrow." From her, that is a standing ovation."
+  "\u201CSame time tomorrow.\u201D From her, that is a standing ovation.",
+  "She tastes the last sauce, nods once, and moves on. You have never seen her do more."
 ];
 const VERDICT_LOSE = [
   "She reads the board, sets down her spoon, and says nothing at all.",
-  ""Learn them." She turns off the pass light and leaves you standing there.",
-  "She doesn't look up. The silence lasts longer than any shouting would."
+  "\u201CLearn them.\u201D She turns off the pass light and leaves you standing there.",
+  "She doesn\u2019t look up. The silence lasts longer than any shouting would.",
+  "\u201CYou knew the words.\u201D She lets that sit. \u201CYou didn\u2019t know the kitchen.\u201D"
 ];
 
 function finish(){
@@ -932,9 +966,17 @@ function finish(){
 
   const ml = $("missed-list");
   if(missedItems.length){
-    const names = [...new Set(missedItems.map(s=>s.choices.find(c=>c.correct).label))];
     ml.innerHTML = '<b>Back on the board tomorrow</b>' +
-      names.map(n=>`<div><span class="m-term">${n}</span> <span class="m-why">— missed in context</span></div>`).join("");
+      missedItems.map(s=>{
+        const right = s.choices.find(c=>c.correct);
+        const plain = s.situation.replace(/<[^>]+>/g,"");
+        const short = plain.length > 110 ? plain.slice(0,110).replace(/\s+\S*$/,"") + "\u2026" : plain;
+        return `<div style="margin-bottom:11px">`
+             + `<span class="m-term">${right.label}</span>`
+             + `<span class="m-why"> \u2014 ${s.family.toLowerCase()}</span>`
+             + `<div class="m-why" style="font-size:12.5px;line-height:1.5;margin-top:2px">${short}</div>`
+             + `</div>`;
+      }).join("");
   } else {
     ml.innerHTML = '<b>Nothing dropped. Clean service.</b>';
   }
@@ -957,10 +999,31 @@ function startService(){
 $("btn-start").addEventListener("click", startService);
 $("btn-again").addEventListener("click", startService);
 
+/* ═══════════════ KEYBOARD ═══════════════════ */
+document.addEventListener("keydown", e=>{
+  const startOpen = !$("scr-start").classList.contains("hidden");
+  const endOpen   = !$("scr-end").classList.contains("hidden");
+
+  if(startOpen || endOpen){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); startService(); }
+    return;
+  }
+  if(locked) return;
+
+  const map = {a:0,b:1,c:2,"1":0,"2":1,"3":2};
+  const pos = map[e.key.toLowerCase()];
+  if(pos === undefined) return;
+  e.preventDefault();
+  const btn = choicesEl.children[pos];
+  if(btn && !btn.disabled) onChoose(parseInt(btn.dataset.idx,10));
+});
+
 /* ═══════════════ RAIN ═══════════════════════ */
 function rainPaper(){
-  const reduced=window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  const reduced = typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion:reduce)").matches;
   if(reduced) return;
+  if(typeof Element.prototype.animate !== "function") return;
   for(let i=0;i<60;i++){
     const p=document.createElement("div"); p.className="paper";
     p.style.left=Math.random()*100+"vw";
