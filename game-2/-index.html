@@ -1,1 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orchestra Theory — The Floating Camera</title>
+  <meta name="description" content="A cinematic 30-question music theory game. The camera orbits a full orchestra, pausing on 28 musicians and the composer.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=Inter:wght@300;400;500&display=swap');
 
+    :root {
+      --bg: #0c0b0a;
+      --panel: #161412;
+      --gold: #c9a227;
+      --gold-dim: #8a7018;
+      --text: #e8e0d5;
+      --text-dim: #9a9186;
+      --success: #4a7c59;
+      --fail: #8b3a3a;
+      --accent: #2a2520;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      background-image:
+        radial-gradient(ellipse at 20% 20%, rgba(201, 162, 39, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(42, 37, 32, 0.8) 0%, transparent 50%);
+    }
+
+    #app {
+      width: 100%;
+      max-width: 720px;
+      padding: 1.5rem;
+    }
+
+    .screen { display: none; animation: fadeIn 0.55s ease; }
+    .screen.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Start screen */
+    #start-screen { text-align: center; padding: 2.8rem 1rem; }
+    #start-screen h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 3.1rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--gold);
+      margin-bottom: 0.35rem;
+    }
+    #start-screen .subtitle {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-bottom: 2.2rem;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    #start-screen .desc {
+      font-size: 1.02rem;
+      line-height: 1.65;
+      color: var(--text);
+      max-width: 520px;
+      margin: 0 auto 2.6rem;
+      opacity: 0.92;
+    }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      padding: 0.9rem 2.3rem;
+      font-size: 0.92rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.22s ease;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+    }
+    .btn:hover {
+      background: var(--gold);
+      color: var(--bg);
+      border-color: var(--gold);
+    }
+
+    /* HUD */
+    .hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      font-size: 0.84rem;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+    }
+    .progress-bar {
+      height: 2px;
+      background: var(--accent);
+      margin-bottom: 1.6rem;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--gold);
+      transition: width 0.4s ease;
+    }
+
+    /* Camera narrative */
+    .camera-box {
+      background: var(--panel);
+      border-left: 3px solid var(--gold-dim);
+      padding: 1.25rem 1.4rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.97rem;
+      line-height: 1.6;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .viewpoint {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.5rem;
+      color: var(--gold);
+      margin-bottom: 0.3rem;
+      font-weight: 600;
+      font-style: normal;
+    }
+
+    /* Definition */
+    .definition-box {
+      background: var(--panel);
+      padding: 1.9rem 1.7rem;
+      margin-bottom: 1.6rem;
+      text-align: center;
+      border: 1px solid #2a2520;
+    }
+    .definition-label {
+      font-size: 0.73rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--gold-dim);
+      margin-bottom: 0.85rem;
+    }
+    .definition-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 1.5rem;
+      line-height: 1.4;
+      color: var(--text);
+    }
+
+    /* Timer */
+    .timer-wrap { text-align: center; margin-bottom: 1.5rem; }
+    .timer {
+      font-size: 2.35rem;
+      font-weight: 300;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
+    }
+    .timer.warning { color: #d4a017; }
+    .timer.danger  { color: #c44; animation: pulse 0.55s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.5; }
+    }
+
+    /* Input */
+    .input-wrap {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1.1rem;
+    }
+    #answer-input {
+      flex: 1;
+      background: var(--panel);
+      border: 1px solid #2a2520;
+      color: var(--text);
+      padding: 0.95rem 1.15rem;
+      font-size: 1.02rem;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #answer-input:focus { border-color: var(--gold-dim); }
+    #answer-input::placeholder { color: #5a534a; }
+
+    .feedback {
+      text-align: center;
+      min-height: 1.5rem;
+      font-size: 0.93rem;
+      margin-top: 0.7rem;
+      letter-spacing: 0.04em;
+    }
+    .feedback.correct { color: var(--success); }
+    .feedback.wrong   { color: var(--fail); }
+
+    /* End / Fail */
+    #end-screen, #fail-screen {
+      text-align: center;
+      padding: 2.4rem 1rem;
+    }
+    #end-screen h2 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.5rem;
+      color: var(--gold);
+      margin-bottom: 1rem;
+    }
+    #fail-screen h2 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 2.2rem;
+      color: var(--fail);
+      margin-bottom: 1rem;
+    }
+    #end-screen p, #fail-screen p {
+      color: var(--text-dim);
+      line-height: 1.6;
+      margin-bottom: 1.8rem;
+      max-width: 440px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .small-note {
+      font-size: 0.78rem;
+      color: #5a534a;
+      margin-top: 1.8rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+
+    <!-- START -->
+    <div id="start-screen" class="screen active">
+      <h1>Orchestra Theory</h1>
+      <div class="subtitle">The Floating Camera</div>
+      <p class="desc">
+        A full orchestra of nearly one hundred players sits under soft stage light.<br>
+        The camera will make one continuous orbit through the sections, pausing on twenty-eight musicians and the composer at both ends.<br><br>
+        Each presents a definition. You have fifteen seconds to type the correct musical term.<br>
+        Stay with the camera.
+      </p>
+      <button class="btn" id="start-btn">Begin the Orbit</button>
+      <p class="small-note">Thirty questions · Continuous path · Strict timer</p>
+    </div>
+
+    <!-- GAME -->
+    <div id="game-screen" class="screen">
+      <div class="hud">
+        <span id="stage-label">Question 1 of 30</span>
+        <span id="section-label">Composer</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress" style="width: 3.33%"></div>
+      </div>
+
+      <div class="camera-box">
+        <div class="viewpoint" id="viewpoint">The Composer</div>
+        <div id="camera-text">Wide establishing shot of the full orchestra under soft stage light. Nearly one hundred players sit ready. The camera begins a slow, deliberate push toward the conductor’s podium.</div>
+      </div>
+
+      <div class="definition-box">
+        <div class="definition-label">Definition</div>
+        <div class="definition-text" id="definition">Large-scale organization of a composition.</div>
+      </div>
+
+      <div class="timer-wrap">
+        <div class="timer" id="timer">15</div>
+      </div>
+
+      <div class="input-wrap">
+        <input type="text" id="answer-input" placeholder="Type the term…" autocomplete="off" spellcheck="false" autofocus>
+        <button class="btn" id="submit-btn">Enter</button>
+      </div>
+
+      <div class="feedback" id="feedback"></div>
+    </div>
+
+    <!-- SUCCESS -->
+    <div id="end-screen" class="screen">
+      <h2>Orbit Complete</h2>
+      <p>
+        You moved with the camera through the entire orchestra and returned to the composer.<br><br>
+        All thirty terms recognized. The loop is closed.
+      </p>
+      <button class="btn" id="restart-btn">Begin Again</button>
+    </div>
+
+    <!-- FAIL -->
+    <div id="fail-screen" class="screen">
+      <h2>Orbit Broken</h2>
+      <p id="fail-message">Time expired or incorrect term.</p>
+      <p style="margin-top:1rem; color: var(--text-dim); font-size:0.95rem;">
+        The correct term was: <span id="fail-answer" style="color:var(--gold)"></span>
+      </p>
+      <button class="btn" id="retry-btn" style="margin-top:1.8rem;">Return to Start</button>
+    </div>
+
+  </div>
+
+  <script>
+    // ============================================================
+    // ORCHESTRA THEORY — THE FLOATING CAMERA
+    // Complete 30-question sequence
+    // 1 Composer open + 28 musicians + 1 Composer close
+    // Continuous large loop around the full orchestra
+    // ============================================================
+
+    const stages = [
+      {
+        viewpoint: "The Composer",
+        section: "Podium",
+        camera: "Wide establishing shot of the full orchestra under soft stage light. Nearly one hundred players sit ready. The camera begins a slow, deliberate push toward the conductor’s podium.",
+        definition: "Large-scale organization of a composition.",
+        answer: "Form"
+      },
+      {
+        viewpoint: "Concertmaster",
+        section: "First Violins",
+        camera: "From the podium the camera drifts right into the front desks of the first violins and settles on the concertmaster, instrument already raised.",
+        definition: "Short recurring musical idea.",
+        answer: "Motif"
+      },
+      {
+        viewpoint: "Principal Second Violin",
+        section: "Second Violins",
+        camera: "It continues laterally across the aisle into the second violin section. The principal turns slightly toward the lens.",
+        definition: "Pattern repeated at different pitch levels.",
+        answer: "Sequence"
+      },
+      {
+        viewpoint: "Principal Viola",
+        section: "Violas",
+        camera: "The slow orbit carries us deeper into the middle strings and frames the principal viola.",
+        definition: "Movement of individual musical lines between harmonies.",
+        answer: "Voice leading"
+      },
+      {
+        viewpoint: "Principal Cello",
+        section: "Cellos",
+        camera: "Still moving backward, the camera glides along the cello row. The principal cellist looks up from the neck of the instrument.",
+        definition: "Coherent musical unit resembling a sentence.",
+        answer: "Phrase"
+      },
+      {
+        viewpoint: "Principal Double Bass",
+        section: "Double Basses",
+        camera: "It drops lower and further back until the tallest instruments fill the frame. The principal bassist stands beside the instrument.",
+        definition: "Sustained note beneath changing harmony.",
+        answer: "Pedal point"
+      },
+      {
+        viewpoint: "Principal Flute",
+        section: "Woodwinds",
+        camera: "A rising arc swings us left and forward into the woodwind section. Soft light catches the silver of the flute.",
+        definition: "Characteristic color or quality of sound.",
+        answer: "Timbre"
+      },
+      {
+        viewpoint: "Principal Oboe",
+        section: "Woodwinds",
+        camera: "A short, intimate push focuses on the oboe. The reed is already in place.",
+        definition: "Pitch distance between two notes.",
+        answer: "Interval"
+      },
+      {
+        viewpoint: "Principal Clarinet",
+        section: "Woodwinds",
+        camera: "The camera slides one desk further along the woodwind line to the principal clarinet.",
+        definition: "Scale type defined by interval pattern and center.",
+        answer: "Mode"
+      },
+      {
+        viewpoint: "Principal Bassoon",
+        section: "Woodwinds",
+        camera: "It settles lower on the bassoons. The long instrument rests against the player’s body.",
+        definition: "A note’s numbered position within a scale.",
+        answer: "Scale degree"
+      },
+      {
+        viewpoint: "Principal Horn",
+        section: "Brass — Horns",
+        camera: "The path swings toward the brass. We arrive first at the horns; the principal’s hand is already inside the bell.",
+        definition: "Fifth scale degree and its harmonic function.",
+        answer: "Dominant"
+      },
+      {
+        viewpoint: "Principal Trumpet",
+        section: "Brass — Trumpets",
+        camera: "A clean lateral move brings the principal trumpet into sharp focus.",
+        definition: "Dominant chord temporarily targeting a non-tonic chord.",
+        answer: "Secondary dominant"
+      },
+      {
+        viewpoint: "Principal Trombone",
+        section: "Brass — Trombones",
+        camera: "The camera continues along the brass line and rests on the principal trombone.",
+        definition: "Harmonic gesture marking closure or pause.",
+        answer: "Cadence"
+      },
+      {
+        viewpoint: "Tuba",
+        section: "Low Brass",
+        camera: "It drops to the lowest brass voice. The tuba fills much of the frame.",
+        definition: "Tonal center or home pitch/chord.",
+        answer: "Tonic"
+      },
+      {
+        viewpoint: "Timpanist",
+        section: "Percussion",
+        camera: "The camera lifts and travels to the rear left of the stage, settling on the timpani.",
+        definition: "Rate at which harmonies change.",
+        answer: "Harmonic rhythm"
+      },
+      {
+        viewpoint: "Percussionist",
+        section: "Percussion",
+        camera: "A slight shift focuses on a neighboring percussionist behind a set of mallets and drums.",
+        definition: "Persistently repeated musical pattern.",
+        answer: "Ostinato"
+      },
+      {
+        viewpoint: "Harpist",
+        section: "Harp",
+        camera: "The path curves toward the left side of the stage where the harp stands. Light runs along the strings.",
+        definition: "Relationship among simultaneous musical layers.",
+        answer: "Texture"
+      },
+      {
+        viewpoint: "Section First Violin",
+        section: "First Violins",
+        camera: "The camera begins a long, slow return across the front of the orchestra and pauses on a section first violinist.",
+        definition: "Combining independent melodic lines.",
+        answer: "Counterpoint"
+      },
+      {
+        viewpoint: "Section Second Violin",
+        section: "Second Violins",
+        camera: "A short float lands on a second violin player two desks back.",
+        definition: "Relatively stable interval or harmony.",
+        answer: "Consonance"
+      },
+      {
+        viewpoint: "Section Viola",
+        section: "Violas",
+        camera: "We move again into the viola section, framing a player in the middle of the row.",
+        definition: "Relatively unstable interval seeking resolution.",
+        answer: "Dissonance"
+      },
+      {
+        viewpoint: "Section Cello",
+        section: "Cellos",
+        camera: "The camera drifts back to the cellos and settles on a section player.",
+        definition: "Delayed note creating then resolving dissonance.",
+        answer: "Suspension"
+      },
+      {
+        viewpoint: "Section Double Bass",
+        section: "Double Basses",
+        camera: "Lower still, to another bassist further along the back line.",
+        definition: "Fourth scale degree or predominant function.",
+        answer: "Subdominant"
+      },
+      {
+        viewpoint: "Piccolo",
+        section: "Woodwinds",
+        camera: "A rising move returns us to the woodwinds, this time focusing on the piccolo.",
+        definition: "Use of pitches outside the prevailing scale.",
+        answer: "Chromaticism"
+      },
+      {
+        viewpoint: "English Horn",
+        section: "Woodwinds",
+        camera: "The camera finds the English horn a few seats away.",
+        definition: "Formal method for studying contrapuntal writing.",
+        answer: "Species counterpoint"
+      },
+      {
+        viewpoint: "Bass Clarinet",
+        section: "Woodwinds",
+        camera: "It settles on the bass clarinet, the long instrument angling across the frame.",
+        definition: "Borrowing chords from a parallel mode.",
+        answer: "Modal mixture"
+      },
+      {
+        viewpoint: "Second Horn",
+        section: "Brass — Horns",
+        camera: "Back into the brass. The camera frames the second horn.",
+        definition: "Temporarily treating another chord as tonic.",
+        answer: "Tonicization"
+      },
+      {
+        viewpoint: "Second Trumpet",
+        section: "Brass — Trumpets",
+        camera: "A short move to the second trumpet desk.",
+        definition: "Establishing a new key.",
+        answer: "Modulation"
+      },
+      {
+        viewpoint: "Bass Trombone",
+        section: "Brass — Trombones",
+        camera: "Lower into the trombone section, focusing on the bass trombone.",
+        definition: "Accentuation of metrically unexpected positions.",
+        answer: "Syncopation"
+      },
+      {
+        viewpoint: "Percussionist",
+        section: "Percussion",
+        camera: "The camera makes one final pass through the rear of the stage and stops on a second percussionist.",
+        definition: "Simultaneous contrasting rhythmic divisions.",
+        answer: "Polyrhythm"
+      },
+      {
+        viewpoint: "The Composer",
+        section: "Podium",
+        camera: "The camera pulls back in a long, continuous crane move until the entire orchestra is once again visible. We return to the composer on the podium, now looking out over every player we have visited.",
+        definition: "Assigning musical material to instruments.",
+        answer: "Orchestration"
+      }
+    ];
+
+    // Game state
+    let current = 0;
+    let timerInterval = null;
+    let timeLeft = 15;
+    let acceptingInput = false;
+
+    const $ = (id) => document.getElementById(id);
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    function normalize(str) {
+      return str.trim().toLowerCase()
+        .replace(/[-–—]/g, ' ')
+        .replace(/\s+/g, ' ');
+    }
+
+    function startGame() {
+      current = 0;
+      showScreen('game-screen');
+      loadStage(0);
+    }
+
+    function loadStage(index) {
+      const stage = stages[index];
+      current = index;
+
+      $('stage-label').textContent = `Question ${index + 1} of 30`;
+      $('section-label').textContent = stage.section;
+      $('viewpoint').textContent = stage.viewpoint;
+      $('camera-text').textContent = stage.camera;
+      $('definition').textContent = stage.definition;
+      $('progress').style.width = `${((index + 1) / 30) * 100}%`;
+      $('feedback').textContent = '';
+      $('feedback').className = 'feedback';
+      $('answer-input').value = '';
+      $('answer-input').focus();
+
+      timeLeft = 15;
+      $('timer').textContent = timeLeft;
+      $('timer').className = 'timer';
+      acceptingInput = true;
+
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        $('timer').textContent = timeLeft;
+        if (timeLeft <= 5) $('timer').className = 'timer danger';
+        else if (timeLeft <= 8) $('timer').className = 'timer warning';
+
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          acceptingInput = false;
+          failStage(stage.answer);
+        }
+      }, 1000);
+    }
+
+    function checkAnswer() {
+      if (!acceptingInput) return;
+      const user = normalize($('answer-input').value);
+      const correct = normalize(stages[current].answer);
+
+      if (user === correct) {
+        clearInterval(timerInterval);
+        acceptingInput = false;
+        $('feedback').textContent = 'Correct';
+        $('feedback').className = 'feedback correct';
+
+        setTimeout(() => {
+          if (current + 1 >= stages.length) {
+            showScreen('end-screen');
+          } else {
+            loadStage(current + 1);
+          }
+        }, 850);
+      } else {
+        $('feedback').textContent = 'Not quite — try again';
+        $('feedback').className = 'feedback wrong';
+        $('answer-input').select();
+      }
+    }
+
+    function failStage(correctAnswer) {
+      acceptingInput = false;
+      $('fail-answer').textContent = correctAnswer;
+      $('fail-message').textContent = timeLeft <= 0
+        ? 'The fifteen seconds expired.'
+        : 'Incorrect term.';
+      showScreen('fail-screen');
+    }
+
+    // Events
+    $('start-btn').addEventListener('click', startGame);
+    $('submit-btn').addEventListener('click', checkAnswer);
+    $('answer-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') checkAnswer();
+    });
+    $('restart-btn').addEventListener('click', () => showScreen('start-screen'));
+    $('retry-btn').addEventListener('click', () => showScreen('start-screen'));
+  </script>
+</body>
+</html>
