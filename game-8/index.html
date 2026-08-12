@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pedagogy Games Hub</title>
+    <style>
+        /* --- Global & Dashboard Styles --- */
+        :root {
+            --bg-color: #1a1a24;
+            --text-color: #f0f0f0;
+            --accent: #4caf50;
+            --nav-bg: #2a2a35;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        #dashboard {
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 250px;
+            background: var(--nav-bg);
+            border-right: 2px solid #333;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 0;
+            z-index: 100;
+        }
+
+        #sidebar h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            padding: 15px 20px;
+            text-align: left;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-left: 4px solid transparent;
+        }
+
+        .nav-btn:hover { background: #3a3a45; }
+        .nav-btn.active {
+            background: #3a3a45;
+            border-left: 4px solid var(--accent);
+            font-weight: bold;
+        }
+
+        #game-area {
+            flex-grow: 1;
+            position: relative;
+            background: #000;
+        }
+
+        .game-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .game-container.active { display: block; }
+
+        .placeholder-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 2rem;
+            color: #777;
+            text-align: center;
+            flex-direction: column;
+        }
+
+        /* --- Strong Winds and Rain Styles --- */
+        #ship-view {
+            position: absolute; top: -10%; left: -10%; width: 120%; height: 120%;
+            background: url('https://images.unsplash.com/photo-1518355486847-814d3f324317?q=80&w=2000&auto=format&fit=crop') center/cover;
+            animation: rockShip 8s infinite ease-in-out alternate;
+            filter: grayscale(0.5) contrast(1.2) brightness(0.6);
+            z-index: 1;
+        }
+        #whiteout-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(200,210,220,0.85) 100%);
+            z-index: 2; transition: opacity 5s ease;
+        }
+        #snow-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+        .game-ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+        .question-box { background: rgba(0,0,0,0.8); border: 2px solid #886547; padding: 30px; text-align: center; max-width: 600px; border-radius: 10px; pointer-events: auto; }
+        .hud { position: absolute; bottom: 40px; display: flex; flex-direction: column; align-items: center; background: rgba(0,0,0,0.8); padding: 20px; border: 3px solid #886547; border-radius: 10px; pointer-events: auto; }
+        .grip-bar-container { width: 300px; height: 25px; background: #222; border-radius: 5px; overflow: hidden; margin-bottom: 10px; }
+        #grip-bar { width: 100%; height: 100%; background: #4caf50; transition: width 0.3s, background-color 0.3s; }
+        .answer-input { width: 80%; padding: 10px; font-size: 1.2rem; background: rgba(255,255,255,0.1); border: 1px solid #886547; color: white; text-align: center; outline: none; }
+        
+        @keyframes rockShip {
+            0% { transform: rotate(-3deg) translateY(0) scale(1); }
+            50% { transform: rotate(2deg) translateY(-20px) scale(1.05); }
+            100% { transform: rotate(-2deg) translateY(10px) scale(1); }
+        }
+
+        /* --- Glass Artist Styles --- */
+        #furnace-view {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #ff4500 0%, #8b0000 40%, #000000 100%);
+            z-index: 1;
+            animation: pulseFire 3s infinite alternate;
+        }
+        #glass-blob {
+            width: 150px; height: 150px;
+            background: radial-gradient(circle, #fff7e6 0%, #ff8c00 70%, #d2691e 100%);
+            border-radius: 50% 50% 40% 60%;
+            margin: 0 auto 30px auto;
+            box-shadow: 0 0 50px #ff4500;
+            transition: all 0.5s ease;
+            animation: spinBlob 4s infinite linear;
+        }
+        @keyframes pulseFire { 0% { opacity: 0.8; } 100% { opacity: 1; } }
+        @keyframes spinBlob { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #glass-artist-ui { border-color: #ff8c00; }
+        #glass-hud { border-color: #ff8c00; }
+        #temp-bar { width: 50%; height: 100%; background: #ff8c00; transition: width 0.3s; }
+
+    </style>
+</head>
+<body>
+
+<div id="dashboard">
+    <!-- Navigation Menu -->
+    <div id="sidebar">
+        <h2>Pedagogy<br>Games</h2>
+        <button class="nav-btn active" onclick="switchGame(1)">1. Strong Winds & Rain</button>
+        <button class="nav-btn" onclick="switchGame(2)">2. Game Slot 2</button>
+        <button class="nav-btn" onclick="switchGame(3)">3. Game Slot 3</button>
+        <button class="nav-btn" onclick="switchGame(4)">4. Game Slot 4</button>
+        <button class="nav-btn" onclick="switchGame(5)">5. Game Slot 5</button>
+        <button class="nav-btn" onclick="switchGame(6)">6. Game Slot 6</button>
+        <button class="nav-btn" onclick="switchGame(7)">7. Game Slot 7</button>
+        <button class="nav-btn" onclick="switchGame(8)">8. Glass Artist</button>
+    </div>
+
+    <!-- Game View Area -->
+    <div id="game-area">
+        
+        <!-- Game 1: Strong Winds and Rain -->
+        <div id="game-1" class="game-container active">
+            <div id="ship-view"></div>
+            <div id="whiteout-overlay"></div>
+            <canvas id="snow-canvas"></canvas>
+            <div class="game-ui">
+                <div class="question-box">
+                    <div id="wind-timer" style="font-size: 3rem; margin-bottom: 10px; color: #4caf50;">0</div>
+                    <div id="wind-def" style="font-size: 1.5rem; margin-bottom: 20px;">Press Enter to Start</div>
+                    <input type="text" id="wind-input" class="answer-input" placeholder="Type the psychological term">
+                </div>
+                <div class="hud">
+                    <div class="grip-bar-container"><div id="grip-bar"></div></div>
+                    <div>Compass Grip: <span id="grip-text">100%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Games 2 through 7: Placeholders -->
+        <div id="game-2" class="game-container"><div class="placeholder-content"><h3>Game 2</h3><p>Under Construction</p></div></div>
+        <div id="game-3" class="game-container"><div class="placeholder-content"><h3>Game 3</h3><p>Under Construction</p></div></div>
+        <div id="game-4" class="game-container"><div class="placeholder-content"><h3>Game 4</h3><p>Under Construction</p></div></div>
+        <div id="game-5" class="game-container"><div class="placeholder-content"><h3>Game 5</h3><p>Under Construction</p></div></div>
+        <div id="game-6" class="game-container"><div class="placeholder-content"><h3>Game 6</h3><p>Under Construction</p></div></div>
+        <div id="game-7" class="game-container"><div class="placeholder-content"><h3>Game 7</h3><p>Under Construction</p></div></div>
+
+        <!-- Game 8: Glass Artist -->
+        <div id="game-8" class="game-container">
+            <div id="furnace-view"></div>
+            <div class="game-ui">
+                <div id="glass-blob"></div>
+                <div class="question-box" id="glass-artist-ui">
+                    <h2 style="margin-top:0; color: #ff8c00;">Glassblowing Trivia</h2>
+                    <div id="glass-def" style="font-size: 1.5rem; margin-bottom: 20px;">Press Enter to Start</div>
+                    <input type="text" id="glass-input" class="answer-input" placeholder="Type the glass art term">
+                </div>
+                <div class="hud" id="glass-hud">
+                    <div class="grip-bar-container"><div id="temp-bar"></div></div>
+                    <div>Glass Temperature: <span id="temp-text">500°C</span> (Keep above 200°C!)</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- Navigation Logic ---
+    function switchGame(gameNum) {
+        // Hide all games
+        document.querySelectorAll('.game-container').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+        
+        // Show selected
+        document.getElementById(`game-${gameNum}`).classList.add('active');
+        document.querySelector(`.nav-btn:nth-child(${gameNum + 1})`).classList.add('active');
+        
+        // Auto-focus inputs if applicable
+        if(gameNum === 1) document.getElementById('wind-input').focus();
+        if(gameNum === 8) document.getElementById('glass-input').focus();
+    }
+
+    // --- GAME 1: Strong Winds and Rain Logic ---
+    const psychTerms = [
+        { term: "Conditioning", def: "Learning through association or consequences.", diff: "easy" },
+        { term: "Working memory", def: "Short-term mental workspace.", diff: "medium" },
+        { term: "Heuristic", def: "Fast mental shortcut for judgment.", diff: "hard" }
+    ]; // Shortened for brevity, you can add your full list here.
+    
+    let grip = 100;
+    let windTime = 0;
+    let windInterval = null;
+    let currentWindQ = null;
+
+    function nextWindQ() {
+        currentWindQ = psychTerms[Math.floor(Math.random() * psychTerms.length)];
+        document.getElementById('wind-def').innerText = `"${currentWindQ.def}"`;
+        document.getElementById('wind-input').value = '';
+        windTime = 0;
+        clearInterval(windInterval);
+        
+        windInterval = setInterval(() => {
+            windTime++;
+            const timerEl = document.getElementById('wind-timer');
+            timerEl.innerText = windTime;
+            timerEl.style.color = windTime < 8 ? '#4caf50' : windTime < 10 ? '#ffeb3b' : '#f44336';
+            
+            if(windTime >= 15) {
+                grip -= 30; // Miss penalty
+                updateGrip();
+                nextWindQ();
+            }
+        }, 1000);
+    }
+
+    function updateGrip() {
+        if(grip < 0) grip = 0;
+        document.getElementById('grip-bar').style.width = grip + '%';
+        document.getElementById('grip-text').innerText = grip + '%';
+        if(grip === 0) alert("The storm took you! Game Over.");
+    }
+
+    document.getElementById('wind-input').addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') {
+            if(!currentWindQ) { nextWindQ(); return; }
+            if(e.target.value.toLowerCase() === currentWindQ.term.toLowerCase()) {
+                document.getElementById('wind-input').style.borderColor = "#4caf50";
+                setTimeout(() => document.getElementById('wind-input').style.borderColor = "#886547", 500);
+            } else {
+                grip -= 30; updateGrip();
+            }
+            nextWindQ();
+        }
+    });
+
+    // Snow Canvas Setup
+    const canvas = document.getElementById('snow-canvas');
+    const ctx = canvas.getContext('2d');
+    function resizeCanvas() { canvas.width = canvas.parentElement.clientWidth; canvas.height = canvas.parentElement.clientHeight; }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    const particles = Array.from({length: 800}, () => ({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*2+1 }));
+    function drawSnow() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.beginPath();
+        particles.forEach(p => { ctx.moveTo(p.x, p.y); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); p.x += 6; p.y += 3; if(p.x > canvas.width) p.x = 0; if(p.y > canvas.height) p.y = 0; });
+        ctx.fill();
+        requestAnimationFrame(drawSnow);
+    }
+    drawSnow();
+
+    // --- GAME 8: Glass Artist Logic ---
+    const glassTerms = [
+        { term: "Silica", def: "The primary ingredient used to make glass." },
+        { term: "Blowpipe", def: "The iron or steel tube used to gather and blow glass." },
+        { term: "Marver", def: "The steel table used to roll and shape hot glass." },
+        { term: "Pontil", def: "The solid metal rod used to hold shaped glass during finishing." },
+        { term: "Annealing", def: "The process of slowly cooling glass to prevent it from shattering." },
+        { term: "Gaffer", def: "The master glassblower in charge of the team." },
+        { term: "Frit", def: "Crushed glass used to add color to the piece." }
+    ];
+
+    let temperature = 500;
+    let glassInterval = null;
+    let currentGlassQ = null;
+
+    function updateTemp(amount) {
+        temperature += amount;
+        if(temperature > 1000) temperature = 1000;
+        if(temperature < 0) temperature = 0;
+        
+        let perc = (temperature / 1000) * 100;
+        document.getElementById('temp-bar').style.width = perc + '%';
+        document.getElementById('temp-text').innerText = temperature + '°C';
+        
+        const blob = document.getElementById('glass-blob');
+        if(temperature > 800) blob.style.background = "radial-gradient(circle, #fff 0%, #fff7e6 70%, #ff8c00 100%)";
+        else if(temperature > 400) blob.style.background = "radial-gradient(circle, #fff7e6 0%, #ff8c00 70%, #d2691e 100%)";
+        else blob.style.background = "radial-gradient(circle, #8b0000 0%, #4a0000 70%, #000 100%)";
+
+        if(temperature < 200) {
+            clearInterval(glassInterval);
+            document.getElementById('glass-def').innerText = "The glass shattered from the cold! Game Over.";
+        }
+    }
+
+    function nextGlassQ() {
+        currentGlassQ = glassTerms[Math.floor(Math.random() * glassTerms.length)];
+        document.getElementById('glass-def').innerText = `"${currentGlassQ.def}"`;
+        document.getElementById('glass-input').value = '';
+        
+        clearInterval(glassInterval);
+        glassInterval = setInterval(() => {
+            updateTemp(-20); // Glass cools down rapidly over time
+        }, 1000);
+    }
+
+    document.getElementById('glass-input').addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') {
+            if(!currentGlassQ) { nextGlassQ(); return; }
+            if(e.target.value.toLowerCase() === currentGlassQ.term.toLowerCase()) {
+                updateTemp(200); // Heating up the glass on correct answer
+                document.getElementById('glass-input').style.borderColor = "#ff8c00";
+                setTimeout(() => document.getElementById('glass-input').style.borderColor = "#886547", 500);
+                nextGlassQ();
+            } else {
+                updateTemp(-100); // Bad shape, loses heat faster
+            }
+        }
+    });
+
+</script>
+</body>
+</html>
