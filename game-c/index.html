@@ -100,7 +100,8 @@ body{background:var(--ink);color:var(--bone);font-family:var(--ui);overflow:hidd
 #cell-family{flex:1}
 #cell-family .hud-val{font-family:var(--display);font-style:italic;font-size:clamp(14px,2vw,22px);color:var(--pass)}
 #cell-timer{margin-left:auto}
-#cell-timer .hud-val{font-size:clamp(22px,4vw,42px);color:var(--good);transition:color .2s}
+#cell-timer .hud-val{font-size:clamp(17px,3vw,30px);color:var(--bone);transition:color .2s}
+#cell-timer.bonus .hud-val{color:var(--good)}
 #cell-timer.warn .hud-val{color:var(--pass)}
 #cell-timer.hot .hud-val{color:var(--bad);animation:hotpulse .52s infinite alternate}
 @keyframes hotpulse{from{opacity:1;transform:scale(1)}to{opacity:.64;transform:scale(1.1)}}
@@ -130,9 +131,16 @@ body{background:var(--ink);color:var(--bone);font-family:var(--ui);overflow:hidd
   box-shadow:0 22px 52px rgba(0,0,0,.78);
   clip-path:polygon(0 0,100% 0,100% 97.6%,94% 100%,88% 97.6%,82% 100%,76% 97.6%,70% 100%,64% 97.6%,58% 100%,52% 97.6%,46% 100%,40% 97.6%,34% 100%,28% 97.6%,22% 100%,16% 97.6%,10% 100%,4% 97.6%,0 100%);
 }
-.t-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:13px;padding-bottom:9px;border-bottom:1px dashed rgba(30,28,24,.3)}
+.t-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:13px;padding-bottom:9px;border-bottom:1px dashed rgba(30,28,24,.3)}
 .t-family{font-size:9px;font-weight:700;letter-spacing:.32em;text-transform:uppercase;color:#7a7166}
-.t-num{font-family:var(--mono);font-size:9px;color:#9a9186}
+.t-num{font-family:var(--mono);font-size:9px;color:#9a9186;white-space:nowrap}
+.t-stake{
+  margin-left:auto;font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:.06em;white-space:nowrap;padding:2px 7px;border-radius:2px;
+}
+.t-stake.s30{color:#7d2418;background:rgba(125,36,24,.11)}   /* short read, most at risk */
+.t-stake.s25{color:#7a5410;background:rgba(122,84,16,.11)}
+.t-stake.s20{color:#2c5340;background:rgba(44,83,64,.11)}    /* dense read, least at risk */
 .situation{font-family:var(--display);font-size:clamp(16px,2.8vw,23px);line-height:1.42;margin-bottom:clamp(14px,2.4vh,22px)}
 .situation em{font-style:italic;color:#6b6158}/* the ruling detail */
 
@@ -253,7 +261,7 @@ body{background:var(--ink);color:var(--bone);font-family:var(--ui);overflow:hidd
 
 <div id="ticket" class="hidden">
   <div class="ticket-inner">
-    <div class="t-head"><span class="t-family" id="t-family">—</span><span class="t-num" id="t-num">01 / 30</span></div>
+    <div class="t-head"><span class="t-family" id="t-family">—</span><span class="t-stake" id="t-stake">15s · 25% at risk</span><span class="t-num" id="t-num">01 / 30</span></div>
     <div class="situation" id="situation"></div>
     <div class="choices" id="choices"></div>
     <div id="why"></div>
@@ -275,9 +283,10 @@ body{background:var(--ink);color:var(--bone);font-family:var(--ui);overflow:hidd
     <div class="fam"><div class="fam-name">Gentle heat</div><div class="fam-terms">Poach · Bain-marie<br>En papillote · Confit<br>Bard · Liaison</div></div>
   </div>
   <div class="rules">
-    <div class="rule"><b>Standing</b><span>Open at 10,000. Each correct answer on first try: +10%. Each miss: −20%. Finish above your start and the night was yours.</span></div>
-    <div class="rule"><b>The clock</b><span>Twenty seconds. First-try answer under ten seconds earns a bonus. After the clock runs out the answer is revealed.</span></div>
-    <div class="rule"><b>Why it's wrong</b><span>Every answer shows you the ruling — the exact condition in the situation that closes or opens each door.</span></div>
+    <div class="rule"><b>Standing</b><span>Open at 10,000. A correct first answer adds 10%, and adds another 10% if it lands inside the bonus window.</span></div>
+    <div class="rule"><b>The clock varies</b><span>Ten, fifteen or twenty seconds, set by how much the ticket asks you to read. The bonus window is half of it.</span></div>
+    <div class="rule"><b>So does the stake</b><span>A short ticket puts 30% at risk, a dense one 20%. Fumbling something easy costs you most.</span></div>
+    <div class="rule"><b>Why it's wrong</b><span>A miss closes only the door you picked and tells you why. The answer stays hidden — reason again.</span></div>
   </div>
   <button class="btn" id="btn-start">Take the station</button>
 </div>
@@ -317,7 +326,7 @@ const SCENARIOS = [
 
   /* ── THICKENING (8) ─────────────────────────── */
   {
-    family:"Thickening", wash:"thicken", roomMood:"",
+    family:"Thickening", wash:"thicken", roomMood:"", clock:15, cost:0.25,
     situation:"The stock is already reduced, the sauce is nearly finished, and it needs body — but <em>it's going back on the heat for service</em> and cannot be allowed to break.",
     choices:[
       {label:"Liaison", note:"egg yolk and cream", correct:false,
@@ -329,7 +338,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"slow",
+    family:"Thickening", wash:"thicken", roomMood:"slow", clock:10, cost:0.30,
     situation:"The sauce is a velouté, just started — the stock is cold, the fat is in the pan, and <em>you have the full cooking time ahead of you</em>.",
     choices:[
       {label:"Roux", note:"fat and flour cooked first", correct:true,
@@ -341,7 +350,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"slow",
+    family:"Thickening", wash:"thicken", roomMood:"slow", clock:15, cost:0.25,
     situation:"The sauce is already built and plated components are ready. The chef tasted it and said it needs body — <em>no more heat, no more time, she wants it corrected and up</em>.",
     choices:[
       {label:"Liaison", note:"egg yolk and cream", correct:false,
@@ -353,7 +362,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"slow",
+    family:"Thickening", wash:"thicken", roomMood:"slow", clock:15, cost:0.25,
     situation:"The cream sauce is nearly ready. It needs thickness, <em>it must stay perfectly smooth and glossy</em>, and the finish absolutely cannot be starchy.",
     choices:[
       {label:"Reduction", note:"simmer away the water", correct:true,
@@ -365,7 +374,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"",
+    family:"Thickening", wash:"thicken", roomMood:"", clock:20, cost:0.20,
     situation:"The fish is poached, plated, and the sauce — a fine fumet — will be poured tableside. It must hold for forty minutes, <em>must not curdle, must coat the back of the spoon</em>, and will not come near the heat again.",
     choices:[
       {label:"Liaison", note:"egg yolk and cream", correct:true,
@@ -377,7 +386,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"slow",
+    family:"Thickening", wash:"thicken", roomMood:"slow", clock:15, cost:0.25,
     situation:"You are building a rich red-wine braise. You want depth of flavour and body — <em>you have two hours, the braising liquid will reduce naturally</em>.",
     choices:[
       {label:"Reduction", note:"cook away the water over time", correct:true,
@@ -389,7 +398,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"",
+    family:"Thickening", wash:"thicken", roomMood:"", clock:10, cost:0.30,
     situation:"Tickets are firing fast. The jus is thin. You have <em>ninety seconds and it must be up</em>.",
     choices:[
       {label:"Slurry", note:"starch in cold liquid, goes in hot", correct:true,
@@ -401,7 +410,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Thickening", wash:"thicken", roomMood:"slow",
+    family:"Thickening", wash:"thicken", roomMood:"slow", clock:20, cost:0.20,
     situation:"The hollandaise is holding in a bain-marie. It's slightly thin and the chef wants it to nappé correctly — <em>it cannot come off the bain-marie, it cannot exceed 65°C, no starches</em>.",
     choices:[
       {label:"Reduction", note:"concentrate by simmering", correct:false,
@@ -415,7 +424,7 @@ const SCENARIOS = [
 
   /* ── FAT & MEAT (5) ─────────────────────────── */
   {
-    family:"Fat & Meat", wash:"fat", roomMood:"",
+    family:"Fat & Meat", wash:"fat", roomMood:"", clock:10, cost:0.30,
     situation:"A lean venison haunch is going into a hot oven. The concern is the <em>exterior drying out and burning</em> before the interior is done. You have strips of back fat.",
     choices:[
       {label:"Bard", note:"wrap exterior in fat", correct:true,
@@ -427,7 +436,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Fat & Meat", wash:"fat", roomMood:"slow",
+    family:"Fat & Meat", wash:"fat", roomMood:"slow", clock:10, cost:0.30,
     situation:"A whole beef tenderloin. The exterior is perfect — good crust, good moisture. The concern is the <em>center of the muscle drying out</em> during a slow roast.",
     choices:[
       {label:"Bard", note:"wrap in fat", correct:false,
@@ -439,7 +448,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Fat & Meat", wash:"fat", roomMood:"slow",
+    family:"Fat & Meat", wash:"fat", roomMood:"slow", clock:10, cost:0.30,
     situation:"Duck legs, eight portions, going into a low oven for four hours. The goal is <em>fully rendered fat, tender flesh, long shelf life — the legs should be preserved in the cooking medium</em>.",
     choices:[
       {label:"Bard", note:"wrap in back fat for moisture", correct:false,
@@ -451,7 +460,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Fat & Meat", wash:"fat", roomMood:"",
+    family:"Fat & Meat", wash:"fat", roomMood:"", clock:15, cost:0.25,
     situation:"A whole pheasant. Lean bird, dry-heat roasting, the chef expects <em>service-ready moisture throughout — both surface and centre</em>.",
     choices:[
       {label:"Bard the exterior, lard the breast", note:"address both zones", correct:true,
@@ -463,7 +472,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Fat & Meat", wash:"fat", roomMood:"slow",
+    family:"Fat & Meat", wash:"fat", roomMood:"slow", clock:20, cost:0.20,
     situation:"Côte de boeuf, bone-in, 1.2 kg. You've finished the sear. It goes into a medium oven. <em>It will be sliced tableside — the exterior must look clean, no wrapping visible</em>.",
     choices:[
       {label:"Bard", note:"wrap in back fat strips", correct:false,
@@ -477,7 +486,7 @@ const SCENARIOS = [
 
   /* ── HEAT & COLOR (6) ───────────────────────── */
   {
-    family:"Heat & Color", wash:"heat", roomMood:"",
+    family:"Heat & Color", wash:"heat", roomMood:"", clock:10, cost:0.30,
     situation:"Diced shallots and garlic, going into a sauce base. The chef said: <em>no colour, just softness and their moisture released</em>.",
     choices:[
       {label:"Sweat", note:"low heat, covered or stirred, no browning", correct:true,
@@ -489,7 +498,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Heat & Color", wash:"heat", roomMood:"",
+    family:"Heat & Color", wash:"heat", roomMood:"", clock:10, cost:0.30,
     situation:"A duck breast, skin-on, going to the pass. The goal is <em>rendered fat, crackling skin, Maillard crust — and the ticket says à la minute</em>.",
     choices:[
       {label:"Sear", note:"high heat, hard color", correct:true,
@@ -501,7 +510,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Heat & Color", wash:"heat", roomMood:"",
+    family:"Heat & Color", wash:"heat", roomMood:"", clock:15, cost:0.25,
     situation:"Mushrooms, large dice. They go into a composed garnish — <em>the chef wants them golden, with fond left in the pan for deglazing, but they must not steam</em>.",
     choices:[
       {label:"Sauté", note:"hot pan, small fat, tossed", correct:true,
@@ -513,7 +522,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Heat & Color", wash:"heat", roomMood:"slow",
+    family:"Heat & Color", wash:"heat", roomMood:"slow", clock:15, cost:0.25,
     situation:"Beef short ribs. Two days out from service. The goal is <em>deep flavour, fall-off-the-bone texture, served reheated and glazed — the method must build the sauce in the same vessel</em>.",
     choices:[
       {label:"Braise", note:"sear first, add liquid, cover, low oven", correct:true,
@@ -525,7 +534,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Heat & Color", wash:"heat", roomMood:"",
+    family:"Heat & Color", wash:"heat", roomMood:"", clock:15, cost:0.25,
     situation:"The chef is plating. She calls for the scallops. They are raw. The table has been seated for <em>twenty-two minutes and she does not want them to wait</em>. Three scallops, one pan.",
     choices:[
       {label:"À la minute", note:"sear right now, plate immediately", correct:true,
@@ -537,7 +546,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Heat & Color", wash:"heat", roomMood:"",
+    family:"Heat & Color", wash:"heat", roomMood:"", clock:20, cost:0.20,
     situation:"Bone-in chicken thighs, skin-on. The goal is maximum crust, but the thigh bone means <em>the interior needs more time than the skin can afford at high heat</em>.",
     choices:[
       {label:"Sear then braise", note:"build crust first, finish in liquid", correct:false,
@@ -551,7 +560,7 @@ const SCENARIOS = [
 
   /* ── STOPPING THE COOK (5) ──────────────────── */
   {
-    family:"Stopping the cook", wash:"stop", roomMood:"",
+    family:"Stopping the cook", wash:"stop", roomMood:"", clock:10, cost:0.30,
     situation:"Green beans, vivid colour, for a composed salad served cold. They've finished cooking in boiling water — <em>the colour must be locked, the texture must stop right now</em>.",
     choices:[
       {label:"Shock", note:"immediately into ice water", correct:true,
@@ -563,7 +572,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Stopping the cook", wash:"stop", roomMood:"slow",
+    family:"Stopping the cook", wash:"stop", roomMood:"slow", clock:20, cost:0.20,
     situation:"Thick asparagus, fifteen portions, for a plated starter going out in service in four hours. <em>They must finish on the plancha to order — texture must be consistent across all fifteen</em>.",
     choices:[
       {label:"Par-cook", note:"cook most of the way, shock, hold, finish to order", correct:true,
@@ -575,7 +584,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Stopping the cook", wash:"stop", roomMood:"",
+    family:"Stopping the cook", wash:"stop", roomMood:"", clock:15, cost:0.25,
     situation:"A beef tenderloin, pulled from the oven at 52°C internal. It needs to reach 57°C. <em>The chef has not touched it and does not plan to</em>.",
     choices:[
       {label:"Carryover cooking", note:"residual heat will continue the cook", correct:true,
@@ -587,7 +596,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Stopping the cook", wash:"stop", roomMood:"slow",
+    family:"Stopping the cook", wash:"stop", roomMood:"slow", clock:20, cost:0.20,
     situation:"Lobster tails, for service in ninety minutes. Raw now. The chef wants them <em>just under done, held cold, finished to order in brown butter — eight portions must all be identical</em>.",
     choices:[
       {label:"Par-cook, shock, hold", note:"partial cook, stop, finish to order", correct:true,
@@ -599,7 +608,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Stopping the cook", wash:"stop", roomMood:"slow",
+    family:"Stopping the cook", wash:"stop", roomMood:"slow", clock:20, cost:0.20,
     situation:"Caramel. The pot has reached 185°C. The recipe calls for it to stop at exactly 185°C — <em>the pot is off the heat and the caramel is still climbing</em>.",
     choices:[
       {label:"Add cream immediately", note:"cold dairy arrests the temperature climb", correct:true,
@@ -613,7 +622,7 @@ const SCENARIOS = [
 
   /* ── GENTLE HEAT (6) ────────────────────────── */
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:10, cost:0.30,
     situation:"Eggs en cocotte, ramekins, going into service. They must set gently without curdling — <em>even heat from all sides, the oven cannot be trusted at this temperature</em>.",
     choices:[
       {label:"Bain-marie", note:"surround the ramekins in hot water", correct:true,
@@ -625,7 +634,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:15, cost:0.25,
     situation:"A sole fillet, delicate, lean. It will go to the pass with a beurre blanc. <em>It must arrive moist, without any browning whatsoever, cooked through in under four minutes</em>.",
     choices:[
       {label:"Poach", note:"gentle simmer in court bouillon or stock", correct:true,
@@ -637,7 +646,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:10, cost:0.30,
     situation:"Sea bass fillet, with julienned vegetables, aromatic herbs, and a splash of white wine. <em>The diner has asked for no added fat and the plate should arrive at the table in the parcel, opened tableside</em>.",
     choices:[
       {label:"En papillote", note:"sealed parchment or foil, steam inside", correct:true,
@@ -649,7 +658,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:10, cost:0.30,
     situation:"Chocolate for a ganache. It needs to melt without seizing. <em>The pastry station has no microwave and the chocolate cannot come near a direct flame</em>.",
     choices:[
       {label:"Bain-marie", note:"bowl over simmering water", correct:true,
@@ -661,7 +670,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:15, cost:0.25,
     situation:"Salmon, centre-cut, 180g. The chef wants it <em>translucent at the centre, butter-poached, extremely moist — she will not accept grill marks or browning of any kind</em>.",
     choices:[
       {label:"Poach in butter", note:"submerge in clarified butter, 55°C", correct:true,
@@ -673,7 +682,7 @@ const SCENARIOS = [
     ]
   },
   {
-    family:"Gentle heat", wash:"gentle", roomMood:"slow",
+    family:"Gentle heat", wash:"gentle", roomMood:"slow", clock:15, cost:0.25,
     situation:"Crème brûlée, eight ramekins, going into a 150°C oven. The custard must be <em>set at the edges and trembling at the centre, with no bubbles — the oven temperature alone would overcook them</em>.",
     choices:[
       {label:"Bain-marie", note:"ramekins set in a tray of hot water", correct:true,
@@ -687,17 +696,23 @@ const SCENARIOS = [
 ];
 
 /* ═══════════════ GAME STATE ═══════════════ */
-const LIMIT = 20;
 const START = 10000;
 const BONUS_MULTI = 1.10;
 const HIT_MULTI   = 1.10;  /* correct first try */
-const MISS_MULTI  = 0.80;
-const FAST_SECS   = 10;
+
+/* per-ticket clock and stake come from the scenario:
+   10s / 30% — short read, clean discrimination (a whiffed gimme costs most)
+   15s / 25% — medium read, real reasoning
+   20s / 20% — dense multi-clause read, hardest concept
+   The under-time bonus threshold is half of whatever clock the ticket carries. */
+const DEFAULT_CLOCK = 15;
+const DEFAULT_COST  = 0.25;
 
 let order = [], qi = 0, rep = START, tick = 0, timerId = null;
 let locked = false, answered = false;
 let firstTry = 0, missed = 0, fast = 0;
 let missedItems = [];
+let clock = DEFAULT_CLOCK, cost = DEFAULT_COST, fastMark = 8;
 
 /* ═══════════════ DOM ═══════════════════════ */
 const $ = id => document.getElementById(id);
@@ -715,6 +730,7 @@ const whyEl    = $("why");
 const chefEl   = $("chef");
 const tFam     = $("t-family");
 const tNum     = $("t-num");
+const tStake   = $("t-stake");
 
 /* ═══════════════ SCENE SETUP ═══════════════ */
 (function buildScene(){
@@ -760,10 +776,11 @@ function bumpRep(next, up){
 }
 
 function paintTimer(v){
-  timerVal.textContent = v;
-  timerEl.classList.remove("warn","hot");
-  if(v >= 14) timerEl.classList.add("hot");
-  else if(v >= 11) timerEl.classList.add("warn");
+  timerVal.textContent = v + "\u2009/\u2009" + clock;
+  timerEl.classList.remove("warn","hot","bonus");
+  if(v >= Math.round(clock * 0.75))      timerEl.classList.add("hot");
+  else if(v >= Math.round(clock * 0.55)) timerEl.classList.add("warn");
+  else if(v < fastMark)                  timerEl.classList.add("bonus");
 }
 
 function buildPips(){
@@ -800,9 +817,15 @@ function nextQ(){
   locked=false; answered=false; tick=0;
   room.classList.remove("frozen");
 
+  clock    = sc.clock || DEFAULT_CLOCK;
+  cost     = (typeof sc.cost === "number") ? sc.cost : DEFAULT_COST;
+  fastMark = Math.ceil(clock / 2);
+
   famEl.textContent = sc.family;
   tFam.textContent  = sc.family.toUpperCase();
   tNum.textContent  = String(qi+1).padStart(2,"0")+" / "+order.length;
+  tStake.textContent = clock + "s \u00B7 " + Math.round(cost*100) + "% at risk";
+  tStake.className   = "t-stake s" + Math.round(cost*100);
   situEl.innerHTML  = sc.situation;
   whyEl.style.display="none"; whyEl.textContent="";
 
@@ -822,7 +845,7 @@ function nextQ(){
   setWash(sc.wash);
   paintTimer(0);
   clearInterval(timerId);
-  timerId=setInterval(()=>{ tick++; paintTimer(tick); if(tick>=LIMIT) onTimeout(); },1000);
+  timerId=setInterval(()=>{ tick++; paintTimer(tick); if(tick>=clock) onTimeout(); },1000);
 
   ticketEl.classList.remove("hidden");
 }
@@ -862,7 +885,7 @@ function onChoose(idx){
 
     if(!answered){
       firstTry++;
-      const quick = tick < FAST_SECS;
+      const quick = tick < fastMark;
       if(quick){ fast++; bumpRep(rep * HIT_MULTI * BONUS_MULTI, true); }
       else      { bumpRep(rep * HIT_MULTI, true); }
       speak(quick ? pick(SAID_FAST) : pick(SAID_SLOW), "good");
@@ -884,7 +907,7 @@ function onChoose(idx){
     answered = true;
     missed++;
     missedItems.push(sc);
-    bumpRep(rep * MISS_MULTI, false);
+    bumpRep(rep * (1 - cost), false);
     room.classList.add("frozen");
     speak(pick(SAID_MISS), "bad");
     setPip(qi, "miss");
@@ -925,7 +948,7 @@ function onTimeout(){
   if(!answered){
     missed++;
     missedItems.push(sc);
-    bumpRep(rep*MISS_MULTI, false);
+    bumpRep(rep * (1 - cost), false);
     room.classList.add("frozen");
     speak(pick(SAID_TIME), "bad");
     setPip(qi,"miss");
