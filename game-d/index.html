@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Storm Run — Floatplane Aviation Vocabulary</title>
+<style>
+  :root{
+    --sky-top:#1a2634;
+    --sky-mid:#2d4356;
+    --sky-low:#4a6178;
+    --water:#243642;
+    --amber:#f2b134;
+    --amber-hot:#ff7b3d;
+    --panel:#0e1620;
+    --panel-line:#31465a;
+    --ink:#dfe9f0;
+    --ink-dim:#8ba0b2;
+    --good:#4bd07b;
+    --bad:#ff5a52;
+    --gauge:#0a1119;
+    --glass:rgba(18,30,42,.72);
+    --mono:"DM Mono","SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    --disp:"Oswald","Bebas Neue",system-ui,sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--mono);
+    color:var(--ink);
+    background:#060b10;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{
+    position:relative;
+    width:100vw;height:100vh;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+
+  /* ---------- SKY / SCENE ---------- */
+  #scene{
+    position:absolute;inset:0;
+    background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-mid) 42%,var(--sky-low) 66%,#31495c 74%,var(--water) 100%);
+    overflow:hidden;
+    transition:filter .4s;
+  }
+  .cloud{
+    position:absolute;
+    background:radial-gradient(circle at 40% 40%, rgba(190,205,220,.55), rgba(120,140,158,.28) 60%, transparent 72%);
+    border-radius:50%;
+    filter:blur(4px);
+    animation:drift linear infinite;
+  }
+  @keyframes drift{
+    from{transform:translateX(6vw)}
+    to{transform:translateX(-46vw)}
+  }
+  .rain{
+    position:absolute;inset:0;
+    background-image:repeating-linear-gradient(78deg,
+      transparent 0 22px,
+      rgba(200,220,235,.14) 22px 23px);
+    animation:rainmove .32s linear infinite;
+    opacity:.55;
+    pointer-events:none;
+  }
+  @keyframes rainmove{
+    from{transform:translateY(-20px) translateX(6px)}
+    to{transform:translateY(60px) translateX(-16px)}
+  }
+  #lightning{
+    position:absolute;inset:0;background:#eaf2ff;opacity:0;pointer-events:none;
+  }
+  #lightning.flash{animation:flash .6s ease-out}
+  @keyframes flash{
+    0%{opacity:0}6%{opacity:.85}12%{opacity:.1}18%{opacity:.7}30%{opacity:0}100%{opacity:0}
+  }
+
+  /* water surface */
+  #water{
+    position:absolute;left:0;right:0;bottom:0;height:26%;
+    background:linear-gradient(180deg,#31495c,#1a2833 60%,#111c24);
+  }
+  #water::before{
+    content:"";position:absolute;inset:0;
+    background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 3px,transparent 3px 9px);
+    animation:ripple 5s linear infinite;
+  }
+  @keyframes ripple{from{background-position:0 0}to{background-position:120px 0}}
+
+  /* ---------- PLANE ---------- */
+  #planeWrap{
+    position:absolute;
+    left:50%;top:47%;
+    width:230px;height:150px;
+    transform:translate(-50%,-50%);
+    transition:transform .5s cubic-bezier(.34,1.2,.5,1), top .6s ease;
+    z-index:3;
+    will-change:transform;
+  }
+  #planeWrap.wobble{animation:wobble .6s ease-in-out}
+  @keyframes wobble{
+    0%{transform:translate(-50%,-50%) rotate(0)}
+    20%{transform:translate(-53%,-52%) rotate(-9deg)}
+    45%{transform:translate(-47%,-49%) rotate(7deg)}
+    70%{transform:translate(-51%,-51%) rotate(-4deg)}
+    100%{transform:translate(-50%,-50%) rotate(0)}
+  }
+  #planeWrap.spin{animation:spin 2.4s cubic-bezier(.5,0,.7,1) forwards}
+  @keyframes spin{
+    0%{transform:translate(-50%,-50%) rotate(0) scale(1);top:47%}
+    30%{transform:translate(-46%,-46%) rotate(140deg) scale(.9)}
+    60%{transform:translate(-54%,-30%) rotate(400deg) scale(.7)}
+    100%{transform:translate(-50%,60%) rotate(760deg) scale(.42);top:80%}
+  }
+  #planeWrap.land{animation:land 1.8s ease-in forwards}
+  @keyframes land{
+    0%{top:47%}
+    60%{top:60%;transform:translate(-50%,-50%) rotate(3deg)}
+    72%{top:66%;transform:translate(-50%,-48%) rotate(-2deg)}
+    82%{top:64%;transform:translate(-51%,-50%) rotate(1deg)}
+    100%{top:66%;transform:translate(-50%,-50%) rotate(0)}
+  }
+  .splash{
+    position:absolute;bottom:20%;left:50%;transform:translateX(-50%);
+    width:0;height:0;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,255,255,.8),transparent 70%);
+    z-index:2;
+  }
+  .splash.go{animation:splash 1s ease-out forwards}
+  @keyframes splash{from{width:20px;height:12px;opacity:.9}to{width:320px;height:80px;opacity:0}}
+
+  svg{display:block;overflow:visible}
+  .prop{transform-origin:200px 74px;animation:spinprop .12s linear infinite}
+  @keyframes spinprop{to{transform:rotate(360deg)}}
+
+  /* ---------- HUD ---------- */
+  #hud{
+    position:relative;z-index:5;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:16px 20px;
+    pointer-events:none;
+  }
+  .readout{
+    background:var(--glass);
+    border:1px solid var(--panel-line);
+    border-radius:4px;
+    padding:8px 14px;
+    backdrop-filter:blur(6px);
+    box-shadow:0 4px 20px rgba(0,0,0,.4);
+  }
+  .readout .lbl{
+    font-size:9px;letter-spacing:.22em;color:var(--ink-dim);text-transform:uppercase;
+  }
+  .readout .val{
+    font-family:var(--disp);font-weight:600;font-size:26px;line-height:1;letter-spacing:.02em;
+    color:var(--amber);margin-top:2px;
+  }
+  #timer .val{color:var(--good);transition:color .2s}
+  #timer.hot .val{color:var(--amber-hot)}
+  #score .val{color:var(--ink)}
+  .altcol{display:flex;gap:10px}
+
+  /* ---------- QUESTION PANEL ---------- */
+  #dash{
+    position:relative;z-index:6;
+    margin-top:auto;
+    background:linear-gradient(180deg,rgba(10,17,25,.4),var(--panel) 40%);
+    border-top:1px solid var(--panel-line);
+    padding:18px 20px calc(18px + env(safe-area-inset-bottom));
+    box-shadow:0 -14px 40px rgba(0,0,0,.5);
+  }
+  #dash::before{
+    content:"";position:absolute;top:-1px;left:0;right:0;height:1px;
+    background:linear-gradient(90deg,transparent,var(--amber),transparent);
+    opacity:.5;
+  }
+  .qmeta{
+    display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;
+  }
+  .qmeta .term{
+    font-family:var(--disp);text-transform:uppercase;letter-spacing:.14em;
+    font-size:13px;color:var(--amber);font-weight:600;
+  }
+  .qmeta .count{font-size:11px;color:var(--ink-dim);letter-spacing:.1em}
+  #question{
+    font-size:15px;line-height:1.5;color:var(--ink);margin-bottom:14px;max-width:760px;
+  }
+  #answers{
+    display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:820px;
+  }
+  @media(max-width:560px){#answers{grid-template-columns:1fr}}
+  .ans{
+    text-align:left;
+    font-family:var(--mono);font-size:13.5px;line-height:1.35;
+    color:var(--ink);
+    background:#111e29;
+    border:1px solid var(--panel-line);
+    border-radius:5px;
+    padding:12px 14px;
+    cursor:pointer;
+    transition:border-color .15s,background .15s,transform .08s;
+    pointer-events:auto;
+  }
+  .ans:hover{border-color:var(--amber);background:#16283699}
+  .ans:active{transform:translateY(1px)}
+  .ans:disabled{cursor:default;opacity:.85}
+  .ans.correct{border-color:var(--good);background:rgba(75,208,123,.14);color:#c8f7d8}
+  .ans.wrong{border-color:var(--bad);background:rgba(255,90,82,.14);color:#ffd2cf}
+  .ans .key{color:var(--ink-dim);font-weight:500;margin-right:8px}
+  .ans.correct .key{color:var(--good)}
+  .ans.wrong .key{color:var(--bad)}
+
+  #reveal{
+    position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.9);
+    z-index:8;pointer-events:none;
+    background:rgba(8,14,20,.92);
+    border:1px solid var(--good);
+    border-radius:6px;
+    padding:14px 22px;
+    text-align:center;
+    opacity:0;
+  }
+  #reveal.show{animation:revealpop 1.4s ease-out forwards}
+  @keyframes revealpop{
+    0%{opacity:0;transform:translate(-50%,-50%) scale(.85)}
+    14%{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    78%{opacity:1}
+    100%{opacity:0;transform:translate(-50%,-54%) scale(1)}
+  }
+  #reveal .rl{font-size:9px;letter-spacing:.24em;color:var(--ink-dim);text-transform:uppercase}
+  #reveal .rv{font-family:var(--disp);font-size:22px;color:var(--good);font-weight:600;margin-top:4px;letter-spacing:.03em}
+
+  /* ---------- OVERLAYS ---------- */
+  .overlay{
+    position:absolute;inset:0;z-index:20;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;
+    text-align:center;padding:30px;
+    background:radial-gradient(circle at 50% 30%,rgba(20,34,48,.86),rgba(4,8,12,.95));
+    backdrop-filter:blur(3px);
+  }
+  .overlay.hide{display:none}
+  .eyebrow{font-size:11px;letter-spacing:.34em;color:var(--amber);text-transform:uppercase;margin-bottom:14px}
+  h1{font-family:var(--disp);font-weight:700;font-size:clamp(40px,9vw,84px);line-height:.92;letter-spacing:.01em;text-transform:uppercase}
+  h1 .sub{display:block;color:var(--ink-dim);font-weight:400;font-size:.42em;letter-spacing:.16em;margin-top:8px}
+  .brief{max-width:440px;margin:20px 0 8px;font-size:13.5px;line-height:1.6;color:var(--ink-dim)}
+  .brief b{color:var(--ink);font-weight:500}
+  .btn{
+    margin-top:26px;
+    font-family:var(--disp);text-transform:uppercase;letter-spacing:.16em;font-weight:600;
+    font-size:18px;color:#0a1119;background:var(--amber);
+    border:none;border-radius:5px;padding:14px 42px;cursor:pointer;
+    transition:transform .1s,box-shadow .2s,background .2s;
+    box-shadow:0 6px 24px rgba(242,177,52,.3);
+  }
+  .btn:hover{background:var(--amber-hot);transform:translateY(-2px);box-shadow:0 10px 30px rgba(255,123,61,.4)}
+  .btn:active{transform:translateY(0)}
+  #finalScore{font-family:var(--disp);font-size:72px;color:var(--amber);font-weight:700;line-height:1;margin:6px 0}
+  #finalWrap{font-size:13px;color:var(--ink-dim);letter-spacing:.1em}
+  #verdict{font-family:var(--disp);text-transform:uppercase;letter-spacing:.1em;font-size:22px;margin-top:16px}
+  #verdict.win{color:var(--good)}
+  #verdict.lose{color:var(--bad)}
+  .tag{font-size:10px;letter-spacing:.2em;color:var(--ink-dim);text-transform:uppercase;margin-top:34px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="scene">
+    <div id="clouds"></div>
+    <div class="rain"></div>
+    <div id="water"></div>
+    <div id="lightning"></div>
+
+    <div id="planeWrap">
+      <div class="splash" id="splash"></div>
+      <svg width="230" height="150" viewBox="0 0 230 150">
+        <!-- floats -->
+        <path d="M70 118 q6 14 20 14 h70 q14 0 20 -14 l-4 -6 h-102 z" fill="#1a2a36" stroke="#3d5568" stroke-width="1.5"/>
+        <rect x="96" y="104" width="4" height="14" fill="#2a3d4d"/>
+        <rect x="150" y="104" width="4" height="14" fill="#2a3d4d"/>
+        <!-- tail / empennage -->
+        <path d="M40 76 l-22 -22 l10 -2 l24 18 z" fill="#c94f2c"/>
+        <path d="M40 72 l-20 4 l0 6 l22 -2 z" fill="#e3ddd0"/>
+        <!-- fuselage -->
+        <path d="M40 74 q30 -18 120 -8 q30 4 44 12 q6 3 0 8 q-20 8 -50 9 q-80 4 -114 -12 q-6 -8 0 -17 z"
+              fill="#eae4d7" stroke="#b7ad98" stroke-width="1.5"/>
+        <!-- windows -->
+        <circle cx="150" cy="72" r="5" fill="#2d4a5e"/>
+        <circle cx="132" cy="73" r="4.5" fill="#2d4a5e"/>
+        <circle cx="115" cy="74" r="4.5" fill="#2d4a5e"/>
+        <path d="M170 68 q14 2 22 8 q-2 5 -10 6 q-8 -1 -14 -6 z" fill="#2d4a5e" opacity=".85"/>
+        <!-- accent stripe -->
+        <path d="M44 88 q60 10 130 6" fill="none" stroke="#c94f2c" stroke-width="3"/>
+        <!-- high wing -->
+        <path d="M60 58 q70 -14 118 -2 q6 2 4 7 q-60 8 -124 4 q-4 -6 2 -9 z"
+              fill="#d8d1c2" stroke="#a89e88" stroke-width="1.5"/>
+        <rect x="96" y="62" width="3" height="12" fill="#8a8371"/>
+        <rect x="140" y="62" width="3" height="12" fill="#8a8371"/>
+        <!-- engine + prop -->
+        <rect x="188" y="66" width="14" height="16" rx="4" fill="#2a3d4d"/>
+        <g class="prop">
+          <rect x="198" y="52" width="4" height="44" rx="2" fill="#141c24"/>
+          <rect x="178" y="72" width="44" height="4" rx="2" fill="#141c24"/>
+          <circle cx="200" cy="74" r="4" fill="#c94f2c"/>
+        </g>
+      </svg>
+    </div>
+
+    <div id="reveal"><div class="rl">Answer</div><div class="rv" id="revealTerm"></div></div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="readout" id="timer"><div class="lbl">Elapsed</div><div class="val" id="timerVal">0.0</div></div>
+    <div class="altcol">
+      <div class="readout" id="alt"><div class="lbl">Altitude</div><div class="val" id="altVal">1200</div></div>
+      <div class="readout" id="score"><div class="lbl">Score</div><div class="val" id="scoreVal">0</div></div>
+    </div>
+  </div>
+
+  <!-- Dash / question -->
+  <div id="dash">
+    <div class="qmeta">
+      <span class="term" id="qterm">—</span>
+      <span class="count" id="qcount">01 / 15</span>
+    </div>
+    <div id="question">—</div>
+    <div id="answers"></div>
+  </div>
+
+  <!-- Start -->
+  <div class="overlay" id="startScreen">
+    <div class="eyebrow">BeamWorthy Flight School</div>
+    <h1>Storm Run<span class="sub">Floatplane · Aviation Vocabulary</span></h1>
+    <p class="brief">You're at the yoke of a bush floatplane over the Canadian shield, weather closing in fast. Every question is a decision. <b>Answer under 10 seconds for a +10% bonus.</b> A wrong call makes her <b>wobble</b>—miss too many and you'll <b>spin into the drink</b>. Fly clean and set her down on the lake.</p>
+    <button class="btn" id="startBtn">Start Engine</button>
+    <div class="tag">15 rounds · 3 strikes</div>
+  </div>
+
+  <!-- End -->
+  <div class="overlay hide" id="endScreen">
+    <div class="eyebrow" id="endEyebrow">Flight Complete</div>
+    <div id="verdict"></div>
+    <div id="finalScore">0</div>
+    <div id="finalWrap">points · <span id="finalStats"></span></div>
+    <button class="btn" id="againBtn">Fly Again</button>
+    <div class="tag">BeamWorthy · Aviation Deck</div>
+  </div>
+</div>
+
+<script>
+/* ============ QUESTION BANK ============
+   Decision-tree scenario format. Each item:
+   term  = vocabulary term being tested (flashed on wrong answers)
+   q     = situational prompt
+   a     = 4 options
+   c     = index of correct option
+   Drawn from the 50-term aviation glossary.
+*/
+const BANK = [
+  {term:"Angle of Attack (AoA)",q:"Climbing out through turbulence, you pull the nose up hard and the wing suddenly buffets and drops. What did you exceed?",a:["The critical angle of attack, stalling the wing","Never-exceed speed (VNE)","Maximum flap extended speed","The adiabatic lapse rate"],c:0},
+  {term:"VSO — Stall Speed, Landing Configuration",q:"Setting up for a water landing with full flaps and floats down, which speed marks the slowest you can fly before stalling?",a:["VNO","VSO","V2","VA"],c:1},
+  {term:"Adverse Yaw",q:"You roll into a left bank and the nose swings right, opposite your turn. Which term names this, and what fixes it?",a:["Wind shear — add power","Adverse yaw — coordinate with rudder","Downwash — lower the nose","Slipstream — reduce throttle"],c:1},
+  {term:"Wind Shear",q:"On short final to the lake, your airspeed drops 20 knots in a heartbeat as a gust front rolls through. What just hit you?",a:["Accelerated stall","Wind shear","Adverse yaw","Wingtip vortices"],c:1},
+  {term:"VA — Design Maneuvering Speed",q:"You're about to punch through heavy turbulence. Below which speed will the wing stall before it breaks, protecting the airframe?",a:["VNE","VFE","VA","VYSE"],c:2},
+  {term:"Controlled Flight Into Terrain (CFIT)",q:"Visibility drops to nothing and you're flying a perfectly good aircraft toward rising ground you can't see. The classic name for this accident?",a:["Accelerated stall","CFIT","Plan continuation bias","Adverse yaw"],c:1},
+  {term:"Plan Continuation Bias",q:"The weather's clearly worse than briefed, but you press on because you're 'almost there.' Which human factor are you falling into?",a:["Aeronautical decision-making","Plan continuation bias","Situational awareness","Adverse yaw"],c:1},
+  {term:"Go-Around",q:"Your approach to the lake is unstable—too fast, off-line. Tower-less strip, your call. What's the safe decision?",a:["Force the landing anyway","Execute a go-around and try again","Squawk 7700","Lower VNE"],c:1},
+  {term:"Squawk Code",q:"ATC says 'squawk 4271.' What are you setting?",a:["A radio frequency","A transponder code identifying you on radar","Your heading","Your altimeter setting"],c:1},
+  {term:"Instrument Meteorological Conditions (IMC)",q:"You've flown into cloud and can no longer see the horizon or ground. You are now operating in what?",a:["VMC","IMC","VFR","MSL"],c:1},
+  {term:"V1 — Takeoff Decision Speed",q:"Accelerating across the water on takeoff, past which speed are you committed to fly—too fast to safely abort?",a:["VR","V1","V2","VX"],c:1},
+  {term:"Altimeter",q:"You need to know your height above sea level as the storm pushes you down. Which instrument reads it, and off what pressure?",a:["Airspeed indicator — dynamic pressure","Altimeter — static/barometric pressure","Attitude indicator — gyroscopic","Tachometer — engine RPM"],c:1},
+  {term:"Above Ground Level (AGL)",q:"The lake sits at 1,100 ft elevation. Your altimeter reads 1,600 ft MSL. How high are you above the water (AGL)?",a:["1,600 ft","1,100 ft","500 ft","2,700 ft"],c:2},
+  {term:"Terrain Awareness and Warning System (TAWS)",q:"In the murk, a synthetic voice barks 'TERRAIN—PULL UP.' Which safety system just saved you?",a:["TAWS","IFR","VMC","ADM"],c:0},
+  {term:"Accelerated Stall",q:"Hauling hard into a steep turn to avoid a ridge, the wing stalls even though your speed looks fine. This is a—?",a:["Wind-shear stall","Accelerated stall","Adverse yaw","VNE overspeed"],c:1},
+  {term:"Constant-Speed Propeller",q:"You adjust blade pitch to hold optimal RPM as load changes through the climb. What kind of propeller allows this?",a:["Fixed-pitch propeller","Constant-speed propeller","Contra-rotating propeller","Feathered propeller"],c:1},
+  {term:"Empennage",q:"Ice is building on the tail assembly—the horizontal and vertical stabilizers. What's the single word for that whole tail structure?",a:["Fuselage","Empennage","Slipstream","Aileron"],c:1},
+  {term:"VNE — Never Exceed Speed",q:"Diving to get below the weather, the airspeed needle races toward a red radial line. Which speed must you never pass?",a:["VNO","VNE","VA","VFE"],c:1},
+  {term:"Wilco",q:"ATC issues an instruction. You'll comply. Which single word confirms 'understood and will do'?",a:["Roger","Affirm","Wilco","Stand by"],c:2},
+  {term:"VYSE — Best Rate of Climb, Single Engine",q:"On a twin, an engine quits on climb-out. Which blue-line speed gives you the best rate of climb on the one remaining?",a:["VX","VY","VYSE","VMC"],c:2},
+];
+
+/* ============ CONFIG ============ */
+const ROUNDS = 15;
+const MAX_STRIKES = 3;
+const BONUS_WINDOW = 10;   // seconds
+const BASE = 100;          // base points per correct
+const BONUS = 0.10;        // +10% under the window
+
+/* ============ STATE ============ */
+let queue=[], idx=0, score=0, strikes=0, startT=0, timerRAF=0, locked=false, elapsed=0;
+
+const $=id=>document.getElementById(id);
+const scene=$("scene"), planeWrap=$("planeWrap"), lightning=$("lightning");
+
+/* clouds */
+(function buildClouds(){
+  const c=$("clouds");
+  for(let i=0;i<7;i++){
+    const el=document.createElement("div");
+    el.className="cloud";
+    const w=120+Math.random()*220, h=w*0.5;
+    el.style.width=w+"px"; el.style.height=h+"px";
+    el.style.top=(Math.random()*46)+"%";
+    el.style.left=(Math.random()*100)+"%";
+    el.style.animationDuration=(24+Math.random()*30)+"s";
+    el.style.opacity=(0.4+Math.random()*0.4);
+    c.appendChild(el);
+  }
+})();
+/* ambient lightning */
+setInterval(()=>{ if(Math.random()<0.5){ lightning.classList.remove("flash"); void lightning.offsetWidth; lightning.classList.add("flash"); } },4200);
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function start(){
+  queue=shuffle([...BANK]).slice(0,ROUNDS);
+  idx=0;score=0;strikes=0;
+  $("startScreen").classList.add("hide");
+  $("endScreen").classList.add("hide");
+  planeWrap.className="";
+  $("scoreVal").textContent="0";
+  $("altVal").textContent="1200";
+  render();
+}
+
+function render(){
+  locked=false;
+  const item=queue[idx];
+  $("qterm").textContent="Round "+(idx+1);
+  $("qcount").textContent=String(idx+1).padStart(2,"0")+" / "+ROUNDS;
+  $("question").textContent=item.q;
+  const box=$("answers"); box.innerHTML="";
+  const keys=["A","B","C","D"];
+  item.a.forEach((txt,i)=>{
+    const b=document.createElement("button");
+    b.className="ans";
+    b.innerHTML='<span class="key">'+keys[i]+'</span>'+txt;
+    b.onclick=()=>choose(i,b);
+    box.appendChild(b);
+  });
+  startTimer();
+}
+
+function startTimer(){
+  startT=performance.now();
+  cancelAnimationFrame(timerRAF);
+  const t=$("timer"), v=$("timerVal");
+  t.classList.remove("hot");
+  (function tick(){
+    elapsed=(performance.now()-startT)/1000;
+    v.textContent=elapsed.toFixed(1);
+    if(elapsed>=BONUS_WINDOW) t.classList.add("hot");
+    timerRAF=requestAnimationFrame(tick);
+  })();
+}
+
+function choose(i,btn){
+  if(locked) return;
+  locked=true;
+  cancelAnimationFrame(timerRAF);
+  const item=queue[idx];
+  const correct = i===item.c;
+  const underWindow = elapsed < BONUS_WINDOW;
+  document.querySelectorAll(".ans").forEach(b=>b.disabled=true);
+
+  if(correct){
+    btn.classList.add("correct");
+    let gained=BASE;
+    if(underWindow) gained=Math.round(BASE*(1+BONUS));
+    score+=gained;
+    bumpScore();
+    // gentle climb feedback
+    let alt=parseInt($("altVal").textContent)+40;
+    $("altVal").textContent=alt;
+  }else{
+    btn.classList.add("wrong");
+    // show the correct option
+    document.querySelectorAll(".ans")[item.c].classList.add("correct");
+    // flash the term
+    flashReveal(item.term);
+    strikes++;
+    planeWrap.classList.remove("wobble"); void planeWrap.offsetWidth;
+    planeWrap.classList.add("wobble");
+    let alt=Math.max(200,parseInt($("altVal").textContent)-180);
+    $("altVal").textContent=alt;
+  }
+
+  setTimeout(()=>{
+    if(strikes>=MAX_STRIKES){ crash(); return; }
+    idx++;
+    if(idx>=queue.length){ landing(); return; }
+    render();
+  }, correct?900:1500);
+}
+
+function bumpScore(){
+  const el=$("scoreVal");
+  el.textContent=score;
+  el.style.color="var(--amber)";
+  setTimeout(()=>el.style.color="var(--ink)",300);
+}
+
+function flashReveal(term){
+  $("revealTerm").textContent=term;
+  const r=$("reveal");
+  r.classList.remove("show"); void r.offsetWidth; r.classList.add("show");
+}
+
+function crash(){
+  planeWrap.className="spin";
+  scene.style.filter="brightness(.7) saturate(.8)";
+  setTimeout(()=>{ scene.style.filter=""; endScreen(false); },2400);
+}
+
+function landing(){
+  planeWrap.className="land";
+  setTimeout(()=>{ $("splash").classList.add("go"); },1100);
+  setTimeout(()=>endScreen(true),2000);
+}
+
+function endScreen(won){
+  const s=$("endScreen"); s.classList.remove("hide");
+  $("finalScore").textContent=score;
+  $("finalStats").textContent = won
+    ? "clean water landing · "+strikes+" strike"+(strikes===1?"":"s")
+    : "spun into the lake · round "+(idx+1);
+  const v=$("verdict");
+  if(won){ v.textContent="Wheels—er, Floats Down"; v.className="win"; $("endEyebrow").textContent="Safe on the Water"; }
+  else{ v.textContent="Lost Her in the Storm"; v.className="lose"; $("endEyebrow").textContent="Flight Terminated"; }
+}
+
+$("startBtn").onclick=start;
+$("againBtn").onclick=start;
+</script>
+</body>
+</html>
