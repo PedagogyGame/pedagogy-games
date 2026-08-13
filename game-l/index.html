@@ -1,629 +1,1575 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Taste Level - Realism Environment Prototype</title>
-    <style>
-        :root {
-            /* Palette: Serious, restrained, professional */
-            --bg-color: #030303; /* Deep, architectural shadow */
-            --runway-color: #1a1a1a; /* Warm grey concrete */
-            --stage-wings: #0f0f0f;
-            --text-main: #f0f0f0;
-            --text-muted: #666666;
-            --text-accent: #ffffff;
-            
-            /* Lighting: Controlled Studio Environment */
-            --spotlight-core: #fffeef; /* 4200K (Warm Neutral White) */
-            --crowd-tint: rgba(10, 10, 10, 0.9);
-            --camera-flash: #ffffff;
-            
-            /* Game Mechanics */
-            --stamp-red: #c01010;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            perspective: 2000px; /* High Balcony Perspective */
-        }
-
-        /* --- THE ROOM & ENVIRONMENT (WebGL Simulation) --- */
-        #scene {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1;
-            display: flex;
-            justify-content: center;
-            align-items: flex-end; /* View looks down the axis */
-            overflow: hidden;
-        }
-
-        /* Runway Surface (Deals with layout and initial perspective) */
-        #runway {
-            width: 320px; /* Approximately 2.8m virtual width */
-            height: 120%; /* Extends well past the balcony */
-            background-color: var(--runway-color);
-            background-image: 
-                radial-gradient(ellipse at 50% 70%, #2a2a2a 0%, #1a1a1a 80%);
-            border-left: 2px solid #222;
-            border-right: 2px solid #222;
-            position: relative;
-            transform: rotateX(55deg) translateY(100px); /* Primary perspective shift */
-            transform-origin: bottom center;
-            box-shadow: 0 -20px 100px 20px rgba(0,0,0,0.9);
-        }
-
-        /* The Spotlight Effect over the runway */
-        #runway::after {
-            content: '';
-            position: absolute;
-            top: -100%; left: 0; width: 100%; height: 300%;
-            background: 
-                radial-gradient(ellipse at 50% 50%, var(--spotlight-core) 0%, rgba(255,255,255,0) 60%),
-                radial-gradient(ellipse at 50% 10%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 80%);
-            mix-blend-mode: overlay;
-            pointer-events: none;
-            opacity: 0.6;
-            filter: blur(10px);
-        }
-
-        /* Background Architecture (Stage wings, audience dark) */
-        #background-stage {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(180deg, #000000 0%, #080808 30%, #030303 100%);
-            z-index: 0;
-            pointer-events: none;
-        }
-
-        /* TURNAROUND SPOT (Far End) */
-        #turnaround {
-            position: absolute;
-            bottom: 30px; /* Far end, near foreground in our perspective */
-            left: 50%; transform: translateX(-50%) rotateX(-55deg);
-            width: 150px; height: 150px;
-            background: radial-gradient(circle, var(--spotlight-core) 0%, rgba(255,255,255,0) 70%);
-            mix-blend-mode: overlay;
-            opacity: 0.3;
-        }
-
-        /* --- CROWD & CAMERA CREW (Pure CSS Elements) --- */
-        .crowd-row {
-            position: absolute;
-            width: 600px;
-            height: 100%;
-            top: 0;
-            background-color: var(--bg-color);
-            pointer-events: none;
-            display: flex;
-            justify-content: space-around;
-            filter: blur(1px); /* Keep background soft */
-        }
-        .crowd-left { left: calc(50% - 620px); transform: rotateX(55deg) translateY(100px) rotateY(-5deg); }
-        .crowd-right { right: calc(50% - 620px); transform: rotateX(55deg) translateY(100px) rotateY(5deg); }
-
-        /* Abstract Spectator Silhouette */
-        .spectator {
-            width: 30px; height: 100%;
-            background-color: #0d0d0d;
-            border-radius: 15px 15px 0 0;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            position: relative;
-        }
-        .spectator::after {
-            content: '';
-            position: absolute;
-            top: -20px; left: 50%; transform: translateX(-50%);
-            width: 18px; height: 18px; border-radius: 50%;
-            background-color: #0d0d0d;
-        }
-
-        /* Camera Men & Women (Placed at the end of the runway) */
-        #camera-pit {
-            position: absolute;
-            bottom: -50px; left: 50%; transform: translateX(-50%) rotateX(-55deg);
-            width: 400px; height: 150px;
-            display: flex; justify-content: space-between; align-items: flex-end;
-            pointer-events: none;
-            opacity: 0.8;
-            filter: blur(0.5px);
-        }
-        .cameraman {
-            width: 40px; height: 100px;
-            background: #0d0d0d;
-            border-radius: 5px 5px 0 0;
-            position: relative;
-        }
-        /* The Camera Lens abstraction */
-        .cameraman::after {
-            content: '';
-            position: absolute;
-            top: 10px; left: 10px;
-            width: 20px; height: 20px;
-            border-radius: 50%;
-            background: #000;
-            border: 2px solid #222;
-        }
-
-        /* Periodically Flash Animation */
-        #flash-layer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: var(--camera-flash);
-            z-index: 5;
-            opacity: 0;
-            pointer-events: none;
-        }
-        @keyframes cameraFlash {
-            0% { opacity: 0; }
-            5% { opacity: 0.9; }
-            10% { opacity: 0; }
-            100% { opacity: 0; }
-        }
-
-        /* --- REFINED MODEL REPRESENTATION (CSS Approximation) --- */
-        .model-abstraction {
-            position: absolute;
-            top: -10%; /* Backstage */
-            left: 50%;
-            transform: translateX(-50%) scale(0.6);
-            width: 50px; /* Slender proportional scaling */
-            height: 120px;
-            background: radial-gradient(ellipse at 50% 20%, #ddd 0%, #aaa 100%);
-            border-radius: 25px 25px 5px 5px;
-            box-shadow: 0 50px 100px rgba(0,0,0,0.8);
-            opacity: 0;
-            animation: walkLoop 24s infinite linear;
-            transition: opacity 0.5s;
-        }
-        
-        .model-abstraction::after {
-            content: attr(data-look);
-            position: absolute;
-            bottom: -30px; left: 50%; transform: translateX(-50%) rotateX(-55deg);
-            white-space: nowrap;
-            font-size: 10px;
-            font-weight: 300;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            mix-blend-mode: overlay;
-        }
-
-        /* The keyframe animation for the approach and receding */
-        @keyframes walkLoop {
-            0%   { top: -10%; transform: translateX(-50%) scale(0.6); opacity: 0; }
-            2%   { opacity: 1; }
-            45%  { top: 88%; transform: translateX(-50%) scale(1.3); } /* Turnaround Point */
-            50%  { top: 88%; transform: translateX(-50%) scale(1.3); } /* Pivot/Pause */
-            98%  { top: -10%; transform: translateX(-50%) scale(0.6); opacity: 1; }
-            100% { top: -10%; transform: translateX(-50%) scale(0.6); opacity: 0; }
-        }
-
-        /* Specific visual IDs for the 3 model archetypes for the prototype loop */
-        #model-column { background: linear-gradient(180deg, #111 0%, #111 100%); width: 45px; } /* Matte black Column */
-        #model-a-line { background: linear-gradient(180deg, #ddd 0%, #bbb 100%); border-radius: 10px 10px 5px 5px; } /* Grey A-line */
-        #model-hourglass { background: linear-gradient(180deg, #333 0%, #111 50%, #333 100%); width: 50px; border-radius: 25px 25px 25px 25px; } /* Cenched Waist structure */
-
-        /* --- THE UI LAYER (HTML Editorial HUD) --- */
-        #ui-layer {
-            position: relative;
-            z-index: 10;
-            width: 100%;
-            max-width: 1200px;
-            height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 40px;
-        }
-
-        #top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        /* Upgraded Confidence Gauge */
-        #taste-container {
-            width: 150px;
-            text-align: right;
-        }
-        #taste-label {
-            font-size: 11px;
-            font-weight: 300;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
-        #confidence-gauge {
-            width: 100%;
-            height: 4px;
-            background-color: #222;
-            position: relative;
-            transform-origin: right;
-        }
-        #confidence-fill {
-            position: absolute;
-            top: 0; right: 0; width: 100%; height: 100%;
-            background-color: var(--text-accent);
-            transition: width 0.3s ease-out;
-        }
-        #taste-value {
-            font-size: 32px;
-            font-weight: 200; /* Editorial thickness */
-            font-family: "Georgia", serif;
-            margin-top: 4px;
-        }
-
-        #quiz-container {
-            width: 420px;
-            background: rgba(3, 3, 3, 0.9);
-            backdrop-filter: blur(15px);
-            border: 1px solid #222;
-            padding: 40px;
-            pointer-events: auto;
-            margin-bottom: auto;
-            margin-top: auto;
-            transform: translateY(-20px); /* Adjust spacing */
-            box-shadow: 0 20px 80px rgba(0,0,0,0.7);
-        }
-
-        #timer-bar {
-            height: 1px; /* Minimalist */
-            background-color: var(--text-muted);
-            width: 100%;
-            margin-bottom: 25px;
-            transform-origin: left;
-        }
-
-        #question-difficulty {
-            font-size: 10px;
-            letter-spacing: 2.5px;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 15px;
-        }
-
-        #question-text {
-            font-size: 20px;
-            line-height: 1.5;
-            font-weight: 300;
-            font-family: "Georgia", serif;
-            margin-bottom: 40px;
-        }
-
-        .option-btn {
-            display: block;
-            width: 100%;
-            background: transparent;
-            border: 1px solid #222;
-            color: var(--text-main);
-            padding: 18px 25px;
-            text-align: left;
-            font-size: 14px;
-            letter-spacing: 1px;
-            font-weight: 300;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .option-btn:hover {
-            border-color: var(--text-muted);
-            background: rgba(255,255,255,0.03);
-        }
-
-        .option-btn.correct { background: var(--text-accent); color: #000; border-color: var(--text-accent); }
-        .option-btn.incorrect { border-color: #333; color: #444; }
-
-        /* --- ENDGAME REJECTION --- */
-        #stamp-layer {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 100;
-            display: flex; justify-content: center; align-items: center;
-            pointer-events: none;
-            opacity: 0;
-            background: rgba(0,0,0,0);
-            transition: background 3s ease 1s; /* Long fade-black delay */
-        }
-
-        #uninvited-stamp {
-            color: var(--stamp-red);
-            font-size: 130px;
-            font-family: "Times New Roman", Times, serif;
-            font-weight: bold;
-            text-transform: uppercase;
-            border: 12px solid var(--stamp-red);
-            padding: 25px 50px;
-            transform: scale(4) rotate(-18deg);
-            opacity: 0;
-            mix-blend-mode: color-dodge; /* Interacts with the dark background */
-        }
-
-        .stamp-active #stamp-layer { opacity: 1; }
-        .stamp-active #uninvited-stamp {
-            animation: stampDown 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-        }
-        .stamp-active.fade-black #stamp-layer {
-            background: rgba(0,0,0,1);
-        }
-        .stamp-active #ui-layer {
-            opacity: 0;
-            transition: opacity 0.5s;
-        }
-
-        @keyframes stampDown {
-            0% { transform: scale(4) rotate(-18deg); opacity: 0; }
-            50% { opacity: 1; }
-            100% { transform: scale(1) rotate(-18deg); opacity: 0.9; }
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Mouse Medical Run — Oval POV</title>
+<style>
+  :root{
+    --bg:#070a0e;
+    --panel:rgba(10,14,20,.94);
+    --line:rgba(255,255,255,.12);
+    --text:#eef3f8;
+    --muted:#aeb7c3;
+    --good:#75e39a;
+    --warn:#ffd468;
+    --bad:#ff6f71;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:var(--bg);
+    color:var(--text);
+    font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  #game{
+    position:relative;
+    width:100%;
+    height:100%;
+    min-height:560px;
+    background:#0b0f15;
+  }
+  canvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  #hud{
+    position:absolute;
+    z-index:20;
+    inset:0 0 auto 0;
+    min-height:174px;
+    padding:12px 18px 13px;
+    background:linear-gradient(180deg,rgba(5,8,13,.985),rgba(5,8,13,.93) 76%,rgba(5,8,13,.66));
+    border-bottom:1px solid rgba(255,255,255,.08);
+    box-shadow:0 10px 28px rgba(0,0,0,.36);
+  }
+  #topline{
+    display:grid;
+    grid-template-columns:minmax(130px,.75fr) minmax(250px,1.7fr) minmax(125px,.75fr);
+    align-items:center;
+    gap:14px;
+    max-width:1200px;
+    margin:0 auto 8px;
+  }
+  .tiny{
+    font-size:11px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  #district{overflow:hidden;text-overflow:ellipsis}
+  #strengthWrap{display:flex;align-items:center;gap:9px}
+  #strengthTrack{
+    position:relative;flex:1;min-width:90px;height:12px;border-radius:20px;overflow:hidden;
+    background:#252a31;border:1px solid rgba(255,255,255,.14);
+  }
+  #strengthBar{
+    position:absolute;inset:0 auto 0 0;width:100%;
+    background:linear-gradient(90deg,#6ddc95,#d6e96e);
+    transition:width .2s ease, background .2s ease;
+  }
+  #strengthText{min-width:48px;text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
+  #questionArea{
+    max-width:1200px;margin:auto;display:grid;grid-template-columns:1fr 94px;gap:14px;align-items:end;
+  }
+  #definition{
+    min-height:48px;font-size:clamp(16px,2vw,24px);line-height:1.24;font-weight:740;letter-spacing:-.012em;
+  }
+  #timerBox{text-align:center}
+  #timer{
+    font-size:38px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums;
+  }
+  #difficulty{
+    font-size:10px;margin-top:4px;color:var(--muted);letter-spacing:.14em;
+  }
+  #entryRow{
+    max-width:1200px;margin:9px auto 0;display:grid;grid-template-columns:1fr auto;gap:8px;
+  }
+  #answer{
+    width:100%;height:42px;border-radius:9px;border:1px solid rgba(255,255,255,.18);
+    background:#171c24;color:white;padding:0 13px;font-size:17px;font-weight:650;outline:none;
+  }
+  #answer:focus{border-color:rgba(255,255,255,.5);box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+  button{
+    height:42px;border:0;border-radius:9px;padding:0 18px;background:#edf1f7;color:#151b23;
+    font-weight:850;cursor:pointer;
+  }
+  button:hover{filter:brightness(1.04)}
+  #feedback{
+    max-width:1200px;height:18px;margin:6px auto 0;font-size:12px;font-weight:800;letter-spacing:.02em;
+  }
+  #overlay{
+    position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+    padding:24px;background:rgba(5,7,10,.72);backdrop-filter:blur(5px);
+  }
+  #overlay.hidden{display:none}
+  .card{
+    width:min(760px,94vw);
+    padding:30px;border-radius:18px;background:linear-gradient(180deg,#151a22,#0f1319);
+    border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 24px 86px rgba(0,0,0,.52);
+  }
+  .card h1{margin:0 0 10px;font-size:clamp(30px,5vw,56px);letter-spacing:-.04em}
+  .card h2{margin:0 0 8px;font-size:32px}
+  .card p{color:#cad1da;line-height:1.52}
+  .rules{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 22px;
+  }
+  .rule{
+    padding:11px 13px;border-radius:10px;background:#1b212a;border:1px solid rgba(255,255,255,.08);
+    color:#cfd6df;font-size:13px;
+  }
+  .bigButton{width:100%;height:50px;font-size:16px}
+  #miniStats{margin-top:12px;color:#adb6c2;font-size:12px}
+  @media(max-width:680px){
+    #hud{min-height:196px;padding:9px 10px}
+    #topline{grid-template-columns:1fr 1.3fr;gap:8px}
+    #strengthWrap{grid-column:1/-1}
+    #questionArea{grid-template-columns:1fr 66px}
+    #entryRow{grid-template-columns:1fr}
+    #submit{display:none}
+    #definition{font-size:16px}
+    #timer{font-size:30px}
+    .rules{grid-template-columns:1fr}
+  }
+</style>
 </head>
 <body>
+<div id="game">
+  <canvas id="world"></canvas>
 
-    <!-- 1. Environmental Simulation -->
-    <div id="background-stage"></div>
-    
-    <div id="flash-layer"></div>
-    
-    <div id="scene">
-        
-        <!-- Audience: Silhouettes -->
-        <div class="crowd-row crowd-left">
-            <div class="spectator"></div><div class="spectator"></div><div class="spectator"></div><div class="spectator"></div>
-            <div class="spectator"></div><div class="spectator"></div><div class="spectator"></div><div class="spectator"></div>
-        </div>
-        <div class="crowd-row crowd-right">
-            <div class="spectator"></div><div class="spectator"></div><div class="spectator"></div><div class="spectator"></div>
-            <div class="spectator"></div><div class="spectator"></div><div class="spectator"></div><div class="spectator"></div>
-        </div>
-
-        <div id="runway">
-            <div id="turnaround"></div>
-            
-            <!-- 2. The Models (Independent Timeline) -->
-            <!-- Model 1 (e.g. Look 01) -->
-            <div id="model-column" class="model-abstraction" data-look="Look 01: Column"></div>
-            
-            <!-- Model 2 (offset) -->
-            <div id="model-a-line" class="model-abstraction" data-look="Look 02: Romantic A-Line" style="animation-delay: 8s;"></div>
-            
-            <!-- Model 3 (offset) -->
-            <div id="model-hourglass" class="model-abstraction" data-look="Look 05: Defined Hourglass" style="animation-delay: 16s;"></div>
-            
-        </div>
-
-        <!-- 3. Camera Crew Pit -->
-        <div id="camera-pit">
-            <div class="cameraman"></div>
-            <div class="cameraman"></div>
-            <div class="cameraman"></div>
-            <div class="cameraman"></div>
-        </div>
+  <div id="hud">
+    <div id="topline">
+      <div class="tiny" id="progress">TERM 1 / 78</div>
+      <div class="tiny" id="district">CIVIC PLAZA</div>
+      <div id="strengthWrap">
+        <span class="tiny">Strength</span>
+        <div id="strengthTrack"><div id="strengthBar"></div></div>
+        <span id="strengthText">100%</span>
+      </div>
     </div>
 
-    <!-- 4. UI Layer (HTML Editorial HUD) -->
-    <div id="ui-layer">
-        <div id="top-bar">
-            <div><!-- Spacer --></div>
-            <div id="taste-container">
-                <div id="taste-label">Confidence Gauge</div>
-                <div id="confidence-gauge">
-                    <div id="confidence-fill"></div>
-                </div>
-                <div id="taste-value">100</div>
-            </div>
-        </div>
-
-        <div id="quiz-container">
-            <div id="timer-bar"></div>
-            <div id="question-difficulty">Loading...</div>
-            <div id="question-text">Taste Level Examination</div>
-            <div id="options"></div>
-        </div>
+    <div id="questionArea">
+      <div id="definition">Press start to begin.</div>
+      <div id="timerBox">
+        <div id="timer">--</div>
+        <div id="difficulty">READY</div>
+      </div>
     </div>
 
-    <!-- 5. Rejection Overlay -->
-    <div id="stamp-layer">
-        <div id="uninvited-stamp">Uninvited</div>
+    <form id="entryRow">
+      <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type the medical term…" />
+      <button id="submit" type="submit">SUBMIT</button>
+    </form>
+
+    <div id="feedback"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="card" id="overlayCard">
+      <h1>Mouse Medical Run</h1>
+      <p>
+        You are no longer looking at a mouse from far away. You are effectively inside the mouse’s tiny,
+        low-to-the-ground awareness, weaving through an active city while answering medical vocabulary.
+      </p>
+      <div class="rules">
+        <div class="rule"><b>78 terms.</b><br>Type the correct term for each definition.</div>
+        <div class="rule"><b>10–20 seconds.</b><br>Harder questions receive more time.</div>
+        <div class="rule"><b>Fast answers heal.</b><br>Answer with more than five seconds remaining to gain Strength.</div>
+        <div class="rule"><b>Wrong answers hurt.</b><br>Penalty ranges from 10% to 50% based on difficulty.</div>
+        <div class="rule"><b>Four blended districts.</b><br>Plaza, crossing, market, and bay-residential lanes gradually transition.</div>
+        <div class="rule"><b>Cat sequence.</b><br>If Strength reaches zero, the cat catches you, then you continue.</div>
+      </div>
+      <button class="bigButton" id="startButton">START RUN</button>
+      <div id="miniStats">Press Enter to submit answers.</div>
     </div>
+  </div>
+</div>
 
-    <script>
-        // Updated mock database covering different types (Form, Cut, Textile, Style)
-        const lexicon = [
-            { term: "Column", def: "Long, straight, narrow vertical shape.", diff: 1, diffLabel: "Form - Familiar", distractors: ["Sheath", "Shift", "Cocoon"] },
-            { term: "Fit-and-flare", def: "Fitted through the torso, widening below the waist.", diff: 1, diffLabel: "Form - Familiar", distractors: ["Mermaid", "A-line", "Hourglass"] },
-            { term: "Drape", def: "The way cloth falls, folds, and moves.", diff: 1, diffLabel: "Foundational - Familiar", distractors: ["Hand", "Ease", "Bias cut"] },
-            { term: "Minimalist", def: "Reduced ornament, simplified palette, and emphasis on cut.", diff: 1, diffLabel: "Aesthetic - Familiar", distractors: ["Classic", "Quiet Luxury", "Refinement"] },
-            
-            { term: "Dart", def: "Tapered sewn wedge that shapes flat fabric around the body.", diff: 2, diffLabel: "Tailoring - Professional", distractors: ["Yoke", "Princess seam", "Twill"] },
-            { term: "Bias cut", def: "Fabric cut diagonally to its grain, creating stretch and fluidity.", diff: 2, diffLabel: "Tailoring - Professional", distractors: ["Grainline", "Gore", "Dart"] },
-            { term: "Bouclé", def: "Nubby, looped yarn or fabric with tactile irregularity.", diff: 2, diffLabel: "Material - Professional", distractors: ["Tweed", "Jacquard", "Linen"] },
-            
-            { term: "Armscye", def: "The shaped armhole where a sleeve joins the garment.", diff: 3, diffLabel: "Tailoring - Specialist", distractors: ["Dart", "Shoulder line", "Yoke"] },
-            { term: "Gore", def: "Shaped panel inserted to create skirt flare.", diff: 3, diffLabel: "Cut - Specialist", distractors: ["Godet", "Dart", "Paneling"] },
-            { term: "Passementerie", def: "Decorative braid, cord, fringe, tassel, or elaborate trim.", diff: 3, diffLabel: "Ornament - Specialist", distractors: ["Topstitching", "Appliqué", "Embrodiery"] }
-        ];
+<script>
+(() => {
+"use strict";
 
-        let taste = 100;
-        let currentQuestion = null;
-        let timer = null;
-        let timeRemaining = 15;
-        let questionActive = false;
-        let usedQuestions = [];
+/* ============================================================
+   TERMS 171–248 — authoritative wording preserved
+   ============================================================ */
+const TERMS = [
+{n:171,t:"Syndrome",d:"Recognizable group of signs and symptoms that tend to occur together.",q:2},
+{n:172,t:"Condition",d:"Broad term for a health problem or state that may or may not constitute a disease.",q:1},
+{n:173,t:"Disease",d:"Disorder involving an identifiable abnormal process affecting body structure or function.",q:1},
+{n:174,t:"Disorder",d:"Disturbance of normal physical or mental function.",q:1},
+{n:175,t:"Benign",d:"Noncancerous; not necessarily harmless.",q:1},
+{n:176,t:"Malignant",d:"Cancerous, with capacity to invade or spread.",q:2},
+{n:177,t:"Chief complaint",d:"Primary reason a patient seeks medical attention.",q:2},
+{n:178,t:"History of present illness (HPI)",d:"Detailed account of the current medical problem and its development.",q:5},
+{n:179,t:"Pain scale",d:"Standardized method for communicating pain intensity.",q:1},
+{n:180,t:"Level of consciousness",d:"Degree to which a person is awake and responsive.",q:3},
+{n:181,t:"Orientation",d:"Awareness of person, place, time, and situation.",q:2},
+{n:182,t:"Mental status",d:"Overall assessment of awareness, cognition, mood, memory, and behavior.",q:2},
+{n:183,t:"Inspection",d:"Examination by carefully looking at the patient or body part.",q:1},
+{n:184,t:"Palpation",d:"Examination using touch to assess structures, tenderness, pulses, or abnormalities.",q:2},
+{n:185,t:"Percussion",d:"Tapping the body to evaluate underlying structures by their resulting sounds or sensations.",q:3},
+{n:186,t:"Escalation of care",d:"Obtaining a higher level of clinical evaluation or treatment when a patient deteriorates.",q:5},
+{n:187,t:"Orthopnea",d:"Shortness of breath that occurs or worsens while lying flat.",q:5},
+{n:188,t:"Chest pain",d:"Chest discomfort, pressure, tightness, or pain requiring interpretation of its underlying cause.",q:1},
+{n:189,t:"Dizziness",d:"Broad patient-reported sensation that may mean lightheadedness, imbalance, or spinning.",q:1},
+{n:190,t:"Weakness",d:"Reduced muscular strength or ability to perform normal movement.",q:1},
+{n:191,t:"Diarrhea",d:"Abnormally loose or watery bowel movements.",q:1},
+{n:192,t:"Constipation",d:"Difficult, infrequent, hard, or incomplete bowel movements.",q:1},
+{n:193,t:"Urinary urgency",d:"Sudden compelling need to urinate.",q:2},
+{n:194,t:"Urinary frequency",d:"Urination more often than usual.",q:2},
+{n:195,t:"Chills",d:"Sensation of cold often accompanied by shivering, particularly during fever or infection.",q:1},
+{n:196,t:"Rash",d:"Abnormal change in the appearance or texture of the skin.",q:1},
+{n:197,t:"Numbness",d:"Reduced or absent sensation in an area of the body.",q:1},
+{n:198,t:"Anatomy",d:"Study of body structures and their relationships.",q:1},
+{n:199,t:"Physiology",d:"Study of how normal body systems function.",q:1},
+{n:200,t:"Diabetes mellitus",d:"Group of disorders characterized by chronically abnormal blood-glucose regulation.",q:2},
+{n:201,t:"Hyperglycemia",d:"Abnormally high blood glucose.",q:2},
+{n:202,t:"Hypoglycemia",d:"Abnormally low blood glucose.",q:2},
+{n:203,t:"Infarction",d:"Tissue death caused by prolonged interruption of blood supply.",q:5},
+{n:204,t:"Thrombosis",d:"Formation of a blood clot within the circulatory system.",q:3},
+{n:205,t:"Embolism",d:"Vessel obstruction caused by material traveling through the circulation.",q:3},
+{n:206,t:"Stroke",d:"Acute brain injury caused by interrupted blood flow or bleeding.",q:1},
+{n:207,t:"Pneumonia",d:"Infection or inflammation involving the lung tissue and air sacs.",q:2},
+{n:208,t:"Acute kidney injury (AKI)",d:"Relatively sudden deterioration in kidney function.",q:5},
+{n:209,t:"Chronic kidney disease (CKD)",d:"Persistent abnormality or loss of kidney function.",q:5},
+{n:210,t:"Delirium",d:"Acute, fluctuating disturbance of attention and cognition.",q:4},
+{n:211,t:"Dementia",d:"Persistent decline in cognitive abilities sufficient to impair everyday functioning.",q:4},
+{n:212,t:"Prescription medication",d:"Medication requiring authorization from a licensed prescriber.",q:2},
+{n:213,t:"Over-the-counter (OTC) medication",d:"Medication legally available without a prescription.",q:3},
+{n:214,t:"Generic name",d:"Standard nonproprietary name of a medication.",q:2},
+{n:215,t:"Brand name",d:"Commercial name under which a medication is sold.",q:1},
+{n:216,t:"Topical",d:"Applied to a body surface, commonly the skin.",q:2},
+{n:217,t:"Inhalation",d:"Administration of medication by breathing it into the respiratory tract.",q:2},
+{n:218,t:"Infusion",d:"Controlled administration of fluid or medication over time.",q:2},
+{n:219,t:"Scheduled medication",d:"Medication ordered to be given at predetermined times.",q:2},
+{n:220,t:"Medication adherence",d:"Extent to which medication use follows an agreed treatment plan.",q:3},
+{n:221,t:"Adverse drug event (ADE)",d:"Injury or harm involving the use of a medication.",q:5},
+{n:222,t:"Therapeutic effect",d:"Intended beneficial result of a treatment.",q:3},
+{n:223,t:"Laboratory test",d:"Analysis of blood, urine, tissue, or another biological material.",q:1},
+{n:224,t:"Specimen",d:"Biological sample collected for examination or testing.",q:2},
+{n:225,t:"Imaging",d:"Use of technology to create representations of internal body structures or functions.",q:1},
+{n:226,t:"Pathology report",d:"Formal interpretation of examined tissue, cells, or other specimens.",q:3},
+{n:227,t:"Procedure",d:"Medical intervention performed for diagnosis, monitoring, or treatment.",q:1},
+{n:228,t:"Surgery",d:"Operative treatment involving intentional intervention on body tissues.",q:1},
+{n:229,t:"Anesthesia",d:"Medical suppression of pain, sensation, awareness, or movement for a procedure.",q:2},
+{n:230,t:"Sedation",d:"Medication-induced reduction in anxiety, awareness, or responsiveness.",q:2},
+{n:231,t:"Sterile technique",d:"Procedures intended to prevent microorganisms from contaminating a sterile area or equipment.",q:3},
+{n:232,t:"Emergency department (ED)",d:"Hospital department providing evaluation and treatment of urgent and emergency conditions.",q:3},
+{n:233,t:"Admission",d:"Formal acceptance of a patient into a hospital or healthcare facility for ongoing care.",q:1},
+{n:234,t:"Transfer",d:"Movement of a patient between units, facilities, or levels of care.",q:1},
+{n:235,t:"Inpatient",d:"Patient formally admitted to a healthcare facility.",q:1},
+{n:236,t:"Outpatient",d:"Patient receiving care without inpatient admission.",q:1},
+{n:237,t:"Intensive care unit (ICU)",d:"Hospital unit providing intensive monitoring and treatment for critically ill patients.",q:3},
+{n:238,t:"Code blue",d:"Hospital emergency response commonly indicating cardiac or respiratory arrest.",q:2},
+{n:239,t:"Rapid response team",d:"Team called to evaluate and intervene when a hospitalized patient is deteriorating.",q:5},
+{n:240,t:"Isolation precautions",d:"Measures used to prevent transmission of infectious organisms.",q:3},
+{n:241,t:"Infection control",d:"Practices designed to prevent healthcare-associated transmission of infection.",q:2},
+{n:242,t:"Ventilator",d:"Machine that assists or controls a patient’s breathing.",q:2},
+{n:243,t:"Intubation",d:"Placement of a tube into the trachea to maintain or control the airway.",q:3},
+{n:244,t:"Resuscitation",d:"Emergency intervention intended to restore vital physiological functions.",q:3},
+{n:245,t:"CPR",d:"Cardiopulmonary resuscitation used when effective circulation or breathing has stopped.",q:2},
+{n:246,t:"Pressure injury",d:"Localized skin or tissue damage caused primarily by sustained pressure or pressure combined with shear.",q:3},
+{n:247,t:"Restraint",d:"Intervention restricting a patient’s movement, access, or freedom, subject to strict clinical rules.",q:2},
+{n:248,t:"Healthcare proxy",d:"Person authorized to make healthcare decisions for another person when required.",q:4}
+];
 
-        const elements = {
-            tasteVal: document.getElementById('taste-value'),
-            confidenceFill: document.getElementById('confidence-fill'),
-            qText: document.getElementById('question-text'),
-            qDiff: document.getElementById('question-difficulty'),
-            options: document.getElementById('options'),
-            timerBar: document.getElementById('timer-bar'),
-            flash: document.getElementById('flash-layer')
-        };
+/* ============================================================
+   GAME STATE — declared before any initialization that may use it
+   ============================================================ */
+let state="title";
+let order=[];
+let questionIndex=0;
+let current=null;
+let timeLeft=0;
+let strength=100;
+let score=0;
+let correctCount=0;
+let fastCount=0;
+let streak=0;
+let catCatches=0;
+let resolveTimer=0;
+let pendingAdvance=false;
+let lastTimestamp=performance.now();
 
-        function initGame() {
-            usedQuestions = [];
-            nextQuestion();
-            requestAnimationFrame(updateTimerVisual);
-            startCameraFlashes();
-        }
+/* ============================================================
+   ANSWER HANDLING / NORMALIZATION
+   ============================================================ */
+const ALIASES = {
+  178:["history of present illness","hpi"],
+  180:["level of consciousness","loc"],
+  208:["acute kidney injury","aki"],
+  209:["chronic kidney disease","ckd"],
+  213:["over the counter medication","over the counter","otc medication","otc"],
+  221:["adverse drug event","ade"],
+  223:["laboratory test","lab test"],
+  232:["emergency department","ed"],
+  237:["intensive care unit","icu"],
+  245:["cardiopulmonary resuscitation","cpr"]
+};
 
-        // Simulates the physical environment's random flashes
-        function startCameraFlashes() {
-            if (taste <= 0) return;
-            const delay = 3000 + (Math.random() * 8000); // 3-11 seconds random interval
-            setTimeout(() => {
-                elements.flash.style.animation = 'cameraFlash 0.3s ease-out forwards';
-                // Trigger thud sound effect approximation for flash
-                try {
-                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(80, ctx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-                    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-                    osc.connect(gain); gain.connect(ctx.destination);
-                    osc.start(); osc.stop(ctx.currentTime + 0.1);
-                } catch(e) {}
+function normalize(s){
+  return String(s||"")
+    .toLowerCase()
+    .replace(/[’']/g,"")
+    .replace(/\([^)]*\)/g," ")
+    .replace(/&/g," and ")
+    .replace(/[-–—/]/g," ")
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
 
-                // Reset flash
-                setTimeout(() => { elements.flash.style.animation = 'none'; }, 300);
-                startCameraFlashes();
-            }, delay);
-        }
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  const prev=new Array(n+1), curr=new Array(n+1);
+  for(let j=0;j<=n;j++) prev[j]=j;
+  for(let i=1;i<=m;i++){
+    curr[0]=i;
+    for(let j=1;j<=n;j++){
+      curr[j]=Math.min(prev[j]+1,curr[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    for(let j=0;j<=n;j++) prev[j]=curr[j];
+  }
+  return prev[n];
+}
 
-        function nextQuestion() {
-            if (taste <= 0) return;
-            
-            if (usedQuestions.length === lexicon.length) { usedQuestions = []; }
+function acceptedAnswers(term){
+  const out=[term.t];
+  if(ALIASES[term.n]) out.push(...ALIASES[term.n]);
+  return out.map(normalize);
+}
 
-            let available = lexicon.filter(q => !usedQuestions.includes(q.term));
-            currentQuestion = available[Math.floor(Math.random() * available.length)];
-            usedQuestions.push(currentQuestion.term);
+function answerIsCorrect(raw,term){
+  const entered=normalize(raw);
+  if(!entered) return false;
+  const valid=acceptedAnswers(term);
+  for(const v of valid){
+    if(entered===v) return true;
+    if(v.length>=7 && Math.abs(v.length-entered.length)<=1 && levenshtein(entered,v)<=1) return true;
+  }
+  return false;
+}
 
-            elements.qDiff.textContent = currentQuestion.diffLabel;
-            elements.qText.textContent = `Identify the professional term for: "${currentQuestion.def}"`;
-            
-            let ops = [currentQuestion.term, ...currentQuestion.distractors];
-            ops.sort(() => Math.random() - 0.5);
+/* ============================================================
+   DIFFICULTY
+   ============================================================ */
+const TIME_BY_DIFFICULTY=[0,10,12,14,17,20];
+const PENALTY_BY_DIFFICULTY=[0,10,20,30,40,50];
+const DIFFICULTY_NAMES=["","EASY","EASY +","MODERATE","DIFFICULT","VERY DIFFICULT"];
 
-            elements.options.innerHTML = '';
-            ops.forEach(op => {
-                let btn = document.createElement('button');
-                btn.className = 'option-btn';
-                btn.textContent = op;
-                btn.onclick = () => handleAnswer(op, btn);
-                elements.options.appendChild(btn);
-            });
+/* ============================================================
+   DISTRICTS — continuous blend
+   ============================================================ */
+const DISTRICTS=[
+  {
+    name:"CIVIC PLAZA",
+    sky:"#b8c8cf",
+    ground:"#b2a894",
+    ground2:"#9c927f",
+    arch:"#cec3aa",
+    shadow:"#554b40",
+    mood:"#8d6d46"
+  },
+  {
+    name:"MAJOR CROSSING",
+    sky:"#adbec8",
+    ground:"#4a4f52",
+    ground2:"#35393b",
+    arch:"#838889",
+    shadow:"#2a3035",
+    mood:"#d6d0b5"
+  },
+  {
+    name:"STREET MARKET",
+    sky:"#c3c8bd",
+    ground:"#786c56",
+    ground2:"#625744",
+    arch:"#b08b61",
+    shadow:"#5c4532",
+    mood:"#d7a94d"
+  },
+  {
+    name:"BAY & OLD HOUSES",
+    sky:"#a8c5cf",
+    ground:"#958c81",
+    ground2:"#7d756a",
+    arch:"#9db0b6",
+    shadow:"#4e4742",
+    mood:"#6f8792"
+  }
+];
 
-            timeRemaining = 15;
-            questionActive = true;
-            clearInterval(timer);
-            timer = setInterval(() => {
-                timeRemaining -= 0.1;
-                if (timeRemaining <= 0) { handleAnswer(null, null); }
-            }, 100);
-        }
+function districtInfo(progress){
+  const scaled=Math.min(.999999,Math.max(0,progress))*4;
+  const index=Math.min(3,Math.floor(scaled));
+  const local=scaled-index;
+  const next=Math.min(3,index+1);
+  const blend=index===3 ? 0 : Math.max(0,(local-.66)/.34);
+  return {index,next,local,blend};
+}
 
-        function updateTimerVisual() {
-            if (questionActive && timeRemaining > 0) {
-                const pct = (timeRemaining / 15) * 100;
-                elements.timerBar.style.transform = `scaleX(${pct / 100})`;
-                
-                // Recovery Window visual (10s bonus)
-                if (timeRemaining <= 5 && taste < 100) {
-                     elements.timerBar.style.backgroundColor = '#444'; // Subdued color after 10s
-                } else {
-                     elements.timerBar.style.backgroundColor = '#aaa'; // Active/neutral
-                }
-            }
-            if (taste > 0) requestAnimationFrame(updateTimerVisual);
-        }
+function currentGameProgress(){
+  if(!order.length) return 0;
+  return Math.max(0,Math.min(1,questionIndex/TERMS.length));
+}
+function districtState(){ return districtInfo(currentGameProgress()); }
 
-        function handleAnswer(selectedStr, btnNode) {
-            if (!questionActive) return;
-            questionActive = false;
-            clearInterval(timer);
+/* ============================================================
+   SHARED PEOPLE CAST — weighted by district
+   ============================================================ */
+const PEOPLE=[
+{name:"office loafers",pants:"#30343a",shoe:"#171718",sock:"#303030",pace:.95,bag:1,w:[4,5,1,1]},
+{name:"brown brogues",pants:"#45505a",shoe:"#573b27",sock:"#23303a",pace:.9,bag:0,w:[4,4,1,2]},
+{name:"white sneakers",pants:"#2e4054",shoe:"#ece9df",sock:"#f5f5f2",pace:1.15,bag:0,w:[4,5,3,4]},
+{name:"red trainers",pants:"#303942",shoe:"#a33932",sock:"#ddd",pace:1.35,bag:0,w:[2,5,3,4]},
+{name:"work boots",pants:"#4e463a",shoe:"#5e422a",sock:"#38352e",pace:.86,bag:0,w:[2,3,5,2]},
+{name:"market boots",pants:"#4e5148",shoe:"#282b29",sock:"#777",pace:.92,bag:2,w:[1,2,6,1]},
+{name:"heels black",pants:"#333138",shoe:"#171519",sock:"#c9a68c",pace:.95,bag:1,w:[4,4,3,4]},
+{name:"heels tan",pants:"#786b5d",shoe:"#7b4d3c",sock:"#d0ad91",pace:.92,bag:1,w:[3,4,3,4]},
+{name:"kids blue",pants:"#4c6f90",shoe:"#335fac",sock:"#eee",pace:1.45,bag:0,w:[3,3,3,5]},
+{name:"kids yellow",pants:"#4b5548",shoe:"#d2a63a",sock:"#ddd",pace:1.5,bag:0,w:[2,3,3,5]},
+{name:"runner neon",pants:"#25272b",shoe:"#c8d748",sock:"#eee",pace:1.6,bag:0,w:[2,3,2,6]},
+{name:"runner gray",pants:"#353a3c",shoe:"#d2d5d8",sock:"#eee",pace:1.55,bag:0,w:[2,4,2,6]},
+{name:"elder walking",pants:"#635e58",shoe:"#4b372c",sock:"#ddd",pace:.68,bag:0,w:[4,2,2,6]},
+{name:"rain boots",pants:"#434947",shoe:"#2f3938",sock:"#555",pace:.82,bag:0,w:[2,2,4,3]},
+{name:"cargo pants",pants:"#66624e",shoe:"#3b3328",sock:"#46433d",pace:.9,bag:2,w:[2,3,6,3]},
+{name:"denim sneakers",pants:"#35516f",shoe:"#d4d3c9",sock:"#fff",pace:1.12,bag:0,w:[4,4,4,5]},
+{name:"black denim",pants:"#292d31",shoe:"#272625",sock:"#888",pace:1.08,bag:0,w:[4,5,4,5]},
+{name:"courier",pants:"#2c3540",shoe:"#383b3c",sock:"#888",pace:1.4,bag:3,w:[2,5,5,3]},
+{name:"vendor apron",pants:"#545047",shoe:"#443329",sock:"#555",pace:.84,bag:2,w:[1,1,7,1]},
+{name:"chef clogs",pants:"#2a2b2d",shoe:"#202223",sock:"#111",pace:.88,bag:0,w:[1,1,6,1]},
+{name:"tourist sandals",pants:"#796e5d",shoe:"#725846",sock:"#bb967a",pace:.82,bag:1,w:[5,3,4,4]},
+{name:"dress boots",pants:"#34353a",shoe:"#302726",sock:"#333",pace:.98,bag:1,w:[4,4,3,4]},
+{name:"dog walker",pants:"#49515c",shoe:"#cbcbc6",sock:"#eee",pace:1.0,bag:0,w:[2,2,2,7]},
+{name:"gardener boots",pants:"#53604c",shoe:"#4c3c2d",sock:"#555",pace:.8,bag:0,w:[1,1,3,6]},
+{name:"student sneakers",pants:"#465362",shoe:"#f2efe8",sock:"#eee",pace:1.2,bag:3,w:[4,5,3,5]},
+{name:"formal shoes",pants:"#25282c",shoe:"#181719",sock:"#202020",pace:.96,bag:1,w:[5,5,1,3]},
+{name:"canvas shoes",pants:"#656057",shoe:"#b2a18c",sock:"#ddd",pace:1.05,bag:0,w:[3,3,5,5]},
+{name:"delivery boots",pants:"#3f4548",shoe:"#303234",sock:"#666",pace:1.05,bag:2,w:[1,4,6,2]}
+];
 
-            const isCorrect = selectedStr === currentQuestion.term;
-            
-            Array.from(elements.options.children).forEach(btn => {
-                if (btn.textContent === currentQuestion.term) btn.classList.add('correct');
-                else if (btn === btnNode) btn.classList.add('incorrect');
-                btn.style.pointerEvents = 'none';
-            });
+/* ============================================================
+   PROP CLUSTERS — more coherent, lane-based
+   ============================================================ */
+const CLUSTERS = {
+  plaza:[
+    {kind:"paper",x:.18,z:.80},
+    {kind:"paper",x:-.22,z:.68},
+    {kind:"cup",x:.30,z:.74},
+    {kind:"pigeon",x:-.06,z:.70},
+    {kind:"benchLeg",x:-.76,z:.52},
+    {kind:"benchLeg",x:.74,z:.50},
+    {kind:"drain",x:-.48,z:.63},
+    {kind:"drain",x:.42,z:.60}
+  ],
+  crossing:[
+    {kind:"stripe",x:-.28,z:.82},
+    {kind:"stripe",x:.00,z:.80},
+    {kind:"stripe",x:.28,z:.78},
+    {kind:"hydrant",x:-.74,z:.58},
+    {kind:"pole",x:.76,z:.55},
+    {kind:"wheel",x:.34,z:.70},
+    {kind:"paper",x:-.18,z:.62}
+  ],
+  market:[
+    {kind:"crate",x:-.65,z:.58},
+    {kind:"crate",x:.67,z:.56},
+    {kind:"produce",x:-.53,z:.64},
+    {kind:"produce",x:.53,z:.66},
+    {kind:"pole",x:-.40,z:.48},
+    {kind:"pole",x:.38,z:.50},
+    {kind:"paper",x:.04,z:.72},
+    {kind:"cup",x:-.08,z:.70}
+  ],
+  bay:[
+    {kind:"fence",x:-.72,z:.52},
+    {kind:"fence",x:.74,z:.54},
+    {kind:"planter",x:-.58,z:.66},
+    {kind:"planter",x:.60,z:.68},
+    {kind:"puddle",x:.12,z:.72},
+    {kind:"dog",x:-.10,z:.62},
+    {kind:"paper",x:.26,z:.64}
+  ]
+};
 
-            if (isCorrect) {
-                // Recovery bonus (+10) if answered fast (timeRemaining > 5s)
-                if (timeRemaining > 5 && taste < 100) {
-                    taste = Math.min(100, taste + 10);
-                }
-            } else {
-                // Penalties by tier (Level I, II, III)
-                const penalty = currentQuestion.diff === 1 ? 20 : (currentQuestion.diff === 2 ? 25 : 30);
-                taste = Math.max(0, taste - penalty);
-            }
+/* ============================================================
+   CANVAS SETUP
+   ============================================================ */
+const canvas=document.getElementById("world");
+const ctx=canvas.getContext("2d",{alpha:false});
 
-            elements.tasteVal.textContent = taste;
-            elements.confidenceFill.style.width = `${taste}%`;
+let W=1280, H=720, DPR=1;
 
-            if (taste === 0) {
-                triggerRejection();
-            } else {
-                setTimeout(nextQuestion, 1600); // Editorial pause
-            }
-        }
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=Math.max(800,window.innerWidth);
+  H=Math.max(560,window.innerHeight);
+  canvas.width=Math.floor(W*DPR);
+  canvas.height=Math.floor(H*DPR);
+  canvas.style.width=W+"px";
+  canvas.style.height=H+"px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener("resize",resize);
+resize();
 
-        function triggerRejection() {
-            elements.timerBar.style.transform = `scaleX(0)`;
-            
-            // Wait slightly, then execute the brutal stamp
-            setTimeout(() => {
-                document.body.classList.add('stamp-active');
-                
-                // Physical stamping sound thud
-                try {
-                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(110, ctx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-                    gain.gain.setValueAtTime(1, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-                    osc.connect(gain); gain.connect(ctx.destination);
-                    osc.start(); osc.stop(ctx.currentTime + 0.4);
-                } catch(e) {}
+function rand(a,b){ return a+Math.random()*(b-a); }
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
 
-                // Final fade-to-black sequence
-                setTimeout(() => {
-                    document.body.classList.add('fade-black');
-                }, 2000);
+function hexToRgb(hex){
+  const s=hex.replace("#","");
+  const n=parseInt(s,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+function mixColor(a,b,t){
+  const A=hexToRgb(a), B=hexToRgb(b);
+  return `rgb(${Math.round(lerp(A.r,B.r,t))},${Math.round(lerp(A.g,B.g,t))},${Math.round(lerp(A.b,B.b,t))})`;
+}
 
-            }, 600);
-        }
+function roundedRectPath(x,y,w,h,r){
+  r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
 
-        // Execute initialization
-        initGame();
-    </script>
+/* ============================================================
+   WORLD STATE
+   ============================================================ */
+let worldTime=0;
+let scroll=0;
+let pedestrians=[];
+let particles=[];
+let nearMisses=[];
+let cat=null;
+
+function weightedPerson(di){
+  let total=0;
+  const weights=PEOPLE.map(p=>{
+    const w=p.w[di.index]*(1-di.blend)+p.w[di.next]*di.blend;
+    total+=w;
+    return w;
+  });
+  let r=Math.random()*total;
+  for(let i=0;i<PEOPLE.length;i++){
+    r-=weights[i];
+    if(r<=0) return PEOPLE[i];
+  }
+  return PEOPLE[0];
+}
+
+function spawnPedestrian(force=false){
+  const di=districtState();
+  const p=weightedPerson(di);
+  const fromLeft=Math.random()<.5;
+  const lane = force ? Math.floor(rand(0,3)) : Math.floor(rand(0,4)); // 0 near, 1 mid, 2 far
+  const z = lane===0 ? rand(.72,.92) : lane===1 ? rand(.52,.72) : rand(.32,.52);
+
+  pedestrians.push({
+    type:p,
+    x:fromLeft?-1.25:1.25,
+    dir:fromLeft?1:-1,
+    z,
+    speed:(lane===0?0.42:lane===1?0.30:0.21)*p.pace*rand(.86,1.14),
+    phase:Math.random()*Math.PI*2,
+    scared:false,
+    scareTime:0,
+    accessory:p.bag,
+    scaleNoise:rand(.9,1.08),
+    lane
+  });
+}
+
+for(let i=0;i<9;i++) spawnPedestrian(true);
+
+/* ============================================================
+   OVAL POV / PROJECTION
+   ============================================================ */
+function sceneRect(){
+  const top=Math.max(178,H*0.24);
+  const left=W*0.05;
+  const width=W*0.90;
+  const height=H-top-H*0.07;
+  return {x:left,y:top,w:width,h:height};
+}
+
+function ovalRect(){
+  const s=sceneRect();
+  return {
+    cx:s.x+s.w*0.5,
+    cy:s.y+s.h*0.57,
+    rx:s.w*0.47,
+    ry:s.h*0.50
+  };
+}
+
+function horizonY(){
+  const s=sceneRect();
+  return s.y+s.h*0.28;
+}
+
+function laneY(z){
+  const s=sceneRect();
+  const hy=horizonY();
+  return hy + Math.pow(clamp(z,0,1),1.28) * (s.y+s.h-hy);
+}
+
+function laneX(xNorm,z){
+  const s=sceneRect();
+  const center=s.x+s.w*0.5;
+  const half=lerp(s.w*0.14,s.w*0.46,Math.pow(z,.92));
+  return center + xNorm*half;
+}
+
+function worldScale(z){
+  return lerp(.18,1.5,Math.pow(clamp(z,0,1),1.1));
+}
+
+/* ============================================================
+   DRAW DISTRICT BACKDROP
+   ============================================================ */
+function drawBackdrop(){
+  const di=districtState();
+  const A=DISTRICTS[di.index];
+  const B=DISTRICTS[di.next];
+  const t=di.blend;
+
+  const sky=mixColor(A.sky,B.sky,t);
+  const ground=mixColor(A.ground,B.ground,t);
+  const ground2=mixColor(A.ground2,B.ground2,t);
+  const arch=mixColor(A.arch,B.arch,t);
+  const shadow=mixColor(A.shadow,B.shadow,t);
+
+  ctx.fillStyle=sky;
+  ctx.fillRect(0,0,W,H);
+
+  const s=sceneRect();
+  const hy=horizonY();
+
+  // Soft distant bases / facades
+  ctx.fillStyle=arch;
+  ctx.fillRect(s.x, hy-56, s.w, 86);
+
+  if(di.index===0 || di.next===0){
+    const a=(di.index===0?1-t:t);
+    ctx.save();
+    ctx.globalAlpha=.85*a;
+    for(let x=s.x-20;x<s.x+s.w+40;x+=110){
+      ctx.fillStyle="#c9bea5";
+      ctx.fillRect(x,hy-108,78,108);
+      ctx.fillStyle="#574d43";
+      ctx.beginPath();
+      ctx.arc(x+39,hy-18,24,Math.PI,0);
+      ctx.lineTo(x+63,hy); ctx.lineTo(x+15,hy); ctx.closePath();
+      ctx.fill();
+    }
+    for(let x=s.x+30;x<s.x+s.w;x+=230){
+      ctx.fillStyle="#7f463e";
+      ctx.beginPath(); ctx.arc(x,hy-48,34,Math.PI,0); ctx.fill();
+      ctx.fillStyle="#41382f"; ctx.fillRect(x-2,hy-48,4,40);
+    }
+    ctx.restore();
+  }
+
+  if(di.index===1 || di.next===1){
+    const a=(di.index===1?1-t:t);
+    ctx.save();
+    ctx.globalAlpha=.86*a;
+    ctx.fillStyle="#62686b";
+    for(let x=s.x-40;x<s.x+s.w+60;x+=120){
+      const h=80+((x/120)%3+3)%3*14;
+      ctx.fillRect(x,hy-h,96,h);
+      ctx.fillStyle="#283139";
+      for(let wy=hy-h+16;wy<hy-12;wy+=23){
+        for(let wx=x+12;wx<x+83;wx+=24) ctx.fillRect(wx,wy,10,8);
+      }
+      ctx.fillStyle="#62686b";
+    }
+    ctx.restore();
+  }
+
+  if(di.index===2 || di.next===2){
+    const a=(di.index===2?1-t:t);
+    const awn=["#a64939","#cbad50","#4f8061","#6a648b"];
+    ctx.save();
+    ctx.globalAlpha=.88*a;
+    for(let x=s.x-20,i=0;x<s.x+s.w+20;x+=118,i++){
+      ctx.fillStyle="#755943";
+      ctx.fillRect(x,hy-76,102,76);
+      ctx.fillStyle=awn[i%awn.length];
+      ctx.beginPath();
+      ctx.moveTo(x-6,hy-76); ctx.lineTo(x+108,hy-76); ctx.lineTo(x+93,hy-45); ctx.lineTo(x+7,hy-45);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#5e4836"; ctx.fillRect(x+7,hy-20,88,7);
+    }
+    ctx.restore();
+  }
+
+  if(di.index===3 || di.next===3){
+    const a=(di.index===3?1-t:t);
+    ctx.save();
+    ctx.globalAlpha=.88*a;
+    ctx.fillStyle="#7b9aa3";
+    ctx.fillRect(s.x,hy-18,s.w,26);
+    const house=["#b89076","#c9a876","#8c9c8b","#b68481","#a99a87"];
+    for(let x=s.x-18,i=0;x<s.x+s.w+40;x+=114,i++){
+      ctx.fillStyle=house[i%house.length];
+      ctx.fillRect(x,hy-102,94,102);
+      ctx.fillStyle="#56493f";
+      ctx.beginPath();
+      ctx.moveTo(x-6,hy-102); ctx.lineTo(x+47,hy-138); ctx.lineTo(x+100,hy-102); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#dbe0db";
+      ctx.fillRect(x+15,hy-74,18,25); ctx.fillRect(x+60,hy-74,18,25);
+      ctx.fillStyle="#53473f"; ctx.fillRect(x+38,hy-38,18,38);
+    }
+    ctx.restore();
+  }
+
+  // Ground
+  const grad=ctx.createLinearGradient(0,hy,0,s.y+s.h);
+  grad.addColorStop(0,ground);
+  grad.addColorStop(1,ground2);
+  ctx.fillStyle=grad;
+
+  ctx.beginPath();
+  ctx.moveTo(laneX(-1,0),hy);
+  ctx.lineTo(laneX(1,0),hy);
+  ctx.lineTo(laneX(1,1),s.y+s.h+10);
+  ctx.lineTo(laneX(-1,1),s.y+s.h+10);
+  ctx.closePath();
+  ctx.fill();
+
+  drawGroundDetails(di);
+}
+
+function drawGroundDetails(di){
+  const s=sceneRect();
+
+  // Receding ground seams
+  for(let i=0;i<10;i++){
+    const z=(i/10+((scroll*0.02)%0.1))%1;
+    const y=laneY(z);
+    ctx.globalAlpha=.12;
+    ctx.strokeStyle="#0d0f12";
+    ctx.lineWidth=Math.max(1,z*1.8);
+    ctx.beginPath();
+    ctx.moveTo(laneX(-1,z),y);
+    ctx.lineTo(laneX(1,z),y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+
+  // Plaza tile lines
+  if(di.index===0 || di.next===0){
+    const a=(di.index===0?1-di.blend:di.blend);
+    ctx.save();
+    ctx.globalAlpha=.18*a;
+    ctx.strokeStyle="#594f44";
+    for(let l=-.75;l<=.75;l+=.17){
+      ctx.beginPath();
+      ctx.moveTo(laneX(l,.02),laneY(.02));
+      ctx.lineTo(laneX(l,1),laneY(1));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Crossing stripes
+  if(di.index===1 || di.next===1){
+    const a=(di.index===1?1-di.blend:di.blend);
+    ctx.save();
+    ctx.globalAlpha=.74*a;
+    for(let i=0;i<5;i++){
+      const z=.34+i*.09;
+      const y=laneY(z);
+      const h=5+16*z;
+      const x1=laneX(-.44,z), x2=laneX(.44,z);
+      ctx.fillStyle="#d7d7cc";
+      ctx.fillRect(x1,y-h/2,x2-x1,h);
+    }
+    ctx.restore();
+  }
+
+  // Market stains / warmer clutter
+  if(di.index===2 || di.next===2){
+    const a=(di.index===2?1-di.blend:di.blend);
+    ctx.save();
+    ctx.globalAlpha=.18*a;
+    for(let i=0;i<18;i++){
+      const z=((i*37)%100)/100;
+      const x=laneX((((i*59)%100)/50)-1,z), y=laneY(z);
+      ctx.fillStyle=i%2?"#4b3528":"#c08d4d";
+      ctx.beginPath();
+      ctx.ellipse(x,y,4+16*z,1.6+6*z,(i*.3)%2,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Residential paver seams
+  if(di.index===3 || di.next===3){
+    const a=(di.index===3?1-di.blend:di.blend);
+    ctx.save();
+    ctx.globalAlpha=.16*a;
+    ctx.strokeStyle="#4e433a";
+    for(let i=0;i<9;i++){
+      const z=i/9, y=laneY(z);
+      ctx.beginPath();
+      ctx.moveTo(laneX(-.85,z),y);
+      ctx.lineTo(laneX(.85,z),y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // subtle shadowed ellipse on ground center
+  ctx.save();
+  ctx.globalAlpha=.12;
+  ctx.fillStyle="#000";
+  const ov=ovalRect();
+  ctx.beginPath();
+  ctx.ellipse(ov.cx, ov.cy+ov.ry*.45, ov.rx*.62, ov.ry*.18, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/* ============================================================
+   PROP DRAWING — coherent cluster items only
+   ============================================================ */
+function currentClusterObjects(){
+  const di=districtState();
+  const ids=["plaza","crossing","market","bay"];
+  const A=CLUSTERS[ids[di.index]];
+  const B=CLUSTERS[ids[di.next]];
+  return {A,B,blend:di.blend};
+}
+
+function drawClusterObjects(){
+  const {A,B,blend}=currentClusterObjects();
+  drawClusterSet(A,1-blend);
+  if(blend>0) drawClusterSet(B,blend);
+}
+
+function drawClusterSet(items,alpha){
+  if(alpha<=0) return;
+  ctx.save();
+  ctx.globalAlpha*=alpha;
+  for(const item of items) drawProp(item.kind,item.x,item.z);
+  ctx.restore();
+}
+
+function drawProp(kind,xNorm,z){
+  const x=laneX(xNorm,z), y=laneY(z), s=worldScale(z);
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(s,s);
+
+  switch(kind){
+    case "paper":
+      ctx.fillStyle="#d7d2c7";
+      ctx.beginPath();
+      ctx.moveTo(-8,-3); ctx.lineTo(10,-1); ctx.lineTo(7,6); ctx.lineTo(-10,4); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle="rgba(30,30,30,.24)";
+      ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,1); ctx.moveTo(-2,2); ctx.lineTo(3,3); ctx.stroke();
+      break;
+    case "cup":
+      ctx.fillStyle="#b8503d";
+      ctx.beginPath();
+      ctx.moveTo(-5,-14); ctx.lineTo(6,-14); ctx.lineTo(4,1); ctx.lineTo(-3,1); ctx.closePath();
+      ctx.fill();
+      break;
+    case "pigeon":
+      ctx.fillStyle="#575d61";
+      ctx.beginPath(); ctx.ellipse(0,-8,9,5,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(6,-12,3,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#a78145";
+      ctx.beginPath(); ctx.moveTo(-3,-4); ctx.lineTo(-5,2); ctx.moveTo(1,-4); ctx.lineTo(3,2); ctx.stroke();
+      break;
+    case "benchLeg":
+      ctx.fillStyle="#694b39";
+      ctx.fillRect(-8,-30,14,30);
+      ctx.fillRect(6,-26,14,26);
+      break;
+    case "drain":
+      ctx.fillStyle="#4a4d50";
+      ctx.beginPath(); ctx.ellipse(0,0,12,4.5,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#2a2d31";
+      for(let i=-7;i<=7;i+=4){ ctx.beginPath(); ctx.moveTo(i,-3); ctx.lineTo(i,3); ctx.stroke(); }
+      break;
+    case "stripe":
+      ctx.fillStyle="#ddd8c6";
+      ctx.fillRect(-42,-4,84,8);
+      break;
+    case "hydrant":
+      ctx.fillStyle="#973f31";
+      ctx.fillRect(-6,-32,12,32);
+      ctx.beginPath(); ctx.ellipse(0,-31,8,4,0,0,Math.PI*2); ctx.fill();
+      ctx.fillRect(-14,-20,8,7); ctx.fillRect(6,-20,8,7);
+      break;
+    case "pole":
+      ctx.fillStyle="#3d4042";
+      ctx.fillRect(-4,-48,8,48);
+      ctx.fillRect(-12,-49,24,5);
+      break;
+    case "wheel":
+      ctx.strokeStyle="#212224";
+      ctx.lineWidth=5;
+      ctx.beginPath(); ctx.arc(0,-12,18,0,Math.PI*2); ctx.stroke();
+      ctx.strokeStyle="#7c8387";
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(0,-12,8,0,Math.PI*2); ctx.stroke();
+      break;
+    case "crate":
+      ctx.fillStyle="#8d643f";
+      ctx.fillRect(-15,-16,30,16);
+      ctx.strokeStyle="#563824";
+      ctx.lineWidth=2;
+      ctx.strokeRect(-15,-16,30,16);
+      ctx.beginPath();
+      ctx.moveTo(-15,-10); ctx.lineTo(15,-10);
+      ctx.moveTo(-15,-5); ctx.lineTo(15,-5);
+      ctx.stroke();
+      break;
+    case "produce":
+      ctx.fillStyle="#c69445";
+      for(let i=0;i<4;i++){ ctx.beginPath(); ctx.arc(-10+i*7,-8-(i%2),4,0,Math.PI*2); ctx.fill(); }
+      ctx.fillStyle="#6a8c45";
+      ctx.beginPath(); ctx.arc(12,-9,4,0,Math.PI*2); ctx.fill();
+      break;
+    case "fence":
+      ctx.fillStyle="#5b554e";
+      for(let i=-10;i<=10;i+=10) ctx.fillRect(i,-34,6,34);
+      ctx.fillRect(-18,-30,42,4);
+      break;
+    case "planter":
+      ctx.fillStyle="#6e5544";
+      ctx.fillRect(-10,-12,20,12);
+      ctx.fillStyle="#4f7a4b";
+      for(let i=0;i<5;i++){
+        ctx.beginPath(); ctx.ellipse((i-2)*4,-17-(i%2)*2,4,8,(i-2)*.2,0,Math.PI*2); ctx.fill();
+      }
+      break;
+    case "puddle":
+      ctx.fillStyle="rgba(110,154,171,.55)";
+      ctx.beginPath(); ctx.ellipse(0,0,28,8,0,0,Math.PI*2); ctx.fill();
+      break;
+    case "dog":
+      ctx.fillStyle="#4a4038";
+      ctx.beginPath(); ctx.ellipse(0,-11,13,8,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(10,-17,6,0,Math.PI*2); ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   PEDESTRIAN DRAWING — dominant scenery
+   ============================================================ */
+function drawPedestrian(p){
+  const z=clamp(p.z,0,1);
+  const x=laneX(p.x,z);
+  const y=laneY(z);
+  const s=worldScale(z)*p.scaleNoise;
+  if(x < -200 || x > W+200) return;
+
+  const stride=Math.sin(worldTime*7.5*p.type.pace+p.phase)*10*s;
+  const lift=Math.max(0,Math.sin(worldTime*7.5*p.type.pace+p.phase))*4*s;
+
+  ctx.save();
+  ctx.translate(x,y);
+
+  if(p.scared){
+    ctx.translate(0,-Math.sin(clamp(p.scareTime,0,1)*Math.PI)*22*s);
+  }
+
+  // partial bag or cart silhouette
+  if(p.accessory){
+    ctx.fillStyle=p.accessory===3 ? "#31404e" : "#6a5244";
+    const bagX = p.dir>0 ? -30*s : 18*s;
+    ctx.fillRect(bagX,-74*s,16*s,28*s);
+  }
+
+  // back leg
+  ctx.fillStyle=p.type.pants;
+  roundedRectPath(-11*s+stride*.35,-76*s,18*s,66*s,6*s);
+  ctx.fill();
+  ctx.fillStyle=p.type.sock;
+  ctx.fillRect(-9*s+stride*.35,-16*s,14*s,10*s);
+  ctx.fillStyle=p.type.shoe;
+  ctx.beginPath();
+  ctx.ellipse(-2*s+stride*.35,-4*s-lift,18*s,7*s,p.dir>.5?.06:-.06,0,Math.PI*2);
+  ctx.fill();
+
+  // front leg
+  ctx.fillStyle=p.type.pants;
+  roundedRectPath(7*s-stride*.35,-80*s,19*s,70*s,6*s);
+  ctx.fill();
+  ctx.fillStyle=p.type.sock;
+  ctx.fillRect(9*s-stride*.35,-17*s,14*s,10*s);
+  ctx.fillStyle=p.type.shoe;
+  ctx.beginPath();
+  ctx.ellipse(20*s-stride*.35,-3*s+lift*.25,20*s,7*s,p.dir>.5?.06:-.06,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ============================================================
+   "YOU ARE THE MOUSE" SILHOUETTE
+   ============================================================ */
+function drawMousePOVHint(){
+  const s=sceneRect();
+  const y=s.y+s.h-16;
+
+  ctx.save();
+  ctx.globalAlpha=.62;
+  ctx.fillStyle="#312d2a";
+
+  // low faint ears / head silhouette
+  ctx.beginPath();
+  ctx.arc(W*.5-22,y-12,10,0,Math.PI*2);
+  ctx.arc(W*.5+22,y-12,10,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(W*.5,y+3,38,18,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.strokeStyle="#7d645e";
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(W*.5-32,y+8);
+  ctx.bezierCurveTo(W*.5-58,y+12,W*.5-74,y+4,W*.5-92,y+16);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+/* ============================================================
+   NEAR MISSES / FAIL CONSEQUENCES
+   ============================================================ */
+function triggerNearMiss(severity){
+  nearMisses.push({
+    kind:pick(["shoe","wheel","bag"]),
+    dir:Math.random()<.5?1:-1,
+    t:0,
+    duration:1.0 + severity*.09,
+    severity
+  });
+  for(let i=0;i<6+severity*2;i++){
+    particles.push({
+      x:W*.5+rand(-26,26),
+      y:sceneRect().y+sceneRect().h-38+rand(-6,8),
+      vx:rand(-85,85),
+      vy:rand(-95,-35),
+      life:rand(.35,.8)
+    });
+  }
+}
+
+function drawNearMiss(n){
+  const u=clamp(n.t/n.duration,0,1);
+  const s=sceneRect();
+  const y=s.y+s.h-36;
+  const x = n.dir>0 ? lerp(-220,W*.5-62,u) : lerp(W+220,W*.5+62,u);
+
+  ctx.save();
+  ctx.translate(x,y);
+
+  if(n.kind==="shoe"){
+    ctx.fillStyle="#262628";
+    ctx.beginPath();
+    ctx.ellipse(0,-14,86,30,n.dir*.08,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle="#404347";
+    ctx.fillRect(-36,-146,58,120);
+  }
+  if(n.kind==="wheel"){
+    ctx.strokeStyle="#191b1d";
+    ctx.lineWidth=10;
+    ctx.beginPath(); ctx.arc(0,-35,56,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle="#737b81";
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,-35,28,0,Math.PI*2); ctx.stroke();
+  }
+  if(n.kind==="bag"){
+    ctx.fillStyle="#6b5648";
+    ctx.fillRect(-50,-100,100,82);
+    ctx.strokeStyle="#4a3a31";
+    ctx.lineWidth=7;
+    ctx.beginPath(); ctx.arc(0,-100,34,Math.PI,0); ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function updateParticles(dt){
+  particles.forEach(p=>{
+    p.life-=dt;
+    p.x+=p.vx*dt;
+    p.y+=p.vy*dt;
+    p.vy+=180*dt;
+  });
+  particles=particles.filter(p=>p.life>0);
+}
+
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha=clamp(p.life*2,0,1);
+    ctx.fillStyle="#cbb99d";
+    ctx.fillRect(p.x,p.y,4,3);
+  });
+  ctx.globalAlpha=1;
+}
+
+/* ============================================================
+   CAT SEQUENCE
+   ============================================================ */
+function startCatSequence(){
+  state="cat";
+  cat={t:0,duration:3.0,fromLeft:Math.random()<.5};
+  input.disabled=true;
+}
+
+function drawCat(){
+  if(!cat) return;
+  const u=clamp(cat.t/cat.duration,0,1);
+  const ease=1-Math.pow(1-u,3);
+  const s=sceneRect();
+  const targetX=W*.5 + (cat.fromLeft?-24:24);
+  const targetY=s.y+s.h-60;
+  const startX=cat.fromLeft?-260:W+260;
+  const x=lerp(startX,targetX,ease);
+  const y=lerp(targetY-10,targetY-16,ease);
+  const scale=lerp(.28,1.34,ease);
+
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+
+  ctx.fillStyle="#292522";
+  ctx.beginPath(); ctx.ellipse(0,-45,72,52,0,0,Math.PI*2); ctx.fill();
+
+  ctx.beginPath(); ctx.arc(cat.fromLeft?44:-44,-85,43,0,Math.PI*2); ctx.fill();
+
+  ctx.beginPath();
+  if(cat.fromLeft){
+    ctx.moveTo(18,-116); ctx.lineTo(24,-154); ctx.lineTo(51,-119);
+    ctx.moveTo(58,-118); ctx.lineTo(80,-146); ctx.lineTo(82,-103);
+  }else{
+    ctx.moveTo(-18,-116); ctx.lineTo(-24,-154); ctx.lineTo(-51,-119);
+    ctx.moveTo(-58,-118); ctx.lineTo(-80,-146); ctx.lineTo(-82,-103);
+  }
+  ctx.fill();
+
+  ctx.fillStyle="#342f2a";
+  ctx.beginPath(); ctx.ellipse(cat.fromLeft?65:-65,-4,52,21,0,0,Math.PI*2); ctx.fill();
+
+  ctx.fillStyle="#d4c86e";
+  const ex=cat.fromLeft?49:-49;
+  ctx.beginPath(); ctx.ellipse(ex,-92,8,12,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#171515";
+  ctx.fillRect(ex-1.5,-100,3,16);
+
+  ctx.restore();
+}
+
+/* ============================================================
+   DOM
+   ============================================================ */
+const input=document.getElementById("answer");
+const form=document.getElementById("entryRow");
+const definitionEl=document.getElementById("definition");
+const timerEl=document.getElementById("timer");
+const difficultyEl=document.getElementById("difficulty");
+const progressEl=document.getElementById("progress");
+const districtEl=document.getElementById("district");
+const strengthBar=document.getElementById("strengthBar");
+const strengthText=document.getElementById("strengthText");
+const feedbackEl=document.getElementById("feedback");
+const overlay=document.getElementById("overlay");
+const overlayCard=document.getElementById("overlayCard");
+const startButton=document.getElementById("startButton");
+
+/* ============================================================
+   GAME FLOW
+   ============================================================ */
+function shuffle(array){
+  const a=[...array];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function startGame(){
+  order=shuffle(TERMS.map((_,i)=>i));
+  questionIndex=0;
+  current=null;
+  timeLeft=0;
+  strength=100;
+  score=0;
+  correctCount=0;
+  fastCount=0;
+  streak=0;
+  catCatches=0;
+  resolveTimer=0;
+  pendingAdvance=false;
+  pedestrians=[];
+  particles=[];
+  nearMisses=[];
+  cat=null;
+
+  for(let i=0;i<10;i++) spawnPedestrian(true);
+
+  overlay.classList.add("hidden");
+  state="playing";
+  updateStrengthHUD();
+  nextQuestion();
+}
+
+function nextQuestion(){
+  if(questionIndex>=order.length){
+    finishGame();
+    return;
+  }
+  current=TERMS[order[questionIndex]];
+  timeLeft=TIME_BY_DIFFICULTY[current.q];
+  resolveTimer=0;
+  pendingAdvance=false;
+
+  definitionEl.textContent=current.d;
+  difficultyEl.textContent=`${DIFFICULTY_NAMES[current.q]} · ${TIME_BY_DIFFICULTY[current.q]} SEC`;
+  progressEl.textContent=`TERM ${questionIndex+1} / ${TERMS.length}`;
+  feedbackEl.textContent="";
+  feedbackEl.style.color="var(--muted)";
+  input.value="";
+  input.disabled=false;
+  input.focus();
+  updateDistrictLabel();
+}
+
+function updateDistrictLabel(){
+  const di=districtState();
+  districtEl.textContent=(di.blend>.06 && di.next!==di.index)
+    ? `${DISTRICTS[di.index].name} → ${DISTRICTS[di.next].name}`
+    : DISTRICTS[di.index].name;
+}
+
+function speedBonus(){
+  if(timeLeft<=5) return 0;
+  return Math.min(16,Math.max(2,Math.round((timeLeft-5)*.72 + current.q*1.3)));
+}
+
+function submitAnswer(){
+  if(state!=="playing" || pendingAdvance || !current) return;
+  const raw=input.value;
+  if(!raw.trim()) return;
+  if(answerIsCorrect(raw,current)) correctAnswer();
+  else wrongAnswer(false);
+}
+
+function correctAnswer(){
+  pendingAdvance=true;
+  input.disabled=true;
+  const bonus=speedBonus();
+  correctCount++;
+  streak++;
+
+  if(bonus>0){
+    fastCount++;
+    strength=Math.min(100,strength+bonus);
+    feedbackEl.textContent=`CORRECT — FAST ANSWER +${bonus}% STRENGTH`;
+    feedbackEl.style.color="var(--good)";
+    score+=100+bonus*3+current.q*10;
+  }else{
+    feedbackEl.textContent="CORRECT";
+    feedbackEl.style.color="var(--good)";
+    score+=100+current.q*10;
+  }
+
+  for(let i=0;i<6;i++){
+    particles.push({
+      x:W*.5+rand(-10,10),
+      y:sceneRect().y+sceneRect().h-44+rand(-10,2),
+      vx:rand(-40,40),
+      vy:rand(-80,-35),
+      life:rand(.35,.65)
+    });
+  }
+
+  questionIndex++;
+  resolveTimer=.72;
+  updateStrengthHUD();
+}
+
+function wrongAnswer(timeout){
+  if(pendingAdvance) return;
+  pendingAdvance=true;
+  input.disabled=true;
+  streak=0;
+
+  const penalty=PENALTY_BY_DIFFICULTY[current.q];
+  strength=Math.max(0,strength-penalty);
+
+  feedbackEl.textContent=`${timeout?"TIME":"MISS"} — ${current.t.toUpperCase()} — −${penalty}% STRENGTH`;
+  feedbackEl.style.color="var(--bad)";
+  triggerNearMiss(current.q);
+
+  questionIndex++;
+  resolveTimer = strength<=0 ? .64 : 1.0;
+  updateStrengthHUD();
+}
+
+function updateStrengthHUD(){
+  strengthBar.style.width=strength+"%";
+  strengthText.textContent=Math.round(strength)+"%";
+  strengthBar.style.background = strength>60
+    ? "linear-gradient(90deg,#6ddc95,#d6e96e)"
+    : strength>30
+      ? "linear-gradient(90deg,#e6b64f,#d98b47)"
+      : "linear-gradient(90deg,#d45151,#ff7474)";
+}
+
+function finishGame(){
+  state="finished";
+  input.disabled=true;
+  const accuracy=Math.round(correctCount/TERMS.length*100);
+
+  overlayCard.innerHTML=`
+    <h2>Run Complete</h2>
+    <p>The mouse survived all four districts. More importantly, you finished the medical terminology run.</p>
+    <div class="rules">
+      <div class="rule"><b>${correctCount} / ${TERMS.length}</b><br>correct answers</div>
+      <div class="rule"><b>${accuracy}%</b><br>accuracy</div>
+      <div class="rule"><b>${fastCount}</b><br>fast-answer bonuses</div>
+      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
+      <div class="rule"><b>${score}</b><br>score</div>
+      <div class="rule"><b>${Math.round(strength)}%</b><br>ending Strength</div>
+    </div>
+    <button class="bigButton" id="againButton">RUN AGAIN</button>
+  `;
+  overlay.classList.remove("hidden");
+  document.getElementById("againButton").onclick=startGame;
+}
+
+function showCatContinue(){
+  state="caught";
+  catCatches++;
+  overlayCard.innerHTML=`
+    <h2>The cat noticed.</h2>
+    <p>The mouse has been captured. Vocabulary progress is preserved. You may continue the run.</p>
+    <div class="rules">
+      <div class="rule"><b>${questionIndex} / ${TERMS.length}</b><br>terms completed</div>
+      <div class="rule"><b>${correctCount}</b><br>correct so far</div>
+      <div class="rule"><b>65%</b><br>Strength on continue</div>
+      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
+    </div>
+    <button class="bigButton" id="continueButton">ESCAPE & CONTINUE</button>
+  `;
+  overlay.classList.remove("hidden");
+  document.getElementById("continueButton").onclick=()=>{
+    strength=65;
+    updateStrengthHUD();
+    cat=null;
+    overlay.classList.add("hidden");
+    state="playing";
+    nextQuestion();
+  };
+}
+
+form.addEventListener("submit",e=>{
+  e.preventDefault();
+  submitAnswer();
+});
+startButton.addEventListener("click",startGame);
+window.addEventListener("keydown",e=>{
+  if(state==="title" && e.key==="Enter") startGame();
+});
+
+/* ============================================================
+   WORLD UPDATE
+   ============================================================ */
+function updateWorld(dt){
+  worldTime+=dt;
+  scroll+=dt*(state==="playing" ? .18 : .06);
+
+  pedestrians.forEach(p=>{
+    p.x += p.dir * p.speed * dt;
+
+    // subtle lane drift to keep crossings organic
+    p.z += Math.sin(worldTime*0.6 + p.phase)*0.0003;
+
+    const mx=W*.5, my=sceneRect().y+sceneRect().h-56;
+    const px=laneX(p.x,p.z), py=laneY(p.z);
+
+    if(!p.scared && Math.abs(px-mx)<90 && Math.abs(py-my)<90 && Math.random()<.035){
+      p.scared=true;
+      p.scareTime=0;
+      p.dir*=-1;
+    }
+    if(p.scared){
+      p.scareTime+=dt*2;
+      if(p.scareTime>1){
+        p.scared=false;
+        p.scareTime=0;
+      }
+    }
+  });
+
+  pedestrians = pedestrians.filter(p => p.x>-1.35 && p.x<1.35 && p.z>.24 && p.z<.95);
+
+  const desired = state==="playing" ? 12 : 9;
+  while(pedestrians.length<desired) spawnPedestrian();
+
+  nearMisses.forEach(n=>n.t+=dt);
+  nearMisses=nearMisses.filter(n=>n.t<n.duration);
+
+  updateParticles(dt);
+
+  if(cat) cat.t+=dt;
+}
+
+function updateGame(dt){
+  if(state==="playing" && current && !pendingAdvance){
+    timeLeft-=dt;
+    if(timeLeft<=0){
+      timeLeft=0;
+      wrongAnswer(true);
+    }
+  }
+
+  if(state==="playing" && pendingAdvance){
+    resolveTimer-=dt;
+    if(resolveTimer<=0){
+      if(strength<=0) startCatSequence();
+      else nextQuestion();
+    }
+  }
+
+  if(state==="cat" && cat && cat.t>=cat.duration){
+    showCatContinue();
+  }
+
+  updateHUD();
+}
+
+function updateHUD(){
+  if(current && (state==="playing" || state==="cat")){
+    timerEl.textContent=Math.ceil(timeLeft).toString().padStart(2,"0");
+    timerEl.style.color = timeLeft>8 ? "var(--good)" : timeLeft>5 ? "var(--warn)" : "var(--bad)";
+  }
+  updateDistrictLabel();
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function drawInsideOvalWorld(){
+  const ov=ovalRect();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2);
+  ctx.clip();
+
+  drawBackdrop();
+  drawClusterObjects();
+
+  const items=[...pedestrians].sort((a,b)=>a.z-b.z);
+  items.forEach(drawPedestrian);
+
+  nearMisses.forEach(drawNearMiss);
+  drawMousePOVHint();
+  drawParticles();
+  if(state==="cat") drawCat();
+
+  ctx.restore();
+
+  drawOvalVignette();
+}
+
+function drawOvalVignette(){
+  const ov=ovalRect();
+
+  // Dark outside
+  ctx.save();
+  ctx.fillStyle="rgba(3,5,8,.92)";
+  ctx.beginPath();
+  ctx.rect(0,0,W,H);
+  ctx.moveTo(ov.cx+ov.rx,ov.cy);
+  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2,true);
+  ctx.fill("evenodd");
+  ctx.restore();
+
+  // Thick soft vignette ring
+  const rg=ctx.createRadialGradient(ov.cx,ov.cy,ov.rx*.55,ov.cx,ov.cy,ov.rx*1.08);
+  rg.addColorStop(0,"rgba(0,0,0,0)");
+  rg.addColorStop(.68,"rgba(0,0,0,.02)");
+  rg.addColorStop(.83,"rgba(0,0,0,.34)");
+  rg.addColorStop(1,"rgba(0,0,0,.92)");
+  ctx.fillStyle=rg;
+  ctx.fillRect(0,0,W,H);
+
+  // faint inner glass edge
+  ctx.save();
+  ctx.globalAlpha=.25;
+  ctx.strokeStyle="rgba(255,255,255,.10)";
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawInsideOvalWorld();
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function loop(ts){
+  let dt=(ts-lastTimestamp)/1000;
+  lastTimestamp=ts;
+  dt=Math.max(0,Math.min(.05,dt));
+
+  updateWorld(dt);
+  updateGame(dt);
+  render();
+
+  requestAnimationFrame(loop);
+}
+
+updateStrengthHUD();
+updateDistrictLabel();
+requestAnimationFrame(loop);
+
+})();
+</script>
 </body>
 </html>
+```
