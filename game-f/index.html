@@ -1,239 +1,663 @@
-I will give it to you straight: **I cannot generate the highly detailed pixel art you are picturing using just HTML and CSS.**
-
-To get the rich visual fidelity of a bustling Hollywood set—with textured characters, complex lighting, and detailed equipment—you need actual image assets (sprite sheets and PNGs) drawn by a pixel artist, loaded into a canvas or a game engine like Unity, Godot, or Phaser. What I can build for you here is essentially "programmer art"—using basic HTML and CSS geometric shapes to block out the layout and UI. I apologize for overpromising on the visual detail I could deliver directly in code.
-
-Regarding the input box: you are completely right. The previous code was just the visual frontend and lacked the **JavaScript** required to make it functional.
-
-Here is the updated code. The visuals are the same CSS block-out as before, but I have added a JavaScript engine at the bottom so you can actually type, press **Enter**, and see it react to correct or incorrect answers based on your vocabulary list.
-
-### Functional Game Code
-
-Save this as your `.html` file. When you type "FOCAL POINT" (or "PAN" on the next round) and press Enter, it will process the answer, flash green or red, and load the next prompt.
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rendering Wizardry - Live Soundstage</title>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <title>Ancient Egypt 101</title>
     <style>
         :root {
-            var(--bg-studio): #111214;
-            --floor-studio: #232529;
-            --set-wall: #7c5b45;
-            --set-floor: #d2a679;
-            --monitor-bezel: #22252a;
-            --monitor-screen: #0a0a0f;
-            --ui-text: #f4f4f5;
-            --ui-highlight: #fbbf24;
-            --tally-red: #ef4444;
-            --tally-off: #3f3f46;
-            --correct-green: #4ade80;
-            --wrong-red: #f87171;
+            --power-color: #4CAF50;
+            --bg-color: #1a1511;
+            --text-color: #e6d7c3;
+            --woozy-level: 0;
+            --blur-level: 0px;
         }
 
         body, html {
-            margin: 0; padding: 0; width: 100vw; height: 100vh;
-            font-family: 'VT323', monospace; background-color: #111214;
-            overflow: hidden; color: var(--ui-text); user-select: none;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
+            background-color: #000;
+            color: var(--text-color);
+            overflow: hidden;
         }
 
-        /* --- STAGE ENVIRONMENT (PROGRAMMER ART) --- */
-        .studio-background {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, #111214 40%, #000 40%, var(--floor-studio) 41%); z-index: 1;
+        /* --- SCENE LAYER (Game World) --- */
+        #scene-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1;
+            filter: grayscale(var(--woozy-level)) sepia(calc(var(--woozy-level) * 0.4)) blur(var(--blur-level));
+            transition: filter 1s ease-out, transform 2s ease-in-out, opacity 2s ease-in-out, background 1s ease;
+            background-color: #050403;
         }
 
-        .lighting-grid {
-            position: absolute; top: 0; left: 0; width: 100%; height: 20%;
-            background-image: repeating-linear-gradient(90deg, transparent 0, transparent 60px, #1a1c20 60px, #1a1c20 65px),
-                              repeating-linear-gradient(0deg, transparent 0, transparent 30px, #1a1c20 30px, #1a1c20 35px);
-            z-index: 5; box-shadow: inset 0 -20px 40px rgba(0,0,0,0.8);
+        /* Tremor Animation */
+        @keyframes shake {
+            0% { transform: translate(2px, 2px) rotate(0deg); }
+            10% { transform: translate(-2px, -4px) rotate(-1deg); }
+            20% { transform: translate(-6px, 0px) rotate(1deg); }
+            30% { transform: translate(6px, 4px) rotate(0deg); }
+            40% { transform: translate(2px, -2px) rotate(1deg); }
+            50% { transform: translate(-2px, 4px) rotate(-1deg); }
+            60% { transform: translate(-6px, 2px) rotate(0deg); }
+            70% { transform: translate(6px, 2px) rotate(-1deg); }
+            80% { transform: translate(-2px, -2px) rotate(1deg); }
+            90% { transform: translate(2px, 4px) rotate(0deg); }
+            100% { transform: translate(2px, -4px) rotate(-1deg); }
+        }
+        .tremor {
+            animation: shake 0.5s;
         }
 
-        .sitcom-set {
-            position: absolute; top: 20%; left: 25%; width: 50%; height: 25%;
-            background-color: var(--set-wall); border: 4px solid #5a4131;
-            border-bottom: 20px solid var(--set-floor); box-shadow: inset 0 20px 50px rgba(0,0,0,0.5); z-index: 2; overflow: hidden;
+        #scene-title {
+            position: absolute;
+            top: 40px;
+            font-size: 36px;
+            color: #d4af37;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            text-shadow: 2px 2px 10px rgba(0,0,0,1);
+            z-index: 5;
         }
 
-        .actor {
-            position: absolute; bottom: 25px; width: 15px; height: 45px; background: #e2c09c;
-            border-bottom: 25px solid #4a6fa5; border-radius: 10px 10px 0 0; z-index: 3;
-            animation: act 4s infinite alternate ease-in-out;
-        }
-        .actor-1 { left: 40%; }
-        .actor-2 { left: 55%; border-bottom-color: #5c804b; animation-delay: 1.5s; }
-
-        @keyframes act {
-            0% { transform: translateX(0) scaleY(1); }
-            50% { transform: translateX(10px) scaleY(1.05); }
-            100% { transform: translateX(-5px) scaleY(1); }
+        #artifact-visual {
+            text-align: center;
+            margin-left: 300px; /* Offset to not be hidden by UI */
+            z-index: 5;
         }
 
-        .camera-operator {
-            position: absolute; top: 45%; width: 40px; height: 80px; background: #2a2a35; z-index: 10;
+        #artifact-image {
+            max-width: 500px;
+            height: 300px;
+            border-radius: 8px;
+            border: 4px solid #5c4a3d;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+            object-fit: cover;
         }
-        .cam-1 { left: 20%; transform: scale(0.9); }
-        .cam-2 { left: 48%; transform: scale(1.1); z-index: 11; }
-        .cam-3 { left: 75%; transform: scale(0.9); }
 
-        /* --- UI: VIDEO VILLAGE --- */
-        .video-village {
-            position: absolute; bottom: 5%; left: 3%; display: flex; gap: 20px; z-index: 20;
+        /* --- DUST AND LIBRARIAN (Room 1 Specifics) --- */
+        #dust-overlay {
+            position: absolute;
+            top: -50%; 
+            left: -50%; 
+            width: 200%; 
+            height: 200%;
+            background-image: 
+                radial-gradient(2px 2px at 40px 60px, rgba(212, 175, 55, 0.4), transparent),
+                radial-gradient(2.5px 2.5px at 20px 50px, rgba(200, 150, 100, 0.3), transparent),
+                radial-gradient(1.5px 1.5px at 90px 40px, rgba(212, 175, 55, 0.5), transparent),
+                radial-gradient(2px 2px at 150px 90px, rgba(255, 200, 120, 0.3), transparent);
+            background-size: 200px 200px;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 3;
+            animation: floatDust 40s linear infinite;
+            display: none;
+            mix-blend-mode: screen;
         }
-        .monitor-rig { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .monitor {
-            width: 200px; height: 140px; background-color: var(--monitor-screen);
-            border: 8px solid var(--monitor-bezel); border-radius: 4px; position: relative;
-        }
-        .tally-light { width: 20px; height: 8px; border-radius: 2px; background-color: var(--tally-off); }
-        .tally-on { background-color: var(--tally-red); box-shadow: 0 0 10px var(--tally-red); }
-        .monitor-label { font-size: 1.3rem; color: #aaa; background: #111; padding: 2px 8px; border-radius: 4px; }
 
-        /* --- GAMEPLAY TERMINAL --- */
-        .terminal {
-            position: absolute; bottom: 5%; right: 3%; width: 440px; background-color: var(--monitor-screen);
-            border: 10px solid var(--monitor-bezel); border-radius: 6px; box-shadow: -10px 15px 35px rgba(0,0,0,0.9);
-            z-index: 20; display: flex; flex-direction: column; transition: border-color 0.3s ease;
+        @keyframes floatDust {
+            0% { transform: translateY(0) translateX(0); }
+            100% { transform: translateY(200px) translateX(-200px); }
         }
-        .terminal.correct { border-color: var(--correct-green); }
-        .terminal.wrong { border-color: var(--wrong-red); }
 
-        .terminal-header {
-            background-color: #1a1c20; border-bottom: 2px solid #333; padding: 8px 15px;
-            display: flex; justify-content: space-between; align-items: center;
+        #librarian-container {
+            position: absolute;
+            right: 80px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            color: #b5985a;
+            text-shadow: 2px 2px 15px #000;
+            opacity: 0.85;
+            z-index: 4;
         }
-        .term-title { font-size: 1.2rem; color: #888; }
-        .term-question { font-size: 1.2rem; background: #333; padding: 2px 8px; border-radius: 4px; }
 
-        .terminal-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-        .status-row { display: flex; justify-content: space-between; align-items: center; }
-        .timer { color: var(--ui-highlight); font-size: 3rem; line-height: 1; }
-        
-        .category-label { color: #888; font-size: 1.1rem; text-transform: uppercase; margin-bottom: -10px; }
-        .definition { font-size: 1.7rem; line-height: 1.2; min-height: 70px; }
+        #librarian-icon {
+            font-size: 100px;
+            margin-bottom: -10px;
+            filter: sepia(1) drop-shadow(0px 0px 10px rgba(0,0,0,0.8));
+        }
 
-        .input-row {
-            display: flex; align-items: center; gap: 10px; background: #1a1c20;
-            padding: 10px 15px; border-radius: 4px; border: 1px solid #333;
+        #librarian-name {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 1px solid #b5985a;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
         }
-        .input-prompt { color: var(--ui-highlight); font-size: 1.8rem; }
-        .term-input {
-            background: transparent; border: none; color: #fff; font-family: 'VT323', monospace;
-            font-size: 1.8rem; width: 100%; outline: none; text-transform: uppercase;
+
+        .hieroglyphs {
+            font-size: 28px;
+            letter-spacing: 8px;
+            color: #8c7345;
         }
-        .term-input::placeholder { color: #555; }
+
+        /* --- QUIZ PANEL (UI Layer - Top Left) --- */
+        #quiz-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 350px;
+            background: rgba(26, 21, 17, 0.95);
+            border: 2px solid #d4af37;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 5px 5px 30px rgba(0,0,0,0.9);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(5px);
+        }
+
+        #top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #5c4a3d;
+            padding-bottom: 10px;
+            font-weight: bold;
+        }
+
+        #power-container {
+            flex-grow: 1;
+            margin: 0 15px;
+            background: #000;
+            height: 15px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #5c4a3d;
+        }
+
+        #power-bar {
+            height: 100%;
+            width: 100%;
+            background-color: var(--power-color);
+            transition: width 0.5s ease-out, background-color 0.5s ease-out;
+        }
+
+        #timer {
+            font-size: 20px;
+            color: #ff9800;
+        }
+
+        #definition-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            line-height: 1.4;
+            text-align: left;
+            margin-bottom: 20px;
+            min-height: 80px;
+            border: 1px solid #3a2e26;
+        }
+
+        #input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #5c4a3d;
+            background: #111;
+            color: #fff;
+            border-radius: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 12px;
+            font-size: 16px;
+            background-color: #d4af37;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover { background-color: #f1c40f; }
+        button:active { transform: scale(0.98); }
+
+        #feedback {
+            text-align: center;
+            margin-top: 15px;
+            font-weight: bold;
+            height: 20px;
+            font-size: 14px;
+        }
+
+        /* --- OVERLAYS & SCENES --- */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            background-color: rgba(0,0,0,0.85);
+            z-index: 20;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #start-screen {
+            background: radial-gradient(circle, #2a221b 0%, #000 100%);
+        }
+
+        #start-screen h1 { color: #d4af37; font-size: 48px; margin-bottom: 10px;}
+        #start-screen p { font-size: 18px; max-width: 600px; line-height: 1.5; margin-bottom: 30px;}
+
+        #transition-screen {
+            background-color: #050403;
+            z-index: 15;
+        }
+        #transition-text {
+            color: #d4af37;
+            font-size: 24px;
+            font-style: italic;
+            letter-spacing: 2px;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        #death-visual {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(20, 0, 0, 0.95);
+            z-index: 25;
+        }
+
+        #death-icon {
+            font-size: 100px;
+            margin-bottom: 20px;
+        }
+
+        .danger-text { color: #ff4c4c; font-size: 32px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;}
+
+        #win-screen {
+            background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.7)), url('https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover;
+            color: #fff;
+            text-shadow: 2px 2px 8px #000;
+        }
+        #win-screen h1 { font-size: 64px; color: #d4af37; }
+
     </style>
 </head>
 <body>
 
-    <div class="studio-background"></div>
-    <div class="lighting-grid"></div>
-    <div class="sitcom-set">
-        <div class="actor actor-1"></div>
-        <div class="actor actor-2"></div>
-    </div>
-    <div class="camera-operator cam-1"></div>
-    <div class="camera-operator cam-2"></div>
-    <div class="camera-operator cam-3"></div>
+<div id="start-screen" class="overlay" style="display: flex;">
+    <h1>Ancient Egypt 101</h1>
+    <p>You have been teleported to antiquity. Survive the 3 chambers by translating the artifacts. The ancient world is unforgiving. <br><br>
+    <strong>Easy (-35%) | Medium (-30%) | Hard (-25%)</strong><br>
+    Answer in under 10 seconds for a +10% power boost!</p>
+    <button onclick="startGame()" style="width: 200px;">Enter the Library</button>
+</div>
 
-    <div class="video-village">
-        <div class="monitor-rig">
-            <div class="tally-light"></div>
-            <div class="monitor"></div>
-            <div class="monitor-label">CAM 1</div>
-        </div>
-        <div class="monitor-rig">
-            <div class="tally-light tally-on"></div>
-            <div class="monitor"></div>
-            <div class="monitor-label" style="color:#fff;">CAM 2 (MASTER)</div>
-        </div>
+<div id="transition-screen" class="overlay">
+    <p id="transition-text">Descending deeper into the ancient sands...</p>
+</div>
+
+<div id="scene-layer">
+    <div id="dust-overlay"></div>
+    <h2 id="scene-title">Library of Alexandria</h2>
+    
+    <div id="artifact-visual">
+        <img id="artifact-image" src="" alt="Artifact Visual">
     </div>
 
-    <div class="terminal" id="terminal-ui">
-        <div class="terminal-header">
-            <span class="term-title">SCENE: 4A | TAKE: 3</span>
-            <span class="term-question" id="shot-counter">SHOT 1 / 3</span>
+    <!-- The Librarian Character for Room 1 -->
+    <div id="librarian-container">
+        <div id="librarian-icon">𓀾</div>
+        <div id="librarian-name">Kha'y<br><span style="font-size:14px; color:#8c7345;">Chief Keeper of Scrolls</span></div>
+        <div class="hieroglyphs">𓊹 𓌃 𓏟 𓏛 𓍼</div>
+    </div>
+</div>
+
+<!-- Death Scene Override completely top level to cover everything -->
+<div id="death-visual" class="overlay">
+    <div id="death-icon">🧟</div>
+    <p id="death-message" class="danger-text"></p>
+    <button onclick="location.reload()" style="margin-top: 30px;">Restart Journey</button>
+</div>
+
+<div id="quiz-panel" style="display: none;">
+    <div id="top-bar">
+        <div>Rm <span id="room-indicator">1</span></div>
+        <div id="power-container">
+            <div id="power-bar"></div>
         </div>
-        <div class="terminal-body">
-            <div class="status-row">
-                <div class="timer" id="game-timer">15.0s</div>
-            </div>
-            <div class="category-label" id="category">Composition & Layout</div>
-            <div class="definition" id="definition">
-                "What the eye is pulled to first; the visual center of interest."
-            </div>
-            <div class="input-row">
-                <span class="input-prompt">INPUT:</span>
-                <input type="text" class="term-input" id="answer-input" placeholder="ENTER TERM..." autocomplete="off" autofocus spellcheck="false">
-            </div>
-        </div>
+        <div id="timer">15s</div>
     </div>
 
-    <!-- GAME LOGIC -->
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const inputField = document.getElementById('answer-input');
-            const defDisplay = document.getElementById('definition');
-            const catDisplay = document.getElementById('category');
-            const shotCounter = document.getElementById('shot-counter');
-            const terminalUI = document.getElementById('terminal-ui');
+    <div id="definition-box">Loading...</div>
 
-            // Sample Vocabulary Database
-            const gameData = [
-                { term: "FOCAL POINT", category: "Composition & Layout", def: '"What the eye is pulled to first; the visual center of interest."' },
-                { term: "PAN", category: "Camera Movements", def: '"Horizontal pivot from a fixed point."' },
-                { term: "DUTCH ANGLE", category: "Camera Angles", def: '"Tilted horizon; unease, disorientation, tension."' }
-            ];
+    <div id="input-area">
+        <input type="text" id="answer-input" placeholder="Name the artifact..." autocomplete="off">
+        <button onclick="submitAnswer()">Submit</button>
+    </div>
 
-            let currentIndex = 0;
+    <div id="feedback"></div>
+</div>
 
-            // Load the first question
-            function loadQuestion() {
-                defDisplay.textContent = gameData[currentIndex].def;
-                catDisplay.textContent = gameData[currentIndex].category;
-                shotCounter.textContent = `SHOT ${currentIndex + 1} / ${gameData.length}`;
-                inputField.value = '';
-                inputField.focus();
+<div id="win-screen" class="overlay">
+    <h1>Victory!</h1>
+    <p style="font-size: 24px; font-weight: bold;">You have mapped the tomb and secured the ancient texts.</p>
+    <button onclick="location.reload()" style="margin-top:30px; width: 200px;">Play Again</button>
+</div>
+
+<script>
+    const artifacts = [
+        { term: "Rosetta Stone", def: "Inscribed decree that enabled decipherment of hieroglyphs.", diff: "easy" },
+        { term: "Narmer Palette", def: "Ceremonial palette depicting Egypt’s early royal unification.", diff: "hard" },
+        { term: "Nefertiti Bust", def: "Painted limestone portrait of Queen Nefertiti.", diff: "medium" },
+        { term: "Tutankhamun's Gold Mask", def: "Gold funerary mask covering the young pharaoh’s mummy.", diff: "easy" },
+        { term: "Tutankhamun's Throne", def: "Elaborately decorated royal chair from his tomb.", diff: "medium" },
+        { term: "Tutankhamun's Coffins", def: "Nested anthropoid coffins enclosing the king’s mummy.", diff: "medium" },
+        { term: "Merneptah Stele", def: "Victory inscription containing an early reference to Israel.", diff: "hard" },
+        { term: "Book of the Dead of Ani", def: "Famous illustrated papyrus of funerary spells.", diff: "medium" },
+        { term: "Papyrus of Hunefer", def: "Funerary manuscript famous for its judgment scene.", diff: "hard" },
+        { term: "Seated Scribe", def: "Famous Old Kingdom painted statue of a scribe.", diff: "easy" },
+        
+        { term: "Khafre Enthroned", def: "Diorite statue portraying the pharaoh under Horus’s protection.", diff: "hard" },
+        { term: "Menkaure Triads", def: "Sculptural groups showing Menkaure with deities.", diff: "hard" },
+        { term: "Rahotep and Nofret", def: "Exceptionally preserved painted Old Kingdom statues.", diff: "hard" },
+        { term: "Colossi of Memnon", def: "Enormous seated statues of Amenhotep III.", diff: "medium" },
+        { term: "Dendera Zodiac", def: "Egyptian temple relief depicting the heavens and constellations.", diff: "medium" },
+        { term: "Canopic jar", def: "Container traditionally used for embalmed internal organs.", diff: "easy" },
+        { term: "Shabti", def: "Funerary figurine intended to work for the deceased. (Also known as Ushabti)", diff: "medium" },
+        { term: "Scarab", def: "Beetle-shaped amulet associated with renewal and rebirth.", diff: "easy" },
+        { term: "Heart scarab", def: "Funerary amulet protecting the heart during judgment.", diff: "medium" },
+        { term: "Ankh", def: "Cross-shaped symbol representing life.", diff: "easy" },
+        
+        { term: "Djed pillar", def: "Symbol representing stability and associated with Osiris.", diff: "medium" },
+        { term: "Was scepter", def: "Staff symbolizing divine power and dominion.", diff: "medium" },
+        { term: "Eye of Horus", def: "Protective symbol associated with restoration and wholeness.", diff: "easy" },
+        { term: "Sistrum", def: "Sacred rattling musical instrument used in worship.", diff: "hard" },
+        { term: "Menat", def: "Beaded ritual necklace associated especially with Hathor.", diff: "hard" },
+        { term: "Faience", def: "Glazed silica material prized for brilliant blue-green objects.", diff: "hard" },
+        { term: "Cartouche", def: "Oval enclosure surrounding a royal name.", diff: "easy" },
+        { term: "False door", def: "Tomb feature through which the dead could symbolically receive offerings.", diff: "medium" },
+        { term: "Senet board", def: "Board used for a famous Egyptian game with funerary symbolism.", diff: "medium" },
+        { term: "Canopic chest", def: "Container protecting a set of canopic vessels.", diff: "easy" }
+    ];
+
+    const roomTitles = ["Ancient Library of Alexandria", "Hall of Monuments", "Vault of Symbols"];
+    
+    const deathScenes = [
+        { text: "The ancient texts crumble to dust, and the librarian curses you to the shadows!", icon: "📜" },
+        { text: "You step on a pressure plate and plummet into a spiked pit!", icon: "🕳️" },
+        { text: "A giant venomous snake drops from the ceiling and strikes!", icon: "🐍" }
+    ];
+
+    const roomBackgrounds = [
+        // Room 1: Dusty, extremely old library with ancient scrolls (Heavy brownish sepia gradient)
+        "linear-gradient(rgba(50, 35, 15, 0.85), rgba(20, 10, 5, 0.95)), url('https://images.unsplash.com/photo-1603831955375-4be427907cae?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover",
+        // Room 2: Authentic carved hieroglyphics on stone wall
+        "linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.85)), url('https://images.unsplash.com/photo-1596700874015-8c0ec8eb752b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover",
+        // Room 3: Deep inside Karnak temple pillars
+        "linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.95)), url('https://images.unsplash.com/photo-1572093883391-764f697488cc?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover"
+    ];
+
+    let currentRoom = 0;
+    let currentQuestionIdx = 0;
+    let power = 100;
+    let timeLeft = 15;
+    let timerInterval = null;
+    let currentItem = null;
+
+    document.getElementById("answer-input").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") submitAnswer();
+    });
+
+    function startGame() {
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('quiz-panel').style.display = 'flex';
+        currentRoom = 0;
+        currentQuestionIdx = 0;
+        power = 100;
+        updatePowerUI();
+        loadQuestion();
+    }
+
+    function loadQuestion() {
+        let globalIndex = (currentRoom * 10) + currentQuestionIdx;
+        currentItem = artifacts[globalIndex];
+
+        document.getElementById('room-indicator').innerText = currentRoom + 1;
+        document.getElementById('definition-box').innerText = currentItem.def;
+        document.getElementById('answer-input').value = "";
+        document.getElementById('feedback').innerText = "";
+        document.getElementById('answer-input').focus();
+        
+        document.getElementById('scene-title').innerText = roomTitles[currentRoom];
+        document.getElementById('scene-layer').style.background = roomBackgrounds[currentRoom];
+        
+        // Handle Room 1 Specific Visuals (Dust and Librarian)
+        if(currentRoom === 0) {
+            document.getElementById('dust-overlay').style.display = 'block';
+            document.getElementById('librarian-container').style.display = 'flex';
+        } else {
+            document.getElementById('dust-overlay').style.display = 'none';
+            document.getElementById('librarian-container').style.display = 'none';
+        }
+        
+        let safeImageName = currentItem.term.replace(/[^a-zA-Z0-9]/g, '');
+        document.getElementById('artifact-image').src = `https://placehold.co/800x500/15100a/d4af37?text=Ancient+Relic:\n${safeImageName}`;
+
+        startTimer();
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timeLeft = 15;
+        document.getElementById('timer').innerText = timeLeft + "s";
+        
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            document.getElementById('timer').innerText = timeLeft + "s";
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                processWrongAnswer("Time's up!");
             }
+        }, 1000);
+    }
 
-            // Listen for the Enter Key
-            inputField.addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault(); // Stop default form submission behavior
-                    
-                    const playerAnswer = inputField.value.trim().toUpperCase();
-                    const correctAnswer = gameData[currentIndex].term.toUpperCase();
+    function normalizeString(str) {
+        return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
 
-                    if (playerAnswer === correctAnswer) {
-                        // Correct Answer Logic
-                        terminalUI.classList.add('correct');
-                        inputField.style.color = 'var(--correct-green)';
-                    } else {
-                        // Wrong Answer Logic
-                        terminalUI.classList.add('wrong');
-                        inputField.style.color = 'var(--wrong-red)';
-                        inputField.value = `CORRECT: ${correctAnswer}`;
-                    }
+    function isAnswerCorrect(input, actual) {
+        let cleanInput = normalizeString(input);
+        let cleanActual = normalizeString(actual);
+        return cleanInput === cleanActual || (cleanInput.length > 3 && cleanActual.includes(cleanInput));
+    }
 
-                    // Wait 1.5 seconds, then move to next question
-                    setTimeout(() => {
-                        terminalUI.classList.remove('correct', 'wrong');
-                        inputField.style.color = '';
-                        currentIndex = (currentIndex + 1) % gameData.length; // Loop back to start
-                        loadQuestion();
-                    }, 1500);
+    function submitAnswer() {
+        if(timeLeft <= 0 || power <= 0) return;
+        clearInterval(timerInterval);
+        
+        let input = document.getElementById('answer-input').value;
+        if (isAnswerCorrect(input, currentItem.term)) {
+            processCorrectAnswer();
+        } else {
+            processWrongAnswer("Incorrect! It was " + currentItem.term);
+        }
+    }
+
+    function processCorrectAnswer() {
+        let feedback = document.getElementById('feedback');
+        feedback.style.color = "#4CAF50";
+        
+        if (timeLeft >= 5) {
+            power = Math.min(100, power + 10);
+            feedback.innerText = "Correct! +10% Speed Bonus!";
+        } else {
+            feedback.innerText = "Correct!";
+        }
+        
+        updatePowerUI();
+        setTimeout(() => {
+            currentQuestionIdx++;
+            if (currentQuestionIdx >= 10) {
+                currentRoom++;
+                currentQuestionIdx = 0;
+                if (currentRoom >= 3) {
+                    winGame();
+                } else {
+                    showTransition();
                 }
-            });
+            } else {
+                loadQuestion();
+            }
+        }, 1500);
+    }
 
-            // Initialize Game
+    function showTransition() {
+        document.getElementById('quiz-panel').style.display = 'none';
+        let transScreen = document.getElementById('transition-screen');
+        let transText = document.getElementById('transition-text');
+
+        if (currentRoom === 1) {
+            transText.innerText = "Departing the Library, descending into the Hall of Monuments...";
+        } else if (currentRoom === 2) {
+            transText.innerText = "Descending further into the pitch-black Vault of Symbols...";
+        }
+
+        transScreen.style.display = 'flex';
+        
+        setTimeout(() => {
+            transScreen.style.display = 'none';
+            document.getElementById('quiz-panel').style.display = 'flex';
             loadQuestion();
-        });
-    </script>
+        }, 3000);
+    }
+
+    function processWrongAnswer(msg) {
+        let feedback = document.getElementById('feedback');
+        feedback.style.color = "#ff4c4c";
+        feedback.innerText = msg;
+        
+        triggerSceneTremor();
+
+        let penalty = 0;
+        if (currentItem.diff === "easy") penalty = 35;
+        else if (currentItem.diff === "medium") penalty = 30;
+        else if (currentItem.diff === "hard") penalty = 25;
+
+        power -= penalty;
+        updatePowerUI();
+
+        if (power <= 0) {
+            setTimeout(loseGame, 1000);
+        } else {
+            setTimeout(() => {
+                currentQuestionIdx++;
+                if (currentQuestionIdx >= 10) {
+                    currentRoom++;
+                    currentQuestionIdx = 0;
+                    if (currentRoom >= 3) {
+                        winGame();
+                    } else {
+                        showTransition();
+                    }
+                } else {
+                    loadQuestion();
+                }
+            }, 2500);
+        }
+    }
+
+    function triggerSceneTremor() {
+        const scene = document.getElementById('scene-layer');
+        scene.classList.remove('tremor');
+        void scene.offsetWidth; 
+        scene.classList.add('tremor');
+    }
+
+    function updatePowerUI() {
+        let displayPower = Math.max(0, power);
+        let powerBar = document.getElementById('power-bar');
+        powerBar.style.width = displayPower + "%";
+
+        if (displayPower > 60) powerBar.style.backgroundColor = "#4CAF50";
+        else if (displayPower > 30) powerBar.style.backgroundColor = "#ff9800";
+        else powerBar.style.backgroundColor = "#f44336";
+
+        let lostPower = 100 - displayPower;
+        let woozyLevel = lostPower / 100; 
+        let blurLevel = (lostPower / 100) * 3; 
+        
+        document.documentElement.style.setProperty('--woozy-level', woozyLevel);
+        document.documentElement.style.setProperty('--blur-level', blurLevel + 'px');
+    }
+
+    function loseGame() {
+        clearInterval(timerInterval);
+        document.getElementById('quiz-panel').style.display = 'none';
+        
+        let deathData = deathScenes[currentRoom];
+        document.getElementById('death-icon').innerText = deathData.icon;
+        document.getElementById('death-message').innerText = deathData.text;
+        
+        document.documentElement.style.setProperty('--woozy-level', 0);
+        document.documentElement.style.setProperty('--blur-level', '0px');
+        
+        document.getElementById('death-visual').style.display = 'flex';
+    }
+
+    function winGame() {
+        clearInterval(timerInterval);
+        document.getElementById('quiz-panel').style.display = 'none'; 
+        
+        let scene = document.getElementById('scene-layer');
+        scene.style.transform = "scale(0.1)";
+        scene.style.opacity = "0";
+
+        setTimeout(() => {
+            scene.style.display = 'none';
+            document.body.style.backgroundColor = "#87CEEB"; 
+            document.getElementById('win-screen').style.display = 'flex';
+            document.getElementById('win-screen').style.opacity = '0';
+            
+            setTimeout(() => {
+                document.getElementById('win-screen').style.transition = "opacity 2s ease-in";
+                document.getElementById('win-screen').style.opacity = '1';
+            }, 100);
+            
+        }, 1800);
+    }
+</script>
+
 </body>
 </html>
-
-```
