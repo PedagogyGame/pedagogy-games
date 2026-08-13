@@ -1,1 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Strategy Command — Executive Vocabulary</title>
+<style>
+  :root{
+    --ui-cream:#f5eddc;
+    --ui-gold:#cbb782;
+    --ui-dim:#9a927f;
+    --glass:rgba(10,14,20,.54);
+    --glass-2:rgba(13,18,25,.72);
+    --line:rgba(235,221,185,.24);
+    --shadow:0 18px 50px rgba(0,0,0,.4);
+    --room-brightness:1;
+    --room-sat:1;
+  }
 
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#0d131a;color:var(--ui-cream);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  button,input{font:inherit}
+  button{cursor:pointer}
+
+  #game{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    min-height:620px;
+    overflow:hidden;
+    background:#111821;
+    isolation:isolate;
+  }
+
+  /* ===================== SKY / CITY ===================== */
+  .sky{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 74% 24%, rgba(255,194,124,.20), transparent 22%),
+      linear-gradient(to bottom,#546171 0%,#74808c 20%,#b08d75 42%,#6e6a6a 66%,#1a252f 100%);
+    z-index:0;
+  }
+  .sky::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(100deg,rgba(16,24,32,.12),rgba(255,230,190,.08),rgba(8,15,22,.18));
+    animation:skyBreath 18s ease-in-out infinite alternate;
+  }
+  @keyframes skyBreath{from{opacity:.72}to{opacity:1}}
+
+  .haze{
+    position:absolute;left:-5%;right:-5%;bottom:18%;height:42%;z-index:1;
+    background:linear-gradient(to top,rgba(211,196,177,.13),rgba(170,183,193,.08),transparent);
+    filter:blur(10px);
+    animation:hazeShift 28s ease-in-out infinite alternate;
+  }
+  @keyframes hazeShift{from{transform:translateX(-1.2%)}to{transform:translateX(1.2%)}}
+
+  .city{position:absolute;left:0;right:0;bottom:17%;height:58%;pointer-events:none}
+  .city.far{z-index:2;opacity:.30;filter:blur(.5px)}
+  .city.mid{z-index:3;opacity:.56}
+  .city.near{z-index:4;opacity:.82}
+
+  .tower{position:absolute;bottom:0;background:linear-gradient(180deg,#394551,#202c36 70%,#17212a);border:1px solid rgba(215,228,236,.09);box-shadow:inset 0 0 0 1px rgba(255,255,255,.02)}
+  .tower::before{content:"";position:absolute;inset:8px 7px;background:repeating-linear-gradient(to bottom,transparent 0 7px,rgba(224,207,150,.11) 7px 9px),repeating-linear-gradient(to right,rgba(255,226,160,.15) 0 2px,transparent 2px 10px);opacity:.75}
+  .tower::after{content:"";position:absolute;left:50%;top:-18px;width:2px;height:18px;background:rgba(220,230,238,.35)}
+  .far .tower{background:linear-gradient(#59616a,#303b45);border-color:rgba(230,240,245,.04)}
+  .far .tower::before{opacity:.25}
+  .near .tower{box-shadow:-10px 0 25px rgba(0,0,0,.14), inset 0 0 0 1px rgba(255,255,255,.03)}
+
+  .river{
+    position:absolute;z-index:2;left:14%;right:10%;bottom:15%;height:9%;
+    background:linear-gradient(170deg,transparent 0 20%,rgba(188,187,177,.12) 21% 39%,rgba(66,79,89,.18) 40% 70%,transparent 71%);
+    filter:blur(2px);opacity:.5;
+  }
+
+  .aircraft{position:absolute;z-index:5;width:3px;height:3px;border-radius:50%;background:#f7ddb0;box-shadow:0 0 7px #f7ddb0;opacity:.55;animation:fly 31s linear infinite}
+  .aircraft.a2{top:30%;left:8%;animation-duration:43s;animation-delay:-18s;opacity:.35}
+  @keyframes fly{from{transform:translateX(-12vw)}to{transform:translateX(120vw)}}
+
+  /* ===================== WINDOW WALL ===================== */
+  .windowWall{position:absolute;z-index:6;left:7%;right:5%;top:7%;bottom:20%;border:1px solid rgba(205,217,225,.16);background:linear-gradient(125deg,rgba(220,230,235,.025),rgba(255,255,255,.012) 45%,rgba(5,9,12,.05));box-shadow:inset 0 0 60px rgba(30,42,50,.18)}
+  .windowWall::before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 0 22%,rgba(255,236,204,.075) 24%,transparent 28% 64%,rgba(230,240,246,.04) 67%,transparent 72%);animation:reflection 22s ease-in-out infinite alternate}
+  @keyframes reflection{from{transform:translateX(-3%);opacity:.45}to{transform:translateX(3%);opacity:.8}}
+  .mullion{position:absolute;top:0;bottom:0;width:7px;background:linear-gradient(to right,#1b252d,#3c4952 50%,#151d24);box-shadow:0 0 7px rgba(0,0,0,.4)}
+  .m1{left:15%}.m2{left:34%}.m3{left:54%}.m4{left:74%}.m5{left:91%}
+  .horizonBar{position:absolute;left:0;right:0;top:51%;height:5px;background:linear-gradient(#26323a,#46545d,#1a252c);opacity:.78}
+
+  /* ===================== ROOM ARCHITECTURE ===================== */
+  .room{position:absolute;z-index:7;inset:0;filter:brightness(var(--room-brightness)) saturate(var(--room-sat));transition:filter 2.2s ease}
+  .ceiling{position:absolute;left:0;right:0;top:0;height:15%;background:linear-gradient(#12181d,#20252a 70%,#171e24);clip-path:polygon(0 0,100% 0,95% 100%,6% 100%)}
+  .ceilingInset{position:absolute;left:22%;right:18%;top:2.8%;height:6%;border:1px solid rgba(205,184,135,.12);background:rgba(7,10,13,.25);box-shadow:0 0 28px rgba(220,183,115,.07) inset}
+  .ceilingLight{position:absolute;top:8.9%;height:2px;background:linear-gradient(90deg,transparent,rgba(255,218,160,.72),transparent);filter:drop-shadow(0 0 6px rgba(255,204,126,.32));transition:opacity 2s ease}
+  .cl1{left:18%;width:25%}.cl2{left:51%;width:27%}
+
+  .leftWall{position:absolute;left:0;top:10%;bottom:0;width:9%;background:linear-gradient(90deg,#1c2225,#2e2923 64%,#171c20);box-shadow:inset -10px 0 25px rgba(0,0,0,.34)}
+  .rightWall{position:absolute;right:0;top:9%;bottom:0;width:6%;background:linear-gradient(270deg,#151b1f,#2f2922 70%,#1c2225)}
+  .wallPanel{position:absolute;left:1.2%;top:25%;width:6.2%;height:26%;border:1px solid rgba(194,163,104,.3);background:linear-gradient(135deg,#352a21,#211d19);box-shadow:inset 0 0 0 6px rgba(20,15,11,.42),0 12px 30px rgba(0,0,0,.3)}
+  .wallPanel::after{content:"";position:absolute;inset:16%;border:1px solid rgba(194,163,104,.22);background:linear-gradient(140deg,rgba(204,162,98,.15),rgba(80,69,61,.06),rgba(192,131,80,.13))}
+
+  .floor{position:absolute;left:0;right:0;bottom:0;height:32%;background:linear-gradient(to bottom,#252728,#1d1e1e 45%,#151718);clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}
+  .floor::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(103deg,transparent 0 62px,rgba(255,255,255,.025) 63px 64px),linear-gradient(100deg,rgba(176,144,102,.05),transparent 42%,rgba(240,220,190,.03));opacity:.85}
+  .rug{position:absolute;left:19%;right:16%;bottom:3%;height:22%;background:linear-gradient(90deg,#201d1a,#2b2520 50%,#1e1b18);clip-path:polygon(9% 0,92% 0,100% 100%,0 100%);box-shadow:0 -6px 24px rgba(0,0,0,.3);border-top:1px solid rgba(180,145,91,.11)}
+
+  /* ===================== TABLE + CHAIRS ===================== */
+  .tableTop{position:absolute;left:23%;right:14%;bottom:14%;height:18%;background:linear-gradient(105deg,#241915 0%,#503328 22%,#2c1b17 57%,#58372a 100%);clip-path:polygon(10% 0,92% 0,100% 100%,0 100%);box-shadow:0 18px 30px rgba(0,0,0,.55), inset 0 1px rgba(255,220,170,.12);border-top:2px solid rgba(157,111,74,.2)}
+  .tableTop::after{content:"";position:absolute;inset:9% 5%;background:repeating-linear-gradient(98deg,rgba(255,214,171,.026) 0 2px,transparent 3px 15px);opacity:.8}
+  .tableEdge{position:absolute;left:26%;right:12%;bottom:10%;height:7%;background:linear-gradient(#3a251d,#15100e);clip-path:polygon(7% 0,94% 0,100% 100%,0 100%)}
+
+  .chair{position:absolute;z-index:10;width:5.6%;height:14%;border-radius:42% 42% 22% 22%;background:linear-gradient(90deg,#121416,#292724 50%,#0f1112);border:1px solid rgba(210,197,175,.08);box-shadow:0 12px 20px rgba(0,0,0,.42)}
+  .chair::after{content:"";position:absolute;left:45%;bottom:-38%;width:10%;height:40%;background:#1a1c1d;box-shadow:0 0 0 2px rgba(80,77,70,.25)}
+  .c1{left:25%;bottom:21%;transform:scale(.75)}
+  .c2{left:34%;bottom:23%;transform:scale(.67)}
+  .c3{left:44%;bottom:24.4%;transform:scale(.61)}
+  .c4{left:56%;bottom:25%;transform:scale(.58)}
+  .c5{left:67%;bottom:24%;transform:scale(.63)}
+  .c6{left:78%;bottom:22%;transform:scale(.72)}
+  .c7{left:18%;bottom:8%;transform:scale(1.04)}
+  .c8{right:6%;bottom:7%;transform:scale(1.08)}
+
+  /* ===================== EXECUTIVE + FIGURES ===================== */
+  .executive{position:absolute;z-index:11;left:58%;bottom:26.2%;width:7%;height:20%;transform-origin:50% 100%;transition:filter 1.5s ease,opacity 1.5s ease}
+  .head{position:absolute;left:36%;top:0;width:29%;height:23%;border-radius:48% 48% 44% 44%;background:linear-gradient(120deg,#c9a27f,#8e6e58 70%,#6b5142);box-shadow:inset -4px -2px rgba(0,0,0,.1)}
+  .hair{position:absolute;left:34%;top:-2%;width:32%;height:11%;border-radius:70% 70% 20% 20%;background:#312a27}
+  .body{position:absolute;left:18%;top:20%;width:64%;height:57%;border-radius:24% 24% 12% 12%;background:linear-gradient(90deg,#17191d,#333842 49%,#15171a);border:1px solid rgba(255,255,255,.05)}
+  .shirt{position:absolute;left:42%;top:21%;width:17%;height:35%;background:linear-gradient(#d7d2c7,#a9a59c);clip-path:polygon(0 0,100% 0,68% 100%,36% 100%)}
+  .tie{position:absolute;left:49%;top:27%;width:5%;height:29%;background:#6b4a3c;clip-path:polygon(50% 0,100% 15%,64% 100%,33% 100%,0 15%)}
+  .arm{position:absolute;top:42%;width:36%;height:12%;background:linear-gradient(#303540,#16191e);border-radius:50px;transform-origin:10% 50%;transition:transform .8s ease}
+  .arm.left{left:-1%;transform:rotate(15deg)}
+  .arm.right{right:-4%;transform-origin:90% 50%;transform:rotate(-17deg)}
+  .hand{position:absolute;top:42%;width:12%;height:9%;background:#aa8267;border-radius:50%}
+  .hand.left{left:-3%}.hand.right{right:-7%}
+  .executive.active .arm.left{animation:leftGestures 15s ease-in-out infinite}
+  .executive.active .arm.right{animation:rightGestures 19s ease-in-out infinite}
+  @keyframes leftGestures{0%,22%,44%,100%{transform:rotate(15deg)}27%{transform:rotate(23deg) translateX(4px)}32%{transform:rotate(10deg)}65%{transform:rotate(18deg) translateY(-2px)}72%{transform:rotate(12deg)}}
+  @keyframes rightGestures{0%,28%,52%,100%{transform:rotate(-17deg)}34%{transform:rotate(-7deg) translateX(-3px)}41%{transform:rotate(-20deg)}70%{transform:rotate(-12deg) translateY(-2px)}77%{transform:rotate(-18deg)}}
+  .executive.sigh{animation:sigh 2.2s ease forwards}
+  @keyframes sigh{0%{transform:translateY(0)}40%{transform:translateY(2px) scaleY(.985)}100%{transform:translateY(5px) scaleY(.975)}}
+
+  .backgroundFigure{position:absolute;z-index:9;width:2.7%;height:11%;opacity:.42;filter:blur(.2px)}
+  .backgroundFigure .fhead{position:absolute;left:35%;width:30%;height:22%;border-radius:50%;background:#8e7666}
+  .backgroundFigure .fbody{position:absolute;left:18%;top:19%;width:64%;height:66%;background:#20252a;border-radius:28% 28% 8% 8%}
+  .f1{left:74%;bottom:35%;animation:shiftFigure 24s ease-in-out infinite}
+  .f2{left:84%;bottom:33%;transform:scale(.84);animation:shiftFigure 31s ease-in-out infinite reverse}
+  @keyframes shiftFigure{0%,75%,100%{transform:translateX(0)}82%{transform:translateX(-8px)}90%{transform:translateX(4px)}}
+
+  .papers{position:absolute;z-index:12;left:48%;bottom:27.4%;width:9%;height:1.6%;background:linear-gradient(100deg,#cfc9ba,#f1ead9);transform:skewX(-18deg);box-shadow:0 2px 6px rgba(0,0,0,.28)}
+  .tablet{position:absolute;z-index:12;left:66%;bottom:27.5%;width:5.2%;height:2.3%;background:linear-gradient(110deg,#10171d,#34424b);border:1px solid rgba(210,224,230,.16);transform:skewX(-16deg);box-shadow:0 2px 8px rgba(0,0,0,.35)}
+  .carafe{position:absolute;z-index:12;left:39%;bottom:27.1%;width:1.3%;height:5%;background:linear-gradient(90deg,rgba(201,220,224,.22),rgba(244,250,250,.44),rgba(139,166,171,.18));border:1px solid rgba(230,240,242,.18);border-radius:14% 14% 28% 28%}
+
+  /* ===================== HUD ===================== */
+  .hud{position:absolute;z-index:30;inset:0;pointer-events:none;padding:22px 24px;display:flex;flex-direction:column;justify-content:space-between}
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+  .brand{pointer-events:auto;text-shadow:0 2px 14px rgba(0,0,0,.65)}
+  .brand .eyebrow{font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:var(--ui-gold);opacity:.88}
+  .brand h1{font-family:Georgia,"Times New Roman",serif;font-weight:500;font-size:clamp(24px,2.1vw,38px);letter-spacing:.04em;margin:3px 0 0;color:#f4ead8}
+  .utility{pointer-events:auto;display:flex;gap:9px;align-items:center}
+  .glassBtn{border:1px solid var(--line);color:#eee3d1;background:rgba(12,17,22,.58);backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);border-radius:999px;padding:9px 13px;box-shadow:0 6px 18px rgba(0,0,0,.22);font-size:12px;letter-spacing:.04em}
+  .glassBtn:hover{background:rgba(25,31,37,.72)}
+
+  .quizWrap{pointer-events:none;display:flex;justify-content:flex-end;align-items:flex-end;padding:0 1.6vw 1.2vh}
+  .panel{pointer-events:auto;width:min(620px,47vw);min-width:470px;background:linear-gradient(135deg,rgba(15,20,27,.72),rgba(8,12,17,.53));border:1px solid rgba(232,218,185,.22);backdrop-filter:blur(17px) saturate(1.12);-webkit-backdrop-filter:blur(17px) saturate(1.12);border-radius:18px;box-shadow:var(--shadow), inset 0 1px rgba(255,255,255,.03);padding:18px 19px 16px;transition:opacity .3s,transform .3s,filter 2s ease}
+  .panel.dimmed{filter:brightness(.72) saturate(.72)}
+  .metaRow{display:grid;grid-template-columns:1fr auto auto;gap:16px;align-items:center;color:#d8c9ad;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+  .timer{font-variant-numeric:tabular-nums;font-size:13px;color:#d7e0d7;min-width:54px;text-align:right;transition:color .25s,text-shadow .25s}
+  .timer.warn{color:#e7c371;text-shadow:0 0 10px rgba(231,195,113,.18)}
+  .timer.urgent{color:#e89a78;text-shadow:0 0 12px rgba(232,154,120,.25)}
+  .definition{font-family:Georgia,"Times New Roman",serif;font-size:clamp(23px,2.15vw,36px);line-height:1.18;font-weight:400;color:#f7efe0;margin:18px 0 16px;min-height:88px;display:flex;align-items:center}
+  .answerRow{display:flex;gap:10px}
+  #answer{flex:1;border-radius:12px;border:1px solid rgba(232,218,185,.26);background:rgba(245,237,220,.075);color:#fff8e9;outline:none;padding:14px 15px;font-size:18px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+  #answer::placeholder{color:rgba(238,230,214,.43)}
+  #answer:focus{border-color:rgba(220,194,132,.58);box-shadow:0 0 0 3px rgba(190,158,94,.09)}
+  .submit{border:1px solid rgba(230,210,165,.32);background:linear-gradient(#b59b66,#897447);color:#17130d;padding:0 18px;border-radius:12px;font-weight:700;letter-spacing:.04em}
+  .submit:disabled,#answer:disabled{opacity:.45;cursor:not-allowed}
+  .feedback{height:25px;margin-top:9px;font-size:13px;letter-spacing:.02em;color:#d5c6a9}
+  .feedback.good{color:#c9dfc5}.feedback.bad{color:#efb293}
+  .credRow{margin-top:6px;display:flex;justify-content:space-between;align-items:center;color:#c8baa1;font-size:11px;letter-spacing:.11em;text-transform:uppercase}
+  .credValue{font-variant-numeric:tabular-nums;color:#f1e6d2}
+  .meter{height:8px;margin-top:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+  .meterFill{height:100%;width:100%;background:linear-gradient(90deg,#8f805d,#d4c08c);border-radius:999px;transition:width .65s cubic-bezier(.22,.8,.22,1),filter .3s}
+  .meterFill.low{filter:saturate(.7) brightness(.85)}
+
+  /* ===================== OVERLAYS ===================== */
+  .overlay{position:absolute;z-index:50;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,8,12,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);transition:opacity .8s ease}
+  .overlay.hidden{opacity:0;pointer-events:none}
+  .card{width:min(690px,88vw);background:linear-gradient(135deg,rgba(12,17,23,.88),rgba(18,23,28,.72));border:1px solid rgba(228,211,170,.24);border-radius:20px;box-shadow:0 28px 90px rgba(0,0,0,.46);padding:30px 30px 27px;text-align:left}
+  .card .kicker{font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:var(--ui-gold)}
+  .card h2{font-family:Georgia,"Times New Roman",serif;font-weight:500;font-size:clamp(34px,5vw,62px);margin:6px 0 10px;color:#f6eddf}
+  .card p{color:#cfc3af;line-height:1.55;margin:0 0 18px}
+  .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 22px}
+  .rule{border:1px solid rgba(229,211,169,.13);background:rgba(255,255,255,.035);border-radius:12px;padding:12px;color:#cfc1a8;font-size:12px;line-height:1.42}
+  .rule strong{display:block;color:#f0e5d2;font-size:15px;margin-bottom:2px}
+  .primary{border:0;border-radius:12px;background:linear-gradient(#d0bb89,#9a824f);color:#16130e;font-weight:800;padding:13px 18px;letter-spacing:.05em;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .secondary{border:1px solid rgba(228,211,170,.22);border-radius:12px;background:rgba(255,255,255,.04);color:#eee4d4;padding:12px 16px;margin-left:8px}
+  .endStats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+  .stat{background:rgba(255,255,255,.04);border:1px solid rgba(228,211,170,.12);border-radius:12px;padding:12px}
+  .stat span{display:block;color:#a99d87;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}.stat b{font-size:21px;font-weight:600;color:#f3eadb}
+  .review{max-height:180px;overflow:auto;margin:12px 0 18px;padding-right:6px}.reviewItem{padding:9px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px;color:#c8bca9}.reviewItem b{color:#efe5d3}
+
+  .failureVignette{position:absolute;z-index:45;inset:0;pointer-events:none;background:radial-gradient(circle at 58% 35%,transparent 0 26%,rgba(3,5,7,.12) 55%,rgba(0,0,0,.48) 100%);opacity:0;transition:opacity 2.2s ease}
+  #game.failed .failureVignette{opacity:1}
+  #game.failed{--room-brightness:.45;--room-sat:.62}
+  #game.failed .ceilingLight{opacity:.12}
+  #game.failed .backgroundFigure{animation-play-state:paused}
+
+  .failureTitle{position:absolute;z-index:49;left:50%;top:46%;transform:translate(-50%,-50%);text-align:center;opacity:0;pointer-events:none;transition:opacity 1.4s ease 1.35s;text-shadow:0 4px 35px rgba(0,0,0,.8)}
+  #game.failed .failureTitle{opacity:1}
+  .failureTitle .small{font-size:11px;letter-spacing:.26em;text-transform:uppercase;color:#b8aa94}.failureTitle .big{font-family:Georgia,"Times New Roman",serif;font-size:clamp(34px,4.5vw,66px);color:#e8dfd0;margin-top:7px}
+
+  @media(max-width:900px){
+    #game{min-height:560px}
+    .windowWall{left:3%;right:3%}
+    .quizWrap{justify-content:center;padding:0 0 1vh}
+    .panel{width:min(94vw,650px);min-width:0}
+    .brand h1{font-size:25px}
+    .rules{grid-template-columns:1fr}
+    .executive{left:59%;width:9%;height:18%;bottom:27%}
+    .backgroundFigure{display:none}
+  }
+  @media(max-width:600px){
+    .hud{padding:14px}
+    .brand .eyebrow{font-size:9px}.brand h1{font-size:21px}
+    .glassBtn{padding:8px 10px;font-size:11px}
+    .panel{padding:14px;border-radius:14px}
+    .metaRow{gap:8px;font-size:9px}.definition{font-size:23px;min-height:78px;margin:13px 0}
+    #answer{font-size:16px;padding:12px}.submit{padding:0 13px}
+    .endStats{grid-template-columns:1fr 1fr}
+    .windowWall{bottom:28%}.city{bottom:26%}.floor{height:37%}
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="sky"></div>
+  <div class="haze"></div>
+  <div class="river"></div>
+
+  <div class="city far" aria-hidden="true">
+    <div class="tower" style="left:2%;width:5%;height:34%"></div>
+    <div class="tower" style="left:8%;width:4%;height:29%"></div>
+    <div class="tower" style="left:14%;width:7%;height:42%"></div>
+    <div class="tower" style="left:23%;width:4%;height:31%"></div>
+    <div class="tower" style="left:30%;width:6%;height:38%"></div>
+    <div class="tower" style="left:39%;width:3.8%;height:28%"></div>
+    <div class="tower" style="left:44%;width:6%;height:46%"></div>
+    <div class="tower" style="left:53%;width:5%;height:33%"></div>
+    <div class="tower" style="left:60%;width:4%;height:40%"></div>
+    <div class="tower" style="left:68%;width:6%;height:35%"></div>
+    <div class="tower" style="left:77%;width:4%;height:30%"></div>
+    <div class="tower" style="left:84%;width:7%;height:43%"></div>
+    <div class="tower" style="left:93%;width:5%;height:36%"></div>
+  </div>
+  <div class="city mid" aria-hidden="true">
+    <div class="tower" style="left:-1%;width:9%;height:48%"></div>
+    <div class="tower" style="left:10%;width:7%;height:58%"></div>
+    <div class="tower" style="left:19%;width:6%;height:43%"></div>
+    <div class="tower" style="left:27%;width:9%;height:67%"></div>
+    <div class="tower" style="left:39%;width:7%;height:51%"></div>
+    <div class="tower" style="left:49%;width:9%;height:62%"></div>
+    <div class="tower" style="left:61%;width:6%;height:47%"></div>
+    <div class="tower" style="left:70%;width:9%;height:69%"></div>
+    <div class="tower" style="left:82%;width:6%;height:52%"></div>
+    <div class="tower" style="left:91%;width:9%;height:60%"></div>
+  </div>
+  <div class="city near" aria-hidden="true">
+    <div class="tower" style="left:-4%;width:13%;height:82%"></div>
+    <div class="tower" style="left:16%;width:10%;height:73%"></div>
+    <div class="tower" style="left:80%;width:11%;height:80%"></div>
+    <div class="tower" style="left:94%;width:10%;height:68%"></div>
+  </div>
+  <div class="aircraft" style="top:22%;left:-5%"></div>
+  <div class="aircraft a2"></div>
+
+  <div class="windowWall">
+    <div class="horizonBar"></div>
+    <div class="mullion m1"></div><div class="mullion m2"></div><div class="mullion m3"></div><div class="mullion m4"></div><div class="mullion m5"></div>
+  </div>
+
+  <div class="room">
+    <div class="ceiling"></div>
+    <div class="ceilingInset"></div>
+    <div class="ceilingLight cl1"></div><div class="ceilingLight cl2"></div>
+    <div class="leftWall"></div><div class="rightWall"></div><div class="wallPanel"></div>
+    <div class="floor"></div><div class="rug"></div>
+    <div class="tableEdge"></div><div class="tableTop"></div>
+
+    <div class="chair c1"></div><div class="chair c2"></div><div class="chair c3"></div><div class="chair c4"></div>
+    <div class="chair c5"></div><div class="chair c6"></div><div class="chair c7"></div><div class="chair c8"></div>
+
+    <div class="backgroundFigure f1"><div class="fhead"></div><div class="fbody"></div></div>
+    <div class="backgroundFigure f2"><div class="fhead"></div><div class="fbody"></div></div>
+
+    <div id="executive" class="executive active" aria-hidden="true">
+      <div class="body"></div><div class="shirt"></div><div class="tie"></div>
+      <div class="arm left"></div><div class="arm right"></div><div class="hand left"></div><div class="hand right"></div>
+      <div class="head"></div><div class="hair"></div>
+    </div>
+    <div class="papers"></div><div class="tablet"></div><div class="carafe"></div>
+  </div>
+
+  <div class="hud">
+    <div class="topbar">
+      <div class="brand"><div class="eyebrow">Executive Vocabulary Simulation</div><h1>STRATEGY COMMAND</h1></div>
+      <div class="utility"><button id="soundBtn" class="glassBtn" type="button">Sound: On</button><button id="restartBtn" class="glassBtn" type="button">Restart</button></div>
+    </div>
+
+    <div class="quizWrap">
+      <section id="panel" class="panel" aria-live="polite">
+        <div class="metaRow"><span id="briefing">Board Briefing 01 / 30</span><span id="difficulty">Medium</span><span id="timer" class="timer">0.0s</span></div>
+        <div id="definition" class="definition">Press Start to begin the board briefing.</div>
+        <div class="answerRow">
+          <input id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the business term…" disabled />
+          <button id="submitBtn" class="submit" type="button" disabled>Submit</button>
+        </div>
+        <div id="feedback" class="feedback"></div>
+        <div class="credRow"><span>Executive Credibility</span><span id="credValue" class="credValue">100%</span></div>
+        <div class="meter"><div id="meterFill" class="meterFill"></div></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="failureVignette"></div>
+  <div class="failureTitle"><div class="small">Strategy Command</div><div class="big">BOARD CONFIDENCE LOST</div></div>
+
+  <div id="startOverlay" class="overlay">
+    <div class="card">
+      <div class="kicker">Private Board Briefing</div>
+      <h2>Strategy Command</h2>
+      <p>Thirty strategic business concepts. Type the term that matches each definition and maintain Executive Credibility through the entire briefing.</p>
+      <div class="rules">
+        <div class="rule"><strong>15 seconds</strong>The clock counts upward. A response submitted within 10 seconds earns +10 credibility.</div>
+        <div class="rule"><strong>One attempt</strong>A wrong answer or timeout moves immediately to the next briefing after showing the correct term.</div>
+        <div class="rule"><strong>0% ends the run</strong>Easy terms cost 30%, medium 25%, hard 20%.</div>
+      </div>
+      <button id="startBtn" class="primary" type="button">Begin Briefing</button>
+    </div>
+  </div>
+
+  <div id="endOverlay" class="overlay hidden">
+    <div class="card">
+      <div id="endKicker" class="kicker">Board Session Complete</div>
+      <h2 id="endTitle">Briefing Complete</h2>
+      <p id="endText"></p>
+      <div class="endStats">
+        <div class="stat"><span>Correct</span><b id="statCorrect">0 / 30</b></div>
+        <div class="stat"><span>Accuracy</span><b id="statAccuracy">0%</b></div>
+        <div class="stat"><span>Credibility</span><b id="statCred">0%</b></div>
+      </div>
+      <div id="reviewWrap">
+        <div class="kicker" style="margin-top:8px">Missed Terms</div>
+        <div id="review" class="review"></div>
+      </div>
+      <button id="playAgainBtn" class="primary" type="button">Run Briefing Again</button>
+      <button id="closeReviewBtn" class="secondary" type="button">Return to Room</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const BANK = [
+    {term:'TAM',def:'Total addressable market.',difficulty:'easy'},
+    {term:'SAM',def:'Portion of TAM a firm can serve.',difficulty:'medium'},
+    {term:'SOM',def:'Portion realistically obtainable.',difficulty:'medium'},
+    {term:'Value proposition',def:'Why customers should choose the offering.',difficulty:'easy'},
+    {term:'Unit economics',def:'Profitability of one customer or unit.',difficulty:'medium'},
+    {term:'CAC',def:'Cost to acquire one customer.',difficulty:'medium'},
+    {term:'LTV',def:'Expected lifetime value of a customer.',difficulty:'medium'},
+    {term:'Churn',def:'Rate at which customers leave.',difficulty:'easy'},
+    {term:'ARR',def:'Annual recurring revenue.',difficulty:'medium'},
+    {term:'Gross margin',def:'Revenue remaining after direct costs.',difficulty:'easy'},
+    {term:'EBITDA',def:'Earnings before interest, taxes, depreciation, amortization.',difficulty:'hard'},
+    {term:'Burn rate',def:'Rate at which cash is spent.',difficulty:'easy'},
+    {term:'Runway',def:'Time until available cash is exhausted.',difficulty:'easy'},
+    {term:'Cap table',def:'Record of company ownership.',difficulty:'medium'},
+    {term:'Dilution',def:'Reduction in an owner’s percentage stake.',difficulty:'medium'},
+    {term:'Moat',def:'Durable competitive advantage.',difficulty:'easy'},
+    {term:'Product-market fit',def:'Strong alignment between product and demand.',difficulty:'medium'},
+    {term:'Go-to-market',def:'Strategy for reaching and selling to customers.',difficulty:'medium'},
+    {term:'Conversion funnel',def:'Stages turning prospects into customers.',difficulty:'medium'},
+    {term:'KPI',def:'Key performance indicator.',difficulty:'easy'},
+    {term:'OKR',def:'Objective paired with measurable key results.',difficulty:'medium'},
+    {term:'Benchmarking',def:'Comparing performance against a reference standard.',difficulty:'easy'},
+    {term:'Vertical integration',def:'Controlling additional supply-chain stages.',difficulty:'hard'},
+    {term:'Horizontal integration',def:'Combining with competitors at the same stage.',difficulty:'hard'},
+    {term:'Economies of scope',def:'Savings from producing related products together.',difficulty:'hard'},
+    {term:'Working capital',def:'Short-term operating assets minus liabilities.',difficulty:'hard'},
+    {term:'Cash flow',def:'Movement of cash into and out of a business.',difficulty:'easy'},
+    {term:'Leverage',def:'Use of debt to amplify financial exposure.',difficulty:'hard'},
+    {term:'Due diligence',def:'Investigation before a major transaction.',difficulty:'easy'},
+    {term:'Stakeholder',def:'Party affected by an organization’s actions.',difficulty:'easy'}
+  ];
+
+  const PENALTY = { easy:30, medium:25, hard:20 };
+  const $ = s => document.querySelector(s);
+  const game = $('#game'), executive = $('#executive'), panel = $('#panel');
+  const startOverlay = $('#startOverlay'), endOverlay = $('#endOverlay');
+  const startBtn = $('#startBtn'), submitBtn = $('#submitBtn'), answer = $('#answer');
+  const definition = $('#definition'), timerEl = $('#timer'), briefingEl = $('#briefing'), diffEl = $('#difficulty');
+  const feedback = $('#feedback'), credValue = $('#credValue'), meterFill = $('#meterFill');
+  const soundBtn = $('#soundBtn'), restartBtn = $('#restartBtn');
+  const playAgainBtn = $('#playAgainBtn'), closeReviewBtn = $('#closeReviewBtn');
+
+  let deck = [], index = 0, credibility = 100, correct = 0, missed = [];
+  let roundStart = 0, tickHandle = null, locked = true, gameOver = false;
+  let soundOn = true, audioCtx = null, ambienceTimer = null;
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]]}
+    return arr;
+  }
+
+  function normalize(str){
+    return str
+      .toLowerCase()
+      .replace(/&/g,'and')
+      .replace(/[’']/g,'')
+      .replace(/[^a-z0-9]+/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function acceptedAnswer(input, term){
+    const a = normalize(input), b = normalize(term);
+    if(a === b) return true;
+    const aliases = {
+      'product market fit':['pmf'],
+      'go to market':['gtm'],
+      'customer acquisition cost':['cac'],
+      'lifetime value':['ltv'],
+      'annual recurring revenue':['arr'],
+      'key performance indicator':['kpi'],
+      'objectives and key results':['okr'],
+      'total addressable market':['tam'],
+      'serviceable addressable market':['sam'],
+      'serviceable obtainable market':['som']
+    };
+    for(const [canonical,list] of Object.entries(aliases)){
+      if(b===canonical && list.includes(a)) return true;
+      if(list.includes(b) && a===canonical) return true;
+    }
+    return false;
+  }
+
+  function ensureAudio(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function tone(freq=440,dur=.08,gain=.025,type='sine'){
+    if(!soundOn) return;
+    ensureAudio();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type=type;o.frequency.value=freq;g.gain.value=0;
+    o.connect(g);g.connect(audioCtx.destination);
+    const now=audioCtx.currentTime;
+    g.gain.linearRampToValueAtTime(gain,now+.008);
+    g.gain.exponentialRampToValueAtTime(.0001,now+dur);
+    o.start(now);o.stop(now+dur+.02);
+  }
+
+  function noiseBurst(dur=.11,gain=.012,highpass=900){
+    if(!soundOn) return;
+    ensureAudio();
+    const sr=audioCtx.sampleRate, len=Math.floor(sr*dur), buf=audioCtx.createBuffer(1,len,sr), data=buf.getChannelData(0);
+    for(let i=0;i<len;i++) data[i]=(Math.random()*2-1)*(1-i/len);
+    const src=audioCtx.createBufferSource(), filter=audioCtx.createBiquadFilter(), g=audioCtx.createGain();
+    src.buffer=buf;filter.type='highpass';filter.frequency.value=highpass;g.gain.value=gain;
+    src.connect(filter);filter.connect(g);g.connect(audioCtx.destination);src.start();
+  }
+
+  function pageRustle(){
+    if(!soundOn || gameOver) return;
+    noiseBurst(.18,.008,1200);
+    setTimeout(()=>noiseBurst(.12,.005,1500),65);
+  }
+
+  function scheduleAmbience(){
+    clearTimeout(ambienceTimer);
+    if(gameOver) return;
+    const delay = 11000 + Math.random()*17000;
+    ambienceTimer = setTimeout(()=>{
+      if(soundOn && !gameOver && !locked && Math.random() < .72) pageRustle();
+      scheduleAmbience();
+    },delay);
+  }
+
+  function setCredibility(v){
+    credibility = Math.max(0,Math.min(100,Math.round(v)));
+    credValue.textContent = credibility + '%';
+    meterFill.style.width = credibility + '%';
+    meterFill.classList.toggle('low',credibility<=30);
+  }
+
+  function updateTimer(){
+    if(locked) return;
+    const elapsed = (performance.now()-roundStart)/1000;
+    timerEl.textContent = elapsed.toFixed(1)+'s';
+    timerEl.className='timer' + (elapsed>10 ? ' urgent' : elapsed>=8 ? ' warn' : '');
+    if(elapsed>=15){
+      timerEl.textContent='15.0s';
+      failRound('timeout');
+    }
+  }
+
+  function loadRound(){
+    if(gameOver) return;
+    if(index>=deck.length){finish(false);return;}
+    locked=false;
+    const q=deck[index];
+    briefingEl.textContent=`Board Briefing ${String(index+1).padStart(2,'0')} / ${deck.length}`;
+    diffEl.textContent=q.difficulty[0].toUpperCase()+q.difficulty.slice(1);
+    definition.textContent=q.def;
+    answer.value='';answer.disabled=false;submitBtn.disabled=false;answer.focus();
+    feedback.textContent='';feedback.className='feedback';
+    timerEl.textContent='0.0s';timerEl.className='timer';
+    roundStart=performance.now();
+    clearInterval(tickHandle);tickHandle=setInterval(updateTimer,50);
+  }
+
+  function nextRound(delay=980){
+    locked=true;answer.disabled=true;submitBtn.disabled=true;clearInterval(tickHandle);
+    setTimeout(()=>{index++;loadRound();},delay);
+  }
+
+  function submit(){
+    if(locked || gameOver) return;
+    const typed=answer.value.trim();
+    if(!typed) return;
+    const elapsed=(performance.now()-roundStart)/1000;
+    const q=deck[index];
+    if(acceptedAnswer(typed,q.term)){
+      locked=true;clearInterval(tickHandle);answer.disabled=true;submitBtn.disabled=true;correct++;
+      if(elapsed<=10){setCredibility(credibility+10);feedback.textContent='Decisive answer — +10 credibility';}
+      else{feedback.textContent='Briefing accepted.';}
+      feedback.className='feedback good';
+      tone(660,.08,.018,'sine');setTimeout(()=>tone(880,.09,.014,'sine'),55);
+      nextRound(900);
+    } else {
+      failRound('wrong');
+    }
+  }
+
+  function failRound(reason){
+    if(locked || gameOver) return;
+    locked=true;clearInterval(tickHandle);answer.disabled=true;submitBtn.disabled=true;
+    const q=deck[index], loss=PENALTY[q.difficulty];
+    missed.push({term:q.term,def:q.def,reason});
+    setCredibility(credibility-loss);
+    feedback.textContent=(reason==='timeout'?'Time expired. ':'Incorrect. ') + `Correct term: ${q.term}  (−${loss}%)`;
+    feedback.className='feedback bad';
+    tone(180,.16,.018,'triangle');
+    if(credibility<=0){
+      failGame();
+    }else{
+      nextRound(1450);
+    }
+  }
+
+  function failGame(){
+    gameOver=true;locked=true;clearInterval(tickHandle);clearTimeout(ambienceTimer);
+    executive.classList.remove('active');
+    executive.classList.add('sigh');
+    panel.classList.add('dimmed');
+    game.classList.add('failed');
+    answer.disabled=true;submitBtn.disabled=true;
+    if(soundOn){
+      setTimeout(()=>noiseBurst(.22,.006,650),350);
+      setTimeout(()=>tone(95,.55,.010,'sine'),520);
+    }
+    setTimeout(()=>finish(true),3200);
+  }
+
+  function rank(){
+    const acc=correct/Math.max(1,index + (gameOver?1:0));
+    if(!gameOver && correct>=27) return 'Boardroom Expert';
+    if(!gameOver && correct>=23) return 'Executive Operator';
+    if(acc>=.7) return 'Senior Analyst';
+    if(acc>=.5) return 'Strategy Associate';
+    return 'Market Intern';
+  }
+
+  function finish(failed){
+    clearInterval(tickHandle);clearTimeout(ambienceTimer);
+    const attempted = failed ? index+1 : deck.length;
+    const accuracy = Math.round((correct/Math.max(1,attempted))*100);
+    $('#statCorrect').textContent=`${correct} / ${attempted}`;
+    $('#statAccuracy').textContent=accuracy+'%';
+    $('#statCred').textContent=credibility+'%';
+    $('#endKicker').textContent=failed?'Run Terminated':'Board Session Complete';
+    $('#endTitle').textContent=failed?'Board Confidence Lost':rank();
+    $('#endText').textContent=failed
+      ? 'Executive Credibility reached 0%. The briefing ended before all thirty concepts were completed.'
+      : `You completed all thirty briefings with ${credibility}% Executive Credibility remaining.`;
+
+    const review=$('#review'), wrap=$('#reviewWrap');
+    review.innerHTML='';
+    if(!missed.length){
+      wrap.style.display='none';
+    }else{
+      wrap.style.display='block';
+      missed.forEach(m=>{
+        const div=document.createElement('div');div.className='reviewItem';
+        div.innerHTML=`<b>${m.term}</b> — ${m.def}`;
+        review.appendChild(div);
+      });
+    }
+
+    const bestKey='strategyCommandBestAccuracy';
+    const prev=Number(localStorage.getItem(bestKey)||0);
+    if(accuracy>prev) localStorage.setItem(bestKey,String(accuracy));
+    endOverlay.classList.remove('hidden');
+  }
+
+  function resetScene(){
+    game.classList.remove('failed');panel.classList.remove('dimmed');executive.classList.remove('sigh');executive.classList.add('active');
+  }
+
+  function startGame(){
+    ensureAudio();
+    resetScene();
+    deck=shuffle(BANK.map(x=>({...x})));
+    index=0;correct=0;missed=[];gameOver=false;locked=true;setCredibility(100);
+    startOverlay.classList.add('hidden');endOverlay.classList.add('hidden');
+    tone(440,.08,.014);setTimeout(()=>tone(660,.11,.012),85);
+    setTimeout(loadRound,320);
+    scheduleAmbience();
+  }
+
+  function hardRestart(){
+    clearInterval(tickHandle);clearTimeout(ambienceTimer);startGame();
+  }
+
+  startBtn.addEventListener('click',startGame);
+  submitBtn.addEventListener('click',submit);
+  answer.addEventListener('keydown',e=>{if(e.key==='Enter') submit();});
+  restartBtn.addEventListener('click',hardRestart);
+  playAgainBtn.addEventListener('click',hardRestart);
+  closeReviewBtn.addEventListener('click',()=>endOverlay.classList.add('hidden'));
+  soundBtn.addEventListener('click',()=>{
+    soundOn=!soundOn;
+    soundBtn.textContent='Sound: '+(soundOn?'On':'Off');
+    if(soundOn){ensureAudio();tone(520,.06,.012);}
+  });
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden && !locked && !gameOver){
+      // Keep the clock fair: restart the current 15-second window after tabbing back.
+      roundStart=performance.now();
+    }
+  });
+})();
+</script>
+</body>
+</html>
