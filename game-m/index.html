@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weatherman Potential — Stormlands Meteorology Quiz</title>
+<style>
+  :root {
+    --potential: 50;
+    --storm: 0;
+    --panel: rgba(12, 18, 28, 0.78);
+    --panel-border: rgba(255,255,255,0.15);
+    --text: #f4f7fb;
+    --muted: #c6d0df;
+    --accent: #e6edf7;
+    --good: #d5f5df;
+    --bad: #ffd7d7;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
+    background: #10151f;
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  button, input { font: inherit; }
+
+  .game-shell {
+    position: relative;
+    min-height: 100vh;
+    isolation: isolate;
+    overflow: hidden;
+    background:
+      linear-gradient(to bottom,
+        hsl(calc(217 - var(--storm) * .05), 33%, calc(25% - var(--storm) * .08%)) 0%,
+        hsl(215, 29%, calc(18% - var(--storm) * .06%)) 34%,
+        hsl(217, 22%, 13%) 62%,
+        #202a1f 63%,
+        #2f3b26 100%);
+    transition: filter 700ms ease, background 700ms ease;
+  }
+
+  .game-shell.bad-pulse { animation: badPulse 900ms ease; }
+  .game-shell.good-pulse { animation: goodPulse 900ms ease; }
+
+  @keyframes badPulse {
+    0%,100% { filter: brightness(1); }
+    40% { filter: brightness(.76) saturate(.82); }
+  }
+
+  @keyframes goodPulse {
+    0%,100% { filter: brightness(1); }
+    45% { filter: brightness(1.11) saturate(1.04); }
+  }
+
+  .sky-glow {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 54vh;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 72% 24%, rgba(255,255,255,.08), transparent 18%),
+      radial-gradient(circle at 30% 22%, rgba(188,202,224,.08), transparent 25%);
+    opacity: calc(.8 - var(--storm) * .004);
+  }
+
+  .cloud-layer {
+    position: absolute;
+    inset: -5vh -20vw auto -20vw;
+    height: 49vh;
+    pointer-events: none;
+    opacity: calc(.74 + var(--storm) * .0025);
+    filter: blur(1px);
+  }
+
+  .cloud {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, rgba(112,123,142,.88), rgba(46,53,67,.96) 62%, rgba(23,28,37,.96));
+    box-shadow: 0 15px 35px rgba(0,0,0,.2);
+  }
+
+  .cloud.c1 { width: 35vw; height: 14vw; min-height: 110px; top: 8%; left: 1%; animation: drift 28s linear infinite alternate; }
+  .cloud.c2 { width: 42vw; height: 16vw; min-height: 130px; top: 0; left: 31%; animation: drift2 32s linear infinite alternate; }
+  .cloud.c3 { width: 33vw; height: 14vw; min-height: 110px; top: 15%; left: 65%; animation: drift 24s linear infinite alternate-reverse; }
+  .cloud.c4 { width: 30vw; height: 12vw; min-height: 95px; top: 32%; left: 18%; opacity: .84; animation: drift2 36s linear infinite alternate-reverse; }
+  .cloud.c5 { width: 31vw; height: 12vw; min-height: 95px; top: 34%; left: 53%; opacity: .84; animation: drift 34s linear infinite alternate; }
+
+  @keyframes drift { from { transform: translateX(-2vw); } to { transform: translateX(4vw); } }
+  @keyframes drift2 { from { transform: translateX(2vw); } to { transform: translateX(-4vw); } }
+
+  .lightning {
+    position: absolute;
+    width: 3px;
+    height: 0;
+    top: 18vh;
+    left: 77%;
+    opacity: 0;
+    background: #f6fbff;
+    transform: rotate(9deg);
+    box-shadow: 0 0 12px #fff, 0 0 30px rgba(210,232,255,.75);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .lightning::before,
+  .lightning::after {
+    content: "";
+    position: absolute;
+    width: 3px;
+    background: inherit;
+    box-shadow: inherit;
+  }
+  .lightning::before { height: 52px; top: 48px; left: -13px; transform: rotate(27deg); }
+  .lightning::after { height: 48px; top: 89px; left: -2px; transform: rotate(-19deg); }
+
+  .lightning.flash { animation: flash 650ms ease-out; }
+  @keyframes flash {
+    0%, 100% { opacity: 0; height: 0; }
+    8% { opacity: 1; height: 66px; }
+    18% { opacity: 0; }
+    26% { opacity: .95; height: 68px; }
+    45% { opacity: 0; }
+  }
+
+  .rain {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    opacity: calc(.13 + var(--storm) * .0055);
+    overflow: hidden;
+  }
+
+  .drop {
+    position: absolute;
+    width: 1px;
+    height: 18px;
+    background: linear-gradient(to bottom, transparent, rgba(210,227,242,.9));
+    transform: rotate(10deg);
+    animation: rainFall linear infinite;
+  }
+
+  @keyframes rainFall {
+    from { transform: translate3d(0,-22vh,0) rotate(10deg); }
+    to { transform: translate3d(-8vw,112vh,0) rotate(10deg); }
+  }
+
+  .horizon {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 41vh;
+    pointer-events: none;
+    z-index: 4;
+    overflow: hidden;
+  }
+
+  .distant-haze {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 8vh;
+    background: linear-gradient(to bottom, rgba(187,199,196,.06), transparent);
+  }
+
+  .grass-field {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 86%, rgba(185,167,87,.12), transparent 20%),
+      radial-gradient(ellipse at 67% 82%, rgba(177,147,82,.10), transparent 23%),
+      linear-gradient(to bottom, #303d29 0%, #283321 46%, #202b1d 100%);
+  }
+
+  .blade {
+    position: absolute;
+    bottom: -3px;
+    width: 2px;
+    height: var(--h);
+    background: linear-gradient(to top, #182017, #62704d 84%, #7f8c62);
+    transform-origin: bottom center;
+    border-radius: 100% 100% 0 0;
+    animation: sway var(--dur) ease-in-out infinite alternate;
+    opacity: .94;
+  }
+
+  @keyframes sway {
+    from { transform: rotate(calc(-4deg - var(--storm) * .035deg)); }
+    to { transform: rotate(calc(8deg + var(--storm) * .06deg)); }
+  }
+
+  .flower {
+    position: absolute;
+    bottom: var(--bottom);
+    left: var(--left);
+    width: 4px;
+    height: var(--stem);
+    background: #536344;
+    transform-origin: bottom center;
+    animation: flowerSway 2.8s ease-in-out infinite alternate;
+  }
+
+  .flower::before {
+    content: "";
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    left: -4px;
+    top: -6px;
+    border-radius: 50%;
+    background: var(--petal);
+    box-shadow:
+      6px 0 var(--petal),
+      -6px 0 var(--petal),
+      0 6px var(--petal),
+      0 -6px var(--petal);
+    opacity: .92;
+  }
+
+  @keyframes flowerSway {
+    from { transform: rotate(-3deg); }
+    to { transform: rotate(calc(7deg + var(--storm) * .04deg)); }
+  }
+
+  .vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    background: radial-gradient(circle at 50% 45%, transparent 42%, rgba(3,6,10,.46) 100%);
+  }
+
+  .ui {
+    position: relative;
+    z-index: 10;
+    width: min(920px, calc(100% - 28px));
+    margin: 0 auto;
+    padding: 24px 0 34px;
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 14px;
+  }
+
+  .brand {
+    text-shadow: 0 2px 16px rgba(0,0,0,.45);
+  }
+
+  .brand h1 {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    letter-spacing: .02em;
+    font-weight: 600;
+  }
+
+  .brand p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: .94rem;
+  }
+
+  .sound-note {
+    align-self: center;
+    padding: 8px 10px;
+    border: 1px solid var(--panel-border);
+    border-radius: 999px;
+    background: rgba(10,16,24,.52);
+    color: #d5deea;
+    font-size: .78rem;
+    backdrop-filter: blur(10px);
+  }
+
+  .hud {
+    display: grid;
+    grid-template-columns: 1.45fr .8fr .8fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .hud-card,
+  .quiz-card,
+  .intro-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 18px 50px rgba(0,0,0,.25);
+    backdrop-filter: blur(14px);
+  }
+
+  .hud-card {
+    border-radius: 16px;
+    padding: 12px 14px;
+  }
+
+  .hud-label {
+    display: block;
+    color: #b9c5d4;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    margin-bottom: 5px;
+  }
+
+  .hud-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .potential-row {
+    display: flex;
+    gap: 11px;
+    align-items: center;
+  }
+
+  .potential-row .hud-value { min-width: 54px; }
+
+  .meter {
+    height: 9px;
+    flex: 1;
+    border-radius: 999px;
+    background: rgba(255,255,255,.11);
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    width: 50%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #b9cbd6, #f4f7f8);
+    box-shadow: 0 0 18px rgba(220,238,245,.28);
+    transition: width 500ms ease;
+  }
+
+  .quiz-card {
+    border-radius: 22px;
+    padding: clamp(18px, 4vw, 30px);
+    min-height: 370px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .question-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: #b7c3d2;
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 12px;
+  }
+
+  .difficulty {
+    border: 1px solid rgba(255,255,255,.15);
+    padding: 4px 8px;
+    border-radius: 999px;
+    text-transform: none;
+    letter-spacing: .03em;
+  }
+
+  .definition {
+    margin: 0;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.35rem, 3.2vw, 2.2rem);
+    line-height: 1.24;
+    font-weight: 500;
+    text-wrap: balance;
+  }
+
+  .prompt {
+    margin: 15px 0 16px;
+    color: #c4ceda;
+    font-size: .92rem;
+  }
+
+  .answer-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 9px;
+  }
+
+  .answer-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 13px;
+    background: rgba(0,0,0,.28);
+    color: #fff;
+    padding: 13px 14px;
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .answer-input:focus {
+    border-color: rgba(239,247,255,.62);
+    box-shadow: 0 0 0 3px rgba(239,247,255,.08);
+  }
+
+  .answer-input::placeholder { color: #8491a1; }
+
+  .submit-btn,
+  .start-btn,
+  .restart-btn {
+    border: 1px solid rgba(255,255,255,.23);
+    border-radius: 13px;
+    background: linear-gradient(to bottom, rgba(255,255,255,.19), rgba(255,255,255,.09));
+    color: #fff;
+    padding: 12px 18px;
+    cursor: pointer;
+    font-weight: 700;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+  }
+
+  .submit-btn:hover,
+  .start-btn:hover,
+  .restart-btn:hover { background: linear-gradient(to bottom, rgba(255,255,255,.25), rgba(255,255,255,.11)); }
+  .submit-btn:disabled { opacity: .45; cursor: default; }
+
+  .timebar {
+    height: 5px;
+    margin-top: 15px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.10);
+    overflow: hidden;
+  }
+
+  .timebar-fill {
+    height: 100%;
+    width: 100%;
+    background: rgba(231,239,248,.9);
+    transform-origin: left center;
+  }
+
+  .feedback {
+    min-height: 24px;
+    margin-top: 12px;
+    font-size: .94rem;
+    font-weight: 650;
+  }
+
+  .feedback.good { color: var(--good); }
+  .feedback.bad { color: var(--bad); }
+
+  .intro-overlay,
+  .end-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(5,8,12,.48);
+    backdrop-filter: blur(6px);
+  }
+
+  .intro-card,
+  .end-card {
+    width: min(660px, 100%);
+    border-radius: 24px;
+    padding: clamp(22px, 5vw, 38px);
+  }
+
+  .intro-card h2,
+  .end-card h2 {
+    margin: 0 0 10px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.8rem, 5vw, 3rem);
+    font-weight: 600;
+  }
+
+  .intro-card p,
+  .end-card p {
+    color: #ccd5e0;
+    line-height: 1.58;
+  }
+
+  .rules {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 9px;
+    margin: 18px 0 22px;
+  }
+
+  .rule {
+    padding: 12px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,255,255,.1);
+    color: #dbe3ed;
+    font-size: .9rem;
+  }
+
+  .rule strong { color: #fff; display: block; margin-bottom: 3px; }
+
+  .hidden { display: none !important; }
+
+  .tornado-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    pointer-events: none;
+    overflow: hidden;
+    display: none;
+  }
+
+  .tornado-wrap.active { display: block; animation: cameraShake 2.1s 2.2s ease-in-out forwards; }
+
+  .tornado {
+    position: absolute;
+    left: 68%;
+    top: 36%;
+    width: 110px;
+    height: 270px;
+    opacity: 0;
+    filter: blur(.3px);
+    animation: tornadoApproach 3.8s cubic-bezier(.22,.72,.22,1) forwards;
+  }
+
+  .tornado::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(13% 0, 93% 1%, 81% 18%, 70% 34%, 63% 49%, 54% 66%, 52% 78%, 44% 100%, 29% 100%, 35% 79%, 28% 62%, 35% 44%, 27% 25%);
+    background:
+      repeating-linear-gradient(165deg, rgba(62,68,71,.94) 0 10px, rgba(111,114,113,.88) 10px 19px, rgba(42,47,51,.95) 19px 31px);
+    box-shadow: 0 0 45px rgba(28,31,33,.7);
+  }
+
+  @keyframes tornadoApproach {
+    0% { opacity: 0; transform: translate(0,0) scale(.18) rotate(-2deg); }
+    15% { opacity: .58; transform: translate(-18vw,2vh) scale(.3) rotate(2deg); }
+    31% { transform: translate(-5vw,5vh) scale(.45) rotate(-3deg); }
+    49% { transform: translate(-28vw,8vh) scale(.72) rotate(3deg); }
+    67% { transform: translate(-17vw,11vh) scale(1.08) rotate(-4deg); }
+    84% { opacity: .96; transform: translate(-42vw,13vh) scale(1.52) rotate(4deg); }
+    100% { opacity: 1; transform: translate(-29vw,14vh) scale(2.3) rotate(0deg); }
+  }
+
+  @keyframes cameraShake {
+    0% { transform: translate(0,0); filter: brightness(1); }
+    10% { transform: translate(-10px,5px) rotate(-.4deg); }
+    20% { transform: translate(12px,-7px) rotate(.45deg); }
+    30% { transform: translate(-18px,9px) rotate(-.7deg); }
+    42% { transform: translate(13px,-12px) rotate(.8deg); }
+    55% { transform: translate(-22px,7px) rotate(-.9deg); filter: brightness(.6); }
+    70% { transform: translate(20px,-8px) rotate(.8deg); }
+    82% { transform: translate(-16px,10px) rotate(-.6deg); }
+    100% { transform: translate(0,0); filter: brightness(0); }
+  }
+
+  .blackout {
+    position: fixed;
+    inset: 0;
+    z-index: 36;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .blackout.active { animation: blackout 1.05s 4.45s forwards; }
+  @keyframes blackout { to { opacity: 1; } }
+
+  @media (max-width: 700px) {
+    .hud { grid-template-columns: 1fr 1fr; }
+    .hud .potential-card { grid-column: 1 / -1; }
+    .topbar { grid-template-columns: 1fr; }
+    .sound-note { justify-self: start; }
+    .answer-row { grid-template-columns: 1fr; }
+    .submit-btn { width: 100%; }
+    .rules { grid-template-columns: 1fr; }
+    .quiz-card { min-height: 390px; }
+  }
+</style>
+</head>
+<body>
+<div class="game-shell" id="gameShell">
+  <div class="sky-glow"></div>
+  <div class="cloud-layer" aria-hidden="true">
+    <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div><div class="cloud c4"></div><div class="cloud c5"></div>
+  </div>
+  <div class="lightning" id="lightning"></div>
+  <div class="rain" id="rain"></div>
+
+  <div class="horizon" aria-hidden="true">
+    <div class="grass-field" id="grassField"></div>
+    <div class="distant-haze"></div>
+    <div class="flower" style="--left:11%;--bottom:8%;--stem:46px;--petal:#d8b63b"></div>
+    <div class="flower" style="--left:24%;--bottom:13%;--stem:37px;--petal:#ce6ea1"></div>
+    <div class="flower" style="--left:36%;--bottom:5%;--stem:52px;--petal:#8b6fc4"></div>
+    <div class="flower" style="--left:52%;--bottom:14%;--stem:42px;--petal:#d6b743"></div>
+    <div class="flower" style="--left:68%;--bottom:7%;--stem:49px;--petal:#b7669a"></div>
+    <div class="flower" style="--left:83%;--bottom:12%;--stem:41px;--petal:#8568bd"></div>
+    <div class="flower" style="--left:91%;--bottom:5%;--stem:44px;--petal:#d5b33f"></div>
+  </div>
+  <div class="vignette"></div>
+
+  <main class="ui">
+    <header class="topbar">
+      <div class="brand">
+        <h1>Weatherman Potential</h1>
+        <p>A stormlands meteorology vocabulary trial</p>
+      </div>
+      <div class="sound-note">55 terms · 15 seconds each</div>
+    </header>
+
+    <section class="hud" aria-label="Game status">
+      <div class="hud-card potential-card">
+        <span class="hud-label">Weatherman Potential</span>
+        <div class="potential-row">
+          <span class="hud-value" id="potentialText">50%</span>
+          <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+        </div>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">Progress</span>
+        <span class="hud-value" id="progressText">0 / 55</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">Time</span>
+        <span class="hud-value" id="timeText">15.0s</span>
+      </div>
+    </section>
+
+    <section class="quiz-card" id="quizCard">
+      <div class="question-meta">
+        <span id="categoryText">Ready</span>
+        <span class="difficulty" id="difficultyText">—</span>
+      </div>
+      <h2 class="definition" id="definitionText">The grasslands are waiting beneath a restless sky.</h2>
+      <p class="prompt" id="promptText">Begin when you’re ready. Answers ignore capitalization and ordinary plurals; only strong direct synonyms are accepted.</p>
+      <form id="answerForm" class="answer-row" autocomplete="off">
+        <input class="answer-input" id="answerInput" type="text" placeholder="Type the meteorology term…" disabled aria-label="Meteorology term answer" />
+        <button class="submit-btn" id="submitBtn" type="submit" disabled>Answer</button>
+      </form>
+      <div class="timebar"><div class="timebar-fill" id="timebarFill"></div></div>
+      <div class="feedback" id="feedback" aria-live="polite"></div>
+    </section>
+  </main>
+</div>
+
+<div class="intro-overlay" id="introOverlay">
+  <section class="intro-card">
+    <h2>Stormlands</h2>
+    <p>Dark clouds roll over a windy grassland. Sparse yellow, pink, and purple flowers bend in the rain while lightning flashes far off. The sky is temperamental, but only subtly so.</p>
+    <div class="rules">
+      <div class="rule"><strong>Start at 50%</strong>Potential can rise as high as 100%, but 100% is not the finish line.</div>
+      <div class="rule"><strong>15 seconds</strong>Answer each definition before the clock reaches zero.</div>
+      <div class="rule"><strong>Quick correct: +15</strong>Correct within the first 10 seconds earns the +10 quick bonus on top of +5.</div>
+      <div class="rule"><strong>Normal correct: +5</strong>Correct during the final 5 seconds still improves your potential.</div>
+      <div class="rule"><strong>Wrong: −20 easy / −15 hard</strong>Harder terms are penalized less severely.</div>
+      <div class="rule"><strong>Reach 0%</strong>A tornado comes out of the distance. The camera does not fare especially well.</div>
+    </div>
+    <button class="start-btn" id="startBtn">Enter the grasslands</button>
+  </section>
+</div>
+
+<div class="tornado-wrap" id="tornadoWrap" aria-hidden="true"><div class="tornado"></div></div>
+<div class="blackout" id="blackout"></div>
+
+<div class="end-overlay hidden" id="endOverlay">
+  <section class="end-card hud-card">
+    <h2 id="endTitle">You made it through.</h2>
+    <p id="endText"></p>
+    <button class="restart-btn" id="restartBtn">Walk the stormlands again</button>
+  </section>
+</div>
+
+<script>
+const TERMS = [
+  {term:"Troposphere", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Lowest atmospheric layer; nearly all weather, clouds, and convection occur here.", accepted:["troposphere"]},
+  {term:"Stratosphere", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Layer above the troposphere; contains the ozone layer, and temperature generally increases with height.", accepted:["stratosphere"]},
+  {term:"Tropopause", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Boundary between the troposphere and stratosphere.", accepted:["tropopause"]},
+  {term:"Atmospheric pressure", category:"Atmosphere, Heat & Structure", difficulty:"easy", definition:"Force per unit area from the weight of the air column above a point.", accepted:["atmospheric pressure","barometric pressure","air pressure"]},
+  {term:"Radiation", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Energy transferred as electromagnetic waves, including incoming solar and outgoing terrestrial infrared energy.", accepted:["radiation"]},
+  {term:"Albedo", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Fraction of incoming sunlight reflected by a surface.", accepted:["albedo"]},
+  {term:"Adiabatic process", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Temperature change of air caused only by expansion or compression, with no heat exchange with the surroundings.", accepted:["adiabatic process","adiabatic"]},
+  {term:"Lapse rate", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Rate at which temperature changes with height in the atmosphere.", accepted:["lapse rate"]},
+  {term:"Dry adiabatic lapse rate", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Cooling rate of unsaturated rising air, about 9.8 degrees Celsius per kilometer.", accepted:["dry adiabatic lapse rate","dalr"]},
+  {term:"Inversion", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Layer in which temperature increases with height, suppressing vertical mixing.", accepted:["inversion","temperature inversion"]},
+  {term:"Latent heat", category:"Atmosphere, Heat & Structure", difficulty:"hard", definition:"Heat absorbed or released during a phase change of water without a change in temperature.", accepted:["latent heat"]},
+
+  {term:"Water vapor", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Water in gaseous form in the atmosphere; a key greenhouse gas and moisture source.", accepted:["water vapor","water vapour"]},
+  {term:"Humidity", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Amount of water vapor present in the air.", accepted:["humidity"]},
+  {term:"Relative humidity", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Percentage of water vapor present relative to the maximum possible at that temperature.", accepted:["relative humidity","rh"]},
+  {term:"Dew point", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Temperature to which air must be cooled, at constant pressure, to reach saturation.", accepted:["dew point","dewpoint"]},
+  {term:"Saturation", category:"Moisture, Clouds & Precipitation", difficulty:"hard", definition:"State in which air contains the maximum possible amount of water vapor for its temperature.", accepted:["saturation","saturated"]},
+  {term:"Condensation", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Phase change in which water vapor becomes liquid droplets.", accepted:["condensation"]},
+  {term:"Evaporation", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Phase change in which liquid water becomes vapor, absorbing heat.", accepted:["evaporation"]},
+  {term:"Sublimation", category:"Moisture, Clouds & Precipitation", difficulty:"hard", definition:"Direct phase change between ice and water vapor without passing through liquid water.", accepted:["sublimation"]},
+  {term:"Cloud condensation nuclei", category:"Moisture, Clouds & Precipitation", difficulty:"hard", definition:"Tiny airborne particles on which water vapor condenses to begin forming cloud droplets.", accepted:["cloud condensation nuclei","condensation nuclei","ccn"]},
+  {term:"Cumulus", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Heap-like, puffy clouds associated with convection.", accepted:["cumulus","cumulus cloud"]},
+  {term:"Stratus", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Layered, sheet-like clouds commonly associated with stable air.", accepted:["stratus","stratus cloud"]},
+  {term:"Cirrus", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"High, thin, wispy clouds composed mainly of ice crystals.", accepted:["cirrus","cirrus cloud"]},
+  {term:"Cumulonimbus", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Deep convective cloud capable of producing lightning, heavy rain, hail, and sometimes tornadoes.", accepted:["cumulonimbus","cumulonimbus cloud","cb"]},
+  {term:"Virga", category:"Moisture, Clouds & Precipitation", difficulty:"hard", definition:"Precipitation that evaporates or sublimates before reaching the ground.", accepted:["virga"]},
+  {term:"Hail", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Lumps or balls of ice grown within strong thunderstorm updrafts.", accepted:["hail","hailstone","hailstones"]},
+  {term:"Sleet", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Ice pellets formed when liquid precipitation freezes before reaching the ground.", accepted:["sleet","ice pellets"]},
+  {term:"Freezing rain", category:"Moisture, Clouds & Precipitation", difficulty:"easy", definition:"Liquid rain that freezes on contact with sufficiently cold surfaces.", accepted:["freezing rain"]},
+
+  {term:"Air mass", category:"Pressure, Wind & Map Language", difficulty:"easy", definition:"Large body of air with relatively uniform temperature and moisture characteristics.", accepted:["air mass","airmass"]},
+  {term:"High pressure / Anticyclone", category:"Pressure, Wind & Map Language", difficulty:"easy", definition:"Pressure maximum usually associated with sinking air and fairer weather; surface winds spiral outward, clockwise in the Northern Hemisphere.", accepted:["high pressure","anticyclone","high pressure system","high"]},
+  {term:"Low pressure / Cyclone", category:"Pressure, Wind & Map Language", difficulty:"easy", definition:"Pressure minimum usually associated with rising air, clouds, and precipitation; surface winds spiral inward, counterclockwise in the Northern Hemisphere.", accepted:["low pressure","cyclone","low pressure system","low"]},
+  {term:"Isobar", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Line on a weather map connecting points of equal atmospheric pressure.", accepted:["isobar"]},
+  {term:"Isotherm", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Line on a map connecting points of equal temperature.", accepted:["isotherm"]},
+  {term:"Pressure-gradient force", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Force caused by pressure differences that accelerates air from higher toward lower pressure.", accepted:["pressure gradient force","pressure-gradient force","pgf"]},
+  {term:"Coriolis effect", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Apparent deflection of moving air due to Earth's rotation: rightward in the Northern Hemisphere and leftward in the Southern.", accepted:["coriolis effect","coriolis force","coriolis"]},
+  {term:"Geostrophic wind", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Upper-level wind produced by balance between pressure-gradient force and Coriolis effect, flowing parallel to isobars.", accepted:["geostrophic wind","geostrophic flow"]},
+  {term:"Surface friction", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Drag near Earth's surface that slows the wind and alters its direction across isobars.", accepted:["surface friction","friction"]},
+  {term:"Advection", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Horizontal transport of heat, moisture, or another atmospheric property by moving air.", accepted:["advection"]},
+  {term:"Convection", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Vertical transport in the atmosphere driven mainly by buoyancy.", accepted:["convection"]},
+  {term:"Convergence", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Horizontal inflow of air toward an area, often promoting upward motion.", accepted:["convergence"]},
+  {term:"Divergence", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Horizontal outflow of air from an area; near the surface it often favors sinking motion.", accepted:["divergence"]},
+  {term:"Jet stream", category:"Pressure, Wind & Map Language", difficulty:"easy", definition:"Narrow band of strong upper-level winds that helps steer weather systems.", accepted:["jet stream","jet"]},
+  {term:"Trough", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Elongated region of relatively low atmospheric pressure or geopotential heights.", accepted:["trough"]},
+  {term:"Ridge", category:"Pressure, Wind & Map Language", difficulty:"hard", definition:"Elongated region of relatively high atmospheric pressure or geopotential heights.", accepted:["ridge"]},
+
+  {term:"Front", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Boundary separating air masses with different temperature and/or moisture characteristics.", accepted:["front","weather front"]},
+  {term:"Cold front", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Boundary where colder air advances, often producing a relatively narrow zone of showers or thunderstorms.", accepted:["cold front"]},
+  {term:"Warm front", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Boundary where warmer air advances over retreating cooler air, often bringing broader, steadier precipitation.", accepted:["warm front"]},
+  {term:"Occluded front", category:"Fronts, Storms & Forecasting", difficulty:"hard", definition:"Front formed when a cold front overtakes a warm front.", accepted:["occluded front","occlusion"]},
+  {term:"Stationary front", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Front that shows little or no movement for a period of time.", accepted:["stationary front"]},
+  {term:"Severe thunderstorm", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Under the U.S. NWS definition, a thunderstorm producing at least one-inch hail, winds of at least 58 mph, or a tornado.", accepted:["severe thunderstorm","severe storm"]},
+  {term:"Hurricane / Tropical cyclone", category:"Fronts, Storms & Forecasting", difficulty:"easy", definition:"Intense tropical low-pressure system with sustained winds of at least 74 mph or 119 km/h, often featuring an eye and eyewall.", accepted:["hurricane","tropical cyclone","typhoon"]},
+  {term:"Numerical weather prediction / Forecast model", category:"Fronts, Storms & Forecasting", difficulty:"hard", definition:"Computer simulation that uses observations and physical equations to project future atmospheric conditions.", accepted:["numerical weather prediction","nwp","forecast model","weather model","numerical model"]},
+
+  {term:"Barometer", category:"Key Instruments", difficulty:"easy", definition:"Instrument used to measure atmospheric pressure.", accepted:["barometer"]},
+  {term:"Anemometer", category:"Key Instruments", difficulty:"easy", definition:"Instrument used to measure wind speed.", accepted:["anemometer"]},
+  {term:"Radiosonde", category:"Key Instruments", difficulty:"hard", definition:"Instrument package carried aloft by a weather balloon to measure temperature, humidity, pressure, and winds.", accepted:["radiosonde","weather balloon instrument"]}
+];
+
+if (TERMS.length !== 55) console.warn(`Expected 55 terms, found ${TERMS.length}.`);
+
+const $ = id => document.getElementById(id);
+const shell = $("gameShell");
+const introOverlay = $("introOverlay");
+const endOverlay = $("endOverlay");
+const startBtn = $("startBtn");
+const restartBtn = $("restartBtn");
+const answerForm = $("answerForm");
+const answerInput = $("answerInput");
+const submitBtn = $("submitBtn");
+const definitionText = $("definitionText");
+const categoryText = $("categoryText");
+const difficultyText = $("difficultyText");
+const feedback = $("feedback");
+const potentialText = $("potentialText");
+const meterFill = $("meterFill");
+const progressText = $("progressText");
+const timeText = $("timeText");
+const timebarFill = $("timebarFill");
+const tornadoWrap = $("tornadoWrap");
+const blackout = $("blackout");
+const endTitle = $("endTitle");
+const endText = $("endText");
+const lightning = $("lightning");
+
+let deck = [];
+let currentIndex = 0;
+let potential = 50;
+let questionStartedAt = 0;
+let timerInterval = null;
+let locked = true;
+let flashInterval = null;
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function normalize(s) {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[–—]/g, "-")
+    .replace(/[^a-z0-9\s\/-]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\bclouds\b/g, "cloud")
+    .replace(/\bhailstones\b/g, "hailstone")
+    .replace(/\bsystems\b/g, "system")
+    .trim();
+}
+
+function isAccepted(termObj, raw) {
+  const n = normalize(raw);
+  if (!n) return false;
+  return termObj.accepted.some(a => normalize(a) === n);
+}
+
+function setPotential(next) {
+  potential = Math.max(0, Math.min(100, next));
+  potentialText.textContent = `${potential}%`;
+  meterFill.style.width = `${potential}%`;
+  document.documentElement.style.setProperty("--potential", potential);
+  const storm = Math.max(0, 50 - potential) * 2;
+  document.documentElement.style.setProperty("--storm", storm);
+}
+
+function pulse(type) {
+  shell.classList.remove("good-pulse", "bad-pulse");
+  void shell.offsetWidth;
+  shell.classList.add(type === "good" ? "good-pulse" : "bad-pulse");
+  if (type === "good") flashLightning(true);
+}
+
+function startLightningLoop() {
+  clearInterval(flashInterval);
+  flashInterval = setInterval(() => {
+    const stormBias = Math.max(0, 50 - potential) / 100;
+    if (Math.random() < 0.42 + stormBias) flashLightning(false);
+  }, 4200);
+}
+
+function flashLightning(bright=false) {
+  lightning.style.left = `${55 + Math.random() * 34}%`;
+  lightning.style.top = `${10 + Math.random() * 15}vh`;
+  lightning.style.filter = bright ? "brightness(1.3)" : "none";
+  lightning.classList.remove("flash");
+  void lightning.offsetWidth;
+  lightning.classList.add("flash");
+}
+
+function createRain() {
+  const rain = $("rain");
+  for (let i = 0; i < 80; i++) {
+    const d = document.createElement("i");
+    d.className = "drop";
+    d.style.left = `${Math.random() * 108}%`;
+    d.style.top = `${-30 + Math.random() * 130}%`;
+    d.style.animationDuration = `${1.1 + Math.random() * 1.8}s`;
+    d.style.animationDelay = `${-Math.random() * 2}s`;
+    d.style.opacity = `${.2 + Math.random() * .8}`;
+    rain.appendChild(d);
+  }
+}
+
+function createGrass() {
+  const field = $("grassField");
+  for (let i = 0; i < 190; i++) {
+    const b = document.createElement("i");
+    b.className = "blade";
+    b.style.left = `${Math.random() * 100}%`;
+    b.style.setProperty("--h", `${18 + Math.random() * 64}px`);
+    b.style.setProperty("--dur", `${1.8 + Math.random() * 2.6}s`);
+    b.style.opacity = `${.45 + Math.random() * .5}`;
+    field.appendChild(b);
+  }
+}
+
+function beginGame() {
+  deck = shuffle(TERMS);
+  currentIndex = 0;
+  setPotential(50);
+  feedback.textContent = "";
+  endOverlay.classList.add("hidden");
+  introOverlay.classList.add("hidden");
+  tornadoWrap.classList.remove("active");
+  blackout.classList.remove("active");
+  locked = false;
+  progressText.textContent = `0 / ${deck.length}`;
+  startLightningLoop();
+  loadQuestion();
+}
+
+function loadQuestion() {
+  if (potential <= 0) return tornadoGameOver();
+  if (currentIndex >= deck.length) return finishGame();
+
+  const q = deck[currentIndex];
+  definitionText.textContent = q.definition;
+  categoryText.textContent = q.category;
+  difficultyText.textContent = q.difficulty === "easy" ? "Easy · −20 if missed" : "Hard · −15 if missed";
+  progressText.textContent = `${currentIndex + 1} / ${deck.length}`;
+  feedback.textContent = "";
+  feedback.className = "feedback";
+  answerInput.value = "";
+  answerInput.disabled = false;
+  submitBtn.disabled = false;
+  locked = false;
+  questionStartedAt = performance.now();
+  answerInput.focus();
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timebarFill.style.transition = "none";
+  timebarFill.style.width = "100%";
+  void timebarFill.offsetWidth;
+  timebarFill.style.transition = "width 15s linear";
+  timebarFill.style.width = "0%";
+  timeText.textContent = "15.0s";
+
+  timerInterval = setInterval(() => {
+    const elapsed = (performance.now() - questionStartedAt) / 1000;
+    const remaining = Math.max(0, 15 - elapsed);
+    timeText.textContent = `${remaining.toFixed(1)}s`;
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      handleTimeout();
+    }
+  }, 50);
+}
+
+function handleTimeout() {
+  if (locked) return;
+  locked = true;
+  answerInput.disabled = true;
+  submitBtn.disabled = true;
+  const q = deck[currentIndex];
+  const penalty = q.difficulty === "easy" ? 20 : 15;
+  setPotential(potential - penalty);
+  feedback.textContent = `Time. −${penalty}. The term was ${q.term}.`;
+  feedback.className = "feedback bad";
+  pulse("bad");
+  proceedAfterFeedback();
+}
+
+function submitAnswer(raw) {
+  if (locked) return;
+  clearInterval(timerInterval);
+  locked = true;
+  answerInput.disabled = true;
+  submitBtn.disabled = true;
+
+  const q = deck[currentIndex];
+  const elapsed = (performance.now() - questionStartedAt) / 1000;
+  if (isAccepted(q, raw)) {
+    const gain = elapsed <= 10 ? 15 : 5;
+    setPotential(potential + gain);
+    feedback.textContent = elapsed <= 10 ? `Correct — quick answer. +${gain}.` : `Correct. +${gain}.`;
+    feedback.className = "feedback good";
+    pulse("good");
+  } else {
+    const penalty = q.difficulty === "easy" ? 20 : 15;
+    setPotential(potential - penalty);
+    feedback.textContent = `Not quite. −${penalty}. The term was ${q.term}.`;
+    feedback.className = "feedback bad";
+    pulse("bad");
+  }
+
+  proceedAfterFeedback();
+}
+
+function proceedAfterFeedback() {
+  timebarFill.style.transition = "none";
+  currentIndex++;
+  setTimeout(() => {
+    if (potential <= 0) tornadoGameOver();
+    else loadQuestion();
+  }, 1550);
+}
+
+function finishGame() {
+  clearInterval(timerInterval);
+  clearInterval(flashInterval);
+  locked = true;
+  answerInput.disabled = true;
+  submitBtn.disabled = true;
+  progressText.textContent = `${deck.length} / ${deck.length}`;
+  timeText.textContent = "—";
+  definitionText.textContent = "The last definition passes, and the grasslands are still there.";
+  categoryText.textContent = "Complete";
+  difficultyText.textContent = "Survived all 55";
+  feedback.textContent = `Final Weatherman Potential: ${potential}%.`;
+  feedback.className = "feedback good";
+
+  setTimeout(() => {
+    endTitle.textContent = "You made it through the stormlands.";
+    endText.textContent = `You answered all 55 terms and finished with ${potential}% Weatherman Potential. The sky settles only a little; the flowers keep bending in the wind.`;
+    endOverlay.classList.remove("hidden");
+  }, 900);
+}
+
+function tornadoGameOver() {
+  clearInterval(timerInterval);
+  clearInterval(flashInterval);
+  locked = true;
+  answerInput.disabled = true;
+  submitBtn.disabled = true;
+  setPotential(0);
+  feedback.textContent = "Weatherman Potential has reached 0%.";
+  feedback.className = "feedback bad";
+  tornadoWrap.classList.add("active");
+  blackout.classList.add("active");
+
+  setTimeout(() => {
+    endTitle.textContent = "The storm got you.";
+    endText.textContent = `Your Weatherman Potential fell to 0% after ${Math.min(currentIndex, deck.length)} of 55 terms. Somewhere beyond the black screen, the grasslands are probably fine.`;
+    endOverlay.classList.remove("hidden");
+    endOverlay.style.background = "rgba(0,0,0,.94)";
+  }, 5700);
+}
+
+answerForm.addEventListener("submit", e => {
+  e.preventDefault();
+  submitAnswer(answerInput.value);
+});
+startBtn.addEventListener("click", beginGame);
+restartBtn.addEventListener("click", () => {
+  endOverlay.style.background = "rgba(5,8,12,.48)";
+  beginGame();
+});
+
+createRain();
+createGrass();
+setPotential(50);
+flashLightning(false);
+</script>
+</body>
+</html>
