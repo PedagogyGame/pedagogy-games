@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watch Floor — Volcano Monitoring Terms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#050c11;
+  --deep:#08151d;
+  --panel:rgba(8,26,35,.86);
+  --panel-hi:rgba(14,38,48,.92);
+  --line:rgba(112,196,196,.26);
+  --line-hi:rgba(140,224,214,.55);
+  --cyan:#6fe0d0;
+  --cyan-dim:#3d8b88;
+  --blue:#5590c8;
+  --ink:#cfe8e6;
+  --ink-dim:#7fa3a6;
+  --warm:#ff7a2f;
+  --warm-hi:#ffc06a;
+  --alert:#e0483a;
+  --ok:#6fe0a0;
+  --display:"Barlow Condensed","Oswald","Arial Narrow",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--void);color:var(--ink);font-family:var(--body);
+  overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+#room{position:fixed;inset:0;overflow:hidden}
+#scene{position:absolute;inset:0;width:100%;height:100%}
+
+/* ---- ambient washes ---- */
+#alertWash{
+  position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:
+    radial-gradient(120% 80% at 50% 30%, rgba(224,72,58,.30), transparent 62%),
+    linear-gradient(0deg, rgba(224,72,58,.16), rgba(224,72,58,.03));
+  mix-blend-mode:screen;transition:opacity .5s linear;
+}
+#scanlines{
+  position:absolute;inset:0;pointer-events:none;opacity:.16;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.55) 0 1px,transparent 1px 3px);
+}
+#vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(115% 95% at 50% 42%,transparent 44%,rgba(2,6,9,.86) 100%);
+}
+
+/* ---- top rail ---- */
+#rail{
+  position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;
+  gap:18px;padding:0 16px;font-family:var(--display);letter-spacing:.14em;
+  text-transform:uppercase;font-size:13px;color:var(--ink-dim);
+  border-bottom:1px solid rgba(112,196,196,.14);
+  background:linear-gradient(180deg,rgba(4,12,17,.92),rgba(4,12,17,.35));
+  backdrop-filter:blur(2px);z-index:6;
+}
+#rail .tag{color:var(--cyan);font-weight:600}
+#rail .sp{flex:1}
+#rail .stat b{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:500;letter-spacing:.04em}
+#rail .stat{white-space:nowrap}
+#statusPip{
+  display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 10px var(--ok);margin-right:7px;vertical-align:1px;transition:all .4s;
+}
+#statusPip.hot{background:var(--alert);box-shadow:0 0 12px var(--alert)}
+
+/* ---- console stack ---- */
+#console{
+  position:absolute;left:50%;transform:translateX(-50%);
+  bottom:clamp(14px,4vh,54px);width:min(760px,calc(100vw - 28px));z-index:5;
+}
+.panel{
+  background:var(--panel);border:1px solid var(--line);
+  box-shadow:0 0 0 1px rgba(0,0,0,.5),0 24px 60px rgba(0,0,0,.6),inset 0 1px 0 rgba(140,224,214,.09);
+  backdrop-filter:blur(7px);
+}
+.panel-head{
+  display:flex;align-items:center;gap:10px;padding:7px 12px;
+  border-bottom:1px solid rgba(112,196,196,.16);
+  font-family:var(--display);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--cyan-dim);
+}
+.panel-head .idx{font-family:var(--mono);letter-spacing:.02em;color:var(--ink-dim)}
+.panel-head .sp{flex:1}
+.chip{
+  font-family:var(--display);font-size:11px;letter-spacing:.16em;padding:2px 8px;
+  border:1px solid var(--line);color:var(--ink-dim);text-transform:uppercase;
+}
+.chip.timed{color:var(--warm-hi);border-color:rgba(255,160,90,.45)}
+
+/* ---- timer ---- */
+#timerWrap{height:3px;background:rgba(112,196,196,.12);position:relative;overflow:hidden;display:none}
+#timerWrap.on{display:block}
+#timerBar{position:absolute;inset:0;transform-origin:left center;background:var(--cyan);transition:background .35s}
+#timerBar.past{background:var(--warm-hi)}
+#timerBar.crit{background:var(--alert)}
+#bonusTick{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--line-hi)}
+#bonusTick.spent{background:rgba(224,72,58,.6)}
+
+/* ---- clue ---- */
+#clue{
+  padding:18px 16px 6px;font-size:clamp(15px,2.1vw,18.5px);line-height:1.45;
+  color:#e6f6f3;font-weight:400;
+}
+#clueMeta{
+  padding:0 16px 14px;font-family:var(--mono);font-size:11px;color:var(--ink-dim);
+  letter-spacing:.04em;display:flex;gap:14px;flex-wrap:wrap;
+}
+#clueMeta .sec{color:var(--warm-hi)}
+
+/* ---- options ---- */
+#options{display:grid;gap:1px;background:rgba(112,196,196,.14);border-top:1px solid rgba(112,196,196,.16)}
+.opt{
+  appearance:none;text-align:left;width:100%;border:0;cursor:pointer;
+  background:var(--panel-hi);color:var(--ink);
+  font-family:var(--body);font-size:clamp(14px,1.9vw,16px);
+  padding:13px 14px;display:flex;align-items:center;gap:12px;
+  transition:background .16s,color .16s;
+}
+.opt .key{
+  font-family:var(--mono);font-size:11px;color:var(--cyan-dim);
+  border:1px solid var(--line);padding:1px 6px;flex:none;
+}
+.opt:hover:not(:disabled){background:rgba(24,58,68,.95)}
+.opt:focus-visible{outline:2px solid var(--cyan);outline-offset:-2px}
+.opt:disabled{cursor:default}
+.opt.right{background:rgba(30,86,68,.95);color:#d9fbe9}
+.opt.right .key{color:var(--ok);border-color:rgba(111,224,160,.5)}
+.opt.wrong{background:rgba(96,30,28,.92);color:#fbdcd7}
+.opt.wrong .key{color:var(--alert);border-color:rgba(224,72,58,.5)}
+.opt.faded{opacity:.42}
+
+/* ---- verdict ---- */
+#verdict{
+  padding:11px 14px;font-family:var(--display);font-size:14px;letter-spacing:.1em;
+  text-transform:uppercase;border-top:1px solid rgba(112,196,196,.16);
+  display:none;align-items:center;gap:12px;background:rgba(5,16,22,.85);
+}
+#verdict.on{display:flex}
+#verdict .pts{font-family:var(--mono);font-size:12px;letter-spacing:.02em;color:var(--ink-dim)}
+#verdict .sp{flex:1}
+#verdict.good{color:var(--ok)}
+#verdict.bad{color:var(--alert)}
+.btn{
+  appearance:none;background:transparent;border:1px solid var(--line-hi);color:var(--cyan);
+  font-family:var(--display);letter-spacing:.16em;text-transform:uppercase;font-size:12px;
+  padding:7px 15px;cursor:pointer;transition:background .16s,color .16s;
+}
+.btn:hover{background:rgba(111,224,208,.12)}
+.btn:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.btn.warm{border-color:rgba(255,160,90,.5);color:var(--warm-hi)}
+.btn.warm:hover{background:rgba(255,140,70,.14)}
+
+/* ---- overlay screens ---- */
+#overlay{
+  position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;
+  padding:56px 16px 16px;background:rgba(3,9,13,.72);backdrop-filter:blur(3px);
+}
+#overlay.off{display:none}
+#card{width:min(620px,100%);max-height:100%;overflow:auto}
+#card .body{padding:20px 20px 22px}
+h1{
+  font-family:var(--display);font-weight:500;letter-spacing:.02em;
+  font-size:clamp(26px,5vw,40px);margin:0 0 4px;color:#eafaf7;text-transform:uppercase;
+}
+.sub{font-family:var(--mono);font-size:11.5px;color:var(--cyan-dim);letter-spacing:.1em;margin:0 0 16px;text-transform:uppercase}
+#card p{font-size:14.5px;line-height:1.6;color:var(--ink);margin:0 0 12px}
+#card p.dim{color:var(--ink-dim);font-size:13px}
+.brief{border-left:1px solid var(--line);padding-left:14px;margin:0 0 18px}
+.brief div{font-size:13.5px;line-height:1.55;color:var(--ink-dim);margin-bottom:6px}
+.brief b{color:var(--ink);font-weight:500}
+.picks{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:rgba(112,196,196,.14);margin:4px 0 18px}
+.cell{background:rgba(10,30,38,.9);padding:12px 13px}
+.cell span{display:block;font-family:var(--display);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cyan-dim);margin-bottom:3px}
+.cell b{font-family:var(--mono);font-size:20px;font-weight:500;color:#eafaf7}
+.missed{max-height:34vh;overflow:auto;border-top:1px solid rgba(112,196,196,.16);padding-top:12px}
+.missed h3{font-family:var(--display);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--cyan-dim);margin:0 0 8px}
+.missed li{font-size:13.5px;line-height:1.5;color:var(--ink-dim);margin-bottom:7px;list-style:none}
+.missed li b{color:var(--ink);font-weight:500}
+.missed ul{margin:0;padding:0}
+
+@media (max-width:640px){
+  #rail{font-size:11px;gap:12px;padding:0 11px}
+  #rail .hideSm{display:none}
+  #clue{padding:15px 13px 5px}
+  #clueMeta{padding:0 13px 12px}
+  #console{bottom:10px;width:calc(100vw - 16px)}
+  .opt{padding:12px 12px}
+}
+@media (prefers-reduced-motion:reduce){
+  .orbit,#plume,#sweep,.blink{animation:none!important}
+  #scanlines{display:none}
+}
+</style>
+</head>
+<body>
+<div id="room">
+
+<svg id="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#071219"/><stop offset=".55" stop-color="#061017"/><stop offset="1" stop-color="#03090d"/>
+    </linearGradient>
+    <radialGradient id="spill" cx=".5" cy=".38" r=".62">
+      <stop offset="0" stop-color="#1d5c66" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#1d5c66" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#04222b"/><stop offset="1" stop-color="#021419"/>
+    </linearGradient>
+    <linearGradient id="land" x1=".2" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#123540"/><stop offset=".6" stop-color="#0c2530"/><stop offset="1" stop-color="#081c25"/>
+    </linearGradient>
+    <radialGradient id="craterGlow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ffd9a0" stop-opacity=".95"/>
+      <stop offset=".28" stop-color="#ff7a2f" stop-opacity=".8"/>
+      <stop offset=".7" stop-color="#c93d14" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#c93d14" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="plumeG" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#f0c9a8" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#9fb6bd" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="deskG" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b1f28"/><stop offset="1" stop-color="#030a0e"/>
+    </linearGradient>
+    <clipPath id="screenClip"><rect x="432" y="112" width="736" height="426" rx="2"/></clipPath>
+  </defs>
+
+  <!-- room shell -->
+  <rect width="1600" height="900" fill="url(#wall)"/>
+  <rect width="1600" height="900" fill="url(#spill)"/>
+  <!-- ceiling light strips -->
+  <rect x="180" y="36" width="420" height="2" fill="#2b6f74" opacity=".22"/>
+  <rect x="1000" y="36" width="420" height="2" fill="#2b6f74" opacity=".22"/>
+
+  <!-- ===== the big monitor ===== -->
+  <rect x="422" y="102" width="756" height="446" fill="#020709" stroke="#16414a" stroke-width="2"/>
+  <g clip-path="url(#screenClip)">
+    <rect x="432" y="112" width="736" height="426" fill="url(#sea)"/>
+    <!-- swell lines -->
+    <g stroke="#2a7f86" stroke-width="1" opacity=".10">
+      <path d="M432 190 H1168"/><path d="M432 250 H1168"/><path d="M432 310 H1168"/>
+      <path d="M432 370 H1168"/><path d="M432 430 H1168"/><path d="M432 490 H1168"/>
+    </g>
+
+    <!-- orbiting island: plan view rotating once every 3:50 -->
+    <g class="tilt">
+      <g class="orbit">
+        <!-- coastline -->
+        <path d="M800 175 C855 172 905 190 945 220 C985 250 1002 286 990 320 C978 356 950 386 905 406
+                 C860 426 800 436 750 425 C700 414 655 390 630 355 C604 319 608 274 636 240
+                 C666 201 740 178 800 175 Z"
+              fill="url(#land)" stroke="#3d8b88" stroke-width="1.4" opacity=".95"/>
+        <!-- surf ring -->
+        <path d="M800 175 C855 172 905 190 945 220 C985 250 1002 286 990 320 C978 356 950 386 905 406
+                 C860 426 800 436 750 425 C700 414 655 390 630 355 C604 319 608 274 636 240
+                 C666 201 740 178 800 175 Z"
+              fill="none" stroke="#7fd8d0" stroke-width="3" opacity=".13"/>
+        <!-- radial drainages -->
+        <g fill="none" stroke="#5aa8a4" stroke-width="1" opacity=".34">
+          <path d="M806 302 Q830 250 848 190"/>
+          <path d="M806 302 Q880 288 962 262"/>
+          <path d="M806 302 Q878 330 972 330"/>
+          <path d="M806 302 Q862 372 890 402"/>
+          <path d="M806 302 Q800 372 780 424"/>
+          <path d="M806 302 Q724 344 668 388"/>
+          <path d="M806 302 Q712 306 636 322"/>
+          <path d="M806 302 Q716 268 646 250"/>
+          <path d="M806 302 Q756 236 726 192"/>
+        </g>
+        <!-- lahar-prone valleys, brighter fill -->
+        <path d="M806 302 Q848 366 878 408 L902 400 Q866 352 812 298 Z" fill="#4e8f8c" opacity=".18"/>
+        <path d="M806 302 Q740 340 682 382 L668 366 Q738 322 800 296 Z" fill="#4e8f8c" opacity=".14"/>
+        <!-- older flow field, SE -->
+        <path d="M808 304 Q882 322 954 350 Q916 384 872 396 Q828 352 808 304 Z" fill="#1b2f31" opacity=".7"/>
+        <!-- summit complex -->
+        <ellipse cx="806" cy="302" rx="74" ry="66" fill="#0d2b33" opacity=".55"/>
+        <ellipse cx="806" cy="302" rx="46" ry="40" fill="none" stroke="#5aa8a4" stroke-width="1" opacity=".45"/>
+        <ellipse cx="806" cy="302" rx="30" ry="26" fill="url(#craterGlow)"/>
+        <ellipse cx="806" cy="302" rx="11" ry="9" fill="#ffdca6" opacity=".92" class="blink"/>
+        <!-- flank thermal spots -->
+        <circle cx="852" cy="330" r="3.4" fill="#ff9a4d" opacity=".7"/>
+        <circle cx="776" cy="264" r="2.6" fill="#ff9a4d" opacity=".5"/>
+        <!-- dome shoulder -->
+        <ellipse cx="838" cy="276" rx="19" ry="15" fill="#173c42" stroke="#5aa8a4" stroke-width=".8" opacity=".8"/>
+      </g>
+    </g>
+
+    <!-- plume: fixed downwind, does not orbit -->
+    <g id="plume" opacity=".85">
+      <path d="M806 300 C860 268 940 232 1040 206 C1090 194 1130 190 1160 194
+               C1120 226 1050 262 976 288 C916 308 856 314 806 300 Z" fill="url(#plumeG)"/>
+      <path d="M806 300 C852 282 916 258 986 240" fill="none" stroke="#f3d2b4" stroke-width="8" opacity=".10"/>
+    </g>
+
+    <!-- fixed camera furniture -->
+    <g stroke="#7fd8d0" opacity=".22" stroke-width="1" fill="none">
+      <path d="M442 122 h34 M442 122 v34 M1158 122 h-34 M1158 122 v34
+               M442 528 h34 M442 528 v-34 M1158 528 h-34 M1158 528 v-34"/>
+      <path d="M770 325 h-26 M830 325 h26 M800 295 v-26 M800 355 v26"/>
+      <circle cx="800" cy="325" r="86" stroke-dasharray="2 9"/>
+      <circle cx="800" cy="325" r="150" stroke-dasharray="2 14"/>
+    </g>
+    <g id="sweep" opacity=".14"><rect x="432" y="112" width="90" height="426" fill="#7fd8d0"/></g>
+    <!-- screen telemetry -->
+    <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#7fd8d0" opacity=".62">
+      <text x="446" y="140">CAM 04 · AERIAL · ALT 7.4 km · RNG 8.6 km</text>
+      <text x="446" y="522" id="svgClock">--:--:-- UTC</text>
+      <text x="1154" y="140" text-anchor="end">ORBIT PERIOD 03:50</text>
+      <text x="1154" y="522" text-anchor="end" id="svgAlert">ALERT · II ADVISORY</text>
+    </g>
+    <rect x="432" y="112" width="736" height="426" fill="none" stroke="#7fd8d0" opacity=".1"/>
+  </g>
+
+  <!-- ===== raised rear tier (player's side) ===== -->
+  <g>
+    <!-- lower front desk row against the wall -->
+    <rect x="300" y="606" width="1000" height="16" fill="#0d2731"/>
+    <rect x="300" y="622" width="1000" height="60" fill="url(#deskG)"/>
+    <!-- front desk screens -->
+    <g>
+      <rect x="520" y="566" width="86" height="44" rx="2" fill="#0a2b33" stroke="#2f7f86"/>
+      <rect x="526" y="572" width="74" height="32" fill="#0e4048" opacity=".85"/>
+      <rect x="640" y="570" width="70" height="38" rx="2" fill="#0a2b33" stroke="#2f7f86"/>
+      <rect x="645" y="575" width="60" height="28" fill="#0e4048" opacity=".7"/>
+      <rect x="960" y="566" width="86" height="44" rx="2" fill="#0a2b33" stroke="#2f7f86"/>
+      <rect x="966" y="572" width="74" height="32" fill="#0e4048" opacity=".8"/>
+    </g>
+    <!-- analyst A, silhouetted from behind -->
+    <g fill="#02080b">
+      <ellipse cx="600" cy="556" rx="23" ry="25"/>
+      <path d="M556 640 Q560 588 600 582 Q640 588 644 640 Z"/>
+    </g>
+    <ellipse cx="600" cy="556" rx="27" ry="29" fill="none" stroke="#4a9aa0" stroke-width="1.5" opacity=".26"/>
+    <!-- analyst B -->
+    <g fill="#02080b">
+      <ellipse cx="1000" cy="562" rx="21" ry="23"/>
+      <path d="M960 642 Q964 594 1000 588 Q1036 594 1040 642 Z"/>
+    </g>
+    <ellipse cx="1000" cy="562" rx="25" ry="27" fill="none" stroke="#4a9aa0" stroke-width="1.5" opacity=".2"/>
+
+    <!-- rear raised tier, closest to viewer -->
+    <rect x="120" y="742" width="1360" height="18" fill="#0e2a34"/>
+    <rect x="120" y="760" width="1360" height="140" fill="url(#deskG)"/>
+    <g opacity=".5">
+      <rect x="240" y="700" width="120" height="44" rx="2" fill="#08242b" stroke="#276a71"/>
+      <rect x="1240" y="700" width="120" height="44" rx="2" fill="#08242b" stroke="#276a71"/>
+    </g>
+    <rect x="120" y="742" width="1360" height="2" fill="#6fd8d0" opacity=".14"/>
+  </g>
+</svg>
+
+<div id="alertWash"></div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<div id="rail">
+  <span class="tag">Watch Floor</span>
+  <span class="hideSm">Volcano Monitoring Terms</span>
+  <span class="sp"></span>
+  <span class="stat"><span id="statusPip"></span><b id="railStatus">STANDBY</b></span>
+  <span class="stat hideSm">Streak <b id="railStreak">0</b></span>
+  <span class="stat">Score <b id="railScore">0</b></span>
+</div>
+
+<!-- ===== play console ===== -->
+<div id="console" class="panel" hidden>
+  <div class="panel-head">
+    <span class="idx" id="qIdx">CALL 01 / 30</span>
+    <span class="sp"></span>
+    <span class="chip" id="modeChip">LOGGED</span>
+  </div>
+  <div id="timerWrap"><div id="timerBar"></div><div id="bonusTick"></div></div>
+  <div id="clue">—</div>
+  <div id="clueMeta"></div>
+  <div id="options"></div>
+  <div id="verdict">
+    <span id="verdictText">—</span>
+    <span class="pts" id="verdictPts"></span>
+    <span class="sp"></span>
+    <button class="btn" id="nextBtn">Next call</button>
+  </div>
+</div>
+
+<!-- ===== overlay ===== -->
+<div id="overlay">
+  <div id="card" class="panel">
+    <div class="panel-head"><span>Shift briefing</span><span class="sp"></span><span class="idx">108 terms</span></div>
+    <div class="body" id="cardBody"></div>
+  </div>
+</div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   TERMS — rank 1 (most familiar) to 108 (most specialist)
+   ============================================================ */
+const TERMS=[
+{r:1,t:"GPS / GNSS",c:"Satellite positioning used to track centimetre-scale movement of a volcano's surface over months and years."},
+{r:2,t:"Basalt",c:"Dark, low-silica volcanic rock that erupts hot and runny, building most oceanic islands and shield volcanoes."},
+{r:3,t:"Viscosity",c:"A magma's resistance to flow. It rises as silica content increases and as temperature falls."},
+{r:4,t:"Tephra",c:"Any fragmental material thrown out by an eruption and carried through the air, whatever its size."},
+{r:5,t:"Pyroclastic flow / PDC",c:"Ground-hugging avalanche of hot gas, ash and rock fragments that races downslope and destroys almost everything in its path."},
+{r:6,t:"Lava dome",c:"Steep-sided mound built where lava is too viscous to flow away and instead piles up over the vent."},
+{r:7,t:"Fissure",c:"Elongate crack that erupts lava or gas along a line rather than from a single central point."},
+{r:8,t:"Andesite",c:"Intermediate-silica volcanic rock typical of subduction-zone arcs, sitting between basalt and rhyolite."},
+{r:9,t:"Degassing",c:"Release of gases dissolved in magma to the atmosphere, through a vent, a fumarole field or the flanks."},
+{r:10,t:"Volcanic tremor",c:"Sustained, continuous ground vibration lasting minutes to days, without the sharp onset of an earthquake."},
+{r:11,t:"Inflation",c:"Swelling of the ground surface, usually read as magma or gas accumulating at depth."},
+{r:12,t:"Deflation",c:"Sinking of the ground surface, often following withdrawal of magma or a loss of pressure."},
+{r:13,t:"Deformation",c:"Any measurable change in the shape or elevation of a volcano's surface."},
+{r:14,t:"Outcrop",c:"Exposure of bedrock or deposit at the surface, available for direct examination."},
+{r:15,t:"Stratigraphy",c:"The layered sequence of deposits, and the study of their order, used to reconstruct eruption history."},
+{r:16,t:"Hand sample",c:"Fist-sized piece of rock collected for description in the field and analysis later."},
+{r:17,t:"Remote sensing",c:"Gathering information about a volcano from a distance, typically with satellite or airborne sensors."},
+{r:18,t:"Thermal anomaly",c:"A patch measurably hotter than its surroundings, picked out in infrared imagery."},
+{r:19,t:"Gas plume",c:"Cloud of volcanic gases drifting downwind of a vent, visible or detectable by instrument."},
+{r:20,t:"Magma chamber / reservoir",c:"Subsurface body of stored molten rock that feeds eruptions at the surface."},
+{r:21,t:"Volatiles",c:"Dissolved components such as water, carbon dioxide and sulphur that come out of solution as magma decompresses."},
+{r:22,t:"Mafic",c:"Describes magma or rock rich in magnesium and iron and relatively poor in silica."},
+{r:23,t:"Felsic",c:"Describes magma or rock rich in silica and alkalis, typically pale and viscous."},
+{r:24,t:"Silica",c:"The silicon oxide whose abundance largely governs magma viscosity and eruptive style."},
+{r:25,t:"Phenocryst",c:"Crystal grown in magma before eruption, visibly larger than the groundmass around it."},
+{r:26,t:"Vesiculation",c:"Formation and growth of gas bubbles in magma as pressure drops during ascent."},
+{r:27,t:"Conduit",c:"The pipe-like pathway carrying magma from reservoir to vent."},
+{r:28,t:"Phreatic eruption",c:"Steam-driven explosion caused by heating of groundwater, ejecting no fresh magma."},
+{r:29,t:"Lapilli",c:"Tephra fragments between two and 64 millimetres across."},
+{r:30,t:"Volcanic bomb",c:"Ballistic fragment larger than 64 mm, thrown out still partly molten and deformed on landing."},
+{r:31,t:"Pyroclastic surge",c:"Dilute, turbulent, low-density cloud that can detach from a flow and ride over ridges."},
+{r:32,t:"Crater lake",c:"Water ponded in a summit depression, capable of driving violent steam explosions."},
+{r:33,t:"Edifice",c:"The constructed cone or mountain mass of the volcano itself."},
+{r:34,t:"Seismic swarm",c:"Cluster of many earthquakes in a small area and short window with no single dominant mainshock."},
+{r:35,t:"Hypocenter",c:"The point at depth where an earthquake originates."},
+{r:36,t:"Tiltmeter",c:"Instrument that measures minute changes in the slope of the ground near a vent."},
+{r:37,t:"InSAR",c:"Satellite radar interferometry that maps ground displacement across an entire volcano at once."},
+{r:38,t:"Harmonic tremor",c:"Tremor with a regular, narrow-band spectral signature, often attributed to sustained fluid flow."},
+{r:39,t:"Ground truthing",c:"Checking remotely sensed or modelled results against direct observation on the ground."},
+{r:40,t:"Isopach map",c:"Map of contours joining points of equal deposit thickness, used to estimate erupted volume."},
+{r:41,t:"Hazard map",c:"Map delineating which areas are subject to which volcanic hazards, at differing likelihood."},
+{r:42,t:"Alert level",c:"Formal graded statement of a volcano's status that triggers defined response actions."},
+{r:43,t:"Unrest",c:"Departure from a volcano's normal behaviour that may or may not lead to eruption."},
+{r:44,t:"Background / Baseline",c:"The established normal range of a monitored parameter, against which change is judged."},
+{r:45,t:"Precursor",c:"Observable change ahead of an eruption that may indicate one is approaching."},
+{r:46,t:"Duty scientist",c:"Staff member on rotation responsible for monitoring and first response at any hour."},
+{r:47,t:"Observatory",c:"Institution charged with continuous monitoring and hazard communication for its volcanoes."},
+{r:48,t:"Field notebook",c:"Primary handwritten record of observations, sketches and sample details made on site."},
+{r:49,t:"Transect",c:"Line along which observations or samples are taken at intervals, for systematic coverage."},
+{r:50,t:"Field station",c:"Semi-permanent base near a volcano supporting instruments and fieldwork."},
+{r:51,t:"Sampling protocol",c:"Defined procedure that keeps samples consistent and free of contamination."},
+{r:52,t:"Broadband seismometer",c:"Seismic sensor that records faithfully across a wide range of frequencies."},
+{r:53,t:"RSAM",c:"Real-time seismic amplitude measurement: a running average of ground shaking used for rapid tracking."},
+{r:54,t:"DOAS",c:"Spectroscopic method measuring sulphur dioxide by its absorption of scattered ultraviolet light."},
+{r:55,t:"Multi-GAS",c:"Portable instrument package measuring several gas species in a plume at the same time."},
+{r:56,t:"FLIR / Thermal camera",c:"Infrared imager, handheld or fixed, showing how surface temperature is distributed."},
+{r:57,t:"Acoustic Flow Monitor (AFM)",c:"Ground-vibration sensor sited in a valley to detect an approaching lahar."},
+{r:58,t:"Infrasound array",c:"Set of low-frequency acoustic sensors that detect explosions through the air rather than the ground."},
+{r:59,t:"LiDAR",c:"Laser ranging survey, often flown, producing high-resolution topography."},
+{r:60,t:"Multiparameter station",c:"Single site combining seismic, deformation, gas and other sensors."},
+{r:61,t:"Telemetry",c:"Automatic transmission of instrument data from the field back to the observatory."},
+{r:62,t:"Gas flux",c:"Mass of a gas species emitted per unit time, such as tonnes of sulphur dioxide per day."},
+{r:63,t:"Componentry",c:"Quantified breakdown of particle types in a tephra sample, separating juvenile from lithic material."},
+{r:64,t:"Ash sampling",c:"Collection of freshly fallen ash for grain size, chemistry and component analysis."},
+{r:65,t:"Trenching",c:"Excavation across deposits to expose their full stratigraphic section."},
+{r:66,t:"Photogrammetry",c:"Deriving three-dimensional topography from overlapping photographs."},
+{r:67,t:"Strike and dip",c:"Paired measurements giving the orientation and inclination of a planar geological surface."},
+{r:68,t:"Aviation Color Code",c:"Four-step colour scheme that communicates volcanic status specifically to aviation."},
+{r:69,t:"VONA",c:"Volcano Observatory Notice for Aviation: a terse formal message issued to air traffic authorities."},
+{r:70,t:"SitRep",c:"Concise periodic written summary of current status and actions, written for responders."},
+{r:71,t:"Briefing",c:"Structured verbal presentation of the current assessment to officials or responders."},
+{r:72,t:"Public Information Officer",c:"Designated person handling media and public messaging during a crisis."},
+{r:73,t:"Interagency coordination",c:"Joint working among observatories, civil protection and other bodies during a response."},
+{r:74,t:"Hazard assessment",c:"Systematic evaluation of which hazards threaten which areas, and how likely each is."},
+{r:75,t:"Evacuation / Exclusion zone",c:"Officially delimited area from which people are moved out or barred from entering."},
+{r:76,t:"Aviation ash advisory",c:"Forecast product describing where ash is and where it is expected to drift, issued for aviation."},
+{r:77,t:"Incident command",c:"Standard management structure that organises multi-agency emergency response."},
+{r:78,t:"Situational awareness",c:"Current, shared, accurate understanding of conditions and how they are likely to develop."},
+{r:79,t:"Data quality control",c:"Routine checking of incoming data for validity before it is used in interpretation."},
+{r:80,t:"Data stream",c:"Continuous flow of records from one instrument or channel into the archive."},
+{r:81,t:"Event detection",c:"Automatic recognition and cataloguing of discrete signals within a continuous record."},
+{r:82,t:"Field deployment",c:"Trip onto the volcano to install, service or recover instruments."},
+{r:83,t:"Ash leachate",c:"Water-soluble coating on ash particles, analysed for its effect on water supplies and grazing land."},
+{r:84,t:"Instrument noise",c:"Unwanted signal generated by the sensor and recording system itself, not by the ground."},
+{r:85,t:"Telemetry dropout",c:"Loss of data transmission from a station, leaving holes in an otherwise continuous record."},
+{r:86,t:"False trigger",c:"Automatic detection fired by something other than the phenomenon it was meant to catch."},
+{r:87,t:"Data artifact",c:"Feature in a record produced by the measurement process rather than by the volcano."},
+{r:88,t:"Sensor drift",c:"Slow, progressive change in an instrument's output unrelated to any real change in what it measures."},
+{r:89,t:"Weather modulation",c:"Meteorological influence that alters a monitored signal and can mimic volcanic change."},
+{r:90,t:"Overprinting",c:"Later deposits or processes obscuring the evidence left by earlier ones."},
+{r:91,t:"Station outage",c:"Complete loss of a monitoring site's operation for some period."},
+{r:92,t:"Clipping / Saturation",c:"Signal exceeding an instrument's recordable range, so peaks come out flat-topped and true amplitudes are lost."},
+{r:93,t:"Non-unique solution",c:"Situation where several quite different source models fit the observations equally well."},
+{r:94,t:"Signal attenuation",c:"Weakening of a signal with distance, or through the medium it passes."},
+{r:95,t:"Field bias",c:"Systematic skew in observations arising from where fieldwork could actually be done: accessible ground over the rest."},
+{r:96,t:"Cultural noise",c:"Vibration from human activity such as traffic or machinery contaminating a record."},
+{r:97,t:"Aliasing",c:"Misrepresentation of high-frequency content as spurious low frequencies, from sampling too slowly."},
+{r:98,t:"Gap in coverage",c:"Region or interval for which the network provides no usable observation."},
+{r:99,t:"Misclassification",c:"Assigning a signal or a deposit to the wrong category."},
+{r:100,t:"Over-interpretation",c:"Drawing conclusions beyond what the data, often a single parameter, can actually support."},
+{r:101,t:"Ash contamination",c:"Introduction of extraneous material into a sample, compromising the analysis."},
+{r:102,t:"Base-level shift",c:"Change in a record's reference or zero level, offsetting every value that follows."},
+{r:103,t:"Plume opacity misjudgment",c:"Error in estimating how much ash a plume carries from its visual appearance alone."},
+{r:104,t:"Underestimating ballistic range",c:"Failure to allow for how far ejected blocks can actually be thrown from the vent."},
+{r:105,t:"Ignoring distal hazards",c:"Neglect of threats far from the vent, such as lahars in valleys and ashfall downwind."},
+{r:106,t:"Sensor burial",c:"Instrument covered by tephra or debris, degrading or ending its usefulness."},
+{r:107,t:"Clock synchronization error",c:"Timing offset between stations that corrupts locations and cross-station correlation."},
+{r:108,t:"Incomplete metadata",c:"Missing accompanying information that leaves a record hard to interpret or reuse."}
+];
+const N=TERMS.length;
+const TIMED_FROM=Math.ceil(N*0.7)+1;   // hardest 30% are timed
+
+/* ============================================================
+   config
+   ============================================================ */
+const KEYS=["A","B","C","D"];
+const FLOOR=0.06, SIGMA=0.26;          // drift shape: 90/10 at each end, still scattered
+const SHORT_CH=95, MED_CH=170;         // character-count tiers
+
+function tierFor(chars){
+  if(chars<=SHORT_CH) return {limit:15,bonus:10};
+  if(chars<=MED_CH)   return {limit:20,bonus:15};
+  return                     {limit:25,bonus:15};
+}
+
+/* ============================================================
+   state
+   ============================================================ */
+let pool=[],order=[],qi=0,total=30,score=0,streak=0,best=0,right=0,bonuses=0,missed=[];
+let cur=null,tId=null,startT=0,limitMs=0,bonusMs=0,answered=true,bonusGone=false;
+
+const $=s=>document.querySelector(s);
+const consoleEl=$("#console"),overlay=$("#overlay"),cardBody=$("#cardBody");
+const optionsEl=$("#options"),clueEl=$("#clue"),metaEl=$("#clueMeta");
+const wrap=$("#timerWrap"),bar=$("#timerBar"),tick=$("#bonusTick");
+const verdict=$("#verdict"),vText=$("#verdictText"),vPts=$("#verdictPts");
+const wash=$("#alertWash"),pip=$("#statusPip");
+
+/* ---- weighted draw: centre of gravity slides from easy to hard ---- */
+function drawTerm(progress){
+  const w=pool.map(i=>{
+    const x=(TERMS[i].r-1)/(N-1);
+    const d=x-progress;
+    return FLOOR+Math.exp(-(d*d)/(2*SIGMA*SIGMA));
+  });
+  let sum=w.reduce((a,b)=>a+b,0),roll=Math.random()*sum;
+  for(let k=0;k<pool.length;k++){roll-=w[k];if(roll<=0)return pool.splice(k,1)[0];}
+  return pool.splice(pool.length-1,1)[0];
+}
+
+/* ---- distractors drawn from neighbours in the ranking ---- */
+function distractors(idx){
+  let span=16,near=[];
+  while(near.length<3&&span<N){
+    near=TERMS.map((t,i)=>i).filter(i=>i!==idx&&Math.abs(TERMS[i].r-TERMS[idx].r)<=span);
+    span+=12;
+  }
+  for(let i=near.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[near[i],near[j]]=[near[j],near[i]];}
+  return near.slice(0,3);
+}
+
+function start(n){
+  total=n;pool=TERMS.map((_,i)=>i);order=[];qi=0;score=0;streak=0;best=0;right=0;bonuses=0;missed=[];
+  overlay.classList.add("off");consoleEl.hidden=false;
+  paintRail();nextCall();
+}
+
+function nextCall(){
+  if(qi>=total||!pool.length){return finish();}
+  const progress=total>1?qi/(total-1):0;
+  const idx=drawTerm(progress);
+  const opts=[idx,...distractors(idx)];
+  for(let i=opts.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[opts[i],opts[j]]=[opts[j],opts[i]];}
+
+  const timed=TERMS[idx].r>=TIMED_FROM;
+  const chars=TERMS[idx].c.length+opts.reduce((a,i)=>a+TERMS[i].t.length,0);
+  const tier=tierFor(chars);
+  cur={idx,opts,timed,tier};
+  answered=false;bonusGone=false;
+
+  $("#qIdx").textContent="CALL "+String(qi+1).padStart(2,"0")+" / "+total;
+  const chip=$("#modeChip");
+  chip.textContent=timed?"TIMED · "+tier.limit+"s":"LOGGED";
+  chip.className="chip"+(timed?" timed":"");
+  clueEl.textContent=TERMS[idx].c;
+  verdict.className="";verdict.textContent="";
+  verdict.innerHTML='<span id="verdictText">—</span><span class="pts" id="verdictPts"></span><span class="sp"></span><button class="btn" id="nextBtn">Next call</button>';
+  $("#nextBtn").addEventListener("click",()=>{qi++;nextCall();});
+
+  optionsEl.innerHTML="";
+  opts.forEach((oi,k)=>{
+    const b=document.createElement("button");
+    b.className="opt";b.type="button";
+    b.innerHTML='<span class="key">'+KEYS[k]+'</span><span>'+TERMS[oi].t+'</span>';
+    b.addEventListener("click",()=>answer(k,oi));
+    optionsEl.appendChild(b);
+  });
+
+  if(timed){
+    metaEl.innerHTML='<span>Bonus if answered inside <span class="sec">'+tier.bonus+'s</span></span><span id="clock">'+tier.limit+'.0s</span>';
+    setRoomHot(true);runTimer(tier);
+  }else{
+    metaEl.innerHTML='<span>No clock on this one. Answer when ready.</span>';
+    wrap.classList.remove("on");setRoomHot(false);
+  }
+}
+
+function runTimer(tier){
+  limitMs=tier.limit*1000;bonusMs=tier.bonus*1000;startT=performance.now();
+  wrap.classList.add("on");
+  bar.className="";bar.style.transform="scaleX(1)";
+  tick.className="";tick.style.left=(tier.bonus/tier.limit*100)+"%";
+  cancelAnimationFrame(tId);
+  const frame=now=>{
+    const el=now-startT,left=Math.max(0,limitMs-el);
+    bar.style.transform="scaleX("+(left/limitMs)+")";
+    const cl=$("#clock");if(cl)cl.textContent=(left/1000).toFixed(1)+"s";
+    if(el>=bonusMs&&!bonusGone){
+      bonusGone=true;bar.classList.add("past");tick.classList.add("spent");
+      const m=metaEl.querySelector(".sec");if(m)m.style.color="var(--alert)";
+    }
+    if(left<=5000)bar.classList.add("crit");
+    wash.style.opacity=(0.10+0.55*(1-left/limitMs)).toFixed(3);
+    if(left<=0){timeOut();return;}
+    if(!answered)tId=requestAnimationFrame(frame);
+  };
+  tId=requestAnimationFrame(frame);
+}
+
+function stopTimer(){cancelAnimationFrame(tId);tId=null;}
+function setRoomHot(on){
+  pip.classList.toggle("hot",on);
+  $("#railStatus").textContent=on?"TIMED CALL":"MONITORING";
+  $("#svgAlert").textContent=on?"ALERT · III WATCH":"ALERT · II ADVISORY";
+  if(!on)wash.style.opacity="0";
+}
+
+function answer(k,oi){
+  if(answered)return;
+  answered=true;stopTimer();
+  const elapsed=cur.timed?performance.now()-startT:0;
+  const inBonus=cur.timed&&elapsed<=bonusMs;
+  const correct=oi===cur.idx;
+  reveal(correct?k:-1);
+
+  if(correct){
+    right++;streak++;best=Math.max(best,streak);
+    let pts=100+streak*5;
+    if(inBonus){pts+=50;bonuses++;}
+    score+=pts;
+    verdict.className="on good";
+    vSet(inBonus?"Correct — inside the bonus window":"Correct",
+         "+"+pts+(inBonus?" (100 base · 50 bonus · "+streak*5+" streak)":" (100 base · "+streak*5+" streak)"));
+  }else{
+    streak=0;missed.push(cur.idx);
+    verdict.className="on bad";
+    vSet("Wrong — logged as "+TERMS[cur.idx].t,"+0");
+  }
+  wash.style.opacity="0";paintRail();
+}
+
+function timeOut(){
+  if(answered)return;
+  answered=true;stopTimer();streak=0;missed.push(cur.idx);
+  reveal(-1);
+  verdict.className="on bad";
+  vSet("Time out — answer was "+TERMS[cur.idx].t,"+0");
+  wash.style.opacity="0";paintRail();
+}
+
+function vSet(text,pts){
+  $("#verdictText").textContent=text;$("#verdictPts").textContent=pts;
+  $("#nextBtn").focus({preventScroll:true});
+}
+
+function reveal(pickedK){
+  [...optionsEl.children].forEach((b,k)=>{
+    b.disabled=true;
+    if(cur.opts[k]===cur.idx)b.classList.add("right");
+    else if(k===pickedK)b.classList.add("wrong");
+    else b.classList.add("faded");
+  });
+}
+
+function paintRail(){
+  $("#railScore").textContent=score;
+  $("#railStreak").textContent=streak;
+}
+
+function finish(){
+  stopTimer();consoleEl.hidden=true;wash.style.opacity="0";setRoomHot(false);
+  $("#railStatus").textContent="SHIFT END";
+  const acc=total?Math.round(right/total*100):0;
+  cardBody.innerHTML=
+    '<h1>Shift log</h1><p class="sub">'+right+' of '+total+' calls answered correctly</p>'+
+    '<div class="grid">'+
+      cell("Score",score)+cell("Accuracy",acc+"%")+cell("Bonus hits",bonuses)+cell("Best streak",best)+
+    '</div>'+
+    (missed.length?'<div class="missed"><h3>Terms to review</h3><ul>'+
+      missed.map(i=>'<li><b>'+TERMS[i].t+'</b> — '+TERMS[i].c+'</li>').join("")+'</ul></div>':
+      '<p class="dim">Nothing missed. The whole board went to you.</p>')+
+    '<div class="picks" style="margin-top:18px">'+
+      '<button class="btn warm" id="again30">Take another 30</button>'+
+      '<button class="btn" id="againAll">Full sweep · 108</button>'+
+    '</div>';
+  $("#again30").addEventListener("click",()=>start(30));
+  $("#againAll").addEventListener("click",()=>start(N));
+  overlay.classList.remove("off");
+  document.querySelector("#card .panel-head .idx").textContent=total+" calls";
+}
+const cell=(l,v)=>'<div class="cell"><span>'+l+'</span><b>'+v+'</b></div>';
+
+/* ---- briefing ---- */
+function briefing(){
+  cardBody.innerHTML=
+    '<h1>Take the desk</h1>'+
+    '<p class="sub">108 terms · monitoring, field practice, failure modes</p>'+
+    '<p>A definition comes up on the console. Pick the term it describes.</p>'+
+    '<div class="brief">'+
+      '<div><b>The board drifts.</b> Calls arrive in scattered order, but the easy end of the list dominates early and the specialist end dominates late.</div>'+
+      '<div><b>The hardest third runs on a clock.</b> 15, 20 or 25 seconds depending on how much there is to read. Answer inside the first 10 or 15 and the call scores a bonus.</div>'+
+      '<div><b>Everything else is untimed.</b> Take as long as you want on those.</div>'+
+    '</div>'+
+    '<div class="picks">'+
+      '<button class="btn warm" id="go30">Start · 30 calls</button>'+
+      '<button class="btn" id="goAll">Full sweep · 108</button>'+
+    '</div>'+
+    '<p class="dim" style="margin-top:14px">Keys 1–4 or A–D also work. Enter moves to the next call.</p>';
+  $("#go30").addEventListener("click",()=>start(30));
+  $("#goAll").addEventListener("click",()=>start(N));
+}
+
+/* ---- keyboard ---- */
+addEventListener("keydown",e=>{
+  if(consoleEl.hidden)return;
+  const k=e.key.toUpperCase();
+  if(!answered){
+    let n=-1;
+    if("1234".includes(k))n=+k-1;
+    if(KEYS.includes(k))n=KEYS.indexOf(k);
+    if(n>=0&&n<cur.opts.length){e.preventDefault();answer(n,cur.opts[n]);}
+  }else if(e.key==="Enter"||e.key===" "){e.preventDefault();qi++;nextCall();}
+});
+
+/* ---- feed clock ---- */
+setInterval(()=>{
+  const d=new Date();
+  $("#svgClock").textContent=d.toISOString().slice(11,19)+" UTC";
+},1000);
+
+briefing();
+</script>
+
+<style>
+/* scene motion — kept at the end so the orbit period reads plainly */
+.tilt{transform:scaleY(.76);transform-origin:800px 325px}
+.orbit{transform-origin:800px 325px;animation:orbit 230s linear infinite}
+@keyframes orbit{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+#plume{transform-origin:806px 300px;animation:breathe 19s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:.95;transform:scale(1.05)}}
+.blink{animation:pulseHot 4.5s ease-in-out infinite}
+@keyframes pulseHot{0%,100%{opacity:.75}50%{opacity:1}}
+#sweep{animation:sweep 11s linear infinite}
+@keyframes sweep{from{transform:translateX(0)}to{transform:translateX(736px)}}
+</style>
+</body>
+</html>
