@@ -1,1 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FLYING — Drone Vocabulary Trainer</title>
+<style>
+  :root{
+    --ink:#183029;
+    --soft-ink:#41564f;
+    --glass:rgba(250,248,236,.82);
+    --glass-strong:rgba(252,250,239,.94);
+    --line:rgba(32,57,49,.16);
+    --shadow:0 18px 50px rgba(38,51,42,.16);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#b9d7e6;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  button,input{font:inherit}
+  #scene{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #warmth{
+    pointer-events:none;position:fixed;inset:0;
+    background:
+      radial-gradient(circle at 72% 18%,rgba(255,232,170,.23),transparent 32%),
+      linear-gradient(to bottom,rgba(255,250,224,.06),rgba(255,222,174,.03) 56%,rgba(66,91,66,.06));
+    mix-blend-mode:screen
+  }
+  #vignette{
+    pointer-events:none;position:fixed;inset:0;
+    box-shadow:inset 0 0 120px rgba(26,45,39,.12)
+  }
+  #hud{position:fixed;inset:0;pointer-events:none}
+  .topbar{
+    position:absolute;top:18px;left:18px;right:18px;
+    display:flex;align-items:flex-start;justify-content:space-between;gap:12px
+  }
+  .pill{
+    pointer-events:auto;background:rgba(250,248,236,.72);border:1px solid rgba(255,255,255,.48);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-radius:999px;padding:8px 12px;box-shadow:0 8px 22px rgba(48,62,53,.08);
+    color:var(--soft-ink);font-size:12px;letter-spacing:.04em
+  }
+  .status{
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end
+  }
+  .meter{display:flex;align-items:center;gap:8px}
+  .bar{width:90px;height:6px;border-radius:99px;background:rgba(27,48,42,.11);overflow:hidden}
+  .fill{height:100%;width:100%;background:currentColor;border-radius:99px;transition:width .35s ease}
+  #batteryPill.low{color:#a0342f}
+  #batteryPill.low .bar{box-shadow:0 0 9px rgba(180,35,25,.18)}
+  #batteryPill.critical{animation:softPulse 1.1s ease-in-out infinite}
+  @keyframes softPulse{50%{filter:brightness(1.08)}}
+  #questionWrap{
+    position:absolute;top:74px;left:50%;transform:translateX(-50%);
+    width:min(690px,calc(100vw - 32px));pointer-events:auto
+  }
+  .card{
+    background:var(--glass);border:1px solid rgba(255,255,255,.55);
+    backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);
+    border-radius:20px;padding:18px 18px 15px;box-shadow:var(--shadow)
+  }
+  .eyebrow{
+    display:flex;justify-content:space-between;gap:14px;align-items:center;
+    color:#67776f;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase
+  }
+  #definition{font-size:clamp(17px,2.25vw,24px);line-height:1.35;margin:10px 0 14px;font-weight:620;letter-spacing:-.015em}
+  .answerRow{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+  #answer{
+    width:100%;border:1px solid var(--line);outline:none;background:rgba(255,255,255,.58);
+    border-radius:12px;padding:12px 13px;color:var(--ink);transition:.18s ease
+  }
+  #answer:focus{border-color:rgba(42,76,63,.38);box-shadow:0 0 0 4px rgba(74,112,94,.08);background:rgba(255,255,255,.78)}
+  .btn{
+    border:1px solid rgba(37,61,52,.14);background:rgba(255,255,255,.62);color:var(--ink);
+    border-radius:12px;padding:10px 13px;cursor:pointer;transition:.16s ease;white-space:nowrap
+  }
+  .btn:hover{transform:translateY(-1px);background:rgba(255,255,255,.8)}
+  .btn.primary{background:#28483d;color:#f8f3e6;border-color:#28483d}
+  .btn:disabled{opacity:.45;cursor:default;transform:none}
+  #feedback{
+    min-height:20px;margin-top:9px;color:#64746d;font-size:13px;
+    display:flex;justify-content:space-between;gap:12px;align-items:center
+  }
+  #feedback.good{color:#355d49}
+  #feedback.bad{color:#7a4d42}
+  .tiny{font-size:11px;color:#7b8a83}
+  #lowBattery{
+    position:absolute;right:24px;bottom:26px;display:none;align-items:center;gap:8px;
+    background:rgba(29,24,22,.66);color:#ffccc6;border:1px solid rgba(255,130,120,.24);
+    border-radius:10px;padding:8px 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    box-shadow:0 0 22px rgba(197,31,23,.12);backdrop-filter:blur(8px)
+  }
+  #batteryIcon{width:23px;height:11px;border:1.5px solid #ff6a60;border-radius:2px;position:relative}
+  #batteryIcon:after{content:"";position:absolute;right:-4px;top:2px;width:2px;height:5px;border-radius:0 1px 1px 0;background:#ff6a60}
+  #batteryIcon:before{content:"";position:absolute;inset:2px;right:13px;background:#ff4d45;border-radius:1px;box-shadow:0 0 7px rgba(255,65,55,.65)}
+  #start,#end{
+    position:fixed;inset:0;display:grid;place-items:center;background:rgba(32,48,42,.14);
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:9
+  }
+  #end{display:none;background:rgba(10,13,12,.92);color:#f3efe4}
+  .modal{
+    width:min(520px,calc(100vw - 34px));background:var(--glass-strong);color:var(--ink);
+    border-radius:24px;padding:26px;border:1px solid rgba(255,255,255,.62);box-shadow:0 28px 80px rgba(25,35,30,.24)
+  }
+  #end .modal{background:rgba(25,28,26,.78);color:#f3efe4;border-color:rgba(255,255,255,.08)}
+  .modal h1{font-size:clamp(34px,7vw,60px);letter-spacing:.12em;margin:0 0 8px;font-weight:800}
+  .modal p{line-height:1.55;color:#61716a;margin:8px 0 20px}
+  #end .modal p{color:#b9c1bc}
+  .modal .btn{width:100%;padding:13px 16px}
+  #fade{
+    pointer-events:none;position:fixed;inset:0;background:#050706;opacity:0;z-index:8;transition:opacity 3.5s ease
+  }
+  #fade.on{opacity:1}
+  #easter{
+    position:absolute;left:18px;bottom:18px;color:rgba(246,244,231,.58);
+    font-size:10px;letter-spacing:.08em;text-transform:uppercase;opacity:0;transition:opacity 1s ease
+  }
+  @media(max-width:640px){
+    .topbar{top:10px;left:10px;right:10px}
+    .pill{padding:7px 9px}
+    .bar{width:62px}
+    #questionWrap{top:62px}
+    .card{padding:14px}
+    .answerRow{grid-template-columns:1fr auto}
+    #revealBtn{grid-column:1 / -1}
+    #definition{font-size:17px}
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="warmth"></div>
+<div id="vignette"></div>
 
+<div id="hud">
+  <div class="topbar">
+    <div class="pill" id="progressPill">FLYING · 1 / 66</div>
+    <div class="status">
+      <div class="pill meter" id="confidencePill">CONFIDENCE <div class="bar"><div class="fill" id="confidenceFill"></div></div><span id="confidenceText">100</span></div>
+      <div class="pill meter" id="batteryPill">BATTERY <div class="bar"><div class="fill" id="batteryFill"></div></div><span id="batteryText">100%</span></div>
+    </div>
+  </div>
+
+  <div id="questionWrap">
+    <div class="card">
+      <div class="eyebrow"><span id="category">Flight Control & Orientation</span><span>TYPE THE TERM</span></div>
+      <div id="definition">Control that increases or decreases motor power, mainly affecting climb and descent.</div>
+      <div class="answerRow">
+        <input id="answer" autocomplete="off" spellcheck="false" placeholder="Your answer…" aria-label="Type the matching drone term" />
+        <button class="btn primary" id="submitBtn">Check</button>
+        <button class="btn" id="revealBtn">Reveal</button>
+      </div>
+      <div id="feedback"><span>Enter the matching term. Punctuation and capitalization do not matter.</span><span class="tiny">Enter ↵</span></div>
+    </div>
+  </div>
+
+  <div id="lowBattery"><div id="batteryIcon"></div><span>Low battery</span></div>
+  <div id="easter"></div>
+</div>
+
+<div id="start">
+  <div class="modal">
+    <div class="tiny">DRONE VOCABULARY TRAINER</div>
+    <h1>FLYING</h1>
+    <p>A quiet full-deck flight through 66 essential drone terms. Type the term that matches each definition. Misses cause only the slightest wobble—but they cost battery.</p>
+    <button class="btn primary" id="startBtn">Begin flight</button>
+  </div>
+</div>
+
+<div id="fade"></div>
+
+<div id="end">
+  <div class="modal">
+    <div class="tiny" id="endEyebrow">FLIGHT COMPLETE</div>
+    <h1 id="endTitle">LANDED</h1>
+    <p id="endText"></p>
+    <button class="btn" id="restartBtn">FLY AGAIN</button>
+  </div>
+</div>
+
+<script>
+const TERMS = [
+  {c:"Flight Control & Orientation",t:"Throttle",d:"Control that increases or decreases motor power, mainly affecting climb and descent.",a:["throttle"]},
+  {c:"Flight Control & Orientation",t:"Yaw",d:"Rotation of the drone left or right around its vertical axis.",a:["yaw"]},
+  {c:"Flight Control & Orientation",t:"Pitch",d:"Tilting the drone forward or backward.",a:["pitch"]},
+  {c:"Flight Control & Orientation",t:"Roll",d:"Tilting the drone left or right.",a:["roll"]},
+  {c:"Flight Control & Orientation",t:"Hover",d:"Holding a nearly fixed position and altitude in the air.",a:["hover"]},
+  {c:"Flight Control & Orientation",t:"Attitude",d:"The aircraft’s orientation in pitch, roll, and yaw.",a:["attitude"]},
+  {c:"Flight Control & Orientation",t:"Orientation",d:"The drone’s heading relative to the pilot, especially nose-in versus nose-out.",a:["orientation"]},
+  {c:"Flight Control & Orientation",t:"Trim",d:"Small adjustments that correct neutral stick positions so the drone holds level flight.",a:["trim"]},
+  {c:"Flight Control & Orientation",t:"Arm",d:"Enabling the motors so they can spin.",a:["arm","arming"]},
+  {c:"Flight Control & Orientation",t:"Disarm",d:"Disabling the motors after landing or in an emergency.",a:["disarm","disarming"]},
+
+  {c:"Flight Modes & Automation",t:"GPS mode",d:"Flight mode that uses satellite positioning to hold position and altitude.",a:["gps mode","gps"]},
+  {c:"Flight Modes & Automation",t:"ATTI mode",d:"Attitude mode that stabilizes orientation but does not hold position without GPS.",a:["atti mode","atti","attitude mode"]},
+  {c:"Flight Modes & Automation",t:"Acro / Manual mode",d:"Direct control mode with little or no automatic leveling, common in FPV.",a:["acro","acro mode","manual","manual mode","acro manual mode"]},
+  {c:"Flight Modes & Automation",t:"Sport mode",d:"Higher-speed, more responsive flight mode on many camera drones.",a:["sport mode","sport"]},
+  {c:"Flight Modes & Automation",t:"Altitude hold",d:"Mode that automatically maintains a selected height.",a:["altitude hold","alt hold"]},
+  {c:"Flight Modes & Automation",t:"Return to Home (RTH)",d:"Automatic or commanded flight back to the recorded home point.",a:["return to home","rth","return home"]},
+  {c:"Flight Modes & Automation",t:"Failsafe",d:"Predetermined safety behavior when a critical problem, such as lost signal, occurs.",a:["failsafe","fail safe"]},
+  {c:"Flight Modes & Automation",t:"Waypoint",d:"A saved geographic point used in an automated flight path.",a:["waypoint","way point"]},
+  {c:"Flight Modes & Automation",t:"Orbit",d:"Flight path that circles a selected subject or point of interest.",a:["orbit"]},
+  {c:"Flight Modes & Automation",t:"Follow-me",d:"Mode in which the drone automatically tracks and follows a moving subject.",a:["follow me","follow-me","followme"]},
+  {c:"Flight Modes & Automation",t:"Geofence",d:"Software boundary that warns or restricts flight in defined areas.",a:["geofence","geo fence"]},
+  {c:"Flight Modes & Automation",t:"Headless mode",d:"Mode in which stick directions are relative to the pilot, not the drone’s nose.",a:["headless mode","headless"]},
+
+  {c:"Navigation & Sensing",t:"Home point",d:"Recorded location the drone uses as its return reference.",a:["home point","homepoint"]},
+  {c:"Navigation & Sensing",t:"Compass calibration",d:"Procedure that sets the magnetic heading sensor to accurate reference values.",a:["compass calibration","calibrate compass"]},
+  {c:"Navigation & Sensing",t:"IMU",d:"Inertial Measurement Unit; sensors that measure rotation and acceleration for stability.",a:["imu","inertial measurement unit"]},
+  {c:"Navigation & Sensing",t:"Obstacle avoidance",d:"System that detects objects and attempts to prevent collisions.",a:["obstacle avoidance","collision avoidance"]},
+  {c:"Navigation & Sensing",t:"VLOS",d:"Visual Line of Sight; keeping the aircraft continuously visible to the pilot.",a:["vlos","visual line of sight"]},
+  {c:"Navigation & Sensing",t:"BVLOS",d:"Beyond Visual Line of Sight; operating the aircraft outside direct visual observation.",a:["bvlos","beyond visual line of sight"]},
+  {c:"Navigation & Sensing",t:"AGL",d:"Above Ground Level; height measured relative to the surface beneath the aircraft.",a:["agl","above ground level"]},
+  {c:"Navigation & Sensing",t:"Telemetry",d:"Live flight data such as battery, GPS, and altitude sent from the drone to the pilot.",a:["telemetry"]},
+
+  {c:"Signal & Control",t:"Transmitter (TX)",d:"Handheld device that sends pilot commands to the drone.",a:["transmitter","tx","transmitter tx"]},
+  {c:"Signal & Control",t:"Receiver (RX)",d:"Onboard device that receives commands from the transmitter.",a:["receiver","rx","receiver rx"]},
+  {c:"Signal & Control",t:"Binding",d:"Process of linking a specific transmitter and receiver so they communicate.",a:["binding","bind"]},
+  {c:"Signal & Control",t:"Latency",d:"Delay between a pilot input and the corresponding aircraft response or video display.",a:["latency","lag"]},
+  {c:"Signal & Control",t:"Range",d:"Maximum reliable distance of the control or video link.",a:["range"]},
+  {c:"Signal & Control",t:"FPV",d:"First-Person View; piloting or viewing through a live camera feed from the aircraft.",a:["fpv","first person view"]},
+  {c:"Signal & Control",t:"RSSI",d:"Received Signal Strength Indicator; a measure of radio link quality.",a:["rssi","received signal strength indicator"]},
+  {c:"Signal & Control",t:"Interference",d:"Unwanted radio signals that degrade control or video performance.",a:["interference"]},
+  {c:"Signal & Control",t:"Lost link",d:"Condition in which communication between the controller and drone is interrupted.",a:["lost link","loss of link"]},
+
+  {c:"Power & Performance",t:"LiPo battery",d:"Lithium-polymer battery commonly used to power multirotor drones.",a:["lipo battery","lipo","lithium polymer battery"]},
+  {c:"Power & Performance",t:"Voltage sag",d:"Temporary drop in battery voltage under high load.",a:["voltage sag"]},
+  {c:"Power & Performance",t:"mAh capacity",d:"Measure of how much energy a battery can store.",a:["mah capacity","mah","milliamp hour capacity","milliamp-hour capacity"]},
+  {c:"Power & Performance",t:"Low-battery warning",d:"Alert that the battery is running low and landing or RTH is needed.",a:["low battery warning","low-battery warning"]},
+  {c:"Power & Performance",t:"Flight time",d:"Approximate duration the drone can remain airborne on a given battery.",a:["flight time"]},
+  {c:"Power & Performance",t:"Payload",d:"Extra equipment carried by the drone, such as a camera or sensor.",a:["payload"]},
+  {c:"Power & Performance",t:"Prop wash",d:"Turbulent air produced by the propellers that can affect handling.",a:["prop wash","propwash"]},
+
+  {c:"Operations & Regulation",t:"Pilot in command (PIC)",d:"Person ultimately responsible for the safe conduct of the flight.",a:["pilot in command","pic"]},
+  {c:"Operations & Regulation",t:"Visual observer",d:"Person who assists the pilot by watching the aircraft and surrounding airspace.",a:["visual observer","vo"]},
+  {c:"Operations & Regulation",t:"Preflight check",d:"Inspection of the aircraft, battery, environment, and systems before takeoff.",a:["preflight check","pre-flight check","preflight"]},
+  {c:"Operations & Regulation",t:"Post-flight check",d:"Inspection after landing for damage, heat, or other issues.",a:["post flight check","post-flight check","postflight check"]},
+  {c:"Operations & Regulation",t:"No-fly zone",d:"Area where drone flight is prohibited or restricted.",a:["no fly zone","no-fly zone","nofly zone"]},
+  {c:"Operations & Regulation",t:"Controlled airspace",d:"Airspace requiring air traffic control authorization for many drone operations.",a:["controlled airspace"]},
+  {c:"Operations & Regulation",t:"LAANC",d:"FAA system that provides near-real-time authorization for many controlled-airspace flights.",a:["laanc"]},
+  {c:"Operations & Regulation",t:"Remote ID",d:"Broadcast system that transmits a drone’s identification and location information.",a:["remote id","remote identification"]},
+  {c:"Operations & Regulation",t:"Part 107",d:"Primary U.S. federal regulations governing most non-recreational small-drone operations.",a:["part 107","part one oh seven","part one hundred seven"]},
+  {c:"Operations & Regulation",t:"TFR",d:"Temporary Flight Restriction that limits aircraft operations in a defined area for a limited time.",a:["tfr","temporary flight restriction"]},
+  {c:"Operations & Regulation",t:"NOTAM",d:"Notice to Air Missions; time-sensitive information about hazards or restrictions.",a:["notam","notice to air missions"]},
+  {c:"Operations & Regulation",t:"UAS",d:"Unmanned Aircraft System; the aircraft plus its control station, links, and operator.",a:["uas","unmanned aircraft system"]},
+
+  {c:"8 Essential Technical Parts",t:"Frame / Airframe",d:"Structural body that holds motors, electronics, and payload.",a:["frame","airframe","frame airframe"]},
+  {c:"8 Essential Technical Parts",t:"Brushless motors",d:"Electric motors that spin the propellers to produce thrust.",a:["brushless motors","brushless motor"]},
+  {c:"8 Essential Technical Parts",t:"Propellers",d:"Rotating blades that convert motor power into lift and directional force.",a:["propellers","propeller","props"]},
+  {c:"8 Essential Technical Parts",t:"ESCs (Electronic Speed Controllers)",d:"Devices that regulate power to each motor.",a:["escs","esc","electronic speed controllers","electronic speed controller"]},
+  {c:"8 Essential Technical Parts",t:"Flight controller",d:"Central computer that processes pilot inputs and sensor data to stabilize and control the aircraft.",a:["flight controller"]},
+  {c:"8 Essential Technical Parts",t:"GPS module",d:"Hardware that receives satellite signals for position and navigation.",a:["gps module","gps receiver"]},
+  {c:"8 Essential Technical Parts",t:"Receiver + antennas",d:"Hardware that receives pilot commands and maintains the radio control link.",a:["receiver antennas","receiver and antennas","receiver plus antennas","rx antennas"]},
+  {c:"8 Essential Technical Parts",t:"Gimbal",d:"Motorized mount that stabilizes and aims the camera.",a:["gimbal"]}
+];
+
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
+let W=0,H=0,dpr=1,t=0,last=0;
+let running=false,failed=false,complete=false;
+let battery=100,confidence=100,index=0,wrongCount=0;
+let deck=[];
+let wobble=0, wobbleVel=0, fall=0, turnAmt=0, targetTurn=0;
+let sceneX=0, speed=22;
+let easterShown=[false,false];
+let audioCtx=null, humOsc1=null, humOsc2=null, humGain=null;
+const cloudSeed = Array.from({length:9},(_,i)=>({x:(i*0.137+0.06)%1,y:.07+(i%4)*.075,s:.7+(i%3)*.33}));
+const birdSeed = [
+  {x:.16,y:.27,s:.7,phase:0},
+  {x:.68,y:.22,s:.55,phase:2.2},
+  {x:.88,y:.34,s:.45,phase:4.1}
+];
+
+function resize(){
+  dpr=Math.min(devicePixelRatio||1,2);
+  W=innerWidth; H=innerHeight;
+  canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
+  canvas.style.width=W+"px"; canvas.style.height=H+"px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize",resize); resize();
+
+function rnd01(n){ const x=Math.sin(n*91.712+8.31)*43758.5453; return x-Math.floor(x); }
+function normalize(s){
+  return s.toLowerCase()
+    .replace(/first-person/g,"first person")
+    .replace(/lithium-polymer/g,"lithium polymer")
+    .replace(/[^a-z0-9]+/g," ")
+    .replace(/\s+/g," ").trim();
+}
+function shuffle(a){
+  a=[...a];
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+  return a;
+}
+function setupDeck(){
+  // Gentle ramp: familiar controls first, then mix the rest.
+  const warmup = TERMS.slice(0,10);
+  const rest = TERMS.slice(10);
+  deck=[...shuffle(warmup),...shuffle(rest)];
+}
+setupDeck();
+
+const definition=document.getElementById("definition");
+const category=document.getElementById("category");
+const answer=document.getElementById("answer");
+const feedback=document.getElementById("feedback");
+const submitBtn=document.getElementById("submitBtn");
+const revealBtn=document.getElementById("revealBtn");
+const progressPill=document.getElementById("progressPill");
+const confidenceFill=document.getElementById("confidenceFill");
+const confidenceText=document.getElementById("confidenceText");
+const batteryFill=document.getElementById("batteryFill");
+const batteryText=document.getElementById("batteryText");
+const batteryPill=document.getElementById("batteryPill");
+const lowBattery=document.getElementById("lowBattery");
+const fade=document.getElementById("fade");
+const start=document.getElementById("start");
+const end=document.getElementById("end");
+const endTitle=document.getElementById("endTitle");
+const endText=document.getElementById("endText");
+const endEyebrow=document.getElementById("endEyebrow");
+
+function renderQuestion(){
+  const q=deck[index];
+  if(!q){ finishSuccess(); return; }
+  category.textContent=q.c;
+  definition.textContent=q.d;
+  answer.value="";
+  answer.disabled=false; submitBtn.disabled=false; revealBtn.disabled=false;
+  revealBtn.textContent="Reveal";
+  feedback.className="";
+  feedback.innerHTML='<span>Enter the matching term. Punctuation and capitalization do not matter.</span><span class="tiny">Enter ↵</span>';
+  progressPill.textContent=`FLYING · ${index+1} / ${deck.length}`;
+  answer.focus();
+}
+function updateMeters(){
+  confidence=Math.max(0,Math.min(100,confidence));
+  battery=Math.max(0,Math.min(100,battery));
+  confidenceFill.style.width=confidence+"%";
+  confidenceText.textContent=Math.round(confidence);
+  batteryFill.style.width=battery+"%";
+  batteryText.textContent=Math.ceil(battery)+"%";
+  const low=battery<=18;
+  const critical=battery<=10;
+  batteryPill.classList.toggle("low",low);
+  batteryPill.classList.toggle("critical",critical);
+  lowBattery.style.display=low&&running&&!failed?"flex":"none";
+  if(battery<=0 && running && !failed) failFlight();
+}
+
+function checkAnswer(){
+  if(!running||failed||complete) return;
+  const q=deck[index];
+  const n=normalize(answer.value);
+  if(!n) return;
+  const good=q.a.some(a=>normalize(a)===n) || normalize(q.t)===n;
+  if(good){
+    confidence=Math.min(100,confidence+0.8);
+    battery-=0.78;
+    feedback.className="good";
+    feedback.innerHTML=`<span>Correct — ${q.t}</span><span class="tiny">steady flight</span>`;
+    answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true;
+    tinySteady();
+    updateMeters();
+    setTimeout(()=>{index++; maybeTurn(); renderQuestion();},650);
+  }else{
+    wrongCount++;
+    confidence-=6;
+    battery-=5.2;
+    feedback.className="bad";
+    feedback.innerHTML='<span>Not quite. Try once more, or reveal it.</span><span class="tiny">minor correction</span>';
+    subtleWobble();
+    updateMeters();
+    answer.select();
+  }
+}
+function reveal(){
+  if(!running||failed||complete) return;
+  const q=deck[index];
+  if(revealBtn.textContent==="Continue"){
+    index++; maybeTurn(); renderQuestion(); return;
+  }
+  confidence-=2;
+  battery-=2.4;
+  answer.value=q.t;
+  answer.disabled=true; submitBtn.disabled=true;
+  revealBtn.textContent="Continue";
+  feedback.className="";
+  feedback.innerHTML=`<span>${q.t}</span><span class="tiny">review it once</span>`;
+  updateMeters();
+}
+submitBtn.onclick=checkAnswer;
+revealBtn.onclick=reveal;
+answer.addEventListener("keydown",e=>{if(e.key==="Enter") checkAnswer();});
+
+function maybeTurn(){
+  // Exactly two landscape peeks in a full run.
+  if(index===18 && !easterShown[0]) startTurn(1,0);
+  if(index===44 && !easterShown[1]) startTurn(-1,1);
+}
+function startTurn(dir,which){
+  easterShown[which]=true;
+  targetTurn=dir;
+  setTimeout(()=>targetTurn=0,5200);
+}
+
+function subtleWobble(){
+  wobbleVel+=(Math.random()<.5?-1:1)*0.8;
+  pitchHum(1.055,0.55);
+}
+function tinySteady(){ pitchHum(1.012,0.18); }
+
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  humGain=audioCtx.createGain();
+  humGain.gain.value=.028;
+  const filter=audioCtx.createBiquadFilter();
+  filter.type="lowpass"; filter.frequency.value=520;
+  humOsc1=audioCtx.createOscillator();
+  humOsc2=audioCtx.createOscillator();
+  humOsc1.type="sawtooth"; humOsc2.type="triangle";
+  humOsc1.frequency.value=92; humOsc2.frequency.value=138;
+  humOsc1.connect(filter); humOsc2.connect(filter); filter.connect(humGain); humGain.connect(audioCtx.destination);
+  humOsc1.start(); humOsc2.start();
+}
+function pitchHum(mult=1,dur=.2){
+  if(!audioCtx||!humOsc1) return;
+  const now=audioCtx.currentTime;
+  humOsc1.frequency.cancelScheduledValues(now);
+  humOsc2.frequency.cancelScheduledValues(now);
+  humOsc1.frequency.setValueAtTime(humOsc1.frequency.value,now);
+  humOsc2.frequency.setValueAtTime(humOsc2.frequency.value,now);
+  humOsc1.frequency.linearRampToValueAtTime(92*mult,now+.06);
+  humOsc2.frequency.linearRampToValueAtTime(138*mult,now+.06);
+  humOsc1.frequency.linearRampToValueAtTime(92,now+dur);
+  humOsc2.frequency.linearRampToValueAtTime(138,now+dur);
+}
+function stopAudioSoft(){
+  if(!audioCtx||!humGain) return;
+  const now=audioCtx.currentTime;
+  humGain.gain.cancelScheduledValues(now);
+  humGain.gain.setValueAtTime(humGain.gain.value,now);
+  humGain.gain.linearRampToValueAtTime(.0001,now+2.8);
+}
+
+document.getElementById("startBtn").onclick=()=>{
+  initAudio();
+  if(audioCtx.state==="suspended") audioCtx.resume();
+  start.style.display="none";
+  running=true;
+  renderQuestion();
+};
+document.getElementById("restartBtn").onclick=()=>location.reload();
+
+function failFlight(){
+  failed=true;
+  answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true;
+  lowBattery.style.display="flex";
+  feedback.className="bad";
+  feedback.innerHTML='<span>Battery depleted.</span><span class="tiny">descending</span>';
+  stopAudioSoft();
+  setTimeout(()=>{fall=1;},450);
+  setTimeout(()=>fade.classList.add("on"),1250);
+  setTimeout(()=>{
+    endEyebrow.textContent="FLIGHT ENDED";
+    endTitle.textContent="BATTERY LOW";
+    endText.textContent=`You reached ${index+1} of ${deck.length} terms with ${Math.round(confidence)} pilot confidence. Fly again and the deck will reshuffle.`;
+    end.style.display="grid";
+  },4700);
+}
+function finishSuccess(){
+  complete=true; running=false;
+  answer.disabled=true; submitBtn.disabled=true; revealBtn.disabled=true;
+  stopAudioSoft();
+  endEyebrow.textContent="FULL DECK COMPLETE";
+  endTitle.textContent="LANDED";
+  endText.textContent=`All ${deck.length} terms completed. Final pilot confidence: ${Math.round(confidence)}. Misses: ${wrongCount}.`;
+  end.style.display="grid";
+}
+
+function drawSky(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#a9cfe2");
+  g.addColorStop(.58,"#dce6d7");
+  g.addColorStop(1,"#d9c9a5");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // gentle sun haze
+  const rg=ctx.createRadialGradient(W*.72,H*.15,4,W*.72,H*.15,Math.max(W,H)*.42);
+  rg.addColorStop(0,"rgba(255,244,198,.33)");
+  rg.addColorStop(1,"rgba(255,244,198,0)");
+  ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);
+}
+function drawCloud(x,y,s,alpha=.68){
+  ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.globalAlpha=alpha;
+  ctx.fillStyle="#f6f1dc";
+  ctx.beginPath();
+  ctx.ellipse(-42,10,46,17,0,0,Math.PI*2);
+  ctx.ellipse(-10,0,37,24,0,0,Math.PI*2);
+  ctx.ellipse(24,8,44,19,0,0,Math.PI*2);
+  ctx.ellipse(53,12,31,14,0,0,Math.PI*2);
+  ctx.fill();ctx.restore();
+}
+function drawClouds(){
+  cloudSeed.forEach((cl,i)=>{
+    const drift=((sceneX*(.018+.004*(i%3)))%(W+260));
+    let x=cl.x*W-drift;
+    if(x<-150)x+=W+300;
+    drawCloud(x,cl.y*H,cl.s*(W/1100+.45),.42+.06*(i%4));
+  });
+}
+function treeShape(x,base,s,kind,shade){
+  ctx.save();ctx.translate(x,base);
+  ctx.fillStyle=shade;
+  if(kind==="pine"){
+    ctx.beginPath();ctx.moveTo(0,-44*s);ctx.lineTo(-17*s,-7*s);ctx.lineTo(-8*s,-7*s);ctx.lineTo(-23*s,12*s);ctx.lineTo(23*s,12*s);ctx.lineTo(8*s,-7*s);ctx.lineTo(17*s,-7*s);ctx.closePath();ctx.fill();
+  }else{
+    ctx.beginPath();
+    ctx.arc(-11*s,-14*s,18*s,0,Math.PI*2);
+    ctx.arc(7*s,-21*s,22*s,0,Math.PI*2);
+    ctx.arc(20*s,-9*s,17*s,0,Math.PI*2);
+    ctx.arc(-2*s,0,24*s,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function drawDistantLand(){
+  const horizon=H*.79;
+  // distant field
+  const g=ctx.createLinearGradient(0,horizon-55,0,H);
+  g.addColorStop(0,"#849870");g.addColorStop(1,"#5f7756");
+  ctx.fillStyle=g;ctx.fillRect(0,horizon,W,H-horizon);
+  // far treeline
+  ctx.fillStyle="#5f785e";
+  ctx.beginPath();ctx.moveTo(0,horizon);
+  for(let x=0;x<=W+20;x+=18){
+    const world=x+sceneX*.35;
+    const y=horizon-23-18*rnd01(Math.floor(world/18));
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
+
+  // individual tree crowns at bottom
+  for(let x=-50;x<W+60;x+=40){
+    const world=x+sceneX*.62;
+    const n=Math.floor(world/40);
+    const sx=x-(sceneX*.62%40);
+    const kind=rnd01(n*2.2)>.82?"pine":"dec";
+    const s=.75+rnd01(n*7.1)*.55;
+    treeShape(sx,horizon+18,s,kind, n%2?"#48664f":"#527057");
+  }
+}
+function drawCornfield(){
+  const a=Math.abs(turnAmt);
+  if(a<.16 || !easterShown[1] || index<44 || index>49) return;
+  ctx.save();
+  ctx.globalAlpha=Math.min(.72,(a-.16)*1.1);
+  const side=turnAmt<0?0:W*.68;
+  const width=W*.42;
+  const x=turnAmt<0?-W*.02:W*.60;
+  const y=H*.68;
+  ctx.fillStyle="#b7a25f";ctx.fillRect(x,y,width,H-y);
+  ctx.strokeStyle="rgba(91,88,45,.36)";ctx.lineWidth=1;
+  for(let i=0;i<26;i++){
+    const xx=x+i*(width/25);
+    ctx.beginPath();ctx.moveTo(xx,y);ctx.lineTo(xx+(turnAmt<0?-40:40),H);ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawHouses(){
+  const a=Math.abs(turnAmt);
+  if(a<.16 || !easterShown[0] || index<18 || index>23) return;
+  ctx.save();
+  ctx.globalAlpha=Math.min(.68,(a-.16)*1.2);
+  const dir=turnAmt>0?1:-1;
+  const baseX=dir>0?W*.73:W*.15;
+  const y=H*.70;
+  for(let i=0;i<3;i++){
+    const x=baseX+i*48*dir;
+    ctx.fillStyle="#d9cfb7";ctx.fillRect(x-18,y-18-i*3,34,22);
+    ctx.fillStyle="#7d695c";
+    ctx.beginPath();ctx.moveTo(x-23,y-18-i*3);ctx.lineTo(x,y-37-i*3);ctx.lineTo(x+21,y-18-i*3);ctx.closePath();ctx.fill();
+  }
+  ctx.restore();
+}
+function drawBird(x,y,s,phase){
+  const flap=Math.sin(t*2.2+phase)*2;
+  ctx.strokeStyle="rgba(54,67,61,.55)";ctx.lineWidth=1.4;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x-6*s,y-(3+flap)*s,x-12*s,y-1*s);
+  ctx.moveTo(x,y);ctx.quadraticCurveTo(x+6*s,y-(3+flap)*s,x+12*s,y-1*s);ctx.stroke();
+}
+function drawBirds(){
+  birdSeed.forEach((b,i)=>{
+    let x=(b.x*W + t*(5+i*2))%(W+60)-30;
+    drawBird(x,b.y*H,b.s,b.phase);
+  });
+}
+function drawDrone(){
+  const baseY=H*.54;
+  const bob=Math.sin(t*1.7)*2.2;
+  wobbleVel*=.88; wobble+=wobbleVel; wobble*=.88;
+  const fallPx=fall?Math.min(H*.66,(t-fallStart)*110):0;
+  const turnLean=turnAmt*6;
+  const x=W*.5+turnAmt*W*.035;
+  const y=baseY+bob+fallPx;
+
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate((wobble+turnLean)*Math.PI/180);
+  const s=Math.max(.66,Math.min(1.08,W/1100));
+
+  // shadow under body
+  ctx.globalAlpha=.16;ctx.fillStyle="#22312c";ctx.beginPath();ctx.ellipse(0,22*s,70*s,12*s,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+
+  // rear-perspective arms
+  ctx.strokeStyle="#283936";ctx.lineWidth=6*s;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(-14*s,0);ctx.lineTo(-62*s,-22*s);ctx.moveTo(14*s,0);ctx.lineTo(62*s,-22*s);
+  ctx.moveTo(-11*s,7*s);ctx.lineTo(-56*s,34*s);ctx.moveTo(11*s,7*s);ctx.lineTo(56*s,34*s);ctx.stroke();
+
+  // prop discs
+  ctx.fillStyle="rgba(35,48,45,.13)";
+  [[-66,-24],[66,-24],[-60,37],[60,37]].forEach(([px,py],i)=>{
+    ctx.save();ctx.translate(px*s,py*s);
+    ctx.rotate(t*(i%2?17:-17));
+    ctx.beginPath();ctx.ellipse(0,0,30*s,5*s,0,0,Math.PI*2);ctx.fill();ctx.restore();
+    ctx.fillStyle="#273936";ctx.beginPath();ctx.arc(px*s,py*s,5*s,0,Math.PI*2);ctx.fill();ctx.fillStyle="rgba(35,48,45,.13)";
+  });
+
+  // body
+  const bodyGrad=ctx.createLinearGradient(0,-18*s,0,23*s);
+  bodyGrad.addColorStop(0,"#66766f");bodyGrad.addColorStop(1,"#313f3b");
+  ctx.fillStyle=bodyGrad;ctx.beginPath();
+  ctx.moveTo(-27*s,-9*s);ctx.quadraticCurveTo(0,-29*s,27*s,-9*s);
+  ctx.lineTo(20*s,20*s);ctx.quadraticCurveTo(0,29*s,-20*s,20*s);ctx.closePath();ctx.fill();
+
+  // rear status light
+  ctx.fillStyle="#d9a967";ctx.beginPath();ctx.arc(0,20*s,2.2*s,0,Math.PI*2);ctx.fill();
+
+  // gimbal camera
+  ctx.fillStyle="#202a28";ctx.fillRect(-8*s,16*s,16*s,10*s);
+  ctx.fillStyle="#0e1514";ctx.beginPath();ctx.arc(0,22*s,4.2*s,0,Math.PI*2);ctx.fill();
+
+  ctx.restore();
+}
+let fallStart=0;
+function animate(ms){
+  const now=ms/1000;
+  const dt=Math.min(.033,now-last||.016);last=now;t=now;
+  if(running&&!failed&&!complete) sceneX+=speed*dt;
+  if(failed&&fall===1){fall=2;fallStart=t}
+  turnAmt += (targetTurn-turnAmt)*Math.min(1,dt*.65);
+
+  drawSky();
+  drawClouds();
+  drawBirds();
+  drawCornfield();
+  drawHouses();
+  drawDistantLand();
+  drawDrone();
+
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+updateMeters();
+</script>
+</body>
+</html>
