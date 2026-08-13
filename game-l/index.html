@@ -1,1575 +1,1854 @@
-```html
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<title>Mouse Medical Run — Oval POV</title>
-<style>
-  :root{
-    --bg:#070a0e;
-    --panel:rgba(10,14,20,.94);
-    --line:rgba(255,255,255,.12);
-    --text:#eef3f8;
-    --muted:#aeb7c3;
-    --good:#75e39a;
-    --warn:#ffd468;
-    --bad:#ff6f71;
-  }
-  *{box-sizing:border-box}
-  html,body{
-    margin:0;
-    width:100%;
-    height:100%;
-    overflow:hidden;
-    background:var(--bg);
-    color:var(--text);
-    font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  }
-  #game{
-    position:relative;
-    width:100%;
-    height:100%;
-    min-height:560px;
-    background:#0b0f15;
-  }
-  canvas{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
-    display:block;
-  }
-  #hud{
-    position:absolute;
-    z-index:20;
-    inset:0 0 auto 0;
-    min-height:174px;
-    padding:12px 18px 13px;
-    background:linear-gradient(180deg,rgba(5,8,13,.985),rgba(5,8,13,.93) 76%,rgba(5,8,13,.66));
-    border-bottom:1px solid rgba(255,255,255,.08);
-    box-shadow:0 10px 28px rgba(0,0,0,.36);
-  }
-  #topline{
-    display:grid;
-    grid-template-columns:minmax(130px,.75fr) minmax(250px,1.7fr) minmax(125px,.75fr);
-    align-items:center;
-    gap:14px;
-    max-width:1200px;
-    margin:0 auto 8px;
-  }
-  .tiny{
-    font-size:11px;
-    letter-spacing:.12em;
-    text-transform:uppercase;
-    color:var(--muted);
-    white-space:nowrap;
-  }
-  #district{overflow:hidden;text-overflow:ellipsis}
-  #strengthWrap{display:flex;align-items:center;gap:9px}
-  #strengthTrack{
-    position:relative;flex:1;min-width:90px;height:12px;border-radius:20px;overflow:hidden;
-    background:#252a31;border:1px solid rgba(255,255,255,.14);
-  }
-  #strengthBar{
-    position:absolute;inset:0 auto 0 0;width:100%;
-    background:linear-gradient(90deg,#6ddc95,#d6e96e);
-    transition:width .2s ease, background .2s ease;
-  }
-  #strengthText{min-width:48px;text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
-  #questionArea{
-    max-width:1200px;margin:auto;display:grid;grid-template-columns:1fr 94px;gap:14px;align-items:end;
-  }
-  #definition{
-    min-height:48px;font-size:clamp(16px,2vw,24px);line-height:1.24;font-weight:740;letter-spacing:-.012em;
-  }
-  #timerBox{text-align:center}
-  #timer{
-    font-size:38px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums;
-  }
-  #difficulty{
-    font-size:10px;margin-top:4px;color:var(--muted);letter-spacing:.14em;
-  }
-  #entryRow{
-    max-width:1200px;margin:9px auto 0;display:grid;grid-template-columns:1fr auto;gap:8px;
-  }
-  #answer{
-    width:100%;height:42px;border-radius:9px;border:1px solid rgba(255,255,255,.18);
-    background:#171c24;color:white;padding:0 13px;font-size:17px;font-weight:650;outline:none;
-  }
-  #answer:focus{border-color:rgba(255,255,255,.5);box-shadow:0 0 0 3px rgba(255,255,255,.06)}
-  button{
-    height:42px;border:0;border-radius:9px;padding:0 18px;background:#edf1f7;color:#151b23;
-    font-weight:850;cursor:pointer;
-  }
-  button:hover{filter:brightness(1.04)}
-  #feedback{
-    max-width:1200px;height:18px;margin:6px auto 0;font-size:12px;font-weight:800;letter-spacing:.02em;
-  }
-  #overlay{
-    position:absolute;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
-    padding:24px;background:rgba(5,7,10,.72);backdrop-filter:blur(5px);
-  }
-  #overlay.hidden{display:none}
-  .card{
-    width:min(760px,94vw);
-    padding:30px;border-radius:18px;background:linear-gradient(180deg,#151a22,#0f1319);
-    border:1px solid rgba(255,255,255,.14);
-    box-shadow:0 24px 86px rgba(0,0,0,.52);
-  }
-  .card h1{margin:0 0 10px;font-size:clamp(30px,5vw,56px);letter-spacing:-.04em}
-  .card h2{margin:0 0 8px;font-size:32px}
-  .card p{color:#cad1da;line-height:1.52}
-  .rules{
-    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:18px 0 22px;
-  }
-  .rule{
-    padding:11px 13px;border-radius:10px;background:#1b212a;border:1px solid rgba(255,255,255,.08);
-    color:#cfd6df;font-size:13px;
-  }
-  .bigButton{width:100%;height:50px;font-size:16px}
-  #miniStats{margin-top:12px;color:#adb6c2;font-size:12px}
-  @media(max-width:680px){
-    #hud{min-height:196px;padding:9px 10px}
-    #topline{grid-template-columns:1fr 1.3fr;gap:8px}
-    #strengthWrap{grid-column:1/-1}
-    #questionArea{grid-template-columns:1fr 66px}
-    #entryRow{grid-template-columns:1fr}
-    #submit{display:none}
-    #definition{font-size:16px}
-    #timer{font-size:30px}
-    .rules{grid-template-columns:1fr}
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taste Level</title>
+  <meta name="description" content="Taste Level — an editorial runway vocabulary examination in a single HTML file." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root, [data-theme="light"] {
+      --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+      --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+      --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.05rem);
+      --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.45rem);
+      --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.2rem);
+      --text-2xl: clamp(2rem, 1.2rem + 2.5vw, 3.2rem);
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.25rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+      --space-10: 2.5rem;
+      --space-12: 3rem;
+      --space-16: 4rem;
+      --space-20: 5rem;
+      --radius-sm: 0.375rem;
+      --radius-md: 0.5rem;
+      --radius-lg: 0.9rem;
+      --radius-xl: 1.25rem;
+      --color-bg: #090909;
+      --color-surface: rgba(19,19,19,0.84);
+      --color-surface-2: rgba(28,28,28,0.88);
+      --color-surface-3: rgba(41,41,41,0.82);
+      --color-border: rgba(240,240,240,0.12);
+      --color-divider: rgba(240,240,240,0.08);
+      --color-text: #f0f0f0;
+      --color-text-muted: #bdb8b1;
+      --color-text-faint: #79756f;
+      --color-text-inverse: #111111;
+      --color-primary: #d8d0c4;
+      --color-primary-2: #a99778;
+      --color-accent: #b81414;
+      --color-success: #7d9f72;
+      --shadow-lg: 0 20px 80px rgba(0,0,0,0.4);
+      --shadow-md: 0 10px 32px rgba(0,0,0,0.28);
+      --font-display: 'Instrument Serif', Georgia, serif;
+      --font-body: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+      --transition: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    html { color-scheme: dark; }
+    body {
+      min-height: 100dvh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.03), transparent 35%),
+        linear-gradient(180deg, #050505 0%, #090909 40%, #030303 100%);
+      color: var(--color-text);
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; border: 0; background: none; color: inherit; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      isolation: isolate;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+        radial-gradient(circle at 50% 0%, rgba(255,255,255,0.045), transparent 28%);
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      perspective: 1450px;
+      overflow: hidden;
+      background: linear-gradient(180deg, rgba(255,255,255,0.015), transparent 22%);
+    }
+
+    .ceiling-grid, .audience, .runway-shell, .lighting-haze { position: absolute; inset: 0; }
+
+    .ceiling-grid {
+      background:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 84px 84px;
+      transform: rotateX(82deg) translateZ(260px) translateY(-68vh);
+      transform-origin: top center;
+      opacity: 0.36;
+    }
+
+    .lighting-haze {
+      background:
+        radial-gradient(circle at 50% 2%, rgba(255,255,255,0.16), transparent 25%),
+        radial-gradient(circle at 30% 10%, rgba(255,255,255,0.05), transparent 25%),
+        radial-gradient(circle at 70% 10%, rgba(255,255,255,0.05), transparent 25%);
+      mix-blend-mode: screen;
+      opacity: 0.7;
+    }
+
+    .runway-shell {
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .runway-stage {
+      position: relative;
+      width: min(100vw, 1320px);
+      height: 100vh;
+      transform-style: preserve-3d;
+    }
+
+    .runway {
+      position: absolute;
+      left: 50%;
+      top: 11%;
+      width: clamp(260px, 20vw, 360px);
+      height: 115vh;
+      transform: translateX(-50%) rotateX(75deg) translateZ(-130px);
+      transform-origin: center top;
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, #76716b 0%, #59544d 14%, #403c36 40%, #262320 74%, #171513 100%);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.08),
+        0 40px 80px rgba(0,0,0,0.45),
+        inset 0 0 80px rgba(255,255,255,0.02);
+      overflow: hidden;
+    }
+
+    .runway::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08) 10%, rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.09) 90%, rgba(255,255,255,0.02)),
+        repeating-linear-gradient(180deg, rgba(255,255,255,0.018) 0 2px, transparent 2px 26px);
+      opacity: 0.65;
+    }
+
+    .runway::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 1px;
+      height: 100%;
+      background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02));
+      transform: translateX(-50%);
+      opacity: 0.32;
+    }
+
+    .side-rail {
+      position: absolute;
+      top: 18%;
+      bottom: 0;
+      width: clamp(160px, 18vw, 290px);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.18));
+      transform: rotateX(75deg) translateZ(-112px);
+      transform-origin: center top;
+      opacity: 0.3;
+      filter: blur(1px);
+    }
+
+    .side-rail.left { left: calc(50% - min(10vw, 170px) - clamp(180px, 12vw, 220px)); }
+    .side-rail.right { right: calc(50% - min(10vw, 170px) - clamp(180px, 12vw, 220px)); }
+
+    .audience {
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .audience-bank {
+      position: absolute;
+      top: 28%;
+      width: 28vw;
+      max-width: 400px;
+      height: 46vh;
+      display: grid;
+      grid-template-rows: repeat(5, 1fr);
+      gap: 8px;
+      transform-style: preserve-3d;
+    }
+
+    .audience-bank.left { left: 5vw; transform: rotateY(16deg) rotateX(4deg); }
+    .audience-bank.right { right: 5vw; transform: rotateY(-16deg) rotateX(4deg); }
+
+    .aud-row {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      opacity: 0.85;
+    }
+
+    .aud-figure {
+      flex: 1;
+      min-width: 20px;
+      height: var(--h, 70%);
+      border-radius: 999px 999px 8px 8px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.015) 20%, rgba(0,0,0,0.45));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.025);
+      transform: translateY(var(--shift, 0px)) scaleX(var(--w, 1));
+      animation: spectator 6s ease-in-out infinite;
+      animation-delay: var(--d, 0s);
+      filter: blur(0.2px);
+    }
+
+    @keyframes spectator {
+      0%, 100% { transform: translateY(var(--shift, 0px)) scaleX(var(--w, 1)); opacity: 0.82; }
+      50% { transform: translateY(calc(var(--shift, 0px) - 2px)) scaleX(calc(var(--w, 1) * 1.02)); opacity: 0.96; }
+    }
+
+    .model-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .model {
+      position: absolute;
+      left: 50%;
+      bottom: 12%;
+      width: clamp(36px, 4vw, 52px);
+      height: clamp(116px, 16vw, 168px);
+      transform-origin: center bottom;
+      opacity: 0;
+      transition: opacity 320ms ease;
+      filter: drop-shadow(0 16px 18px rgba(0,0,0,0.32));
+    }
+
+    .model.visible { opacity: 1; }
+
+    .model .shadow {
+      position: absolute;
+      left: 50%;
+      bottom: -10px;
+      width: 120%;
+      height: 18px;
+      border-radius: 999px;
+      transform: translateX(-50%);
+      background: radial-gradient(circle, rgba(0,0,0,0.45), transparent 72%);
+      filter: blur(3px);
+      opacity: 0.7;
+    }
+
+    .model .body {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .look-figure {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-origin: center bottom;
+    }
+
+    .head {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 24%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(180deg, #d6c2ac, #b48f73);
+      box-shadow: inset 0 -2px 4px rgba(0,0,0,0.12);
+    }
+
+    .neck {
+      position: absolute;
+      top: 16%;
+      left: 50%;
+      width: 10%;
+      height: 7%;
+      transform: translateX(-50%);
+      background: #ba9378;
+      border-radius: 4px;
+    }
+
+    .torso {
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      width: var(--torso, 36%);
+      height: 40%;
+      transform: translateX(-50%);
+      border-radius: var(--torso-radius, 18px 18px 12px 12px);
+      background: var(--fabric, linear-gradient(180deg, #e9e6e1, #b8b0a2));
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.12),
+        inset 0 -18px 22px rgba(0,0,0,0.12);
+    }
+
+    .waist {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      width: var(--waist, 24%);
+      height: 4%;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: var(--belt, rgba(0,0,0,0.2));
+      opacity: var(--belt-opacity, 0);
+    }
+
+    .skirt {
+      position: absolute;
+      top: var(--skirt-top, 36%);
+      left: 50%;
+      width: var(--skirt-width, 62%);
+      height: var(--skirt-height, 46%);
+      transform: translateX(-50%);
+      clip-path: var(--skirt-clip, polygon(30% 0%, 70% 0%, 100% 100%, 0% 100%));
+      border-radius: var(--skirt-radius, 0 0 18px 18px);
+      background: var(--fabric, linear-gradient(180deg, #e9e6e1, #b8b0a2));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+      opacity: var(--skirt-opacity, 1);
+    }
+
+    .overlay-panel, .left-overlay, .right-overlay, .center-overlay {
+      position: absolute;
+      z-index: 3;
+    }
+
+    .topbar {
+      position: absolute;
+      inset: 0 0 auto 0;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: var(--space-4);
+      padding: var(--space-6) clamp(var(--space-4), 3vw, var(--space-10));
+      pointer-events: none;
+    }
+
+    .hud-panel {
+      pointer-events: auto;
+      background: linear-gradient(180deg, rgba(10,10,10,0.76), rgba(10,10,10,0.55));
+      border: 1px solid var(--color-border);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .hud-left, .hud-right {
+      display: flex;
+      gap: var(--space-3);
+      align-items: start;
+      min-width: 0;
+    }
+
+    .hud-left { justify-content: start; }
+    .hud-right { justify-content: end; }
+
+    .mark-panel {
+      min-width: min(280px, 40vw);
+      padding: var(--space-4) var(--space-4) var(--space-3);
+      border-radius: var(--radius-lg);
+    }
+
+    .mark-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      margin-bottom: var(--space-2);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--color-text-muted);
+    }
+
+    .mark-title {
+      font-family: var(--font-display);
+      font-size: var(--text-xl);
+      line-height: 1;
+      margin-bottom: var(--space-3);
+      letter-spacing: 0.01em;
+    }
+
+    .gauge-track {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .gauge-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 100%;
+      background: linear-gradient(90deg, #91856f 0%, #d8d0c4 50%, #f0f0f0 100%);
+      transform-origin: left center;
+      transition: transform 420ms cubic-bezier(0.16,1,0.3,1), background 220ms ease;
+    }
+
+    .gauge-text {
+      display: flex;
+      justify-content: space-between;
+      margin-top: var(--space-3);
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+
+    .title-panel {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--space-4) var(--space-6);
+      border-radius: 999px;
+      text-align: center;
+      min-width: min(560px, 54vw);
+    }
+
+    .eyebrow {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.28em;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-2);
+    }
+
+    .show-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.8rem, 1.2rem + 2vw, 3rem);
+      line-height: 0.94;
+      letter-spacing: 0.03em;
+    }
+
+    .subtitle {
+      margin-top: var(--space-2);
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+    }
+
+    .timer-panel {
+      min-width: min(280px, 34vw);
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+    }
+
+    .timer-head {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-3);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-3);
+    }
+
+    .timer-seconds {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 1.5rem + 2vw, 3.25rem);
+      line-height: 1;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+
+    .timer-bar {
+      position: relative;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.08);
+      margin-top: var(--space-3);
+    }
+
+    .timer-bar > span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 100%;
+      background: linear-gradient(90deg, rgba(240,240,240,0.86), rgba(216,208,196,0.72));
+      transform-origin: left center;
+      transition: transform 1s linear, background 180ms ease;
+    }
+
+    .question-wrap {
+      position: absolute;
+      left: clamp(var(--space-4), 3vw, var(--space-10));
+      right: clamp(var(--space-4), 3vw, var(--space-10));
+      bottom: clamp(var(--space-4), 3vw, var(--space-8));
+      z-index: 6;
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .question-card {
+      width: min(1120px, 100%);
+      pointer-events: auto;
+      border-radius: 28px;
+      border: 1px solid rgba(240,240,240,0.11);
+      background:
+        linear-gradient(180deg, rgba(6,6,6,0.9), rgba(12,12,12,0.8)),
+        linear-gradient(90deg, rgba(255,255,255,0.03), transparent 30%);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 24px 70px rgba(0,0,0,0.42);
+      padding: clamp(var(--space-4), 3vw, var(--space-8));
+    }
+
+    .question-header {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-4);
+      align-items: start;
+      margin-bottom: var(--space-4);
+    }
+
+    .question-index {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--color-text-muted);
+    }
+
+    .question-tier {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--color-text-muted);
+      text-align: right;
+    }
+
+    .question-text {
+      font-family: var(--font-display);
+      font-size: clamp(1.4rem, 1.1rem + 1.5vw, 2.35rem);
+      line-height: 1.08;
+      max-width: 22ch;
+      margin-bottom: var(--space-5);
+    }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+
+    .option {
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+      transition: transform var(--transition), background var(--transition), border-color var(--transition), color var(--transition);
+    }
+
+    .option:hover, .option:focus-visible {
+      transform: translateY(-1px);
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.16);
+      outline: none;
+    }
+
+    .option-key {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      flex: none;
+    }
+
+    .option-label {
+      font-size: var(--text-base);
+      line-height: 1.3;
+    }
+
+    .option.correct { background: rgba(125,159,114,0.18); border-color: rgba(125,159,114,0.35); }
+    .option.wrong { background: rgba(184,20,20,0.16); border-color: rgba(184,20,20,0.35); }
+    .option.dim { opacity: 0.56; }
+
+    .feedback-row {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--color-divider);
+      color: var(--color-text-muted);
+      min-height: 58px;
+      align-items: start;
+    }
+
+    .feedback-text {
+      max-width: 72ch;
+      font-size: var(--text-sm);
+    }
+
+    .feedback-note {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--color-primary);
+      white-space: nowrap;
+    }
+
+    .status-strip {
+      position: absolute;
+      left: clamp(var(--space-4), 3vw, var(--space-10));
+      bottom: calc(clamp(var(--space-4), 3vw, var(--space-8)) + 290px);
+      z-index: 5;
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .status-pill {
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(7,7,7,0.7);
+      backdrop-filter: blur(18px);
+      color: var(--color-text-muted);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      display: inline-flex;
+      gap: var(--space-2);
+      align-items: center;
+      min-height: 44px;
+    }
+
+    .status-pill strong {
+      color: var(--color-text);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-size: var(--text-sm);
+    }
+
+    .center-message {
+      position: absolute;
+      inset: 0;
+      z-index: 9;
+      display: grid;
+      place-items: center;
+      padding: var(--space-8);
+      background: linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0.7));
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 240ms ease;
+    }
+
+    .center-message.active { opacity: 1; pointer-events: auto; }
+
+    .message-card {
+      width: min(860px, 100%);
+      border-radius: 32px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: linear-gradient(180deg, rgba(7,7,7,0.92), rgba(12,12,12,0.84));
+      padding: clamp(var(--space-6), 4vw, var(--space-12));
+      box-shadow: var(--shadow-lg);
+    }
+
+    .message-mark {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.26em;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-3);
+    }
+
+    .message-title {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 2rem + 3vw, 5.2rem);
+      line-height: 0.92;
+      margin-bottom: var(--space-4);
+      text-wrap: balance;
+    }
+
+    .message-body {
+      color: var(--color-text-muted);
+      max-width: 58ch;
+      font-size: var(--text-base);
+      margin-bottom: var(--space-6);
+    }
+
+    .message-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap: var(--space-4);
+      margin-bottom: var(--space-6);
+    }
+
+    .message-stat {
+      padding: var(--space-4);
+      border-radius: 20px;
+      background: rgba(255,255,255,0.035);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .message-stat-label {
+      font-size: var(--text-xs);
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: var(--space-2);
+    }
+
+    .message-stat-value {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 1.2rem + 1vw, 2.4rem);
+      line-height: 1;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+    }
+
+    .btn {
+      min-height: 48px;
+      padding: 0.85rem 1.2rem;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      border: 1px solid rgba(255,255,255,0.12);
+      transition: transform var(--transition), background var(--transition), border-color var(--transition), color var(--transition);
+    }
+
+    .btn:hover, .btn:focus-visible { transform: translateY(-1px); outline: none; }
+    .btn-primary {
+      background: rgba(240,240,240,0.92);
+      color: var(--color-text-inverse);
+      border-color: rgba(240,240,240,0.92);
+    }
+
+    .btn-secondary { background: rgba(255,255,255,0.035); }
+    .btn-danger {
+      background: rgba(184,20,20,0.9);
+      border-color: rgba(184,20,20,0.92);
+      color: #fff3f3;
+    }
+
+    .stamp {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.6rem 1rem;
+      border: 4px solid rgba(184,20,20,0.9);
+      color: rgba(184,20,20,0.92);
+      border-radius: 8px;
+      font-size: clamp(2rem, 1.2rem + 2vw, 3.8rem);
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      transform: rotate(-11deg);
+      margin-bottom: var(--space-5);
+      box-shadow: 0 0 0 1px rgba(184,20,20,0.35), 0 10px 24px rgba(0,0,0,0.3);
+      filter: saturate(0.95) contrast(1.1);
+    }
+
+    .legend {
+      position: absolute;
+      right: clamp(var(--space-4), 3vw, var(--space-10));
+      bottom: calc(clamp(var(--space-4), 3vw, var(--space-8)) + 304px);
+      z-index: 5;
+      max-width: min(360px, 34vw);
+      padding: var(--space-4);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.09);
+      background: rgba(8,8,8,0.72);
+      backdrop-filter: blur(18px);
+      pointer-events: none;
+    }
+
+    .legend-label {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--color-text-muted);
+      margin-bottom: var(--space-2);
+    }
+
+    .legend-look {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      line-height: 1.05;
+      margin-bottom: var(--space-2);
+    }
+
+    .legend-copy {
+      font-size: var(--text-sm);
+      color: var(--color-text-muted);
+    }
+
+    .intro {
+      position: absolute;
+      inset: 0;
+      z-index: 8;
+      display: grid;
+      place-items: center;
+      padding: var(--space-8);
+      background:
+        radial-gradient(circle at top, rgba(255,255,255,0.06), transparent 32%),
+        linear-gradient(180deg, rgba(4,4,4,0.86), rgba(4,4,4,0.94));
+      backdrop-filter: blur(10px);
+    }
+
+    .intro.hidden { display: none; }
+
+    .intro-card {
+      width: min(960px, 100%);
+      border-radius: 34px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: linear-gradient(180deg, rgba(12,12,12,0.92), rgba(14,14,14,0.86));
+      box-shadow: var(--shadow-lg);
+      padding: clamp(var(--space-6), 5vw, var(--space-12));
+    }
+
+    .intro-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: clamp(var(--space-6), 4vw, var(--space-10));
+      align-items: start;
+    }
+
+    .intro-title {
+      font-family: var(--font-display);
+      font-size: clamp(3rem, 2rem + 5vw, 6rem);
+      line-height: 0.88;
+      margin-bottom: var(--space-4);
+      max-width: 8ch;
+    }
+
+    .intro-copy {
+      color: var(--color-text-muted);
+      max-width: 58ch;
+      margin-bottom: var(--space-6);
+    }
+
+    .intro-quote {
+      border-left: 1px solid rgba(255,255,255,0.14);
+      padding-left: var(--space-4);
+      color: var(--color-primary);
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      line-height: 1.14;
+      margin-bottom: var(--space-6);
+    }
+
+    .intro-list {
+      display: grid;
+      gap: var(--space-3);
+      color: var(--color-text-muted);
+      font-size: var(--text-sm);
+    }
+
+    .intro-list li {
+      list-style: none;
+      padding-left: 1.2rem;
+      position: relative;
+    }
+
+    .intro-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--color-primary);
+    }
+
+    .side-card {
+      border-radius: 24px;
+      padding: var(--space-5);
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: grid;
+      gap: var(--space-4);
+    }
+
+    .side-card h2 {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--color-text-muted);
+      font-weight: 600;
+    }
+
+    .side-card p { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+    .keyline {
+      height: 1px;
+      background: var(--color-divider);
+      margin: var(--space-2) 0;
+    }
+
+    .review-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: var(--space-4);
+      font-size: var(--text-sm);
+    }
+
+    .review-table th, .review-table td {
+      padding: 0.8rem 0.6rem;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .review-table th {
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--color-text-muted);
+      font-weight: 600;
+    }
+
+    .review-table td { color: var(--color-text-muted); }
+    .review-table td strong { color: var(--color-text); font-weight: 600; }
+
+    .tiny { font-size: var(--text-xs); color: var(--color-text-muted); }
+    .muted { color: var(--color-text-muted); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 1024px) {
+      .topbar { grid-template-columns: 1fr; justify-items: stretch; }
+      .title-panel { min-width: 0; order: -1; }
+      .hud-left, .hud-right { justify-content: stretch; }
+      .mark-panel, .timer-panel { min-width: 0; width: 100%; }
+      .legend { display: none; }
+      .status-strip { bottom: calc(clamp(var(--space-4), 3vw, var(--space-8)) + 342px); }
+      .intro-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      body { overflow: auto; }
+      .app, .scene { min-height: 100dvh; }
+      .audience-bank { display: none; }
+      .side-rail { display: none; }
+      .runway { width: clamp(180px, 30vw, 240px); top: 16%; }
+      .question-wrap { left: var(--space-3); right: var(--space-3); bottom: var(--space-3); }
+      .question-card { border-radius: 24px; padding: var(--space-4); }
+      .question-text { max-width: none; font-size: clamp(1.3rem, 4.2vw, 1.8rem); }
+      .options { grid-template-columns: 1fr; }
+      .feedback-row { flex-direction: column; }
+      .status-strip {
+        left: var(--space-3);
+        right: var(--space-3);
+        bottom: calc(var(--space-3) + 404px);
+        flex-wrap: wrap;
+      }
+      .status-pill { flex: 1 1 160px; }
+      .message-grid { grid-template-columns: 1fr; }
+      .intro-card { padding: var(--space-5); }
+      .intro-title { max-width: none; }
+      .stamp { font-size: clamp(1.6rem, 8vw, 2.5rem); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
 </head>
 <body>
-<div id="game">
-  <canvas id="world"></canvas>
+  <div class="app">
+    <a class="sr-only" href="#questionText">Skip to question</a>
 
-  <div id="hud">
-    <div id="topline">
-      <div class="tiny" id="progress">TERM 1 / 78</div>
-      <div class="tiny" id="district">CIVIC PLAZA</div>
-      <div id="strengthWrap">
-        <span class="tiny">Strength</span>
-        <div id="strengthTrack"><div id="strengthBar"></div></div>
-        <span id="strengthText">100%</span>
+    <div class="scene" aria-hidden="true">
+      <div class="ceiling-grid"></div>
+      <div class="lighting-haze"></div>
+      <div class="runway-shell">
+        <div class="runway-stage">
+          <div class="side-rail left"></div>
+          <div class="side-rail right"></div>
+          <div class="runway"></div>
+          <div class="model-layer" id="modelLayer"></div>
+        </div>
+      </div>
+      <div class="audience">
+        <div class="audience-bank left" id="audLeft"></div>
+        <div class="audience-bank right" id="audRight"></div>
       </div>
     </div>
 
-    <div id="questionArea">
-      <div id="definition">Press start to begin.</div>
-      <div id="timerBox">
-        <div id="timer">--</div>
-        <div id="difficulty">READY</div>
+    <header class="topbar">
+      <div class="hud-left">
+        <section class="mark-panel hud-panel" aria-label="Taste gauge">
+          <div class="mark-meta">
+            <span>Taste</span>
+            <span id="tasteMeta">Sustained judgment</span>
+          </div>
+          <div class="mark-title"><span id="tasteNumber">100</span>%</div>
+          <div class="gauge-track"><div class="gauge-fill" id="gaugeFill"></div></div>
+          <div class="gauge-text"><span>Confidence</span><span id="correctWrongText">0 correct · 0 missed</span></div>
+        </section>
       </div>
+
+      <section class="title-panel hud-panel" aria-label="Presentation information">
+        <div class="eyebrow">Editorial Examination</div>
+        <div class="show-title">Taste Level</div>
+        <div class="subtitle" id="showSubtitle">Runway observation proceeds without your permission.</div>
+      </section>
+
+      <div class="hud-right">
+        <section class="timer-panel hud-panel" aria-label="Question timer">
+          <div class="timer-head"><span>Question window</span><span id="timerState">Open</span></div>
+          <div class="timer-seconds"><span id="timerText">15</span>s</div>
+          <div class="timer-bar"><span id="timerBar"></span></div>
+        </section>
+      </div>
+    </header>
+
+    <div class="status-strip">
+      <div class="status-pill">Look <strong id="lookCounter">01 / 15</strong></div>
+      <div class="status-pill">Question <strong id="questionCounter">01 / 24</strong></div>
+      <div class="status-pill">Visible look <strong id="visibleLookText">Minimal Column</strong></div>
     </div>
 
-    <form id="entryRow">
-      <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Type the medical term…" />
-      <button id="submit" type="submit">SUBMIT</button>
-    </form>
+    <aside class="legend" aria-live="polite">
+      <div class="legend-label">Current runway emphasis</div>
+      <div class="legend-look" id="legendLook">Minimal Column</div>
+      <div class="legend-copy" id="legendCopy">Column, monochrome, line, restraint, and refinement govern the current visual read.</div>
+    </aside>
 
-    <div id="feedback"></div>
+    <main class="question-wrap">
+      <section class="question-card" aria-labelledby="questionText">
+        <div class="question-header">
+          <div>
+            <div class="question-index" id="questionCategory">Form & Silhouette</div>
+          </div>
+          <div class="question-tier" id="questionTier">Level I — Familiar · -20</div>
+        </div>
+
+        <h1 class="question-text" id="questionText">Press Begin to enter the examination.</h1>
+
+        <div class="options" id="options"></div>
+
+        <div class="feedback-row">
+          <div class="feedback-text" id="feedbackText">You are seated above a live runway. The presentation continues whether you answer or not.</div>
+          <div class="feedback-note" id="feedbackNote">Awaiting entry</div>
+        </div>
+      </section>
+    </main>
+
+    <section class="intro" id="introOverlay">
+      <div class="intro-card">
+        <div class="intro-grid">
+          <div>
+            <div class="eyebrow">Invitation-only assessment</div>
+            <div class="intro-title">Taste Level</div>
+            <p class="intro-copy">This is a complete playable HTML prototype of your editorial runway examination. The show maintains its own cadence, the models advance independently, and every question tests whether you can distinguish the right term from the nearest plausible alternative.</p>
+            <div class="intro-quote">“The strongest vocabulary is not the most obscure. It is the vocabulary that allows you to say why an outfit works.”</div>
+            <div class="actions">
+              <button class="btn btn-primary" id="beginBtn">Begin the show</button>
+              <button class="btn btn-secondary" id="studyBtn">Study lexicon</button>
+            </div>
+          </div>
+          <div class="side-card">
+            <h2>Rules</h2>
+            <ul class="intro-list">
+              <li>Taste begins at 100. Incorrect answers deduct 20, 25, or 30 depending on tier.</li>
+              <li>Correct answers within the first 10 seconds restore +10 Taste if you are below 100.</li>
+              <li>The runway does not pause. Questions softly follow the most visible look about 60% of the time.</li>
+              <li>When Taste reaches zero, you are rejected instantly. If the show clears, you are admitted.</li>
+            </ul>
+            <div class="keyline"></div>
+            <h2>Controls</h2>
+            <p>Click an answer, press 1–4, or use A–D. Use Enter to start and R to restart after an ending.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="center-message" id="endingOverlay" aria-live="polite">
+      <div class="message-card" id="endingCard"></div>
+    </section>
   </div>
 
-  <div id="overlay">
-    <div class="card" id="overlayCard">
-      <h1>Mouse Medical Run</h1>
-      <p>
-        You are no longer looking at a mouse from far away. You are effectively inside the mouse’s tiny,
-        low-to-the-ground awareness, weaving through an active city while answering medical vocabulary.
-      </p>
-      <div class="rules">
-        <div class="rule"><b>78 terms.</b><br>Type the correct term for each definition.</div>
-        <div class="rule"><b>10–20 seconds.</b><br>Harder questions receive more time.</div>
-        <div class="rule"><b>Fast answers heal.</b><br>Answer with more than five seconds remaining to gain Strength.</div>
-        <div class="rule"><b>Wrong answers hurt.</b><br>Penalty ranges from 10% to 50% based on difficulty.</div>
-        <div class="rule"><b>Four blended districts.</b><br>Plaza, crossing, market, and bay-residential lanes gradually transition.</div>
-        <div class="rule"><b>Cat sequence.</b><br>If Strength reaches zero, the cat catches you, then you continue.</div>
-      </div>
-      <button class="bigButton" id="startButton">START RUN</button>
-      <div id="miniStats">Press Enter to submit answers.</div>
-    </div>
-  </div>
-</div>
-
-<script>
-(() => {
-"use strict";
-
-/* ============================================================
-   TERMS 171–248 — authoritative wording preserved
-   ============================================================ */
-const TERMS = [
-{n:171,t:"Syndrome",d:"Recognizable group of signs and symptoms that tend to occur together.",q:2},
-{n:172,t:"Condition",d:"Broad term for a health problem or state that may or may not constitute a disease.",q:1},
-{n:173,t:"Disease",d:"Disorder involving an identifiable abnormal process affecting body structure or function.",q:1},
-{n:174,t:"Disorder",d:"Disturbance of normal physical or mental function.",q:1},
-{n:175,t:"Benign",d:"Noncancerous; not necessarily harmless.",q:1},
-{n:176,t:"Malignant",d:"Cancerous, with capacity to invade or spread.",q:2},
-{n:177,t:"Chief complaint",d:"Primary reason a patient seeks medical attention.",q:2},
-{n:178,t:"History of present illness (HPI)",d:"Detailed account of the current medical problem and its development.",q:5},
-{n:179,t:"Pain scale",d:"Standardized method for communicating pain intensity.",q:1},
-{n:180,t:"Level of consciousness",d:"Degree to which a person is awake and responsive.",q:3},
-{n:181,t:"Orientation",d:"Awareness of person, place, time, and situation.",q:2},
-{n:182,t:"Mental status",d:"Overall assessment of awareness, cognition, mood, memory, and behavior.",q:2},
-{n:183,t:"Inspection",d:"Examination by carefully looking at the patient or body part.",q:1},
-{n:184,t:"Palpation",d:"Examination using touch to assess structures, tenderness, pulses, or abnormalities.",q:2},
-{n:185,t:"Percussion",d:"Tapping the body to evaluate underlying structures by their resulting sounds or sensations.",q:3},
-{n:186,t:"Escalation of care",d:"Obtaining a higher level of clinical evaluation or treatment when a patient deteriorates.",q:5},
-{n:187,t:"Orthopnea",d:"Shortness of breath that occurs or worsens while lying flat.",q:5},
-{n:188,t:"Chest pain",d:"Chest discomfort, pressure, tightness, or pain requiring interpretation of its underlying cause.",q:1},
-{n:189,t:"Dizziness",d:"Broad patient-reported sensation that may mean lightheadedness, imbalance, or spinning.",q:1},
-{n:190,t:"Weakness",d:"Reduced muscular strength or ability to perform normal movement.",q:1},
-{n:191,t:"Diarrhea",d:"Abnormally loose or watery bowel movements.",q:1},
-{n:192,t:"Constipation",d:"Difficult, infrequent, hard, or incomplete bowel movements.",q:1},
-{n:193,t:"Urinary urgency",d:"Sudden compelling need to urinate.",q:2},
-{n:194,t:"Urinary frequency",d:"Urination more often than usual.",q:2},
-{n:195,t:"Chills",d:"Sensation of cold often accompanied by shivering, particularly during fever or infection.",q:1},
-{n:196,t:"Rash",d:"Abnormal change in the appearance or texture of the skin.",q:1},
-{n:197,t:"Numbness",d:"Reduced or absent sensation in an area of the body.",q:1},
-{n:198,t:"Anatomy",d:"Study of body structures and their relationships.",q:1},
-{n:199,t:"Physiology",d:"Study of how normal body systems function.",q:1},
-{n:200,t:"Diabetes mellitus",d:"Group of disorders characterized by chronically abnormal blood-glucose regulation.",q:2},
-{n:201,t:"Hyperglycemia",d:"Abnormally high blood glucose.",q:2},
-{n:202,t:"Hypoglycemia",d:"Abnormally low blood glucose.",q:2},
-{n:203,t:"Infarction",d:"Tissue death caused by prolonged interruption of blood supply.",q:5},
-{n:204,t:"Thrombosis",d:"Formation of a blood clot within the circulatory system.",q:3},
-{n:205,t:"Embolism",d:"Vessel obstruction caused by material traveling through the circulation.",q:3},
-{n:206,t:"Stroke",d:"Acute brain injury caused by interrupted blood flow or bleeding.",q:1},
-{n:207,t:"Pneumonia",d:"Infection or inflammation involving the lung tissue and air sacs.",q:2},
-{n:208,t:"Acute kidney injury (AKI)",d:"Relatively sudden deterioration in kidney function.",q:5},
-{n:209,t:"Chronic kidney disease (CKD)",d:"Persistent abnormality or loss of kidney function.",q:5},
-{n:210,t:"Delirium",d:"Acute, fluctuating disturbance of attention and cognition.",q:4},
-{n:211,t:"Dementia",d:"Persistent decline in cognitive abilities sufficient to impair everyday functioning.",q:4},
-{n:212,t:"Prescription medication",d:"Medication requiring authorization from a licensed prescriber.",q:2},
-{n:213,t:"Over-the-counter (OTC) medication",d:"Medication legally available without a prescription.",q:3},
-{n:214,t:"Generic name",d:"Standard nonproprietary name of a medication.",q:2},
-{n:215,t:"Brand name",d:"Commercial name under which a medication is sold.",q:1},
-{n:216,t:"Topical",d:"Applied to a body surface, commonly the skin.",q:2},
-{n:217,t:"Inhalation",d:"Administration of medication by breathing it into the respiratory tract.",q:2},
-{n:218,t:"Infusion",d:"Controlled administration of fluid or medication over time.",q:2},
-{n:219,t:"Scheduled medication",d:"Medication ordered to be given at predetermined times.",q:2},
-{n:220,t:"Medication adherence",d:"Extent to which medication use follows an agreed treatment plan.",q:3},
-{n:221,t:"Adverse drug event (ADE)",d:"Injury or harm involving the use of a medication.",q:5},
-{n:222,t:"Therapeutic effect",d:"Intended beneficial result of a treatment.",q:3},
-{n:223,t:"Laboratory test",d:"Analysis of blood, urine, tissue, or another biological material.",q:1},
-{n:224,t:"Specimen",d:"Biological sample collected for examination or testing.",q:2},
-{n:225,t:"Imaging",d:"Use of technology to create representations of internal body structures or functions.",q:1},
-{n:226,t:"Pathology report",d:"Formal interpretation of examined tissue, cells, or other specimens.",q:3},
-{n:227,t:"Procedure",d:"Medical intervention performed for diagnosis, monitoring, or treatment.",q:1},
-{n:228,t:"Surgery",d:"Operative treatment involving intentional intervention on body tissues.",q:1},
-{n:229,t:"Anesthesia",d:"Medical suppression of pain, sensation, awareness, or movement for a procedure.",q:2},
-{n:230,t:"Sedation",d:"Medication-induced reduction in anxiety, awareness, or responsiveness.",q:2},
-{n:231,t:"Sterile technique",d:"Procedures intended to prevent microorganisms from contaminating a sterile area or equipment.",q:3},
-{n:232,t:"Emergency department (ED)",d:"Hospital department providing evaluation and treatment of urgent and emergency conditions.",q:3},
-{n:233,t:"Admission",d:"Formal acceptance of a patient into a hospital or healthcare facility for ongoing care.",q:1},
-{n:234,t:"Transfer",d:"Movement of a patient between units, facilities, or levels of care.",q:1},
-{n:235,t:"Inpatient",d:"Patient formally admitted to a healthcare facility.",q:1},
-{n:236,t:"Outpatient",d:"Patient receiving care without inpatient admission.",q:1},
-{n:237,t:"Intensive care unit (ICU)",d:"Hospital unit providing intensive monitoring and treatment for critically ill patients.",q:3},
-{n:238,t:"Code blue",d:"Hospital emergency response commonly indicating cardiac or respiratory arrest.",q:2},
-{n:239,t:"Rapid response team",d:"Team called to evaluate and intervene when a hospitalized patient is deteriorating.",q:5},
-{n:240,t:"Isolation precautions",d:"Measures used to prevent transmission of infectious organisms.",q:3},
-{n:241,t:"Infection control",d:"Practices designed to prevent healthcare-associated transmission of infection.",q:2},
-{n:242,t:"Ventilator",d:"Machine that assists or controls a patient’s breathing.",q:2},
-{n:243,t:"Intubation",d:"Placement of a tube into the trachea to maintain or control the airway.",q:3},
-{n:244,t:"Resuscitation",d:"Emergency intervention intended to restore vital physiological functions.",q:3},
-{n:245,t:"CPR",d:"Cardiopulmonary resuscitation used when effective circulation or breathing has stopped.",q:2},
-{n:246,t:"Pressure injury",d:"Localized skin or tissue damage caused primarily by sustained pressure or pressure combined with shear.",q:3},
-{n:247,t:"Restraint",d:"Intervention restricting a patient’s movement, access, or freedom, subject to strict clinical rules.",q:2},
-{n:248,t:"Healthcare proxy",d:"Person authorized to make healthcare decisions for another person when required.",q:4}
-];
-
-/* ============================================================
-   GAME STATE — declared before any initialization that may use it
-   ============================================================ */
-let state="title";
-let order=[];
-let questionIndex=0;
-let current=null;
-let timeLeft=0;
-let strength=100;
-let score=0;
-let correctCount=0;
-let fastCount=0;
-let streak=0;
-let catCatches=0;
-let resolveTimer=0;
-let pendingAdvance=false;
-let lastTimestamp=performance.now();
-
-/* ============================================================
-   ANSWER HANDLING / NORMALIZATION
-   ============================================================ */
-const ALIASES = {
-  178:["history of present illness","hpi"],
-  180:["level of consciousness","loc"],
-  208:["acute kidney injury","aki"],
-  209:["chronic kidney disease","ckd"],
-  213:["over the counter medication","over the counter","otc medication","otc"],
-  221:["adverse drug event","ade"],
-  223:["laboratory test","lab test"],
-  232:["emergency department","ed"],
-  237:["intensive care unit","icu"],
-  245:["cardiopulmonary resuscitation","cpr"]
-};
-
-function normalize(s){
-  return String(s||"")
-    .toLowerCase()
-    .replace(/[’']/g,"")
-    .replace(/\([^)]*\)/g," ")
-    .replace(/&/g," and ")
-    .replace(/[-–—/]/g," ")
-    .replace(/[^a-z0-9\s]/g," ")
-    .replace(/\s+/g," ")
-    .trim();
-}
-
-function levenshtein(a,b){
-  const m=a.length,n=b.length;
-  const prev=new Array(n+1), curr=new Array(n+1);
-  for(let j=0;j<=n;j++) prev[j]=j;
-  for(let i=1;i<=m;i++){
-    curr[0]=i;
-    for(let j=1;j<=n;j++){
-      curr[j]=Math.min(prev[j]+1,curr[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
-    }
-    for(let j=0;j<=n;j++) prev[j]=curr[j];
-  }
-  return prev[n];
-}
-
-function acceptedAnswers(term){
-  const out=[term.t];
-  if(ALIASES[term.n]) out.push(...ALIASES[term.n]);
-  return out.map(normalize);
-}
-
-function answerIsCorrect(raw,term){
-  const entered=normalize(raw);
-  if(!entered) return false;
-  const valid=acceptedAnswers(term);
-  for(const v of valid){
-    if(entered===v) return true;
-    if(v.length>=7 && Math.abs(v.length-entered.length)<=1 && levenshtein(entered,v)<=1) return true;
-  }
-  return false;
-}
-
-/* ============================================================
-   DIFFICULTY
-   ============================================================ */
-const TIME_BY_DIFFICULTY=[0,10,12,14,17,20];
-const PENALTY_BY_DIFFICULTY=[0,10,20,30,40,50];
-const DIFFICULTY_NAMES=["","EASY","EASY +","MODERATE","DIFFICULT","VERY DIFFICULT"];
-
-/* ============================================================
-   DISTRICTS — continuous blend
-   ============================================================ */
-const DISTRICTS=[
-  {
-    name:"CIVIC PLAZA",
-    sky:"#b8c8cf",
-    ground:"#b2a894",
-    ground2:"#9c927f",
-    arch:"#cec3aa",
-    shadow:"#554b40",
-    mood:"#8d6d46"
-  },
-  {
-    name:"MAJOR CROSSING",
-    sky:"#adbec8",
-    ground:"#4a4f52",
-    ground2:"#35393b",
-    arch:"#838889",
-    shadow:"#2a3035",
-    mood:"#d6d0b5"
-  },
-  {
-    name:"STREET MARKET",
-    sky:"#c3c8bd",
-    ground:"#786c56",
-    ground2:"#625744",
-    arch:"#b08b61",
-    shadow:"#5c4532",
-    mood:"#d7a94d"
-  },
-  {
-    name:"BAY & OLD HOUSES",
-    sky:"#a8c5cf",
-    ground:"#958c81",
-    ground2:"#7d756a",
-    arch:"#9db0b6",
-    shadow:"#4e4742",
-    mood:"#6f8792"
-  }
-];
-
-function districtInfo(progress){
-  const scaled=Math.min(.999999,Math.max(0,progress))*4;
-  const index=Math.min(3,Math.floor(scaled));
-  const local=scaled-index;
-  const next=Math.min(3,index+1);
-  const blend=index===3 ? 0 : Math.max(0,(local-.66)/.34);
-  return {index,next,local,blend};
-}
-
-function currentGameProgress(){
-  if(!order.length) return 0;
-  return Math.max(0,Math.min(1,questionIndex/TERMS.length));
-}
-function districtState(){ return districtInfo(currentGameProgress()); }
-
-/* ============================================================
-   SHARED PEOPLE CAST — weighted by district
-   ============================================================ */
-const PEOPLE=[
-{name:"office loafers",pants:"#30343a",shoe:"#171718",sock:"#303030",pace:.95,bag:1,w:[4,5,1,1]},
-{name:"brown brogues",pants:"#45505a",shoe:"#573b27",sock:"#23303a",pace:.9,bag:0,w:[4,4,1,2]},
-{name:"white sneakers",pants:"#2e4054",shoe:"#ece9df",sock:"#f5f5f2",pace:1.15,bag:0,w:[4,5,3,4]},
-{name:"red trainers",pants:"#303942",shoe:"#a33932",sock:"#ddd",pace:1.35,bag:0,w:[2,5,3,4]},
-{name:"work boots",pants:"#4e463a",shoe:"#5e422a",sock:"#38352e",pace:.86,bag:0,w:[2,3,5,2]},
-{name:"market boots",pants:"#4e5148",shoe:"#282b29",sock:"#777",pace:.92,bag:2,w:[1,2,6,1]},
-{name:"heels black",pants:"#333138",shoe:"#171519",sock:"#c9a68c",pace:.95,bag:1,w:[4,4,3,4]},
-{name:"heels tan",pants:"#786b5d",shoe:"#7b4d3c",sock:"#d0ad91",pace:.92,bag:1,w:[3,4,3,4]},
-{name:"kids blue",pants:"#4c6f90",shoe:"#335fac",sock:"#eee",pace:1.45,bag:0,w:[3,3,3,5]},
-{name:"kids yellow",pants:"#4b5548",shoe:"#d2a63a",sock:"#ddd",pace:1.5,bag:0,w:[2,3,3,5]},
-{name:"runner neon",pants:"#25272b",shoe:"#c8d748",sock:"#eee",pace:1.6,bag:0,w:[2,3,2,6]},
-{name:"runner gray",pants:"#353a3c",shoe:"#d2d5d8",sock:"#eee",pace:1.55,bag:0,w:[2,4,2,6]},
-{name:"elder walking",pants:"#635e58",shoe:"#4b372c",sock:"#ddd",pace:.68,bag:0,w:[4,2,2,6]},
-{name:"rain boots",pants:"#434947",shoe:"#2f3938",sock:"#555",pace:.82,bag:0,w:[2,2,4,3]},
-{name:"cargo pants",pants:"#66624e",shoe:"#3b3328",sock:"#46433d",pace:.9,bag:2,w:[2,3,6,3]},
-{name:"denim sneakers",pants:"#35516f",shoe:"#d4d3c9",sock:"#fff",pace:1.12,bag:0,w:[4,4,4,5]},
-{name:"black denim",pants:"#292d31",shoe:"#272625",sock:"#888",pace:1.08,bag:0,w:[4,5,4,5]},
-{name:"courier",pants:"#2c3540",shoe:"#383b3c",sock:"#888",pace:1.4,bag:3,w:[2,5,5,3]},
-{name:"vendor apron",pants:"#545047",shoe:"#443329",sock:"#555",pace:.84,bag:2,w:[1,1,7,1]},
-{name:"chef clogs",pants:"#2a2b2d",shoe:"#202223",sock:"#111",pace:.88,bag:0,w:[1,1,6,1]},
-{name:"tourist sandals",pants:"#796e5d",shoe:"#725846",sock:"#bb967a",pace:.82,bag:1,w:[5,3,4,4]},
-{name:"dress boots",pants:"#34353a",shoe:"#302726",sock:"#333",pace:.98,bag:1,w:[4,4,3,4]},
-{name:"dog walker",pants:"#49515c",shoe:"#cbcbc6",sock:"#eee",pace:1.0,bag:0,w:[2,2,2,7]},
-{name:"gardener boots",pants:"#53604c",shoe:"#4c3c2d",sock:"#555",pace:.8,bag:0,w:[1,1,3,6]},
-{name:"student sneakers",pants:"#465362",shoe:"#f2efe8",sock:"#eee",pace:1.2,bag:3,w:[4,5,3,5]},
-{name:"formal shoes",pants:"#25282c",shoe:"#181719",sock:"#202020",pace:.96,bag:1,w:[5,5,1,3]},
-{name:"canvas shoes",pants:"#656057",shoe:"#b2a18c",sock:"#ddd",pace:1.05,bag:0,w:[3,3,5,5]},
-{name:"delivery boots",pants:"#3f4548",shoe:"#303234",sock:"#666",pace:1.05,bag:2,w:[1,4,6,2]}
-];
-
-/* ============================================================
-   PROP CLUSTERS — more coherent, lane-based
-   ============================================================ */
-const CLUSTERS = {
-  plaza:[
-    {kind:"paper",x:.18,z:.80},
-    {kind:"paper",x:-.22,z:.68},
-    {kind:"cup",x:.30,z:.74},
-    {kind:"pigeon",x:-.06,z:.70},
-    {kind:"benchLeg",x:-.76,z:.52},
-    {kind:"benchLeg",x:.74,z:.50},
-    {kind:"drain",x:-.48,z:.63},
-    {kind:"drain",x:.42,z:.60}
-  ],
-  crossing:[
-    {kind:"stripe",x:-.28,z:.82},
-    {kind:"stripe",x:.00,z:.80},
-    {kind:"stripe",x:.28,z:.78},
-    {kind:"hydrant",x:-.74,z:.58},
-    {kind:"pole",x:.76,z:.55},
-    {kind:"wheel",x:.34,z:.70},
-    {kind:"paper",x:-.18,z:.62}
-  ],
-  market:[
-    {kind:"crate",x:-.65,z:.58},
-    {kind:"crate",x:.67,z:.56},
-    {kind:"produce",x:-.53,z:.64},
-    {kind:"produce",x:.53,z:.66},
-    {kind:"pole",x:-.40,z:.48},
-    {kind:"pole",x:.38,z:.50},
-    {kind:"paper",x:.04,z:.72},
-    {kind:"cup",x:-.08,z:.70}
-  ],
-  bay:[
-    {kind:"fence",x:-.72,z:.52},
-    {kind:"fence",x:.74,z:.54},
-    {kind:"planter",x:-.58,z:.66},
-    {kind:"planter",x:.60,z:.68},
-    {kind:"puddle",x:.12,z:.72},
-    {kind:"dog",x:-.10,z:.62},
-    {kind:"paper",x:.26,z:.64}
-  ]
-};
-
-/* ============================================================
-   CANVAS SETUP
-   ============================================================ */
-const canvas=document.getElementById("world");
-const ctx=canvas.getContext("2d",{alpha:false});
-
-let W=1280, H=720, DPR=1;
-
-function resize(){
-  DPR=Math.min(2,window.devicePixelRatio||1);
-  W=Math.max(800,window.innerWidth);
-  H=Math.max(560,window.innerHeight);
-  canvas.width=Math.floor(W*DPR);
-  canvas.height=Math.floor(H*DPR);
-  canvas.style.width=W+"px";
-  canvas.style.height=H+"px";
-  ctx.setTransform(DPR,0,0,DPR,0,0);
-}
-window.addEventListener("resize",resize);
-resize();
-
-function rand(a,b){ return a+Math.random()*(b-a); }
-function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
-function lerp(a,b,t){ return a+(b-a)*t; }
-
-function hexToRgb(hex){
-  const s=hex.replace("#","");
-  const n=parseInt(s,16);
-  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
-}
-function mixColor(a,b,t){
-  const A=hexToRgb(a), B=hexToRgb(b);
-  return `rgb(${Math.round(lerp(A.r,B.r,t))},${Math.round(lerp(A.g,B.g,t))},${Math.round(lerp(A.b,B.b,t))})`;
-}
-
-function roundedRectPath(x,y,w,h,r){
-  r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.lineTo(x+w-r,y);
-  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
-  ctx.lineTo(x+w,y+h-r);
-  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  ctx.lineTo(x+r,y+h);
-  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
-  ctx.lineTo(x,y+r);
-  ctx.quadraticCurveTo(x,y,x+r,y);
-  ctx.closePath();
-}
-
-/* ============================================================
-   WORLD STATE
-   ============================================================ */
-let worldTime=0;
-let scroll=0;
-let pedestrians=[];
-let particles=[];
-let nearMisses=[];
-let cat=null;
-
-function weightedPerson(di){
-  let total=0;
-  const weights=PEOPLE.map(p=>{
-    const w=p.w[di.index]*(1-di.blend)+p.w[di.next]*di.blend;
-    total+=w;
-    return w;
-  });
-  let r=Math.random()*total;
-  for(let i=0;i<PEOPLE.length;i++){
-    r-=weights[i];
-    if(r<=0) return PEOPLE[i];
-  }
-  return PEOPLE[0];
-}
-
-function spawnPedestrian(force=false){
-  const di=districtState();
-  const p=weightedPerson(di);
-  const fromLeft=Math.random()<.5;
-  const lane = force ? Math.floor(rand(0,3)) : Math.floor(rand(0,4)); // 0 near, 1 mid, 2 far
-  const z = lane===0 ? rand(.72,.92) : lane===1 ? rand(.52,.72) : rand(.32,.52);
-
-  pedestrians.push({
-    type:p,
-    x:fromLeft?-1.25:1.25,
-    dir:fromLeft?1:-1,
-    z,
-    speed:(lane===0?0.42:lane===1?0.30:0.21)*p.pace*rand(.86,1.14),
-    phase:Math.random()*Math.PI*2,
-    scared:false,
-    scareTime:0,
-    accessory:p.bag,
-    scaleNoise:rand(.9,1.08),
-    lane
-  });
-}
-
-for(let i=0;i<9;i++) spawnPedestrian(true);
-
-/* ============================================================
-   OVAL POV / PROJECTION
-   ============================================================ */
-function sceneRect(){
-  const top=Math.max(178,H*0.24);
-  const left=W*0.05;
-  const width=W*0.90;
-  const height=H-top-H*0.07;
-  return {x:left,y:top,w:width,h:height};
-}
-
-function ovalRect(){
-  const s=sceneRect();
-  return {
-    cx:s.x+s.w*0.5,
-    cy:s.y+s.h*0.57,
-    rx:s.w*0.47,
-    ry:s.h*0.50
-  };
-}
-
-function horizonY(){
-  const s=sceneRect();
-  return s.y+s.h*0.28;
-}
-
-function laneY(z){
-  const s=sceneRect();
-  const hy=horizonY();
-  return hy + Math.pow(clamp(z,0,1),1.28) * (s.y+s.h-hy);
-}
-
-function laneX(xNorm,z){
-  const s=sceneRect();
-  const center=s.x+s.w*0.5;
-  const half=lerp(s.w*0.14,s.w*0.46,Math.pow(z,.92));
-  return center + xNorm*half;
-}
-
-function worldScale(z){
-  return lerp(.18,1.5,Math.pow(clamp(z,0,1),1.1));
-}
-
-/* ============================================================
-   DRAW DISTRICT BACKDROP
-   ============================================================ */
-function drawBackdrop(){
-  const di=districtState();
-  const A=DISTRICTS[di.index];
-  const B=DISTRICTS[di.next];
-  const t=di.blend;
-
-  const sky=mixColor(A.sky,B.sky,t);
-  const ground=mixColor(A.ground,B.ground,t);
-  const ground2=mixColor(A.ground2,B.ground2,t);
-  const arch=mixColor(A.arch,B.arch,t);
-  const shadow=mixColor(A.shadow,B.shadow,t);
-
-  ctx.fillStyle=sky;
-  ctx.fillRect(0,0,W,H);
-
-  const s=sceneRect();
-  const hy=horizonY();
-
-  // Soft distant bases / facades
-  ctx.fillStyle=arch;
-  ctx.fillRect(s.x, hy-56, s.w, 86);
-
-  if(di.index===0 || di.next===0){
-    const a=(di.index===0?1-t:t);
-    ctx.save();
-    ctx.globalAlpha=.85*a;
-    for(let x=s.x-20;x<s.x+s.w+40;x+=110){
-      ctx.fillStyle="#c9bea5";
-      ctx.fillRect(x,hy-108,78,108);
-      ctx.fillStyle="#574d43";
-      ctx.beginPath();
-      ctx.arc(x+39,hy-18,24,Math.PI,0);
-      ctx.lineTo(x+63,hy); ctx.lineTo(x+15,hy); ctx.closePath();
-      ctx.fill();
-    }
-    for(let x=s.x+30;x<s.x+s.w;x+=230){
-      ctx.fillStyle="#7f463e";
-      ctx.beginPath(); ctx.arc(x,hy-48,34,Math.PI,0); ctx.fill();
-      ctx.fillStyle="#41382f"; ctx.fillRect(x-2,hy-48,4,40);
-    }
-    ctx.restore();
-  }
-
-  if(di.index===1 || di.next===1){
-    const a=(di.index===1?1-t:t);
-    ctx.save();
-    ctx.globalAlpha=.86*a;
-    ctx.fillStyle="#62686b";
-    for(let x=s.x-40;x<s.x+s.w+60;x+=120){
-      const h=80+((x/120)%3+3)%3*14;
-      ctx.fillRect(x,hy-h,96,h);
-      ctx.fillStyle="#283139";
-      for(let wy=hy-h+16;wy<hy-12;wy+=23){
-        for(let wx=x+12;wx<x+83;wx+=24) ctx.fillRect(wx,wy,10,8);
-      }
-      ctx.fillStyle="#62686b";
-    }
-    ctx.restore();
-  }
-
-  if(di.index===2 || di.next===2){
-    const a=(di.index===2?1-t:t);
-    const awn=["#a64939","#cbad50","#4f8061","#6a648b"];
-    ctx.save();
-    ctx.globalAlpha=.88*a;
-    for(let x=s.x-20,i=0;x<s.x+s.w+20;x+=118,i++){
-      ctx.fillStyle="#755943";
-      ctx.fillRect(x,hy-76,102,76);
-      ctx.fillStyle=awn[i%awn.length];
-      ctx.beginPath();
-      ctx.moveTo(x-6,hy-76); ctx.lineTo(x+108,hy-76); ctx.lineTo(x+93,hy-45); ctx.lineTo(x+7,hy-45);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#5e4836"; ctx.fillRect(x+7,hy-20,88,7);
-    }
-    ctx.restore();
-  }
-
-  if(di.index===3 || di.next===3){
-    const a=(di.index===3?1-t:t);
-    ctx.save();
-    ctx.globalAlpha=.88*a;
-    ctx.fillStyle="#7b9aa3";
-    ctx.fillRect(s.x,hy-18,s.w,26);
-    const house=["#b89076","#c9a876","#8c9c8b","#b68481","#a99a87"];
-    for(let x=s.x-18,i=0;x<s.x+s.w+40;x+=114,i++){
-      ctx.fillStyle=house[i%house.length];
-      ctx.fillRect(x,hy-102,94,102);
-      ctx.fillStyle="#56493f";
-      ctx.beginPath();
-      ctx.moveTo(x-6,hy-102); ctx.lineTo(x+47,hy-138); ctx.lineTo(x+100,hy-102); ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#dbe0db";
-      ctx.fillRect(x+15,hy-74,18,25); ctx.fillRect(x+60,hy-74,18,25);
-      ctx.fillStyle="#53473f"; ctx.fillRect(x+38,hy-38,18,38);
-    }
-    ctx.restore();
-  }
-
-  // Ground
-  const grad=ctx.createLinearGradient(0,hy,0,s.y+s.h);
-  grad.addColorStop(0,ground);
-  grad.addColorStop(1,ground2);
-  ctx.fillStyle=grad;
-
-  ctx.beginPath();
-  ctx.moveTo(laneX(-1,0),hy);
-  ctx.lineTo(laneX(1,0),hy);
-  ctx.lineTo(laneX(1,1),s.y+s.h+10);
-  ctx.lineTo(laneX(-1,1),s.y+s.h+10);
-  ctx.closePath();
-  ctx.fill();
-
-  drawGroundDetails(di);
-}
-
-function drawGroundDetails(di){
-  const s=sceneRect();
-
-  // Receding ground seams
-  for(let i=0;i<10;i++){
-    const z=(i/10+((scroll*0.02)%0.1))%1;
-    const y=laneY(z);
-    ctx.globalAlpha=.12;
-    ctx.strokeStyle="#0d0f12";
-    ctx.lineWidth=Math.max(1,z*1.8);
-    ctx.beginPath();
-    ctx.moveTo(laneX(-1,z),y);
-    ctx.lineTo(laneX(1,z),y);
-    ctx.stroke();
-  }
-  ctx.globalAlpha=1;
-
-  // Plaza tile lines
-  if(di.index===0 || di.next===0){
-    const a=(di.index===0?1-di.blend:di.blend);
-    ctx.save();
-    ctx.globalAlpha=.18*a;
-    ctx.strokeStyle="#594f44";
-    for(let l=-.75;l<=.75;l+=.17){
-      ctx.beginPath();
-      ctx.moveTo(laneX(l,.02),laneY(.02));
-      ctx.lineTo(laneX(l,1),laneY(1));
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Crossing stripes
-  if(di.index===1 || di.next===1){
-    const a=(di.index===1?1-di.blend:di.blend);
-    ctx.save();
-    ctx.globalAlpha=.74*a;
-    for(let i=0;i<5;i++){
-      const z=.34+i*.09;
-      const y=laneY(z);
-      const h=5+16*z;
-      const x1=laneX(-.44,z), x2=laneX(.44,z);
-      ctx.fillStyle="#d7d7cc";
-      ctx.fillRect(x1,y-h/2,x2-x1,h);
-    }
-    ctx.restore();
-  }
-
-  // Market stains / warmer clutter
-  if(di.index===2 || di.next===2){
-    const a=(di.index===2?1-di.blend:di.blend);
-    ctx.save();
-    ctx.globalAlpha=.18*a;
-    for(let i=0;i<18;i++){
-      const z=((i*37)%100)/100;
-      const x=laneX((((i*59)%100)/50)-1,z), y=laneY(z);
-      ctx.fillStyle=i%2?"#4b3528":"#c08d4d";
-      ctx.beginPath();
-      ctx.ellipse(x,y,4+16*z,1.6+6*z,(i*.3)%2,0,Math.PI*2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // Residential paver seams
-  if(di.index===3 || di.next===3){
-    const a=(di.index===3?1-di.blend:di.blend);
-    ctx.save();
-    ctx.globalAlpha=.16*a;
-    ctx.strokeStyle="#4e433a";
-    for(let i=0;i<9;i++){
-      const z=i/9, y=laneY(z);
-      ctx.beginPath();
-      ctx.moveTo(laneX(-.85,z),y);
-      ctx.lineTo(laneX(.85,z),y);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // subtle shadowed ellipse on ground center
-  ctx.save();
-  ctx.globalAlpha=.12;
-  ctx.fillStyle="#000";
-  const ov=ovalRect();
-  ctx.beginPath();
-  ctx.ellipse(ov.cx, ov.cy+ov.ry*.45, ov.rx*.62, ov.ry*.18, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-}
-
-/* ============================================================
-   PROP DRAWING — coherent cluster items only
-   ============================================================ */
-function currentClusterObjects(){
-  const di=districtState();
-  const ids=["plaza","crossing","market","bay"];
-  const A=CLUSTERS[ids[di.index]];
-  const B=CLUSTERS[ids[di.next]];
-  return {A,B,blend:di.blend};
-}
-
-function drawClusterObjects(){
-  const {A,B,blend}=currentClusterObjects();
-  drawClusterSet(A,1-blend);
-  if(blend>0) drawClusterSet(B,blend);
-}
-
-function drawClusterSet(items,alpha){
-  if(alpha<=0) return;
-  ctx.save();
-  ctx.globalAlpha*=alpha;
-  for(const item of items) drawProp(item.kind,item.x,item.z);
-  ctx.restore();
-}
-
-function drawProp(kind,xNorm,z){
-  const x=laneX(xNorm,z), y=laneY(z), s=worldScale(z);
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.scale(s,s);
-
-  switch(kind){
-    case "paper":
-      ctx.fillStyle="#d7d2c7";
-      ctx.beginPath();
-      ctx.moveTo(-8,-3); ctx.lineTo(10,-1); ctx.lineTo(7,6); ctx.lineTo(-10,4); ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle="rgba(30,30,30,.24)";
-      ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(4,1); ctx.moveTo(-2,2); ctx.lineTo(3,3); ctx.stroke();
-      break;
-    case "cup":
-      ctx.fillStyle="#b8503d";
-      ctx.beginPath();
-      ctx.moveTo(-5,-14); ctx.lineTo(6,-14); ctx.lineTo(4,1); ctx.lineTo(-3,1); ctx.closePath();
-      ctx.fill();
-      break;
-    case "pigeon":
-      ctx.fillStyle="#575d61";
-      ctx.beginPath(); ctx.ellipse(0,-8,9,5,0,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(6,-12,3,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle="#a78145";
-      ctx.beginPath(); ctx.moveTo(-3,-4); ctx.lineTo(-5,2); ctx.moveTo(1,-4); ctx.lineTo(3,2); ctx.stroke();
-      break;
-    case "benchLeg":
-      ctx.fillStyle="#694b39";
-      ctx.fillRect(-8,-30,14,30);
-      ctx.fillRect(6,-26,14,26);
-      break;
-    case "drain":
-      ctx.fillStyle="#4a4d50";
-      ctx.beginPath(); ctx.ellipse(0,0,12,4.5,0,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle="#2a2d31";
-      for(let i=-7;i<=7;i+=4){ ctx.beginPath(); ctx.moveTo(i,-3); ctx.lineTo(i,3); ctx.stroke(); }
-      break;
-    case "stripe":
-      ctx.fillStyle="#ddd8c6";
-      ctx.fillRect(-42,-4,84,8);
-      break;
-    case "hydrant":
-      ctx.fillStyle="#973f31";
-      ctx.fillRect(-6,-32,12,32);
-      ctx.beginPath(); ctx.ellipse(0,-31,8,4,0,0,Math.PI*2); ctx.fill();
-      ctx.fillRect(-14,-20,8,7); ctx.fillRect(6,-20,8,7);
-      break;
-    case "pole":
-      ctx.fillStyle="#3d4042";
-      ctx.fillRect(-4,-48,8,48);
-      ctx.fillRect(-12,-49,24,5);
-      break;
-    case "wheel":
-      ctx.strokeStyle="#212224";
-      ctx.lineWidth=5;
-      ctx.beginPath(); ctx.arc(0,-12,18,0,Math.PI*2); ctx.stroke();
-      ctx.strokeStyle="#7c8387";
-      ctx.lineWidth=2;
-      ctx.beginPath(); ctx.arc(0,-12,8,0,Math.PI*2); ctx.stroke();
-      break;
-    case "crate":
-      ctx.fillStyle="#8d643f";
-      ctx.fillRect(-15,-16,30,16);
-      ctx.strokeStyle="#563824";
-      ctx.lineWidth=2;
-      ctx.strokeRect(-15,-16,30,16);
-      ctx.beginPath();
-      ctx.moveTo(-15,-10); ctx.lineTo(15,-10);
-      ctx.moveTo(-15,-5); ctx.lineTo(15,-5);
-      ctx.stroke();
-      break;
-    case "produce":
-      ctx.fillStyle="#c69445";
-      for(let i=0;i<4;i++){ ctx.beginPath(); ctx.arc(-10+i*7,-8-(i%2),4,0,Math.PI*2); ctx.fill(); }
-      ctx.fillStyle="#6a8c45";
-      ctx.beginPath(); ctx.arc(12,-9,4,0,Math.PI*2); ctx.fill();
-      break;
-    case "fence":
-      ctx.fillStyle="#5b554e";
-      for(let i=-10;i<=10;i+=10) ctx.fillRect(i,-34,6,34);
-      ctx.fillRect(-18,-30,42,4);
-      break;
-    case "planter":
-      ctx.fillStyle="#6e5544";
-      ctx.fillRect(-10,-12,20,12);
-      ctx.fillStyle="#4f7a4b";
-      for(let i=0;i<5;i++){
-        ctx.beginPath(); ctx.ellipse((i-2)*4,-17-(i%2)*2,4,8,(i-2)*.2,0,Math.PI*2); ctx.fill();
-      }
-      break;
-    case "puddle":
-      ctx.fillStyle="rgba(110,154,171,.55)";
-      ctx.beginPath(); ctx.ellipse(0,0,28,8,0,0,Math.PI*2); ctx.fill();
-      break;
-    case "dog":
-      ctx.fillStyle="#4a4038";
-      ctx.beginPath(); ctx.ellipse(0,-11,13,8,0,0,Math.PI*2); ctx.fill();
-      ctx.beginPath(); ctx.arc(10,-17,6,0,Math.PI*2); ctx.fill();
-      break;
-  }
-  ctx.restore();
-}
-
-/* ============================================================
-   PEDESTRIAN DRAWING — dominant scenery
-   ============================================================ */
-function drawPedestrian(p){
-  const z=clamp(p.z,0,1);
-  const x=laneX(p.x,z);
-  const y=laneY(z);
-  const s=worldScale(z)*p.scaleNoise;
-  if(x < -200 || x > W+200) return;
-
-  const stride=Math.sin(worldTime*7.5*p.type.pace+p.phase)*10*s;
-  const lift=Math.max(0,Math.sin(worldTime*7.5*p.type.pace+p.phase))*4*s;
-
-  ctx.save();
-  ctx.translate(x,y);
-
-  if(p.scared){
-    ctx.translate(0,-Math.sin(clamp(p.scareTime,0,1)*Math.PI)*22*s);
-  }
-
-  // partial bag or cart silhouette
-  if(p.accessory){
-    ctx.fillStyle=p.accessory===3 ? "#31404e" : "#6a5244";
-    const bagX = p.dir>0 ? -30*s : 18*s;
-    ctx.fillRect(bagX,-74*s,16*s,28*s);
-  }
-
-  // back leg
-  ctx.fillStyle=p.type.pants;
-  roundedRectPath(-11*s+stride*.35,-76*s,18*s,66*s,6*s);
-  ctx.fill();
-  ctx.fillStyle=p.type.sock;
-  ctx.fillRect(-9*s+stride*.35,-16*s,14*s,10*s);
-  ctx.fillStyle=p.type.shoe;
-  ctx.beginPath();
-  ctx.ellipse(-2*s+stride*.35,-4*s-lift,18*s,7*s,p.dir>.5?.06:-.06,0,Math.PI*2);
-  ctx.fill();
-
-  // front leg
-  ctx.fillStyle=p.type.pants;
-  roundedRectPath(7*s-stride*.35,-80*s,19*s,70*s,6*s);
-  ctx.fill();
-  ctx.fillStyle=p.type.sock;
-  ctx.fillRect(9*s-stride*.35,-17*s,14*s,10*s);
-  ctx.fillStyle=p.type.shoe;
-  ctx.beginPath();
-  ctx.ellipse(20*s-stride*.35,-3*s+lift*.25,20*s,7*s,p.dir>.5?.06:-.06,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.restore();
-}
-
-/* ============================================================
-   "YOU ARE THE MOUSE" SILHOUETTE
-   ============================================================ */
-function drawMousePOVHint(){
-  const s=sceneRect();
-  const y=s.y+s.h-16;
-
-  ctx.save();
-  ctx.globalAlpha=.62;
-  ctx.fillStyle="#312d2a";
-
-  // low faint ears / head silhouette
-  ctx.beginPath();
-  ctx.arc(W*.5-22,y-12,10,0,Math.PI*2);
-  ctx.arc(W*.5+22,y-12,10,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.ellipse(W*.5,y+3,38,18,0,0,Math.PI*2);
-  ctx.fill();
-
-  ctx.strokeStyle="#7d645e";
-  ctx.lineWidth=3;
-  ctx.beginPath();
-  ctx.moveTo(W*.5-32,y+8);
-  ctx.bezierCurveTo(W*.5-58,y+12,W*.5-74,y+4,W*.5-92,y+16);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-/* ============================================================
-   NEAR MISSES / FAIL CONSEQUENCES
-   ============================================================ */
-function triggerNearMiss(severity){
-  nearMisses.push({
-    kind:pick(["shoe","wheel","bag"]),
-    dir:Math.random()<.5?1:-1,
-    t:0,
-    duration:1.0 + severity*.09,
-    severity
-  });
-  for(let i=0;i<6+severity*2;i++){
-    particles.push({
-      x:W*.5+rand(-26,26),
-      y:sceneRect().y+sceneRect().h-38+rand(-6,8),
-      vx:rand(-85,85),
-      vy:rand(-95,-35),
-      life:rand(.35,.8)
-    });
-  }
-}
-
-function drawNearMiss(n){
-  const u=clamp(n.t/n.duration,0,1);
-  const s=sceneRect();
-  const y=s.y+s.h-36;
-  const x = n.dir>0 ? lerp(-220,W*.5-62,u) : lerp(W+220,W*.5+62,u);
-
-  ctx.save();
-  ctx.translate(x,y);
-
-  if(n.kind==="shoe"){
-    ctx.fillStyle="#262628";
-    ctx.beginPath();
-    ctx.ellipse(0,-14,86,30,n.dir*.08,0,Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle="#404347";
-    ctx.fillRect(-36,-146,58,120);
-  }
-  if(n.kind==="wheel"){
-    ctx.strokeStyle="#191b1d";
-    ctx.lineWidth=10;
-    ctx.beginPath(); ctx.arc(0,-35,56,0,Math.PI*2); ctx.stroke();
-    ctx.strokeStyle="#737b81";
-    ctx.lineWidth=3;
-    ctx.beginPath(); ctx.arc(0,-35,28,0,Math.PI*2); ctx.stroke();
-  }
-  if(n.kind==="bag"){
-    ctx.fillStyle="#6b5648";
-    ctx.fillRect(-50,-100,100,82);
-    ctx.strokeStyle="#4a3a31";
-    ctx.lineWidth=7;
-    ctx.beginPath(); ctx.arc(0,-100,34,Math.PI,0); ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-function updateParticles(dt){
-  particles.forEach(p=>{
-    p.life-=dt;
-    p.x+=p.vx*dt;
-    p.y+=p.vy*dt;
-    p.vy+=180*dt;
-  });
-  particles=particles.filter(p=>p.life>0);
-}
-
-function drawParticles(){
-  particles.forEach(p=>{
-    ctx.globalAlpha=clamp(p.life*2,0,1);
-    ctx.fillStyle="#cbb99d";
-    ctx.fillRect(p.x,p.y,4,3);
-  });
-  ctx.globalAlpha=1;
-}
-
-/* ============================================================
-   CAT SEQUENCE
-   ============================================================ */
-function startCatSequence(){
-  state="cat";
-  cat={t:0,duration:3.0,fromLeft:Math.random()<.5};
-  input.disabled=true;
-}
-
-function drawCat(){
-  if(!cat) return;
-  const u=clamp(cat.t/cat.duration,0,1);
-  const ease=1-Math.pow(1-u,3);
-  const s=sceneRect();
-  const targetX=W*.5 + (cat.fromLeft?-24:24);
-  const targetY=s.y+s.h-60;
-  const startX=cat.fromLeft?-260:W+260;
-  const x=lerp(startX,targetX,ease);
-  const y=lerp(targetY-10,targetY-16,ease);
-  const scale=lerp(.28,1.34,ease);
-
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.scale(scale,scale);
-
-  ctx.fillStyle="#292522";
-  ctx.beginPath(); ctx.ellipse(0,-45,72,52,0,0,Math.PI*2); ctx.fill();
-
-  ctx.beginPath(); ctx.arc(cat.fromLeft?44:-44,-85,43,0,Math.PI*2); ctx.fill();
-
-  ctx.beginPath();
-  if(cat.fromLeft){
-    ctx.moveTo(18,-116); ctx.lineTo(24,-154); ctx.lineTo(51,-119);
-    ctx.moveTo(58,-118); ctx.lineTo(80,-146); ctx.lineTo(82,-103);
-  }else{
-    ctx.moveTo(-18,-116); ctx.lineTo(-24,-154); ctx.lineTo(-51,-119);
-    ctx.moveTo(-58,-118); ctx.lineTo(-80,-146); ctx.lineTo(-82,-103);
-  }
-  ctx.fill();
-
-  ctx.fillStyle="#342f2a";
-  ctx.beginPath(); ctx.ellipse(cat.fromLeft?65:-65,-4,52,21,0,0,Math.PI*2); ctx.fill();
-
-  ctx.fillStyle="#d4c86e";
-  const ex=cat.fromLeft?49:-49;
-  ctx.beginPath(); ctx.ellipse(ex,-92,8,12,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#171515";
-  ctx.fillRect(ex-1.5,-100,3,16);
-
-  ctx.restore();
-}
-
-/* ============================================================
-   DOM
-   ============================================================ */
-const input=document.getElementById("answer");
-const form=document.getElementById("entryRow");
-const definitionEl=document.getElementById("definition");
-const timerEl=document.getElementById("timer");
-const difficultyEl=document.getElementById("difficulty");
-const progressEl=document.getElementById("progress");
-const districtEl=document.getElementById("district");
-const strengthBar=document.getElementById("strengthBar");
-const strengthText=document.getElementById("strengthText");
-const feedbackEl=document.getElementById("feedback");
-const overlay=document.getElementById("overlay");
-const overlayCard=document.getElementById("overlayCard");
-const startButton=document.getElementById("startButton");
-
-/* ============================================================
-   GAME FLOW
-   ============================================================ */
-function shuffle(array){
-  const a=[...array];
-  for(let i=a.length-1;i>0;i--){
-    const j=Math.floor(Math.random()*(i+1));
-    [a[i],a[j]]=[a[j],a[i]];
-  }
-  return a;
-}
-
-function startGame(){
-  order=shuffle(TERMS.map((_,i)=>i));
-  questionIndex=0;
-  current=null;
-  timeLeft=0;
-  strength=100;
-  score=0;
-  correctCount=0;
-  fastCount=0;
-  streak=0;
-  catCatches=0;
-  resolveTimer=0;
-  pendingAdvance=false;
-  pedestrians=[];
-  particles=[];
-  nearMisses=[];
-  cat=null;
-
-  for(let i=0;i<10;i++) spawnPedestrian(true);
-
-  overlay.classList.add("hidden");
-  state="playing";
-  updateStrengthHUD();
-  nextQuestion();
-}
-
-function nextQuestion(){
-  if(questionIndex>=order.length){
-    finishGame();
-    return;
-  }
-  current=TERMS[order[questionIndex]];
-  timeLeft=TIME_BY_DIFFICULTY[current.q];
-  resolveTimer=0;
-  pendingAdvance=false;
-
-  definitionEl.textContent=current.d;
-  difficultyEl.textContent=`${DIFFICULTY_NAMES[current.q]} · ${TIME_BY_DIFFICULTY[current.q]} SEC`;
-  progressEl.textContent=`TERM ${questionIndex+1} / ${TERMS.length}`;
-  feedbackEl.textContent="";
-  feedbackEl.style.color="var(--muted)";
-  input.value="";
-  input.disabled=false;
-  input.focus();
-  updateDistrictLabel();
-}
-
-function updateDistrictLabel(){
-  const di=districtState();
-  districtEl.textContent=(di.blend>.06 && di.next!==di.index)
-    ? `${DISTRICTS[di.index].name} → ${DISTRICTS[di.next].name}`
-    : DISTRICTS[di.index].name;
-}
-
-function speedBonus(){
-  if(timeLeft<=5) return 0;
-  return Math.min(16,Math.max(2,Math.round((timeLeft-5)*.72 + current.q*1.3)));
-}
-
-function submitAnswer(){
-  if(state!=="playing" || pendingAdvance || !current) return;
-  const raw=input.value;
-  if(!raw.trim()) return;
-  if(answerIsCorrect(raw,current)) correctAnswer();
-  else wrongAnswer(false);
-}
-
-function correctAnswer(){
-  pendingAdvance=true;
-  input.disabled=true;
-  const bonus=speedBonus();
-  correctCount++;
-  streak++;
-
-  if(bonus>0){
-    fastCount++;
-    strength=Math.min(100,strength+bonus);
-    feedbackEl.textContent=`CORRECT — FAST ANSWER +${bonus}% STRENGTH`;
-    feedbackEl.style.color="var(--good)";
-    score+=100+bonus*3+current.q*10;
-  }else{
-    feedbackEl.textContent="CORRECT";
-    feedbackEl.style.color="var(--good)";
-    score+=100+current.q*10;
-  }
-
-  for(let i=0;i<6;i++){
-    particles.push({
-      x:W*.5+rand(-10,10),
-      y:sceneRect().y+sceneRect().h-44+rand(-10,2),
-      vx:rand(-40,40),
-      vy:rand(-80,-35),
-      life:rand(.35,.65)
-    });
-  }
-
-  questionIndex++;
-  resolveTimer=.72;
-  updateStrengthHUD();
-}
-
-function wrongAnswer(timeout){
-  if(pendingAdvance) return;
-  pendingAdvance=true;
-  input.disabled=true;
-  streak=0;
-
-  const penalty=PENALTY_BY_DIFFICULTY[current.q];
-  strength=Math.max(0,strength-penalty);
-
-  feedbackEl.textContent=`${timeout?"TIME":"MISS"} — ${current.t.toUpperCase()} — −${penalty}% STRENGTH`;
-  feedbackEl.style.color="var(--bad)";
-  triggerNearMiss(current.q);
-
-  questionIndex++;
-  resolveTimer = strength<=0 ? .64 : 1.0;
-  updateStrengthHUD();
-}
-
-function updateStrengthHUD(){
-  strengthBar.style.width=strength+"%";
-  strengthText.textContent=Math.round(strength)+"%";
-  strengthBar.style.background = strength>60
-    ? "linear-gradient(90deg,#6ddc95,#d6e96e)"
-    : strength>30
-      ? "linear-gradient(90deg,#e6b64f,#d98b47)"
-      : "linear-gradient(90deg,#d45151,#ff7474)";
-}
-
-function finishGame(){
-  state="finished";
-  input.disabled=true;
-  const accuracy=Math.round(correctCount/TERMS.length*100);
-
-  overlayCard.innerHTML=`
-    <h2>Run Complete</h2>
-    <p>The mouse survived all four districts. More importantly, you finished the medical terminology run.</p>
-    <div class="rules">
-      <div class="rule"><b>${correctCount} / ${TERMS.length}</b><br>correct answers</div>
-      <div class="rule"><b>${accuracy}%</b><br>accuracy</div>
-      <div class="rule"><b>${fastCount}</b><br>fast-answer bonuses</div>
-      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
-      <div class="rule"><b>${score}</b><br>score</div>
-      <div class="rule"><b>${Math.round(strength)}%</b><br>ending Strength</div>
-    </div>
-    <button class="bigButton" id="againButton">RUN AGAIN</button>
-  `;
-  overlay.classList.remove("hidden");
-  document.getElementById("againButton").onclick=startGame;
-}
-
-function showCatContinue(){
-  state="caught";
-  catCatches++;
-  overlayCard.innerHTML=`
-    <h2>The cat noticed.</h2>
-    <p>The mouse has been captured. Vocabulary progress is preserved. You may continue the run.</p>
-    <div class="rules">
-      <div class="rule"><b>${questionIndex} / ${TERMS.length}</b><br>terms completed</div>
-      <div class="rule"><b>${correctCount}</b><br>correct so far</div>
-      <div class="rule"><b>65%</b><br>Strength on continue</div>
-      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
-    </div>
-    <button class="bigButton" id="continueButton">ESCAPE & CONTINUE</button>
-  `;
-  overlay.classList.remove("hidden");
-  document.getElementById("continueButton").onclick=()=>{
-    strength=65;
-    updateStrengthHUD();
-    cat=null;
-    overlay.classList.add("hidden");
-    state="playing";
-    nextQuestion();
-  };
-}
-
-form.addEventListener("submit",e=>{
-  e.preventDefault();
-  submitAnswer();
-});
-startButton.addEventListener("click",startGame);
-window.addEventListener("keydown",e=>{
-  if(state==="title" && e.key==="Enter") startGame();
-});
-
-/* ============================================================
-   WORLD UPDATE
-   ============================================================ */
-function updateWorld(dt){
-  worldTime+=dt;
-  scroll+=dt*(state==="playing" ? .18 : .06);
-
-  pedestrians.forEach(p=>{
-    p.x += p.dir * p.speed * dt;
-
-    // subtle lane drift to keep crossings organic
-    p.z += Math.sin(worldTime*0.6 + p.phase)*0.0003;
-
-    const mx=W*.5, my=sceneRect().y+sceneRect().h-56;
-    const px=laneX(p.x,p.z), py=laneY(p.z);
-
-    if(!p.scared && Math.abs(px-mx)<90 && Math.abs(py-my)<90 && Math.random()<.035){
-      p.scared=true;
-      p.scareTime=0;
-      p.dir*=-1;
-    }
-    if(p.scared){
-      p.scareTime+=dt*2;
-      if(p.scareTime>1){
-        p.scared=false;
-        p.scareTime=0;
+  <script>
+    const TERM_BANK = [
+      { id: 1, term: 'Silhouette', definition: 'The garment’s total outline on the body.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['column','silhouette','line','shape'] },
+      { id: 2, term: 'A-line', definition: 'Narrow at the top and gradually wider toward the hem.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['a-line','volume','shape'] },
+      { id: 3, term: 'Column', definition: 'Long, straight, narrow vertical shape.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['column','line','minimalist'] },
+      { id: 4, term: 'Sheath', definition: 'Close, clean body-skimming form with little fullness.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['sheath','tailored','contour'] },
+      { id: 5, term: 'Shift', definition: 'Straight, loose, minimally shaped dress or tunic.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['shift','boxy','minimalist'] },
+      { id: 6, term: 'Hourglass', definition: 'Defined waist with balanced emphasis at bust and hips.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['hourglass','cinched waist','contour'] },
+      { id: 7, term: 'Empire line', definition: 'Waistline raised to just below the bust.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['empire line','romantic','drape'] },
+      { id: 8, term: 'Dropped waist', definition: 'Waist seam lowered toward the hips.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['dropped waist','modernist','proportion'] },
+      { id: 9, term: 'Fit-and-flare', definition: 'Fitted through the torso, widening below the waist.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['fit-and-flare','a-line','volume'] },
+      { id: 10, term: 'Mermaid', definition: 'Fitted through the thigh, then sharply flared near the hem.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['mermaid','contour','formal proportion'] },
+      { id: 11, term: 'Ball gown', definition: 'Fitted bodice paired with a notably full skirt.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['ball gown','volume','formal'] },
+      { id: 12, term: 'Cocoon', definition: 'Rounded, enveloping volume that narrows at an edge.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['cocoon','oversized','outerwear'] },
+      { id: 13, term: 'Boxy', definition: 'Squared, broad, and minimally waist-shaped.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['boxy','shift','architectural'] },
+      { id: 14, term: 'Oversized', definition: 'Intentionally enlarged fit and proportion.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['oversized','streetwear','cocoon'] },
+      { id: 15, term: 'Asymmetry', definition: 'Deliberate unevenness in cut, volume, closure, or hem.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['asymmetry','avant-garde','line'] },
+      { id: 16, term: 'High-low hem', definition: 'Hem shorter in front and longer behind.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['high-low hem','volume','line'] },
+      { id: 17, term: 'Peplum', definition: 'Short flared extension beginning at the waist.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['peplum','hourglass','contour'] },
+      { id: 18, term: 'Volume', definition: 'Deliberate fullness or spatial presence in a garment.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['volume','ball gown','romantic'] },
+      { id: 19, term: 'Proportion', definition: 'Relationship among lengths, widths, and volumes.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['proportion','balance','scale'] },
+      { id: 20, term: 'Scale', definition: 'Relative size of a garment detail, pattern, or accessory.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['scale','architectural','accessory'] },
+      { id: 21, term: 'Balance', definition: 'Even distribution of visual weight in a look.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['balance','proportion','line'] },
+      { id: 22, term: 'Line', definition: 'The dominant directional movement: vertical, horizontal, diagonal, or curved.', category: 'Form & Silhouette', tier: 1, penalty: 20, tags: ['line','column','asymmetry'] },
+      { id: 23, term: 'Contour', definition: 'How a garment traces, shapes, or departs from the body.', category: 'Form & Silhouette', tier: 2, penalty: 25, tags: ['contour','hourglass','sheath'] },
+      { id: 24, term: 'Fit', definition: 'How well clothing relates to the wearer’s body and movement.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['fit','tailored','ease'] },
+      { id: 25, term: 'Ease', definition: 'Extra room built beyond body measurements for motion or style.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['ease','athleisure','soft tailoring'] },
+      { id: 26, term: 'Drape', definition: 'The way cloth falls, folds, and moves.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['drape','chiffon','satin'] },
+      { id: 27, term: 'Bias cut', definition: 'Fabric cut diagonally to its grain, creating stretch and fluidity.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['bias cut','mermaid','satin'] },
+      { id: 28, term: 'Grainline', definition: 'Thread direction in cloth that governs hang, stretch, and stability.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['grainline','construction','stability'] },
+      { id: 29, term: 'Dart', definition: 'Tapered sewn wedge that shapes flat fabric around the body.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['dart','hourglass','princess seam'] },
+      { id: 30, term: 'Princess seam', definition: 'Long vertical seam that forms the torso without a horizontal waist seam.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['princess seam','hourglass','tailored'] },
+      { id: 31, term: 'Paneling', definition: 'Garment construction from distinct fabric sections.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['paneling','avant-garde','architectural'] },
+      { id: 32, term: 'Yoke', definition: 'Fitted panel across shoulders, chest, or upper back.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['yoke','tailoring','structure'] },
+      { id: 33, term: 'Gore', definition: 'Shaped panel inserted to create skirt flare.', category: 'Fit, Cut, & Tailoring', tier: 3, penalty: 30, tags: ['gore','flare','skirt'] },
+      { id: 34, term: 'Godet', definition: 'Inserted wedge that gives a garment controlled movement and fullness.', category: 'Fit, Cut, & Tailoring', tier: 3, penalty: 30, tags: ['godet','movement','fullness'] },
+      { id: 35, term: 'Pleat', definition: 'Fold of fabric used for fullness, rhythm, or structure.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['pleat','fit-and-flare','volume'] },
+      { id: 36, term: 'Gathering', definition: 'Fabric drawn together to create soft fullness.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['gathering','romantic','softness'] },
+      { id: 37, term: 'Cinched waist', definition: 'Waist visibly drawn in by cut, belt, corsetry, or fastening.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['cinched waist','hourglass','belt'] },
+      { id: 38, term: 'Shoulder line', definition: 'The visual and structural placement of the shoulder.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['shoulder line','cocoon','tailoring'] },
+      { id: 39, term: 'Armscye', definition: 'The shaped armhole where a sleeve joins the garment.', category: 'Fit, Cut, & Tailoring', tier: 3, penalty: 30, tags: ['armscye','tailoring','construction'] },
+      { id: 40, term: 'Break', definition: 'The crease made where trousers meet the shoe.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['break','soft tailoring','trouser'] },
+      { id: 41, term: 'Crop', definition: 'Deliberately shortened garment length.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['crop','streetwear','proportion'] },
+      { id: 42, term: 'Alteration', definition: 'Modification made to improve fit or proportion.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['alteration','fit','tailored'] },
+      { id: 43, term: 'Bespoke', definition: 'Individually patterned and made for a particular client.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['bespoke','atelier','tailoring'] },
+      { id: 44, term: 'Made-to-measure', definition: 'Adapted from a standard pattern to a client’s measurements.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['made-to-measure','tailoring','client'] },
+      { id: 45, term: 'Ready-to-wear (RTW)', definition: 'Finished fashion sold in standardized sizes.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['ready-to-wear','retail','sizing'] },
+      { id: 46, term: 'Haute couture', definition: 'Highly exclusive, custom, hand-executed atelier fashion.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['haute couture','atelier','formal'] },
+      { id: 47, term: 'Tailoring', definition: 'Precise construction and shaping, especially in jackets, coats, trousers, and suits.', category: 'Fit, Cut, & Tailoring', tier: 1, penalty: 20, tags: ['tailoring','soft tailoring','structure'] },
+      { id: 48, term: 'Soft tailoring', definition: 'Tailoring with relaxed structure and reduced stiffness.', category: 'Fit, Cut, & Tailoring', tier: 2, penalty: 25, tags: ['soft tailoring','ease','break'] },
+      { id: 49, term: 'Canvassing', definition: 'Internal jacket structure that molds chest and lapel shape.', category: 'Fit, Cut, & Tailoring', tier: 3, penalty: 30, tags: ['canvassing','tailoring','jacket'] },
+      { id: 50, term: 'Interfacing', definition: 'Hidden support material that stiffens or stabilizes edges and panels.', category: 'Fit, Cut, & Tailoring', tier: 3, penalty: 30, tags: ['interfacing','support','structure'] },
+      { id: 51, term: 'Hand', definition: 'Tactile quality of a fabric: crisp, dry, soft, plush, or papery.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['hand','fabric','texture'] },
+      { id: 52, term: 'Texture', definition: 'Visible and tactile surface character.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['texture','tweed','bouclé'] },
+      { id: 53, term: 'Weight', definition: 'A cloth’s heaviness and capacity for structure or flow.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['weight','fabric','flow'] },
+      { id: 54, term: 'Luster', definition: 'How fabric reflects light, from matte to highly glossy.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['luster','satin','evening'] },
+      { id: 55, term: 'Nap', definition: 'Directional raised surface of materials such as velvet or suede.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['nap','velvet','surface'] },
+      { id: 56, term: 'Woven', definition: 'Fabric made from interlaced threads; usually stable and structured.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['woven','structure','tailoring'] },
+      { id: 57, term: 'Knit', definition: 'Loop-constructed fabric; usually soft and stretchy.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['knit','athleisure','soft'] },
+      { id: 58, term: 'Twill', definition: 'Diagonal-rib weave used in denim, gabardine, and many suitings.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['twill','tailoring','denim'] },
+      { id: 59, term: 'Crepe', definition: 'Matte fabric with a subtly pebbled surface and graceful drape.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['crepe','drape','matte'] },
+      { id: 60, term: 'Chiffon', definition: 'Very lightweight, sheer, floating fabric.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['chiffon','romantic','movement'] },
+      { id: 61, term: 'Organza', definition: 'Crisp, sheer material that holds shape.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['organza','ball gown','volume'] },
+      { id: 62, term: 'Tulle', definition: 'Fine net fabric used for volume, veiling, or softness.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['tulle','ball gown','volume'] },
+      { id: 63, term: 'Satin', definition: 'Smooth, lustrous fabric with a glossy face.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['satin','luster','evening'] },
+      { id: 64, term: 'Velvet', definition: 'Dense cut-pile fabric with deep, directional light response.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['velvet','nap','luster'] },
+      { id: 65, term: 'Tweed', definition: 'Textured wool fabric, often flecked, mottled, or patterned.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['tweed','texture','classic'] },
+      { id: 66, term: 'Bouclé', definition: 'Nubby, looped yarn or fabric with tactile irregularity.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['bouclé','texture','surface'] },
+      { id: 67, term: 'Cashmere', definition: 'Fine, soft insulating fiber from goat undercoat.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['cashmere','luxury','soft'] },
+      { id: 68, term: 'Merino', definition: 'Fine, resilient wool valued for softness and temperature regulation.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['merino','wool','athleisure'] },
+      { id: 69, term: 'Linen', definition: 'Cool, absorbent plant fiber with a crisp, naturally irregular surface.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['linen','crisp','summer'] },
+      { id: 70, term: 'Denim', definition: 'Durable cotton twill, usually indigo-dyed.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['denim','streetwear','twill'] },
+      { id: 71, term: 'Jersey', definition: 'Soft knit fabric with stretch and recovery.', category: 'Fabric & Material', tier: 1, penalty: 20, tags: ['jersey','athleisure','streetwear'] },
+      { id: 72, term: 'Jacquard', definition: 'Pattern woven directly into the textile structure.', category: 'Fabric & Material', tier: 2, penalty: 25, tags: ['jacquard','pattern','woven'] },
+      { id: 73, term: 'Bonded fabric', definition: 'Two layers fused to create stiffness, opacity, or clean shape.', category: 'Fabric & Material', tier: 3, penalty: 30, tags: ['bonded fabric','architectural','cocoon'] },
+      { id: 74, term: 'Palette', definition: 'The organized color range of a garment or outfit.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['palette','color','styling'] },
+      { id: 75, term: 'Hue', definition: 'The color family itself: red, blue, green, and so on.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['hue','color','family'] },
+      { id: 76, term: 'Value', definition: 'A color’s lightness or darkness.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['value','color','contrast'] },
+      { id: 77, term: 'Chroma', definition: 'A color’s intensity or saturation.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['chroma','color','intensity'] },
+      { id: 78, term: 'Monochrome', definition: 'A look composed chiefly of one color.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['monochrome','minimalist','quiet luxury'] },
+      { id: 79, term: 'Tonal dressing', definition: 'Different shades and depths within one color family.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['tonal dressing','quiet luxury','refinement'] },
+      { id: 80, term: 'Contrast', definition: 'Intentional opposition in color, value, scale, texture, or form.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['contrast','visual weight','ornament'] },
+      { id: 81, term: 'Color blocking', definition: 'Clear, geometric use of distinct solid-color areas.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['color blocking','geometric','palette'] },
+      { id: 82, term: 'Print', definition: 'Pattern applied to cloth through dyeing, painting, or printing.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['print','motif','ornament'] },
+      { id: 83, term: 'Motif', definition: 'A recurring decorative image or visual unit.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['motif','print','decorative'] },
+      { id: 84, term: 'Placement print', definition: 'Design positioned for a specific area of the garment.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['placement print','print','localized'] },
+      { id: 85, term: 'Plaid', definition: 'Crossed bands of color, including tartan-type checks.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['plaid','pattern','classic'] },
+      { id: 86, term: 'Herringbone', definition: 'Repeating broken-zigzag pattern, often in twill wool.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['herringbone','pattern','twill'] },
+      { id: 87, term: 'Houndstooth', definition: 'Broken check pattern with pointed, abstract shapes.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['houndstooth','pattern','classic'] },
+      { id: 88, term: 'Ombré', definition: 'Gradual transition from one color depth to another.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['ombré','gradient','color'] },
+      { id: 89, term: 'Embroidery', definition: 'Decorative needlework added to cloth.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['embroidery','romantic','ornament'] },
+      { id: 90, term: 'Appliqué', definition: 'Fabric motif sewn onto another fabric for contrast or ornament.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['appliqué','ornament','ball gown'] },
+      { id: 91, term: 'Passementerie', definition: 'Decorative braid, cord, fringe, tassel, or elaborate trim.', category: 'Color & Ornament', tier: 3, penalty: 30, tags: ['passementerie','trim','ornament'] },
+      { id: 92, term: 'Piping', definition: 'Narrow corded trim inserted into a seam for definition.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['piping','tailoring','trim'] },
+      { id: 93, term: 'Topstitching', definition: 'Deliberately visible stitching for reinforcement or visual emphasis.', category: 'Color & Ornament', tier: 2, penalty: 25, tags: ['topstitching','streetwear','denim'] },
+      { id: 94, term: 'Hardware', definition: 'Visible metal or molded components: zippers, buckles, studs, snaps, and rings.', category: 'Color & Ornament', tier: 1, penalty: 20, tags: ['hardware','streetwear','utility'] },
+      { id: 95, term: 'Classic', definition: 'Based on enduring, established proportions and restrained detail.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['classic','refinement','tailored'] },
+      { id: 96, term: 'Minimalist', definition: 'Reduced ornament, simplified palette, and emphasis on cut.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['minimalist','column','architectural'] },
+      { id: 97, term: 'Maximalist', definition: 'Deliberate abundance of pattern, color, texture, or ornament.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['maximalist','ornament','volume'] },
+      { id: 98, term: 'Romantic', definition: 'Soft, decorative, fluid, or historically feminine visual language.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['romantic','chiffon','embroidery'] },
+      { id: 99, term: 'Tailored', definition: 'Crisp, shaped, and structurally controlled in appearance.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['tailored','sheath','soft tailoring'] },
+      { id: 100, term: 'Avant-garde', definition: 'Experimental design that challenges ordinary form or convention.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['avant-garde','asymmetry','paneling'] },
+      { id: 101, term: 'Streetwear', definition: 'Urban casual dress shaped by sport, music, youth culture, and subcultural codes.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['streetwear','denim','oversized'] },
+      { id: 102, term: 'Athleisure', definition: 'Athletic materials and forms worn in everyday settings.', category: 'Aesthetic & Style Language', tier: 1, penalty: 20, tags: ['athleisure','jersey','knit'] },
+      { id: 103, term: 'Quiet luxury', definition: 'Understated quality, discreet branding, excellent material, and controlled fit.', category: 'Aesthetic & Style Language', tier: 2, penalty: 25, tags: ['quiet luxury','tonal dressing','refinement'] },
+      { id: 104, term: 'Refinement', definition: 'Elegance achieved through quality, proportion, restraint, and finish.', category: 'Aesthetic & Style Language', tier: 2, penalty: 25, tags: ['refinement','minimalist','quiet luxury'] },
+      { id: 105, term: 'Appropriateness', definition: 'Suitability to the occasion, climate, social setting, activity, and wearer.', category: 'Aesthetic & Style Language', tier: 2, penalty: 25, tags: ['appropriateness','judgment','occasion'] }
+    ];
+
+    const LOOKS = [
+      { id: 1, name: 'Minimal Column', tags: ['column','silhouette','monochrome','minimalist','proportion','line','refinement'], description: 'Column, monochrome, line, restraint, and refinement govern the current visual read.', style: { fabric: 'linear-gradient(180deg,#f0ece7 0%,#c8c0b5 45%,#9f978d 100%)', torso: '28%', waist: '22%', beltOpacity: 0, skirtWidth: '44%', skirtHeight: '52%', skirtTop: '32%', skirtClip: 'polygon(34% 0%,66% 0%,73% 100%,27% 100%)' } },
+      { id: 2, name: 'Romantic A-Line', tags: ['a-line','chiffon','gathering','embroidery','drape','romantic','volume'], description: 'A softened waist opens into airy chiffon volume with romantic movement.', style: { fabric: 'linear-gradient(180deg,#f5d9dd 0%,#d7b0bd 48%,#b37c93 100%)', torso: '30%', waist: '21%', beltOpacity: 0.25, belt: 'rgba(255,255,255,0.35)', skirtWidth: '78%', skirtHeight: '52%', skirtTop: '33%', skirtClip: 'polygon(38% 0%,62% 0%,100% 100%,0% 100%)' } },
+      { id: 3, name: 'Quiet Sheath', tags: ['sheath','tailored','tonal dressing','quiet luxury','contour','refinement'], description: 'Body-skimming control, tonal restraint, and polished finish dominate this look.', style: { fabric: 'linear-gradient(180deg,#e9e2d7 0%,#cdbfae 48%,#a38d77 100%)', torso: '32%', waist: '24%', beltOpacity: 0.1, skirtWidth: '42%', skirtHeight: '49%', skirtTop: '35%', skirtClip: 'polygon(32% 0%,68% 0%,76% 100%,24% 100%)' } },
+      { id: 4, name: 'Architectural Shift', tags: ['shift','boxy','bonded fabric','scale','balance','minimalist'], description: 'Bonded structure and boxy breadth make the silhouette feel deliberately architectural.', style: { fabric: 'linear-gradient(180deg,#c4c5c9 0%,#9fa2aa 48%,#767b84 100%)', torso: '40%', waist: '36%', beltOpacity: 0, torsoRadius: '12px', skirtWidth: '54%', skirtHeight: '46%', skirtTop: '37%', skirtClip: 'polygon(22% 0%,78% 0%,86% 100%,14% 100%)', skirtRadius: '10px' } },
+      { id: 5, name: 'Defined Hourglass', tags: ['hourglass','cinched waist','dart','princess seam','peplum','contour'], description: 'A sharply drawn waist and shaped torso create a controlled hourglass read.', style: { fabric: 'linear-gradient(180deg,#efe4dc 0%,#d4b3a9 45%,#ae7f75 100%)', torso: '36%', waist: '17%', beltOpacity: 0.52, belt: 'rgba(79,22,22,0.55)', skirtWidth: '58%', skirtHeight: '44%', skirtTop: '40%', skirtClip: 'polygon(26% 0%,74% 0%,88% 100%,12% 100%)' } },
+      { id: 6, name: 'Empire Evening Look', tags: ['empire line','chiffon','satin','drape','luster','romantic'], description: 'The waist rises beneath the bust as soft lustrous fabric descends in a romantic fall.', style: { fabric: 'linear-gradient(180deg,#e8edf7 0%,#c4d0ea 50%,#95a9d0 100%)', torso: '30%', waist: '26%', beltOpacity: 0.34, belt: 'rgba(255,255,255,0.48)', skirtWidth: '70%', skirtHeight: '54%', skirtTop: '29%', skirtClip: 'polygon(34% 0%,66% 0%,96% 100%,4% 100%)' } },
+      { id: 7, name: 'Dropped-Waist Modernist', tags: ['dropped waist','asymmetry','proportion','line','avant-garde'], description: 'Lowered waist placement and directional asymmetry disturb the usual torso-to-skirt relation.', style: { fabric: 'linear-gradient(180deg,#d3d0da 0%,#aaa4bb 50%,#7e7790 100%)', torso: '34%', waist: '27%', beltOpacity: 0.42, belt: 'rgba(25,25,35,0.5)', skirtWidth: '60%', skirtHeight: '46%', skirtTop: '44%', skirtClip: 'polygon(22% 0%,78% 8%,96% 100%,10% 100%)' } },
+      { id: 8, name: 'Fit-and-Flare', tags: ['fit-and-flare','pleat','gathering','a-line relationships','volume'], description: 'The torso holds close before opening into measured flare and rhythmic fullness.', style: { fabric: 'linear-gradient(180deg,#f3e3be 0%,#d7bb74 45%,#b08837 100%)', torso: '31%', waist: '20%', beltOpacity: 0.3, belt: 'rgba(109,82,22,0.46)', skirtWidth: '82%', skirtHeight: '51%', skirtTop: '36%', skirtClip: 'polygon(38% 0%,62% 0%,100% 100%,0% 100%)' } },
+      { id: 9, name: 'Mermaid Evening Look', tags: ['mermaid','satin','bias cut','contour','luster','formal proportion'], description: 'A close lower-body contour breaks into a late flare, sharpened by satin sheen.', style: { fabric: 'linear-gradient(180deg,#f7f7f8 0%,#d6dce5 44%,#aab5c6 100%)', torso: '30%', waist: '22%', beltOpacity: 0.08, skirtWidth: '46%', skirtHeight: '56%', skirtTop: '34%', skirtClip: 'polygon(36% 0%,64% 0%,70% 48%,88% 74%,100% 100%,0% 100%,12% 74%,30% 48%)' } },
+      { id: 10, name: 'Formal Ball Gown', tags: ['ball gown','organza','tulle','volume','embroidery','appliqué'], description: 'A fitted bodice yields to ceremonial volume, surface ornament, and sheer structure.', style: { fabric: 'linear-gradient(180deg,#f0f4ef 0%,#cdddc8 44%,#9fb29c 100%)', torso: '28%', waist: '18%', beltOpacity: 0.24, belt: 'rgba(255,255,255,0.4)', skirtWidth: '96%', skirtHeight: '56%', skirtTop: '34%', skirtClip: 'polygon(42% 0%,58% 0%,100% 100%,0% 100%)' } },
+      { id: 11, name: 'Cocoon Outerwear', tags: ['cocoon','oversized','bonded fabric','shoulder line','scale'], description: 'Rounded outer volume narrows toward the hem, emphasizing shoulder breadth and cocoon shape.', style: { fabric: 'linear-gradient(180deg,#d5cfc9 0%,#aba39a 44%,#7b746d 100%)', torso: '50%', waist: '34%', beltOpacity: 0, skirtWidth: '62%', skirtHeight: '42%', skirtTop: '43%', skirtClip: 'polygon(12% 0%,88% 0%,70% 100%,30% 100%)', torsoRadius: '22px 22px 30px 30px' } },
+      { id: 12, name: 'Soft Tailoring', tags: ['soft tailoring','twill','wide proportion','break','canvassing','tailoring'], description: 'Tailored language remains, but structure relaxes into softer, wider, easier proportion.', style: { fabric: 'linear-gradient(180deg,#ddd6cb 0%,#bbb09d 44%,#8a7d68 100%)', torso: '38%', waist: '26%', beltOpacity: 0.12, skirtWidth: '54%', skirtHeight: '48%', skirtTop: '37%', skirtClip: 'polygon(24% 0%,76% 0%,82% 100%,18% 100%)' } },
+      { id: 13, name: 'Elevated Streetwear', tags: ['streetwear','denim','jersey','hardware','oversized','topstitching'], description: 'Denim, visible utility details, and enlarged proportion pull the look toward elevated streetwear.', style: { fabric: 'linear-gradient(180deg,#8ea7c7 0%,#5e7ba0 44%,#324d72 100%)', torso: '42%', waist: '30%', beltOpacity: 0.2, belt: 'rgba(18,26,40,0.45)', skirtWidth: '58%', skirtHeight: '42%', skirtTop: '41%', skirtClip: 'polygon(16% 0%,84% 0%,82% 100%,18% 100%)', torsoRadius: '16px' } },
+      { id: 14, name: 'Refined Athleisure', tags: ['athleisure','knit','jersey','ease','monochrome','technical proportion'], description: 'Stretch materials and easy proportion are refined enough to leave the gym context behind.', style: { fabric: 'linear-gradient(180deg,#d2d5d8 0%,#a9b0b8 44%,#798390 100%)', torso: '36%', waist: '28%', beltOpacity: 0.08, skirtWidth: '52%', skirtHeight: '46%', skirtTop: '38%', skirtClip: 'polygon(24% 0%,76% 0%,86% 100%,14% 100%)' } },
+      { id: 15, name: 'Avant-Garde Finale', tags: ['avant-garde','asymmetry','volume','paneling','appliqué','unusual contour','scale'], description: 'The finale fractures symmetry and proportion, using paneling and scale to break ordinary fashion logic.', style: { fabric: 'linear-gradient(180deg,#f5e8e3 0%,#d8b0ac 40%,#a86360 100%)', torso: '38%', waist: '24%', beltOpacity: 0.22, belt: 'rgba(49,8,8,0.45)', skirtWidth: '88%', skirtHeight: '54%', skirtTop: '33%', skirtClip: 'polygon(20% 0%,74% 6%,100% 100%,12% 88%)' } }
+    ];
+
+    const PROMPT_TEMPLATES = [
+      term => `Which term is most precise here? ${term.definition.replace(/^./, c => c.toUpperCase())}`,
+      term => `A critic needs the exact word for this concept: ${term.definition} Which answer is correct?`,
+      term => `Select the strongest vocabulary term for the following distinction: ${term.definition}`,
+      term => `Which lexicon term names this fashion idea most exactly: ${term.definition}`,
+      term => `An editorial note describes a look this way: ${term.definition} Which term belongs in the note?`
+    ];
+
+    const CATEGORY_DISTRactors = {
+      'Form & Silhouette': ['Silhouette','A-line','Column','Sheath','Shift','Hourglass','Empire line','Dropped waist','Fit-and-flare','Mermaid','Ball gown','Cocoon','Boxy','Oversized','Asymmetry','High-low hem','Peplum','Volume','Proportion','Scale','Balance','Line','Contour'],
+      'Fit, Cut, & Tailoring': ['Fit','Ease','Drape','Bias cut','Grainline','Dart','Princess seam','Paneling','Yoke','Gore','Godet','Pleat','Gathering','Cinched waist','Shoulder line','Armscye','Break','Crop','Alteration','Bespoke','Made-to-measure','Ready-to-wear (RTW)','Haute couture','Tailoring','Soft tailoring','Canvassing','Interfacing'],
+      'Fabric & Material': ['Hand','Texture','Weight','Luster','Nap','Woven','Knit','Twill','Crepe','Chiffon','Organza','Tulle','Satin','Velvet','Tweed','Bouclé','Cashmere','Merino','Linen','Denim','Jersey','Jacquard','Bonded fabric'],
+      'Color & Ornament': ['Palette','Hue','Value','Chroma','Monochrome','Tonal dressing','Contrast','Color blocking','Print','Motif','Placement print','Plaid','Herringbone','Houndstooth','Ombré','Embroidery','Appliqué','Passementerie','Piping','Topstitching','Hardware'],
+      'Aesthetic & Style Language': ['Classic','Minimalist','Maximalist','Romantic','Tailored','Avant-garde','Streetwear','Athleisure','Quiet luxury','Refinement','Appropriateness']
+    };
+
+    const state = {
+      started: false,
+      gameOver: false,
+      victory: false,
+      taste: 100,
+      correct: 0,
+      missed: 0,
+      currentQuestion: null,
+      askedTerms: new Set(),
+      history: [],
+      lookIndex: 0,
+      questionNumber: 0,
+      totalQuestionsTarget: 24,
+      visibleLookId: 1,
+      lastCategories: [],
+      recentTerms: [],
+      timerRemaining: 15,
+      questionStartMs: 0,
+      intervals: { model: null, timer: null },
+      audio: null,
+      reviewMode: false,
+      weakTerms: new Map()
+    };
+
+    const els = {
+      options: document.getElementById('options'),
+      questionText: document.getElementById('questionText'),
+      questionCategory: document.getElementById('questionCategory'),
+      questionTier: document.getElementById('questionTier'),
+      feedbackText: document.getElementById('feedbackText'),
+      feedbackNote: document.getElementById('feedbackNote'),
+      timerText: document.getElementById('timerText'),
+      timerBar: document.getElementById('timerBar'),
+      timerState: document.getElementById('timerState'),
+      tasteNumber: document.getElementById('tasteNumber'),
+      gaugeFill: document.getElementById('gaugeFill'),
+      correctWrongText: document.getElementById('correctWrongText'),
+      lookCounter: document.getElementById('lookCounter'),
+      questionCounter: document.getElementById('questionCounter'),
+      visibleLookText: document.getElementById('visibleLookText'),
+      legendLook: document.getElementById('legendLook'),
+      legendCopy: document.getElementById('legendCopy'),
+      introOverlay: document.getElementById('introOverlay'),
+      endingOverlay: document.getElementById('endingOverlay'),
+      endingCard: document.getElementById('endingCard'),
+      beginBtn: document.getElementById('beginBtn'),
+      studyBtn: document.getElementById('studyBtn'),
+      modelLayer: document.getElementById('modelLayer'),
+      audLeft: document.getElementById('audLeft'),
+      audRight: document.getElementById('audRight'),
+      showSubtitle: document.getElementById('showSubtitle'),
+      tasteMeta: document.getElementById('tasteMeta')
+    };
+
+    function sample(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+    function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+    function tierLabel(tier) { return tier === 1 ? 'Level I — Familiar' : tier === 2 ? 'Level II — Professional' : 'Level III — Specialist'; }
+    function formatLookCounter() { return String(state.lookIndex + 1).padStart(2, '0') + ' / 15'; }
+    function formatQuestionCounter() { return String(state.questionNumber).padStart(2, '0') + ' / ' + String(state.totalQuestionsTarget).padStart(2, '0'); }
+
+    function buildAudience(bank) {
+      bank.innerHTML = '';
+      for (let row = 0; row < 5; row++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'aud-row';
+        const count = 9 - row;
+        for (let i = 0; i < count; i++) {
+          const fig = document.createElement('div');
+          fig.className = 'aud-figure';
+          fig.style.setProperty('--h', `${54 + Math.random() * 40}%`);
+          fig.style.setProperty('--shift', `${Math.random() * 6}px`);
+          fig.style.setProperty('--w', `${0.82 + Math.random() * 0.45}`);
+          fig.style.setProperty('--d', `${Math.random() * 5}s`);
+          rowEl.appendChild(fig);
+        }
+        bank.appendChild(rowEl);
       }
     }
-  });
 
-  pedestrians = pedestrians.filter(p => p.x>-1.35 && p.x<1.35 && p.z>.24 && p.z<.95);
+    function createModel(look, slot, zProgress) {
+      const model = document.createElement('div');
+      model.className = 'model visible';
+      model.dataset.lookId = look.id;
+      model.style.zIndex = String(20 + slot);
 
-  const desired = state==="playing" ? 12 : 9;
-  while(pedestrians.length<desired) spawnPedestrian();
-
-  nearMisses.forEach(n=>n.t+=dt);
-  nearMisses=nearMisses.filter(n=>n.t<n.duration);
-
-  updateParticles(dt);
-
-  if(cat) cat.t+=dt;
-}
-
-function updateGame(dt){
-  if(state==="playing" && current && !pendingAdvance){
-    timeLeft-=dt;
-    if(timeLeft<=0){
-      timeLeft=0;
-      wrongAnswer(true);
+      const style = look.style;
+      model.innerHTML = `
+        <div class="shadow"></div>
+        <div class="body">
+          <div class="look-figure"
+            style="--fabric:${style.fabric}; --torso:${style.torso}; --waist:${style.waist}; --belt-opacity:${style.beltOpacity ?? 0}; --belt:${style.belt || 'rgba(0,0,0,0.2)'}; --torso-radius:${style.torsoRadius || '18px 18px 12px 12px'}; --skirt-width:${style.skirtWidth}; --skirt-height:${style.skirtHeight}; --skirt-top:${style.skirtTop}; --skirt-clip:${style.skirtClip}; --skirt-radius:${style.skirtRadius || '0 0 18px 18px'};">
+            <div class="head"></div>
+            <div class="neck"></div>
+            <div class="torso"></div>
+            <div class="waist"></div>
+            <div class="skirt"></div>
+          </div>
+        </div>`;
+      updateModelTransform(model, zProgress);
+      return model;
     }
-  }
 
-  if(state==="playing" && pendingAdvance){
-    resolveTimer-=dt;
-    if(resolveTimer<=0){
-      if(strength<=0) startCatSequence();
-      else nextQuestion();
+    function updateModelTransform(model, progress) {
+      const depth = 1 - progress;
+      const scale = 0.22 + (progress * 0.9);
+      const y = 72 - progress * 54;
+      const xDrift = Math.sin(progress * Math.PI * 1.15) * 18;
+      const sway = Math.sin(performance.now() / 260 + progress * 8) * 2.2;
+      model.style.left = `calc(50% + ${xDrift}px)`;
+      model.style.bottom = `${y}%`;
+      model.style.transform = `translateX(-50%) scale(${scale}) rotateZ(${sway * 0.1}deg)`;
+      model.style.opacity = String(clamp(0.18 + progress * 1.1, 0, 1));
+      const shadow = model.querySelector('.shadow');
+      if (shadow) shadow.style.transform = `translateX(-50%) scale(${1.1 - progress * 0.35}, ${1 - progress * 0.2})`;
     }
-  }
 
-  if(state==="cat" && cat && cat.t>=cat.duration){
-    showCatContinue();
-  }
+    function renderModels() {
+      els.modelLayer.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const look = LOOKS[(state.lookIndex + i) % LOOKS.length];
+        const progress = clamp((i * 0.24) + 0.12, 0, 1);
+        els.modelLayer.appendChild(createModel(look, i, progress));
+      }
+      updateVisibleLook(LOOKS[state.lookIndex % LOOKS.length]);
+    }
 
-  updateHUD();
-}
+    function animateModels() {
+      if (!state.started || state.gameOver) return;
+      const models = [...els.modelLayer.querySelectorAll('.model')];
+      models.forEach((model, idx) => {
+        const base = (idx * 0.24) + 0.12;
+        const t = (performance.now() / 1000) % 7;
+        const progress = (base + t * 0.02) % 1.14;
+        updateModelTransform(model, clamp(progress, 0, 1));
+      });
+      requestAnimationFrame(animateModels);
+    }
 
-function updateHUD(){
-  if(current && (state==="playing" || state==="cat")){
-    timerEl.textContent=Math.ceil(timeLeft).toString().padStart(2,"0");
-    timerEl.style.color = timeLeft>8 ? "var(--good)" : timeLeft>5 ? "var(--warn)" : "var(--bad)";
-  }
-  updateDistrictLabel();
-}
+    function advanceLook() {
+      if (!state.started || state.gameOver) return;
+      state.lookIndex = (state.lookIndex + 1) % LOOKS.length;
+      renderModels();
+      maybeQueueQuestion();
+      if (state.questionNumber >= state.totalQuestionsTarget && state.lookIndex === LOOKS.length - 1 && !state.currentQuestion) {
+        endGame(true);
+      }
+    }
 
-/* ============================================================
-   RENDER
-   ============================================================ */
-function drawInsideOvalWorld(){
-  const ov=ovalRect();
+    function updateVisibleLook(look) {
+      state.visibleLookId = look.id;
+      els.lookCounter.textContent = formatLookCounter();
+      els.visibleLookText.textContent = look.name;
+      els.legendLook.textContent = look.name;
+      els.legendCopy.textContent = look.description;
+    }
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2);
-  ctx.clip();
+    function computeCandidatePool() {
+      const visibleLook = LOOKS.find(l => l.id === state.visibleLookId) || LOOKS[0];
+      const affinityTerms = TERM_BANK.filter(term => term.tags.some(tag => visibleLook.tags.includes(tag)));
+      const useAffinity = Math.random() < 0.6;
+      const pool = useAffinity && affinityTerms.length > 4 ? affinityTerms : TERM_BANK;
+      let filtered = pool.filter(term => !state.recentTerms.includes(term.term));
+      if (filtered.length < 8) filtered = TERM_BANK.filter(term => !state.recentTerms.slice(-3).includes(term.term));
+      if (filtered.length < 4) filtered = TERM_BANK;
 
-  drawBackdrop();
-  drawClusterObjects();
+      const categoryCounts = state.history.reduce((acc, item) => {
+        acc[item.category] = (acc[item.category] || 0) + 1;
+        return acc;
+      }, {});
 
-  const items=[...pedestrians].sort((a,b)=>a.z-b.z);
-  items.forEach(drawPedestrian);
+      return filtered
+        .map(term => {
+          const weakBoost = state.weakTerms.get(term.term) || 0;
+          const seenPenalty = state.askedTerms.has(term.term) ? 0.72 : 1;
+          const categoryBoost = (categoryCounts[term.category] || 0) < Math.floor(state.questionNumber / 5) ? 1.15 : 1;
+          const affinityBoost = term.tags.some(tag => visibleLook.tags.includes(tag)) ? 1.25 : 1;
+          const tierBoost = term.tier === 3 && state.questionNumber > 10 ? 1.18 : 1;
+          return { term, weight: (1 + weakBoost * 0.18) * seenPenalty * categoryBoost * affinityBoost * tierBoost };
+        })
+        .sort((a, b) => b.weight - a.weight);
+    }
 
-  nearMisses.forEach(drawNearMiss);
-  drawMousePOVHint();
-  drawParticles();
-  if(state==="cat") drawCat();
+    function chooseWeighted(candidates) {
+      const total = candidates.reduce((sum, item) => sum + item.weight, 0);
+      let threshold = Math.random() * total;
+      for (const item of candidates) {
+        threshold -= item.weight;
+        if (threshold <= 0) return item.term;
+      }
+      return candidates[0].term;
+    }
 
-  ctx.restore();
+    function distractorsFor(term) {
+      const sameCategory = CATEGORY_DISTRactors[term.category]
+        .filter(name => name !== term.term)
+        .map(name => TERM_BANK.find(t => t.term === name));
+      const tagMatches = TERM_BANK.filter(t => t.term !== term.term && t.tags.some(tag => term.tags.includes(tag)));
+      const pool = shuffle([...new Set([...tagMatches, ...sameCategory].filter(Boolean))]);
+      const picks = [];
+      for (const item of pool) {
+        if (!picks.find(p => p.term === item.term)) picks.push(item);
+        if (picks.length === 3) break;
+      }
+      while (picks.length < 3) {
+        const random = sample(TERM_BANK.filter(t => t.term !== term.term && !picks.find(p => p.term === t.term)));
+        picks.push(random);
+      }
+      return shuffle([term, ...picks]);
+    }
 
-  drawOvalVignette();
-}
+    function makePrompt(term) {
+      return sample(PROMPT_TEMPLATES)(term);
+    }
 
-function drawOvalVignette(){
-  const ov=ovalRect();
+    function maybeQueueQuestion() {
+      if (state.currentQuestion || state.gameOver || !state.started) return;
+      if (state.questionNumber >= state.totalQuestionsTarget) return;
+      nextQuestion();
+    }
 
-  // Dark outside
-  ctx.save();
-  ctx.fillStyle="rgba(3,5,8,.92)";
-  ctx.beginPath();
-  ctx.rect(0,0,W,H);
-  ctx.moveTo(ov.cx+ov.rx,ov.cy);
-  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2,true);
-  ctx.fill("evenodd");
-  ctx.restore();
+    function nextQuestion() {
+      const candidates = computeCandidatePool();
+      const answer = chooseWeighted(candidates);
+      const options = distractorsFor(answer);
+      state.questionNumber += 1;
+      state.currentQuestion = {
+        answer,
+        options,
+        prompt: makePrompt(answer),
+        resolved: false,
+        startedAt: performance.now(),
+        number: state.questionNumber
+      };
+      state.questionStartMs = performance.now();
+      state.timerRemaining = 15;
+      state.askedTerms.add(answer.term);
+      state.recentTerms = [...state.recentTerms.slice(-6), answer.term];
+      renderQuestion();
+      startTimer();
+    }
 
-  // Thick soft vignette ring
-  const rg=ctx.createRadialGradient(ov.cx,ov.cy,ov.rx*.55,ov.cx,ov.cy,ov.rx*1.08);
-  rg.addColorStop(0,"rgba(0,0,0,0)");
-  rg.addColorStop(.68,"rgba(0,0,0,.02)");
-  rg.addColorStop(.83,"rgba(0,0,0,.34)");
-  rg.addColorStop(1,"rgba(0,0,0,.92)");
-  ctx.fillStyle=rg;
-  ctx.fillRect(0,0,W,H);
+    function renderQuestion() {
+      const q = state.currentQuestion;
+      if (!q) return;
+      els.questionText.textContent = q.prompt;
+      els.questionCategory.textContent = q.answer.category;
+      els.questionTier.textContent = `${tierLabel(q.answer.tier)} · -${q.answer.penalty}`;
+      els.questionCounter.textContent = formatQuestionCounter();
+      els.feedbackText.textContent = 'Select the term that distinguishes the concept most precisely from its nearest plausible alternatives.';
+      els.feedbackNote.textContent = 'Window open';
+      els.options.innerHTML = '';
+      q.options.forEach((option, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option';
+        btn.type = 'button';
+        btn.dataset.term = option.term;
+        btn.innerHTML = `<span class="option-key">${index + 1}</span><span class="option-label">${option.term}</span>`;
+        btn.addEventListener('click', () => submitAnswer(option.term));
+        els.options.appendChild(btn);
+      });
+      updateTimerUI();
+    }
 
-  // faint inner glass edge
-  ctx.save();
-  ctx.globalAlpha=.25;
-  ctx.strokeStyle="rgba(255,255,255,.10)";
-  ctx.lineWidth=3;
-  ctx.beginPath();
-  ctx.ellipse(ov.cx,ov.cy,ov.rx,ov.ry,0,0,Math.PI*2);
-  ctx.stroke();
-  ctx.restore();
-}
+    function startTimer() {
+      clearInterval(state.intervals.timer);
+      state.intervals.timer = setInterval(() => {
+        if (!state.currentQuestion || state.currentQuestion.resolved) return;
+        const elapsed = (performance.now() - state.questionStartMs) / 1000;
+        state.timerRemaining = clamp(15 - elapsed, 0, 15);
+        updateTimerUI();
+        if (state.timerRemaining <= 0.02) {
+          clearInterval(state.intervals.timer);
+          submitAnswer(null, true);
+        }
+      }, 100);
+    }
 
-function render(){
-  ctx.clearRect(0,0,W,H);
-  drawInsideOvalWorld();
-}
+    function updateTimerUI() {
+      els.timerText.textContent = Math.ceil(state.timerRemaining).toString();
+      els.timerBar.style.transform = `scaleX(${state.timerRemaining / 15})`;
+      const urgent = state.timerRemaining <= 5;
+      els.timerBar.style.background = urgent
+        ? 'linear-gradient(90deg, rgba(184,20,20,0.95), rgba(255,180,180,0.7))'
+        : 'linear-gradient(90deg, rgba(240,240,240,0.86), rgba(216,208,196,0.72))';
+      els.timerState.textContent = state.timerRemaining > 10 ? 'Recovery window' : state.timerRemaining > 0 ? 'Survival window' : 'Closed';
+    }
 
-/* ============================================================
-   MAIN LOOP
-   ============================================================ */
-function loop(ts){
-  let dt=(ts-lastTimestamp)/1000;
-  lastTimestamp=ts;
-  dt=Math.max(0,Math.min(.05,dt));
+    function updateTasteUI() {
+      els.tasteNumber.textContent = Math.round(state.taste);
+      els.gaugeFill.style.transform = `scaleX(${state.taste / 100})`;
+      els.correctWrongText.textContent = `${state.correct} correct · ${state.missed} missed`;
+      els.tasteMeta.textContent = state.taste > 66 ? 'Sustained judgment' : state.taste > 33 ? 'Under pressure' : 'Near exclusion';
+      els.gaugeFill.style.background = state.taste > 33
+        ? 'linear-gradient(90deg, #91856f 0%, #d8d0c4 50%, #f0f0f0 100%)'
+        : 'linear-gradient(90deg, rgba(184,20,20,0.95), rgba(240,180,180,0.86))';
+    }
 
-  updateWorld(dt);
-  updateGame(dt);
-  render();
+    function playTone(kind) {
+      if (!state.audio) {
+        try { state.audio = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch { return; }
+      }
+      const ctx = state.audio;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc.connect(gain).connect(ctx.destination);
+      osc2.connect(gain2).connect(ctx.destination);
+      if (kind === 'correct') {
+        osc.type = 'sine'; osc.frequency.setValueAtTime(660, now); osc.frequency.linearRampToValueAtTime(880, now + 0.12);
+        gain.gain.setValueAtTime(0.001, now); gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        osc.start(now); osc.stop(now + 0.22);
+      } else if (kind === 'bonus') {
+        osc.type = 'triangle'; osc.frequency.setValueAtTime(660, now); osc.frequency.linearRampToValueAtTime(1100, now + 0.18);
+        osc2.type = 'sine'; osc2.frequency.setValueAtTime(1320, now + 0.02);
+        gain.gain.setValueAtTime(0.001, now); gain.gain.exponentialRampToValueAtTime(0.08, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        gain2.gain.setValueAtTime(0.001, now + 0.02); gain2.gain.exponentialRampToValueAtTime(0.05, now + 0.03); gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        osc.start(now); osc.stop(now + 0.28); osc2.start(now + 0.02); osc2.stop(now + 0.24);
+      } else if (kind === 'wrong') {
+        osc.type = 'square'; osc.frequency.setValueAtTime(180, now);
+        gain.gain.setValueAtTime(0.001, now); gain.gain.exponentialRampToValueAtTime(0.09, now + 0.01); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        osc.start(now); osc.stop(now + 0.18);
+      } else if (kind === 'thud') {
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(90, now);
+        gain.gain.setValueAtTime(0.001, now); gain.gain.exponentialRampToValueAtTime(0.14, now + 0.02); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+        osc.start(now); osc.stop(now + 0.34);
+      }
+    }
 
-  requestAnimationFrame(loop);
-}
+    function submitAnswer(selectedTerm, timedOut = false) {
+      const q = state.currentQuestion;
+      if (!q || q.resolved || state.gameOver) return;
+      q.resolved = true;
+      clearInterval(state.intervals.timer);
+      const elapsed = (performance.now() - state.questionStartMs) / 1000;
+      const fastWindow = elapsed <= 10;
+      const isCorrect = selectedTerm === q.answer.term;
+      const optionButtons = [...els.options.querySelectorAll('.option')];
+      optionButtons.forEach(btn => {
+        if (btn.dataset.term === q.answer.term) btn.classList.add('correct');
+        else if (btn.dataset.term === selectedTerm) btn.classList.add('wrong');
+        else btn.classList.add('dim');
+        btn.disabled = true;
+      });
 
-updateStrengthHUD();
-updateDistrictLabel();
-requestAnimationFrame(loop);
+      let note = q.answer.definition;
+      let side = 'Recorded';
+      if (isCorrect) {
+        state.correct += 1;
+        playTone(fastWindow && state.taste < 100 ? 'bonus' : 'correct');
+        if (fastWindow && state.taste < 100) {
+          state.taste = clamp(state.taste + 10, 0, 100);
+          side = '+10 Taste recovered';
+        } else {
+          side = 'Correct';
+        }
+        els.feedbackText.textContent = `Correct: ${q.answer.term} — ${q.answer.definition}`;
+      } else {
+        state.missed += 1;
+        state.taste = clamp(state.taste - q.answer.penalty, 0, 100);
+        playTone('wrong');
+        state.weakTerms.set(q.answer.term, (state.weakTerms.get(q.answer.term) || 0) + 1);
+        side = timedOut ? `Timed out · -${q.answer.penalty}` : `-${q.answer.penalty} Taste`;
+        els.feedbackText.textContent = timedOut
+          ? `No answer submitted. Correct: ${q.answer.term} — ${q.answer.definition}`
+          : `Incorrect. Correct: ${q.answer.term} — ${q.answer.definition}`;
+      }
 
-})();
-</script>
+      els.feedbackNote.textContent = side;
+      updateTasteUI();
+      state.history.push({
+        question: q.prompt,
+        term: q.answer.term,
+        category: q.answer.category,
+        selected: selectedTerm || 'No answer',
+        correct: isCorrect,
+        definition: q.answer.definition,
+        penalty: q.answer.penalty,
+        elapsed: Number(elapsed.toFixed(1))
+      });
+
+      if (state.taste <= 0) {
+        setTimeout(() => endGame(false), 650);
+        return;
+      }
+
+      state.currentQuestion = null;
+      setTimeout(() => {
+        if (!state.gameOver) {
+          optionButtons.forEach(btn => btn.disabled = false);
+          maybeQueueQuestion();
+        }
+      }, 1300);
+    }
+
+    function reviewMarkup() {
+      const weakest = [...state.weakTerms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const strongestCategory = Object.entries(state.history.reduce((acc, item) => {
+        acc[item.category] = acc[item.category] || { correct: 0, total: 0 };
+        acc[item.category].total += 1;
+        if (item.correct) acc[item.category].correct += 1;
+        return acc;
+      }, {})).sort((a, b) => (b[1].correct / b[1].total) - (a[1].correct / a[1].total))[0];
+
+      const rows = state.history.slice(-10).map(item => `
+        <tr>
+          <td><strong>${item.term}</strong></td>
+          <td>${item.selected}</td>
+          <td>${item.correct ? 'Correct' : 'Missed'}</td>
+          <td>${item.elapsed}s</td>
+        </tr>`).join('');
+
+      return `
+        <div class="message-mark">Review dossier</div>
+        <div class="message-title">Private Viewing</div>
+        <p class="message-body">The examination is paused. Study your most recent terms, then return to the show when your distinctions feel sharp again.</p>
+        <div class="message-grid">
+          <div class="message-stat">
+            <div class="message-stat-label">Recent accuracy</div>
+            <div class="message-stat-value">${state.correct} / ${Math.max(1, state.correct + state.missed)}</div>
+          </div>
+          <div class="message-stat">
+            <div class="message-stat-label">Strongest category</div>
+            <div class="message-stat-value">${strongestCategory ? strongestCategory[0] : 'Not enough data'}</div>
+          </div>
+        </div>
+        <div class="tiny muted" style="margin-bottom:1rem;">Most repeated misses: ${weakest.length ? weakest.map(([term, count]) => `${term} (${count})`).join(', ') : 'None yet.'}</div>
+        <table class="review-table">
+          <thead><tr><th>Term</th><th>Your answer</th><th>Result</th><th>Time</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4">No questions answered yet.</td></tr>'}</tbody>
+        </table>
+        <div class="actions" style="margin-top:1.5rem;">
+          <button class="btn btn-primary" id="resumeBtn">Return to the runway</button>
+          <button class="btn btn-secondary" id="restartFromReviewBtn">Restart examination</button>
+        </div>`;
+    }
+
+    function showReview() {
+      state.reviewMode = true;
+      els.endingCard.innerHTML = reviewMarkup();
+      els.endingOverlay.classList.add('active');
+      const resumeBtn = document.getElementById('resumeBtn');
+      const restartBtn = document.getElementById('restartFromReviewBtn');
+      resumeBtn?.addEventListener('click', hideOverlay);
+      restartBtn?.addEventListener('click', restartGame);
+    }
+
+    function hideOverlay() {
+      state.reviewMode = false;
+      els.endingOverlay.classList.remove('active');
+    }
+
+    function endGame(victory) {
+      if (state.gameOver) return;
+      state.gameOver = true;
+      state.victory = victory;
+      clearInterval(state.intervals.timer);
+      clearInterval(state.intervals.model);
+      if (!victory) playTone('thud');
+      const accuracy = state.correct + state.missed ? Math.round((state.correct / (state.correct + state.missed)) * 100) : 0;
+      const weakest = [...state.weakTerms.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([term]) => term).join(', ') || 'No repeated misses';
+      const card = victory
+        ? `
+          <div class="message-mark">Admission granted</div>
+          <div class="message-title">Welcome.</div>
+          <p class="message-body">The final model cleared the runway and your judgment held. The institution allows you closer to the presentation space. A quiet nod from the atelier is the only celebration you receive.</p>
+          <div class="message-grid">
+            <div class="message-stat"><div class="message-stat-label">Final Taste</div><div class="message-stat-value">${Math.round(state.taste)}%</div></div>
+            <div class="message-stat"><div class="message-stat-label">Accuracy</div><div class="message-stat-value">${accuracy}%</div></div>
+            <div class="message-stat"><div class="message-stat-label">Terms faced</div><div class="message-stat-value">${state.correct + state.missed}</div></div>
+            <div class="message-stat"><div class="message-stat-label">Editorial note</div><div class="message-stat-value">You have an eye.</div></div>
+          </div>
+          <p class="tiny muted" style="margin-bottom:1.25rem;">Closest pressure points: ${weakest}.</p>
+          <div class="actions">
+            <button class="btn btn-primary" id="restartBtn">Run the show again</button>
+            <button class="btn btn-secondary" id="studyEndingBtn">Open review dossier</button>
+          </div>`
+        : `
+          <div class="message-mark">Institutional decision</div>
+          <div class="stamp">Uninvited</div>
+          <div class="message-title">Your judgment did not hold.</div>
+          <p class="message-body">Taste reached zero before the show concluded. The runway continued for half a second, then the room withdrew itself from you without spectacle.</p>
+          <div class="message-grid">
+            <div class="message-stat"><div class="message-stat-label">Questions survived</div><div class="message-stat-value">${state.correct + state.missed}</div></div>
+            <div class="message-stat"><div class="message-stat-label">Accuracy</div><div class="message-stat-value">${accuracy}%</div></div>
+            <div class="message-stat"><div class="message-stat-label">Repeated weak terms</div><div class="message-stat-value">${weakest}</div></div>
+            <div class="message-stat"><div class="message-stat-label">Result</div><div class="message-stat-value">Silent exclusion</div></div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-danger" id="restartBtn">Re-enter the examination</button>
+            <button class="btn btn-secondary" id="studyEndingBtn">Open review dossier</button>
+          </div>`;
+
+      els.endingCard.innerHTML = card;
+      els.endingOverlay.classList.add('active');
+      document.getElementById('restartBtn')?.addEventListener('click', restartGame);
+      document.getElementById('studyEndingBtn')?.addEventListener('click', showReview);
+      els.feedbackNote.textContent = victory ? 'Admitted' : 'Rejected';
+      els.timerState.textContent = 'Closed';
+    }
+
+    function restartGame() {
+      clearInterval(state.intervals.timer);
+      clearInterval(state.intervals.model);
+      Object.assign(state, {
+        started: false,
+        gameOver: false,
+        victory: false,
+        taste: 100,
+        correct: 0,
+        missed: 0,
+        currentQuestion: null,
+        askedTerms: new Set(),
+        history: [],
+        lookIndex: 0,
+        questionNumber: 0,
+        visibleLookId: 1,
+        lastCategories: [],
+        recentTerms: [],
+        timerRemaining: 15,
+        questionStartMs: 0,
+        intervals: { model: null, timer: null },
+        reviewMode: false,
+        weakTerms: new Map(),
+        audio: state.audio
+      });
+      els.endingOverlay.classList.remove('active');
+      els.introOverlay.classList.remove('hidden');
+      els.questionText.textContent = 'Press Begin to enter the examination.';
+      els.questionCategory.textContent = 'Form & Silhouette';
+      els.questionTier.textContent = 'Level I — Familiar · -20';
+      els.options.innerHTML = '';
+      els.feedbackText.textContent = 'You are seated above a live runway. The presentation continues whether you answer or not.';
+      els.feedbackNote.textContent = 'Awaiting entry';
+      els.showSubtitle.textContent = 'Runway observation proceeds without your permission.';
+      updateTasteUI();
+      updateTimerUI();
+      renderModels();
+      els.questionCounter.textContent = '01 / 24';
+      els.lookCounter.textContent = '01 / 15';
+      els.visibleLookText.textContent = LOOKS[0].name;
+      els.legendLook.textContent = LOOKS[0].name;
+      els.legendCopy.textContent = LOOKS[0].description;
+    }
+
+    function startGame() {
+      if (state.started) return;
+      state.started = true;
+      els.introOverlay.classList.add('hidden');
+      renderModels();
+      updateTasteUI();
+      maybeQueueQuestion();
+      state.intervals.model = setInterval(advanceLook, 5800);
+      requestAnimationFrame(animateModels);
+      els.showSubtitle.textContent = 'An elite room is assessing whether your vocabulary can keep up.';
+      if (state.audio && state.audio.state === 'suspended') state.audio.resume();
+    }
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !state.started) {
+        e.preventDefault();
+        startGame();
+        return;
+      }
+      if (e.key.toLowerCase() === 'r' && state.gameOver) {
+        restartGame();
+        return;
+      }
+      if (e.key.toLowerCase() === 's' && !state.gameOver && state.started) {
+        showReview();
+        return;
+      }
+      if (!state.currentQuestion || state.currentQuestion.resolved) return;
+      const map = { '1': 0, '2': 1, '3': 2, '4': 3, 'a': 0, 'b': 1, 'c': 2, 'd': 3 };
+      const key = e.key.toLowerCase();
+      if (key in map) {
+        const idx = map[key];
+        const choice = state.currentQuestion.options[idx];
+        if (choice) submitAnswer(choice.term);
+      }
+    }
+
+    function init() {
+      buildAudience(els.audLeft);
+      buildAudience(els.audRight);
+      renderModels();
+      updateTasteUI();
+      updateTimerUI();
+      els.beginBtn.addEventListener('click', startGame);
+      els.studyBtn.addEventListener('click', showReview);
+      document.addEventListener('keydown', handleKey);
+    }
+
+    init();
+  </script>
 </body>
 </html>
-```
