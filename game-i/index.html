@@ -1,1 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Shift · Global OCC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&family=Saira+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --soil:#0e0b08; --panel:#1d1510; --rock:#382a1e; --rock-lit:#5a4230;
+  --worklight:#ffab2e; --amber-dim:#8a5c1c; --phosphor:#9fd2ff; --phos-dim:#4d6c8a;
+  --slurry:#c96a3a; --fault:#ff4d3d; --nominal:#6fd08c; --bone:#e8dfd4; --mute:#9a8974;
+  --hivis:#d8e04a;
+  --ore-dur:11s; --drill-dur:7s;
+  --disp:"Saira Condensed",Impact,sans-serif;
+  --data:"IBM Plex Mono",ui-monospace,monospace;
+  --body:"IBM Plex Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--soil);color:var(--bone);font-family:var(--body);overflow-x:hidden}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:80;
+  background:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px);background-size:100% 3px;
+  mix-blend-mode:overlay}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--worklight);outline-offset:2px}
+.ghost{background:transparent;border:1px solid var(--rock-lit);color:var(--worklight);
+  font-family:var(--data);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+  padding:5px 11px;border-radius:2px;transition:background .15s,color .15s}
+.ghost:hover{background:var(--worklight);color:var(--soil)}
+.ghost.on{background:var(--worklight);color:var(--soil)}
 
+.rail{display:flex;align-items:center;gap:15px;flex-wrap:wrap;padding:8px 18px;
+  border-bottom:1px solid var(--rock);background:#120c07;position:relative;z-index:50}
+.brand{font-family:var(--disp);font-weight:800;font-size:17px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--worklight);line-height:1}
+.brand small{display:block;font-size:8.5px;letter-spacing:.32em;color:var(--mute);font-weight:600}
+.slot{font-family:var(--data);font-size:9px;letter-spacing:.13em;color:var(--mute);text-transform:uppercase}
+.slot b{display:block;color:var(--bone);font-weight:500;font-size:11px;letter-spacing:.05em}
+.spacer{flex:1}
+
+/* ── room ── */
+.room{position:relative;width:100%;line-height:0}
+#scene{display:block;width:100%;height:auto}
+.oredrift{animation:ore var(--ore-dur) linear infinite}
+@keyframes ore{to{transform:translateX(-96px)}}
+.spin{animation:spin var(--drill-dur) linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bob{animation:bob 4.6s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(6px)}}
+.pulse{animation:pulse 3.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.45}}
+.flick{animation:flick 6.2s steps(1) infinite}
+@keyframes flick{0%,88%{opacity:1}89%{opacity:.35}90%{opacity:1}93%{opacity:.6}94%,100%{opacity:1}}
+.sip{animation:sip 9s ease-in-out infinite}
+@keyframes sip{0%,72%,100%{transform:translate(0,0)}80%,88%{transform:translate(-3px,-9px)}}
+.nod{animation:nod 7.5s ease-in-out infinite}
+@keyframes nod{0%,84%,100%{transform:rotate(0)}90%{transform:rotate(-5deg)}}
+
+.fg{position:absolute;bottom:-2px;width:220px;height:auto;pointer-events:none;z-index:30;
+  filter:blur(2.6px);opacity:.95}
+.fg.l{left:-34px} .fg.r{right:-34px}
+
+/* ── your terminal (scaled down ~12%) ── */
+.station{position:relative;z-index:20;max-width:890px;margin:-78px auto 0;padding:0 18px 40px;line-height:1.4}
+.bezel{background:linear-gradient(#241a12,#1a120c);border:1px solid var(--rock-lit);
+  border-radius:7px;padding:8px;box-shadow:0 -18px 60px rgba(255,171,46,.10),0 22px 60px rgba(0,0,0,.75)}
+.crt{background:#0c0a07;border:1px solid #4a3626;border-radius:4px;padding:16px 18px 15px;position:relative;overflow:hidden}
+.crt::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 100% at 50% 0%,rgba(159,210,255,.06),transparent 70%)}
+
+.hud{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;
+  border-bottom:1px solid var(--rock);padding-bottom:8px;margin-bottom:13px}
+.hud .h{font-family:var(--data);font-size:8.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--mute)}
+.hud .h b{color:var(--phosphor);font-weight:500;font-size:11px;letter-spacing:.04em}
+.hud .h b.up{color:var(--nominal)} .hud .h b.dn{color:var(--fault)}
+.pips{display:flex;gap:3px}
+.pips i{width:8px;height:3.5px;background:var(--rock);border-radius:1px}
+.pips i.ok{background:var(--nominal)} .pips i.no{background:var(--fault)}
+
+.cue{font-family:var(--data);font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--slurry)}
+.term{font-family:var(--disp);font-weight:800;font-size:clamp(26px,4.6vw,47px);line-height:.98;
+  text-transform:uppercase;letter-spacing:.015em;margin:5px 0 3px;color:var(--bone)}
+.termdef{font-size:clamp(15px,2.2vw,20px);line-height:1.4;margin:7px 0 5px;color:var(--bone);max-width:56ch}
+.sub{font-family:var(--data);font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--amber-dim)}
+
+.opts{display:flex;flex-direction:column;gap:6px;margin-top:13px}
+.opt{display:flex;gap:10px;align-items:flex-start;text-align:left;width:100%;
+  background:#15100a;border:1px solid var(--rock);color:var(--bone);padding:9px 11px;
+  border-radius:2px;font-size:13px;line-height:1.42;transition:border-color .13s,background .13s}
+.opt:hover:not(:disabled){border-color:var(--worklight);background:#1d1509}
+.opt kbd{font-family:var(--data);font-size:9px;color:var(--worklight);border:1px solid var(--rock-lit);
+  border-radius:2px;padding:1px 5px;flex:0 0 auto;letter-spacing:.05em}
+.opt:disabled{cursor:default;opacity:.4}
+.opt.right{border-color:var(--nominal);background:rgba(111,208,140,.10);opacity:1}
+.opt.right kbd{color:var(--nominal);border-color:var(--nominal)}
+.opt.wrong{border-color:var(--fault);background:rgba(255,77,61,.10);opacity:1}
+.opt.wrong kbd{color:var(--fault);border-color:var(--fault)}
+
+.timer{height:2px;background:var(--rock);margin-top:13px;overflow:hidden}
+.timer i{display:block;height:100%;width:100%;background:var(--worklight);transform-origin:left;
+  animation:drain var(--wait,1700ms) linear forwards}
+@keyframes drain{to{transform:scaleX(0)}}
+.echo{font-family:var(--data);font-size:10px;letter-spacing:.05em;color:var(--mute);margin-top:9px;min-height:1.4em}
+.echo b{color:var(--worklight);font-weight:500}
+
+.report h2{font-family:var(--disp);font-weight:800;font-size:clamp(26px,4.8vw,45px);
+  text-transform:uppercase;letter-spacing:.02em;margin:3px 0 0;line-height:.96}
+.report h2 span{color:var(--worklight)}
+.figs{display:flex;flex-wrap:wrap;gap:22px;margin:14px 0 17px;padding:11px 0;
+  border-top:1px solid var(--rock);border-bottom:1px solid var(--rock)}
+.figs div span{display:block;font-family:var(--data);font-size:8.5px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--mute)}
+.figs div b{font-family:var(--disp);font-weight:700;font-size:25px;color:var(--phosphor)}
+.misses{list-style:none;padding:0;margin:0 0 16px;max-height:268px;overflow:auto}
+.misses li{border-left:2px solid var(--fault);padding:5px 0 5px 11px;margin-bottom:8px}
+.misses strong{font-family:var(--data);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--worklight);display:block}
+.misses p{margin:2px 0 0;font-size:12.5px;line-height:1.5;color:#c4b8a9}
+
+#gloss{position:fixed;top:0;right:0;height:100%;width:min(410px,92vw);z-index:90;background:#171009;
+  border-left:1px solid var(--rock-lit);transform:translateX(102%);transition:transform .3s ease;
+  overflow:auto;padding:18px 20px 40px;line-height:1.4}
+#gloss.open{transform:none}
+#gloss h3{font-family:var(--disp);font-weight:800;font-size:20px;text-transform:uppercase;
+  letter-spacing:.1em;margin:0;color:var(--worklight)}
+#gloss h4{font-family:var(--data);font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--slurry);margin:19px 0 6px;border-bottom:1px solid var(--rock);padding-bottom:4px}
+#gloss dt{font-family:var(--data);font-size:11px;color:var(--bone);margin-top:8px}
+#gloss dd{margin:2px 0 0;font-size:12px;line-height:1.5;color:var(--mute)}
+#gloss .close{position:absolute;top:16px;right:18px}
+
+@media (max-width:900px){ .station{margin-top:-40px} .fg{width:145px} }
+@media (max-width:620px){ .fg{display:none} .station{margin-top:-20px;padding-bottom:28px} .crt{padding:14px} }
+@media (prefers-reduced-motion:reduce){ *{animation:none !important} }
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <div class="brand">Global OCC<small>Bastrop · Texas</small></div>
+  <div class="slot">Console<b>07</b></div>
+  <div class="slot">Shift lead<b>V. Ostrander</b></div>
+  <div class="slot">Clock<b id="clock">01:52</b></div>
+  <div class="spacer"></div>
+  <div class="slot">Run<b><button class="ghost on" id="r20">20</button> <button class="ghost" id="r45">45</button></b></div>
+  <button class="ghost" id="glossBtn">Terms</button>
+</header>
+
+<div class="room">
+<svg id="scene" viewBox="0 0 1600 790" preserveAspectRatio="xMidYMax slice"
+  aria-label="Dark operations control room: shelving and a supply counter along the back wall, monitor banks and an observation window over the shaft works, operators at terminals">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#151009"/><stop offset="1" stop-color="#0a0705"/></linearGradient>
+    <linearGradient id="airglow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffab2e" stop-opacity=".15"/><stop offset="1" stop-color="#ffab2e" stop-opacity="0"/></linearGradient>
+    <linearGradient id="deskglow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9fd2ff" stop-opacity=".30"/><stop offset="1" stop-color="#9fd2ff" stop-opacity="0"/></linearGradient>
+    <linearGradient id="shaftlight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffab2e" stop-opacity=".34"/><stop offset="1" stop-color="#c96a3a" stop-opacity="0"/></linearGradient>
+    <linearGradient id="floorfade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0705" stop-opacity="0"/><stop offset="1" stop-color="#0a0705"/></linearGradient>
+    <radialGradient id="lamp"><stop offset="0" stop-color="#ffab2e" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#ffab2e" stop-opacity="0"/></radialGradient>
+    <radialGradient id="warm"><stop offset="0" stop-color="#ffab2e" stop-opacity=".40"/>
+      <stop offset="1" stop-color="#ffab2e" stop-opacity="0"/></radialGradient>
+    <clipPath id="win"><rect x="620" y="96" width="360" height="208" rx="3"/></clipPath>
+    <clipPath id="beltclip"><rect x="620" y="216" width="360" height="88"/></clipPath>
+  </defs>
+
+  <rect width="1600" height="790" fill="url(#wall)"/>
+
+  <!-- ceiling soffit + troffers -->
+  <rect x="0" y="0" width="1600" height="46" fill="#0a0705"/>
+  <rect x="300" y="18" width="330" height="8" rx="4" fill="#ffab2e" opacity=".5" class="flick"/>
+  <rect x="970" y="18" width="330" height="8" rx="4" fill="#ffab2e" opacity=".42"/>
+  <path d="M300 26 L200 790 H730 L630 26 Z" fill="url(#airglow)" opacity=".38"/>
+  <path d="M970 26 L870 790 H1400 L1300 26 Z" fill="url(#airglow)" opacity=".32"/>
+
+  <!-- ░ back wall furniture ░ -->
+  <g id="shelfL"></g>
+  <g id="bankL"></g>
+  <g id="bankR"></g>
+  <g id="shelfR"></g>
+
+  <!-- observation window onto the shaft works -->
+  <g clip-path="url(#win)">
+    <rect x="620" y="96" width="360" height="208" fill="#120c08"/>
+    <rect x="620" y="96" width="360" height="150" fill="url(#shaftlight)"/>
+    <path d="M620 268 L668 206 L724 230 L776 188 L840 214 L898 176 L948 212 L980 192 V304 H620Z" fill="#1a120b"/>
+    <!-- headframe + drill string -->
+    <g stroke="#4a3626" stroke-width="2.4" fill="none">
+      <path d="M652 96 V268 M690 96 V268"/>
+      <path d="M652 130 H690 M652 164 H690 M652 198 H690 M652 232 H690"/>
+      <path d="M658 102 L684 130 M684 102 L658 130 M658 136 L684 164 M684 136 L658 164
+               M658 170 L684 198 M684 170 L658 198 M658 204 L684 232 M684 204 L658 232"/>
+    </g>
+    <g class="bob">
+      <rect x="668" y="102" width="5.5" height="150" fill="#5a4230"/>
+      <g class="spin" style="transform-origin:671px 258px">
+        <circle cx="671" cy="258" r="13" fill="#241a11" stroke="#6b4f36" stroke-width="2.4"/>
+        <g fill="#ffab2e"><circle cx="671" cy="247" r="2.6"/><circle cx="682" cy="258" r="2.6"/>
+          <circle cx="671" cy="269" r="2.6"/><circle cx="660" cy="258" r="2.6"/></g>
+      </g>
+    </g>
+    <!-- tunnel mouth -->
+    <g transform="translate(898,192)">
+      <ellipse rx="64" ry="54" fill="#0d0906" stroke="#4a3626" stroke-width="3"/>
+      <ellipse rx="50" ry="42" fill="none" stroke="#3a2a1c" stroke-width="5"/>
+      <ellipse rx="38" ry="32" fill="none" stroke="#332417" stroke-width="5"/>
+      <ellipse rx="27" ry="22" fill="none" stroke="#2b1e13" stroke-width="4"/>
+      <ellipse rx="15" ry="12" fill="#1c130c"/>
+      <circle r="7" fill="#ffab2e" opacity=".35" class="pulse"/>
+    </g>
+    <!-- ore conveyor out of the tunnel -->
+    <path d="M980 236 L622 268" stroke="#2b1e13" stroke-width="19" stroke-linecap="round"/>
+    <path d="M980 236 L622 268" stroke="#3a2a1c" stroke-width="3"/>
+    <g clip-path="url(#beltclip)"><g class="oredrift" id="oreRow"></g></g>
+    <g stroke="#4a3626" stroke-width="2.4">
+      <path d="M940 244 V292 M878 250 V296 M816 256 V300 M754 262 V304 M692 268 V304"/>
+    </g>
+    <path d="M620 274 L680 274 L658 304 L620 304 Z" fill="#c96a3a" opacity=".5"/>
+    <path d="M620 274 L680 274" stroke="#c96a3a" stroke-width="2.4" opacity=".7"/>
+    <!-- gantry -->
+    <g stroke="#4a3626" stroke-width="3" fill="none">
+      <path d="M740 96 V140 M940 96 V140 M732 140 H948"/><path d="M840 140 V164"/>
+      <rect x="826" y="164" width="28" height="17" fill="#241a11"/>
+    </g>
+    <!-- crew with headlamps -->
+    <g fill="#0a0705">
+      <g transform="translate(756,272)"><circle cy="-13" r="4"/><path d="M-4.6 -9 h9.2 l2.4 10 h-14 z"/></g>
+      <g transform="translate(776,277)"><circle cy="-12" r="3.6"/><path d="M-4.2 -8 h8.4 l2.2 9 h-12.8 z"/></g>
+    </g>
+    <circle cx="760" cy="260" r="10" fill="url(#lamp)"/><circle cx="780" cy="266" r="9" fill="url(#lamp)"/>
+    <rect x="620" y="170" width="360" height="134" fill="url(#airglow)" opacity=".7"/>
+  </g>
+  <rect x="620" y="96" width="360" height="208" rx="3" fill="none" stroke="#5a4230" stroke-width="5.5"/>
+  <g stroke="#4a3626" stroke-width="4"><path d="M740 96 V304"/><path d="M860 96 V304"/></g>
+  <path d="M628 304 L726 104 L768 104 L670 304 Z" fill="#9fd2ff" opacity=".03"/>
+  <text x="800" y="86" text-anchor="middle" font-family="IBM Plex Mono" font-size="10"
+    letter-spacing="5" fill="#8a5c1c">SHAFT 2 · MAIN WORKS</text>
+
+  <!-- ░ supply counter running the length of the wall ░ -->
+  <g id="counter"></g>
+
+  <!-- depth scrim: pushes the whole back wall away -->
+  <rect x="0" y="0" width="1600" height="446" fill="#0a0705" opacity=".22"/>
+
+  <!-- floor perspective -->
+  <g stroke="#241a11" stroke-width="2" opacity=".75">
+    <path d="M800 446 L-260 790"/><path d="M800 446 L200 790"/><path d="M800 446 L600 790"/>
+    <path d="M800 446 L1000 790"/><path d="M800 446 L1400 790"/><path d="M800 446 L1860 790"/>
+  </g>
+
+  <g id="rowFar"></g>
+  <g id="standing"></g>
+  <g stroke="#2b1e13" stroke-width="4" opacity=".9">
+    <path d="M0 604 H1600"/><path d="M0 611 H1600" stroke-width="2" stroke-dasharray="11 9"/>
+  </g>
+  <g id="rowNear"></g>
+  <rect x="0" y="640" width="1600" height="150" fill="url(#floorfade)"/>
+</svg>
+
+<svg class="fg l" viewBox="0 0 240 200" aria-hidden="true">
+  <path d="M40 200 V96 q0-30 34-30 h56 q34 0 34 30 V200 Z" fill="#080604"/>
+  <ellipse cx="102" cy="52" rx="30" ry="32" fill="#080604"/>
+  <path d="M78 26 q24-18 48 0" stroke="#5a4230" stroke-width="3" fill="none" opacity=".5"/>
+</svg>
+<svg class="fg r" viewBox="0 0 240 200" aria-hidden="true">
+  <path d="M36 200 V104 q0-30 34-30 h58 q34 0 34 30 V200 Z" fill="#080604"/>
+  <ellipse cx="100" cy="60" rx="28" ry="30" fill="#080604"/>
+  <path d="M78 36 q22-16 44 0" stroke="#5a4230" stroke-width="3" fill="none" opacity=".45"/>
+</svg>
+</div>
+
+<div class="station"><div class="bezel"><div class="crt" id="crt"></div></div></div>
+
+<aside id="gloss" aria-label="Glossary">
+  <button class="ghost close" id="glossClose">Close</button>
+  <h3>Field terms</h3><div id="glossBody"></div>
+</aside>
+
+<script>
+/* ════════ 45 terms ════════ */
+const T=[
+["Prufrock","TBC's in-house TBM series — the machine the whole operation is built around.","Machine"],
+["TBM","Tunnel boring machine: the generic class of excavation machine.","Machine"],
+["Godot","The first-generation off-the-shelf machine that set the baseline.","Machine"],
+["Porpoising","Launching off the truck at grade and surfacing again at the far end, with no pits.","Machine"],
+["Surface launch","Getting the machine cutting within roughly a day or two of arriving on site.","Machine"],
+["Continuous mining","Erecting the liner while still boring, instead of stopping to build each ring.","Machine"],
+["ZPIT","Zero People In Tunnel: normal mining runs remote, with nobody underground.","Machine"],
+["The Monster","The trailer the machine mines itself onto for recovery and transport.","Machine"],
+["Advance rate","Distance completed per week — the number the whole operation is judged on.","Machine"],
+["Cutterhead","The rotating front face of the machine that does the excavating.","Machine"],
+["Disc cutters","The individual cutting tools bolted to the rotating face.","Machine"],
+["Erector","The arm that lifts and positions precast segments into the ring.","Machine"],
+["Thrust cylinders","Hydraulic rams that push the machine forward off the last completed ring.","Machine"],
+["Tail shield","The rear section of the shield, where the ring is built.","Machine"],
+["Tunnel face","The live excavation front being cut.","Machine"],
+
+["Precast segments","Concrete pieces bolted into rings to form the permanent lining.","Liner & muck"],
+["Ring clocking","Rotating tapered rings against each other so the finished tunnel curves.","Liner & muck"],
+["SNaILS","The in-house guidance system that computes alignment and ring clocking.","Liner & muck"],
+["Liner truck","All-electric remote hauler that runs segments down to the face on tires.","Liner & muck"],
+["Muck","Excavated material coming out of the hole.","Liner & muck"],
+["Spoil","The civil-engineering word for excavated material, used interchangeably with muck.","Liner & muck"],
+["Vertical cassette","Surface unit that stores and pays out conveyor belt as the drive lengthens.","Liner & muck"],
+["Carry belt","The loaded outbound run of the conveyor; the empty side coming back is the return belt.","Liner & muck"],
+["Belt boosters","Intermediate drives that keep long conveyor runs powered, roughly every mile and a half.","Liner & muck"],
+["Grouting","Injecting material behind the segments to support and seal them.","Liner & muck"],
+["EPDM gaskets","Rubber seals between segments that keep the tunnel watertight.","Liner & muck"],
+["Annulus","The gap between the excavated bore and the outside of the installed liner.","Liner & muck"],
+["12-foot diameter","The standard bore size — small diameter is where the cost comes out.","Liner & muck"],
+
+["Loop","The all-electric, zero-emission underground transit system.","Loop & ops"],
+["AEV","Autonomous electric vehicle — the cars that carry passengers through the tunnels.","Loop & ops"],
+["Main artery","The primary high-speed tunnel connecting stations.","Loop & ops"],
+["Station","Passenger entry and exit point, sometimes no bigger than two parking spaces.","Loop & ops"],
+["OCC","The remote control center in Texas that runs the machine fleet.","Loop & ops"],
+["Vertical integration","Machines, liners, vehicles and operations all designed and built in-house.","Loop & ops"],
+["Porpoise test","A short proving tunnel every new machine runs before it deploys.","Loop & ops"],
+["Bastrop","The Texas site where R&D, testing and manufacturing all happen.","Loop & ops"],
+
+["Alignment","The planned path of the tunnel and the live guidance holding it there.","Geometry & safety"],
+["Invert","The bottom of the tunnel cross-section.","Geometry & safety"],
+["Crown","The top of the tunnel cross-section.","Geometry & safety"],
+["Portal","The point where the tunnel meets daylight.","Geometry & safety"],
+["Shaft","Vertical access into the works — porpoising exists to avoid needing them.","Geometry & safety"],
+["Ventilation","Air handling, much simpler with electric plant and nobody underground.","Geometry & safety"],
+["Fire life safety","Detection, evacuation and suppression systems for occupied tunnels.","Geometry & safety"],
+["Soft-soil TBM","A machine built for soil rather than hard rock.","Geometry & safety"],
+["Hyperloop","The vacuum-tube high-speed concept; test tunnels have served related work.","Geometry & safety"]
+];
+
+/* ════════ scene ════════ */
+const NS="http://www.w3.org/2000/svg";
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const add=(p,n,a)=>{const e=el(n,a);p.appendChild(e);return e;};
+
+/* wall screens */
+function screenArt(g,x,y,w,h){
+  add(g,"rect",{x,y,width:w,height:h,rx:2,fill:"#0b1520",stroke:"#31241a","stroke-width":1.6});
+  const k=Math.floor(rnd(0,4)), c=Math.random()<.35?"#ffab2e":"#9fd2ff";
+  if(k===0){let d="M"+(x+3)+" "+(y+h/2);
+    for(let i=1;i<=12;i++) d+=" L"+(x+3+i*(w-6)/12)+" "+(y+h/2+rnd(-h/3,h/3));
+    add(g,"path",{d,fill:"none",stroke:c,"stroke-width":1.3,opacity:.7});}
+  else if(k===1){for(let i=0;i<6;i++){const bh=rnd(4,h-9);
+    add(g,"rect",{x:x+4+i*(w-8)/6,y:y+h-4-bh,width:(w-8)/6-3,height:bh,fill:c,opacity:.55});}}
+  else if(k===2){for(let r=Math.min(w,h)/2-3;r>2;r-=4)
+    add(g,"ellipse",{cx:x+w/2,cy:y+h/2,rx:r,ry:r*.78,fill:"none",stroke:c,"stroke-width":1,opacity:.45});}
+  else {for(let i=0;i<Math.floor(h/7);i++)
+    add(g,"rect",{x:x+4,y:y+5+i*7,width:rnd(8,w-10),height:2,fill:c,opacity:.4});}
+  const gl=add(g,"rect",{x,y,width:w,height:h,rx:2,fill:c,opacity:.05});
+  gl.setAttribute("class","pulse"); gl.style.animationDelay=(Math.random()*4)+"s";
+}
+function bank(id,x0){
+  const g=document.getElementById(id);
+  [[0,0,88,64],[96,0,88,64],[192,0,80,64],[280,0,90,64],
+   [0,72,116,62],[124,72,120,62],[252,72,118,62],
+   [0,142,90,68],[98,142,80,68],[186,142,96,68],[290,142,80,68]]
+   .forEach(([x,y,w,h])=>screenArt(g,x0+x,96+y,w,h));
+  add(g,"rect",{x:x0-9,y:87,width:388,height:228,rx:3,fill:"none",stroke:"#241a11","stroke-width":2.5});
+}
+bank("bankL",212); bank("bankR",1022);
+
+/* shelving units at the ends of the room */
+function shelfUnit(id,x0){
+  const g=document.getElementById(id), w=138;
+  add(g,"rect",{x:x0,y:96,width:w,height:330,fill:"#120d09",stroke:"#3a2a1c","stroke-width":3});
+  [96,164,232,300,368].forEach(y=>add(g,"rect",{x:x0,y,width:w,height:5,fill:"#4a3626"}));
+  // binders, boxes, helmets, core tubes, first-aid
+  const cols=["#8a5c1c","#c96a3a","#4d6c8a","#6b4f36","#7a6a4a"];
+  let x=x0+8;
+  while(x<x0+w-14){const bw=rnd(7,13),bh=rnd(34,52);
+    add(g,"rect",{x,y:164-bh,width:bw,height:bh,fill:cols[Math.floor(rnd(0,5))],opacity:.55});x+=bw+2.5;}
+  add(g,"rect",{x:x0+10,y:200,width:52,height:32,fill:"#241a11",stroke:"#4a3626","stroke-width":1.5});
+  add(g,"rect",{x:x0+70,y:196,width:56,height:36,fill:"#241a11",stroke:"#4a3626","stroke-width":1.5});
+  add(g,"path",{d:`M${x0+16} ${232} a26 22 0 0 1 52 0 Z`,fill:"#ffab2e",opacity:".38"});
+  // hard hats on the third shelf
+  add(g,"path",{d:`M${x0+14} ${300} a24 19 0 0 1 48 0 Z`,fill:"#ffab2e",opacity:".45"});
+  add(g,"path",{d:`M${x0+8} ${300} h60`,stroke:"#ffab2e","stroke-width":2.5,opacity:".45"});
+  add(g,"path",{d:`M${x0+76} ${300} a22 17 0 0 1 44 0 Z`,fill:"#c96a3a",opacity:".4"});
+  add(g,"path",{d:`M${x0+70} ${300} h56`,stroke:"#c96a3a","stroke-width":2.5,opacity:".4"});
+  // core sample tubes lying on the bottom shelf
+  for(let i=0;i<3;i++) add(g,"rect",{x:x0+10,y:340+i*8,width:w-24,height:5,rx:2.5,fill:"#5a4230",opacity:.8});
+  // first-aid box on the wall beside the unit
+  const fx=x0<800?x0+w+14:x0-46;
+  add(g,"rect",{x:fx,y:150,width:32,height:26,fill:"#1c130c",stroke:"#4a3626","stroke-width":2});
+  add(g,"path",{d:`M${fx+16} 156 V170 M${fx+9} 163 H${fx+23}`,stroke:"#e8dfd4","stroke-width":2.5,opacity:".55"});
+  // extinguisher
+  add(g,"rect",{x:fx+8,y:196,width:15,height:34,rx:6,fill:"#c96a3a",opacity:".55"});
+  add(g,"rect",{x:fx+13,y:189,width:5,height:8,fill:"#5a4230"});
+}
+shelfUnit("shelfL",44); shelfUnit("shelfR",1418);
+
+/* supply counter with base cabinets and clutter */
+(function(){
+  const g=document.getElementById("counter");
+  add(g,"rect",{x:190,y:376,width:1222,height:62,fill:"#150f0a"});          // cabinet face
+  add(g,"rect",{x:190,y:368,width:1222,height:11,rx:2,fill:"#4a3626"});      // countertop
+  add(g,"rect",{x:190,y:376,width:1222,height:62,fill:"none",stroke:"#2b1e13","stroke-width":2});
+  for(let x=232;x<1400;x+=68){                                               // cabinet doors + pulls
+    add(g,"path",{d:`M${x} 380 V434`,stroke:"#241a11","stroke-width":2});
+    add(g,"path",{d:`M${x+30} 390 h14`,stroke:"#5a4230","stroke-width":2.5});
+  }
+  const top=368;
+  // coffee station
+  add(g,"rect",{x:250,y:top-38,width:30,height:38,rx:2,fill:"#241a11",stroke:"#4a3626","stroke-width":1.6});
+  add(g,"rect",{x:255,y:top-16,width:20,height:14,fill:"#c96a3a",opacity:.6});
+  add(g,"circle",{cx:265,cy:top-32,r:2.6,fill:"#ff4d3d",opacity:.8,class:"pulse"});
+  for(let i=0;i<4;i++) add(g,"rect",{x:292,y:top-9-i*9,width:14,height:8,rx:2,fill:"#5a4230",opacity:.7});
+  add(g,"circle",{cx:268,cy:top-10,r:34,fill:"url(#warm)"});
+  // leaning binders
+  let bx=330; while(bx<420){const bw=rnd(7,12),bh=rnd(26,40);
+    add(g,"rect",{x:bx,y:top-bh,width:bw,height:bh,fill:"#8a5c1c",opacity:rnd(.35,.6)});bx+=bw+2;}
+  // radio charging dock
+  add(g,"rect",{x:452,y:top-10,width:82,height:10,fill:"#241a11",stroke:"#4a3626","stroke-width":1.4});
+  for(let i=0;i<4;i++){add(g,"rect",{x:458+i*20,y:top-32,width:12,height:23,rx:2,fill:"#1c130c",stroke:"#4a3626","stroke-width":1.2});
+    add(g,"path",{d:`M${464+i*20} ${top-32} v-7`,stroke:"#5a4230","stroke-width":1.6});
+    add(g,"circle",{cx:464+i*20,cy:top-13,r:1.8,fill:"#6fd08c",opacity:.85});}
+  // spare hard hat + mug
+  add(g,"path",{d:`M568 ${top} a22 17 0 0 1 44 0 Z`,fill:"#ffab2e",opacity:".45"});
+  add(g,"path",{d:`M562 ${top} h56`,stroke:"#ffab2e","stroke-width":2.5,opacity:".45"});
+  add(g,"rect",{x:1006,y:top-15,width:14,height:15,rx:2,fill:"#5a4230"});
+  add(g,"path",{d:`M1020 ${top-11} a5 5 0 0 1 0 8`,stroke:"#5a4230","stroke-width":2,fill:"none"});
+  // rolled drawings in a bin
+  add(g,"rect",{x:1064,y:top-26,width:44,height:26,fill:"#241a11",stroke:"#4a3626","stroke-width":1.5});
+  add(g,"path",{d:`M1070 ${top-26} L1062 ${top-62} M1082 ${top-26} L1080 ${top-66} M1094 ${top-26} L1100 ${top-60}`,
+    stroke:"#7a6a4a","stroke-width":4,"stroke-linecap":"round",opacity:.6});
+  // plotter / label printer
+  add(g,"rect",{x:1146,y:top-30,width:58,height:30,rx:2,fill:"#1c130c",stroke:"#4a3626","stroke-width":1.6});
+  add(g,"rect",{x:1152,y:top-24,width:30,height:4,fill:"#9fd2ff",opacity:.45});
+  add(g,"rect",{x:1150,y:top-2,width:50,height:5,fill:"#e8dfd4",opacity:.18});
+  // glove box + small plant
+  add(g,"rect",{x:1240,y:top-22,width:34,height:22,fill:"#4d6c8a",opacity:.32});
+  add(g,"path",{d:`M1310 ${top} v-14 M1310 ${top-14} q-12 -10 -16 -22 M1310 ${top-14} q12 -8 17 -20 M1310 ${top-20} q-2 -14 4 -22`,
+    stroke:"#6fd08c","stroke-width":2.4,fill:"none",opacity:.45});
+  add(g,"rect",{x:1300,y:top-14,width:20,height:14,rx:2,fill:"#c96a3a",opacity:.45});
+})();
+
+/* ore on the belt */
+(function(){
+  const g=document.getElementById("oreRow");
+  for(let i=0;i<24;i++){
+    const x=980+96-i*48; if(x<596) break;
+    const y=236+((980-x)/358)*32, s=rnd(.6,1.1);
+    add(g,"path",{d:`M${x} ${y} q${9*s} ${-11*s} ${20*s} ${-2*s} q${11*s} ${-2*s} ${13*s} ${5*s}
+      q${8*s} ${4*s} ${-2*s} ${8*s} q${-16*s} ${5*s} ${-31*s} 0 Z`,fill:"#c96a3a",opacity:rnd(.55,.95)});
+  }
+})();
+
+/* ── operators, each with their own posture and clutter ── */
+function operator(g,x,y,s,o){
+  const k=add(g,"g",{transform:`translate(${x},${y}) scale(${s})`});
+  const D=o.delay||0;
+  // their monitors (facing away, so it reads as backlight)
+  const m=add(k,"rect",{x:-42,y:-96,width:84,height:52,rx:2,fill:"#9fd2ff",opacity:.16});
+  m.setAttribute("class","pulse"); m.style.animationDelay=D+"s";
+  add(k,"rect",{x:-46,y:-100,width:92,height:60,rx:3,fill:"none",stroke:"#3a2a1c","stroke-width":3});
+  if(o.second){
+    add(k,"rect",{x:52,y:-84,width:52,height:36,rx:2,fill:"#ffab2e",opacity:.12});
+    add(k,"rect",{x:49,y:-87,width:58,height:42,rx:2,fill:"none",stroke:"#3a2a1c","stroke-width":2.4});
+  }
+  if(o.notes) for(let i=0;i<3;i++)
+    add(k,"rect",{x:-58,y:-96+i*14,width:11,height:11,fill:"#ffab2e",opacity:.5});
+  add(k,"path",{d:"M-70 -100 L-70 0",stroke:"#2b1e13","stroke-width":3});
+  // desk
+  add(k,"rect",{x:-86,y:-40,width:172,height:9,rx:2,fill:"#241a11"});
+  add(k,"path",{d:"M-78 -31 V6 M78 -31 V6",stroke:"#1c130c","stroke-width":6});
+  add(k,"rect",{x:-60,y:-40,width:120,height:26,fill:"url(#deskglow)",opacity:.5});
+  if(o.lamp){ add(k,"path",{d:"M64 -40 V-64 q0-8 -12 -8",stroke:"#4a3626","stroke-width":2.6,fill:"none"});
+    add(k,"circle",{cx:48,cy:-66,r:26,fill:"url(#warm)"}); }
+  // body
+  const lean=o.pose==="lean", fwd=o.pose==="forward", turn=o.pose==="turn";
+  const hx = turn? 13 : fwd? 5 : 0, hy = lean? -68 : fwd? -54 : -62;
+  add(k,"path",{d: lean
+      ? "M-38 10 V-26 q0-22 26-22 h24 q26 0 26 22 V10 Z"
+      : fwd ? "M-32 10 V-24 q2-24 24-30 h20 q24 6 26 30 V10 Z"
+      : "M-34 10 V-30 q0-20 22-20 h24 q22 0 22 20 V10 Z", fill:"#0a0705"});
+  add(k,"path",{d: fwd? "M-24 -40 q26 -18 50 -4" : "M-26 -44 q26 -16 52 0", fill:"#0a0705"});
+  const head=add(k,"g",{});
+  if(o.pose==="nod") head.setAttribute("class","nod");
+  head.style.transformOrigin="0px -44px";
+  add(head,"ellipse",{cx:hx,cy:hy,rx:19,ry:21,fill:"#0a0705"});
+  if(turn) add(head,"path",{d:`M${hx+17} ${hy+2} q7 3 1 8`,fill:"#0a0705"});
+  if(o.hair==="bun") add(head,"circle",{cx:hx-4,cy:hy-24,r:9,fill:"#0a0705"});
+  if(o.hair==="pony") add(head,"path",{d:`M${hx-16} ${hy-8} q-16 8 -12 30 q6 -4 8 -14 q2 -10 6 -12 Z`,fill:"#0a0705"});
+  if(o.hair==="cap"){ add(head,"path",{d:`M${hx-20} ${hy-8} a20 16 0 0 1 40 0 Z`,fill:"#0a0705"});
+    add(head,"path",{d:`M${hx-22} ${hy-8} h-14 q10 6 18 5`,fill:"#0a0705"}); }
+  if(o.headset){ add(head,"path",{d:`M${hx-20} ${hy-6} a20 22 0 0 1 40 0`,fill:"none",stroke:"#5a4230","stroke-width":3});
+    add(head,"circle",{cx:hx-20,cy:hy+2,r:5,fill:"#3a2a1c"});
+    add(head,"path",{d:`M${hx-20} ${hy+6} q-6 12 6 15`,fill:"none",stroke:"#5a4230","stroke-width":2}); }
+  // rim light
+  add(k,"path",{d: fwd? "M-23 -41 q25 -17 48 -3" : "M-25 -45 q25 -15 50 0",
+    fill:"none",stroke:"#9fd2ff","stroke-width":2,opacity:.28});
+  add(head,"path",{d:`M${hx-16} ${hy-14} q16 -9 32 0`,fill:"none",stroke:"#9fd2ff","stroke-width":2,opacity:.2});
+  if(o.hivis){ add(k,"path",{d:"M-28 -22 q28 -6 56 0",fill:"none",stroke:"var(--hivis)","stroke-width":4,opacity:.3});
+    add(k,"path",{d:"M-30 -8 q30 -6 60 0",fill:"none",stroke:"var(--hivis)","stroke-width":4,opacity:.22}); }
+  if(lean){ add(k,"path",{d:`M-30 -30 q-16 -20 -2 -34 q4 -4 10 2`,fill:"none",stroke:"#0a0705","stroke-width":10,"stroke-linecap":"round"});
+    add(k,"path",{d:`M30 -30 q16 -20 2 -34 q-4 -4 -10 2`,fill:"none",stroke:"#0a0705","stroke-width":10,"stroke-linecap":"round"}); }
+  if(o.mug){ const mg=add(k,"g",{class:"sip"});
+    add(mg,"rect",{x:44,y:-52,width:13,height:14,rx:2,fill:"#5a4230"});
+    add(mg,"path",{d:"M57 -48 a5 5 0 0 1 0 8",stroke:"#5a4230","stroke-width":2,fill:"none"});
+    add(mg,"path",{d:"M46 -54 q3 -7 8 -3",stroke:"#9a8974","stroke-width":1.4,fill:"none",opacity:.5}); }
+  if(o.hat){ add(k,"path",{d:"M-78 -40 a20 15 0 0 1 40 0 Z",fill:"#ffab2e",opacity:".42"});
+    add(k,"path",{d:"M-84 -40 h52",stroke:"#ffab2e","stroke-width":2.4,opacity:".42"}); }
+  add(k,"path",{d:"M0 10 V26 M-16 30 L16 30",stroke:"#1c130c","stroke-width":5});
+}
+
+/* four on the far row, two up close — plus one on their feet at the counter */
+(function(){
+  const far=document.getElementById("rowFar");
+  operator(far,300,548,.62,{pose:"forward",hair:"cap",notes:1,delay:.2});
+  operator(far,640,552,.62,{pose:"lean",hair:"short",lamp:1,delay:1.1});
+  operator(far,1020,548,.62,{pose:"turn",hair:"bun",second:1,mug:1,delay:.6});
+  operator(far,1352,552,.62,{pose:"nod",hair:"pony",headset:1,delay:1.6});
+  const near=document.getElementById("rowNear");
+  operator(near,430,726,.98,{pose:"forward",hair:"short",headset:1,second:1,hat:1,delay:.4});
+  operator(near,1130,730,.98,{pose:"nod",hair:"bun",notes:1,lamp:1,mug:1,delay:1.3});
+  // standing at the counter, coffee in hand, hi-vis catching the screen light
+  const st=document.getElementById("standing"), k=add(st,"g",{transform:"translate(880,486) scale(.66)"});
+  add(k,"path",{d:"M-26 0 V-64 q0-26 26-26 q26 0 26 26 V0 Z",fill:"#0a0705"});
+  add(k,"path",{d:"M-24 -58 q24 -10 48 0",fill:"none",stroke:"#9fd2ff","stroke-width":2.4,opacity:.26});
+  add(k,"path",{d:"M-24 -44 q24 -8 48 0",fill:"none",stroke:"var(--hivis)","stroke-width":5,opacity:.3});
+  add(k,"path",{d:"M-25 -26 q25 -8 50 0",fill:"none",stroke:"var(--hivis)","stroke-width":5,opacity:.22});
+  add(k,"ellipse",{cx:2,cy:-104,rx:18,ry:20,fill:"#0a0705"});
+  add(k,"path",{d:"M-14 -118 q16 -9 32 0",fill:"none",stroke:"#9fd2ff","stroke-width":2,opacity:.2});
+  add(k,"path",{d:"M26 -60 q22 -6 24 -26",fill:"none",stroke:"#0a0705","stroke-width":11,"stroke-linecap":"round"});
+  const cup=add(k,"g",{class:"sip"});
+  add(cup,"rect",{x:44,y:-96,width:13,height:15,rx:2,fill:"#5a4230"});
+  add(cup,"path",{d:"M46 -98 q3 -8 8 -3",stroke:"#9a8974","stroke-width":1.4,fill:"none",opacity:.45});
+  add(k,"path",{d:"M-14 0 V44 M14 0 V44",stroke:"#0a0705","stroke-width":13,"stroke-linecap":"round"});
+})();
+
+/* ════════ drill ════════ */
+const $=s=>document.querySelector(s);
+const shuffle=a=>a.map(v=>[Math.random(),v]).sort((p,q)=>p[0]-q[0]).map(p=>p[1]);
+let deck=[],idx=0,right=0,streak=0,best=0,ar=.40,rings=0,missed=[],locked=false,timer=null,runLen=20;
+
+function makeQ(item){
+  const reverse=Math.random()<.3, pool=T.filter(t=>t[0]!==item[0]);
+  const same=shuffle(pool.filter(t=>t[2]===item[2])), rest=shuffle(pool.filter(t=>t[2]!==item[2]));
+  const set=shuffle([item,...[...same,...rest].slice(0,3)]);
+  return {reverse,item,opts:set,a:set.indexOf(item)};
+}
+function paint(){
+  document.documentElement.style.setProperty("--ore-dur",(16-Math.min(13,ar*8.4)).toFixed(2)+"s");
+  document.documentElement.style.setProperty("--drill-dur",(11-Math.min(9,ar*6)).toFixed(2)+"s");
+  const h=document.getElementById("hudbits");
+  if(h) h.innerHTML=`
+    <div class="h">Correct <b>${right} / ${idx}</b></div>
+    <div class="h">Streak <b class="${streak>2?'up':''}">${streak}</b></div>
+    <div class="h">Advance rate <b class="${ar>=1?'up':ar<=.2?'dn':''}">${ar.toFixed(2)} mi/wk</b></div>
+    <div class="h">Rings <b>${rings}</b></div>`;
+  const t=52+idx*11;
+  document.getElementById("clock").textContent=`0${1+Math.floor(t/60)}:${String(t%60).padStart(2,"0")}`;
+}
+function render(){
+  if(idx>=deck.length) return report();
+  const q=deck[idx];
+  const head=q.reverse
+    ? `<div class="cue">Term check · which term is this</div><p class="termdef">${q.item[1]}</p><div class="sub">${q.item[2]}</div>`
+    : `<div class="cue">Term check · define it</div><h1 class="term">${q.item[0]}</h1><div class="sub">${q.item[2]}</div>`;
+  $("#crt").innerHTML=`
+    <div class="hud"><div id="hudbits" style="display:flex;gap:16px;flex-wrap:wrap"></div>
+      <div class="spacer"></div>
+      <div class="pips">${deck.map((_,i)=>`<i class="${i<idx?(deck[i].got?'ok':'no'):''}"></i>`).join("")}</div></div>
+    ${head}
+    <div class="opts">${q.opts.map((o,i)=>`<button class="opt" data-i="${i}"><kbd>${i+1}</kbd><span>${q.reverse?o[0]:o[1]}</span></button>`).join("")}</div>
+    <div class="echo" id="echo"></div>`;
+  paint(); locked=false;
+  document.querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>choose(+b.dataset.i)));
+}
+function choose(i){
+  if(locked) return; locked=true;
+  const q=deck[idx], ok=(i===q.a); q.got=ok;
+  document.querySelectorAll(".opt").forEach(b=>{b.disabled=true;
+    if(+b.dataset.i===q.a) b.classList.add("right");
+    else if(+b.dataset.i===i) b.classList.add("wrong");});
+  if(ok){right++;streak++;best=Math.max(best,streak);ar=Math.min(1.6,ar+.085);rings+=14;}
+  else {streak=0;ar=Math.max(.10,ar-.12);rings+=3;missed.push(q.item);}
+  $("#echo").innerHTML = ok ? `<b>${q.item[0]}</b> — logged.` : `<b>${q.item[0]}</b> — ${q.item[1]}`;
+  const wait=ok?1700:4200, bar=document.createElement("div");
+  bar.className="timer"; bar.style.setProperty("--wait",wait+"ms"); bar.innerHTML="<i></i>";
+  $("#crt").appendChild(bar);
+  idx++; paint();
+  timer=setTimeout(()=>{timer=null;render();},wait);
+}
+function report(){
+  const p=Math.round(right/deck.length*100);
+  const rank=p>=95?"Shift lead":p>=85?"Console qualified":p>=65?"Provisional":"Retrain";
+  $("#crt").innerHTML=`<div class="report">
+    <div class="cue">Shift report · console 07</div>
+    <h2>Handover<br><span>${rank}</span></h2>
+    <div class="figs">
+      <div><span>Terms held</span><b>${right}/${deck.length}</b></div>
+      <div><span>Accuracy</span><b>${p}%</b></div>
+      <div><span>Best streak</span><b>${best}</b></div>
+      <div><span>Advance rate</span><b>${ar.toFixed(2)}</b></div>
+      <div><span>Rings set</span><b>${rings}</b></div></div>
+    ${missed.length?`<div class="cue" style="margin-bottom:8px">Review before next shift</div>
+      <ul class="misses">${missed.map(m=>`<li><strong>${m[0]}</strong><p>${m[1]}</p></li>`).join("")}</ul>`
+      :`<p class="termdef">Every term held. The belt never slowed.</p>`}
+    <button class="ghost" id="again">Start another shift</button></div>`;
+  $("#again").addEventListener("click",start);
+}
+function start(){
+  clearTimeout(timer);
+  deck=shuffle(T).slice(0,runLen).map(makeQ);
+  idx=0;right=0;streak=0;best=0;ar=.40;rings=0;missed=[];
+  render();
+}
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){$("#gloss").classList.remove("open");return;}
+  if(/^[1-4]$/.test(e.key)&&!locked){const b=document.querySelector(`.opt[data-i="${+e.key-1}"]`);if(b)b.click();return;}
+  if(e.code==="Space"&&timer){e.preventDefault();clearTimeout(timer);timer=null;render();}
+});
+$("#glossBtn").addEventListener("click",()=>$("#gloss").classList.toggle("open"));
+$("#glossClose").addEventListener("click",()=>$("#gloss").classList.remove("open"));
+$("#r20").addEventListener("click",()=>{runLen=20;$("#r20").classList.add("on");$("#r45").classList.remove("on");start();});
+$("#r45").addEventListener("click",()=>{runLen=45;$("#r45").classList.add("on");$("#r20").classList.remove("on");start();});
+$("#glossBody").innerHTML=[...new Set(T.map(t=>t[2]))].map(c=>`<h4>${c}</h4><dl>${
+  T.filter(t=>t[2]===c).map(t=>`<dt>${t[0]}</dt><dd>${t[1]}</dd>`).join("")}</dl>`).join("");
+start();
+</script>
+</body>
+</html>
