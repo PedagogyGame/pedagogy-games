@@ -306,7 +306,6 @@ select:focus-visible{outline:3px solid #8FD9E6;outline-offset:2px}
     <div class="opts" id="opts"></div>
     <div class="verdict hidden" id="verdict">
       <div class="verdict-text"><p class="head" id="vHead"></p><p id="vBody"></p></div>
-      <button class="btn" id="nextBtn">Next</button>
     </div>
   </section>
 
@@ -733,7 +732,6 @@ async function answer(choice,btn){
     $("vBody").innerHTML=`<b>${target.term}</b> — ${target.def}.`;
   }
   $("verdict").classList.remove("hidden");
-  $("nextBtn").disabled=true;
 
   if(right){
     const batch=[]; for(let i=0;i<n;i++) batch.push(makeFly());
@@ -746,14 +744,15 @@ async function answer(choice,btn){
     }
     clearFlies();
   }
-  $("nextBtn").disabled=false;
-  $("nextBtn").textContent=hunger<=0?"See results":"Next";
-  busy=false; $("nextBtn").focus();
+  busy=false;
+  scheduleNext(right?1100:2300);
 }
+let advTimer=null;
+function scheduleNext(ms){ clearTimeout(advTimer); advTimer=setTimeout(()=>{advTimer=null;next();},ms); }
 
 /* ================= FLOW ================= */
 function showPanel(p){ [startPanel,qPanel,endPanel].forEach(x=>x.classList.toggle("hidden",x!==p)); }
-function next(){ if(hunger<=0) return finish(); current=draw(); render(); }
+function next(){ clearTimeout(advTimer); advTimer=null; if(hunger<=0) return finish(); current=draw(); render(); }
 function finish(){
   clearFlies();
   const fed=hunger<=0;
@@ -779,10 +778,9 @@ function reset(){
 $("startBtn").addEventListener("click",reset);
 $("againBtn").addEventListener("click",reset);
 $("changeBtn").addEventListener("click",()=>{clearFlies();showPanel(startPanel);});
-$("nextBtn").addEventListener("click",next);
 document.addEventListener("keydown",e=>{
   if(qPanel.classList.contains("hidden")) return;
-  if(e.key==="Enter"&&!$("verdict").classList.contains("hidden")&&!$("nextBtn").disabled){ next(); return; }
+  if(e.key==="Enter"&&advTimer){ next(); return; }
   const n=parseInt(e.key,10);
   if(n>=1&&n<=4){ const b=$("opts").children[n-1]; if(b&&!b.disabled) b.click(); }
 });
