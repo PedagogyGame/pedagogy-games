@@ -1,1 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#07131d">
+  <title>Chemistry Guru Lab</title>
+  <style>
+    :root {
+      --ink: #e8f7f8;
+      --muted: #8ea9ad;
+      --cyan: #54e1df;
+      --cyan-soft: rgba(84, 225, 223, .16);
+      --amber: #ffbf68;
+      --danger: #ff725e;
+      --green: #86e4ad;
+      --panel: rgba(7, 20, 28, .92);
+      --line: rgba(126, 210, 211, .2);
+    }
 
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #050d13;
+      color: var(--ink);
+      font-family: "Avenir Next", Avenir, "Segoe UI", system-ui, sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(84, 225, 223, .55);
+      outline-offset: 3px;
+    }
+
+    .game-shell {
+      min-height: 100dvh;
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 22% 10%, rgba(31, 86, 100, .2), transparent 35%),
+        linear-gradient(135deg, #0b1b28 0%, #08141e 48%, #050c12 100%);
+    }
+
+    .periodic-grid {
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      opacity: .055;
+      background-image:
+        linear-gradient(rgba(126, 210, 211, .65) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(126, 210, 211, .65) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black 0 54%, transparent 78%);
+    }
+
+    .top-bar {
+      height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 28px;
+      border-bottom: 1px solid rgba(136, 218, 219, .13);
+      background: rgba(4, 13, 20, .7);
+      backdrop-filter: blur(12px);
+      position: relative;
+      z-index: 5;
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border: 1px solid rgba(84, 225, 223, .5);
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      color: var(--cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      box-shadow: inset 0 0 18px rgba(84, 225, 223, .08);
+    }
+
+    .brand h1 { margin: 0; font-size: clamp(17px, 2vw, 23px); letter-spacing: .08em; text-transform: uppercase; }
+    .brand p { margin: 2px 0 0; color: var(--muted); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; }
+
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(8, 26, 36, .8);
+      color: var(--ink);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: border-color .2s, background .2s, transform .2s;
+    }
+
+    .icon-button:hover { border-color: rgba(84, 225, 223, .56); background: rgba(20, 54, 65, .85); }
+    .icon-button:active { transform: scale(.96); }
+
+    .meter-wrap { width: min(37vw, 380px); }
+    .meter-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+    .meter-label span:first-child { color: #adc1c3; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+    .meter-value { color: var(--cyan); font: 700 21px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .meter-track {
+      height: 8px;
+      border-radius: 99px;
+      background: rgba(120, 150, 154, .17);
+      overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.6);
+    }
+
+    .meter-fill {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #2ba4ad, var(--cyan));
+      box-shadow: 0 0 14px rgba(84, 225, 223, .35);
+      transition: width .65s cubic-bezier(.2,.8,.2,1), background .35s;
+    }
+
+    .main-grid {
+      height: calc(100dvh - 78px);
+      display: grid;
+      grid-template-columns: minmax(0, 1.52fr) minmax(350px, .82fr);
+    }
+
+    .lab-stage {
+      min-width: 0;
+      position: relative;
+      overflow: hidden;
+      border-right: 1px solid rgba(126, 210, 211, .15);
+      background:
+        linear-gradient(to bottom, transparent 0 62%, rgba(0, 0, 0, .1) 62% 100%),
+        radial-gradient(circle at 40% 30%, rgba(37, 91, 102, .16), transparent 45%);
+    }
+
+    .lab-stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(0,0,0,.08), transparent 18% 82%, rgba(0,0,0,.2));
+      z-index: 3;
+    }
+
+    .lab-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    .status-plaque {
+      position: absolute;
+      left: 22px;
+      top: 20px;
+      z-index: 4;
+      padding: 9px 13px;
+      border: 1px solid rgba(126, 210, 211, .16);
+      border-radius: 9px;
+      background: rgba(5, 17, 24, .68);
+      color: #8facb0;
+      font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      backdrop-filter: blur(6px);
+    }
+
+    .status-plaque i {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 8px;
+      box-shadow: 0 0 8px rgba(134, 228, 173, .7);
+      animation: blink 2.6s infinite;
+    }
+
+    .console-panel {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      padding: clamp(22px, 3.2vw, 46px);
+      background:
+        linear-gradient(145deg, rgba(12, 30, 40, .97), rgba(5, 16, 23, .99)),
+        var(--panel);
+      position: relative;
+      overflow: auto;
+    }
+
+    .console-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .18;
+      background: repeating-linear-gradient(0deg, transparent 0 4px, rgba(255,255,255,.012) 5px);
+    }
+
+    .round-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #8aa7aa; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+    .round-line strong { color: #d1e4e5; font-weight: 600; }
+
+    .timer-area { margin: 24px 0 20px; display: flex; align-items: center; gap: 18px; }
+
+    .timer-ring {
+      --progress: 1;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background: conic-gradient(var(--cyan) calc(var(--progress) * 1turn), rgba(110, 150, 154, .16) 0);
+      position: relative;
+      box-shadow: 0 0 22px rgba(84, 225, 223, .08);
+    }
+
+    .timer-ring::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: #091923; }
+    .timer-number { position: relative; z-index: 1; font: 700 24px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--cyan); }
+    .timer-caption { color: #c1d3d4; font-size: 12px; line-height: 1.5; }
+    .timer-caption span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .12em; }
+
+    .definition-label { color: var(--cyan); font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; }
+
+    .definition {
+      min-height: 128px;
+      display: flex;
+      align-items: center;
+      margin: 10px 0 24px;
+      padding: 20px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(22px, 2.35vw, 34px);
+      line-height: 1.22;
+      letter-spacing: -.018em;
+      text-wrap: balance;
+    }
+
+    .answer-label { display: block; color: #99b2b4; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+
+    .answer-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; }
+
+    .answer-input {
+      width: 100%;
+      min-width: 0;
+      height: 54px;
+      border: 1px solid rgba(84, 225, 223, .3);
+      border-radius: 11px;
+      background: rgba(3, 12, 18, .68);
+      color: #efffff;
+      padding: 0 15px;
+      font-size: 18px;
+      caret-color: var(--cyan);
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .answer-input::placeholder { color: #526c70; }
+    .answer-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(84, 225, 223, .07); }
+    .answer-input:disabled { opacity: .55; }
+
+    .submit-button {
+      height: 54px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: 11px;
+      background: var(--cyan);
+      color: #042027;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: filter .2s, transform .2s;
+    }
+
+    .submit-button:hover { filter: brightness(1.08); }
+    .submit-button:active { transform: translateY(1px); }
+    .submit-button:disabled { opacity: .45; cursor: default; }
+
+    .feedback {
+      min-height: 58px;
+      margin-top: 14px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 13px;
+      color: #819da0;
+      font-size: 12px;
+      line-height: 1.45;
+      background: rgba(4, 13, 19, .3);
+      border: 1px solid transparent;
+    }
+
+    .feedback.correct { color: var(--green); border-color: rgba(134, 228, 173, .28); background: rgba(60, 139, 91, .08); }
+    .feedback.wrong { color: #ff9c8d; border-color: rgba(255, 114, 94, .28); background: rgba(158, 55, 42, .08); }
+
+    .console-foot { margin-top: auto; padding-top: 24px; display: flex; justify-content: space-between; gap: 10px; color: #597579; font-size: 9px; letter-spacing: .11em; text-transform: uppercase; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(2, 8, 12, .76);
+      backdrop-filter: blur(12px);
+      transition: opacity .35s, visibility .35s;
+    }
+
+    .overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    .modal {
+      width: min(560px, 100%);
+      border-radius: 22px;
+      border: 1px solid rgba(84, 225, 223, .26);
+      background: linear-gradient(145deg, rgba(13, 35, 46, .98), rgba(5, 16, 23, .99));
+      padding: clamp(26px, 5vw, 48px);
+      box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px rgba(255,255,255,.03);
+      text-align: center;
+    }
+
+    .modal-symbol { width: 70px; height: 70px; margin: 0 auto 18px; border-radius: 20px; border: 1px solid rgba(84, 225, 223, .38); display: grid; place-items: center; color: var(--cyan); font: 700 22px/1 Georgia, serif; box-shadow: inset 0 0 25px rgba(84, 225, 223, .08); }
+    .modal-kicker { color: var(--cyan); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+    .modal h2 { margin: 10px 0 10px; font-size: clamp(29px, 6vw, 46px); line-height: 1; letter-spacing: -.03em; }
+    .modal p { margin: 0 auto; color: #a6bec0; max-width: 440px; line-height: 1.6; font-size: 14px; }
+
+    .rule-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 26px 0; }
+    .rule { padding: 13px 8px; border-radius: 12px; background: rgba(3, 13, 19, .48); border: 1px solid rgba(126, 210, 211, .13); }
+    .rule strong { display: block; color: var(--ink); font: 700 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 7px; }
+    .rule span { color: #789699; font-size: 9px; line-height: 1.3; letter-spacing: .08em; text-transform: uppercase; }
+
+    .primary-button {
+      border: 0;
+      border-radius: 12px;
+      min-width: 190px;
+      height: 54px;
+      padding: 0 25px;
+      background: var(--cyan);
+      color: #042027;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      box-shadow: 0 10px 30px rgba(52, 173, 174, .14);
+    }
+
+    .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 24px 0; }
+    .end-stat { padding: 14px 6px; background: rgba(2, 12, 17, .45); border-radius: 12px; border: 1px solid rgba(126, 210, 211, .12); }
+    .end-stat strong { display: block; color: var(--cyan); font: 700 21px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .end-stat span { display: block; margin-top: 7px; color: #718e92; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+
+    /* SVG animation */
+    .machine-light { animation: blink 2.1s infinite; }
+    .machine-light:nth-child(2n) { animation-delay: -.7s; }
+    .machine-light:nth-child(3n) { animation-delay: -1.2s; }
+    .fan { transform-origin: center; animation: spin 8s linear infinite; }
+    .bubble { animation: bubble 3.2s linear infinite; opacity: 0; }
+    .bubble.b2 { animation-delay: -1.1s; }
+    .bubble.b3 { animation-delay: -2.2s; }
+    .flame { transform-origin: center bottom; animation: flame .45s ease-in-out infinite alternate; }
+    .vapor { animation: vapor 4s ease-in-out infinite; opacity: 0; }
+    .vapor.v2 { animation-delay: -2s; }
+    .scientist-hand { transform-origin: 276px 448px; animation: note 3.8s ease-in-out infinite; }
+    .chair-scientist { animation: chairRoll 11s ease-in-out infinite; }
+    .scanner-arm { transform-origin: 595px 357px; animation: scan 5.5s ease-in-out infinite; }
+    .overflow-foam { opacity: 0; transform-origin: center bottom; }
+    .alarm-glow { opacity: 0; }
+
+    .game-shell.success .machine-light { fill: #86e4ad !important; animation-duration: .35s; }
+    .game-shell.correct-pulse .lab-stage { animation: calmPulse 1s ease-out; }
+    .game-shell.alarm .alarm-glow { animation: alarmGlow 1.9s ease-out; }
+    .game-shell.alarm .overflow-foam { animation: overflow 2.15s ease-out; }
+    .game-shell.alarm .machine-light { fill: #ff725e !important; animation-duration: .18s; }
+    .game-shell.low .lab-stage { box-shadow: inset 0 0 90px rgba(255, 114, 94, .08); }
+
+    @keyframes blink { 0%, 44%, 100% { opacity: .95; } 52%, 70% { opacity: .25; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes bubble { 0% { transform: translateY(18px) scale(.7); opacity: 0; } 15% { opacity: .8; } 85% { opacity: .55; } 100% { transform: translateY(-42px) scale(1.1); opacity: 0; } }
+    @keyframes flame { from { transform: scale(.9, .93) skewX(-2deg); } to { transform: scale(1.06, 1.08) skewX(3deg); } }
+    @keyframes vapor { 0% { transform: translate(0, 8px) scale(.7); opacity: 0; } 25% { opacity: .26; } 100% { transform: translate(12px, -40px) scale(1.2); opacity: 0; } }
+    @keyframes note { 0%, 55%, 100% { transform: rotate(0deg); } 65% { transform: rotate(-7deg); } 78% { transform: rotate(4deg); } }
+    @keyframes chairRoll { 0%, 34%, 100% { transform: translateX(0); } 43%, 78% { transform: translateX(22px); } }
+    @keyframes scan { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(7deg); } }
+    @keyframes calmPulse { 0% { filter: brightness(1); } 35% { filter: brightness(1.14) saturate(1.08); } 100% { filter: brightness(1); } }
+    @keyframes alarmGlow { 0%, 100% { opacity: 0; } 20%, 48% { opacity: .38; } 34%, 68% { opacity: .06; } }
+    @keyframes overflow { 0% { opacity: 0; transform: scaleY(.25) translateY(20px); } 18% { opacity: 1; } 48% { opacity: .96; transform: scaleY(1.45) translateY(-4px); } 100% { opacity: 0; transform: scaleY(.8) translateY(4px); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+
+    @media (max-width: 860px) {
+      body { overflow: auto; }
+      .game-shell { min-height: 100dvh; overflow: visible; }
+      .top-bar { height: auto; min-height: 70px; padding: 11px 15px; flex-wrap: wrap; }
+      .brand p { display: none; }
+      .brand-mark { width: 36px; height: 36px; }
+      .meter-wrap { order: 3; width: 100%; }
+      .main-grid { height: auto; min-height: calc(100dvh - 102px); grid-template-columns: 1fr; grid-template-rows: minmax(275px, 42vh) auto; }
+      .lab-stage { border-right: 0; border-bottom: 1px solid rgba(126, 210, 211, .15); }
+      .console-panel { overflow: visible; min-height: 520px; padding: 24px 20px 30px; }
+      .definition { min-height: 102px; font-size: clamp(22px, 6vw, 30px); }
+      .console-foot { margin-top: 20px; }
+    }
+
+    @media (max-width: 480px) {
+      .brand h1 { font-size: 15px; }
+      .icon-button { width: 38px; height: 38px; }
+      .answer-row { grid-template-columns: 1fr; }
+      .submit-button { width: 100%; }
+      .timer-area { margin-top: 18px; }
+      .rule-row { grid-template-columns: 1fr; }
+      .rule { display: flex; align-items: center; gap: 12px; text-align: left; }
+      .rule strong { margin: 0; min-width: 46px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-shell" id="gameShell">
+    <div class="periodic-grid" aria-hidden="true"></div>
+
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">Cg<br>100</div>
+        <div>
+          <h1>Chemistry Guru Lab</h1>
+          <p>Night research certification</p>
+        </div>
+      </div>
+
+      <div class="meter-wrap" aria-label="Chemistry Guru Meter">
+        <div class="meter-label">
+          <span>Chemistry Guru Meter</span>
+          <span class="meter-value" id="meterValue">100%</span>
+        </div>
+        <div class="meter-track"><div class="meter-fill" id="meterFill"></div></div>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-button" id="soundButton" type="button" aria-label="Mute sound" title="Mute sound">
+          <span id="soundIcon" aria-hidden="true">♫</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="main-grid">
+      <section class="lab-stage" aria-label="Animated nighttime chemistry laboratory">
+        <div class="status-plaque"><i></i><span id="labStatus">Reaction stable</span></div>
+
+        <svg class="lab-svg" viewBox="0 0 900 650" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Two scientists working among laboratory equipment at night">
+          <defs>
+            <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#112735"/><stop offset="1" stop-color="#091720"/></linearGradient>
+            <linearGradient id="bench" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4d6870"/><stop offset="1" stop-color="#223941"/></linearGradient>
+            <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#698188"/><stop offset=".45" stop-color="#304b54"/><stop offset="1" stop-color="#172d35"/></linearGradient>
+            <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#baf6f0" stop-opacity=".4"/><stop offset="1" stop-color="#55b8bc" stop-opacity=".08"/></linearGradient>
+            <linearGradient id="liquidA" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#6ce0cd"/><stop offset="1" stop-color="#168f91"/></linearGradient>
+            <linearGradient id="liquidB" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffbe72"/><stop offset="1" stop-color="#c85f4b"/></linearGradient>
+            <radialGradient id="alarm"><stop stop-color="#ff5c4a" stop-opacity=".65"/><stop offset="1" stop-color="#ff5c4a" stop-opacity="0"/></radialGradient>
+            <filter id="softGlow"><feGaussianBlur stdDeviation="7"/></filter>
+          </defs>
+
+          <rect width="900" height="650" fill="url(#wall)"/>
+          <rect y="498" width="900" height="152" fill="#071118"/>
+          <path d="M0 562H900M0 606H900M100 498v152M250 498v152M400 498v152M550 498v152M700 498v152M850 498v152" stroke="#173039" stroke-width="1" opacity=".55"/>
+
+          <!-- overhead ducting and sprinklers -->
+          <path d="M-30 54H285c25 0 38 12 38 37v23h306V87c0-18 13-30 31-30h270" fill="none" stroke="#38525b" stroke-width="30"/>
+          <path d="M-30 46H283c33 0 49 15 49 46v13h288V86c0-25 17-39 42-39h268" fill="none" stroke="#61747a" stroke-width="3" opacity=".45"/>
+          <g stroke="#758a8f" stroke-width="4" fill="none"><path d="M155 70v39"/><path d="M727 70v39"/></g>
+          <g fill="#657b80"><rect x="143" y="106" width="24" height="5" rx="2"/><rect x="715" y="106" width="24" height="5" rx="2"/><path d="M148 111l-9 10h33l-10-10z"/><path d="M720 111l-9 10h33l-10-10z"/></g>
+
+          <!-- high window -->
+          <rect x="34" y="132" width="176" height="105" rx="3" fill="#061019" stroke="#35505b" stroke-width="6"/>
+          <path d="M122 134v101M36 184h172" stroke="#263f49" stroke-width="4"/>
+          <circle cx="80" cy="156" r="2" fill="#bceaf0"/><circle cx="163" cy="205" r="1.5" fill="#bceaf0"/><circle cx="184" cy="151" r="1" fill="#bceaf0"/>
+          <path d="M50 218c23-27 45-32 69-10 25-33 53-40 79 10" fill="#10272f"/>
+
+          <!-- exhaust fan -->
+          <g transform="translate(785 170)"><circle r="54" fill="#0b1c24" stroke="#38525b" stroke-width="6"/><g class="fan"><path d="M0 0C-4-30 5-44 30-38 29-16 17-4 0 0Z" fill="#42606a"/><path d="M0 0C30-4 44 5 38 30 16 29 4 17 0 0Z" fill="#42606a"/><path d="M0 0C4 30-5 44-30 38-29 16-17 4 0 0Z" fill="#42606a"/><path d="M0 0C-30 4-44-5-38-30-16-29-4-17 0 0Z" fill="#42606a"/></g><circle r="7" fill="#758c92"/></g>
+
+          <!-- hanging goggles and safety station -->
+          <rect x="237" y="145" width="68" height="94" rx="4" fill="#122a34" stroke="#3b555e"/>
+          <path d="M247 165h48M271 145v94" stroke="#263e47"/>
+          <g transform="translate(270 188)" fill="none" stroke="#72b7ba" stroke-width="3"><ellipse cx="-13" cy="0" rx="13" ry="9"/><ellipse cx="13" cy="0" rx="13" ry="9"/><path d="M0-2c-3-4-7-4-10 0M-26-2l-8-4M26-2l8-4"/></g>
+          <rect x="251" y="210" width="39" height="18" rx="2" fill="#29464e"/><path d="M261 219h19M270 213v12" stroke="#91d9d3" stroke-width="2"/>
+
+          <!-- left workstation -->
+          <rect x="22" y="349" width="354" height="23" rx="4" fill="#70888d"/>
+          <rect x="30" y="372" width="338" height="105" fill="url(#bench)"/>
+          <path d="M142 372v105M258 372v105" stroke="#182f38" stroke-width="3"/>
+          <rect x="45" y="278" width="130" height="70" rx="5" fill="#0b171d" stroke="#385862" stroke-width="5"/>
+          <rect x="55" y="288" width="110" height="49" rx="2" fill="#102c35"/>
+          <path d="M65 324l18-13 14 8 22-20 35 12" fill="none" stroke="#58d9d5" stroke-width="2" opacity=".8"/>
+          <circle cx="67" cy="324" r="3" fill="#ffbf68"/>
+          <path d="M110 348v11M84 359h52" stroke="#49636a" stroke-width="4"/>
+          <rect x="188" y="323" width="88" height="9" rx="4" fill="#152a31"/><g fill="#768d90"><circle cx="202" cy="327" r="2"/><circle cx="211" cy="327" r="2"/><circle cx="220" cy="327" r="2"/></g>
+
+          <!-- seated scientist -->
+          <g class="chair-scientist">
+            <path d="M238 360c4-47 24-69 58-63 28 5 36 33 28 68z" fill="#e6edf0"/>
+            <path d="M252 321c6-32 13-51 35-55 27-4 35 22 26 48z" fill="#a7c0ba"/>
+            <circle cx="291" cy="267" r="24" fill="#b87858"/>
+            <path d="M269 265c-1-28 15-39 35-32 12 4 16 14 15 27-11-5-24-10-50 5z" fill="#25292e"/>
+            <path d="M306 268c9 12 8 20-2 29" fill="none" stroke="#925a43" stroke-width="3"/>
+            <path d="M278 273h12M296 273h13M290 273h6" stroke="#24373b" stroke-width="2" fill="none"/>
+            <path d="M260 331l-27 14 42 5" fill="none" stroke="#dbe8e8" stroke-width="13" stroke-linecap="round"/>
+            <g class="scientist-hand"><path d="M274 337l-7 13" stroke="#dbe8e8" stroke-width="12" stroke-linecap="round"/><circle cx="265" cy="351" r="6" fill="#b87858"/></g>
+            <rect x="230" y="356" width="83" height="15" rx="6" fill="#254048"/>
+            <path d="M274 371v57M246 428h59M252 428l-13 30M299 428l12 30" stroke="#354d53" stroke-width="8" stroke-linecap="round"/>
+            <circle cx="237" cy="459" r="7" fill="#14282f"/><circle cx="313" cy="459" r="7" fill="#14282f"/>
+          </g>
+
+          <!-- central machine -->
+          <rect x="391" y="201" width="275" height="277" rx="14" fill="url(#metal)" stroke="#739097" stroke-width="3"/>
+          <rect x="409" y="219" width="240" height="46" rx="6" fill="#101e24" stroke="#405d65"/>
+          <text x="428" y="239" fill="#8ca5a8" font-size="10" font-family="monospace" letter-spacing="2">MOLECULAR ANALYSIS</text>
+          <path d="M428 250h76" stroke="#4dd7d4" stroke-width="2"/><path d="M511 250h34" stroke="#ffb95f" stroke-width="2"/>
+          <g fill="#66ded9"><circle class="machine-light" cx="610" cy="238" r="4"/><circle class="machine-light" cx="622" cy="238" r="4"/><circle class="machine-light" cx="634" cy="238" r="4"/></g>
+          <rect x="413" y="282" width="140" height="152" rx="7" fill="#0b151a" stroke="#3b5861" stroke-width="3"/>
+          <rect x="429" y="299" width="107" height="76" rx="4" fill="#0e2930"/>
+          <path d="M443 347c13-30 27-30 40 0s26 30 39 0" fill="none" stroke="#67deda" stroke-width="3"/>
+          <path d="M443 322c13 30 27 30 40 0s26-30 39 0" fill="none" stroke="#ffb86b" stroke-width="2" opacity=".78"/>
+          <g fill="#658086"><rect x="431" y="391" width="22" height="8" rx="3"/><rect x="459" y="391" width="22" height="8" rx="3"/><rect x="487" y="391" width="22" height="8" rx="3"/></g>
+          <g class="scanner-arm"><path d="M570 292h53v87h-18v-65h-35z" fill="#59727a"/><rect x="557" y="284" width="67" height="17" rx="5" fill="#819599"/><rect x="592" y="368" width="45" height="17" rx="6" fill="#2a454d"/></g>
+          <rect x="572" y="406" width="56" height="28" rx="3" fill="#13272e"/><g fill="#8ce7d9"><circle class="machine-light" cx="585" cy="420" r="3"/><circle class="machine-light" cx="597" cy="420" r="3"/><circle class="machine-light" cx="609" cy="420" r="3"/></g>
+          <path d="M411 449h237" stroke="#1d343b" stroke-width="3"/>
+
+          <!-- standing scientist at machine -->
+          <g transform="translate(645 0)">
+            <circle cx="70" cy="288" r="23" fill="#946648"/>
+            <path d="M49 286c-2-23 8-36 28-34 19 2 24 15 19 35-16-10-29-12-47-1z" fill="#171e22"/>
+            <path d="M51 314c14-14 37-13 45 3l18 110H43z" fill="#dce8e9"/>
+            <path d="M46 329l-27 39 25 15" fill="none" stroke="#dce8e9" stroke-width="14" stroke-linecap="round"/>
+            <circle cx="44" cy="384" r="7" fill="#946648"/>
+            <path d="M95 327l17 40-17 12" fill="none" stroke="#dce8e9" stroke-width="13" stroke-linecap="round"/>
+            <path d="M58 427l-7 67M88 427l10 67" stroke="#1b333b" stroke-width="17"/>
+            <path d="M43 494h24M91 494h27" stroke="#141e23" stroke-width="10" stroke-linecap="round"/>
+            <path d="M53 316h43" stroke="#5bcac6" stroke-width="4"/><rect x="67" y="319" width="19" height="26" rx="2" fill="#9eb7ba"/>
+          </g>
+
+          <!-- right bench with sink and glassware -->
+          <rect x="760" y="404" width="168" height="22" rx="3" fill="#72878b"/>
+          <rect x="766" y="426" width="146" height="78" fill="url(#bench)"/>
+          <ellipse cx="823" cy="405" rx="38" ry="9" fill="#13262d" stroke="#91a6a9" stroke-width="3"/>
+          <path d="M852 380v22M852 380c0-14 22-14 22 0v13" fill="none" stroke="#85999d" stroke-width="6" stroke-linecap="round"/>
+          <path d="M886 394v10" stroke="#66dcd7" stroke-width="2" stroke-dasharray="2 4"/>
+
+          <!-- foreground rolling cart -->
+          <g transform="translate(102 0)">
+            <path d="M0 465h121M8 465v103M113 465v103M8 512h105" stroke="#667e83" stroke-width="7"/>
+            <circle cx="8" cy="574" r="10" fill="#182a31" stroke="#6b8084" stroke-width="4"/><circle cx="113" cy="574" r="10" fill="#182a31" stroke="#6b8084" stroke-width="4"/>
+            <path d="M22 444h24l-5 22H27z" fill="url(#glass)" stroke="#7ab9b8"/><path d="M28 456h13" stroke="#ffb869" stroke-width="8"/>
+            <path d="M65 432h12v16l14 18H51l14-18z" fill="url(#glass)" stroke="#7ab9b8"/><path d="M57 457h28l6 9H51z" fill="url(#liquidA)"/>
+            <rect x="31" y="522" width="58" height="28" rx="3" fill="#243d45"/><circle cx="45" cy="536" r="5" fill="#ffbf68"/><circle cx="62" cy="536" r="5" fill="#54e1df"/>
+          </g>
+
+          <!-- foreground chemistry bench -->
+          <path d="M276 491H756l24 28H252z" fill="#758b8f"/>
+          <rect x="267" y="519" width="500" height="115" fill="#1a333b"/>
+          <path d="M316 519v115M708 519v115" stroke="#0d222a" stroke-width="5"/>
+
+          <!-- flask A -->
+          <g transform="translate(355 0)">
+            <path d="M30 421h25v55l42 93c7 16-1 31-20 31H7c-19 0-27-15-20-31l43-93z" fill="url(#glass)" stroke="#89cfcc" stroke-width="3"/>
+            <path d="M-7 561h96l8 18c7 13-3 21-19 21H7c-17 0-26-9-19-23z" fill="url(#liquidA)" opacity=".87"/>
+            <ellipse cx="42" cy="561" rx="48" ry="8" fill="#78e3d3" opacity=".55"/>
+            <g fill="none" stroke="#baf8ed" stroke-width="2"><circle class="bubble" cx="24" cy="562" r="5"/><circle class="bubble b2" cx="52" cy="572" r="4"/><circle class="bubble b3" cx="69" cy="566" r="6"/></g>
+            <g class="overflow-foam" fill="#baf6e5"><circle cx="3" cy="559" r="11"/><circle cx="20" cy="555" r="14"/><circle cx="39" cy="560" r="13"/><circle cx="58" cy="554" r="15"/><circle cx="79" cy="559" r="12"/></g>
+            <path class="vapor" d="M33 419c-14-18 13-23 0-43" fill="none" stroke="#aee5dd" stroke-width="5" stroke-linecap="round"/>
+            <path class="vapor v2" d="M49 420c16-17-9-28 7-42" fill="none" stroke="#aee5dd" stroke-width="4" stroke-linecap="round"/>
+          </g>
+
+          <!-- burner and round flask -->
+          <g transform="translate(530 0)">
+            <path d="M22 565h70" stroke="#6a8085" stroke-width="8"/><path d="M38 565l8-43h24l8 43" fill="#263f47" stroke="#769096" stroke-width="3"/>
+            <path class="flame" d="M58 519c-18-20 4-32 0-51 20 19 17 38 0 51z" fill="#65d9ef"/><path class="flame" d="M58 518c-8-11 2-17 1-28 9 12 8 21-1 28z" fill="#fff3b5"/>
+            <path d="M37 420h41v28c29 9 48 35 48 64 0 38-31 68-69 68S-12 550-12 512c0-29 18-55 49-64z" fill="url(#glass)" stroke="#8ac8c7" stroke-width="3"/>
+            <path d="M-3 520c11-11 25 7 39-3 18-12 39 12 78-3-1 33-26 58-58 58-31 0-55-22-59-52z" fill="url(#liquidB)" opacity=".84"/>
+            <g fill="none" stroke="#ffe1a8" stroke-width="2"><circle class="bubble" cx="25" cy="535" r="5"/><circle class="bubble b2" cx="62" cy="542" r="4"/><circle class="bubble b3" cx="89" cy="532" r="6"/></g>
+          </g>
+
+          <!-- petri dishes -->
+          <g transform="translate(690 485)"><ellipse cx="0" cy="0" rx="42" ry="10" fill="#9de4df" opacity=".2" stroke="#8bc9c8" stroke-width="2"/><ellipse cx="0" cy="-4" rx="31" ry="6" fill="#b0639b" opacity=".7"/><circle cx="-12" cy="-5" r="5" fill="#e998c4"/><circle cx="13" cy="-2" r="7" fill="#754d93"/></g>
+
+          <!-- mop bucket -->
+          <g transform="translate(815 516)"><path d="M0 0h60l-8 59H10z" fill="#bd8b31"/><path d="M6 0c6-25 46-25 49 0" fill="none" stroke="#6c7472" stroke-width="4"/><rect x="11" y="14" width="39" height="16" rx="3" fill="#d6a849"/><path d="M23 28h15" stroke="#68511f" stroke-width="3"/><circle cx="13" cy="61" r="6" fill="#17242a"/><circle cx="50" cy="61" r="6" fill="#17242a"/></g>
+
+          <rect class="alarm-glow" width="900" height="650" fill="url(#alarm)"/>
+        </svg>
+      </section>
+
+      <section class="console-panel" aria-labelledby="definitionHeading">
+        <div class="round-line"><span>Specimen <strong id="roundNumber">01 / 30</strong></span><span id="accuracyText">Accuracy 100%</span></div>
+
+        <div class="timer-area">
+          <div class="timer-ring" id="timerRing" aria-label="15 seconds remaining">
+            <span class="timer-number" id="timerNumber">15</span>
+          </div>
+          <div class="timer-caption"><strong id="timerState">Analysis window</strong><br><span>Fast bonus through 10 seconds</span></div>
+        </div>
+
+        <div class="definition-label" id="definitionHeading">Identify the chemical term</div>
+        <div class="definition" id="definitionText">Select Begin Certification to initialize the laboratory.</div>
+
+        <form id="answerForm" autocomplete="off">
+          <label class="answer-label" for="answerInput">Your term</label>
+          <div class="answer-row">
+            <input class="answer-input" id="answerInput" name="answer" type="text" placeholder="Type the matching term…" aria-describedby="feedback" disabled spellcheck="false">
+            <button class="submit-button" id="submitButton" type="submit" disabled>Submit</button>
+          </div>
+        </form>
+
+        <div class="feedback" id="feedback" role="status" aria-live="polite">Capitalization, punctuation, apostrophes, and extra spaces are ignored.</div>
+        <div class="console-foot"><span>One response per specimen</span><span>Protocol CGL–30</span></div>
+      </section>
+    </main>
+
+    <div class="overlay" id="startOverlay">
+      <div class="modal">
+        <div class="modal-symbol">Cg</div>
+        <div class="modal-kicker">Night research certification</div>
+        <h2>Chemistry Guru Lab</h2>
+        <p>Identify all 30 chemical terms from their definitions. Keep the experiment stable and finish with guru-level chemistry knowledge.</p>
+        <div class="rule-row">
+          <div class="rule"><strong>15s</strong><span>per definition</span></div>
+          <div class="rule"><strong>+10%</strong><span>correct by 10 seconds</span></div>
+          <div class="rule"><strong>0%</strong><span>ends the experiment</span></div>
+        </div>
+        <button class="primary-button" id="startButton" type="button">Begin certification</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="endOverlay">
+      <div class="modal">
+        <div class="modal-symbol" id="endSymbol">Cg</div>
+        <div class="modal-kicker" id="endKicker">Certification complete</div>
+        <h2 id="endTitle">Chemistry Guru</h2>
+        <p id="endMessage">The final analysis is complete.</p>
+        <div class="stats-row">
+          <div class="end-stat"><strong id="endMeter">100%</strong><span>Guru meter</span></div>
+          <div class="end-stat"><strong id="endAccuracy">100%</strong><span>Accuracy</span></div>
+          <div class="end-stat"><strong id="endCorrect">30/30</strong><span>Correct</span></div>
+        </div>
+        <button class="primary-button" id="restartButton" type="button">Run new experiment</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const TERMS = [
+        { term: "Mole", definition: "6.022 × 10²³ entities.", difficulty: "medium" },
+        { term: "Molarity", definition: "Moles of solute per liter.", difficulty: "medium" },
+        { term: "Stoichiometry", definition: "Quantitative relationships in chemical reactions.", difficulty: "medium" },
+        { term: "Equilibrium", definition: "Forward and reverse reactions balance dynamically.", difficulty: "easy" },
+        { term: "Le Châtelier’s principle", definition: "Equilibrium shifts against imposed change.", difficulty: "hard" },
+        { term: "Activation energy", definition: "Energy barrier required for reaction.", difficulty: "easy" },
+        { term: "Catalyst", definition: "Substance accelerating reaction without being consumed.", difficulty: "easy" },
+        { term: "Enthalpy", definition: "Heat-related energy content of a system.", difficulty: "medium" },
+        { term: "Entropy", definition: "Measure of energy dispersal or multiplicity.", difficulty: "medium" },
+        { term: "Gibbs free energy", definition: "Energy available for useful chemical work.", difficulty: "hard" },
+        { term: "Redox", definition: "Coupled oxidation and reduction.", difficulty: "easy" },
+        { term: "Oxidation state", definition: "Formal electron accounting assigned to an atom.", difficulty: "medium" },
+        { term: "pKa", definition: "Measure of acid strength.", difficulty: "medium" },
+        { term: "Buffer", definition: "Solution resisting changes in pH.", difficulty: "easy" },
+        { term: "Nucleophile", definition: "Electron-pair donor.", difficulty: "medium" },
+        { term: "Electrophile", definition: "Electron-pair acceptor.", difficulty: "medium" },
+        { term: "Chirality", definition: "Non-superimposability on a mirror image.", difficulty: "hard" },
+        { term: "Stereoisomer", definition: "Same connectivity, different spatial arrangement.", difficulty: "hard" },
+        { term: "Resonance", definition: "Multiple valid electron-distribution representations.", difficulty: "hard" },
+        { term: "Aromaticity", definition: "Special stability from cyclic electron delocalization.", difficulty: "hard" },
+        { term: "Hybridization", definition: "Mixing atomic orbitals into bonding orbitals.", difficulty: "medium" },
+        { term: "Orbital", definition: "Quantum state describing probable electron location.", difficulty: "hard" },
+        { term: "Electronegativity", definition: "Ability to attract bonding electrons.", difficulty: "medium" },
+        { term: "Intermolecular force", definition: "Attraction between separate molecules.", difficulty: "medium" },
+        { term: "Solvation", definition: "Surrounding of solute particles by solvent.", difficulty: "medium" },
+        { term: "Precipitation", definition: "Formation of an insoluble solid.", difficulty: "easy" },
+        { term: "Titration", definition: "Quantitative analysis by controlled reaction.", difficulty: "easy" },
+        { term: "Chromatography", definition: "Separation by differential movement between phases.", difficulty: "easy" },
+        { term: "Spectroscopy", definition: "Studying matter through electromagnetic interaction.", difficulty: "easy" },
+        { term: "Limiting reagent", definition: "Reactant that runs out first.", difficulty: "medium" }
+      ];
+
+      const PENALTIES = { easy: 30, medium: 25, hard: 20 };
+      const ROUND_SECONDS = 15;
+      const FAST_WINDOW = 10;
+      const els = {
+        shell: document.getElementById("gameShell"),
+        meterValue: document.getElementById("meterValue"),
+        meterFill: document.getElementById("meterFill"),
+        roundNumber: document.getElementById("roundNumber"),
+        accuracyText: document.getElementById("accuracyText"),
+        timerRing: document.getElementById("timerRing"),
+        timerNumber: document.getElementById("timerNumber"),
+        timerState: document.getElementById("timerState"),
+        definitionText: document.getElementById("definitionText"),
+        answerForm: document.getElementById("answerForm"),
+        answerInput: document.getElementById("answerInput"),
+        submitButton: document.getElementById("submitButton"),
+        feedback: document.getElementById("feedback"),
+        labStatus: document.getElementById("labStatus"),
+        startOverlay: document.getElementById("startOverlay"),
+        startButton: document.getElementById("startButton"),
+        endOverlay: document.getElementById("endOverlay"),
+        endKicker: document.getElementById("endKicker"),
+        endTitle: document.getElementById("endTitle"),
+        endMessage: document.getElementById("endMessage"),
+        endMeter: document.getElementById("endMeter"),
+        endAccuracy: document.getElementById("endAccuracy"),
+        endCorrect: document.getElementById("endCorrect"),
+        restartButton: document.getElementById("restartButton"),
+        soundButton: document.getElementById("soundButton"),
+        soundIcon: document.getElementById("soundIcon")
+      };
+
+      let deck = [];
+      let round = 0;
+      let meter = 100;
+      let correct = 0;
+      let answered = 0;
+      let roundStarted = 0;
+      let timerId = null;
+      let locked = true;
+      let muted = false;
+      let audio = null;
+      let hum = null;
+
+      const shuffle = (items) => {
+        const copy = [...items];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      };
+
+      const normalize = (value) => value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[’'`´.,/#!$%^&*;:{}=\-_~()?]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const setMeter = (value) => {
+        meter = Math.max(0, Math.min(100, value));
+        els.meterValue.textContent = `${meter}%`;
+        els.meterFill.style.width = `${meter}%`;
+        if (meter <= 25) {
+          els.meterFill.style.background = "linear-gradient(90deg,#b33d35,#ff725e)";
+          els.meterValue.style.color = "var(--danger)";
+          els.shell.classList.add("low");
+          els.labStatus.textContent = "Critical instability";
+        } else if (meter <= 50) {
+          els.meterFill.style.background = "linear-gradient(90deg,#b56b34,#ffbf68)";
+          els.meterValue.style.color = "var(--amber)";
+          els.shell.classList.remove("low");
+          els.labStatus.textContent = "Reaction unstable";
+        } else {
+          els.meterFill.style.background = "linear-gradient(90deg,#2ba4ad,var(--cyan))";
+          els.meterValue.style.color = "var(--cyan)";
+          els.shell.classList.remove("low");
+          els.labStatus.textContent = "Reaction stable";
+        }
+      };
+
+      const setTimerVisual = (elapsed) => {
+        const remaining = Math.max(0, ROUND_SECONDS - elapsed);
+        const whole = Math.ceil(remaining);
+        els.timerNumber.textContent = String(whole).padStart(2, "0");
+        els.timerRing.style.setProperty("--progress", remaining / ROUND_SECONDS);
+        els.timerRing.setAttribute("aria-label", `${whole} seconds remaining`);
+        const color = remaining > 5 ? "var(--cyan)" : remaining > 2 ? "var(--amber)" : "var(--danger)";
+        els.timerRing.style.background = `conic-gradient(${color} calc(var(--progress) * 1turn), rgba(110,150,154,.16) 0)`;
+        els.timerNumber.style.color = color;
+        els.timerState.textContent = elapsed <= FAST_WINDOW ? "Fast-bonus window" : "Analysis window";
+      };
+
+      const updateAccuracy = () => {
+        const accuracy = answered ? Math.round((correct / answered) * 100) : 100;
+        els.accuracyText.textContent = `Accuracy ${accuracy}%`;
+      };
+
+      const initAudio = () => {
+        if (audio) return;
+        const Context = window.AudioContext || window.webkitAudioContext;
+        if (!Context) return;
+        audio = new Context();
+        const gain = audio.createGain();
+        const osc = audio.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = 54;
+        gain.gain.value = muted ? 0 : 0.012;
+        osc.connect(gain).connect(audio.destination);
+        osc.start();
+        hum = gain;
+      };
+
+      const tone = (kind) => {
+        if (muted || !audio) return;
+        const now = audio.currentTime;
+        const gain = audio.createGain();
+        const osc = audio.createOscillator();
+        osc.type = kind === "correct" ? "sine" : "triangle";
+        osc.frequency.setValueAtTime(kind === "correct" ? 420 : 150, now);
+        osc.frequency.exponentialRampToValueAtTime(kind === "correct" ? 660 : 95, now + .28);
+        gain.gain.setValueAtTime(.0001, now);
+        gain.gain.exponentialRampToValueAtTime(.045, now + .025);
+        gain.gain.exponentialRampToValueAtTime(.0001, now + .34);
+        osc.connect(gain).connect(audio.destination);
+        osc.start(now);
+        osc.stop(now + .36);
+      };
+
+      const bubbleTick = () => {
+        if (muted || !audio || locked || Math.random() > .55) return;
+        const now = audio.currentTime;
+        const gain = audio.createGain();
+        const osc = audio.createOscillator();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(210 + Math.random() * 100, now);
+        osc.frequency.exponentialRampToValueAtTime(360 + Math.random() * 140, now + .06);
+        gain.gain.setValueAtTime(.0001, now);
+        gain.gain.exponentialRampToValueAtTime(.009, now + .012);
+        gain.gain.exponentialRampToValueAtTime(.0001, now + .08);
+        osc.connect(gain).connect(audio.destination);
+        osc.start(now);
+        osc.stop(now + .09);
+      };
+      setInterval(bubbleTick, 2400);
+
+      const triggerScene = (type) => {
+        const className = type === "correct" ? "correct-pulse" : "alarm";
+        els.shell.classList.remove("correct-pulse", "alarm");
+        void els.shell.offsetWidth;
+        els.shell.classList.add(className);
+        window.setTimeout(() => els.shell.classList.remove(className), 2200);
+      };
+
+      const stopTimer = () => {
+        if (timerId) cancelAnimationFrame(timerId);
+        timerId = null;
+      };
+
+      const timerLoop = (now) => {
+        if (locked) return;
+        const elapsed = (now - roundStarted) / 1000;
+        setTimerVisual(elapsed);
+        if (elapsed >= ROUND_SECONDS) {
+          resolveAnswer(false, true, elapsed);
+          return;
+        }
+        timerId = requestAnimationFrame(timerLoop);
+      };
+
+      const beginRound = () => {
+        if (round >= deck.length) {
+          finish(false);
+          return;
+        }
+        locked = false;
+        const item = deck[round];
+        els.roundNumber.textContent = `${String(round + 1).padStart(2, "0")} / ${deck.length}`;
+        els.definitionText.textContent = item.definition;
+        els.answerInput.value = "";
+        els.answerInput.disabled = false;
+        els.submitButton.disabled = false;
+        els.feedback.className = "feedback";
+        els.feedback.textContent = "Capitalization, punctuation, apostrophes, and extra spaces are ignored.";
+        els.answerInput.focus({ preventScroll: true });
+        setTimerVisual(0);
+        roundStarted = performance.now();
+        timerId = requestAnimationFrame(timerLoop);
+      };
+
+      const resolveAnswer = (isCorrect, timedOut, elapsed) => {
+        if (locked) return;
+        locked = true;
+        stopTimer();
+        els.answerInput.disabled = true;
+        els.submitButton.disabled = true;
+        answered++;
+        const item = deck[round];
+
+        if (isCorrect) {
+          correct++;
+          const fast = elapsed <= FAST_WINDOW;
+          const restored = fast ? Math.min(10, 100 - meter) : 0;
+          if (fast) setMeter(meter + 10);
+          els.feedback.className = "feedback correct";
+          els.feedback.textContent = fast
+            ? `Correct — fast analysis. ${restored ? `Guru Meter +${restored}%.` : "Guru Meter already at 100%."}`
+            : "Correct — analysis accepted. The fast-bonus window had closed.";
+          tone("correct");
+          triggerScene("correct");
+        } else {
+          const loss = PENALTIES[item.difficulty];
+          setMeter(meter - loss);
+          els.feedback.className = "feedback wrong";
+          els.feedback.textContent = `${timedOut ? "Time expired" : "Incorrect"} — the term was “${item.term}.” Guru Meter −${loss}%.`;
+          tone("wrong");
+          triggerScene("wrong");
+        }
+
+        updateAccuracy();
+        round++;
+
+        if (meter <= 0) {
+          window.setTimeout(() => finish(true), 1850);
+        } else if (round >= deck.length) {
+          window.setTimeout(() => finish(false), 1850);
+        } else {
+          window.setTimeout(beginRound, 2100);
+        }
+      };
+
+      const ranking = () => {
+        if (meter >= 90) return ["Chemistry Guru", "Your command of the vocabulary kept the laboratory precise and stable."];
+        if (meter >= 75) return ["Laboratory Expert", "A strong result with confident command of most chemical concepts."];
+        if (meter >= 50) return ["Practicing Chemist", "The experiment survived. A few concepts merit another pass."];
+        if (meter >= 25) return ["Chemistry Apprentice", "The laboratory held together, but the reaction remained unstable."];
+        return ["Unstable Reaction", "You completed the protocol under critical laboratory conditions."];
+      };
+
+      const finish = (failed) => {
+        stopTimer();
+        locked = true;
+        const accuracy = answered ? Math.round((correct / answered) * 100) : 0;
+        const [title, message] = failed ? ["Experiment Terminated", "The Chemistry Guru Meter reached zero. Review the results and begin a new experiment."] : ranking();
+        els.endKicker.textContent = failed ? "Critical instability" : "Certification complete";
+        els.endTitle.textContent = title;
+        els.endMessage.textContent = message;
+        els.endMeter.textContent = `${meter}%`;
+        els.endAccuracy.textContent = `${accuracy}%`;
+        els.endCorrect.textContent = `${correct}/${deck.length}`;
+        els.endOverlay.classList.remove("hidden");
+      };
+
+      const startGame = () => {
+        initAudio();
+        if (audio && audio.state === "suspended") audio.resume();
+        deck = shuffle(TERMS);
+        round = 0;
+        correct = 0;
+        answered = 0;
+        setMeter(100);
+        updateAccuracy();
+        els.endOverlay.classList.add("hidden");
+        els.startOverlay.classList.add("hidden");
+        beginRound();
+      };
+
+      els.answerForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (locked) return;
+        const supplied = normalize(els.answerInput.value);
+        if (!supplied) {
+          els.feedback.className = "feedback wrong";
+          els.feedback.textContent = "Enter a term before submitting.";
+          els.answerInput.focus();
+          return;
+        }
+        const elapsed = (performance.now() - roundStarted) / 1000;
+        resolveAnswer(supplied === normalize(deck[round].term), false, elapsed);
+      });
+
+      els.startButton.addEventListener("click", startGame);
+      els.restartButton.addEventListener("click", startGame);
+      els.soundButton.addEventListener("click", () => {
+        initAudio();
+        muted = !muted;
+        els.soundIcon.textContent = muted ? "×" : "♫";
+        els.soundButton.setAttribute("aria-label", muted ? "Turn sound on" : "Mute sound");
+        els.soundButton.title = muted ? "Turn sound on" : "Mute sound";
+        if (hum) hum.gain.setTargetAtTime(muted ? 0 : .012, audio.currentTime, .04);
+      });
+    })();
+  </script>
+</body>
+</html>
