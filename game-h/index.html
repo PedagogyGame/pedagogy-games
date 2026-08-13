@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATC Tower Vocab Simulator</title>
+    <style>
+        :root {
+            --bg-color: #0a0e17;
+            --console-color: #1e222b;
+            --screen-bg: #051008;
+            --text-main: #33ff33;
+            --text-dim: #1a801a;
+            --text-amber: #ffb000;
+            --text-red: #ff3333;
+            --ui-border: #2a303c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Courier New", Courier, monospace;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Status Bar */
+        .top-strip {
+            height: 40px;
+            background: #000;
+            border-bottom: 2px solid var(--ui-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 14px;
+            color: var(--text-amber);
+            z-index: 10;
+        }
+
+        .strikes span {
+            color: #333;
+            font-size: 18px;
+            margin-left: 5px;
+        }
+        .strikes span.active { color: var(--text-red); }
+
+        /* Tower Windows (Background) */
+        .tower-window {
+            flex: 1;
+            background: linear-gradient(to bottom, #050a15 0%, #0d1b2a 70%, #050811 100%);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 10px solid #111;
+        }
+
+        /* Runway & Ambient Lights */
+        .runway {
+            position: absolute;
+            bottom: 20%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+        
+        .runway-lights {
+            position: absolute;
+            bottom: 20%;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: repeating-linear-gradient(90deg, transparent, transparent 40px, #ffb000 40px, #ffb000 45px);
+            opacity: 0.6;
+        }
+
+        /* Animated Ambient Aircraft */
+        .aircraft {
+            position: absolute;
+            bottom: 22%;
+            left: -50px;
+            width: 10px;
+            height: 10px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #fff, 0 0 20px #ff3333;
+            animation: taxi 45s linear infinite;
+        }
+
+        .aircraft-2 {
+            bottom: 30%;
+            left: 110%;
+            width: 8px;
+            height: 8px;
+            box-shadow: 0 0 8px #fff, 0 0 15px #33ff33;
+            animation: taxi-reverse 60s linear infinite 15s;
+        }
+
+        @keyframes taxi {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(120vw); }
+        }
+        @keyframes taxi-reverse {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-120vw); }
+        }
+
+        /* Main Console Desk */
+        .console {
+            height: 45vh;
+            background: linear-gradient(to bottom, #2a303c 0%, #15181e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 30px;
+            position: relative;
+            box-shadow: inset 0 20px 20px -20px #000;
+        }
+
+        /* Center Monitor UI */
+        .monitor-center {
+            width: 600px;
+            height: 350px;
+            background: #000;
+            border: 15px solid #111;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(51, 255, 51, 0.1);
+            position: relative;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* CRT Screen Effect */
+        .monitor-center::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15), rgba(0,0,0,0.15) 1px, transparent 1px, transparent 2px);
+            pointer-events: none;
+        }
+
+        .timer {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 24px;
+            color: var(--text-main);
+            font-weight: bold;
+        }
+        .timer.urgent { color: var(--text-red); animation: blink 1s infinite; }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .definition-box {
+            font-size: 18px;
+            color: var(--text-main);
+            margin-bottom: 30px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 0 0 5px var(--text-dim);
+            line-height: 1.4;
+            padding: 0 20px;
+        }
+
+        input[type="text"] {
+            background: #000;
+            border: 2px solid var(--text-dim);
+            color: var(--text-main);
+            font-size: 24px;
+            padding: 10px;
+            width: 80%;
+            text-align: center;
+            text-transform: uppercase;
+            outline: none;
+            box-shadow: inset 0 0 10px var(--text-dim);
+        }
+        input[type="text"]:focus {
+            border-color: var(--text-main);
+            box-shadow: 0 0 15px var(--text-dim), inset 0 0 10px var(--text-dim);
+        }
+
+        .feedback {
+            margin-top: 20px;
+            height: 20px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .feedback.correct { color: var(--text-main); }
+        .feedback.wrong { color: var(--text-red); }
+
+        /* Supervisor System */
+        .supervisor-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.85);
+            border: 2px solid var(--text-amber);
+            padding: 15px;
+            width: 250px;
+            color: var(--text-amber);
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 20;
+            box-shadow: 0 0 15px rgba(255, 176, 0, 0.3);
+        }
+        .supervisor-overlay.show { opacity: 1; }
+        .supervisor-overlay .title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            border-bottom: 1px solid var(--text-amber);
+            padding-bottom: 3px;
+        }
+
+        /* Game Over Screen */
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 100;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-main);
+        }
+        #game-over h1 { color: var(--text-red); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
+        .stats { margin-bottom: 30px; font-size: 18px; line-height: 1.6; text-align: center; }
+        button {
+            background: #111;
+            color: var(--text-main);
+            border: 2px solid var(--text-main);
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: var(--text-main);
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-strip">
+        <div id="clock-zulu">UTC: 00:00:00</div>
+        <div id="clock-local">LCL: 00:00:00</div>
+        <div>STATUS: ACTIVE SHIFT</div>
+        <div id="score-display">SCORE: 0</div>
+        <div id="streak-display">STREAK: 0</div>
+        <div class="strikes" id="strike-display">
+            STRIKES: 
+            <span id="strike-1">X</span>
+            <span id="strike-2">X</span>
+            <span id="strike-3">X</span>
+        </div>
+    </div>
+
+    <div class="tower-window">
+        <div class="runway"></div>
+        <div class="runway-lights"></div>
+        <div class="aircraft"></div>
+        <div class="aircraft-2"></div>
+        <div class="supervisor-overlay" id="supervisor">
+            <div class="title">SUPERVISOR:</div>
+            <div id="supervisor-text">Are we guessing today?</div>
+        </div>
+    </div>
+
+    <div class="console">
+        <div class="monitor-center">
+            <div class="timer" id="timer">15</div>
+            <div class="definition-box" id="definition">Initializing system...</div>
+            <input type="text" id="answer-input" autocomplete="off" spellcheck="false">
+            <div class="feedback" id="feedback"></div>
+        </div>
+    </div>
+
+    <div id="game-over">
+        <h1>Relieved of Position</h1>
+        <div class="stats">
+            Final Score: <span id="final-score">0</span><br>
+            Best Streak: <span id="final-streak">0</span><br>
+            Terms Cleared: <span id="final-cleared">0</span>
+        </div>
+        <button onclick="startGame()">Return to Position</button>
+    </div>
+
+    <script>
+        const vocab = [
+            { term: "ATC CLEARANCE", def: "Authorization for an aircraft to proceed under conditions specified by ATC." },
+            { term: "ATC INSTRUCTION", def: "Directive issued by ATC requiring a pilot to take a specific action." },
+            { term: "SEPARATION", def: "Spacing aircraft to keep traffic safely and orderly apart." },
+            { term: "SEPARATION MINIMA", def: "Minimum permitted spacing between aircraft." },
+            { term: "VERTICAL SEPARATION", def: "Separation achieved by assigning different altitudes or flight levels." },
+            { term: "LATERAL SEPARATION", def: "Separation achieved through different routes, courses, or geographic positions." },
+            { term: "LONGITUDINAL SEPARATION", def: "Separation of aircraft along the same or converging tracks using distance or time." },
+            { term: "WAKE TURBULENCE SEPARATION", def: "Additional spacing used to protect aircraft from another aircraft's wake vortices." },
+            { term: "TRAFFIC ADVISORY", def: "Information alerting a pilot to another aircraft that may affect the flight." },
+            { term: "SAFETY ALERT", def: "Urgent warning that an aircraft is in unsafe proximity to terrain, obstructions, or another aircraft." },
+            { term: "IFR", def: "Flight conducted under instrument-flight regulations and procedures." },
+            { term: "VFR", def: "Flight conducted under visual-flight regulations." },
+            { term: "IMC", def: "Weather below specified visual-flight criteria." },
+            { term: "VMC", def: "Weather meeting specified visual-flight criteria." },
+            { term: "CONTROLLED AIRSPACE", def: "Airspace in which ATC service is provided according to its classification." },
+            { term: "CLASS B", def: "Highly controlled airspace surrounding the busiest airports." },
+            { term: "CLASS C", def: "Controlled airspace generally surrounding airports with radar approach control." },
+            { term: "CLASS D", def: "Controlled airspace generally surrounding airports with operating control towers." },
+            { term: "FLIGHT LEVEL", def: "Altitude expressed relative to the standard pressure datum, such as FL350." },
+            { term: "TRANSITION ALTITUDE", def: "Boundary associated with changing between altitude references and flight levels." },
+            { term: "CENTER", def: "Facility primarily controlling en-route traffic. (Short name)" },
+            { term: "TRACON", def: "Terminal Radar Approach Control facility serving arriving, departing, and nearby traffic." },
+            { term: "TOWER", def: "Airport facility controlling airport and nearby traffic. (Short name)" },
+            { term: "SECTOR", def: "Defined portion of airspace assigned to a controller or controller team." },
+            { term: "LOCAL CONTROL", def: "Tower position primarily responsible for runway and airborne traffic near the airport." },
+            { term: "GROUND CONTROL", def: "Tower position primarily responsible for aircraft and vehicles moving on designated airport surfaces." },
+            { term: "CLEARANCE DELIVERY", def: "Position that issues departure clearances and related information." },
+            { term: "MOVEMENT AREA", def: "Airport surfaces where aircraft/vehicle movement is subject to ATC authorization." },
+            { term: "RUNWAY INCURSION", def: "Incorrect presence of an aircraft, vehicle, or person on a protected runway surface." },
+            { term: "HOLD SHORT", def: "Instruction requiring an aircraft or vehicle to stop before a specified point, commonly a runway." },
+            { term: "LINE UP AND WAIT", def: "Enter the runway, align for departure, and wait rather than take off." },
+            { term: "RUNWAY CROSSING CLEARANCE", def: "Explicit authorization to cross a specified runway." },
+            { term: "VECTOR", def: "Heading issued by ATC to provide navigational guidance." },
+            { term: "DIRECT", def: "Proceed straight to a specified fix, point, or navigation aid." },
+            { term: "FIX", def: "Geographical position used for navigation or ATC purposes." },
+            { term: "AIRWAY", def: "Defined corridor or route through controlled airspace." },
+            { term: "SID", def: "Standard Instrument Departure; published IFR departure procedure." },
+            { term: "STAR", def: "Standard Terminal Arrival Route; published IFR arrival procedure." },
+            { term: "APPROACH CLEARANCE", def: "ATC authorization for an aircraft to execute a specified instrument approach." },
+            { term: "MISSED APPROACH", def: "Prescribed procedure followed when an instrument approach cannot be completed to landing." },
+            { term: "HOLDING", def: "Keeping an aircraft within specified airspace while awaiting further clearance." },
+            { term: "HANDOFF", def: "Action transferring radar identification of an aircraft from one controller to another." },
+            { term: "POINT OUT", def: "Transfer of radar identification without transferring control or communications." },
+            { term: "TRANSFER OF CONTROL", def: "Passing responsibility for controlling an aircraft from one controller to another." },
+            { term: "TRANSFER OF COMMUNICATIONS", def: "Instructing an aircraft to change communications to another controller or facility." },
+            { term: "RADAR CONTACT", def: "Notification that an aircraft has been identified on the controller's surveillance display." },
+            { term: "TRANSPONDER", def: "Aircraft equipment that replies to surveillance interrogations with coded information." },
+            { term: "SQUAWK", def: "Set the transponder to a specified code or mode." },
+            { term: "IDENT", def: "Transponder function used to make an aircraft's surveillance target conspicuous to ATC." },
+            { term: "READ BACK", def: "Pilot repetition of a clearance or instruction so its accuracy can be verified." }
+        ];
+
+        const supervisorQuotes = [
+            "My coffee is getting cold, and so is your career.",
+            "Are we playing guessing games with heavy machinery today?",
+            "Do you want two planes sharing the same airspace?",
+            "Read the manual again. Right now.",
+            "I've seen better vectoring from a weather balloon.",
+            "That's a strike. Keep it up and I'll unplug your mic.",
+            "Pilots rely on us. Try to remember the basics."
+        ];
+
+        let score = 0;
+        let streak = 0;
+        let bestStreak = 0;
+        let strikes = 0;
+        let termsCleared = 0;
+        let currentTermObj = null;
+        let timeLeft = 15;
+        let timerInterval;
+
+        const timerEl = document.getElementById('timer');
+        const defEl = document.getElementById('definition');
+        const inputEl = document.getElementById('answer-input');
+        const feedbackEl = document.getElementById('feedback');
+        const scoreEl = document.getElementById('score-display');
+        const streakEl = document.getElementById('streak-display');
+        const supOverlay = document.getElementById('supervisor');
+        const supText = document.getElementById('supervisor-text');
+
+        // Clocks
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('clock-zulu').innerText = `UTC: ${now.toISOString().substr(11, 8)}`;
+            document.getElementById('clock-local').innerText = `LCL: ${now.toTimeString().substr(0, 8)}`;
+        }, 1000);
+
+        function startGame() {
+            document.getElementById('game-over').style.display = 'none';
+            score = 0; streak = 0; bestStreak = 0; strikes = 0; termsCleared = 0;
+            updateUI();
+            resetStrikes();
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            clearInterval(timerInterval);
+            inputEl.value = '';
+            inputEl.focus();
+            
+            currentTermObj = vocab[Math.floor(Math.random() * vocab.length)];
+            defEl.innerText = `"${currentTermObj.def}"`;
+            
+            timeLeft = 15;
+            timerEl.innerText = timeLeft;
+            timerEl.classList.remove('urgent');
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerEl.innerText = timeLeft;
+                if (timeLeft <= 5) timerEl.classList.add('urgent');
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    handleWrong("TIMEOUT");
+                }
+            }, 1000);
+        }
+
+        inputEl.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const answer = inputEl.value.trim().toUpperCase();
+                if (answer === '') return;
+                
+                // Allow exact match, or match without spaces (e.g., HOLDSHORT vs HOLD SHORT)
+                if (answer === currentTermObj.term || answer === currentTermObj.term.replace(/\s+/g, '')) {
+                    handleCorrect();
+                } else {
+                    handleWrong(answer);
+                }
+            }
+        });
+
+        function handleCorrect() {
+            clearInterval(timerInterval);
+            score += (100 + (timeLeft * 10)) * (1 + (streak * 0.1));
+            streak++;
+            termsCleared++;
+            if (streak > bestStreak) bestStreak = streak;
+            
+            feedbackEl.innerText = "CORRECT";
+            feedbackEl.className = "feedback correct";
+            updateUI();
+            
+            setTimeout(() => {
+                feedbackEl.innerText = "";
+                nextQuestion();
+            }, 800);
+        }
+
+        function handleWrong(attempt) {
+            clearInterval(timerInterval);
+            streak = 0;
+            strikes++;
+            
+            feedbackEl.innerText = `WRONG. CORRECT TERM: ${currentTermObj.term}`;
+            feedbackEl.className = "feedback wrong";
+            document.getElementById(`strike-${strikes}`).classList.add('active');
+            updateUI();
+
+            if (strikes >= 3) {
+                setTimeout(triggerGameOver, 1500);
+            } else {
+                showSupervisor();
+                setTimeout(() => {
+                    feedbackEl.innerText = "";
+                    nextQuestion();
+                }, 2500);
+            }
+        }
+
+        function showSupervisor() {
+            supText.innerText = supervisorQuotes[Math.floor(Math.random() * supervisorQuotes.length)];
+            supOverlay.classList.add('show');
+            setTimeout(() => supOverlay.classList.remove('show'), 3000);
+        }
+
+        function triggerGameOver() {
+            document.getElementById('game-over').style.display = 'flex';
+            document.getElementById('final-score').innerText = Math.floor(score);
+            document.getElementById('final-streak').innerText = bestStreak;
+            document.getElementById('final-cleared').innerText = termsCleared;
+        }
+
+        function updateUI() {
+            scoreEl.innerText = `SCORE: ${Math.floor(score)}`;
+            streakEl.innerText = `STREAK: ${streak}`;
+        }
+
+        function resetStrikes() {
+            for(let i=1; i<=3; i++) {
+                document.getElementById(`strike-${i}`).classList.remove('active');
+            }
+        }
+
+        // Initialize
+        startGame();
+
+    </script>
+</body>
+</html>
