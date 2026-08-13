@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#061217">
+  <title>Cell Biology Core Lab</title>
+  <style>
+    :root{--ink:#eaffff;--muted:#94bec4;--cyan:#4ee6ee;--cyan2:#18aeba;--green:#79efb3;--amber:#ffd06b;--red:#ff6b7e;--glass:rgba(7,24,29,.88);--line:rgba(85,224,232,.2);--plant:#6ee7a2;--animal:#ed89d7}
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:#02070a;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{overflow-x:hidden;background:
+      radial-gradient(circle at 18% 18%,rgba(34,152,161,.14),transparent 28%),
+      radial-gradient(circle at 82% 72%,rgba(68,105,154,.11),transparent 30%),#02070a}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(63,203,211,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(63,203,211,.035) 1px,transparent 1px);background-size:44px 44px;mask-image:linear-gradient(to bottom,black,transparent 92%)}
+    button,input{font:inherit}
+    button{color:inherit}
+    .shell{min-height:100vh;padding:12px;display:grid;place-items:center}
+    .board{position:relative;width:min(1800px,100%);height:calc(100vh - 24px);min-height:720px;max-height:1120px;display:grid;grid-template-rows:auto minmax(290px,1fr) auto;background:linear-gradient(145deg,rgba(10,31,37,.96),rgba(3,14,18,.98));border:1px solid rgba(119,238,243,.44);border-radius:30px;overflow:hidden;box-shadow:0 0 0 6px #071316,0 0 0 8px rgba(77,220,228,.2),0 0 60px rgba(31,191,202,.18),inset 0 0 45px rgba(51,207,216,.07)}
+    .board:after{content:"";position:absolute;inset:7px;border:1px solid rgba(134,246,250,.1);border-radius:23px;pointer-events:none}
+    .topbar{position:relative;z-index:5;display:flex;align-items:center;gap:18px;padding:15px 24px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(8,29,34,.98),rgba(8,23,29,.88));min-height:72px}
+    .mark{display:flex;align-items:center;gap:13px;min-width:310px}
+    .mark-glyph{width:38px;height:38px;border:1px solid var(--cyan);border-radius:50%;display:grid;place-items:center;box-shadow:0 0 18px rgba(78,230,238,.23);font-weight:900;color:var(--cyan)}
+    .eyebrow{font:700 11px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.24em;color:var(--cyan);text-transform:uppercase}
+    h1{font-size:clamp(20px,2vw,30px);line-height:1;margin:5px 0 0;letter-spacing:.02em}
+    .toolbar{margin-left:auto;display:flex;gap:10px;align-items:center}
+    .tool{min-height:43px;padding:0 17px;border:1px solid rgba(88,222,230,.3);border-radius:10px;background:rgba(10,38,44,.7);font-weight:800;font-size:14px;letter-spacing:.04em;cursor:pointer;transition:.2s}
+    .tool:hover,.tool:focus-visible{outline:none;border-color:var(--cyan);background:rgba(24,79,87,.8);box-shadow:0 0 16px rgba(78,230,238,.15)}
+    .tool[aria-pressed="true"]{border-color:var(--amber);color:var(--amber);background:rgba(111,79,18,.26)}
+    .toolbar-note{font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#72a7ad;letter-spacing:.12em;text-transform:uppercase}
+    .atlas{position:relative;min-height:0;padding:8px 20px 0;overflow:hidden}
+    .atlas-head{position:absolute;z-index:3;top:16px;left:38px;right:38px;display:flex;justify-content:space-between;pointer-events:none}
+    .cell-title{display:flex;align-items:center;gap:10px;font-weight:900;font-size:clamp(17px,1.6vw,25px);letter-spacing:.12em;text-transform:uppercase;text-shadow:0 2px 12px #000}
+    .cell-title:before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;box-shadow:0 0 16px currentColor}
+    .plant-title{color:var(--plant)}.animal-title{color:var(--animal)}
+    .cell-map{width:100%;height:100%;min-height:300px;display:block;overflow:visible}
+    .cell-map .org{cursor:pointer;transition:opacity .28s,filter .2s,transform .2s;transform-box:fill-box;transform-origin:center}
+    .cell-map .org:hover,.cell-map .org:focus,.cell-map .org.active{outline:none;filter:url(#cyanGlow);transform:scale(1.035)}
+    .cell-map .org.unique:hover,.cell-map .org.unique:focus,.cell-map .org.unique.active{filter:url(#goldGlow)}
+    .cell-map text{pointer-events:none;user-select:none}
+    .svg-label{fill:#f2ffff;font-size:22px;font-weight:850;letter-spacing:.03em;paint-order:stroke;stroke:#061216;stroke-width:6px;stroke-linejoin:round}
+    .svg-sub{fill:#b4d5d8;font-size:15px;font-weight:750;letter-spacing:.05em;paint-order:stroke;stroke:#061216;stroke-width:5px}
+    .compare .org.shared{opacity:.13;filter:saturate(.35)}
+    .compare .org.unique{opacity:1;filter:url(#goldGlow)}
+    .compare .svg-label.shared-label{opacity:.15}
+    .info-panel{position:absolute;z-index:4;left:50%;bottom:8px;translate:-50% 0;width:min(680px,52%);min-height:86px;padding:14px 22px 14px 72px;border:1px solid rgba(111,227,234,.38);border-radius:14px;background:rgba(3,18,23,.91);box-shadow:0 14px 30px rgba(0,0,0,.32),inset 0 0 24px rgba(52,186,197,.07);backdrop-filter:blur(12px)}
+    .info-panel:before{content:"i";position:absolute;left:20px;top:18px;width:36px;height:36px;border:1px solid var(--cyan);border-radius:50%;display:grid;place-items:center;color:var(--cyan);font-family:Georgia,serif;font-weight:900;font-size:22px}
+    .info-name{font-size:clamp(17px,1.5vw,23px);font-weight:900;color:var(--cyan);letter-spacing:.04em;margin-bottom:4px}
+    .info-function{font-size:clamp(13px,1.08vw,17px);font-weight:620;line-height:1.35;color:#d6eef0}
+    .quiz{position:relative;z-index:6;border-top:1px solid rgba(82,224,231,.25);background:linear-gradient(180deg,rgba(4,17,22,.93),rgba(3,12,16,.99));display:grid;grid-template-columns:210px minmax(0,1fr) 210px;gap:20px;padding:18px 24px 20px;min-height:238px}
+    .metric{border:1px solid rgba(89,214,222,.22);border-radius:15px;background:rgba(10,35,40,.55);padding:16px;display:flex;flex-direction:column;justify-content:center}
+    .metric-label{font:800 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.17em;text-transform:uppercase;color:#84b4b9}
+    .core-number{font-size:clamp(42px,4vw,62px);font-weight:900;line-height:1;margin:9px 0 10px;font-variant-numeric:tabular-nums;color:var(--green);text-shadow:0 0 20px color-mix(in srgb,var(--core-color,var(--green)) 40%,transparent)}
+    .meter{height:10px;border-radius:999px;background:#071317;overflow:hidden;border:1px solid rgba(117,236,241,.13)}
+    .meter-fill{height:100%;width:100%;background:linear-gradient(90deg,#34bfa8,var(--green));border-radius:inherit;transition:width .45s,background .3s;box-shadow:0 0 12px currentColor}
+    .streak{margin-top:12px;color:#a8ced2;font-size:14px;font-weight:700}
+    .prompt-wrap{min-width:0;display:flex;flex-direction:column;justify-content:center}
+    .prompt-meta{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:8px}
+    .round{font:800 12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.14em;color:#9cc7cb;text-transform:uppercase}
+    .difficulty{font:900 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;padding:5px 8px;border-radius:6px;border:1px solid currentColor;color:var(--amber)}
+    .definition{font-size:clamp(18px,1.55vw,27px);line-height:1.25;font-weight:760;letter-spacing:-.01em;margin:0 0 14px;color:#efffff}
+    .answer-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
+    #answer{width:100%;min-height:54px;border:1px solid rgba(98,225,232,.38);border-radius:10px;background:#071c21;color:#f2ffff;padding:0 17px;font-size:clamp(20px,1.7vw,28px);font-weight:750;outline:none;caret-color:var(--cyan)}
+    #answer:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(78,230,238,.1),0 0 18px rgba(78,230,238,.1)}
+    #answer::placeholder{color:#557d82}
+    .submit{min-width:140px;border:1px solid var(--cyan);border-radius:10px;background:linear-gradient(180deg,rgba(35,137,145,.82),rgba(15,80,87,.9));font-weight:900;font-size:17px;letter-spacing:.05em;cursor:pointer}
+    .submit:hover,.submit:focus-visible{outline:none;filter:brightness(1.16);box-shadow:0 0 18px rgba(78,230,238,.22)}
+    .feedback{min-height:22px;margin-top:7px;font-size:14px;font-weight:800;color:#8db6bb}
+    .feedback.good{color:var(--green)}.feedback.bad{color:var(--red)}
+    .timer-box{align-items:center;text-align:center}
+    .timer{font-size:clamp(46px,4.5vw,70px);font-weight:900;line-height:1;margin:9px 0 7px;color:var(--green);font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(121,239,179,.25)}
+    .timer.warn{color:var(--amber)}.timer.danger{color:var(--red)}
+    .timebar{width:100%;height:7px;border-radius:99px;background:#101d20;overflow:hidden}
+    .timefill{height:100%;width:100%;background:currentColor;transition:width .1s linear;color:var(--green)}
+    .timefill.warn{color:var(--amber)}.timefill.danger{color:var(--red)}
+    .legend{margin-top:11px;font-size:12px;line-height:1.45;color:#88afb4}
+    .overlay{position:absolute;z-index:20;inset:0;display:grid;place-items:center;padding:30px;background:rgba(1,8,11,.76);backdrop-filter:blur(9px);transition:.35s}
+    .overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+    .modal{width:min(720px,94%);border:1px solid rgba(93,229,236,.48);border-radius:22px;background:linear-gradient(145deg,rgba(9,35,41,.98),rgba(4,18,23,.99));padding:clamp(28px,4vw,52px);box-shadow:0 0 0 5px rgba(4,18,22,.8),0 0 55px rgba(47,204,214,.18)}
+    .modal-kicker{font:800 12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.22em;text-transform:uppercase;color:var(--cyan)}
+    .modal h2{font-size:clamp(34px,5vw,61px);line-height:1.02;letter-spacing:-.03em;margin:12px 0 18px}
+    .modal p{font-size:clamp(17px,1.7vw,22px);line-height:1.5;color:#c3e0e3;margin:0 0 20px}
+    .rules{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:22px 0}
+    .rule{border:1px solid rgba(95,217,224,.2);border-radius:12px;padding:14px;background:rgba(6,25,30,.65);font-size:14px;font-weight:750;color:#b9d9dc}
+    .rule b{display:block;font-size:23px;color:#f0ffff;margin-bottom:3px}
+    .start{width:100%;min-height:61px;border:1px solid var(--cyan);border-radius:12px;background:linear-gradient(180deg,#168e98,#0c5860);font-size:21px;font-weight:900;letter-spacing:.06em;cursor:pointer;box-shadow:0 0 24px rgba(52,211,220,.18)}
+    .start:hover,.start:focus-visible{filter:brightness(1.15);outline:3px solid rgba(78,230,238,.17)}
+    .tiny{font-size:13px!important;color:#759fa4!important;margin:13px 0 0!important;text-align:center}
+    .flash-good{animation:flashgood .45s}.flash-bad{animation:flashbad .55s}
+    @keyframes flashgood{50%{box-shadow:inset 0 0 80px rgba(56,226,162,.19),0 0 60px rgba(31,191,202,.18)}}
+    @keyframes flashbad{35%{box-shadow:inset 0 0 90px rgba(255,55,87,.22),0 0 60px rgba(31,191,202,.18)}}
+    @media (max-width:1050px){.board{height:auto;min-height:100vh;border-radius:0}.shell{padding:0}.quiz{grid-template-columns:150px 1fr 150px}.atlas{min-height:390px}.toolbar-note{display:none}.mark{min-width:0}.info-panel{width:65%}}
+    @media (max-width:760px){body{overflow:auto}.topbar{padding:13px 15px;flex-wrap:wrap}.mark{width:100%}.toolbar{margin:0;width:100%}.tool{flex:1}.atlas{min-height:390px;padding:2px}.atlas-head{top:12px;left:20px;right:20px}.cell-title{font-size:14px}.info-panel{width:92%;bottom:3px;padding:11px 14px 11px 55px;min-height:74px}.info-panel:before{left:13px;top:14px;width:30px;height:30px}.info-function{font-size:12px}.quiz{grid-template-columns:1fr;gap:10px;padding:14px}.metric{display:grid;grid-template-columns:1fr 1fr;align-items:center;padding:11px 15px}.metric-label,.streak{margin:0}.core-number{font-size:39px;margin:0;text-align:right}.meter{grid-column:1/-1}.timer-box{display:grid;grid-template-columns:1fr 1fr}.timer{font-size:40px;margin:0;text-align:right}.timebar,.legend{grid-column:1/-1}.rules{grid-template-columns:1fr}.svg-label{font-size:25px}.answer-row{grid-template-columns:1fr}.submit{min-height:48px}}
+    @media (prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="board" id="board" aria-label="Cell Biology Core Lab game">
+      <header class="topbar">
+        <div class="mark"><div class="mark-glyph" aria-hidden="true">C</div><div><div class="eyebrow">Biology // Core Lab</div><h1>Cell Atlas Challenge</h1></div></div>
+        <div class="toolbar"><span class="toolbar-note">Select a structure to inspect</span><button class="tool" id="compareBtn" aria-pressed="false">Compare cells</button><button class="tool" id="restartBtn">Restart run</button></div>
+      </header>
+
+      <section class="atlas" id="atlas" aria-label="Interactive comparison of plant and animal cells">
+        <div class="atlas-head"><div class="cell-title plant-title">Plant cell</div><div class="cell-title animal-title">Animal cell</div></div>
+        <svg class="cell-map" viewBox="0 0 1520 500" role="img" aria-labelledby="cellMapTitle cellMapDesc">
+          <title id="cellMapTitle">Plant and animal cell comparison</title>
+          <desc id="cellMapDesc">Interactive diagrams. Select an organelle to read its function. Compare mode emphasizes unique structures.</desc>
+          <defs>
+            <filter id="cyanGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="5" result="b"/><feColorMatrix in="b" values="0 0 0 0 0.2 0 0 0 0 0.95 0 0 0 0 1 0 0 0 1 0" result="c"/><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="goldGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="b"/><feColorMatrix in="b" values="0 0 0 0 1 0 0 0 0 0.74 0 0 0 0 0.2 0 0 0 1 0" result="c"/><feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <pattern id="cytoplasmDots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.2" fill="#6ad6d4" opacity=".18"/></pattern>
+          </defs>
+
+          <g aria-label="Plant cell">
+            <g class="org unique" data-org="cellWall" tabindex="0" role="button" aria-label="Cell wall"><rect x="35" y="61" width="685" height="365" rx="72" fill="#173e2e" stroke="#83efa9" stroke-width="15"/><rect x="44" y="70" width="667" height="347" rx="65" fill="none" stroke="#d6ffc9" stroke-opacity=".28" stroke-width="3"/></g>
+            <g class="org shared" data-org="membrane" tabindex="0" role="button" aria-label="Plasma membrane"><rect x="55" y="81" width="645" height="325" rx="57" fill="#0b2930" stroke="#4ee6ee" stroke-width="5"/><rect x="62" y="88" width="631" height="311" rx="51" fill="url(#cytoplasmDots)" stroke="#247a81" stroke-width="2"/></g>
+            <g class="org unique" data-org="vacuole" tabindex="0" role="button" aria-label="Central vacuole"><path d="M337 120 C455 87 619 119 641 207 C665 305 590 370 451 367 C347 365 301 314 315 229 C321 188 306 146 337 120Z" fill="#174b5d" stroke="#71d6e6" stroke-width="5" opacity=".86"/><path d="M365 141 C457 119 591 140 608 213" fill="none" stroke="#b8f6ff" stroke-opacity=".28" stroke-width="4"/></g>
+            <g class="org shared" data-org="nucleus" tabindex="0" role="button" aria-label="Nucleus"><circle cx="210" cy="241" r="75" fill="#523f82" stroke="#b6a2ff" stroke-width="5"/><circle cx="210" cy="241" r="65" fill="#342d5c" stroke="#8576bd" stroke-width="2"/><circle cx="224" cy="232" r="23" fill="#d57bd9" stroke="#ffc4ff" stroke-width="3" data-org="nucleolus"/></g>
+            <g class="org shared" data-org="roughER" tabindex="0" role="button" aria-label="Rough endoplasmic reticulum"><path d="M115 145 C145 122 250 119 285 152 M108 159 C153 141 251 143 285 169 M112 176 C164 160 249 164 278 186" fill="none" stroke="#61b4df" stroke-width="7" stroke-linecap="round"/><g fill="#e3fbff"><circle cx="139" cy="139" r="3"/><circle cx="174" cy="130" r="3"/><circle cx="217" cy="132" r="3"/><circle cx="256" cy="146" r="3"/><circle cx="150" cy="160" r="3"/><circle cx="240" cy="166" r="3"/></g></g>
+            <g class="org shared" data-org="smoothER" tabindex="0" role="button" aria-label="Smooth endoplasmic reticulum"><path d="M116 319 C144 287 183 308 207 288 C235 265 262 292 285 274 M123 338 C153 309 185 339 218 310 C245 287 272 314 292 298" fill="none" stroke="#69a8ca" stroke-width="8" stroke-linecap="round"/></g>
+            <g class="org shared" data-org="golgi" tabindex="0" role="button" aria-label="Golgi apparatus"><path d="M257 352 Q302 326 344 351 M250 365 Q304 337 352 364 M252 379 Q307 351 347 378 M269 391 Q309 372 338 391" fill="none" stroke="#f2aa66" stroke-width="8" stroke-linecap="round"/><circle cx="360" cy="350" r="6" fill="#ffc786"/><circle cx="354" cy="389" r="5" fill="#ffc786"/></g>
+            <g class="org unique" data-org="chloroplast" tabindex="0" role="button" aria-label="Chloroplast"><g transform="translate(492 105) rotate(8)"><ellipse rx="48" ry="25" fill="#278b52" stroke="#7ff4a3" stroke-width="4"/><path d="M-25-12v24M-12-15v30M3-16v32M18-14v28M31-9v18" stroke="#b9ff80" stroke-width="4"/></g><g transform="translate(594 339) rotate(-13)"><ellipse rx="48" ry="25" fill="#278b52" stroke="#7ff4a3" stroke-width="4"/><path d="M-25-12v24M-12-15v30M3-16v32M18-14v28M31-9v18" stroke="#b9ff80" stroke-width="4"/></g><g transform="translate(646 155) rotate(68)"><ellipse rx="40" ry="21" fill="#278b52" stroke="#7ff4a3" stroke-width="4"/><path d="M-21-10v20M-8-12v24M5-12v24M18-9v18" stroke="#b9ff80" stroke-width="3"/></g></g>
+            <g class="org shared" data-org="mitochondrion" tabindex="0" role="button" aria-label="Mitochondrion"><g transform="translate(102 257) rotate(-24)"><ellipse rx="41" ry="23" fill="#b8626b" stroke="#ff9f9f" stroke-width="4"/><path d="M-27 1c9-17 19 18 29 0s19 17 30-2" fill="none" stroke="#ffd0bd" stroke-width="3"/></g><g transform="translate(447 388) rotate(7)"><ellipse rx="43" ry="23" fill="#b8626b" stroke="#ff9f9f" stroke-width="4"/><path d="M-28 1c9-17 19 18 29 0s19 17 30-2" fill="none" stroke="#ffd0bd" stroke-width="3"/></g></g>
+            <g class="org shared" data-org="ribosome" tabindex="0" role="button" aria-label="Ribosomes" fill="#d9ffff"><circle cx="90" cy="121" r="4"/><circle cx="112" cy="202" r="4"/><circle cx="275" cy="104" r="4"/><circle cx="300" cy="222" r="4"/><circle cx="292" cy="321" r="4"/><circle cx="529" cy="388" r="4"/><circle cx="650" cy="285" r="4"/></g>
+            <text x="61" y="53" class="svg-label">CELL WALL</text><text x="343" y="254" class="svg-label">CENTRAL VACUOLE</text><text x="158" y="247" class="svg-label shared-label">NUCLEUS</text><text x="464" y="93" class="svg-label">CHLOROPLAST</text>
+          </g>
+
+          <g aria-label="Animal cell">
+            <g class="org shared" data-org="membrane" tabindex="0" role="button" aria-label="Plasma membrane"><path d="M825 253 C825 134 941 76 1123 75 C1303 74 1457 141 1466 253 C1475 369 1324 423 1124 420 C928 418 825 358 825 253Z" fill="#30243d" stroke="#ef91d8" stroke-width="7"/><path d="M838 252 C838 144 948 90 1122 89 C1292 88 1441 149 1452 254 C1461 355 1314 409 1125 406 C938 404 838 349 838 252Z" fill="url(#cytoplasmDots)" stroke="#874f87" stroke-width="2"/></g>
+            <g class="org shared" data-org="nucleus" tabindex="0" role="button" aria-label="Nucleus"><circle cx="1114" cy="244" r="88" fill="#543b78" stroke="#bd9aff" stroke-width="6"/><circle cx="1114" cy="244" r="75" fill="#342b52" stroke="#8169ad" stroke-width="2"/><circle cx="1130" cy="231" r="27" fill="#d06ecb" stroke="#ffc6fa" stroke-width="4" data-org="nucleolus"/></g>
+            <g class="org shared" data-org="roughER" tabindex="0" role="button" aria-label="Rough endoplasmic reticulum"><path d="M955 137 C1011 112 1090 125 1111 151 M939 153 C1002 129 1087 142 1114 169 M932 172 C991 151 1070 161 1096 187" fill="none" stroke="#60aedb" stroke-width="9" stroke-linecap="round"/><g fill="#e2fbff"><circle cx="975" cy="128" r="3"/><circle cx="1017" cy="122" r="3"/><circle cx="1057" cy="129" r="3"/><circle cx="961" cy="151" r="3"/><circle cx="1034" cy="146" r="3"/></g></g>
+            <g class="org shared" data-org="smoothER" tabindex="0" role="button" aria-label="Smooth endoplasmic reticulum"><path d="M946 319 C980 280 1020 317 1054 285 C1084 257 1110 287 1138 272 M957 340 C991 307 1027 338 1061 307 C1090 282 1128 317 1153 291" fill="none" stroke="#6b9ec4" stroke-width="9" stroke-linecap="round"/></g>
+            <g class="org shared" data-org="golgi" tabindex="0" role="button" aria-label="Golgi apparatus"><path d="M1216 283 Q1270 248 1322 280 M1208 299 Q1270 263 1330 296 M1210 316 Q1270 280 1327 313 M1225 332 Q1271 302 1314 330" fill="none" stroke="#f3a66a" stroke-width="10" stroke-linecap="round"/><circle cx="1345" cy="281" r="8" fill="#ffcc8b"/><circle cx="1340" cy="331" r="6" fill="#ffcc8b"/></g>
+            <g class="org shared" data-org="mitochondrion" tabindex="0" role="button" aria-label="Mitochondrion"><g transform="translate(1288 145) rotate(14)"><ellipse rx="55" ry="28" fill="#b55e70" stroke="#ff9fa9" stroke-width="5"/><path d="M-37 1c12-20 25 21 38 0s25 20 39-2" fill="none" stroke="#ffd2bf" stroke-width="4"/></g><g transform="translate(909 274) rotate(-42)"><ellipse rx="49" ry="26" fill="#b55e70" stroke="#ff9fa9" stroke-width="5"/><path d="M-32 1c10-18 22 19 34 0s22 18 34-2" fill="none" stroke="#ffd2bf" stroke-width="4"/></g></g>
+            <g class="org unique" data-org="lysosome" tabindex="0" role="button" aria-label="Lysosome"><circle cx="1378" cy="232" r="29" fill="#bf5c9f" stroke="#ffb4e9" stroke-width="4"/><circle cx="1369" cy="223" r="7" fill="#ffd2f1" opacity=".75"/><circle cx="1252" cy="370" r="25" fill="#bf5c9f" stroke="#ffb4e9" stroke-width="4"/><circle cx="1244" cy="363" r="6" fill="#ffd2f1" opacity=".75"/></g>
+            <g class="org unique" data-org="centriole" tabindex="0" role="button" aria-label="Centrioles" transform="translate(923 350)"><g transform="rotate(-22)"><rect x="-8" y="-39" width="22" height="78" rx="10" fill="#d9a63e" stroke="#ffe08c" stroke-width="4"/><path d="M-7-20h20M-7 0h20M-7 20h20" stroke="#795719" stroke-width="3"/></g><g transform="rotate(66) translate(4 -17)"><rect x="-8" y="-39" width="22" height="78" rx="10" fill="#d9a63e" stroke="#ffe08c" stroke-width="4"/><path d="M-7-20h20M-7 0h20M-7 20h20" stroke="#795719" stroke-width="3"/></g></g>
+            <g class="org shared" data-org="ribosome" tabindex="0" role="button" aria-label="Ribosomes" fill="#dbffff"><circle cx="886" cy="186" r="4"/><circle cx="924" cy="112" r="4"/><circle cx="1190" cy="113" r="4"/><circle cx="1381" cy="306" r="4"/><circle cx="1183" cy="364" r="4"/><circle cx="1012" cy="379" r="4"/></g>
+            <text x="1045" y="252" class="svg-label shared-label">NUCLEUS</text><text x="1333" y="276" class="svg-label">LYSOSOME</text><text x="862" y="417" class="svg-label">CENTRIOLES</text><text x="1206" y="111" class="svg-label shared-label">MITOCHONDRION</text>
+          </g>
+        </svg>
+        <aside class="info-panel" aria-live="polite"><div class="info-name" id="infoName">Interactive cell atlas</div><div class="info-function" id="infoFunction">Hover, click, or tab to a structure. Use Compare cells to isolate features unique to plant and animal cells.</div></aside>
+      </section>
+
+      <section class="quiz" aria-label="Vocabulary challenge">
+        <div class="metric"><div class="metric-label">Core level</div><div class="core-number" id="coreNumber">100%</div><div class="meter"><div class="meter-fill" id="coreFill"></div></div><div class="streak" id="streak">Streak · 0</div></div>
+        <div class="prompt-wrap"><div class="prompt-meta"><span class="round" id="round">154 terms · ready</span><span class="difficulty" id="difficulty">Core bank</span></div><p class="definition" id="definition">Press “Begin challenge” to start the complete cell-biology vocabulary run.</p><form class="answer-row" id="answerForm" autocomplete="off"><input id="answer" type="text" placeholder="Type the matching term" aria-label="Type the matching cell biology term" disabled spellcheck="false"><button class="submit" id="submitBtn" type="submit" disabled>Submit</button></form><div class="feedback" id="feedback" aria-live="assertive">Answer matching ignores capitalization, punctuation, and extra spaces.</div></div>
+        <div class="metric timer-box"><div class="metric-label">Time remaining</div><div class="timer" id="timer">15.0</div><div class="timebar"><div class="timefill" id="timeFill"></div></div><div class="legend">Fast answer ≤ 10 sec<br><b>+10 core</b></div></div>
+      </section>
+
+      <div class="overlay" id="intro"><div class="modal"><div class="modal-kicker">154-term mastery run</div><h2>How strong is your cellular core?</h2><p>Read the definition and type the precise term before the 15-second scan closes. The cell atlas stays active throughout the challenge.</p><div class="rules"><div class="rule"><b>+10</b>Correct in the first 10 seconds</div><div class="rule"><b>−30 / −25</b>Foundational or intermediate miss</div><div class="rule"><b>−20</b>Advanced or obscure miss</div></div><button class="start" id="startBtn">Begin challenge</button><p class="tiny">One attempt per term · Core level is capped at 100%</p></div></div>
+      <div class="overlay hidden" id="end"><div class="modal"><div class="modal-kicker" id="endKicker">Run complete</div><h2 id="endTitle">Cellular core assessed.</h2><p id="endText"></p><button class="start" id="playAgain">Run the bank again</button></div></div>
+    </section>
+  </main>
+
+  <script>
+    const ORG={
+      cellWall:["Cell wall","A rigid cellulose-rich layer outside the plant plasma membrane. It supports the cell and resists internal water pressure."],
+      membrane:["Plasma membrane","A selectively permeable phospholipid boundary that regulates exchange and cellular communication."],
+      vacuole:["Central vacuole","A large plant-cell compartment that stores solutes and water, maintains turgor pressure, and helps regulate internal chemistry."],
+      nucleus:["Nucleus","The double-membrane compartment that houses most of the cell’s DNA and coordinates gene expression."],
+      nucleolus:["Nucleolus","A dense nuclear region where ribosomal RNA is transcribed and ribosome subunits begin assembly."],
+      roughER:["Rough endoplasmic reticulum","A ribosome-studded membrane network that makes and folds proteins destined for secretion, membranes, or organelles."],
+      smoothER:["Smooth endoplasmic reticulum","A ribosome-free membrane network involved in lipid synthesis, detoxification, and calcium storage."],
+      golgi:["Golgi apparatus","Stacked membrane sacs that modify, sort, and package proteins and lipids for delivery."],
+      chloroplast:["Chloroplast","A plant and algal organelle that converts light energy into chemical energy through photosynthesis."],
+      mitochondrion:["Mitochondrion","The organelle that generates most cellular ATP through oxidative metabolism and chemiosmosis."],
+      ribosome:["Ribosome","An RNA–protein machine that translates messenger RNA into a polypeptide."],
+      lysosome:["Lysosome","An acidic, enzyme-filled vesicle that digests macromolecules and recycles worn cellular components."],
+      centriole:["Centrioles","Paired cylindrical microtubule structures in the animal-cell centrosome that help organize microtubules."]
+    };
+
+    const RAW=String.raw`
+Cell|The smallest structural unit of an organism capable of independent function; a bounded, self-maintaining system of living matter.
+Cell theory|The principle that all living things are composed of cells, that the cell is the basic unit of life, and that cells arise only from pre-existing cells.
+Prokaryote|An organism whose cell lacks a membrane-bound nucleus and membrane-bound organelles.
+Eukaryote|An organism whose cells possess a nucleus and other membrane-bound organelles.
+Unicellular|Consisting of a single cell.
+Multicellular|Consisting of many cells, typically differentiated and organized into tissues.
+Somatic cell|Any cell of the body other than a reproductive cell.
+Stem cell|An undifferentiated cell capable of both self-renewal and giving rise to specialized cell types.
+Tissue|An organized aggregate of similar cells performing a common function.
+Differentiation|The process by which a cell acquires a specialized structure and function through changes in gene expression.
+Compartmentalization|The division of a cell's interior into distinct regions, allowing incompatible processes to proceed simultaneously.
+Surface-area-to-volume ratio|The proportion of a cell's exchange surface to its internal bulk; a constraint on cell size and transport efficiency.
+Organelle|A specialized structure within a cell performing a distinct function.
+Plasma membrane|The selectively permeable lipid boundary enclosing the cell and governing exchange with its surroundings.
+Phospholipid bilayer|A double sheet of phospholipids, tails inward and heads outward, forming the structural basis of biological membranes.
+Fluid mosaic model|The conception of the membrane as a fluid lipid sheet within which proteins are embedded and free to move laterally.
+Selective permeability|The property of allowing certain substances to cross a membrane more readily than others.
+Cell wall|A rigid outer layer external to the plasma membrane in plants, fungi, and many prokaryotes, giving shape and resisting pressure.
+Extracellular matrix|The network of secreted proteins and polysaccharides occupying the space between animal cells.
+Cytoplasm|The whole of a cell's contents within the plasma membrane, excluding the nucleus.
+Cytosol|The aqueous fluid of the cytoplasm, exclusive of organelles.
+Nucleus|The membrane-enclosed compartment housing most of a eukaryotic cell's DNA.
+Nuclear envelope|The double membrane, perforated by pores, that encloses the nucleus.
+Nucleolus|A dense region within the nucleus where ribosomal RNA is transcribed and ribosome subunits assembled.
+Ribosome|The RNA-and-protein machine that synthesizes polypeptides by translating messenger RNA.
+Endoplasmic reticulum|An interconnected membrane network continuous with the nuclear envelope, engaged in protein and lipid synthesis.
+Rough ER|Endoplasmic reticulum studded with ribosomes, where membrane-bound and secreted proteins are made.
+Smooth ER|Endoplasmic reticulum without ribosomes, engaged in lipid synthesis, detoxification, and calcium storage.
+Golgi apparatus|A stack of flattened membrane sacs that modifies, sorts, and dispatches proteins and lipids.
+Endomembrane system|The functionally connected set of membranes — nuclear envelope, ER, Golgi, vesicles, lysosomes, plasma membrane — that makes and routes cellular materials.
+Vesicle|A small membrane-bounded sac used to transport or store material within the cell.
+Lysosome|An acidic vesicle containing digestive enzymes, which breaks down macromolecules and worn organelles.
+Peroxisome|An organelle housing oxidative enzymes, notably those that break down fatty acids and neutralize hydrogen peroxide.
+Vacuole|A large fluid-filled sac used for storage, waste, or the maintenance of turgor pressure in plant cells.
+Mitochondrion|The organelle in which most of a eukaryotic cell's ATP is generated by oxidative metabolism.
+Chloroplast|The plastid in plant and algal cells within which photosynthesis occurs.
+Protein sorting|The routing of newly synthesized proteins to their proper cellular destinations.
+Cytoskeleton|The dynamic network of protein filaments giving a cell its shape, internal organization, and capacity for movement.
+Microtubule|A hollow filament of tubulin, functioning in transport, chromosome movement, and the core of cilia and flagella.
+Microfilament (actin filament)|A thin filament of actin, involved in cell shape, contraction, migration, and cytokinesis.
+Intermediate filament|A rope-like filament of varied protein composition providing mechanical strength.
+Centrosome|The principal microtubule-organizing center of the animal cell.
+Centriole|One of a pair of cylindrical microtubule structures within the centrosome.
+Motor protein|A protein that converts chemical energy into directed movement along a cytoskeletal filament.
+Flagellum|A long whip-like appendage propelling a cell through fluid.
+Cilium|A short hair-like projection, borne in numbers, that beats to move fluid or the cell itself.
+Macromolecule|A very large molecule, typically a polymer, of the kind on which cellular structure and function depend.
+Monomer|A simple molecule capable of being joined with others of its kind to form a polymer.
+Polymer|A large molecule formed of many repeating monomer subunits.
+Protein|A polymer of amino acids folded into a definite shape, performing catalysis, structure, transport, signaling, and movement.
+Polypeptide|An unbranched chain of amino acids joined by peptide bonds; a protein before or apart from its folded form.
+Amino acid|The monomer of proteins, comprising an amino group, a carboxyl group, and a variable side chain on a central carbon.
+Nucleic acid|A polymer of nucleotides — DNA or RNA — that stores or conveys genetic information.
+Nucleotide|The monomer of nucleic acids, composed of a sugar, a phosphate group, and a nitrogenous base.
+Carbohydrate|A sugar or polymer of sugars, serving in energy supply, storage, structure, and recognition.
+Lipid|Any of a diverse class of largely water-insoluble molecules including fats, phospholipids, and steroids.
+Phospholipid|A lipid with a phosphate-bearing hydrophilic head and two hydrophobic tails; the chief constituent of membranes.
+Amphipathic|Having both a water-attracting and a water-repelling region.
+Hydrophilic|Readily interacting with or dissolving in water.
+Hydrophobic|Tending not to interact with water and to associate with nonpolar substances.
+Hydrophobic interaction|The clustering of nonpolar regions away from water, a force driving membrane formation and protein folding.
+Denaturation|The loss of a protein's or nucleic acid's functional three-dimensional structure through heat, pH change, or other stress.
+Enzyme|A biological catalyst, usually a protein, that accelerates a specific reaction without itself being consumed.
+Substrate|The molecule upon which an enzyme acts.
+Activation energy|The energy input required to bring reactants to the point at which a reaction proceeds.
+Kinase|An enzyme that transfers a phosphate group to another molecule, commonly to switch a protein's activity on or off.
+ATP (adenosine triphosphate)|The cell's immediate energy currency, coupling energy-releasing to energy-requiring processes through phosphate transfer.
+Metabolism|The sum of chemical reactions by which a cell obtains, transforms, and expends matter and energy.
+Anabolism|Metabolic construction of complex molecules from simpler ones, generally consuming energy.
+Catabolism|Metabolic breakdown of complex molecules into simpler ones, generally releasing energy.
+Redox reaction|A paired reaction in which electrons pass from one substance (oxidized) to another (reduced).
+Cellular respiration|The oxidative breakdown of fuel molecules by which cells transfer energy into ATP.
+Glycolysis|The initial, oxygen-independent splitting of glucose into pyruvate, yielding a small net gain of ATP.
+Citric acid cycle (Krebs cycle)|The cyclic series of reactions completing the oxidation of fuel molecules and supplying electron carriers.
+Electron transport chain|A sequence of membrane-bound carriers that passes electrons stepwise, using the released energy to pump protons.
+Chemiosmosis|The synthesis of ATP driven by protons flowing back down their gradient through ATP synthase.
+Oxidative phosphorylation|ATP production coupled to electron transport and the resulting proton gradient.
+Fermentation|The anaerobic extraction of energy from fuel molecules without an electron transport chain.
+Aerobic|Occurring in, or requiring, the presence of oxygen.
+Anaerobic|Occurring in the absence of oxygen.
+Photosynthesis|The conversion of light energy into chemical energy stored in carbohydrate, performed by plants, algae, and some bacteria.
+DNA (deoxyribonucleic acid)|The double-stranded nucleotide polymer in which heritable information is stored.
+RNA (ribonucleic acid)|A generally single-stranded nucleotide polymer serving in the transmission and use of genetic information.
+Gene|A sequence of DNA whose information specifies a functional RNA or protein product.
+Allele|Any of the alternative forms of a gene occupying the same position on a chromosome.
+Genome|The entire complement of genetic material in a cell or organism.
+Chromosome|A single long DNA molecule with its associated proteins, bearing many genes.
+Chromatin|The complex of DNA and protein of which chromosomes are composed, its packing state governing access to genes.
+Histone|A small basic protein about which DNA is wound in the packaging of chromatin.
+Genotype|The genetic constitution of an organism, as distinct from its observable characteristics.
+Phenotype|The observable characteristics of an organism, arising from genotype and environment together.
+Central dogma|The principle that information passes from DNA to RNA to protein.
+DNA replication|The semiconservative copying of DNA, each strand serving as template for a new partner.
+Transcription|The synthesis of RNA from a DNA template.
+RNA processing|The modification of a primary transcript — splicing, capping, tailing — into a mature RNA.
+Translation|The synthesis of a polypeptide by ribosomes reading the codons of messenger RNA.
+Protein synthesis|The whole production of protein from genetic information, comprising transcription and translation.
+mRNA (messenger RNA)|The RNA carrying coding information from gene to ribosome.
+tRNA (transfer RNA)|The adaptor RNA delivering amino acids to the ribosome and matching them to codons.
+rRNA (ribosomal RNA)|The RNA forming the structural and catalytic core of the ribosome.
+Codon|A triplet of nucleotides in mRNA specifying an amino acid or a stop signal.
+Anticodon|The complementary triplet on tRNA that pairs with a codon.
+Genetic code|The correspondence by which nucleotide triplets specify amino acids.
+Gene expression|The realization of a gene's information in a functional RNA or protein.
+Gene regulation|The control of whether, when, where, and how much a gene is expressed.
+Mutation|An alteration in the nucleotide sequence of DNA.
+Concentration gradient|A difference in the concentration of a substance between two regions.
+Electrochemical gradient|The combined concentration and charge difference determining an ion's tendency to move.
+Diffusion|The net movement of particles from higher to lower concentration by random motion.
+Osmosis|The net movement of water across a selectively permeable membrane toward the more concentrated solution.
+Tonicity|The capacity of a solution to alter a cell's volume, determined by solutes that cannot cross the membrane.
+Osmolarity|The total concentration of dissolved particles in a solution, irrespective of their ability to cross membranes.
+Isotonic|Of a solution exerting no net osmotic effect on a cell.
+Hypertonic|Of a solution causing a cell to lose water and shrink.
+Hypotonic|Of a solution causing a cell to gain water and swell.
+Passive transport|Movement across a membrane down a gradient, without expenditure of cellular energy.
+Facilitated diffusion|Passive movement down a gradient by way of a membrane protein.
+Active transport|Movement across a membrane against a gradient, requiring an input of energy.
+Ion channel|A protein pore permitting selected ions to pass rapidly down their gradient.
+Carrier protein (transporter)|A membrane protein that binds a solute and changes shape to convey it across.
+Membrane potential|The voltage across a membrane arising from unequal ion distribution.
+Vesicular transport|The conveyance of material in membrane-bound sacs, as in endocytosis and exocytosis.
+Endocytosis|The taking in of material by inward folding of the plasma membrane to form a vesicle.
+Phagocytosis|Endocytosis of large particles or whole cells; "cell eating."
+Exocytosis|The discharge of vesicle contents by fusion of the vesicle with the plasma membrane.
+Cell cycle|The ordered sequence of growth, replication, and division by which a cell reproduces.
+Interphase|The portion of the cycle between divisions, comprising growth and DNA replication; not a period of rest.
+Cell-cycle checkpoint|A control point at which progression is halted unless prior conditions are satisfied.
+Mitosis|Nuclear division producing two nuclei of identical chromosome complement.
+Cytokinesis|The division of the cytoplasm, separating one cell into two.
+Meiosis|Two successive divisions halving the chromosome number and generating genetic variety.
+Binary fission|The division of a prokaryotic cell into two, without mitosis.
+Sister chromatids|The two identical copies of a replicated chromosome, joined until they separate.
+Homologous chromosomes|A matched maternal and paternal pair bearing the same genes in the same order.
+Crossing over|The exchange of segments between homologous chromosomes during meiosis.
+Diploid|Having two sets of chromosomes, one from each parent.
+Haploid|Having a single set of chromosomes.
+Gamete|A haploid reproductive cell, which fuses with another in fertilization.
+Zygote|The diploid cell formed by the union of two gametes.
+Apoptosis|Programmed cell death, an orderly dismantling of the cell from within.
+Necrosis|Cell death from injury, marked by rupture and inflammation.
+Cell signaling|The detection of and response to information by cells, coordinating their behavior.
+Receptor|A molecule, usually a protein, that recognizes a specific signal and initiates a response.
+Ligand|A molecule that binds specifically to a receptor.
+Signal transduction|The relay and conversion of a received signal into changes within the cell.
+Second messenger|A small intracellular molecule that relays and amplifies a signal after receptor activation.
+Phosphorylation|The addition of a phosphate group, commonly altering a protein's activity.
+Feedback regulation|Control in which the output of a process acts back upon that process.
+Negative feedback|Feedback that opposes change and stabilizes a system.
+Positive feedback|Feedback that amplifies change and drives a system further from its starting state.
+Homeostasis|The maintenance of relatively constant internal conditions by active regulation.
+Autocrine|Of signaling in which a cell responds to a molecule it has itself secreted.
+Paracrine|Of signaling that acts upon neighboring cells.
+Endocrine|Of signaling by hormones carried in the bloodstream to distant targets.`;
+
+    const easy=new Set(["Cell","Cell theory","Prokaryote","Eukaryote","Unicellular","Multicellular","Stem cell","Tissue","Organelle","Plasma membrane","Cell wall","Cytoplasm","Nucleus","Nucleolus","Ribosome","Rough ER","Smooth ER","Golgi apparatus","Vesicle","Lysosome","Vacuole","Mitochondrion","Chloroplast","Cytoskeleton","Flagellum","Cilium","Macromolecule","Monomer","Polymer","Protein","Amino acid","Nucleotide","Carbohydrate","Lipid","Hydrophilic","Hydrophobic","Enzyme","Substrate","ATP (adenosine triphosphate)","Metabolism","Cellular respiration","Glycolysis","Fermentation","Aerobic","Anaerobic","Photosynthesis","DNA (deoxyribonucleic acid)","RNA (ribonucleic acid)","Gene","Allele","Genome","Chromosome","Genotype","Phenotype","Transcription","Translation","Mutation","Diffusion","Osmosis","Isotonic","Hypertonic","Hypotonic","Active transport","Passive transport","Endocytosis","Exocytosis","Cell cycle","Interphase","Mitosis","Cytokinesis","Meiosis","Diploid","Haploid","Gamete","Zygote","Homeostasis"]);
+    const hard=new Set(["Compartmentalization","Surface-area-to-volume ratio","Fluid mosaic model","Extracellular matrix","Endomembrane system","Peroxisome","Protein sorting","Microfilament (actin filament)","Intermediate filament","Centrosome","Motor protein","Hydrophobic interaction","Denaturation","Kinase","Redox reaction","Citric acid cycle (Krebs cycle)","Chemiosmosis","Oxidative phosphorylation","Chromatin","Histone","Central dogma","RNA processing","mRNA (messenger RNA)","tRNA (transfer RNA)","rRNA (ribosomal RNA)","Anticodon","Electrochemical gradient","Tonicity","Osmolarity","Carrier protein (transporter)","Membrane potential","Vesicular transport","Phagocytosis","Cell-cycle checkpoint","Sister chromatids","Homologous chromosomes","Crossing over","Apoptosis","Necrosis","Signal transduction","Second messenger","Phosphorylation","Feedback regulation","Autocrine","Paracrine","Endocrine"]);
+    const BANK=RAW.trim().split("\n").map(line=>{const cut=line.indexOf("|");const term=line.slice(0,cut),definition=line.slice(cut+1);const level=easy.has(term)?"Foundational":hard.has(term)?"Advanced":"Intermediate";return{term,definition,level,penalty:level==="Foundational"?30:level==="Intermediate"?25:20}});
+    const $=id=>document.getElementById(id);
+    const ui={board:$("board"),atlas:$("atlas"),compareBtn:$("compareBtn"),restartBtn:$("restartBtn"),infoName:$("infoName"),infoFunction:$("infoFunction"),coreNumber:$("coreNumber"),coreFill:$("coreFill"),streak:$("streak"),round:$("round"),difficulty:$("difficulty"),definition:$("definition"),form:$("answerForm"),answer:$("answer"),submit:$("submitBtn"),feedback:$("feedback"),timer:$("timer"),timeFill:$("timeFill"),intro:$("intro"),start:$("startBtn"),end:$("end"),endKicker:$("endKicker"),endTitle:$("endTitle"),endText:$("endText"),again:$("playAgain")};
+    let deck=[],index=0,core=100,streak=0,correct=0,startedAt=0,raf=0,locked=true;
+
+    function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+    function normalize(s){return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/&/g,"and").replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ")}
+    function variants(term){const out=new Set([normalize(term)]);const par=[...term.matchAll(/\(([^)]+)\)/g)].map(x=>x[1]);out.add(normalize(term.replace(/\s*\([^)]*\)/g,"")));par.forEach(x=>out.add(normalize(x)));const first=term.match(/^([A-Za-z]+)\s*\(/);if(first)out.add(normalize(first[1]));return out}
+    function matches(answer,term){return variants(term).has(normalize(answer))}
+    function current(){return deck[index]}
+    function setCore(){core=Math.max(0,Math.min(100,core));ui.coreNumber.textContent=core+"%";ui.coreFill.style.width=core+"%";const color=core>55?"var(--green)":core>25?"var(--amber)":"var(--red)";ui.coreNumber.style.color=color;ui.coreFill.style.background=`linear-gradient(90deg,${core>55?"#34bfa8":core>25?"#bd802a":"#ac354b"},${color})`}
+    function showQuestion(){if(index>=deck.length||core<=0){finish();return}const q=current();locked=false;ui.round.textContent=`Term ${index+1} of ${deck.length}`;ui.difficulty.textContent=`${q.level} · −${q.penalty}`;ui.difficulty.style.color=q.level==="Foundational"?"var(--green)":q.level==="Intermediate"?"var(--amber)":"#c9a7ff";ui.definition.textContent=q.definition;ui.answer.value="";ui.answer.disabled=false;ui.submit.disabled=false;ui.feedback.textContent="Identify the exact term.";ui.feedback.className="feedback";startedAt=performance.now();cancelAnimationFrame(raf);tick();setTimeout(()=>ui.answer.focus(),50)}
+    function tick(now=performance.now()){if(locked)return;const elapsed=(now-startedAt)/1000;const left=Math.max(0,15-elapsed);ui.timer.textContent=left.toFixed(1);ui.timeFill.style.width=(left/15*100)+"%";const cls=left>5?"":left>2?"warn":"danger";ui.timer.className="timer "+cls;ui.timeFill.className="timefill "+cls;if(left<=0){resolve(false,true,15)}else raf=requestAnimationFrame(tick)}
+    function resolve(ok,timeout=false,elapsed=(performance.now()-startedAt)/1000){if(locked)return;locked=true;cancelAnimationFrame(raf);ui.answer.disabled=true;ui.submit.disabled=true;const q=current();if(ok){correct++;streak++;const fast=elapsed<=10;if(fast)core=Math.min(100,core+10);ui.feedback.textContent=fast?`Correct · fast scan +10 core`:`Correct · ${elapsed.toFixed(1)} seconds`;ui.feedback.className="feedback good";pulse("flash-good")}else{streak=0;core-=q.penalty;ui.feedback.textContent=`${timeout?"Time expired":"Incorrect"} · ${q.term} · −${q.penalty} core`;ui.feedback.className="feedback bad";pulse("flash-bad")}ui.streak.textContent=`Streak · ${streak}`;setCore();index++;setTimeout(showQuestion,ok?900:1750)}
+    function pulse(cls){ui.board.classList.remove("flash-good","flash-bad");void ui.board.offsetWidth;ui.board.classList.add(cls)}
+    function start(){deck=shuffle(BANK.slice());index=0;core=100;streak=0;correct=0;ui.intro.classList.add("hidden");ui.end.classList.add("hidden");setCore();ui.streak.textContent="Streak · 0";showQuestion()}
+    function finish(){locked=true;cancelAnimationFrame(raf);const completed=index>=deck.length&&core>0;const pct=Math.round(correct/Math.max(1,index)*100);ui.endKicker.textContent=completed?"Master bank complete":"Core level depleted";ui.endTitle.textContent=completed?"Cellular core assessed.":"The cellular core collapsed.";ui.endText.textContent=`You identified ${correct} of ${index} presented terms (${pct}%) and finished at ${core}% Core Level.${completed?" You survived the full 154-term bank.":" Rebuild the core and begin again."}`;ui.end.classList.remove("hidden")}
+    ui.form.addEventListener("submit",e=>{e.preventDefault();if(!locked&&ui.answer.value.trim())resolve(matches(ui.answer.value,current().term),false)});
+    ui.start.addEventListener("click",start);ui.again.addEventListener("click",start);ui.restartBtn.addEventListener("click",()=>{locked=true;cancelAnimationFrame(raf);ui.intro.classList.remove("hidden")});
+    ui.compareBtn.addEventListener("click",()=>{const on=!ui.atlas.classList.contains("compare");ui.atlas.classList.toggle("compare",on);ui.compareBtn.setAttribute("aria-pressed",String(on));ui.infoName.textContent=on?"Unique structures isolated":"Interactive cell atlas";ui.infoFunction.textContent=on?"Plant: cell wall, chloroplasts, and the large central vacuole. Animal: lysosomes and paired centrioles. Shared structures are dimmed.":"Hover, click, or tab to a structure. Use Compare cells to isolate features unique to plant and animal cells."});
+    document.querySelectorAll(".org[data-org]").forEach(el=>{const activate=()=>{document.querySelectorAll(".org.active").forEach(x=>x.classList.remove("active"));el.classList.add("active");const item=ORG[el.dataset.org];if(item){ui.infoName.textContent=item[0];ui.infoFunction.textContent=item[1]}};el.addEventListener("mouseenter",activate);el.addEventListener("click",activate);el.addEventListener("focus",activate);el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();activate()}})});
+    document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!ui.intro.classList.contains("hidden"))ui.intro.classList.add("hidden")});
+    ui.round.textContent=`${BANK.length} terms · ready`;
+  </script>
+</body>
+</html>
