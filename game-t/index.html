@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>FLYING — Drone Vocabulary Trainer</title>
+<title>FLYING — Drone Vocabulary Trainer v3</title>
 <style>
   :root{
     --ink:#183029;
@@ -414,13 +414,13 @@ function initAudio(){
   if(audioCtx) return;
   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
   humGain=audioCtx.createGain();
-  humGain.gain.value=.028;
+  humGain.gain.value=.00065; // 10× quieter ambient rotor hum
   const filter=audioCtx.createBiquadFilter();
-  filter.type="lowpass"; filter.frequency.value=520;
+  filter.type="lowpass"; filter.frequency.value=285;
   humOsc1=audioCtx.createOscillator();
   humOsc2=audioCtx.createOscillator();
   humOsc1.type="sawtooth"; humOsc2.type="triangle";
-  humOsc1.frequency.value=92; humOsc2.frequency.value=138;
+  humOsc1.frequency.value=72; humOsc2.frequency.value=108;
   humOsc1.connect(filter); humOsc2.connect(filter); filter.connect(humGain); humGain.connect(audioCtx.destination);
   humOsc1.start(); humOsc2.start();
 }
@@ -431,10 +431,10 @@ function pitchHum(mult=1,dur=.2){
   humOsc2.frequency.cancelScheduledValues(now);
   humOsc1.frequency.setValueAtTime(humOsc1.frequency.value,now);
   humOsc2.frequency.setValueAtTime(humOsc2.frequency.value,now);
-  humOsc1.frequency.linearRampToValueAtTime(92*mult,now+.06);
-  humOsc2.frequency.linearRampToValueAtTime(138*mult,now+.06);
-  humOsc1.frequency.linearRampToValueAtTime(92,now+dur);
-  humOsc2.frequency.linearRampToValueAtTime(138,now+dur);
+  humOsc1.frequency.linearRampToValueAtTime(72*mult,now+.06);
+  humOsc2.frequency.linearRampToValueAtTime(108*mult,now+.06);
+  humOsc1.frequency.linearRampToValueAtTime(72,now+dur);
+  humOsc2.frequency.linearRampToValueAtTime(108,now+dur);
 }
 function stopAudioSoft(){
   if(!audioCtx||!humGain) return;
@@ -509,45 +509,197 @@ function drawClouds(){
     drawCloud(x,cl.y*H,cl.s*(W/1100+.45),.42+.06*(i%4));
   });
 }
-function treeShape(x,base,s,kind,shade){
-  ctx.save();ctx.translate(x,base);
-  ctx.fillStyle=shade;
-  if(kind==="pine"){
-    ctx.beginPath();ctx.moveTo(0,-44*s);ctx.lineTo(-17*s,-7*s);ctx.lineTo(-8*s,-7*s);ctx.lineTo(-23*s,12*s);ctx.lineTo(23*s,12*s);ctx.lineTo(8*s,-7*s);ctx.lineTo(17*s,-7*s);ctx.closePath();ctx.fill();
-  }else{
-    ctx.beginPath();
-    ctx.arc(-11*s,-14*s,18*s,0,Math.PI*2);
-    ctx.arc(7*s,-21*s,22*s,0,Math.PI*2);
-    ctx.arc(20*s,-9*s,17*s,0,Math.PI*2);
-    ctx.arc(-2*s,0,24*s,0,Math.PI*2);
-    ctx.fill();
+function treeShape(x,base,s,kind,shade,seed=1){
+  ctx.save();
+  ctx.translate(x,base);
+
+  const r=(k)=>rnd01(seed*1.913+k*7.271);
+  const lean=(r(1)-.5)*8*s;
+  const trunkH=(38+r(2)*28)*s;
+  const trunkW=(2.5+r(3)*3.2)*s;
+  const barkLight=`rgba(${76+Math.floor(r(4)*18)},${60+Math.floor(r(5)*16)},${42+Math.floor(r(6)*13)},.92)`;
+  const barkDark='rgba(48,43,34,.62)';
+
+  // Trunks are individually bent and tapered instead of repeated vertical sticks.
+  ctx.lineCap='round';
+  ctx.strokeStyle=barkLight;
+  ctx.lineWidth=trunkW;
+  ctx.beginPath();
+  ctx.moveTo(0,8*s);
+  ctx.quadraticCurveTo(lean*.28,-trunkH*.46,lean,-trunkH);
+  ctx.stroke();
+  ctx.strokeStyle=barkDark;
+  ctx.lineWidth=Math.max(1,trunkW*.32);
+  ctx.beginPath();
+  ctx.moveTo(trunkW*.22,5*s);
+  ctx.quadraticCurveTo(lean*.34,-trunkH*.48,lean+trunkW*.18,-trunkH*.96);
+  ctx.stroke();
+
+  function branch(x1,y1,x2,y2,w=1){
+    ctx.strokeStyle=barkLight;ctx.lineWidth=Math.max(.8,trunkW*w);ctx.beginPath();
+    ctx.moveTo(x1*s,y1*s);ctx.quadraticCurveTo((x1+x2)*.45*s,(y1+y2)*.48*s,x2*s,y2*s);ctx.stroke();
   }
+  function leafBlob(cx,cy,rx,ry,color,rot=0,alpha=1){
+    ctx.save();ctx.globalAlpha*=alpha;ctx.fillStyle=color;ctx.translate(cx*s,cy*s);ctx.rotate(rot);
+    ctx.beginPath();ctx.ellipse(0,0,rx*s,ry*s,0,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+
+  const palettes={
+    oak:['#355b3e','#476d48','#5d7b51','#6f8859'],
+    maple:['#3e6644','#55784b','#6c8955','#7d9660'],
+    cottonwood:['#496e4e','#618057','#789260','#8ea16c'],
+    elm:['#385f43','#4d734d','#638553','#79935e'],
+    willow:['#456b48','#5c8051','#72915a','#829d62'],
+    cedar:['#2f5241','#3a6049','#486d51','#56785a'],
+    pine:['#294b3b','#345a43','#41684b','#4c7353']
+  };
+  const p=palettes[kind]||palettes.oak;
+
+  if(kind==='pine' || kind==='cedar'){
+    const crownTop=-trunkH/s-18-r(9)*14;
+    const levels=kind==='pine'?6:8;
+    for(let i=0;i<levels;i++){
+      const yy=crownTop+i*(10+r(i+20)*3);
+      const fullness=(i+1)/levels;
+      const half=(9+fullness*(23+r(i+30)*8))*(kind==='cedar' ? 0.78 : 1);
+      ctx.fillStyle=p[i%p.length];
+      ctx.beginPath();
+      ctx.moveTo((r(i+40)-.5)*5*s,(yy-8)*s);
+      ctx.lineTo((-half+r(i+50)*4)*s,(yy+13)*s);
+      ctx.lineTo((-half*.38)*s,(yy+8+r(i+60)*5)*s);
+      ctx.lineTo(0,(yy+18+r(i+70)*4)*s);
+      ctx.lineTo((half*.42)*s,(yy+8+r(i+80)*5)*s);
+      ctx.lineTo((half-r(i+90)*4)*s,(yy+13)*s);
+      ctx.closePath();ctx.fill();
+    }
+    if(kind==='cedar'){
+      // Dense cedar skirts hide most of the lower trunk.
+      leafBlob(lean/s*.45,-trunkH/s*.48,18+r(101)*7,26+r(102)*8,p[1],(r(103)-.5)*.25,.9);
+    }
+  }else{
+    // Species-specific branch architecture.
+    const trunkTopY=-trunkH/s;
+    if(kind==='oak'){
+      branch(lean/s*.35,-trunkH/s*.48,-24-r(12)*9,trunkTopY+10, .46);
+      branch(lean/s*.52,-trunkH/s*.57,25+r(13)*10,trunkTopY+4,.43);
+      branch(lean/s*.65,-trunkH/s*.72,-10-r(14)*9,trunkTopY-12,.34);
+    }else if(kind==='maple'){
+      branch(lean/s*.40,-trunkH/s*.52,-18-r(12)*8,trunkTopY+3,.38);
+      branch(lean/s*.45,-trunkH/s*.55,19+r(13)*8,trunkTopY+2,.38);
+    }else if(kind==='cottonwood'){
+      branch(lean/s*.50,-trunkH/s*.64,-14-r(12)*7,trunkTopY-16,.28);
+      branch(lean/s*.55,-trunkH/s*.68,15+r(13)*7,trunkTopY-20,.28);
+    }else if(kind==='elm'){
+      branch(lean/s*.33,-trunkH/s*.50,-26-r(12)*8,trunkTopY+6,.36);
+      branch(lean/s*.48,-trunkH/s*.58,27+r(13)*8,trunkTopY+1,.34);
+      branch(lean/s*.62,-trunkH/s*.69,2,trunkTopY-22,.26);
+    }else if(kind==='willow'){
+      branch(lean/s*.36,-trunkH/s*.52,-22-r(12)*7,trunkTopY+0,.34);
+      branch(lean/s*.45,-trunkH/s*.57,23+r(13)*7,trunkTopY-2,.34);
+    }
+
+    const top=trunkTopY-8;
+    let blobs=[];
+    if(kind==='oak'){
+      blobs=[[-30,8,24,18],[-11,-4,27,22],[14,-7,28,23],[34,8,22,17],[-20,20,27,19],[7,17,31,21],[28,23,22,16],[0,-22,20,17]];
+    }else if(kind==='maple'){
+      blobs=[[-24,7,20,24],[-7,-8,22,27],[15,-10,22,27],[29,9,19,23],[-13,20,23,20],[10,20,25,20],[0,-28,17,20]];
+    }else if(kind==='cottonwood'){
+      blobs=[[-16,20,17,24],[-7,-3,19,29],[4,-30,18,31],[16,-6,19,29],[20,23,16,23],[1,25,21,25]];
+    }else if(kind==='elm'){
+      blobs=[[-32,10,22,17],[-18,-4,24,19],[0,-14,25,21],[20,-6,24,19],[34,10,20,16],[-15,18,27,18],[12,17,29,19]];
+    }else if(kind==='willow'){
+      blobs=[[-25,1,18,24],[-11,-12,21,24],[8,-15,22,25],[25,-2,18,24],[-20,20,15,32],[0,17,18,36],[21,18,15,32]];
+    }
+
+    blobs.forEach((b,i)=>{
+      const jx=(r(120+i)-.5)*8, jy=(r(150+i)-.5)*7;
+      const rot=(r(180+i)-.5)*.48;
+      leafBlob((b[0]+jx),top+(b[1]+jy),b[2]*(.88+r(210+i)*.24),b[3]*(.88+r(240+i)*.24),p[i%3],rot,.96);
+    });
+
+    // A few small sunlit leaf masses break up the silhouette.
+    const highlights=kind==='willow'?2:4;
+    for(let i=0;i<highlights;i++){
+      leafBlob(-18+r(280+i)*42,top-16+r(300+i)*32,6+r(320+i)*5,4+r(340+i)*6,p[3],(r(360+i)-.5)*.5,.42);
+    }
+
+    if(kind==='willow'){
+      // Long hanging foliage strands distinguish willows even at a glance.
+      ctx.strokeStyle='rgba(83,119,75,.72)';ctx.lineWidth=Math.max(.8,1.2*s);
+      for(let i=0;i<9;i++){
+        const bx=(-30+i*7+r(390+i)*6)*s;
+        const by=(top+2+r(410+i)*20)*s;
+        ctx.beginPath();ctx.moveTo(bx,by);ctx.quadraticCurveTo(bx+(r(430+i)-.5)*7*s,by+16*s,bx+(r(450+i)-.5)*10*s,by+(28+r(470+i)*18)*s);ctx.stroke();
+      }
+    }
+  }
+
   ctx.restore();
 }
+
 function drawDistantLand(){
   const horizon=H*.79;
-  // distant field
-  const g=ctx.createLinearGradient(0,horizon-55,0,H);
-  g.addColorStop(0,"#849870");g.addColorStop(1,"#5f7756");
+  const g=ctx.createLinearGradient(0,horizon-62,0,H);
+  g.addColorStop(0,'#87986f');g.addColorStop(1,'#5f7756');
   ctx.fillStyle=g;ctx.fillRect(0,horizon,W,H-horizon);
-  // far treeline
-  ctx.fillStyle="#5f785e";
-  ctx.beginPath();ctx.moveTo(0,horizon);
-  for(let x=0;x<=W+20;x+=18){
-    const world=x+sceneX*.35;
-    const y=horizon-23-18*rnd01(Math.floor(world/18));
+
+  // Far tree line: broad, low-contrast masses with occasional tall crowns and gaps.
+  ctx.fillStyle='rgba(100,124,91,.58)';
+  ctx.beginPath();ctx.moveTo(0,horizon+3);
+  for(let x=-20;x<=W+30;x+=9){
+    const world=x+sceneX*.21;
+    const n=Math.floor(world/31);
+    const local=((world%31)+31)%31/31;
+    const speciesPulse=rnd01(n*5.31);
+    const peak=speciesPulse>.82?24:speciesPulse>.46?15:10;
+    const y=horizon-24-peak*Math.sin(local*Math.PI)-rnd01(n+local*9)*5;
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(W,horizon+16);ctx.lineTo(0,horizon+16);ctx.closePath();ctx.fill();
+
+  // Mid-distance tree line with varied canopy rhythm instead of a sawtooth strip.
+  ctx.fillStyle='#587257';
+  ctx.beginPath();ctx.moveTo(0,horizon+5);
+  for(let x=-30;x<=W+35;x+=7){
+    const world=x+sceneX*.36;
+    const cell=Math.floor(world/44);
+    const local=((world%44)+44)%44/44;
+    const crownType=rnd01(cell*2.87);
+    const width=.60+rnd01(cell*4.21)*.55;
+    const bell=Math.pow(Math.max(0,Math.sin(Math.min(1,local/width)*Math.PI)), crownType > 0.7 ? 0.7 : 1.25);
+    const crownH=14+rnd01(cell*6.44)*30;
+    const y=horizon-13-bell*crownH-rnd01(cell+x*.01)*3;
     ctx.lineTo(x,y);
   }
   ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
 
-  // individual tree crowns at bottom
-  for(let x=-50;x<W+60;x+=40){
-    const world=x+sceneX*.62;
-    const n=Math.floor(world/40);
-    const sx=x-(sceneX*.62%40);
-    const kind=rnd01(n*2.2)>.82?"pine":"dec";
-    const s=.75+rnd01(n*7.1)*.55;
-    treeShape(sx,horizon+18,s,kind, n%2?"#48664f":"#527057");
+  // Foreground roadside grove: variable spacing and seven visually distinct tree families.
+  // We anchor trees to world-space cells so the grove scrolls consistently without popping.
+  const worldStart=sceneX*.62-110;
+  const worldEnd=worldStart+W+220;
+  const firstCell=Math.floor(worldStart/58)-2;
+  const lastCell=Math.ceil(worldEnd/58)+2;
+  const species=['oak','maple','cottonwood','elm','willow','cedar','pine'];
+  for(let cell=firstCell;cell<=lastCell;cell++){
+    if(rnd01(cell*8.37)<.13) continue; // natural gaps
+    const jitter=(rnd01(cell*3.77)-.5)*30;
+    const worldX=cell*58+jitter;
+    const sx=worldX-sceneX*.62;
+    const kind=species[Math.floor(rnd01(cell*9.13)*species.length)%species.length];
+    let s=.62+rnd01(cell*11.91)*.74;
+    if(kind==='cottonwood') s*=1.10;
+    if(kind==='cedar') s*=.88;
+    const base=horizon+14+rnd01(cell*4.51)*8;
+    const shades=['#456449','#4d6c4d','#567354','#3f6147','#5a7754'];
+    treeShape(sx,base,s,kind,shades[Math.floor(rnd01(cell*12.71)*shades.length)],cell);
+
+    // Understory appears only in some gaps and uses different proportions.
+    if(rnd01(cell*13.4)>.72){
+      const ux=sx+(rnd01(cell*14.1)-.5)*34;
+      const us=.22+rnd01(cell*15.2)*.23;
+      treeShape(ux,base+4,us,rnd01(cell*16.3)>.72?'cedar':'elm','#4b674b',cell+9000);
+    }
   }
 }
 function drawCornfield(){
