@@ -38,6 +38,7 @@ blockquote { min-height:76px; margin:0 0 22px; max-width:620px; font-family:Geor
 form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid-template-columns:1fr auto; gap:8px; }.answer-row input { min-width:0; height:46px; padding:0 15px; border:1px solid #445158; outline:none; background:#0a0e10; color:#f5f7f8; font-size:15px; transition:border .2s,box-shadow .2s; }
 .answer-row input:focus { border-color:var(--cyan); box-shadow:0 0 0 3px #61e3dc12; }.answer-row input::placeholder { color:#4f5b61; }
 .answer-row button,.primary-action { height:46px; padding:0 19px; border:1px solid var(--cyan); background:#163331; color:var(--cyan); cursor:pointer; font-size:9px; font-weight:bold; letter-spacing:.17em; }.answer-row button span { margin-left:10px; font-size:13px; }.answer-row button:hover,.primary-action:hover { background:#204642; }
+.answer-row button:disabled { cursor:default; opacity:.72; background:#132220; }
 .feedback { min-height:18px; padding-top:11px; color:#778188; font-size:10px; letter-spacing:.05em; }.feedback.correct { color:var(--cyan); }.feedback.wrong { color:var(--coral); }.game-console.correct { border-color:#61e3dc77; }.game-console.wrong { border-color:#ff755f77; }.primary-action { width:100%; margin-top:5px; }
 .presenter { position:absolute; z-index:2; left:calc(50% - min(610px,45vw)); top:238px; width:72px; height:230px; opacity:.52; transform:scale(.88); transform-origin:bottom; }
 .presenter-head { position:absolute; left:22px; top:0; width:31px; height:38px; border-radius:46% 52% 48% 47%; background:#485157; box-shadow:inset -5px 0 #343b3f; }.presenter-body { position:absolute; left:8px; top:34px; width:55px; height:155px; border-radius:23px 20px 8px 8px; background:linear-gradient(90deg,#252b2f,#444c51 58%,#252a2e); clip-path:polygon(22% 0,76% 0,100% 34%,81% 100%,16% 100%,0 37%); }
@@ -97,7 +98,7 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
       <section id="game-console" class="game-console playing" aria-live="polite">
         <div class="console-head">
           <div><span id="prompt-count" class="micro-label"></span><div id="difficulty" class="difficulty"></div></div>
-          <div id="timer" class="timer"><span id="time-value">25</span><small>SECONDS</small></div>
+          <div id="timer" class="timer"><span id="time-value">15</span><small>SECONDS</small></div>
         </div>
         <div class="timer-track"><div id="timer-fill"></div></div>
         <blockquote id="definition"></blockquote>
@@ -115,7 +116,7 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
     <footer class="scorebar">
       <div class="score-group"><span>OPTOMETRIST MATERIAL</span><strong id="score">100%</strong></div>
       <div class="session-progress"><span id="progress"></span></div>
-      <div class="legend"><span><i class="bonus-dot"></i> UNDER 15 SEC +10% · 100% MAX</span><span><i class="risk-dot"></i> MISSED −20–30%</span></div>
+      <div class="legend"><span><i class="bonus-dot"></i> BONUS: &gt;5 SEC EARLY · HARDEST &lt;15 SEC</span><span><i class="risk-dot"></i> MISSED −20–30%</span></div>
       <button id="reset-button" type="button">RESET SESSION</button>
     </footer>
   </main>
@@ -127,10 +128,11 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
     const $ = (id) => document.getElementById(id);
     const panels = [...document.querySelectorAll(".anatomy-panel")];
     const consoleEl = $("game-console"), form = $("answer-form"), input = $("term-answer"), submit = $("submit-button");
-    let order = TERMS.map((_, index) => index), round = 0, score = 100, timeLeft = 25, status = "playing", timerId = 0;
+    let order = TERMS.map((_, index) => index), round = 0, score = 100, timeLeft = 15, status = "playing", timerId = 0, advanceId = 0;
 
     const normalize = (value) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const current = () => TERMS[order[round] ?? order[0]];
+    const secondsFor = (term) => term.penalty === 20 ? 15 : term.penalty === 25 ? 20 : 25;
     const shuffle = (items) => {
       const next = [...items];
       for (let i = next.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [next[i], next[j]] = [next[j], next[i]]; }
@@ -139,7 +141,7 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
 
     function paintTimer() {
       $("time-value").textContent = String(timeLeft).padStart(2, "0");
-      $("timer-fill").style.width = ((timeLeft / 25) * 100) + "%";
+      $("timer-fill").style.width = ((timeLeft / secondsFor(current())) * 100) + "%";
       $("timer").classList.toggle("urgent", timeLeft <= 5);
     }
 
@@ -153,7 +155,7 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
       const term = current();
       $("prompt-count").textContent = "PROMPT " + String(round + 1).padStart(2, "0") + " / " + String(TERMS.length).padStart(2, "0");
       const label = term.penalty === 20 ? "FOUNDATIONAL" : term.penalty === 25 ? "INTERMEDIATE" : "OBSCURE";
-      $("difficulty").innerHTML = '<i class="level level-' + term.penalty + '"></i> ' + label + " · −" + term.penalty + "% RISK";
+      $("difficulty").innerHTML = '<i class="level level-' + term.penalty + '"></i> ' + label + " · " + secondsFor(term) + " SEC · −" + term.penalty + "% RISK";
       $("definition").textContent = term.definition;
       $("score").textContent = score + "%";
       $("progress").style.width = ((round / TERMS.length) * 100) + "%";
@@ -179,8 +181,9 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
       score = Math.max(0, score - term.penalty);
       $("score").textContent = score + "%";
       input.disabled = true;
-      submit.type = "button"; submit.innerHTML = "NEXT <span>→</span>";
+      submit.type = "button"; submit.disabled = true; submit.innerHTML = "ADVANCING <span>…</span>";
       setFeedback("wrong", (timedOut ? "Time." : "Not quite.") + " The term was " + term.term + ". −" + term.penalty + "%");
+      clearTimeout(advanceId); advanceId = setTimeout(nextRound, 2400);
     }
 
     function finish() {
@@ -193,9 +196,10 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
     }
 
     function nextRound() {
+      clearTimeout(advanceId);
       if (round + 1 >= order.length || score <= 0) { finish(); return; }
-      round += 1; timeLeft = 25; status = "playing";
-      input.value = ""; input.disabled = false; submit.type = "submit"; submit.innerHTML = "SUBMIT <span>↵</span>";
+      round += 1; timeLeft = secondsFor(current()); status = "playing";
+      input.value = ""; input.disabled = false; submit.disabled = false; submit.type = "submit"; submit.innerHTML = "SUBMIT <span>↵</span>";
       setFeedback("playing", "Identify the term before the timer closes.");
       render(); startTimer(); setTimeout(() => input.focus(), 40);
     }
@@ -207,24 +211,25 @@ form label { display:block; margin-bottom:7px; }.answer-row { display:grid; grid
       const accepted = [term.term, ...term.aliases].map(normalize);
       if (!accepted.includes(normalize(input.value))) { markWrong(false); return; }
       status = "correct"; clearInterval(timerId);
-      const quick = timeLeft > 10;
+      const quick = term.penalty === 30 ? timeLeft > 10 : timeLeft > 5;
       const restored = quick ? Math.min(10, 100 - score) : 0;
       if (restored > 0) score = Math.min(100, score + 10);
       $("score").textContent = score + "%";
-      input.disabled = true; submit.type = "button"; submit.innerHTML = "NEXT <span>→</span>";
+      input.disabled = true; submit.type = "button"; submit.disabled = true; submit.innerHTML = "ADVANCING <span>…</span>";
       const message = quick ? (restored > 0 ? "Correct. Fast recall restores +" + restored + "%." : "Correct. Full strength maintained at 100%.") : "Correct. Precise recall.";
       setFeedback("correct", message);
+      clearTimeout(advanceId); advanceId = setTimeout(nextRound, 1100);
     }
 
     function restart() {
-      order = shuffle(TERMS.map((_, index) => index)); round = 0; score = 100; timeLeft = 25; status = "playing";
-      form.hidden = false; $("restart-main").hidden = true; input.value = ""; input.disabled = false; submit.type = "submit"; submit.innerHTML = "SUBMIT <span>↵</span>";
+      clearTimeout(advanceId);
+      order = shuffle(TERMS.map((_, index) => index)); round = 0; score = 100; timeLeft = secondsFor(current()); status = "playing";
+      form.hidden = false; $("restart-main").hidden = true; input.value = ""; input.disabled = false; submit.disabled = false; submit.type = "submit"; submit.innerHTML = "SUBMIT <span>↵</span>";
       setFeedback("playing", "Identify the term before the timer closes.");
       render(); startTimer(); setTimeout(() => input.focus(), 40);
     }
 
     form.addEventListener("submit", submitAnswer);
-    submit.addEventListener("click", (event) => { if (status !== "playing") { event.preventDefault(); nextRound(); } });
     $("reset-button").addEventListener("click", restart);
     $("restart-main").addEventListener("click", restart);
     render(); startTimer(); input.focus();
