@@ -1,412 +1,181 @@
-Here is the fully revised, production-ready HTML implementation.
-
-### What Was Fixed & Upgraded:
-
-* **Flawless Evaluation Logic:** Answers are now strictly evaluated (case-insensitive, stripped of accidental whitespace, and checked against exact definitions or recognized aliases).
-* **Active Director Confidence Meter:** Starts at 100%. Fast correct answers (< 10 seconds) restore +10% confidence, while incorrect answers or timeouts deduct −30%. If confidence hits 0%, the production halts with a "Production Paused" state.
-* **Functional 15-Second Timer:** Counts upward from `0.0s`, shifts color dynamically from green to amber-orange to red, and automatically triggers a timeout penalty if time expires.
-* **Expanded Vocabulary Array:** Includes a robust pool of terms spanning multiple chapters so you can test the logic right away.
-
-Save the code below as an `.html` file (e.g., `rendering_wizardry.html`) and open it in your browser:
-
-```html
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rendering Wizardry - Live Soundstage</title>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --monitor-bezel: #16181d;
-            --monitor-screen: #050508;
-            --ui-text: #f4f4f5;
-            --ui-highlight: #fbbf24;
-            --tally-red: #ef4444;
-            --correct-green: #4ade80;
-            --wrong-red: #f87171;
-            --timer-green: #4ade80;
-            --timer-amber: #f59e0b;
-            --timer-red: #ef4444;
-        }
-
-        body, html {
-            margin: 0; padding: 0; width: 100vw; height: 100vh;
-            font-family: 'VT323', monospace; background-color: #090a0f;
-            overflow: hidden; color: var(--ui-text); user-select: none;
-        }
-
-        #gameCanvas {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; display: block; z-index: 1;
-        }
-
-        .scanlines {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
-            background-size: 100% 4px; z-index: 10; pointer-events: none;
-        }
-
-        /* Video Village Monitors */
-        .video-village {
-            position: absolute; bottom: 4%; left: 3%; display: flex; gap: 20px; z-index: 20; pointer-events: none;
-        }
-        .monitor-rig { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .monitor-label {
-            font-size: 1.3rem; color: #a1a1aa; background: #18181b; padding: 2px 10px; border-radius: 4px;
-            letter-spacing: 1px; border: 1px solid #27272a;
-        }
-
-        /* Gameplay Terminal */
-        .terminal {
-            position: absolute; bottom: 4%; right: 3%; width: 460px; background-color: var(--monitor-screen);
-            border: 12px solid var(--monitor-bezel); border-radius: 8px; 
-            box-shadow: -15px 25px 50px rgba(0,0,0,0.95), inset 0 0 25px rgba(0,0,0,0.8);
-            z-index: 20; display: flex; flex-direction: column; transition: border-color 0.3s ease;
-        }
-        .terminal.correct { border-color: var(--correct-green); }
-        .terminal.wrong { border-color: var(--wrong-red); }
-
-        .terminal-header {
-            background-color: #18181b; border-bottom: 2px solid #27272a; padding: 8px 15px;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .term-title { font-size: 1.2rem; color: #71717a; letter-spacing: 1px; }
-        .term-question { font-size: 1.2rem; background: #27272a; color: #f4f4f5; padding: 2px 8px; border-radius: 4px; }
-
-        .terminal-body { padding: 22px; display: flex; flex-direction: column; gap: 15px; }
-        
-        .status-row { display: flex; justify-content: space-between; align-items: center; }
-        .timer { font-size: 3.2rem; line-height: 1; text-shadow: 0 0 10px rgba(0,0,0,0.4); }
-        
-        .confidence-container { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-        .confidence-label { font-size: 1rem; color: #71717a; letter-spacing: 1px; }
-        .confidence-bar { width: 140px; height: 12px; background-color: #18181b; border: 2px solid #27272a; padding: 1px; }
-        .confidence-fill { width: 100%; height: 100%; background-color: var(--correct-green); transition: width 0.3s ease, background-color 0.3s ease; }
-
-        .category-label { color: #71717a; font-size: 1.2rem; text-transform: uppercase; margin-bottom: -5px; letter-spacing: 1px; }
-        .definition { font-size: 1.7rem; line-height: 1.2; min-height: 70px; color: #f4f4f5; }
-
-        .input-row {
-            display: flex; align-items: center; gap: 12px; background: #121316;
-            padding: 10px 16px; border-radius: 6px; border: 1px solid #27272a;
-        }
-        .input-prompt { color: var(--ui-highlight); font-size: 2rem; }
-        .term-input {
-            background: transparent; border: none; color: #fff; font-family: 'VT323', monospace;
-            font-size: 2rem; width: 100%; outline: none; text-transform: uppercase; letter-spacing: 1px;
-        }
-        .term-input::placeholder { color: #3f3f46; }
-
-        /* Game Over Overlay */
-        .game-over {
-            position: absolute; inset: 0; background: rgba(5,5,8,0.85); z-index: 100;
-            display: none; flex-direction: column; justify-content: center; align-items: center; gap: 20px;
-        }
-        .game-over h1 { font-size: 4rem; color: var(--tally-red); margin: 0; text-shadow: 0 0 20px rgba(239,68,68,0.5); }
-        .game-over p { font-size: 1.8rem; color: #a1a1aa; margin: 0; }
-        .restart-btn {
-            background: #18181b; color: #fff; border: 2px solid #3f3f46; font-family: 'VT323', monospace;
-            font-size: 1.8rem; padding: 10px 24px; cursor: pointer; border-radius: 4px; transition: background 0.2s;
-        }
-        .restart-btn:hover { background: #27272a; border-color: #52525b; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#090b10">
+<title>Rendering Wizardry</title>
+<style>
+  :root{--ink:#e9eef2;--muted:#98a1aa;--gold:#e5b75d;--green:#54d58c;--amber:#f0a642;--red:#ff5b57;--panel:#0d1218eF;--line:#ffffff18;--confidence:100%;--tempo:12s}
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  button,input{font:inherit}button{color:inherit}.app{position:relative;width:100vw;height:100dvh;min-height:520px;overflow:hidden;background:radial-gradient(ellipse at 57% 52%,#313238 0,#171a1f 38%,#080a0e 77%);isolation:isolate}
+  .grain{pointer-events:none;position:absolute;inset:0;z-index:50;opacity:.07;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E")}
+  .topbar{position:absolute;z-index:32;left:0;right:0;top:0;height:48px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(#080a0ef2,#080a0e00);font-size:11px;letter-spacing:.16em;text-transform:uppercase}.brand{font-family:Georgia,serif;letter-spacing:.22em;color:#f3d48f;font-weight:600}.stage-status{display:flex;align-items:center;gap:9px;color:#cbd1d6}.record-dot{width:7px;height:7px;border-radius:50%;background:#7d858c}.playing .record-dot{background:#ff3e39;box-shadow:0 0 12px #ff3e39;animation:pulse 1.8s infinite}
+  .soundstage{position:absolute;inset:38px 0 0;perspective:1100px;overflow:hidden;transition:filter .8s}.soundstage:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#07090d99,transparent 20%,transparent 79%,#07090d88),linear-gradient(0deg,#07090d 0,transparent 20%);z-index:20;pointer-events:none}
+  .rear-wall{position:absolute;left:2%;right:2%;top:4%;height:35%;background:linear-gradient(#22262a,#13171c);border-top:8px solid #383d42;box-shadow:0 16px 45px #0009;transform:rotateX(-3deg);overflow:hidden}.rear-wall:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 8.1%,#ffffff08 8.2% 8.35%),repeating-linear-gradient(0deg,transparent 0 46px,#0004 47px 48px)}
+  .rooms{position:absolute;inset:17% 2% auto;height:23%;display:grid;grid-template-columns:1.1fr 1.2fr 1.6fr 1fr;gap:8px;z-index:3}.room{position:relative;border:1px solid #ffffff1e;background:linear-gradient(150deg,#303037,#111318 70%);box-shadow:inset 0 10px 20px #0007,0 2px 0 #5555;overflow:hidden}.room-label{position:absolute;top:7px;left:9px;color:#c7c0ac;font-size:8px;letter-spacing:.2em;text-transform:uppercase}.mirror{position:absolute;left:8%;right:8%;top:25%;height:42%;border:4px solid #574d3b;background:#161515;box-shadow:0 0 18px #eab96b44}.mirror:before{content:"";position:absolute;inset:-5px;background:radial-gradient(circle at 0 20%,#ffd88d 0 2px,transparent 3px),radial-gradient(circle at 100% 20%,#ffd88d 0 2px,transparent 3px),radial-gradient(circle at 0 80%,#ffd88d 0 2px,transparent 3px),radial-gradient(circle at 100% 80%,#ffd88d 0 2px,transparent 3px)}
+  .wardrobe-rack{position:absolute;left:10%;right:8%;bottom:9%;height:48%;border-top:3px solid #92979c}.wardrobe-rack i{position:absolute;top:2px;width:14%;height:80%;clip-path:polygon(30% 0,70% 0,100% 17%,82% 100%,18% 100%,0 17%);background:var(--c);border-radius:3px;transform:translateX(calc(var(--i)*48%))}.green-sofa{position:absolute;left:8%;bottom:10%;width:44%;height:31%;background:#62624d;border-radius:13px 13px 4px 4px;box-shadow:inset 0 0 0 3px #24251e}.green-table{position:absolute;right:8%;bottom:8%;width:33%;height:14%;border-top:5px solid #493d2c}.prop-shelves{position:absolute;inset:24% 5% 8%;background:repeating-linear-gradient(0deg,#191b1f 0 26%,#777 27% 28%);display:grid;grid-template-columns:repeat(7,1fr);align-items:end;padding:0 6px}.prop-shelves i{height:var(--h);background:var(--c);margin:2px;border-radius:50% 50% 2px 2px}
+  .loading-door{position:absolute;right:3%;top:6%;width:19%;height:28%;border:5px solid #252b30;background:repeating-linear-gradient(0deg,#5b6060 0 10px,#424747 11px 13px);z-index:2}.loading-door:before{content:"STAGE 14";position:absolute;top:20%;left:22%;font:700 18px/1 monospace;color:#1119;letter-spacing:.15em}.loading-door:after{content:"";position:absolute;left:-30%;bottom:-12%;width:110%;height:18%;background:linear-gradient(90deg,#333 0 15%,transparent 16% 20%,#333 21% 34%,transparent 35% 42%,#333 43%);transform:skewX(-25deg)}
+  .rig{position:absolute;inset:2% 0 auto;height:24%;z-index:10;pointer-events:none}.truss{position:absolute;height:8px;background:repeating-linear-gradient(90deg,#4d5357 0 12px,#252a2f 13px 24px);border:1px solid #70777d;box-shadow:0 5px 12px #000}.truss.a{left:-2%;right:-2%;top:6%;transform:rotate(-1deg)}.truss.b{left:8%;right:5%;top:43%;transform:rotate(2deg)}.lamp{position:absolute;top:10%;left:var(--x);width:24px;height:34px;background:#21262b;border:2px solid #757a7d;transform:rotate(var(--r));filter:drop-shadow(0 0 3px #000)}.lamp:before{content:"";position:absolute;left:4px;right:4px;bottom:-13px;height:16px;background:linear-gradient(#fff4bf,#e5b763);clip-path:polygon(15% 0,85% 0,100% 100%,0 100%);opacity:.75;box-shadow:0 22px 35px #f1c96f55}.cable-drop{position:absolute;top:0;left:var(--x);height:77%;width:1px;background:#050505}.cable-drop:after{content:"";position:absolute;bottom:0;left:-6px;width:13px;height:20px;border-radius:5px;background:#15191d;border:1px solid #565d60}
+  .set-zone{position:absolute;z-index:5;left:19%;top:36%;width:62%;height:40%;filter:drop-shadow(0 20px 25px #000a)}.set-floor{position:absolute;inset:5% 0 0;background:linear-gradient(160deg,#715640,#38291f 70%);clip-path:polygon(5% 0,94% 0,100% 100%,0 100%)}.set-wall{position:absolute;top:0;height:74%;background:linear-gradient(90deg,#d3b981,#eed7a0 55%,#b99a66);box-shadow:inset 0 0 30px #6c492d55}.set-wall.left{left:4%;width:54%;clip-path:polygon(0 0,100% 4%,98% 100%,2% 96%)}.set-wall.right{right:3%;width:40%;background:linear-gradient(90deg,#b69667,#d8be8b);clip-path:polygon(0 4%,100% 0,98% 96%,2% 100%)}.set-wall:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 120px,#654b3528 121px 124px)}
+  .window{position:absolute;left:13%;top:13%;width:18%;height:35%;border:7px solid #5e4530;background:linear-gradient(#5b7483,#a4bec5);box-shadow:inset 0 0 20px #142935}.window:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 47%,#5e4530 48% 53%,transparent 54%),linear-gradient(transparent 47%,#5e4530 48% 53%,transparent 54%)}.picture{position:absolute;left:39%;top:14%;width:10%;height:20%;border:5px solid #5a3e24;background:linear-gradient(145deg,#7d9a77,#d1a55c 50%,#725f4f)}
+  .door{position:absolute;left:55%;top:6%;width:14%;height:64%;background:#62402c;border:8px solid #3e2c22;box-shadow:inset 0 0 0 4px #956b48}.door:after{content:"";position:absolute;right:10px;top:52%;width:5px;height:5px;background:#e8c677;border-radius:50%;box-shadow:0 0 4px #fff}.kitchen{position:absolute;right:4%;top:16%;width:28%;height:46%;background:linear-gradient(#839097 0 14%,#ddd2b7 15% 18%,#887661 19% 57%,#4e4036 58%);border-bottom:12px solid #1c1612}.kitchen:before{content:"";position:absolute;left:8%;bottom:0;width:22%;height:78%;background:linear-gradient(90deg,#bcc5c8,#657076);box-shadow:inset 0 0 0 4px #485158}.kitchen:after{content:"";position:absolute;right:5%;top:31%;width:57%;height:7%;background:#d7c4a3;box-shadow:0 16px 0 #382c23,0 34px 0 #49382a}
+  .sofa{position:absolute;left:16%;bottom:13%;width:32%;height:32%;background:linear-gradient(#8f785c,#5e4c39);border-radius:18px 18px 6px 6px;box-shadow:inset 0 0 0 4px #4c3e30,0 5px 12px #0007}.sofa:before,.sofa:after{content:"";position:absolute;top:18%;width:43%;height:54%;background:#9c8565;border:2px solid #5e503d;border-radius:10px}.sofa:before{left:6%}.sofa:after{right:6%}.coffee-table{position:absolute;left:30%;bottom:6%;width:25%;height:11%;background:#3f2b1d;transform:skewX(-9deg);box-shadow:0 7px 0 #20150f}.standing-lamp{position:absolute;left:8%;bottom:18%;width:4px;height:38%;background:#4c3928}.standing-lamp:before{content:"";position:absolute;left:-17px;top:-15px;width:38px;height:22px;background:#e2c788;clip-path:polygon(22% 0,78% 0,100% 100%,0 100%);box-shadow:0 0 22px #ffd48188}
+  .back-brace{position:absolute;z-index:-1;top:-5%;height:102%;width:5px;background:#6b6459;transform:rotate(var(--rot));transform-origin:bottom;box-shadow:0 0 0 1px #211}.back-brace:nth-child(1){left:4%;--rot:-17deg}.back-brace:nth-child(2){left:58%;--rot:15deg}.back-brace:nth-child(3){right:3%;--rot:-12deg}
+  .cast,.crew{position:absolute;z-index:8;width:18px;height:48px;transform-origin:50% 100%;filter:drop-shadow(0 3px 2px #0008)}.person-head{position:absolute;left:4px;top:0;width:11px;height:12px;border-radius:48% 48% 44% 44%;background:var(--skin,#bf8e6b);box-shadow:inset -2px 0 #0002}.person-hair{position:absolute;left:3px;top:-1px;width:13px;height:7px;border-radius:50% 50% 25% 25%;background:var(--hair,#39271f)}.person-body{position:absolute;left:2px;top:11px;width:15px;height:22px;background:var(--shirt,#485465);clip-path:polygon(18% 0,82% 0,100% 100%,0 100%)}.person-legs{position:absolute;left:3px;top:32px;width:12px;height:16px;background:linear-gradient(90deg,var(--pants,#24272d) 0 42%,transparent 43% 56%,var(--pants,#24272d) 57%)}.person-arm{position:absolute;top:13px;width:4px;height:20px;background:var(--skin,#bf8e6b);transform-origin:top}.person-arm.l{left:0;transform:rotate(var(--al,8deg))}.person-arm.r{right:0;transform:rotate(var(--ar,-8deg))}
+  .cast{transform:scale(1.2);animation:perform 6s ease-in-out infinite}.cast.c1{left:25%;bottom:27%;--shirt:#8b3b36;--skin:#c89672;--hair:#32221a}.cast.c2{left:37%;bottom:25%;--shirt:#355e78;--skin:#8c573e;--hair:#181311;animation-delay:-1.4s}.cast.c3{left:60%;bottom:27%;--shirt:#6e6652;--skin:#e0b28f;--hair:#c3a17e;animation-delay:-3s}.cast.c4{left:74%;bottom:29%;--shirt:#73537f;--skin:#b9795d;--hair:#30211e;animation-delay:-4.5s}.cast.c2 .person-arm.r{--ar:-48deg}.cast.c3 .person-arm.l{--al:42deg}
+  .crew-layer{position:absolute;inset:0;z-index:9}.crew{left:var(--x);top:var(--y);transform:scale(var(--s));opacity:var(--o,.95);animation:crewwork var(--tempo) ease-in-out infinite alternate;animation-delay:var(--delay)}
+  .crew.headset:after{content:"";position:absolute;left:1px;top:3px;width:15px;height:8px;border:1px solid #141414;border-bottom:0;border-radius:50%}.crew.paper:before{content:"";position:absolute;left:-6px;top:20px;width:11px;height:14px;background:#d8d3c2;transform:rotate(8deg)}
+  .cameras{position:absolute;inset:0;z-index:12}.camera{position:absolute;left:var(--x);top:var(--y);width:72px;height:80px;transform:scale(var(--s));filter:drop-shadow(0 8px 5px #0009);transition:transform .7s,left .7s}.camera-body{position:absolute;top:7px;width:56px;height:29px;border:2px solid #60666b;background:linear-gradient(#2e343a,#101317);clip-path:polygon(0 8%,74% 0,100% 34%,97% 89%,13% 100%)}.camera-body:after{content:"CAM " attr(data-num);position:absolute;left:11px;top:9px;color:#9ca5aa;font:7px monospace}.lens{position:absolute;right:0;top:12px;width:23px;height:19px;background:#101317;border:3px solid #555b60;border-radius:3px;box-shadow:inset -5px 0 #08090a}.viewfinder{position:absolute;left:7px;top:0;width:18px;height:12px;background:#171b1e;border:2px solid #656b6d}.tally{position:absolute;left:22px;top:4px;width:8px;height:4px;background:#433;border-radius:2px}.camera.live .tally{background:#ff3834;box-shadow:0 0 10px #ff3834}.pedestal{position:absolute;left:23px;top:34px;width:7px;height:34px;background:#4c5155}.pedestal:after{content:"";position:absolute;left:-18px;bottom:-5px;width:44px;height:7px;background:#22282d;clip-path:polygon(44% 0,56% 0,100% 100%,0 100%)}.cable{position:absolute;left:24px;top:68px;width:90px;height:35px;border-bottom:2px solid #0a0a0a;border-radius:50%;transform:rotate(-5deg)}.camera.one{--x:13%;--y:59%;--s:1}.camera.two{--x:46%;--y:64%;--s:1.16}.camera.three{--x:75%;--y:57%;--s:.98}
+  .boom{position:absolute;z-index:14;width:25%;height:3px;background:#25282a;transform-origin:0 50%;animation:boomsway 7s ease-in-out infinite;filter:drop-shadow(0 2px 1px #000)}.boom:after{content:"";position:absolute;right:-22px;top:-4px;width:27px;height:8px;border-radius:8px;background:#0d0f10}.boom.left{left:8%;top:47%;transform:rotate(12deg)}.boom.right{right:4%;top:48%;transform-origin:100% 50%;transform:rotate(170deg);animation-delay:-3s}
+  .foreground{position:absolute;left:0;right:0;bottom:0;height:33%;z-index:15;pointer-events:none}.floor{position:absolute;inset:0;background:linear-gradient(175deg,#24272a,#101215 60%,#07080a);clip-path:polygon(0 12%,100% 0,100% 100%,0 100%)}.floor:after{content:"";position:absolute;inset:0;background:repeating-radial-gradient(ellipse at 52% -20%,transparent 0 65px,#ffffff07 67px 68px)}.roadcase{position:absolute;left:3%;bottom:18%;width:80px;height:46px;background:linear-gradient(135deg,#383d41,#171a1c);border:4px solid #74797b;box-shadow:8px 8px 18px #0009}.roadcase:after{content:"";position:absolute;inset:8px;border:1px solid #7b7b77}.coil{position:absolute;left:11%;bottom:8%;width:55px;height:28px;border:5px double #070707;border-radius:50%;transform:rotate(-7deg)}.dolly-track{position:absolute;left:19%;bottom:3%;width:33%;height:38%;border-top:5px solid #565d61;border-bottom:5px solid #565d61;transform:perspective(200px) rotateX(55deg) rotateZ(-4deg);background:repeating-linear-gradient(90deg,transparent 0 13%,#555 14% 16%,transparent 17%)}
+  .village{position:absolute;left:29%;bottom:5%;width:34%;height:50%;z-index:4}.monitor-rack{position:absolute;inset:0 0 27%;padding:6px;display:flex;gap:5px;background:#171b1f;border:4px solid #4c5357;border-radius:5px;box-shadow:0 9px 20px #000}.monitor{position:relative;flex:1;overflow:hidden;border:4px solid #060708;background:#222;color:#faf5dd}.monitor.live{box-shadow:0 0 0 2px #a52a27}.feed{position:absolute;inset:0;background:linear-gradient(#b19a70 0 62%,#5d4935 63%);transition:filter .5s,transform .7s}.feed:before{content:"";position:absolute;left:12%;bottom:10%;width:55%;height:31%;background:#725c45;border-radius:4px}.feed:after{content:"";position:absolute;left:var(--actor,35%);bottom:29%;width:9px;height:27px;background:#435d74;border-radius:5px 5px 1px 1px;box-shadow:0 -5px 0 -1px #bd8c6d}.monitor:nth-child(2) .feed{transform:scale(.78)}.monitor:nth-child(3) .feed{transform:scale(1.45);--actor:50%}.monitor-meta{position:absolute;left:3px;right:3px;top:2px;display:flex;justify-content:space-between;font:6px monospace;text-shadow:0 1px #000}.monitor .rec{color:#ff4b46;opacity:0}.monitor.live .rec{opacity:1}.desk{position:absolute;left:-4%;right:-4%;bottom:16%;height:13%;background:#25282b;border-top:4px solid #5a4d3b;transform:skewX(-5deg)}.chair{position:absolute;bottom:0;width:24%;height:25%;border-radius:14px 14px 3px 3px;background:#171b1e;border:3px solid #383d42}.chair.a{left:9%}.chair.b{right:12%}.switcher{position:absolute;left:33%;bottom:14%;width:35%;height:15%;transform:skewX(-11deg);background:repeating-linear-gradient(90deg,#a34c45 0 3px,#283339 4px 7px);border:3px solid #121416}
+  .feed.fx-dutch{transform:rotate(6deg) scale(1.04)}.feed.fx-wide{transform:scale(.72)}.feed.fx-close{transform:scale(1.55)}.feed.fx-lowkey{filter:brightness(.5) contrast(1.35)}.feed.fx-highkey{filter:brightness(1.3) contrast(.78)}.feed.fx-rim{box-shadow:inset 0 0 18px #e6d48c}.feed.fx-soft{filter:contrast(.82) brightness(1.08)}.feed.fx-hard{filter:contrast(1.42)}.feed.fx-color{filter:sepia(.25) saturate(1.5)}
+  .terminal{position:absolute;z-index:30;right:clamp(12px,2vw,30px);bottom:clamp(12px,2vw,28px);width:min(390px,31vw);min-width:315px;background:linear-gradient(145deg,#151b21f5,#090d12f7);border:1px solid #ffffff27;border-top-color:#d7af6177;border-radius:9px;box-shadow:0 18px 55px #000d,inset 0 1px #ffffff12;overflow:hidden;transition:box-shadow .25s,transform .4s;backdrop-filter:blur(8px)}.terminal-head{height:34px;padding:0 13px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff14;background:#ffffff05;color:#aeb8bf;font:600 9px/1 monospace;letter-spacing:.14em;text-transform:uppercase}.terminal-head .chapter{color:#e6c987;max-width:68%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.terminal-body{padding:14px}.roundline{display:grid;grid-template-columns:1fr auto auto;gap:11px;align-items:center;margin-bottom:10px;color:#859098;font:600 9px/1 monospace;letter-spacing:.1em;text-transform:uppercase}.difficulty{padding:4px 6px;border:1px solid #ffffff1a;border-radius:3px}.timer{font:700 17px/1 "SFMono-Regular",Consolas,monospace;color:var(--green);min-width:48px;text-align:right;text-shadow:0 0 12px currentColor}.definition{min-height:57px;margin:4px 0 12px;font:500 clamp(14px,1.2vw,17px)/1.45 Georgia,serif;color:#f0eee7}.answer-row{display:flex;gap:7px}.answer{width:100%;height:39px;padding:0 11px;color:#f2f4f4;background:#06090d;border:1px solid #414950;border-radius:5px;outline:none}.answer:focus{border-color:#c5a35f;box-shadow:0 0 0 2px #c5a35f22}.submit{height:39px;padding:0 14px;background:#b68d42;color:#0d1012;border:0;border-radius:5px;font-weight:800;cursor:pointer}.submit:hover{background:#d1a653}.feedback{height:25px;padding-top:8px;color:#98a1a8;font:600 10px/1 monospace;letter-spacing:.06em}.feedback.correct{color:var(--green)}.feedback.wrong{color:#ff7771}.confidence-wrap{padding:0 14px 13px}.confidence-label{display:flex;justify-content:space-between;margin-bottom:5px;color:#8f989f;font:600 9px monospace;letter-spacing:.09em;text-transform:uppercase}.confidence-bar{height:5px;background:#282d31;border-radius:5px;overflow:hidden}.confidence-fill{height:100%;width:var(--confidence);background:linear-gradient(90deg,#a83e38,#e4a342 44%,#59c887);transition:width .7s ease}
+  .timer.amber{color:var(--amber)}.timer.red{color:var(--red)}.terminal.amber{box-shadow:0 18px 55px #000d,0 0 0 1px #f0a64255}.terminal.red{box-shadow:0 18px 55px #000d,0 0 15px #ff5b572a}.terminal.success{animation:good .55s ease}.terminal.failure{animation:bad .42s ease}
+  .overlay{position:absolute;inset:0;z-index:45;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 45%,#1c2226d9,#06080aed 70%);backdrop-filter:blur(3px);transition:opacity .7s,visibility .7s}.overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}.title-card{text-align:center;width:min(720px,90vw);padding:38px}.eyebrow{color:#d9b265;font:600 10px/1 monospace;letter-spacing:.38em;text-transform:uppercase}.title-card h1{margin:15px 0 8px;font:500 clamp(44px,7vw,86px)/.95 Georgia,serif;letter-spacing:-.04em;color:#f2e8d0;text-shadow:0 4px 25px #000}.title-card .tagline{margin:0 0 26px;color:#aeb5b8;font:400 15px/1.5 Georgia,serif;letter-spacing:.04em}.menu{display:flex;justify-content:center;gap:9px;flex-wrap:wrap}.menu button,.modal-close,.end-actions button{padding:11px 17px;border:1px solid #ffffff21;background:#11171ce6;border-radius:5px;cursor:pointer;font:700 10px/1 monospace;letter-spacing:.12em;text-transform:uppercase}.menu button.primary,.end-actions button.primary{background:#d0a150;color:#111317;border-color:#e6c078}.menu button:hover,.end-actions button:hover{border-color:#d7b667;color:#f4dca6}.start-details{display:flex;justify-content:center;gap:25px;margin-top:24px;color:#747e84;font:9px monospace;letter-spacing:.1em;text-transform:uppercase}
+  .modal{position:absolute;z-index:48;inset:8% 10%;display:flex;flex-direction:column;background:#0b1015f7;border:1px solid #ffffff25;border-radius:10px;box-shadow:0 30px 80px #000;overflow:hidden}.modal.hidden{display:none}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #ffffff16}.modal-head h2{margin:0;font:500 25px Georgia,serif;color:#eadcbf}.modal-close{padding:8px 12px}.modal-body{overflow:auto;padding:18px 22px;color:#bbc2c6;line-height:1.65}.modal-body h3{color:#dfbf7d;font:500 17px Georgia,serif;margin:14px 0 6px}.modal-body p{margin:5px 0}.ref-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 22px}.ref-item{padding:8px 0;border-bottom:1px solid #ffffff0d;font-size:12px}.ref-item b{color:#e7e1d3}.search{width:220px;padding:8px 10px;background:#05080b;color:#eee;border:1px solid #3c464d;border-radius:4px}
+  .end-card{width:min(610px,90vw);padding:34px;text-align:center;background:#0c1116f5;border:1px solid #d6ae5e55;border-radius:9px;box-shadow:0 30px 100px #000}.end-card h2{margin:8px 0;font:500 45px Georgia,serif;color:#f0dfb9}.rank{color:#dfb65f;font:700 12px monospace;letter-spacing:.22em;text-transform:uppercase}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:24px 0}.stat{padding:12px 6px;background:#ffffff08;border:1px solid #ffffff0e}.stat b{display:block;color:#f0e4ca;font:500 21px Georgia,serif}.stat span{font:8px monospace;color:#879198;letter-spacing:.09em;text-transform:uppercase}.end-actions{display:flex;justify-content:center;gap:9px}.end-sub{color:#929ba1;font:13px/1.5 Georgia,serif}
+  .confidence-mid .soundstage{filter:saturate(.88)}.confidence-low .soundstage{filter:saturate(.68) brightness(.88)}.confidence-critical .soundstage{filter:saturate(.45) brightness(.72)}.confidence-low .crew{--tempo:6s}.confidence-critical .crew{--tempo:3.7s}.confidence-critical .camera.three{transform:scale(.98) translateX(22px) rotate(-2deg)}
+  @keyframes pulse{50%{opacity:.4}}@keyframes perform{0%,100%{transform:scale(1.2) translateX(0)}35%{transform:scale(1.2) translateX(5px)}55%{transform:scale(1.2) translateX(5px) rotate(1deg)}75%{transform:scale(1.2) translateX(-3px)}}@keyframes crewwork{to{transform:scale(var(--s)) translateX(7px) rotate(1deg)}}@keyframes boomsway{0%,100%{margin-top:-2px}50%{margin-top:4px}}@keyframes good{40%{box-shadow:0 0 28px #54d58c66,inset 0 0 0 1px #54d58c}}@keyframes bad{25%{transform:translateX(-4px)}50%{transform:translateX(4px)}75%{transform:translateX(-2px)}}
+  @media(max-width:900px){.terminal{width:min(390px,44vw)}.village{left:18%;width:38%}.camera.one{display:none}.rooms{grid-template-columns:1fr 1fr}.room:nth-child(-n+2){display:none}.set-zone{left:5%;width:84%}.ref-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:650px){.app{min-height:560px}.terminal{right:8px;bottom:8px;width:calc(100% - 16px);min-width:0}.terminal-body{padding:11px}.definition{min-height:43px}.village{left:6%;width:56%;bottom:38%}.set-zone{top:31%;height:36%}.camera.two{left:7%;top:59%}.camera.three{right:1%;left:auto}.start-details{display:none}.title-card{padding:18px}.topbar{padding:0 12px}.brand{font-size:9px}.modal{inset:4%}.modal-head{gap:10px;flex-wrap:wrap}.search{width:100%}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+</style>
 </head>
 <body>
-
-    <canvas id="gameCanvas"></canvas>
-    <div class="scanlines"></div>
-
-    <div class="video-village">
-        <div class="monitor-rig"><div class="monitor-label">CAM 1</div></div>
-        <div class="monitor-rig"><div class="monitor-label" style="color:#fff; border-color: var(--tally-red);">CAM 2 (LIVE)</div></div>
+<main class="app" id="app">
+  <div class="topbar"><div class="brand">Rendering Wizardry</div><div class="stage-status"><span class="record-dot"></span><span id="stageStatus">Stage 14 · Standby</span></div></div>
+  <section class="soundstage" aria-label="Hollywood sitcom soundstage">
+    <div class="rear-wall"></div><div class="loading-door"></div>
+    <div class="rooms">
+      <div class="room"><span class="room-label">Hair & Makeup</span><div class="mirror"></div></div>
+      <div class="room"><span class="room-label">Wardrobe</span><div class="wardrobe-rack"><i style="--i:0;--c:#7d4640"></i><i style="--i:1;--c:#43586b"></i><i style="--i:2;--c:#887a55"></i><i style="--i:3;--c:#55415d"></i><i style="--i:4;--c:#5e6f58"></i></div></div>
+      <div class="room"><span class="room-label">Greenroom</span><div class="green-sofa"></div><div class="green-table"></div></div>
+      <div class="room"><span class="room-label">Props</span><div class="prop-shelves"><i style="--h:22%;--c:#b6945d"></i><i style="--h:47%;--c:#6c8290"></i><i style="--h:31%;--c:#916254"></i><i style="--h:55%;--c:#4e654b"></i><i style="--h:27%;--c:#c2b58f"></i><i style="--h:42%;--c:#68757e"></i><i style="--h:35%;--c:#804b49"></i></div></div>
     </div>
-
-    <!-- Gameplay Terminal -->
-    <div class="terminal" id="terminal-ui">
-        <div class="terminal-header">
-            <span class="term-title">SCENE: 4A | TAKE: 3</span>
-            <span class="term-question" id="shot-counter">SHOT 1 / 3</span>
-        </div>
-        <div class="terminal-body">
-            <div class="status-row">
-                <div class="timer" id="game-timer" style="color: var(--timer-green);">00.0s</div>
-                <div class="confidence-container">
-                    <span class="confidence-label">DIRECTOR CONFIDENCE</span>
-                    <div class="confidence-bar">
-                        <div class="confidence-fill" id="confidence-fill"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="category-label" id="category">Composition & Layout</div>
-            <div class="definition" id="definition">"Loading..."</div>
-            <div class="input-row">
-                <span class="input-prompt">></span>
-                <input type="text" class="term-input" id="answer-input" placeholder="ENTER TERM..." autocomplete="off" autofocus spellcheck="false">
-            </div>
-        </div>
+    <div class="rig"><div class="truss a"></div><div class="truss b"></div>
+      <i class="lamp" style="--x:12%;--r:12deg"></i><i class="lamp" style="--x:27%;--r:5deg"></i><i class="lamp" style="--x:47%;--r:-4deg"></i><i class="lamp" style="--x:66%;--r:-9deg"></i><i class="lamp" style="--x:84%;--r:-14deg"></i><i class="cable-drop" style="--x:22%"></i><i class="cable-drop" style="--x:76%"></i>
     </div>
-
-    <!-- Game Over Screen -->
-    <div class="game-over" id="gameOverScreen">
-        <h1>PRODUCTION PAUSED</h1>
-        <p>Director confidence reached zero. The visual plan needs another pass.</p>
-        <button class="restart-btn" id="restartBtn">RESTART PRODUCTION</button>
+    <div class="set-zone">
+      <i class="back-brace"></i><i class="back-brace"></i><i class="back-brace"></i><div class="set-floor"></div><div class="set-wall left"></div><div class="set-wall right"></div><div class="window"></div><div class="picture"></div><div class="door"></div><div class="kitchen"></div><div class="standing-lamp"></div><div class="sofa"></div><div class="coffee-table"></div>
+      <div class="cast c1"><i class="person-head"></i><i class="person-hair"></i><i class="person-body"></i><i class="person-legs"></i><i class="person-arm l"></i><i class="person-arm r"></i></div>
+      <div class="cast c2"><i class="person-head"></i><i class="person-hair"></i><i class="person-body"></i><i class="person-legs"></i><i class="person-arm l"></i><i class="person-arm r"></i></div>
+      <div class="cast c3"><i class="person-head"></i><i class="person-hair"></i><i class="person-body"></i><i class="person-legs"></i><i class="person-arm l"></i><i class="person-arm r"></i></div>
+      <div class="cast c4"><i class="person-head"></i><i class="person-hair"></i><i class="person-body"></i><i class="person-legs"></i><i class="person-arm l"></i><i class="person-arm r"></i></div>
     </div>
-
-    <script>
-        // Canvas Rendering
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        function drawRect(x, y, w, h, color) {
-            ctx.fillStyle = color;
-            ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
-        }
-
-        function drawCharacter(x, y, shirtColor, hairColor, hasClipboard = false) {
-            drawRect(x - 2, y + 36, 20, 6, 'rgba(0,0,0,0.4)');
-            drawRect(x + 3, y + 26, 4, 12, '#18181b');
-            drawRect(x + 9, y + 26, 4, 12, '#18181b');
-            drawRect(x, y + 12, 16, 16, shirtColor);
-            drawRect(x + 2, y + 3, 12, 10, '#fde047');
-            drawRect(x + 2, y + 1, 12, 4, hairColor);
-            if (hasClipboard) {
-                drawRect(x - 4, y + 16, 6, 8, '#f8fafc');
-            }
-        }
-
-        let animTimer = 0;
-        function renderScene() {
-            animTimer += 0.05;
-            ctx.fillStyle = '#090a0f';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = '#181a20';
-            ctx.fillRect(0, canvas.height * 0.38, canvas.width, canvas.height * 0.62);
-
-            ctx.strokeStyle = '#222630';
-            ctx.lineWidth = 2;
-            for (let i = 0; i < canvas.width; i += 80) {
-                ctx.beginPath();
-                ctx.moveTo(i, canvas.height * 0.38);
-                ctx.lineTo(i - 200, canvas.height);
-                ctx.stroke();
-            }
-
-            ctx.fillStyle = '#27272a';
-            ctx.fillRect(0, 0, canvas.width, 18);
-
-            const setX = canvas.width * 0.22;
-            const setY = canvas.height * 0.2;
-            const setW = canvas.width * 0.56;
-            const setH = canvas.height * 0.22;
-
-            drawRect(setX, setY, setW, setH, '#5c3a21');
-            drawRect(setX, setY + setH - 15, setW, 15, '#b08053');
-            drawRect(setX + setW * 0.3, setY + setH - 45, 130, 35, '#7f1d1d');
-            drawRect(setX + 40, setY + 20, 50, 35, '#1e293b');
-            drawRect(setX + setW - 70, setY + setH - 50, 25, 40, '#15803d');
-
-            let actorBob = Math.sin(animTimer * 2) * 2;
-            drawCharacter(setX + setW * 0.38, setY + setH - 55 + actorBob, '#2563eb', '#1e293b');
-            drawCharacter(setX + setW * 0.58, setY + setH - 55 - actorBob, '#16a34a', '#b45309');
-
-            const tableX = canvas.width * 0.08;
-            const tableY = canvas.height * 0.35;
-            drawRect(tableX, tableY, 120, 8, '#27272a');
-            drawRect(tableX + 10, tableY + 8, 6, 20, '#090a0f');
-            drawRect(tableX + 100, tableY + 8, 6, 20, '#090a0f');
-            drawRect(tableX + 20, tableY - 22, 18, 22, '#e4e4e7');
-            drawRect(tableX + 65, tableY - 16, 35, 16, '#18181b');
-
-            drawCharacter(tableX - 20, tableY - 10, '#52525b', '#27272a');
-            drawCharacter(tableX + 130, tableY - 10, '#71717a', '#3f3f46');
-            
-            let pace1 = (animTimer * 15) % (canvas.width * 0.4);
-            drawCharacter(canvas.width * 0.15 + pace1, canvas.height * 0.32, '#0284c7', '#0f172a');
-            drawCharacter(canvas.width * 0.8, canvas.height * 0.36, '#334155', '#475569', true);
-
-            drawCameraRig(canvas.width * 0.25, canvas.height * 0.45, false);
-            drawCameraRig(canvas.width * 0.48, canvas.height * 0.48, true);
-            drawCameraRig(canvas.width * 0.72, canvas.height * 0.45, false);
-
-            let dirPace = Math.sin(animTimer) * 20;
-            drawCharacter(canvas.width * 0.38 + dirPace, canvas.height * 0.52, '#0f172a', '#334155');
-
-            requestAnimationFrame(renderScene);
-        }
-
-        function drawCameraRig(x, y, isLive) {
-            drawRect(x + 15, y + 20, 12, 60, '#3f3f46');
-            drawRect(x, y, 42, 28, '#1e293b');
-            drawRect(x + 10, y - 8, 14, 8, '#0f172a');
-            drawRect(x + 32, y + 4, 6, 6, isLive ? '#ef4444' : '#27272a');
-            drawRect(x + 42, y + 6, 25, 16, '#475569');
-            drawCharacter(x - 20, y + 4, '#475569', '#fcd34d');
-        }
-
-        requestAnimationFrame(renderScene);
-
-        // Game Metrics & Logic Engine
-        const gameData = [
-            { term: "FOCAL POINT", aliases: ["FOCAL POINT", "VISUAL WEIGHT"], category: "Composition & Layout", def: "What the eye is pulled to first; the visual center of interest." },
-            { term: "PAN", aliases: ["PAN"], category: "Camera Movements", def: "Horizontal pivot from a fixed point." },
-            { term: "DUTCH ANGLE", aliases: ["DUTCH ANGLE", "CANTED", "OBLIQUE"], category: "Camera Angles", def: "Tilted horizon; unease, disorientation, tension." },
-            { term: "RULE OF THIRDS", aliases: ["RULE OF THIRDS"], category: "Composition & Layout", def: "Subject placed on the intersecting lines of a 3x3 grid." },
-            { term: "ESTABLISHING SHOT", aliases: ["ESTABLISHING SHOT"], category: "Framing the Performance", def: "Wide view that orients the audience to place/time." }
-        ];
-
-        let currentIndex = 0;
-        let confidence = 100;
-        let timerSeconds = 0.0;
-        let timerInterval = null;
-        let isProcessing = false;
-
-        const inputField = document.getElementById('answer-input');
-        const defDisplay = document.getElementById('definition');
-        const catDisplay = document.getElementById('category');
-        const shotCounter = document.getElementById('shot-counter');
-        const terminalUI = document.getElementById('terminal-ui');
-        const timerDisplay = document.getElementById('game-timer');
-        const confidenceFill = document.getElementById('confidence-fill');
-        const gameOverScreen = document.getElementById('gameOverScreen');
-        const restartBtn = document.getElementById('restartBtn');
-
-        function updateConfidenceBar() {
-            confidenceFill.style.width = `${confidence}%`;
-            if (confidence > 50) {
-                confidenceFill.style.background = 'var(--correct-green)';
-            } else if (confidence > 25) {
-                confidenceFill.style.background = 'var(--timer-amber)';
-            } else {
-                confidenceFill.style.background = 'var(--tally-red)';
-            }
-        }
-
-        function startTimer() {
-            timerSeconds = 0.0;
-            timerDisplay.textContent = "00.0s";
-            timerDisplay.style.color = "var(--timer-green)";
-            
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                timerSeconds += 0.1;
-                timerDisplay.textContent = timerSeconds.toFixed(1) + "s";
-
-                if (timerSeconds < 7.0) {
-                    timerDisplay.style.color = "var(--timer-green)";
-                } else if (timerSeconds < 10.0) {
-                    timerDisplay.style.color = "var(--timer-amber)";
-                } else {
-                    timerDisplay.style.color = "var(--timer-red)";
-                }
-
-                if (timerSeconds >= 15.0) {
-                    clearInterval(timerInterval);
-                    handleTimeout();
-                }
-            }, 100);
-        }
-
-        function loadQuestion() {
-            if (confidence <= 0) return;
-            isProcessing = false;
-            defDisplay.textContent = `"${gameData[currentIndex].def}"`;
-            catDisplay.textContent = gameData[currentIndex].category;
-            shotCounter.textContent = `SHOT ${currentIndex + 1} / ${gameData.length}`;
-            inputField.value = '';
-            inputField.disabled = false;
-            inputField.focus();
-            startTimer();
-        }
-
-        function handleTimeout() {
-            if (isProcessing) return;
-            isProcessing = true;
-            inputField.disabled = true;
-            clearInterval(timerInterval);
-
-            confidence = Math.max(0, confidence - 30);
-            updateConfidenceBar();
-
-            terminalUI.classList.add('wrong');
-            inputField.style.color = 'var(--wrong-red)';
-            inputField.value = `TIMEOUT: ${gameData[currentIndex].term}`;
-
-            checkGameOverOrNext();
-        }
-
-        function checkAnswer() {
-            if (isProcessing) return;
-            isProcessing = true;
-            clearInterval(timerInterval);
-            inputField.disabled = true;
-
-            const playerAnswer = inputField.value.trim().toUpperCase();
-            const currentItem = gameData[currentIndex];
-            const isCorrect = currentItem.aliases.includes(playerAnswer);
-
-            if (isCorrect) {
-                terminalUI.classList.add('correct');
-                inputField.style.color = 'var(--correct-green)';
-                if (timerSeconds < 10.0) {
-                    confidence = Math.min(100, confidence + 10);
-                }
-            } else {
-                terminalUI.classList.add('wrong');
-                inputField.style.color = 'var(--wrong-red)';
-                inputField.value = `CORRECT: ${currentItem.term}`;
-                confidence = Math.max(0, confidence - 30);
-            }
-
-            updateConfidenceBar();
-            checkGameOverOrNext();
-        }
-
-        function checkGameOverOrNext() {
-            if (confidence <= 0) {
-                setTimeout(() => {
-                    gameOverScreen.style.display = 'flex';
-                }, 1000);
-                return;
-            }
-
-            setTimeout(() => {
-                terminalUI.classList.remove('correct', 'wrong');
-                inputField.style.color = '';
-                currentIndex = (currentIndex + 1) % gameData.length;
-                loadQuestion();
-            }, 1500);
-        }
-
-        inputField.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                checkAnswer();
-            }
-        });
-
-        restartBtn.addEventListener('click', () => {
-            confidence = 100;
-            currentIndex = 0;
-            updateConfidenceBar();
-            gameOverScreen.style.display = 'none';
-            loadQuestion();
-        });
-
-        // Initialize Game
-        updateConfidenceBar();
-        loadQuestion();
-    </script>
+    <div class="crew-layer" id="crewLayer"></div>
+    <div class="boom left"></div><div class="boom right"></div>
+    <div class="cameras"><div class="camera one"><i class="viewfinder"></i><i class="tally"></i><div class="camera-body" data-num="1"></div><i class="lens"></i><i class="pedestal"></i><i class="cable"></i></div><div class="camera two live"><i class="viewfinder"></i><i class="tally"></i><div class="camera-body" data-num="2"></div><i class="lens"></i><i class="pedestal"></i><i class="cable"></i></div><div class="camera three"><i class="viewfinder"></i><i class="tally"></i><div class="camera-body" data-num="3"></div><i class="lens"></i><i class="pedestal"></i><i class="cable"></i></div></div>
+    <div class="foreground"><div class="floor"></div><div class="roadcase"></div><div class="coil"></div><div class="dolly-track"></div><div class="village"><div class="monitor-rack"><div class="monitor"><div class="feed"></div><div class="monitor-meta"><span>CAM 1</span><span class="rec">REC</span></div></div><div class="monitor live"><div class="feed"></div><div class="monitor-meta"><span>CAM 2 · MASTER</span><span class="rec">REC</span></div></div><div class="monitor"><div class="feed"></div><div class="monitor-meta"><span>CAM 3</span><span class="rec">REC</span></div></div></div><div class="desk"></div><div class="chair a"></div><div class="chair b"></div><div class="switcher"></div></div></div>
+  </section>
+  <section class="terminal" id="terminal" aria-label="Visualization assistant terminal">
+    <div class="terminal-head"><span class="chapter" id="chapter">Framing the Performance</span><span>VIS · 04</span></div>
+    <div class="terminal-body"><div class="roundline"><span id="progress">Question 1 / 75</span><span class="difficulty" id="difficulty">Easy</span><span class="timer" id="timer">0.0</span></div><div class="definition" id="definition">Press Begin Production to receive the director’s first visual instruction.</div><form class="answer-row" id="answerForm"><input class="answer" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the professional term…" disabled aria-label="Answer"><button class="submit" id="submit" disabled>Enter</button></form><div class="feedback" id="feedback" aria-live="polite">Stage 14 is standing by.</div></div>
+    <div class="confidence-wrap"><div class="confidence-label"><span>Director Confidence</span><span id="confidenceText">100%</span></div><div class="confidence-bar"><div class="confidence-fill"></div></div></div>
+  </section>
+  <section class="overlay" id="opening"><div class="title-card"><div class="eyebrow">A visual-direction simulation</div><h1>Rendering<br>Wizardry</h1><p class="tagline">Master the language behind the image.</p><div class="menu"><button class="primary" id="begin">Begin Production</button><button id="howBtn">How to Play</button><button id="refBtn">Vocabulary Reference</button><button id="soundBtn">Sound: On</button><button id="fullBtn">Fullscreen</button></div><div class="start-details"><span>75 production terms</span><span>15 seconds per call</span><span>One live soundstage</span></div></div></section>
+  <section class="overlay hidden" id="ending"></section>
+  <section class="modal hidden" id="howModal"><div class="modal-head"><h2>Call the shot precisely.</h2><button class="modal-close" data-close="howModal">Close</button></div><div class="modal-body"><h3>Your role</h3><p>You are the visualization assistant beside video village. Read each concise direction, type its professional term, and press Enter. Capitalization and harmless punctuation do not matter; listed industry aliases are accepted.</p><h3>Production clock</h3><p>The timer counts upward. Green covers 0–7 seconds, amber 8–9, and red 10–15. You have one attempt. A correct answer inside 10 seconds adds 10% Director Confidence.</p><h3>Confidence</h3><p>Misses cost 35% on Easy calls, 30% on Medium, and 25% on Hard. Reach zero and filming pauses. Complete all 75 terms to wrap the episode.</p><h3>Watch the stage</h3><p>Cameras, feeds, lighting, cast, and crew react to your choices. The atmosphere tightens as confidence falls, while precise terms improve the selected shot.</p></div></section>
+  <section class="modal hidden" id="refModal"><div class="modal-head"><h2>Vocabulary Reference</h2><input class="search" id="refSearch" placeholder="Search 75 terms…"><button class="modal-close" data-close="refModal">Close</button></div><div class="modal-body"><div class="ref-grid" id="refGrid"></div></div></section>
+  <div class="grain"></div>
+</main>
+<script>
+const Q=[
+['Extreme close-up (ECU)','Isolates a tiny visual detail, such as an eye, hand, or texture.','Framing the Performance','easy',['extreme close up','ecu']],
+['Close-up (CU)','A face or single important object fills the frame.','Framing the Performance','easy',['close up','cu']],
+['Medium close-up (MCU)','Frames a performer from the head to the shoulders or chest.','Framing the Performance','easy',['medium close up','mcu']],
+['Medium shot (MS)','The classic waist-up dialogue or working shot.','Framing the Performance','easy',['medium shot','ms']],
+['Medium long / medium full shot','Frames the subject from the knees or mid-thigh upward.','Framing the Performance','medium',['medium long shot','medium full shot','mls','mfs']],
+['Full shot / long shot','Shows a subject head-to-toe with some surrounding environment.','Framing the Performance','easy',['full shot','long shot']],
+['Wide / long shot','Places the subject within a significant amount of environment.','Framing the Performance','easy',['wide shot','long shot','wide']],
+['Extreme wide / extreme long shot (ELS)','Makes the subject appear small or dwarfed by the surrounding space.','Framing the Performance','medium',['extreme wide shot','extreme long shot','els','ews']],
+['Establishing shot','A wide view that orients the audience to a scene’s place or time.','Framing the Performance','easy',['establishing shot']],
+['Master shot','Wide coverage that records the entire scene’s action.','Framing the Performance','medium',['master shot']],
+['Eye-level','A neutral, naturalistic camera angle at the subject’s eye height.','Choosing the Angle','easy',['eye level']],
+['Low angle','Looks upward to imply power, dominance, heroism, or threat.','Choosing the Angle','easy',['low angle']],
+['High angle','Looks downward to suggest vulnerability, smallness, or overview.','Choosing the Angle','easy',['high angle']],
+['Bird’s-eye / overhead','Looks straight down to map space or create detachment.','Choosing the Angle','medium',['birds eye','birds eye view','bird eye','overhead','overhead shot','overhead view']],
+['Worm’s-eye','An extremely low view looking almost straight upward, emphasizing scale.','Choosing the Angle','medium',['worms eye','worms eye view']],
+['Dutch angle / canted / oblique','Tilts the horizon to create unease, tension, or disorientation.','Choosing the Angle','easy',['dutch angle','canted angle','canted','oblique angle','oblique']],
+['Over-the-shoulder (OTS)','Looks past one character’s shoulder toward another.','Choosing the Angle','easy',['over the shoulder','ots','over the shoulder shot']],
+['Point-of-view (POV)','Places the camera where a character’s eyes would be.','Choosing the Angle','easy',['point of view','pov','point of view shot']],
+['Three-quarter view','Turns the subject about 45 degrees to reveal dimension.','Choosing the Angle','medium',['three quarter view','3 quarter view','three quarters view']],
+['Profile','Shows the subject directly from the side.','Choosing the Angle','easy',['profile','profile view']],
+['Pan','A horizontal camera pivot from a fixed position.','Moving the Camera','easy',['pan']],
+['Tilt','A vertical camera pivot from a fixed position.','Moving the Camera','easy',['tilt']],
+['Dolly / track in or out','Physically moves the camera toward or away from the subject.','Moving the Camera','medium',['dolly','dolly in','dolly out','track in','track out','dolly shot']],
+['Tracking / trucking shot','Moves laterally while following a subject.','Moving the Camera','medium',['tracking shot','trucking shot','tracking','trucking']],
+['Crane / jib / boom','Raises or lowers the camera on a mechanical arm.','Moving the Camera','medium',['crane','crane shot','jib','jib shot','boom','boom shot']],
+['Orbit / arc','Circles the camera around the subject.','Moving the Camera','medium',['orbit','arc','arc shot','orbit shot']],
+['Push-in / pull-out','A slow, deliberate move closer or farther for emphasis.','Moving the Camera','medium',['push in','pull out','push-in','pull-out']],
+['Handheld','Allows slight natural camera shake for urgency or documentary energy.','Moving the Camera','easy',['handheld','hand held']],
+['Steadicam / stabilized','Creates smooth, floating camera movement through space.','Moving the Camera','medium',['steadicam','stabilized','stabilised','stabilized shot']],
+['Whip pan','An extremely fast horizontal pivot that creates blur.','Moving the Camera','easy',['whip pan','swish pan']],
+['Rule of thirds','Places key elements along the intersections of a three-by-three grid.','Building the Composition','easy',['rule of thirds']],
+['Centered / symmetrical composition','Builds strong, formal balance around the frame’s center.','Building the Composition','easy',['centered composition','centred composition','symmetrical composition','symmetry']],
+['Asymmetrical balance','Distributes visual weight unevenly while keeping the image stable.','Building the Composition','medium',['asymmetrical balance','asymmetric balance']],
+['Leading lines','Uses visible lines to guide the viewer’s eye toward a subject.','Building the Composition','easy',['leading lines']],
+['Frame within a frame','Uses a doorway, window, or arch to re-frame the subject.','Building the Composition','medium',['frame within a frame']],
+['Negative space','Uses empty area deliberately for breathing room or tension.','Building the Composition','easy',['negative space']],
+['Foreground interest / layered depth','Uses strong near, middle, and far elements to create dimensional space.','Building the Composition','medium',['foreground interest','layered depth','depth layering']],
+['Depth of field (shallow / deep)','Describes how much of the image appears sharply focused.','Building the Composition','easy',['depth of field','dof','shallow depth of field','deep depth of field']],
+['Bokeh','The aesthetic character of a lens’s out-of-focus areas.','Building the Composition','medium',['bokeh']],
+['Vanishing point / perspective','Controls spatial depth through one-, two-, or three-point convergence.','Building the Composition','hard',['vanishing point','one point perspective','two point perspective','three point perspective','perspective']],
+['Visual weight / focal point','Describes what attracts the viewer’s eye first.','Building the Composition','medium',['visual weight','focal point']],
+['Silhouette','Presents the subject as a dark shape against a brighter background.','Building the Composition','easy',['silhouette']],
+['Headroom / lead room / looking room','Names the deliberate space above a head or in the direction a subject faces.','Building the Composition','medium',['headroom','lead room','looking room','look room']],
+['Golden ratio / Fibonacci spiral','An organic proportional guide for balanced composition.','Building the Composition','hard',['golden ratio','fibonacci spiral','golden spiral']],
+['Blocking','Plans where subjects are positioned and how they move within the frame.','Building the Composition','easy',['blocking']],
+['Key light','The primary light that shapes the subject.','Lighting the Stage','easy',['key light','key']],
+['Fill light','Softens the shadows created by the primary light.','Lighting the Stage','easy',['fill light','fill']],
+['Backlight / rim light / kicker','Creates an edge of light that separates a subject from the background.','Lighting the Stage','medium',['backlight','back light','rim light','kicker','kicker light']],
+['Three-point lighting','The classic arrangement of key, fill, and back lights.','Lighting the Stage','easy',['three point lighting','3 point lighting']],
+['High-key','Uses bright, low-contrast illumination with minimal shadows.','Lighting the Stage','medium',['high key','high key lighting']],
+['Low-key','Uses dark, high-contrast illumination with heavy shadows.','Lighting the Stage','medium',['low key','low key lighting']],
+['Hard light','Produces sharp, clearly defined shadows.','Lighting the Stage','easy',['hard light','hard lighting']],
+['Soft / diffused light','Wraps the subject with gentle, gradual shadows.','Lighting the Stage','easy',['soft light','diffused light','soft lighting','diffuse light']],
+['Volumetric lighting / god rays','Makes beams visible through fog, dust, or atmosphere.','Lighting the Stage','medium',['volumetric lighting','volumetric light','god rays','crepuscular rays']],
+['Chiaroscuro','Uses powerful contrast between light and dark for painterly drama.','Lighting the Stage','hard',['chiaroscuro']],
+['Rembrandt lighting','Creates the classic triangular patch of light on the shadowed cheek.','Lighting the Stage','hard',['rembrandt lighting','rembrandt light']],
+['Practical lights','Light sources visibly present inside the scene, such as lamps or neon.','Lighting the Stage','medium',['practical lights','practicals','practical lighting']],
+['Motivated lighting','Lighting that appears to come from a logical source within the scene.','Lighting the Stage','medium',['motivated lighting','motivated light']],
+['Golden hour / magic hour','Warm, low-angle sunlight with long shadows near sunrise or sunset.','Lighting the Stage','easy',['golden hour','magic hour']],
+['Blue hour','Cool, soft natural light shortly after sunset or before sunrise.','Lighting the Stage','medium',['blue hour']],
+['Wide-angle / short focal length','A lens choice that exaggerates depth and may distort nearby forms.','Creating the Final Look','medium',['wide angle','wide angle lens','short focal length','24mm']],
+['Normal / standard lens','A roughly 35–50mm lens producing natural-looking perspective.','Creating the Final Look','medium',['normal lens','standard lens','normal','standard','35mm','50mm']],
+['Telephoto / long lens','An 85mm-or-longer lens that compresses space and isolates subjects.','Creating the Final Look','medium',['telephoto','telephoto lens','long lens','85mm']],
+['Anamorphic','A widescreen lens look associated with horizontal flares and oval bokeh.','Creating the Final Look','hard',['anamorphic','anamorphic lens']],
+['Field of view (FOV)','The amount of the world visible through the camera.','Creating the Final Look','easy',['field of view','fov']],
+['Aspect ratio','The proportional shape of the image frame, such as 16:9 or 2.39:1.','Creating the Final Look','easy',['aspect ratio']],
+['Cinematic','Describes intentional composition, lighting, and color that feel like a movie frame.','Creating the Final Look','easy',['cinematic']],
+['Atmospheric / moody','Emphasizes air, weather, and emotional tone.','Creating the Final Look','medium',['atmospheric','moody','atmospheric mood']],
+['Gritty / raw','Describes a textured, imperfect, lived-in visual quality.','Creating the Final Look','easy',['gritty','raw','gritty raw']],
+['Ethereal / dreamy','Describes a soft, glowing, otherworldly visual quality.','Creating the Final Look','easy',['ethereal','dreamy']],
+['Epic / sweeping','Suggests grand scale, breadth, and movement.','Creating the Final Look','easy',['epic','sweeping','epic sweeping']],
+['Intimate / claustrophobic','Uses tight framing and compressed space to create closeness or confinement.','Creating the Final Look','medium',['intimate','claustrophobic']],
+['Photorealistic / hyperdetailed','Prioritizes maximum realism and surface fidelity.','Creating the Final Look','easy',['photorealistic','photo realistic','hyperdetailed','hyper detailed']],
+['Stylized / painterly / cel-shaded','Uses a deliberately non-photoreal visual treatment.','Creating the Final Look','medium',['stylized','stylised','painterly','cel shaded','cell shaded']],
+['Color grade / palette','Sets emotional temperature through coordinated color, contrast, and tone.','Creating the Final Look','medium',['color grade','colour grade','color palette','colour palette','palette']]
+];
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const app=$('#app'), opening=$('#opening'), ending=$('#ending'), answer=$('#answer'), form=$('#answerForm'), timerEl=$('#timer'), terminal=$('#terminal'), feedback=$('#feedback');
+let deck=[],idx=0,confidence=100,started=false,locked=false,startAt=0,raf=0,soundOn=true,correct=0,fast=0,times=[],categoryStats={},audioCtx=null,liveCam=1;
+function normalize(v){return v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').trim()}
+function spawnCrew(){const spots=[[5,44,.72],[10,52,.84],[16,43,.68],[23,72,.82],[30,47,.7],[36,76,.75],[43,43,.68],[50,74,.77],[58,46,.7],[65,76,.75],[71,45,.72],[79,72,.82],[85,47,.7],[91,60,.79],[6,78,.88],[15,82,.76],[69,83,.8],[84,82,.85],[93,75,.73],[25,31,.54],[52,31,.55],[74,31,.56]];const colors=['#344757','#5a493d','#3f5146','#5d3f43','#464452','#6a6046'];$('#crewLayer').innerHTML=spots.map((p,i)=>`<div class="crew ${i%5===0?'headset ':''}${i%7===0?'paper':''}" style="--x:${p[0]}%;--y:${p[1]}%;--s:${p[2]};--delay:-${(i*.63)%9}s;--shirt:${colors[i%colors.length]};--skin:${['#c99470','#8e5b42','#d7ac86'][i%3]};--hair:${['#241d19','#4a3328','#19191b'][i%3]}"><i class="person-head"></i><i class="person-hair"></i><i class="person-body"></i><i class="person-legs"></i><i class="person-arm l"></i><i class="person-arm r"></i></div>`).join('')}
+function makeDeck(){const first=Q.slice(0,10);const rest=Q.slice(10);for(let i=rest.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[rest[i],rest[j]]=[rest[j],rest[i]]}return first.concat(rest)}
+function tone(freq=520,d=.08,type='sine',gain=.035){if(!soundOn)return;audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(gain,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+d);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+d)}
+function startGame(){deck=makeDeck();idx=0;confidence=100;correct=0;fast=0;times=[];categoryStats={};started=true;locked=false;opening.classList.add('hidden');ending.classList.add('hidden');app.classList.add('playing');$('#stageStatus').textContent='Stage 14 · Rolling · Scene 8A';answer.disabled=false;$('#submit').disabled=false;nextQuestion()}
+function nextQuestion(){if(idx>=deck.length)return finish(true);locked=false;const q=deck[idx];$('#chapter').textContent=q[2];$('#progress').textContent=`Question ${idx+1} / ${deck.length}`;$('#difficulty').textContent=q[3];$('#definition').textContent=q[1];feedback.className='feedback';feedback.textContent='Director is waiting for the visual term.';answer.value='';answer.focus();startAt=performance.now();cancelAnimationFrame(raf);tick()}
+function tick(){if(!started||locked)return;const t=(performance.now()-startAt)/1000;timerEl.textContent=Math.min(15,t).toFixed(1);const phase=t>=10?'red':t>=8?'amber':'';timerEl.className='timer '+phase;terminal.classList.remove('amber','red');if(phase)terminal.classList.add(phase);if(t>=15)return submitAnswer(true);raf=requestAnimationFrame(tick)}
+function submitAnswer(timeout=false){if(!started||locked)return;locked=true;cancelAnimationFrame(raf);const q=deck[idx],elapsed=Math.min(15,(performance.now()-startAt)/1000),given=normalize(answer.value),valid=q[4].map(normalize);const ok=!timeout&&valid.includes(given);times.push(elapsed);categoryStats[q[2]]??={c:0,n:0};categoryStats[q[2]].n++;if(ok){correct++;categoryStats[q[2]].c++;if(elapsed<=10){fast++;confidence=Math.min(100,confidence+10)}feedback.textContent=elapsed<=10?'SHOT APPROVED · Fast call, confidence restored.':'SHOT APPROVED · Correct visual instruction.';feedback.className='feedback correct';terminal.classList.add('success');tone(640,.09);setTimeout(()=>tone(850,.09),80);applyShot(q[0],true)}else{const loss={easy:35,medium:30,hard:25}[q[3]];confidence=Math.max(0,confidence-loss);feedback.textContent=`${timeout?'TIME EXPIRED':'MISSED CALL'} · Correct: ${q[0]}`;feedback.className='feedback wrong';terminal.classList.add('failure');tone(145,.22,'sawtooth',.025);applyShot(q[0],false)}updateConfidence();answer.disabled=true;$('#submit').disabled=true;setTimeout(()=>terminal.classList.remove('success','failure'),650);if(confidence<=0)return setTimeout(()=>finish(false),2100);idx++;setTimeout(()=>{answer.disabled=false;$('#submit').disabled=false;nextQuestion()},ok?950:2300)}
+function updateConfidence(){document.documentElement.style.setProperty('--confidence',confidence+'%');$('#confidenceText').textContent=confidence+'%';app.classList.remove('confidence-mid','confidence-low','confidence-critical');if(confidence<=25)app.classList.add('confidence-critical');else if(confidence<=50)app.classList.add('confidence-low');else if(confidence<=75)app.classList.add('confidence-mid')}
+function applyShot(term,ok){const feeds=$$('.feed');feeds.forEach(f=>f.className='feed');liveCam=(liveCam+1)%3;$$('.monitor,.camera').forEach(x=>x.classList.remove('live'));$$('.monitor')[liveCam].classList.add('live');$$('.camera')[liveCam].classList.add('live');if(!ok){feeds[liveCam].classList.add('fx-dutch');return}const n=normalize(term);let fx='';if(/dutch|canted/.test(n))fx='fx-dutch';else if(/wide|establishing|master/.test(n))fx='fx-wide';else if(/close up|telephoto|intimate/.test(n))fx='fx-close';else if(/low key|chiaroscuro/.test(n))fx='fx-lowkey';else if(/high key/.test(n))fx='fx-highkey';else if(/rim|backlight|kicker/.test(n))fx='fx-rim';else if(/soft|diffused|ethereal/.test(n))fx='fx-soft';else if(/hard light|gritty/.test(n))fx='fx-hard';else if(/color grade|golden hour|blue hour/.test(n))fx='fx-color';if(fx)feeds[liveCam].classList.add(fx);setTimeout(()=>feeds.forEach(f=>f.className='feed'),850)}
+function finish(win){started=false;locked=true;cancelAnimationFrame(raf);answer.disabled=true;$('#submit').disabled=true;app.classList.remove('playing');$('#stageStatus').textContent=win?'Stage 14 · That’s a wrap':'Stage 14 · Production paused';const accuracy=Math.round(correct/Math.max(1,idx+(win?0:1))*100),avg=times.length?(times.reduce((a,b)=>a+b,0)/times.length).toFixed(1):'0.0';let strongest='—',best=-1;Object.entries(categoryStats).forEach(([k,v])=>{const s=v.c/v.n;if(s>best){best=s;strongest=k}});const rank=!win?'Production Paused':accuracy>=94?'Rendering Wizard':accuracy>=85?'Cinematographer':accuracy>=72?'Visual Coordinator':accuracy>=58?'Camera Apprentice':'Production Assistant';ending.innerHTML=`<div class="end-card"><div class="eyebrow">${win?'Episode completed':'Filming halted'}</div><h2>${win?'That’s a wrap!':'Production Paused'}</h2><div class="rank">${rank}</div><p class="end-sub">${win?'The final composition is in the can. The cast and crew acknowledge a precise day at video village.':'The visual plan needs another pass. Review the language, then bring the soundstage back up.'}</p><div class="stats"><div class="stat"><b>${accuracy}%</b><span>Accuracy</span></div><div class="stat"><b>${avg}s</b><span>Avg. response</span></div><div class="stat"><b>${fast}</b><span>Fast calls</span></div><div class="stat"><b>${correct}</b><span>Approved shots</span></div></div><p class="end-sub">Strongest department: <b>${strongest}</b></p><div class="end-actions"><button class="primary" id="restart">Run Another Take</button><button id="endRef">Study Vocabulary</button></div></div>`;ending.classList.remove('hidden');$('#restart').onclick=startGame;$('#endRef').onclick=()=>openModal('refModal');if(win){tone(523,.15);setTimeout(()=>tone(659,.15),160);setTimeout(()=>tone(784,.3),320)}}
+function openModal(id){$('#'+id).classList.remove('hidden')}function closeModal(id){$('#'+id).classList.add('hidden')}
+function buildReference(){const grid=$('#refGrid');grid.innerHTML=Q.map(q=>`<div class="ref-item" data-search="${normalize(q[0]+' '+q[1])}"><b>${q[0]}</b> — ${q[1]}</div>`).join('')}
+form.addEventListener('submit',e=>{e.preventDefault();submitAnswer(false)});$('#begin').onclick=startGame;$('#howBtn').onclick=()=>openModal('howModal');$('#refBtn').onclick=()=>openModal('refModal');$$('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));$('#soundBtn').onclick=e=>{soundOn=!soundOn;e.currentTarget.textContent='Sound: '+(soundOn?'On':'Off');if(soundOn)tone(440,.08)};$('#fullBtn').onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.()};$('#refSearch').addEventListener('input',e=>{const v=normalize(e.target.value);$$('.ref-item').forEach(x=>x.style.display=x.dataset.search.includes(v)?'block':'none')});document.addEventListener('keydown',e=>{if(e.key==='Escape')$$('.modal').forEach(m=>m.classList.add('hidden'))});
+spawnCrew();buildReference();
+</script>
 </body>
 </html>
-
-```
