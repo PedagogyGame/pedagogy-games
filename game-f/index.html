@@ -1,663 +1,1330 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ancient Egypt 101</title>
-    <style>
-        :root {
-            --power-color: #4CAF50;
-            --bg-color: #1a1511;
-            --text-color: #e6d7c3;
-            --woozy-level: 0;
-            --blur-level: 0px;
-        }
-
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            font-family: 'Trebuchet MS', 'Lucida Sans Unicode', 'Lucida Grande', 'Lucida Sans', Arial, sans-serif;
-            background-color: #000;
-            color: var(--text-color);
-            overflow: hidden;
-        }
-
-        /* --- SCENE LAYER (Game World) --- */
-        #scene-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            z-index: 1;
-            filter: grayscale(var(--woozy-level)) sepia(calc(var(--woozy-level) * 0.4)) blur(var(--blur-level));
-            transition: filter 1s ease-out, transform 2s ease-in-out, opacity 2s ease-in-out, background 1s ease;
-            background-color: #050403;
-        }
-
-        /* Tremor Animation */
-        @keyframes shake {
-            0% { transform: translate(2px, 2px) rotate(0deg); }
-            10% { transform: translate(-2px, -4px) rotate(-1deg); }
-            20% { transform: translate(-6px, 0px) rotate(1deg); }
-            30% { transform: translate(6px, 4px) rotate(0deg); }
-            40% { transform: translate(2px, -2px) rotate(1deg); }
-            50% { transform: translate(-2px, 4px) rotate(-1deg); }
-            60% { transform: translate(-6px, 2px) rotate(0deg); }
-            70% { transform: translate(6px, 2px) rotate(-1deg); }
-            80% { transform: translate(-2px, -2px) rotate(1deg); }
-            90% { transform: translate(2px, 4px) rotate(0deg); }
-            100% { transform: translate(2px, -4px) rotate(-1deg); }
-        }
-        .tremor {
-            animation: shake 0.5s;
-        }
-
-        #scene-title {
-            position: absolute;
-            top: 40px;
-            font-size: 36px;
-            color: #d4af37;
-            text-transform: uppercase;
-            letter-spacing: 5px;
-            text-shadow: 2px 2px 10px rgba(0,0,0,1);
-            z-index: 5;
-        }
-
-        #artifact-visual {
-            text-align: center;
-            margin-left: 300px; /* Offset to not be hidden by UI */
-            z-index: 5;
-        }
-
-        #artifact-image {
-            max-width: 500px;
-            height: 300px;
-            border-radius: 8px;
-            border: 4px solid #5c4a3d;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.9);
-            object-fit: cover;
-        }
-
-        /* --- DUST AND LIBRARIAN (Room 1 Specifics) --- */
-        #dust-overlay {
-            position: absolute;
-            top: -50%; 
-            left: -50%; 
-            width: 200%; 
-            height: 200%;
-            background-image: 
-                radial-gradient(2px 2px at 40px 60px, rgba(212, 175, 55, 0.4), transparent),
-                radial-gradient(2.5px 2.5px at 20px 50px, rgba(200, 150, 100, 0.3), transparent),
-                radial-gradient(1.5px 1.5px at 90px 40px, rgba(212, 175, 55, 0.5), transparent),
-                radial-gradient(2px 2px at 150px 90px, rgba(255, 200, 120, 0.3), transparent);
-            background-size: 200px 200px;
-            opacity: 0.8;
-            pointer-events: none;
-            z-index: 3;
-            animation: floatDust 40s linear infinite;
-            display: none;
-            mix-blend-mode: screen;
-        }
-
-        @keyframes floatDust {
-            0% { transform: translateY(0) translateX(0); }
-            100% { transform: translateY(200px) translateX(-200px); }
-        }
-
-        #librarian-container {
-            position: absolute;
-            right: 80px;
-            top: 50%;
-            transform: translateY(-50%);
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            color: #b5985a;
-            text-shadow: 2px 2px 15px #000;
-            opacity: 0.85;
-            z-index: 4;
-        }
-
-        #librarian-icon {
-            font-size: 100px;
-            margin-bottom: -10px;
-            filter: sepia(1) drop-shadow(0px 0px 10px rgba(0,0,0,0.8));
-        }
-
-        #librarian-name {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 20px;
-            font-weight: bold;
-            text-align: center;
-            border-bottom: 1px solid #b5985a;
-            padding-bottom: 5px;
-            margin-bottom: 10px;
-        }
-
-        .hieroglyphs {
-            font-size: 28px;
-            letter-spacing: 8px;
-            color: #8c7345;
-        }
-
-        /* --- QUIZ PANEL (UI Layer - Top Left) --- */
-        #quiz-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 350px;
-            background: rgba(26, 21, 17, 0.95);
-            border: 2px solid #d4af37;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 5px 5px 30px rgba(0,0,0,0.9);
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            backdrop-filter: blur(5px);
-        }
-
-        #top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #5c4a3d;
-            padding-bottom: 10px;
-            font-weight: bold;
-        }
-
-        #power-container {
-            flex-grow: 1;
-            margin: 0 15px;
-            background: #000;
-            height: 15px;
-            border-radius: 10px;
-            overflow: hidden;
-            border: 1px solid #5c4a3d;
-        }
-
-        #power-bar {
-            height: 100%;
-            width: 100%;
-            background-color: var(--power-color);
-            transition: width 0.5s ease-out, background-color 0.5s ease-out;
-        }
-
-        #timer {
-            font-size: 20px;
-            color: #ff9800;
-        }
-
-        #definition-box {
-            background: rgba(0, 0, 0, 0.6);
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 16px;
-            line-height: 1.4;
-            text-align: left;
-            margin-bottom: 20px;
-            min-height: 80px;
-            border: 1px solid #3a2e26;
-        }
-
-        #input-area {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        input[type="text"] {
-            padding: 12px;
-            font-size: 16px;
-            border: 1px solid #5c4a3d;
-            background: #111;
-            color: #fff;
-            border-radius: 5px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-
-        button {
-            padding: 12px;
-            font-size: 16px;
-            background-color: #d4af37;
-            color: #000;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.2s, transform 0.1s;
-        }
-
-        button:hover { background-color: #f1c40f; }
-        button:active { transform: scale(0.98); }
-
-        #feedback {
-            text-align: center;
-            margin-top: 15px;
-            font-weight: bold;
-            height: 20px;
-            font-size: 14px;
-        }
-
-        /* --- OVERLAYS & SCENES --- */
-        .overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100vw; height: 100vh;
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            background-color: rgba(0,0,0,0.85);
-            z-index: 20;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-
-        #start-screen {
-            background: radial-gradient(circle, #2a221b 0%, #000 100%);
-        }
-
-        #start-screen h1 { color: #d4af37; font-size: 48px; margin-bottom: 10px;}
-        #start-screen p { font-size: 18px; max-width: 600px; line-height: 1.5; margin-bottom: 30px;}
-
-        #transition-screen {
-            background-color: #050403;
-            z-index: 15;
-        }
-        #transition-text {
-            color: #d4af37;
-            font-size: 24px;
-            font-style: italic;
-            letter-spacing: 2px;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 0.5; }
-            50% { opacity: 1; }
-            100% { opacity: 0.5; }
-        }
-
-        #death-visual {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(20, 0, 0, 0.95);
-            z-index: 25;
-        }
-
-        #death-icon {
-            font-size: 100px;
-            margin-bottom: 20px;
-        }
-
-        .danger-text { color: #ff4c4c; font-size: 32px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;}
-
-        #win-screen {
-            background: linear-gradient(rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.7)), url('https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover;
-            color: #fff;
-            text-shadow: 2px 2px 8px #000;
-        }
-        #win-screen h1 { font-size: 64px; color: #d4af37; }
-
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Mouse Medical Run</title>
+<style>
+  :root{
+    --ink:#f5f7fb;
+    --muted:#acb4c2;
+    --panel:rgba(9,13,20,.94);
+    --line:rgba(255,255,255,.14);
+    --good:#75e39a;
+    --warn:#ffd468;
+    --bad:#ff6f71;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;width:100%;height:100%;overflow:hidden;background:#080b10;color:var(--ink);
+    font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  #game{position:relative;width:100%;height:100%;min-height:560px;background:#111}
+  #hud{
+    position:absolute;z-index:20;top:0;left:0;right:0;min-height:174px;padding:12px 18px 13px;
+    background:linear-gradient(180deg,rgba(5,8,13,.985),rgba(5,8,13,.93) 76%,rgba(5,8,13,.68));
+    border-bottom:1px solid rgba(255,255,255,.11);box-shadow:0 10px 28px rgba(0,0,0,.32)
+  }
+  #topline{
+    display:grid;grid-template-columns:minmax(135px,.8fr) minmax(260px,1.7fr) minmax(125px,.65fr);
+    align-items:center;gap:15px;max-width:1200px;margin:0 auto 8px
+  }
+  .tiny{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  #district{overflow:hidden;text-overflow:ellipsis}
+  #strengthWrap{display:flex;align-items:center;gap:9px}
+  #strengthTrack{
+    position:relative;flex:1;min-width:90px;height:12px;background:#252a31;
+    border:1px solid rgba(255,255,255,.15);border-radius:20px;overflow:hidden
+  }
+  #strengthBar{
+    position:absolute;inset:0 auto 0 0;width:100%;
+    background:linear-gradient(90deg,#6ddc95,#d6e96e);transition:width .22s ease,background .22s ease
+  }
+  #strengthText{min-width:43px;text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
+  #questionArea{
+    max-width:1200px;margin:auto;display:grid;grid-template-columns:1fr 92px;gap:15px;align-items:end
+  }
+  #definition{
+    min-height:48px;font-size:clamp(16px,2.05vw,24px);line-height:1.22;font-weight:720;letter-spacing:-.012em
+  }
+  #timerBox{text-align:center}
+  #timer{font-size:37px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums}
+  #difficulty{font-size:10px;margin-top:3px;letter-spacing:.14em;color:var(--muted)}
+  #entryRow{max-width:1200px;margin:9px auto 0;display:grid;grid-template-columns:1fr auto;gap:8px}
+  #answer{
+    width:100%;height:41px;border-radius:8px;border:1px solid rgba(255,255,255,.18);outline:none;
+    background:#171c24;color:white;padding:0 13px;font-size:17px;font-weight:650
+  }
+  #answer:focus{border-color:rgba(255,255,255,.52);box-shadow:0 0 0 3px rgba(255,255,255,.06)}
+  button{
+    height:41px;border:0;border-radius:8px;padding:0 18px;background:#eceff5;color:#131820;font-weight:850;cursor:pointer
+  }
+  button:hover{filter:brightness(1.05)}
+  #feedback{max-width:1200px;height:18px;margin:5px auto 0;font-size:12px;font-weight:800;letter-spacing:.02em}
+  canvas{display:block;position:absolute;z-index:1;left:0;top:0;width:100%;height:100%}
+  #overlay{
+    position:absolute;z-index:40;inset:0;display:flex;align-items:center;justify-content:center;padding:25px;
+    background:rgba(5,7,10,.76);backdrop-filter:blur(4px)
+  }
+  #overlay.hidden{display:none}
+  .card{
+    width:min(690px,94vw);padding:31px;border-radius:18px;background:linear-gradient(180deg,#151a22,#0e1218);
+    border:1px solid rgba(255,255,255,.14);box-shadow:0 28px 90px rgba(0,0,0,.55)
+  }
+  .card h1{margin:0 0 10px;font-size:clamp(31px,5vw,55px);letter-spacing:-.04em}
+  .card h2{margin:0 0 8px;font-size:31px}
+  .card p{color:#c8ced7;line-height:1.52}
+  .rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:18px 0 21px}
+  .rule{
+    background:#1b212a;border:1px solid rgba(255,255,255,.08);border-radius:10px;
+    padding:11px 13px;color:#ccd2da;font-size:13px
+  }
+  .bigButton{width:100%;height:49px;font-size:16px}
+  #miniStats{margin-top:12px;color:#aeb6c2;font-size:12px}
+  @media(max-width:650px){
+    #hud{min-height:196px;padding:9px 10px}
+    #topline{grid-template-columns:1fr 1.35fr;gap:8px}
+    #strengthWrap{grid-column:1 / -1}
+    #questionArea{grid-template-columns:1fr 65px}
+    #entryRow{grid-template-columns:1fr}
+    #submit{display:none}
+    #definition{font-size:16px}
+    #timer{font-size:30px}
+    .rules{grid-template-columns:1fr}
+  }
+</style>
 </head>
 <body>
+<div id="game">
+  <canvas id="world"></canvas>
 
-<div id="start-screen" class="overlay" style="display: flex;">
-    <h1>Ancient Egypt 101</h1>
-    <p>You have been teleported to antiquity. Survive the 3 chambers by translating the artifacts. The ancient world is unforgiving. <br><br>
-    <strong>Easy (-35%) | Medium (-30%) | Hard (-25%)</strong><br>
-    Answer in under 10 seconds for a +10% power boost!</p>
-    <button onclick="startGame()" style="width: 200px;">Enter the Library</button>
-</div>
-
-<div id="transition-screen" class="overlay">
-    <p id="transition-text">Descending deeper into the ancient sands...</p>
-</div>
-
-<div id="scene-layer">
-    <div id="dust-overlay"></div>
-    <h2 id="scene-title">Library of Alexandria</h2>
-    
-    <div id="artifact-visual">
-        <img id="artifact-image" src="" alt="Artifact Visual">
+  <div id="hud">
+    <div id="topline">
+      <div class="tiny" id="progress">TERM 1 / 78</div>
+      <div class="tiny" id="district">CIVIC PLAZA</div>
+      <div id="strengthWrap">
+        <span class="tiny">Strength</span>
+        <div id="strengthTrack"><div id="strengthBar"></div></div>
+        <span id="strengthText">100%</span>
+      </div>
     </div>
 
-    <!-- The Librarian Character for Room 1 -->
-    <div id="librarian-container">
-        <div id="librarian-icon">𓀾</div>
-        <div id="librarian-name">Kha'y<br><span style="font-size:14px; color:#8c7345;">Chief Keeper of Scrolls</span></div>
-        <div class="hieroglyphs">𓊹 𓌃 𓏟 𓏛 𓍼</div>
-    </div>
-</div>
-
-<!-- Death Scene Override completely top level to cover everything -->
-<div id="death-visual" class="overlay">
-    <div id="death-icon">🧟</div>
-    <p id="death-message" class="danger-text"></p>
-    <button onclick="location.reload()" style="margin-top: 30px;">Restart Journey</button>
-</div>
-
-<div id="quiz-panel" style="display: none;">
-    <div id="top-bar">
-        <div>Rm <span id="room-indicator">1</span></div>
-        <div id="power-container">
-            <div id="power-bar"></div>
-        </div>
-        <div id="timer">15s</div>
+    <div id="questionArea">
+      <div id="definition">Press start to begin.</div>
+      <div id="timerBox">
+        <div id="timer">--</div>
+        <div id="difficulty">READY</div>
+      </div>
     </div>
 
-    <div id="definition-box">Loading...</div>
-
-    <div id="input-area">
-        <input type="text" id="answer-input" placeholder="Name the artifact..." autocomplete="off">
-        <button onclick="submitAnswer()">Submit</button>
-    </div>
+    <form id="entryRow">
+      <input id="answer" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             placeholder="Type the medical term…">
+      <button id="submit" type="submit">SUBMIT</button>
+    </form>
 
     <div id="feedback"></div>
-</div>
+  </div>
 
-<div id="win-screen" class="overlay">
-    <h1>Victory!</h1>
-    <p style="font-size: 24px; font-weight: bold;">You have mapped the tomb and secured the ancient texts.</p>
-    <button onclick="location.reload()" style="margin-top:30px; width: 200px;">Play Again</button>
+  <div id="overlay">
+    <div class="card" id="overlayCard">
+      <h1>Mouse Medical Run</h1>
+      <p>
+        A very small mouse has made the questionable decision to cross an
+        extremely busy city while you identify medical terminology.
+      </p>
+
+      <div class="rules">
+        <div class="rule"><b>78 terms.</b><br>Type the term matching each definition.</div>
+        <div class="rule"><b>10–20 seconds.</b><br>Harder terms receive more thinking time.</div>
+        <div class="rule"><b>Fast answers heal.</b><br>Finish with more than five seconds left for bonus Strength.</div>
+        <div class="rule"><b>Wrong answers hurt.</b><br>Strength loss scales with question difficulty.</div>
+        <div class="rule"><b>No instant scene cuts.</b><br>Four districts gradually bleed into one another.</div>
+        <div class="rule"><b>Reach zero Strength.</b><br>The cat finally notices you. You may continue afterward.</div>
+      </div>
+
+      <button class="bigButton" id="startButton">START RUN</button>
+      <div id="miniStats">Press Enter to submit answers.</div>
+    </div>
+  </div>
 </div>
 
 <script>
-    const artifacts = [
-        { term: "Rosetta Stone", def: "Inscribed decree that enabled decipherment of hieroglyphs.", diff: "easy" },
-        { term: "Narmer Palette", def: "Ceremonial palette depicting Egypt’s early royal unification.", diff: "hard" },
-        { term: "Nefertiti Bust", def: "Painted limestone portrait of Queen Nefertiti.", diff: "medium" },
-        { term: "Tutankhamun's Gold Mask", def: "Gold funerary mask covering the young pharaoh’s mummy.", diff: "easy" },
-        { term: "Tutankhamun's Throne", def: "Elaborately decorated royal chair from his tomb.", diff: "medium" },
-        { term: "Tutankhamun's Coffins", def: "Nested anthropoid coffins enclosing the king’s mummy.", diff: "medium" },
-        { term: "Merneptah Stele", def: "Victory inscription containing an early reference to Israel.", diff: "hard" },
-        { term: "Book of the Dead of Ani", def: "Famous illustrated papyrus of funerary spells.", diff: "medium" },
-        { term: "Papyrus of Hunefer", def: "Funerary manuscript famous for its judgment scene.", diff: "hard" },
-        { term: "Seated Scribe", def: "Famous Old Kingdom painted statue of a scribe.", diff: "easy" },
-        
-        { term: "Khafre Enthroned", def: "Diorite statue portraying the pharaoh under Horus’s protection.", diff: "hard" },
-        { term: "Menkaure Triads", def: "Sculptural groups showing Menkaure with deities.", diff: "hard" },
-        { term: "Rahotep and Nofret", def: "Exceptionally preserved painted Old Kingdom statues.", diff: "hard" },
-        { term: "Colossi of Memnon", def: "Enormous seated statues of Amenhotep III.", diff: "medium" },
-        { term: "Dendera Zodiac", def: "Egyptian temple relief depicting the heavens and constellations.", diff: "medium" },
-        { term: "Canopic jar", def: "Container traditionally used for embalmed internal organs.", diff: "easy" },
-        { term: "Shabti", def: "Funerary figurine intended to work for the deceased. (Also known as Ushabti)", diff: "medium" },
-        { term: "Scarab", def: "Beetle-shaped amulet associated with renewal and rebirth.", diff: "easy" },
-        { term: "Heart scarab", def: "Funerary amulet protecting the heart during judgment.", diff: "medium" },
-        { term: "Ankh", def: "Cross-shaped symbol representing life.", diff: "easy" },
-        
-        { term: "Djed pillar", def: "Symbol representing stability and associated with Osiris.", diff: "medium" },
-        { term: "Was scepter", def: "Staff symbolizing divine power and dominion.", diff: "medium" },
-        { term: "Eye of Horus", def: "Protective symbol associated with restoration and wholeness.", diff: "easy" },
-        { term: "Sistrum", def: "Sacred rattling musical instrument used in worship.", diff: "hard" },
-        { term: "Menat", def: "Beaded ritual necklace associated especially with Hathor.", diff: "hard" },
-        { term: "Faience", def: "Glazed silica material prized for brilliant blue-green objects.", diff: "hard" },
-        { term: "Cartouche", def: "Oval enclosure surrounding a royal name.", diff: "easy" },
-        { term: "False door", def: "Tomb feature through which the dead could symbolically receive offerings.", diff: "medium" },
-        { term: "Senet board", def: "Board used for a famous Egyptian game with funerary symbolism.", diff: "medium" },
-        { term: "Canopic chest", def: "Container protecting a set of canopic vessels.", diff: "easy" }
-    ];
+(() => {
+"use strict";
 
-    const roomTitles = ["Ancient Library of Alexandria", "Hall of Monuments", "Vault of Symbols"];
-    
-    const deathScenes = [
-        { text: "The ancient texts crumble to dust, and the librarian curses you to the shadows!", icon: "📜" },
-        { text: "You step on a pressure plate and plummet into a spiked pit!", icon: "🕳️" },
-        { text: "A giant venomous snake drops from the ceiling and strikes!", icon: "🐍" }
-    ];
+/* ====================== TERMS 171–248 ====================== */
+const TERMS = [
+{n:171,t:"Syndrome",d:"Recognizable group of signs and symptoms that tend to occur together.",q:2},
+{n:172,t:"Condition",d:"Broad term for a health problem or state that may or may not constitute a disease.",q:1},
+{n:173,t:"Disease",d:"Disorder involving an identifiable abnormal process affecting body structure or function.",q:1},
+{n:174,t:"Disorder",d:"Disturbance of normal physical or mental function.",q:1},
+{n:175,t:"Benign",d:"Noncancerous; not necessarily harmless.",q:1},
+{n:176,t:"Malignant",d:"Cancerous, with capacity to invade or spread.",q:2},
+{n:177,t:"Chief complaint",d:"Primary reason a patient seeks medical attention.",q:2},
+{n:178,t:"History of present illness (HPI)",d:"Detailed account of the current medical problem and its development.",q:5},
+{n:179,t:"Pain scale",d:"Standardized method for communicating pain intensity.",q:1},
+{n:180,t:"Level of consciousness",d:"Degree to which a person is awake and responsive.",q:3},
+{n:181,t:"Orientation",d:"Awareness of person, place, time, and situation.",q:2},
+{n:182,t:"Mental status",d:"Overall assessment of awareness, cognition, mood, memory, and behavior.",q:2},
+{n:183,t:"Inspection",d:"Examination by carefully looking at the patient or body part.",q:1},
+{n:184,t:"Palpation",d:"Examination using touch to assess structures, tenderness, pulses, or abnormalities.",q:2},
+{n:185,t:"Percussion",d:"Tapping the body to evaluate underlying structures by their resulting sounds or sensations.",q:3},
+{n:186,t:"Escalation of care",d:"Obtaining a higher level of clinical evaluation or treatment when a patient deteriorates.",q:5},
+{n:187,t:"Orthopnea",d:"Shortness of breath that occurs or worsens while lying flat.",q:5},
+{n:188,t:"Chest pain",d:"Chest discomfort, pressure, tightness, or pain requiring interpretation of its underlying cause.",q:1},
+{n:189,t:"Dizziness",d:"Broad patient-reported sensation that may mean lightheadedness, imbalance, or spinning.",q:1},
+{n:190,t:"Weakness",d:"Reduced muscular strength or ability to perform normal movement.",q:1},
+{n:191,t:"Diarrhea",d:"Abnormally loose or watery bowel movements.",q:1},
+{n:192,t:"Constipation",d:"Difficult, infrequent, hard, or incomplete bowel movements.",q:1},
+{n:193,t:"Urinary urgency",d:"Sudden compelling need to urinate.",q:2},
+{n:194,t:"Urinary frequency",d:"Urination more often than usual.",q:2},
+{n:195,t:"Chills",d:"Sensation of cold often accompanied by shivering, particularly during fever or infection.",q:1},
+{n:196,t:"Rash",d:"Abnormal change in the appearance or texture of the skin.",q:1},
+{n:197,t:"Numbness",d:"Reduced or absent sensation in an area of the body.",q:1},
+{n:198,t:"Anatomy",d:"Study of body structures and their relationships.",q:1},
+{n:199,t:"Physiology",d:"Study of how normal body systems function.",q:1},
+{n:200,t:"Diabetes mellitus",d:"Group of disorders characterized by chronically abnormal blood-glucose regulation.",q:2},
+{n:201,t:"Hyperglycemia",d:"Abnormally high blood glucose.",q:2},
+{n:202,t:"Hypoglycemia",d:"Abnormally low blood glucose.",q:2},
+{n:203,t:"Infarction",d:"Tissue death caused by prolonged interruption of blood supply.",q:5},
+{n:204,t:"Thrombosis",d:"Formation of a blood clot within the circulatory system.",q:3},
+{n:205,t:"Embolism",d:"Vessel obstruction caused by material traveling through the circulation.",q:3},
+{n:206,t:"Stroke",d:"Acute brain injury caused by interrupted blood flow or bleeding.",q:1},
+{n:207,t:"Pneumonia",d:"Infection or inflammation involving the lung tissue and air sacs.",q:2},
+{n:208,t:"Acute kidney injury (AKI)",d:"Relatively sudden deterioration in kidney function.",q:5},
+{n:209,t:"Chronic kidney disease (CKD)",d:"Persistent abnormality or loss of kidney function.",q:5},
+{n:210,t:"Delirium",d:"Acute, fluctuating disturbance of attention and cognition.",q:4},
+{n:211,t:"Dementia",d:"Persistent decline in cognitive abilities sufficient to impair everyday functioning.",q:4},
+{n:212,t:"Prescription medication",d:"Medication requiring authorization from a licensed prescriber.",q:2},
+{n:213,t:"Over-the-counter (OTC) medication",d:"Medication legally available without a prescription.",q:3},
+{n:214,t:"Generic name",d:"Standard nonproprietary name of a medication.",q:2},
+{n:215,t:"Brand name",d:"Commercial name under which a medication is sold.",q:1},
+{n:216,t:"Topical",d:"Applied to a body surface, commonly the skin.",q:2},
+{n:217,t:"Inhalation",d:"Administration of medication by breathing it into the respiratory tract.",q:2},
+{n:218,t:"Infusion",d:"Controlled administration of fluid or medication over time.",q:2},
+{n:219,t:"Scheduled medication",d:"Medication ordered to be given at predetermined times.",q:2},
+{n:220,t:"Medication adherence",d:"Extent to which medication use follows an agreed treatment plan.",q:3},
+{n:221,t:"Adverse drug event (ADE)",d:"Injury or harm involving the use of a medication.",q:5},
+{n:222,t:"Therapeutic effect",d:"Intended beneficial result of a treatment.",q:3},
+{n:223,t:"Laboratory test",d:"Analysis of blood, urine, tissue, or another biological material.",q:1},
+{n:224,t:"Specimen",d:"Biological sample collected for examination or testing.",q:2},
+{n:225,t:"Imaging",d:"Use of technology to create representations of internal body structures or functions.",q:1},
+{n:226,t:"Pathology report",d:"Formal interpretation of examined tissue, cells, or other specimens.",q:3},
+{n:227,t:"Procedure",d:"Medical intervention performed for diagnosis, monitoring, or treatment.",q:1},
+{n:228,t:"Surgery",d:"Operative treatment involving intentional intervention on body tissues.",q:1},
+{n:229,t:"Anesthesia",d:"Medical suppression of pain, sensation, awareness, or movement for a procedure.",q:2},
+{n:230,t:"Sedation",d:"Medication-induced reduction in anxiety, awareness, or responsiveness.",q:2},
+{n:231,t:"Sterile technique",d:"Procedures intended to prevent microorganisms from contaminating a sterile area or equipment.",q:3},
+{n:232,t:"Emergency department (ED)",d:"Hospital department providing evaluation and treatment of urgent and emergency conditions.",q:3},
+{n:233,t:"Admission",d:"Formal acceptance of a patient into a hospital or healthcare facility for ongoing care.",q:1},
+{n:234,t:"Transfer",d:"Movement of a patient between units, facilities, or levels of care.",q:1},
+{n:235,t:"Inpatient",d:"Patient formally admitted to a healthcare facility.",q:1},
+{n:236,t:"Outpatient",d:"Patient receiving care without inpatient admission.",q:1},
+{n:237,t:"Intensive care unit (ICU)",d:"Hospital unit providing intensive monitoring and treatment for critically ill patients.",q:3},
+{n:238,t:"Code blue",d:"Hospital emergency response commonly indicating cardiac or respiratory arrest.",q:2},
+{n:239,t:"Rapid response team",d:"Team called to evaluate and intervene when a hospitalized patient is deteriorating.",q:5},
+{n:240,t:"Isolation precautions",d:"Measures used to prevent transmission of infectious organisms.",q:3},
+{n:241,t:"Infection control",d:"Practices designed to prevent healthcare-associated transmission of infection.",q:2},
+{n:242,t:"Ventilator",d:"Machine that assists or controls a patient’s breathing.",q:2},
+{n:243,t:"Intubation",d:"Placement of a tube into the trachea to maintain or control the airway.",q:3},
+{n:244,t:"Resuscitation",d:"Emergency intervention intended to restore vital physiological functions.",q:3},
+{n:245,t:"CPR",d:"Cardiopulmonary resuscitation used when effective circulation or breathing has stopped.",q:2},
+{n:246,t:"Pressure injury",d:"Localized skin or tissue damage caused primarily by sustained pressure or pressure combined with shear.",q:3},
+{n:247,t:"Restraint",d:"Intervention restricting a patient’s movement, access, or freedom, subject to strict clinical rules.",q:2},
+{n:248,t:"Healthcare proxy",d:"Person authorized to make healthcare decisions for another person when required.",q:4}
+];
 
-    const roomBackgrounds = [
-        // Room 1: Dusty, extremely old library with ancient scrolls (Heavy brownish sepia gradient)
-        "linear-gradient(rgba(50, 35, 15, 0.85), rgba(20, 10, 5, 0.95)), url('https://images.unsplash.com/photo-1603831955375-4be427907cae?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover",
-        // Room 2: Authentic carved hieroglyphics on stone wall
-        "linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.85)), url('https://images.unsplash.com/photo-1596700874015-8c0ec8eb752b?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover",
-        // Room 3: Deep inside Karnak temple pillars
-        "linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.95)), url('https://images.unsplash.com/photo-1572093883391-764f697488cc?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80') center/cover"
-    ];
+/* ====================== STATE DECLARED EARLY ====================== */
+let state="title";
+let order=[];
+let questionIndex=0;
+let current=null;
+let timeLeft=0;
+let strength=100;
+let score=0;
+let correctCount=0;
+let fastCount=0;
+let streak=0;
+let catCatches=0;
+let resolveTimer=0;
+let pendingAdvance=false;
+let lastTimestamp=performance.now();
 
-    let currentRoom = 0;
-    let currentQuestionIdx = 0;
-    let power = 100;
-    let timeLeft = 15;
-    let timerInterval = null;
-    let currentItem = null;
+/* ====================== ANSWER HANDLING ====================== */
+const ALIASES = {
+  178:["history of present illness","hpi"],
+  180:["level of consciousness","loc"],
+  208:["acute kidney injury","aki"],
+  209:["chronic kidney disease","ckd"],
+  213:["over the counter medication","over the counter","otc medication","otc"],
+  221:["adverse drug event","ade"],
+  223:["laboratory test","lab test"],
+  232:["emergency department","ed"],
+  237:["intensive care unit","icu"],
+  245:["cardiopulmonary resuscitation","cpr"]
+};
 
-    document.getElementById("answer-input").addEventListener("keypress", function(e) {
-        if (e.key === "Enter") submitAnswer();
+function normalize(s){
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[’']/g,"")
+    .replace(/\([^)]*\)/g," ")
+    .replace(/&/g," and ")
+    .replace(/[-–—/]/g," ")
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  const prev=new Array(n+1);
+  const curr=new Array(n+1);
+  for(let j=0;j<=n;j++) prev[j]=j;
+  for(let i=1;i<=m;i++){
+    curr[0]=i;
+    for(let j=1;j<=n;j++){
+      curr[j]=Math.min(
+        prev[j]+1,
+        curr[j-1]+1,
+        prev[j-1]+(a[i-1]===b[j-1]?0:1)
+      );
+    }
+    for(let j=0;j<=n;j++) prev[j]=curr[j];
+  }
+  return prev[n];
+}
+
+function acceptedAnswers(term){
+  const arr=[term.t];
+  if(ALIASES[term.n]) arr.push(...ALIASES[term.n]);
+  return arr.map(normalize);
+}
+
+function answerIsCorrect(raw,term){
+  const entered=normalize(raw);
+  if(!entered) return false;
+  const valid=acceptedAnswers(term);
+  for(const v of valid){
+    if(entered===v) return true;
+    if(v.length>=7 &&
+       Math.abs(v.length-entered.length)<=1 &&
+       levenshtein(entered,v)<=1){
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ====================== DIFFICULTY ====================== */
+const TIME_BY_DIFFICULTY=[0,10,12,14,17,20];
+const PENALTY_BY_DIFFICULTY=[0,10,20,30,40,50];
+const DIFFICULTY_NAMES=["","EASY","EASY +","MODERATE","DIFFICULT","VERY DIFFICULT"];
+
+/* ====================== DISTRICTS ====================== */
+const DISTRICTS=[
+  {name:"CIVIC PLAZA",ground:"#b4aa96",ground2:"#9b927f",horizon:"#d0c5ae",accent:"#8d6d46",sky:"#b8c8cf"},
+  {name:"MAJOR CROSSING",ground:"#44484a",ground2:"#34383a",horizon:"#777b79",accent:"#d6d0b5",sky:"#adbec8"},
+  {name:"STREET MARKET",ground:"#776b55",ground2:"#625744",horizon:"#b49065",accent:"#d7a94d",sky:"#c3c8bd"},
+  {name:"BAY & OLD HOUSES",ground:"#948a7d",ground2:"#7c7469",horizon:"#9db0b6",accent:"#6f8792",sky:"#a8c5cf"}
+];
+
+function districtInfo(progress){
+  const scaled=Math.min(.999999,Math.max(0,progress))*4;
+  const index=Math.min(3,Math.floor(scaled));
+  const local=scaled-index;
+  const next=Math.min(3,index+1);
+  const blend=index===3 ? 0 : Math.max(0,(local-.66)/.34);
+  return {index,next,local,blend};
+}
+
+/* ====================== PEOPLE ====================== */
+const PEOPLE=[
+{name:"office loafers",pants:"#30343a",shoe:"#171718",sock:"#303030",pace:.95,bag:1,w:[4,5,1,1]},
+{name:"brown brogues",pants:"#45505a",shoe:"#573b27",sock:"#23303a",pace:.9,bag:0,w:[4,4,1,2]},
+{name:"white sneakers",pants:"#2e4054",shoe:"#e8e8e0",sock:"#f2f2f2",pace:1.15,bag:0,w:[4,5,3,4]},
+{name:"red trainers",pants:"#303942",shoe:"#a33932",sock:"#ddd",pace:1.35,bag:0,w:[2,5,3,4]},
+{name:"work boots",pants:"#4e463a",shoe:"#5e422a",sock:"#38352e",pace:.86,bag:0,w:[2,3,5,2]},
+{name:"market boots",pants:"#4e5148",shoe:"#282b29",sock:"#777",pace:.92,bag:2,w:[1,2,6,1]},
+{name:"heels black",pants:"#333138",shoe:"#171519",sock:"#c9a68c",pace:.95,bag:1,w:[4,4,3,4]},
+{name:"heels tan",pants:"#786b5d",shoe:"#7b4d3c",sock:"#d0ad91",pace:.92,bag:1,w:[3,4,3,4]},
+{name:"kids blue",pants:"#4c6f90",shoe:"#335fac",sock:"#eee",pace:1.45,bag:0,w:[3,3,3,5]},
+{name:"kids yellow",pants:"#4b5548",shoe:"#d2a63a",sock:"#ddd",pace:1.5,bag:0,w:[2,3,3,5]},
+{name:"runner neon",pants:"#25272b",shoe:"#c8d748",sock:"#eee",pace:1.6,bag:0,w:[2,3,2,6]},
+{name:"runner gray",pants:"#353a3c",shoe:"#d2d5d8",sock:"#eee",pace:1.55,bag:0,w:[2,4,2,6]},
+{name:"elder walking",pants:"#635e58",shoe:"#4b372c",sock:"#ddd",pace:.68,bag:0,w:[4,2,2,6]},
+{name:"rain boots",pants:"#434947",shoe:"#2f3938",sock:"#555",pace:.82,bag:0,w:[2,2,4,3]},
+{name:"cargo pants",pants:"#66624e",shoe:"#3b3328",sock:"#46433d",pace:.9,bag:2,w:[2,3,6,3]},
+{name:"denim sneakers",pants:"#35516f",shoe:"#d4d3c9",sock:"#fff",pace:1.12,bag:0,w:[4,4,4,5]},
+{name:"black denim",pants:"#292d31",shoe:"#272625",sock:"#888",pace:1.08,bag:0,w:[4,5,4,5]},
+{name:"courier",pants:"#2c3540",shoe:"#383b3c",sock:"#888",pace:1.4,bag:3,w:[2,5,5,3]},
+{name:"vendor apron",pants:"#545047",shoe:"#443329",sock:"#555",pace:.84,bag:2,w:[1,1,7,1]},
+{name:"chef clogs",pants:"#2a2b2d",shoe:"#202223",sock:"#111",pace:.88,bag:0,w:[1,1,6,1]},
+{name:"tourist sandals",pants:"#796e5d",shoe:"#725846",sock:"#bb967a",pace:.82,bag:1,w:[5,3,4,4]},
+{name:"dress boots",pants:"#34353a",shoe:"#302726",sock:"#333",pace:.98,bag:1,w:[4,4,3,4]},
+{name:"dog walker",pants:"#49515c",shoe:"#cbcbc6",sock:"#eee",pace:1.0,bag:0,w:[2,2,2,7]},
+{name:"gardener boots",pants:"#53604c",shoe:"#4c3c2d",sock:"#555",pace:.8,bag:0,w:[1,1,3,6]},
+{name:"student sneakers",pants:"#465362",shoe:"#f2efe8",sock:"#eee",pace:1.2,bag:3,w:[4,5,3,5]},
+{name:"formal shoes",pants:"#25282c",shoe:"#181719",sock:"#202020",pace:.96,bag:1,w:[5,5,1,3]},
+{name:"canvas shoes",pants:"#656057",shoe:"#b2a18c",sock:"#ddd",pace:1.05,bag:0,w:[3,3,5,5]},
+{name:"delivery boots",pants:"#3f4548",shoe:"#303234",sock:"#666",pace:1.05,bag:2,w:[1,4,6,2]}
+];
+
+/* ====================== PROP LIBRARY ====================== */
+const PROP_TYPES=[
+["newspaper","paper",[6,4,3,3]],["folded newspaper","paper",[5,4,2,2]],["receipt","paper",[4,3,5,2]],
+["flyer","paper",[5,3,4,2]],["paper cup","cup",[5,4,5,3]],["soda cup","cup",[4,5,6,3]],
+["coffee lid","small",[5,3,4,3]],["dropped fries","food",[5,4,5,2]],["hot dog wrapper","food",[4,4,5,2]],
+["napkin","paper",[4,3,5,2]],["leaf","leaf",[3,2,3,6]],["flower petal","leaf",[3,1,3,6]],
+["chalk mark","mark",[5,2,3,3]],["gum spot","small",[4,4,4,3]],["bottle cap","small",[3,4,5,2]],
+["pigeon","bird",[6,3,5,3]],["seagull","bird",[1,1,1,8]],["trash can","bin",[6,4,6,5]],
+["recycling bin","bin",[4,3,5,5]],["trash bag","bag",[3,3,5,3]],["cardboard box","box",[3,3,7,3]],
+["wood crate","crate",[1,2,8,2]],["produce crate","crate",[1,1,9,1]],["fruit basket","crate",[1,1,8,1]],
+["flower bucket","plant",[2,1,7,5]],["planter","plant",[6,2,4,7]],["tree grate","ground",[5,2,2,8]],
+["manhole","ground",[2,7,3,2]],["storm drain","ground",[2,7,3,4]],["bollard","post",[7,4,4,5]],
+["parking meter","post",[2,7,2,6]],["hydrant","post",[4,6,3,5]],["bench end","bench",[8,2,3,6]],
+["lamp base","post",[7,3,3,7]],["sign pole","post",[5,7,5,4]],["awning pole","post",[1,1,9,1]],
+["umbrella base","post",[2,1,8,3]],["sandwich board","board",[4,3,9,4]],["menu board","board",[2,1,9,2]],
+["newspaper box","box",[5,4,3,4]],["ATM","machine",[3,5,3,4]],["soda machine","machine",[2,2,7,2]],
+["vending machine","machine",[2,2,6,2]],["bike rack","rack",[4,6,5,6]],["bicycle wheel","wheel",[3,8,6,7]],
+["scooter wheel","wheel",[2,7,5,5]],["stroller wheel","wheel",[4,5,4,6]],["delivery cart","wheel",[2,5,8,3]],
+["hand truck","wheel",[1,4,8,2]],["taxi wheel","vehicle",[1,9,2,2]],["bus wheel","vehicle",[1,9,2,1]],
+["parked car bumper","vehicle",[2,8,2,6]],["delivery van edge","vehicle",[1,8,5,2]],["market sack","bag",[1,2,8,2]],
+["onion spill","food",[1,1,8,1]],["orange spill","food",[1,1,8,1]],["herb bundle","plant",[1,1,8,2]],
+["flower pot","plant",[2,1,5,8]],["stoop railing","home",[1,1,1,9]],["porch step","home",[1,1,1,9]],
+["mailbox base","home",[1,1,1,7]],["iron fence","home",[1,1,1,8]],["dock rope","water",[1,1,1,8]],
+["mooring cleat","water",[1,1,1,8]],["harbor puddle","water",[1,1,2,7]],["dog","animal",[2,2,2,8]],
+["leash","animal",[2,2,2,8]]
+];
+
+/* ====================== CANVAS / WORLD ====================== */
+const canvas=document.getElementById("world");
+const ctx=canvas.getContext("2d",{alpha:false});
+
+let W=1280,H=720,DPR=1;
+let worldTime=0;
+let scroll=0;
+let props=[];
+let pedestrians=[];
+let particles=[];
+let nearMisses=[];
+let cat=null;
+
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=Math.max(800,window.innerWidth);
+  H=Math.max(560,window.innerHeight);
+  canvas.width=Math.floor(W*DPR);
+  canvas.height=Math.floor(H*DPR);
+  canvas.style.width=W+"px";
+  canvas.style.height=H+"px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener("resize",resize);
+resize();
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+function rand(a,b){return a+Math.random()*(b-a)}
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+
+function hexToRgb(hex){
+  const s=hex.replace("#","");
+  const n=parseInt(s,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+
+function mixColor(a,b,t){
+  const A=hexToRgb(a),B=hexToRgb(b);
+  return `rgb(${Math.round(lerp(A.r,B.r,t))},${Math.round(lerp(A.g,B.g,t))},${Math.round(lerp(A.b,B.b,t))})`;
+}
+
+function currentGameProgress(){
+  if(!order.length) return 0;
+  return clamp(questionIndex/TERMS.length,0,1);
+}
+
+function districtState(){ return districtInfo(currentGameProgress()); }
+
+function weightedProp(di){
+  let total=0;
+  const weights=PROP_TYPES.map(p=>{
+    const w=p[2][di.index]*(1-di.blend)+p[2][di.next]*di.blend;
+    total+=w;
+    return w;
+  });
+  let r=Math.random()*total;
+  for(let i=0;i<PROP_TYPES.length;i++){
+    r-=weights[i];
+    if(r<=0) return PROP_TYPES[i];
+  }
+  return PROP_TYPES[0];
+}
+
+function weightedPerson(di){
+  let total=0;
+  const weights=PEOPLE.map(p=>{
+    const w=p.w[di.index]*(1-di.blend)+p.w[di.next]*di.blend;
+    total+=w;
+    return w;
+  });
+  let r=Math.random()*total;
+  for(let i=0;i<PEOPLE.length;i++){
+    r-=weights[i];
+    if(r<=0) return PEOPLE[i];
+  }
+  return PEOPLE[0];
+}
+
+function spawnProp(force=false){
+  const di=districtState();
+  const spec=weightedProp(di);
+  const depth=force?Math.random():rand(.02,.28);
+  const side=Math.random()<.5?-1:1;
+  props.push({
+    label:spec[0],kind:spec[1],depth,lateral:side*rand(.24,.92),drift:rand(-.025,.025),
+    rot:rand(-.5,.5),seed:Math.random(),district:di.index
+  });
+}
+
+function spawnPedestrian(force=false){
+  const di=districtState();
+  const p=weightedPerson(di);
+  const fromLeft=Math.random()<.5;
+  const depth=force?rand(.32,.78):rand(.18,.65);
+  pedestrians.push({
+    type:p,x:fromLeft?-0.22:1.22,dir:fromLeft?1:-1,depth,
+    speed:rand(.035,.06)*p.pace,phase:Math.random()*Math.PI*2,
+    scared:false,scareTime:0,yOffset:rand(-.05,.05),accessory:p.bag,scaleNoise:rand(.9,1.1)
+  });
+}
+
+/* Safe now: all state variables already exist. */
+for(let i=0;i<30;i++) spawnProp(true);
+for(let i=0;i<10;i++) spawnPedestrian(true);
+
+/* ====================== PERSPECTIVE ====================== */
+function horizonY(){ return Math.max(205,Math.min(260,H*.34)); }
+function groundY(depth){
+  const hy=horizonY();
+  return hy + Math.pow(clamp(depth,0,1),1.45)*(H-hy+55);
+}
+function groundX(lateral,depth){
+  const center=W*.5;
+  const halfAtHorizon=W*.12;
+  const halfAtBottom=W*.66;
+  const half=lerp(halfAtHorizon,halfAtBottom,Math.pow(depth,.92));
+  return center+lateral*half;
+}
+function perspectiveScale(depth){ return lerp(.12,1.45,Math.pow(clamp(depth,0,1),1.18)); }
+
+/* ====================== BACKGROUND ====================== */
+function drawBaseScene(){
+  const di=districtState();
+  const A=DISTRICTS[di.index], B=DISTRICTS[di.next], blend=di.blend;
+  const sky=mixColor(A.sky,B.sky,blend);
+  const ground=mixColor(A.ground,B.ground,blend);
+  const ground2=mixColor(A.ground2,B.ground2,blend);
+  const horizon=mixColor(A.horizon,B.horizon,blend);
+
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+  const hy=horizonY();
+
+  ctx.fillStyle=horizon;
+  ctx.fillRect(0,hy-70,W,95);
+
+  drawDistrictHorizon(di.index,1-blend);
+  if(blend>0) drawDistrictHorizon(di.next,blend);
+
+  const grad=ctx.createLinearGradient(0,hy,0,H);
+  grad.addColorStop(0,ground); grad.addColorStop(1,ground2);
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  ctx.moveTo(W*.38,hy); ctx.lineTo(W*.62,hy); ctx.lineTo(W*1.04,H); ctx.lineTo(-W*.04,H);
+  ctx.closePath(); ctx.fill();
+
+  drawGroundTexture(di);
+}
+
+function drawDistrictHorizon(index,alpha){
+  if(alpha<=0) return;
+  ctx.save();
+  ctx.globalAlpha*=alpha;
+  const hy=horizonY();
+
+  if(index===0){
+    for(let x=-20;x<W+80;x+=120){
+      ctx.fillStyle="#c6b99d"; ctx.fillRect(x,hy-95,88,95);
+      ctx.fillStyle="#564d42";
+      ctx.beginPath();
+      ctx.arc(x+44,hy-16,25,Math.PI,0);
+      ctx.lineTo(x+69,hy); ctx.lineTo(x+19,hy); ctx.closePath(); ctx.fill();
+    }
+    for(let x=80;x<W;x+=260){
+      ctx.fillStyle="#7f463e";
+      ctx.beginPath(); ctx.arc(x,hy-35,37,Math.PI,0); ctx.fill();
+      ctx.fillStyle="#443a31"; ctx.fillRect(x-2,hy-35,4,36);
+    }
+  }
+
+  if(index===1){
+    ctx.fillStyle="#5f666a";
+    for(let x=-50;x<W+100;x+=145){
+      const h=78 + ((x/145)%3+3)%3*18;
+      ctx.fillRect(x,hy-h,115,h);
+      ctx.fillStyle="#283139";
+      for(let wy=hy-h+15;wy<hy-15;wy+=22){
+        for(let wx=x+13;wx<x+100;wx+=27) ctx.fillRect(wx,wy,12,9);
+      }
+      ctx.fillStyle="#5f666a";
+    }
+    for(let x=110;x<W;x+=420){
+      ctx.fillStyle="#292d2d"; ctx.fillRect(x,hy-100,5,100); ctx.fillRect(x,hy-98,72,5);
+      ctx.fillStyle="#282d2b"; ctx.fillRect(x+61,hy-106,21,46);
+      ctx.fillStyle="#d6b34e"; ctx.beginPath(); ctx.arc(x+71,hy-76,5,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  if(index===2){
+    const colors=["#a64939","#cbad50","#4f8061","#6a648b"];
+    for(let x=-30,i=0;x<W+50;x+=130,i++){
+      ctx.fillStyle="#725744"; ctx.fillRect(x,hy-80,112,80);
+      ctx.fillStyle=colors[i%colors.length];
+      ctx.beginPath();
+      ctx.moveTo(x-8,hy-80); ctx.lineTo(x+120,hy-80); ctx.lineTo(x+105,hy-49); ctx.lineTo(x+5,hy-49);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#59472f"; ctx.fillRect(x+5,hy-20,96,7);
+    }
+  }
+
+  if(index===3){
+    ctx.fillStyle="#779aa4"; ctx.fillRect(0,hy-24,W,30);
+    const houseColors=["#b89076","#c9a876","#8c9c8b","#b68481","#a99a87"];
+    for(let x=-30,i=0;x<W+100;x+=125,i++){
+      ctx.fillStyle=houseColors[i%houseColors.length]; ctx.fillRect(x,hy-105,104,105);
+      ctx.fillStyle="#574940";
+      ctx.beginPath(); ctx.moveTo(x-8,hy-105); ctx.lineTo(x+52,hy-145); ctx.lineTo(x+112,hy-105); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#d8ded9"; ctx.fillRect(x+18,hy-76,20,28); ctx.fillRect(x+63,hy-76,20,28);
+      ctx.fillStyle="#53473f"; ctx.fillRect(x+42,hy-42,22,42);
+    }
+  }
+  ctx.restore();
+}
+
+function drawGroundTexture(di){
+  for(let i=0;i<14;i++){
+    const d=((i/14)+((scroll*.045)%(.075)))%1;
+    const y=groundY(d);
+    ctx.globalAlpha=.12; ctx.strokeStyle="#111"; ctx.lineWidth=Math.max(1,d*2);
+    ctx.beginPath(); ctx.moveTo(groundX(-1,d),y); ctx.lineTo(groundX(1,d),y); ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+
+  if(di.index===0 || di.next===0){
+    const a=di.index===0?1-di.blend:di.blend;
+    ctx.save(); ctx.globalAlpha=.2*a; ctx.strokeStyle="#514b40";
+    for(let l=-.8;l<=.8;l+=.2){
+      ctx.beginPath(); ctx.moveTo(groundX(l,.02),groundY(.02)); ctx.lineTo(groundX(l,1),groundY(1)); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if(di.index===1 || di.next===1){
+    const a=di.index===1?1-di.blend:di.blend;
+    ctx.save(); ctx.globalAlpha=.72*a;
+    for(let i=0;i<7;i++){
+      const d=.22+i*.085, y=groundY(d), h=8+22*d;
+      ctx.fillStyle="#d7d7cc";
+      ctx.fillRect(groundX(-.62,d),y-h/2,groundX(.62,d)-groundX(-.62,d),h);
+    }
+    ctx.restore();
+  }
+
+  if(di.index===2 || di.next===2){
+    const a=di.index===2?1-di.blend:di.blend;
+    ctx.save(); ctx.globalAlpha=.17*a;
+    for(let i=0;i<24;i++){
+      const d=((i*37)%100)/100;
+      const x=groundX((((i*59)%100)/50)-1,d), y=groundY(d);
+      ctx.fillStyle=i%2?"#402f26":"#d0aa67";
+      ctx.beginPath(); ctx.ellipse(x,y,5+25*d,2+8*d,(i*.3)%2,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if(di.index===3 || di.next===3){
+    const a=di.index===3?1-di.blend:di.blend;
+    ctx.save(); ctx.globalAlpha=.18*a; ctx.strokeStyle="#4b4038";
+    for(let i=0;i<11;i++){
+      const d=i/11, y=groundY(d);
+      ctx.beginPath(); ctx.moveTo(groundX(-.9,d),y); ctx.lineTo(groundX(.9,d),y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ====================== COMPATIBLE ROUNDED RECT ====================== */
+function roundedRectPath(x,y,w,h,r){
+  r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);
+  ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);
+  ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+
+/* ====================== PROP DRAWING ====================== */
+function drawProp(p){
+  const d=p.depth;
+  if(d<0 || d>1.1) return;
+  const x=groundX(p.lateral,d), y=groundY(d), s=perspectiveScale(d);
+
+  ctx.save();
+  ctx.translate(x,y); ctx.rotate(p.rot); ctx.scale(s,s);
+
+  switch(p.kind){
+    case "paper":
+      ctx.fillStyle=p.seed>.5?"#e3ded0":"#c8c4b9";
+      ctx.beginPath(); ctx.moveTo(-11,-5); ctx.lineTo(13,-3); ctx.lineTo(10,7); ctx.lineTo(-13,5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle="rgba(30,30,30,.35)"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(-6,-1);ctx.lineTo(7,0);ctx.moveTo(-5,2);ctx.lineTo(3,3);ctx.stroke();
+      break;
+
+    case "cup":
+      ctx.fillStyle=p.seed>.5?"#d9d7cc":"#a94a3e";
+      ctx.beginPath(); ctx.moveTo(-6,-15);ctx.lineTo(7,-15);ctx.lineTo(5,2);ctx.lineTo(-4,2);ctx.closePath();ctx.fill();
+      break;
+
+    case "food":
+      ctx.fillStyle=p.seed>.5?"#d3a542":"#9c6a38";
+      for(let i=0;i<4;i++) ctx.fillRect(-9+i*5,-4+(i%2)*2,8,3);
+      break;
+
+    case "leaf":
+      ctx.fillStyle=p.seed>.5?"#7e7d3a":"#a36a36";
+      ctx.beginPath(); ctx.ellipse(0,0,9,4,.5,0,Math.PI*2); ctx.fill();
+      break;
+
+    case "mark":
+      ctx.strokeStyle="#dad1b0"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-11,4);ctx.lineTo(0,-4);ctx.lineTo(11,4);ctx.stroke();
+      break;
+
+    case "small":
+      ctx.fillStyle="#5c5a55"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+      break;
+
+    case "bird":
+      ctx.fillStyle=p.label==="seagull"?"#e8e8df":"#5f6464";
+      ctx.beginPath(); ctx.ellipse(0,-7,10,6,0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(7,-12,4,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#ab7e45";
+      ctx.beginPath(); ctx.moveTo(-4,-2);ctx.lineTo(-6,5);ctx.moveTo(2,-2);ctx.lineTo(4,5);ctx.stroke();
+      break;
+
+    case "bin":
+      ctx.fillStyle=p.seed>.5?"#3f5451":"#3e4143";
+      ctx.fillRect(-12,-34,24,34); ctx.fillStyle="#202526"; ctx.fillRect(-14,-37,28,5);
+      break;
+
+    case "bag":
+      ctx.fillStyle=p.seed>.5?"#27292a":"#b8a47b";
+      ctx.beginPath(); ctx.moveTo(-10,0);ctx.quadraticCurveTo(-14,-21,-5,-27);ctx.lineTo(6,-27);ctx.quadraticCurveTo(14,-16,10,0);
+      ctx.closePath();ctx.fill();
+      break;
+
+    case "box":
+      ctx.fillStyle=p.seed>.5?"#a97a4f":"#51646d";
+      ctx.fillRect(-15,-22,30,22); ctx.strokeStyle="rgba(0,0,0,.3)"; ctx.strokeRect(-15,-22,30,22);
+      break;
+
+    case "crate":
+      ctx.fillStyle="#88613c"; ctx.fillRect(-18,-18,36,18);
+      ctx.strokeStyle="#4d3525"; ctx.lineWidth=2; ctx.strokeRect(-18,-18,36,18);
+      ctx.beginPath(); ctx.moveTo(-18,-12);ctx.lineTo(18,-12);ctx.moveTo(-18,-6);ctx.lineTo(18,-6);ctx.stroke();
+      if(p.label.includes("produce")||p.label.includes("fruit")){
+        ctx.fillStyle=p.seed>.5?"#c85a3e":"#6a9c4c";
+        for(let i=0;i<5;i++){ ctx.beginPath(); ctx.arc(-12+i*6,-20-(i%2)*2,4,0,Math.PI*2); ctx.fill(); }
+      }
+      break;
+
+    case "plant":
+      ctx.fillStyle="#685044"; ctx.fillRect(-9,-12,18,12);
+      ctx.fillStyle=p.seed>.5?"#547d4d":"#7a8b42";
+      for(let i=0;i<5;i++){ ctx.beginPath(); ctx.ellipse((i-2)*4,-19-(i%2)*4,4,9,(i-2)*.25,0,Math.PI*2); ctx.fill(); }
+      break;
+
+    case "ground":
+      ctx.fillStyle="#505454"; ctx.beginPath(); ctx.ellipse(0,0,17,6,0,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#282b2c";
+      for(let i=-10;i<=10;i+=5){ ctx.beginPath();ctx.moveTo(i,-4);ctx.lineTo(i,4);ctx.stroke(); }
+      break;
+
+    case "post":
+      ctx.fillStyle=p.label==="hydrant"?"#8f4235":"#44484a";
+      ctx.fillRect(-5,-45,10,45); ctx.beginPath(); ctx.ellipse(0,-44,8,4,0,0,Math.PI*2); ctx.fill();
+      break;
+
+    case "bench":
+      ctx.fillStyle="#4a443c"; ctx.fillRect(-4,-35,8,35); ctx.fillRect(-8,-34,26,5);
+      break;
+
+    case "board":
+      ctx.fillStyle="#5b4430"; ctx.fillRect(-16,-35,32,31);
+      ctx.strokeStyle="#a99170"; ctx.lineWidth=2; ctx.strokeRect(-13,-31,26,21);
+      ctx.beginPath(); ctx.moveTo(-10,-4);ctx.lineTo(-15,8);ctx.moveTo(10,-4);ctx.lineTo(15,8);ctx.stroke();
+      break;
+
+    case "machine":
+      ctx.fillStyle=p.label==="ATM"?"#536371":"#755245"; ctx.fillRect(-18,-55,36,55);
+      ctx.fillStyle="#202932"; ctx.fillRect(-12,-43,24,16); ctx.fillStyle="#9bb3b8"; ctx.fillRect(-9,-40,18,9);
+      break;
+
+    case "rack":
+      ctx.strokeStyle="#555c5d"; ctx.lineWidth=5;
+      ctx.beginPath(); ctx.arc(0,-10,13,Math.PI,0); ctx.lineTo(13,0); ctx.moveTo(-13,-10);ctx.lineTo(-13,0);ctx.stroke();
+      break;
+
+    case "wheel":
+    case "vehicle":
+      ctx.strokeStyle="#252627"; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,-15,p.kind==="vehicle"?23:16,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle="#7f8585"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,-15,p.kind==="vehicle"?12:7,0,Math.PI*2);ctx.stroke();
+      if(p.kind==="vehicle"){ ctx.fillStyle=p.seed>.5?"#ad9b62":"#575f66"; ctx.fillRect(-32,-55,64,22); }
+      break;
+
+    case "home":
+      ctx.fillStyle="#55504a";
+      if(p.label.includes("step")){
+        ctx.fillRect(-26,-8,52,8); ctx.fillRect(-19,-16,38,8);
+      }else{
+        ctx.fillRect(-4,-58,8,58); ctx.fillRect(-15,-48,30,4);
+      }
+      break;
+
+    case "water":
+      if(p.label.includes("rope")){
+        ctx.strokeStyle="#8f8065"; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.moveTo(-20,-4);ctx.bezierCurveTo(-7,-17,9,8,24,-5);ctx.stroke();
+      }else if(p.label.includes("puddle")){
+        ctx.fillStyle="rgba(100,150,165,.55)"; ctx.beginPath(); ctx.ellipse(0,0,26,8,0,0,Math.PI*2);ctx.fill();
+      }else{
+        ctx.fillStyle="#4a4c4c"; ctx.fillRect(-10,-7,20,7);
+      }
+      break;
+
+    case "animal":
+      ctx.fillStyle=p.seed>.5?"#72543e":"#3a3b3c";
+      ctx.beginPath();ctx.ellipse(0,-14,15,9,0,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(12,-21,7,0,Math.PI*2);ctx.fill();
+      break;
+  }
+  ctx.restore();
+}
+
+/* ====================== PEDESTRIANS ====================== */
+function drawPedestrian(p){
+  const depth=clamp(p.depth,0,1);
+  const y=groundY(depth)+p.yOffset*H;
+  const x=p.x*W;
+  const s=perspectiveScale(depth)*p.scaleNoise;
+  if(x<-160 || x>W+160) return;
+
+  const stride=Math.sin(worldTime*8*p.type.pace+p.phase)*12*s;
+  const lift=Math.max(0,Math.sin(worldTime*8*p.type.pace+p.phase))*4*s;
+
+  ctx.save();
+  ctx.translate(x,y);
+
+  if(p.scared) ctx.translate(0,-Math.sin(clamp(p.scareTime,0,1)*Math.PI)*26*s);
+
+  if(p.accessory){
+    ctx.fillStyle=p.accessory===3?"#303c47":"#695144";
+    ctx.fillRect(p.dir>0?-35*s:18*s,-76*s,17*s,31*s);
+  }
+
+  ctx.fillStyle=p.type.pants;
+  roundedRectPath(-12*s+stride*.35,-78*s,18*s,68*s,6*s); ctx.fill();
+  ctx.fillStyle=p.type.sock; ctx.fillRect(-10*s+stride*.35,-16*s,15*s,10*s);
+  ctx.fillStyle=p.type.shoe;
+  ctx.beginPath();
+  ctx.ellipse(-4*s+stride*.35,-3*s-lift,19*s,7*s,p.dir>.5?.08:-.08,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle=p.type.pants;
+  roundedRectPath(7*s-stride*.35,-82*s,19*s,72*s,6*s); ctx.fill();
+  ctx.fillStyle=p.type.sock; ctx.fillRect(9*s-stride*.35,-17*s,15*s,10*s);
+  ctx.fillStyle=p.type.shoe;
+  ctx.beginPath();
+  ctx.ellipse(19*s-stride*.35,-3*s+lift*.25,20*s,7*s,p.dir>.5?.08:-.08,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+/* ====================== MOUSE ====================== */
+function mousePosition(){
+  const weave=Math.sin(worldTime*.92)*38 + Math.sin(worldTime*2.17)*13;
+  return {x:W*.5+weave,y:Math.min(H-72,H*.84)};
+}
+
+function drawMouse(){
+  const m=mousePosition(), bob=Math.sin(worldTime*10)*2;
+  ctx.save(); ctx.translate(m.x,m.y+bob);
+
+  ctx.strokeStyle="#9a7b70"; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(-14,3);ctx.bezierCurveTo(-33,8,-44,4,-55,13+Math.sin(worldTime*3)*5);ctx.stroke();
+
+  ctx.fillStyle="rgba(0,0,0,.25)";
+  ctx.beginPath();ctx.ellipse(2,13,25,7,0,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#72685e";
+  ctx.beginPath();ctx.ellipse(0,0,22,14,0,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#81756a";
+  ctx.beginPath();ctx.ellipse(0,-13,14,12,0,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#8f7a71";
+  ctx.beginPath();ctx.arc(-10,-21,7,0,Math.PI*2);ctx.arc(10,-21,7,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#b28d88";
+  ctx.beginPath();ctx.arc(-10,-21,3.5,0,Math.PI*2);ctx.arc(10,-21,3.5,0,Math.PI*2);ctx.fill();
+
+  const kick=Math.sin(worldTime*11)*5;
+  ctx.fillStyle="#a68a7d";
+  ctx.beginPath();ctx.ellipse(-12+kick,11,8,4,-.3,0,Math.PI*2);ctx.ellipse(12-kick,11,8,4,.3,0,Math.PI*2);ctx.fill();
+
+  ctx.restore();
+}
+
+/* ====================== NEAR MISSES ====================== */
+function triggerNearMiss(severity){
+  nearMisses.push({
+    kind:pick(["shoe","bike","stroller","scooter","bag"]),
+    dir:Math.random()<.5?1:-1,
+    t:0,duration:1.05+severity*.08,severity
+  });
+
+  for(let i=0;i<6+severity*2;i++){
+    particles.push({
+      x:W*.5+rand(-30,30),y:Math.min(H-65,H*.84)+rand(-5,10),
+      vx:rand(-75,75),vy:rand(-95,-35),life:rand(.35,.8)
     });
+  }
+}
 
-    function startGame() {
-        document.getElementById('start-screen').style.display = 'none';
-        document.getElementById('quiz-panel').style.display = 'flex';
-        currentRoom = 0;
-        currentQuestionIdx = 0;
-        power = 100;
-        updatePowerUI();
-        loadQuestion();
+function drawNearMiss(n){
+  const u=clamp(n.t/n.duration,0,1);
+  const y=Math.min(H-65,H*.84)-5;
+  const x=n.dir>0 ? lerp(-180,W*.5-75,u) : lerp(W+180,W*.5+75,u);
+
+  ctx.save(); ctx.translate(x,y);
+
+  if(n.kind==="shoe"){
+    ctx.fillStyle="#272525";
+    ctx.beginPath();ctx.ellipse(0,-12,70,26,n.dir*.08,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#3f4143";ctx.fillRect(-30,-130,52,110);
+  }
+
+  if(n.kind==="bike"||n.kind==="stroller"||n.kind==="scooter"){
+    ctx.strokeStyle="#202223";ctx.lineWidth=9;
+    ctx.beginPath();ctx.arc(0,-35,48,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle="#646c70";ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(0,-35,25,0,Math.PI*2);ctx.stroke();
+  }
+
+  if(n.kind==="bag"){
+    ctx.fillStyle="#6a5142";ctx.fillRect(-40,-95,80,78);
+    ctx.strokeStyle="#44352c";ctx.lineWidth=6;
+    ctx.beginPath();ctx.arc(0,-96,31,Math.PI,0);ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function updateParticles(dt){
+  particles.forEach(p=>{
+    p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=180*dt;
+  });
+  particles=particles.filter(p=>p.life>0);
+}
+
+function drawParticles(){
+  ctx.fillStyle="#c8b89a";
+  particles.forEach(p=>{
+    ctx.globalAlpha=clamp(p.life*2,0,1);
+    ctx.fillRect(p.x,p.y,4,3);
+  });
+  ctx.globalAlpha=1;
+}
+
+/* ====================== CAT ====================== */
+function startCatSequence(){
+  state="cat";
+  cat={t:0,duration:3.05,fromLeft:Math.random()<.5};
+  input.disabled=true;
+}
+
+function drawCat(){
+  if(!cat) return;
+  const u=clamp(cat.t/cat.duration,0,1);
+  const ease=1-Math.pow(1-u,3);
+  const mx=mousePosition().x, my=mousePosition().y;
+  const sx=cat.fromLeft?-240:W+240;
+  const x=lerp(sx,mx+(cat.fromLeft?-30:30),ease);
+  const y=lerp(my-10,my-15,ease);
+  const scale=lerp(.25,1.35,ease);
+
+  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+
+  ctx.fillStyle="#282522";
+  ctx.beginPath();ctx.ellipse(0,-45,68,49,0,0,Math.PI*2);ctx.fill();
+
+  ctx.beginPath();ctx.arc(cat.fromLeft?42:-42,-83,42,0,Math.PI*2);ctx.fill();
+
+  ctx.beginPath();
+  if(cat.fromLeft){
+    ctx.moveTo(19,-115);ctx.lineTo(25,-151);ctx.lineTo(49,-119);
+    ctx.moveTo(56,-117);ctx.lineTo(78,-145);ctx.lineTo(81,-103);
+  }else{
+    ctx.moveTo(-19,-115);ctx.lineTo(-25,-151);ctx.lineTo(-49,-119);
+    ctx.moveTo(-56,-117);ctx.lineTo(-78,-145);ctx.lineTo(-81,-103);
+  }
+  ctx.fill();
+
+  ctx.fillStyle="#342f2a";
+  ctx.beginPath();ctx.ellipse(cat.fromLeft?62:-62,-5,48,21,0,0,Math.PI*2);ctx.fill();
+
+  ctx.fillStyle="#d4c86e";
+  const ex=cat.fromLeft?48:-48;
+  ctx.beginPath();ctx.ellipse(ex,-91,8,12,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#151515";ctx.fillRect(ex-1.5,-99,3,16);
+
+  ctx.restore();
+}
+
+/* ====================== DOM ====================== */
+const input=document.getElementById("answer");
+const form=document.getElementById("entryRow");
+const definitionEl=document.getElementById("definition");
+const timerEl=document.getElementById("timer");
+const difficultyEl=document.getElementById("difficulty");
+const progressEl=document.getElementById("progress");
+const districtEl=document.getElementById("district");
+const strengthBar=document.getElementById("strengthBar");
+const strengthText=document.getElementById("strengthText");
+const feedbackEl=document.getElementById("feedback");
+const overlay=document.getElementById("overlay");
+const overlayCard=document.getElementById("overlayCard");
+const startButton=document.getElementById("startButton");
+
+function shuffle(array){
+  const a=[...array];
+  for(let i=a.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function startGame(){
+  order=shuffle(TERMS.map((_,i)=>i));
+  questionIndex=0;current=null;strength=100;score=0;correctCount=0;fastCount=0;streak=0;catCatches=0;
+  props=[];pedestrians=[];particles=[];nearMisses=[];cat=null;
+
+  for(let i=0;i<32;i++) spawnProp(true);
+  for(let i=0;i<11;i++) spawnPedestrian(true);
+
+  overlay.classList.add("hidden");
+  state="playing";
+  updateStrengthHUD();
+  nextQuestion();
+}
+
+function nextQuestion(){
+  if(questionIndex>=order.length){
+    finishGame();
+    return;
+  }
+
+  current=TERMS[order[questionIndex]];
+  timeLeft=TIME_BY_DIFFICULTY[current.q];
+  resolveTimer=0;
+  pendingAdvance=false;
+
+  definitionEl.textContent=current.d;
+  difficultyEl.textContent=`${DIFFICULTY_NAMES[current.q]} · ${TIME_BY_DIFFICULTY[current.q]} SEC`;
+  progressEl.textContent=`TERM ${questionIndex+1} / ${TERMS.length}`;
+  feedbackEl.textContent="";
+  input.value="";
+  input.disabled=false;
+  input.focus();
+  updateDistrictLabel();
+}
+
+function updateDistrictLabel(){
+  const di=districtState();
+  districtEl.textContent=(di.blend>.06 && di.next!==di.index)
+    ? `${DISTRICTS[di.index].name} → ${DISTRICTS[di.next].name}`
+    : DISTRICTS[di.index].name;
+}
+
+function speedBonus(){
+  if(timeLeft<=5) return 0;
+  return Math.min(16,Math.max(2,Math.round((timeLeft-5)*.72 + current.q*1.3)));
+}
+
+function submitAnswer(){
+  if(state!=="playing" || pendingAdvance || !current) return;
+  if(!input.value.trim()) return;
+  answerIsCorrect(input.value,current) ? correctAnswer() : wrongAnswer(false);
+}
+
+function correctAnswer(){
+  pendingAdvance=true;
+  input.disabled=true;
+  const bonus=speedBonus();
+  correctCount++;
+  streak++;
+
+  if(bonus>0){
+    fastCount++;
+    strength=Math.min(100,strength+bonus);
+    feedbackEl.textContent=`CORRECT — FAST ANSWER +${bonus}% STRENGTH`;
+    feedbackEl.style.color="var(--good)";
+    score+=100+bonus*3+current.q*10;
+  }else{
+    feedbackEl.textContent="CORRECT";
+    feedbackEl.style.color="var(--good)";
+    score+=100+current.q*10;
+  }
+
+  for(let i=0;i<6;i++){
+    particles.push({
+      x:mousePosition().x+rand(-12,12),y:mousePosition().y+rand(-15,3),
+      vx:rand(-45,45),vy:rand(-80,-30),life:rand(.35,.65)
+    });
+  }
+
+  questionIndex++;
+  resolveTimer=.76;
+  updateStrengthHUD();
+}
+
+function wrongAnswer(timeout){
+  if(pendingAdvance) return;
+  pendingAdvance=true;
+  input.disabled=true;
+  streak=0;
+
+  const penalty=PENALTY_BY_DIFFICULTY[current.q];
+  strength=Math.max(0,strength-penalty);
+
+  feedbackEl.textContent=`${timeout?"TIME":"MISS"} — ${current.t.toUpperCase()} — −${penalty}% STRENGTH`;
+  feedbackEl.style.color="var(--bad)";
+
+  triggerNearMiss(current.q);
+  questionIndex++;
+  resolveTimer=strength<=0?.66:1.1;
+  updateStrengthHUD();
+}
+
+function updateStrengthHUD(){
+  strengthBar.style.width=strength+"%";
+  strengthText.textContent=Math.round(strength)+"%";
+  strengthBar.style.background = strength>60
+    ? "linear-gradient(90deg,#6ddc95,#d6e96e)"
+    : strength>30
+      ? "linear-gradient(90deg,#e6b64f,#d98b47)"
+      : "linear-gradient(90deg,#d45151,#ff7474)";
+}
+
+function finishGame(){
+  state="finished";
+  input.disabled=true;
+  const accuracy=Math.round(correctCount/TERMS.length*100);
+
+  overlayCard.innerHTML=`
+    <h2>Run Complete</h2>
+    <p>The mouse made it through all four districts. Considering the traffic situation, this is already an achievement.</p>
+    <div class="rules">
+      <div class="rule"><b>${correctCount} / ${TERMS.length}</b><br>correct answers</div>
+      <div class="rule"><b>${accuracy}%</b><br>accuracy</div>
+      <div class="rule"><b>${fastCount}</b><br>fast-answer bonuses</div>
+      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
+      <div class="rule"><b>${score}</b><br>score</div>
+      <div class="rule"><b>${Math.round(strength)}%</b><br>ending Strength</div>
+    </div>
+    <button class="bigButton" id="againButton">RUN AGAIN</button>
+  `;
+  overlay.classList.remove("hidden");
+  document.getElementById("againButton").onclick=startGame;
+}
+
+function showCatContinue(){
+  state="caught";
+  catCatches++;
+
+  overlayCard.innerHTML=`
+    <h2>The cat noticed.</h2>
+    <p>The mouse has been captured, dignity somewhat compromised. Your vocabulary progress is preserved.</p>
+    <div class="rules">
+      <div class="rule"><b>${questionIndex} / ${TERMS.length}</b><br>terms completed</div>
+      <div class="rule"><b>${correctCount}</b><br>correct so far</div>
+      <div class="rule"><b>65%</b><br>Strength on continue</div>
+      <div class="rule"><b>${catCatches}</b><br>cat catches</div>
+    </div>
+    <button class="bigButton" id="continueButton">ESCAPE & CONTINUE</button>
+  `;
+  overlay.classList.remove("hidden");
+
+  document.getElementById("continueButton").onclick=()=>{
+    strength=65;
+    updateStrengthHUD();
+    cat=null;
+    overlay.classList.add("hidden");
+    state="playing";
+    nextQuestion();
+  };
+}
+
+form.addEventListener("submit",e=>{
+  e.preventDefault();
+  submitAnswer();
+});
+
+startButton.addEventListener("click",startGame);
+
+window.addEventListener("keydown",e=>{
+  if(state==="title" && e.key==="Enter") startGame();
+});
+
+/* ====================== UPDATE ====================== */
+function updateWorld(dt){
+  worldTime+=dt;
+  const speed=state==="playing" ? .12 : .035;
+  scroll+=dt*speed;
+
+  props.forEach(p=>{
+    p.depth+=dt*(.075+.10*p.depth);
+    p.lateral+=p.drift*dt;
+  });
+  props=props.filter(p=>p.depth<1.08);
+  while(props.length<38) spawnProp();
+
+  pedestrians.forEach(p=>{
+    p.x+=p.dir*p.speed*dt;
+    p.depth+=dt*.008;
+    const m=mousePosition();
+    const px=p.x*W, py=groundY(p.depth);
+
+    if(!p.scared && Math.abs(px-m.x)<95 && Math.abs(py-m.y)<105 && Math.random()<.045){
+      p.scared=true;
+      p.scareTime=0;
+      p.dir*=-1;
     }
 
-    function loadQuestion() {
-        let globalIndex = (currentRoom * 10) + currentQuestionIdx;
-        currentItem = artifacts[globalIndex];
-
-        document.getElementById('room-indicator').innerText = currentRoom + 1;
-        document.getElementById('definition-box').innerText = currentItem.def;
-        document.getElementById('answer-input').value = "";
-        document.getElementById('feedback').innerText = "";
-        document.getElementById('answer-input').focus();
-        
-        document.getElementById('scene-title').innerText = roomTitles[currentRoom];
-        document.getElementById('scene-layer').style.background = roomBackgrounds[currentRoom];
-        
-        // Handle Room 1 Specific Visuals (Dust and Librarian)
-        if(currentRoom === 0) {
-            document.getElementById('dust-overlay').style.display = 'block';
-            document.getElementById('librarian-container').style.display = 'flex';
-        } else {
-            document.getElementById('dust-overlay').style.display = 'none';
-            document.getElementById('librarian-container').style.display = 'none';
-        }
-        
-        let safeImageName = currentItem.term.replace(/[^a-zA-Z0-9]/g, '');
-        document.getElementById('artifact-image').src = `https://placehold.co/800x500/15100a/d4af37?text=Ancient+Relic:\n${safeImageName}`;
-
-        startTimer();
+    if(p.scared){
+      p.scareTime+=dt*2;
+      if(p.scareTime>1){p.scared=false;p.scareTime=0;}
     }
+  });
 
-    function startTimer() {
-        clearInterval(timerInterval);
-        timeLeft = 15;
-        document.getElementById('timer').innerText = timeLeft + "s";
-        
-        timerInterval = setInterval(() => {
-            timeLeft--;
-            document.getElementById('timer').innerText = timeLeft + "s";
-            
-            if (timeLeft <= 0) {
-                clearInterval(timerInterval);
-                processWrongAnswer("Time's up!");
-            }
-        }, 1000);
+  pedestrians=pedestrians.filter(p=>p.x>-0.35 && p.x<1.35 && p.depth<.92);
+
+  const desired=state==="playing"?13:9;
+  while(pedestrians.length<desired) spawnPedestrian();
+
+  nearMisses.forEach(n=>n.t+=dt);
+  nearMisses=nearMisses.filter(n=>n.t<n.duration);
+
+  updateParticles(dt);
+  if(cat) cat.t+=dt;
+}
+
+function updateGame(dt){
+  if(state==="playing" && current && !pendingAdvance){
+    timeLeft-=dt;
+    if(timeLeft<=0){
+      timeLeft=0;
+      wrongAnswer(true);
     }
+  }
 
-    function normalizeString(str) {
-        return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if(state==="playing" && pendingAdvance){
+    resolveTimer-=dt;
+    if(resolveTimer<=0){
+      if(strength<=0) startCatSequence();
+      else nextQuestion();
     }
+  }
 
-    function isAnswerCorrect(input, actual) {
-        let cleanInput = normalizeString(input);
-        let cleanActual = normalizeString(actual);
-        return cleanInput === cleanActual || (cleanInput.length > 3 && cleanActual.includes(cleanInput));
-    }
+  if(state==="cat" && cat && cat.t>=cat.duration) showCatContinue();
 
-    function submitAnswer() {
-        if(timeLeft <= 0 || power <= 0) return;
-        clearInterval(timerInterval);
-        
-        let input = document.getElementById('answer-input').value;
-        if (isAnswerCorrect(input, currentItem.term)) {
-            processCorrectAnswer();
-        } else {
-            processWrongAnswer("Incorrect! It was " + currentItem.term);
-        }
-    }
+  updateHUD();
+}
 
-    function processCorrectAnswer() {
-        let feedback = document.getElementById('feedback');
-        feedback.style.color = "#4CAF50";
-        
-        if (timeLeft >= 5) {
-            power = Math.min(100, power + 10);
-            feedback.innerText = "Correct! +10% Speed Bonus!";
-        } else {
-            feedback.innerText = "Correct!";
-        }
-        
-        updatePowerUI();
-        setTimeout(() => {
-            currentQuestionIdx++;
-            if (currentQuestionIdx >= 10) {
-                currentRoom++;
-                currentQuestionIdx = 0;
-                if (currentRoom >= 3) {
-                    winGame();
-                } else {
-                    showTransition();
-                }
-            } else {
-                loadQuestion();
-            }
-        }, 1500);
-    }
+function updateHUD(){
+  if(current && (state==="playing"||state==="cat")){
+    timerEl.textContent=Math.ceil(timeLeft).toString().padStart(2,"0");
+    timerEl.style.color=timeLeft>8?"var(--good)":timeLeft>5?"var(--warn)":"var(--bad)";
+  }
+  updateDistrictLabel();
+}
 
-    function showTransition() {
-        document.getElementById('quiz-panel').style.display = 'none';
-        let transScreen = document.getElementById('transition-screen');
-        let transText = document.getElementById('transition-text');
+/* ====================== RENDER ====================== */
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawBaseScene();
 
-        if (currentRoom === 1) {
-            transText.innerText = "Departing the Library, descending into the Hall of Monuments...";
-        } else if (currentRoom === 2) {
-            transText.innerText = "Descending further into the pitch-black Vault of Symbols...";
-        }
+  const items=[];
+  props.forEach(p=>items.push({depth:p.depth,type:"prop",obj:p}));
+  pedestrians.forEach(p=>items.push({depth:p.depth,type:"ped",obj:p}));
+  items.sort((a,b)=>a.depth-b.depth);
 
-        transScreen.style.display = 'flex';
-        
-        setTimeout(() => {
-            transScreen.style.display = 'none';
-            document.getElementById('quiz-panel').style.display = 'flex';
-            loadQuestion();
-        }, 3000);
-    }
+  items.forEach(item=>{
+    if(item.type==="prop") drawProp(item.obj);
+    else drawPedestrian(item.obj);
+  });
 
-    function processWrongAnswer(msg) {
-        let feedback = document.getElementById('feedback');
-        feedback.style.color = "#ff4c4c";
-        feedback.innerText = msg;
-        
-        triggerSceneTremor();
+  nearMisses.forEach(drawNearMiss);
+  drawMouse();
+  drawParticles();
+  if(state==="cat") drawCat();
 
-        let penalty = 0;
-        if (currentItem.diff === "easy") penalty = 35;
-        else if (currentItem.diff === "medium") penalty = 30;
-        else if (currentItem.diff === "hard") penalty = 25;
+  const vg=ctx.createRadialGradient(
+    W*.5,H*.62,Math.min(W,H)*.23,
+    W*.5,H*.62,Math.max(W,H)*.78
+  );
+  vg.addColorStop(0,"rgba(0,0,0,0)");
+  vg.addColorStop(1,"rgba(0,0,0,.28)");
+  ctx.fillStyle=vg;
+  ctx.fillRect(0,0,W,H);
+}
 
-        power -= penalty;
-        updatePowerUI();
+/* ====================== MAIN LOOP ====================== */
+function loop(ts){
+  let dt=(ts-lastTimestamp)/1000;
+  lastTimestamp=ts;
+  dt=Math.min(.05,Math.max(0,dt));
 
-        if (power <= 0) {
-            setTimeout(loseGame, 1000);
-        } else {
-            setTimeout(() => {
-                currentQuestionIdx++;
-                if (currentQuestionIdx >= 10) {
-                    currentRoom++;
-                    currentQuestionIdx = 0;
-                    if (currentRoom >= 3) {
-                        winGame();
-                    } else {
-                        showTransition();
-                    }
-                } else {
-                    loadQuestion();
-                }
-            }, 2500);
-        }
-    }
+  updateWorld(dt);
+  updateGame(dt);
+  render();
+  requestAnimationFrame(loop);
+}
 
-    function triggerSceneTremor() {
-        const scene = document.getElementById('scene-layer');
-        scene.classList.remove('tremor');
-        void scene.offsetWidth; 
-        scene.classList.add('tremor');
-    }
+updateStrengthHUD();
+updateDistrictLabel();
+requestAnimationFrame(loop);
 
-    function updatePowerUI() {
-        let displayPower = Math.max(0, power);
-        let powerBar = document.getElementById('power-bar');
-        powerBar.style.width = displayPower + "%";
-
-        if (displayPower > 60) powerBar.style.backgroundColor = "#4CAF50";
-        else if (displayPower > 30) powerBar.style.backgroundColor = "#ff9800";
-        else powerBar.style.backgroundColor = "#f44336";
-
-        let lostPower = 100 - displayPower;
-        let woozyLevel = lostPower / 100; 
-        let blurLevel = (lostPower / 100) * 3; 
-        
-        document.documentElement.style.setProperty('--woozy-level', woozyLevel);
-        document.documentElement.style.setProperty('--blur-level', blurLevel + 'px');
-    }
-
-    function loseGame() {
-        clearInterval(timerInterval);
-        document.getElementById('quiz-panel').style.display = 'none';
-        
-        let deathData = deathScenes[currentRoom];
-        document.getElementById('death-icon').innerText = deathData.icon;
-        document.getElementById('death-message').innerText = deathData.text;
-        
-        document.documentElement.style.setProperty('--woozy-level', 0);
-        document.documentElement.style.setProperty('--blur-level', '0px');
-        
-        document.getElementById('death-visual').style.display = 'flex';
-    }
-
-    function winGame() {
-        clearInterval(timerInterval);
-        document.getElementById('quiz-panel').style.display = 'none'; 
-        
-        let scene = document.getElementById('scene-layer');
-        scene.style.transform = "scale(0.1)";
-        scene.style.opacity = "0";
-
-        setTimeout(() => {
-            scene.style.display = 'none';
-            document.body.style.backgroundColor = "#87CEEB"; 
-            document.getElementById('win-screen').style.display = 'flex';
-            document.getElementById('win-screen').style.opacity = '0';
-            
-            setTimeout(() => {
-                document.getElementById('win-screen').style.transition = "opacity 2s ease-in";
-                document.getElementById('win-screen').style.opacity = '1';
-            }, 100);
-            
-        }, 1800);
-    }
+})();
 </script>
-
 </body>
 </html>
