@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#172019">
+<title>Geology Fieldbook</title>
+<style>
+  :root {
+    --ink: #201d17;
+    --paper: #e7d9b4;
+    --paper-light: #f5ebcc;
+    --rust: #9c4f2c;
+    --moss: #627450;
+    --gold: #d9b463;
+    --safe: #84a66f;
+    --warn: #d5a84f;
+    --danger: #b64b35;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #111814; }
+  body {
+    color: var(--paper-light);
+    font-family: Georgia, "Times New Roman", serif;
+    user-select: none;
+  }
+  button, input { font: inherit; }
+  #scene {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #8ba3a0;
+  }
+  .vignette {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(12,18,15,.08), transparent 35%, rgba(7,10,8,.34)),
+      radial-gradient(ellipse at center, transparent 46%, rgba(5,8,6,.52) 120%);
+  }
+  .grain {
+    position: fixed;
+    inset: 0;
+    opacity: .07;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.38'/%3E%3C/svg%3E");
+    mix-blend-mode: soft-light;
+  }
+  #hud {
+    position: fixed;
+    top: max(18px, env(safe-area-inset-top));
+    left: max(18px, env(safe-area-inset-left));
+    width: min(390px, calc(100vw - 36px));
+    padding: 14px 16px 15px;
+    background: linear-gradient(145deg, rgba(23,31,24,.92), rgba(32,38,27,.82));
+    border: 2px solid rgba(219,192,124,.48);
+    border-radius: 4px;
+    box-shadow: 0 7px 28px rgba(0,0,0,.36), inset 0 0 0 2px rgba(0,0,0,.24);
+    text-shadow: 0 2px 0 rgba(0,0,0,.45);
+  }
+  .brandrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { letter-spacing: .12em; text-transform: uppercase; font-weight: 700; font-size: 18px; color: #f3dfaa; }
+  .brand small { display: block; margin-top: 3px; font: 10px/1.2 system-ui, sans-serif; letter-spacing: .18em; color: #bdc4a4; }
+  #mute {
+    border: 1px solid rgba(229,206,151,.45);
+    background: rgba(10,14,11,.45);
+    color: #e9d8ac;
+    border-radius: 3px;
+    padding: 7px 9px;
+    cursor: pointer;
+    font: 700 11px/1 system-ui, sans-serif;
+    letter-spacing: .08em;
+  }
+  #mute:hover, #mute:focus-visible { background: rgba(117,132,92,.55); outline: 2px solid #e1c984; }
+  .meterline { display: flex; justify-content: space-between; margin-top: 12px; font: 700 11px/1.2 system-ui, sans-serif; letter-spacing: .09em; text-transform: uppercase; }
+  #readinessValue { color: #f6e5b7; }
+  .meter {
+    height: 13px;
+    margin-top: 6px;
+    padding: 2px;
+    border: 1px solid rgba(233,209,151,.42);
+    background: #141914;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,.6);
+  }
+  #readinessBar {
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, #526b45, #9bb676 75%, #d6c174);
+    transition: width .55s ease, background .3s;
+  }
+  #quiz {
+    position: fixed;
+    right: max(22px, env(safe-area-inset-right));
+    bottom: max(20px, env(safe-area-inset-bottom));
+    width: min(620px, 48vw);
+    min-height: 330px;
+    padding: 24px 28px 22px 38px;
+    color: var(--ink);
+    background:
+      linear-gradient(90deg, transparent 0 17px, rgba(156,79,44,.25) 18px 19px, transparent 20px),
+      repeating-linear-gradient(0deg, transparent 0 29px, rgba(92,108,94,.17) 30px 31px),
+      linear-gradient(145deg, rgba(247,237,205,.96), rgba(218,199,153,.93));
+    border: 2px solid #6f5735;
+    border-radius: 3px 9px 6px 3px;
+    box-shadow: 0 16px 50px rgba(0,0,0,.52), inset 0 0 26px rgba(97,66,28,.16);
+    transform: rotate(-.25deg);
+    transition: transform .18s, filter .2s, opacity .4s;
+  }
+  #quiz::before {
+    content: "";
+    position: absolute; left: 9px; top: 18px; bottom: 18px; width: 6px;
+    background: repeating-linear-gradient(0deg, #5d4e37 0 5px, transparent 5px 13px);
+    opacity: .72;
+  }
+  #quiz.correct { animation: correctPulse .55s ease; }
+  #quiz.wrong { animation: wrongPulse .42s ease; }
+  @keyframes correctPulse { 50% { filter: brightness(1.13) sepia(.18); transform: rotate(-.25deg) scale(1.012); } }
+  @keyframes wrongPulse { 25%,75% { transform: rotate(-.65deg) translateX(-5px); } 50% { filter: sepia(.6) saturate(1.45); transform: rotate(.15deg) translateX(5px); } }
+  .quiztop { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  #progress { font: 800 11px/1.3 system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #655838; }
+  #tierLabel { margin-top: 4px; font: italic 12px/1.2 Georgia, serif; color: #806744; }
+  .timerWrap { min-width: 78px; text-align: right; }
+  #timer { font: 800 36px/.85 Georgia, serif; color: #526b45; font-variant-numeric: tabular-nums; transition: color .2s; }
+  #timer.safe { color: #526b45; }
+  #timer.warn { color: #a27128; }
+  #timer.danger { color: #a33e2c; animation: tickPulse .55s infinite alternate; }
+  @keyframes tickPulse { to { transform: scale(1.06); } }
+  #timebar { height: 4px; margin: 9px 0 19px; background: rgba(83,67,42,.2); overflow: hidden; }
+  #timefill { height: 100%; width: 100%; transform-origin: left; background: #64794f; }
+  #definition {
+    min-height: 104px;
+    margin: 0;
+    padding-right: 3px;
+    font-size: clamp(17px, 1.55vw, 23px);
+    line-height: 1.34;
+    font-weight: 700;
+    color: #2e2a1e;
+  }
+  .prompt { margin: 13px 0 6px; font: 800 10px/1 system-ui, sans-serif; letter-spacing: .13em; text-transform: uppercase; color: #725f3e; }
+  #answer {
+    width: 100%;
+    border: 0;
+    border-bottom: 3px solid #635336;
+    border-radius: 0;
+    padding: 8px 4px 7px;
+    color: #1f2119;
+    background: rgba(255,252,231,.3);
+    outline: none;
+    font: 700 clamp(16px, 1.3vw, 20px)/1.2 system-ui, sans-serif;
+    user-select: text;
+  }
+  #answer:focus { border-color: #8b4a2d; background: rgba(255,253,232,.55); }
+  #answer:disabled { opacity: .55; }
+  .quizfoot { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 11px; }
+  #feedback { min-height: 18px; font: 800 12px/1.35 system-ui, sans-serif; color: #6b5b3c; }
+  #feedback.good { color: #48613f; }
+  #feedback.bad { color: #9f3829; }
+  #submit {
+    border: 1px solid #57452d;
+    padding: 8px 14px;
+    color: #f2e5bd;
+    background: #3e4d36;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 2px 0 #342c20;
+    border-radius: 2px;
+    cursor: pointer;
+    font: 800 11px/1 system-ui, sans-serif;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  #submit:hover, #submit:focus-visible { background: #596948; outline: 2px solid #8f6c38; }
+  #submit:disabled { opacity: .5; cursor: default; }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(10,15,12,.42);
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .5s, visibility .5s;
+    z-index: 10;
+  }
+  .overlay.show { opacity: 1; visibility: visible; }
+  .card {
+    width: min(560px, calc(100vw - 36px));
+    padding: 36px 38px 32px;
+    text-align: center;
+    color: #332b1d;
+    background: linear-gradient(145deg, #f1e4bd, #d8c18e);
+    border: 3px double #735b35;
+    box-shadow: 0 22px 70px rgba(0,0,0,.55), inset 0 0 35px rgba(96,61,20,.16);
+    transform: rotate(-.35deg);
+  }
+  .card .eyebrow { font: 800 10px/1 system-ui, sans-serif; letter-spacing: .24em; text-transform: uppercase; color: #775c35; }
+  .card h1 { margin: 10px 0 12px; font-size: clamp(34px, 6vw, 57px); line-height: .98; color: #2f3829; }
+  .card p { margin: 0 auto 22px; max-width: 440px; font-size: 16px; line-height: 1.45; }
+  .card button {
+    border: 2px solid #33402d;
+    border-radius: 2px;
+    padding: 13px 24px;
+    color: #f6e9c1;
+    background: #3d4c35;
+    box-shadow: 0 4px 0 #263023;
+    cursor: pointer;
+    font: 800 12px/1 system-ui, sans-serif;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .card button:hover, .card button:focus-visible { background: #58694a; outline: 3px solid rgba(216,180,99,.7); }
+  .rules { display: flex; justify-content: center; flex-wrap: wrap; gap: 7px 16px; margin: 0 0 23px; font: 700 11px/1.3 system-ui, sans-serif; color: #695939; }
+  #endTitle { margin-bottom: 14px; }
+  #endDetail { white-space: pre-line; }
+  #mapSheet {
+    position: fixed;
+    z-index: 9;
+    left: 50%; top: 50%;
+    width: min(76vw, 900px); height: min(68vh, 590px);
+    transform: translate(-50%,-50%) scaleX(.02);
+    transform-origin: center;
+    opacity: 0;
+    pointer-events: none;
+    border: 9px solid #725733;
+    background:
+      repeating-linear-gradient(22deg, transparent 0 36px, rgba(110,86,48,.12) 37px 39px),
+      repeating-linear-gradient(-31deg, transparent 0 48px, rgba(86,107,72,.13) 49px 52px),
+      #dfd09e;
+    box-shadow: 0 20px 75px rgba(0,0,0,.65), inset 0 0 55px rgba(91,63,27,.25);
+  }
+  #mapSheet::before {
+    content: "EXPEDITION COMPLETE";
+    position: absolute; left: 50%; top: 44%; transform: translate(-50%,-50%) rotate(-7deg);
+    padding: 10px 18px;
+    border: 4px double #6f3327;
+    color: #6f3327;
+    font: 900 clamp(18px,3vw,38px)/1 system-ui, sans-serif;
+    letter-spacing: .1em;
+    white-space: nowrap;
+    opacity: .8;
+  }
+  #mapSheet.unfold { animation: unfold 2s .25s cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes unfold {
+    0% { opacity: 0; transform: translate(-50%,-50%) scaleX(.02) rotate(-2deg); }
+    35% { opacity: 1; }
+    100% { opacity: 1; transform: translate(-50%,-50%) scaleX(1) rotate(-.4deg); }
+  }
+  #flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: rgba(144,45,28,.25); z-index: 8; }
+  #flash.hit { animation: flashHit .45s ease; }
+  @keyframes flashHit { 25% { opacity: 1; } 100% { opacity: 0; } }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  @media (max-width: 820px), (max-height: 620px) {
+    #hud { width: min(340px, calc(100vw - 24px)); top: 10px; left: 10px; padding: 10px 12px; }
+    .brand { font-size: 15px; }
+    #quiz { right: 10px; bottom: 10px; width: min(610px, calc(100vw - 20px)); min-height: 0; padding: 17px 18px 15px 31px; }
+    #definition { min-height: 70px; font-size: 16px; }
+    #timer { font-size: 29px; }
+    .prompt { margin-top: 8px; }
+  }
+  @media (max-height: 480px) {
+    #hud { width: 280px; }
+    .meterline { margin-top: 7px; }
+    #quiz { width: 58vw; }
+    #definition { min-height: 48px; font-size: 14px; }
+    #answer { font-size: 14px; padding: 4px; }
+    #timebar { margin-bottom: 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" width="480" height="270" aria-label="Animated pixel-art geology field station beside a layered roadcut"></canvas>
+<div class="vignette"></div>
+<div class="grain"></div>
+
+<header id="hud" aria-label="Expedition status">
+  <div class="brandrow">
+    <div class="brand">Geology Fieldbook<small>Roadcut Survey No. 225</small></div>
+    <button id="mute" type="button" aria-pressed="false">Sound: On</button>
+  </div>
+  <div class="meterline"><span>Field Readiness</span><span id="readinessValue">100%</span></div>
+  <div class="meter"><div id="readinessBar"></div></div>
+</header>
+
+<main id="quiz" aria-live="polite">
+  <div class="quiztop">
+    <div><div id="progress">Field Log — Ready</div><div id="tierLabel">Awaiting expedition</div></div>
+    <div class="timerWrap"><div id="timer" class="safe">15</div></div>
+  </div>
+  <div id="timebar"><div id="timefill"></div></div>
+  <p id="definition">Open the fieldbook to begin the complete 225-term geological survey.</p>
+  <label class="prompt" for="answer">Identify the geological term</label>
+  <input id="answer" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" disabled>
+  <div class="quizfoot">
+    <div id="feedback">Capitalization and punctuation are ignored.</div>
+    <button id="submit" type="button" disabled>Record</button>
+  </div>
+</main>
+
+<div id="flash"></div>
+<div id="mapSheet" aria-hidden="true"></div>
+
+<section id="startOverlay" class="overlay show">
+  <div class="card">
+    <div class="eyebrow">Geoscience Vocabulary Expedition</div>
+    <h1>Geology<br>Fieldbook</h1>
+    <p>Identify each term from its definition while a field geologist maps the exposed roadcut. Complete all 225 entries before Field Readiness reaches zero.</p>
+    <div class="rules"><span>15–25 second questions</span><span>+10% fast-answer bonus</span><span>One continuous survey</span></div>
+    <button id="begin" type="button">Begin Expedition</button>
+  </div>
+</section>
+
+<section id="endOverlay" class="overlay">
+  <div class="card">
+    <div class="eyebrow" id="endEyebrow">Field Report</div>
+    <h1 id="endTitle">Expedition Complete</h1>
+    <p id="endDetail"></p>
+    <button id="restart" type="button">Begin New Survey</button>
+  </div>
+</section>
+
+<script>
+'use strict';
+const BANK = [{"term":"Mineral","definition":"A naturally occurring solid with an ordered atomic structure and a characteristic chemical composition.","tier":1},{"term":"Igneous rock","definition":"Rock formed through the cooling and solidification of magma or lava.","tier":1},{"term":"Sedimentary rock","definition":"Rock formed from deposited sediment, biological material, or chemical precipitates.","tier":1},{"term":"Metamorphic rock","definition":"Rock altered in the solid state by heat, pressure, deformation, or chemically active fluids.","tier":1},{"term":"Magma","definition":"Molten or partly molten rock beneath Earth's surface, commonly containing crystals and dissolved gases.","tier":1},{"term":"Lava","definition":"Magma that has erupted onto Earth's surface.","tier":1},{"term":"Texture","definition":"The size, shape, arrangement, and relationships of the grains or crystals in a rock.","tier":1},{"term":"Grain size","definition":"The diameter or size category of the particles or crystals composing a rock or sediment.","tier":1},{"term":"Bedrock","definition":"Solid rock beneath soil, sediment, fill, regolith, or other loose surface material.","tier":1},{"term":"Plate tectonics","definition":"The theory that Earth's rigid outer shell is divided into plates that move relative to one another.","tier":1},{"term":"Plate boundary","definition":"A zone where two tectonic plates meet and interact.","tier":1},{"term":"Convergent boundary","definition":"A plate boundary at which two plates move toward one another.","tier":1},{"term":"Divergent boundary","definition":"A plate boundary at which two plates move apart and new crust may form.","tier":1},{"term":"Transform boundary","definition":"A plate boundary at which plates move horizontally past one another.","tier":1},{"term":"Fault","definition":"A fracture or fracture zone across which measurable rock displacement has occurred.","tier":1},{"term":"Fold","definition":"A bend or flexure in originally planar geological layers or structures.","tier":1},{"term":"Sediment","definition":"Loose mineral, rock, chemical, or biological material transported or deposited at Earth's surface.","tier":1},{"term":"Weathering","definition":"Physical breakdown or chemical alteration of rock at or near Earth's surface.","tier":1},{"term":"Mechanical weathering","definition":"Physical disintegration of rock without a fundamental change in its chemical composition.","tier":1},{"term":"Chemical weathering","definition":"Decomposition or alteration of rock through chemical reactions involving water, gases, or dissolved substances.","tier":1},{"term":"Erosion","definition":"Removal and transport of earth material by water, wind, ice, waves, or gravity.","tier":1},{"term":"Mass wasting","definition":"Downslope movement of soil, sediment, or rock driven primarily by gravity.","tier":1},{"term":"Soil profile","definition":"A vertical section through the sequence of soil horizons at a location.","tier":1},{"term":"Floodplain","definition":"Low-lying land beside a river or stream that is periodically inundated.","tier":1},{"term":"Sinkhole","definition":"A closed surface depression formed by dissolution, subsurface erosion, or collapse into an underground void.","tier":1},{"term":"Aquifer","definition":"A geological unit that stores and transmits usable quantities of groundwater.","tier":1},{"term":"Water table","definition":"The upper surface of the saturated zone in an unconfined aquifer.","tier":1},{"term":"Porosity","definition":"The fraction of a material's total volume occupied by voids.","tier":1},{"term":"Permeability","definition":"The intrinsic ability of connected pores or fractures in a material to transmit fluids.","tier":1},{"term":"Ground-penetrating radar (GPR)","definition":"A shallow geophysical method that transmits high-frequency electromagnetic pulses and records subsurface reflections.","tier":1},{"term":"Mineral deposit (deposit)","definition":"A natural concentration of minerals or geological material that may have scientific or economic interest.","tier":1},{"term":"Ore","definition":"Material that can be mined and processed economically for one or more valuable constituents under stated conditions.","tier":1},{"term":"Grade","definition":"The concentration of a valuable element, mineral, or compound in a material.","tier":1},{"term":"Overburden","definition":"Soil, sediment, weathered material, or rock lying above a geological or mineral target.","tier":1},{"term":"Tailings","definition":"Fine-grained residual material remaining after valuable constituents have been extracted from ore.","tier":1},{"term":"Outcrop","definition":"Bedrock or another geological unit exposed at Earth's surface.","tier":1},{"term":"Geologic map","definition":"A map showing the distribution, relationships, and structural orientation of geological units at the surface.","tier":1},{"term":"Core","definition":"A cylindrical sample of rock or sediment recovered by drilling.","tier":1},{"term":"Global Positioning System (GPS)","definition":"The United States satellite-navigation system used to determine position and time.","tier":1},{"term":"Geologic hazard","definition":"A geological condition or process capable of harming people, property, infrastructure, or the environment.","tier":1},{"term":"Risk","definition":"The likelihood and consequences of harm resulting from a hazard, considering exposure and vulnerability.","tier":1},{"term":"Landslide","definition":"Downslope movement of rock, soil, or debris as a mass.","tier":1},{"term":"Rockfall","definition":"Detachment and free fall, bouncing, or rolling of rock from a steep slope or cliff.","tier":1},{"term":"Liquefaction","definition":"Loss of strength in loose, saturated sediment when cyclic loading raises pore-water pressure.","tier":1},{"term":"Tsunami","definition":"A series of long water waves produced by sudden displacement of a large volume of water.","tier":1},{"term":"Crystal habit (habit)","definition":"The characteristic external shape in which a mineral or group of crystals grows.","tier":2},{"term":"Cleavage","definition":"A mineral's tendency to split repeatedly along structurally weak crystallographic planes.","tier":2},{"term":"Fracture","definition":"The way a mineral breaks away from cleavage planes, such as conchoidal, uneven, splintery, or hackly.","tier":2},{"term":"Hardness (Mohs hardness)","definition":"Resistance to scratching, conventionally ranked from 1 for talc to 10 for diamond.","tier":2},{"term":"Luster","definition":"The way a mineral reflects light, described with terms such as metallic, vitreous, pearly, resinous, or dull.","tier":2},{"term":"Streak","definition":"The color of a mineral's powder, normally observed by rubbing it on unglazed porcelain.","tier":2},{"term":"Specific gravity (SG)","definition":"The ratio of a mineral's density to the density of water.","tier":2},{"term":"Intrusive (plutonic)","definition":"Describing igneous rock that crystallized below the surface, commonly with a coarse-grained texture.","tier":2},{"term":"Extrusive (volcanic)","definition":"Describing igneous rock formed at or near the surface, commonly with a fine-grained, fragmental, or glassy texture.","tier":2},{"term":"Mafic","definition":"Describing minerals, magma, or rock relatively rich in magnesium and iron and commonly dark in color.","tier":2},{"term":"Felsic","definition":"Describing minerals, magma, or rock relatively rich in silica, feldspar, and commonly quartz.","tier":2},{"term":"Porphyritic texture","definition":"An igneous texture containing large crystals in a finer-grained groundmass.","tier":2},{"term":"Phenocryst","definition":"A conspicuously large crystal enclosed in the finer-grained groundmass of an igneous rock.","tier":2},{"term":"Foliation","definition":"Planar mineral alignment, compositional banding, or cleavage produced by metamorphism and deformation.","tier":2},{"term":"Weathered rock","definition":"Bedrock physically disintegrated, chemically altered, or weakened by near-surface processes.","tier":2},{"term":"Subduction zone","definition":"A convergent margin where one tectonic plate descends beneath another.","tier":2},{"term":"Normal fault","definition":"A dip-slip fault on which the hanging wall moved downward relative to the footwall.","tier":2},{"term":"Reverse fault","definition":"A dip-slip fault on which the hanging wall moved upward relative to the footwall.","tier":2},{"term":"Thrust fault","definition":"A relatively low-angle reverse fault that accommodates crustal shortening.","tier":2},{"term":"Strike-slip fault","definition":"A fault dominated by horizontal displacement parallel to its strike.","tier":2},{"term":"Strike","definition":"The compass direction of a horizontal line on an inclined geological surface.","tier":2},{"term":"Dip","definition":"The maximum angle at which a planar geological surface slopes downward from horizontal.","tier":2},{"term":"Bedding","definition":"Layering in sediment or sedimentary rock produced primarily during deposition.","tier":2},{"term":"Joint","definition":"A natural rock fracture with little or no visible shear displacement.","tier":2},{"term":"Contact","definition":"The boundary between two distinct rock bodies, units, or geological materials.","tier":2},{"term":"Clast","definition":"A fragment of preexisting rock or mineral incorporated into sediment or a clastic rock.","tier":2},{"term":"Sorting","definition":"The degree to which the grains in a sediment have similar sizes.","tier":2},{"term":"Roundness (rounding)","definition":"The degree to which abrasion has smoothed a sediment grain's corners and edges.","tier":2},{"term":"Matrix","definition":"Fine-grained material occurring between larger grains, crystals, or clasts.","tier":2},{"term":"Cement","definition":"Mineral matter precipitated in pore spaces that binds sediment grains into rock.","tier":2},{"term":"Bed","definition":"A distinct layer of sediment or sedimentary rock separated from adjacent layers by visible boundaries.","tier":2},{"term":"Stratigraphy","definition":"The study of rock layers, their sequence, ages, distribution, and correlation.","tier":2},{"term":"Formation","definition":"The fundamental formal lithostratigraphic unit, sufficiently distinctive and extensive to be mapped.","tier":2},{"term":"Facies","definition":"A body of rock or sediment whose characteristics reflect a particular depositional setting or process.","tier":2},{"term":"Depositional environment","definition":"The physical, chemical, and biological setting in which sediment accumulated.","tier":2},{"term":"Cross-bedding","definition":"Internal sedimentary layers inclined relative to the main bedding surface.","tier":2},{"term":"Superposition","definition":"The principle that an undisturbed sedimentary succession becomes progressively younger upward.","tier":2},{"term":"Unconformity","definition":"A surface representing missing geological time caused by erosion or nondeposition.","tier":2},{"term":"Geomorphology","definition":"The study of landforms and the processes that create and modify them.","tier":2},{"term":"Alluvium","definition":"Unconsolidated sediment deposited by rivers, streams, or other running water.","tier":2},{"term":"Colluvium","definition":"Loose sediment and rock fragments moved and deposited mainly by gravity on or at the base of a slope.","tier":2},{"term":"Talus (scree)","definition":"An accumulation of loose, angular rock fragments at the base of a cliff or steep slope.","tier":2},{"term":"Regolith","definition":"Loose or altered material overlying intact bedrock, including soil, weathered rock, and transported sediment.","tier":2},{"term":"Fluvial","definition":"Pertaining to rivers, streams, or the processes and deposits produced by flowing water.","tier":2},{"term":"Glacial till","definition":"Unsorted, generally unstratified sediment deposited directly by glacier ice.","tier":2},{"term":"Drainage basin (watershed)","definition":"The land area from which surface water drains to a common outlet.","tier":2},{"term":"Terrace","definition":"A bench representing a former floodplain, shoreline, or erosional surface above its present equivalent.","tier":2},{"term":"Karst","definition":"Terrain developed by dissolution of soluble rock and commonly characterized by sinkholes, caves, and underground drainage.","tier":2},{"term":"Hydrogeology","definition":"The study of groundwater and its occurrence, movement, chemistry, and interaction with geological materials.","tier":2},{"term":"Confined aquifer","definition":"An aquifer bounded above by lower-permeability material and containing water under pressure.","tier":2},{"term":"Unconfined aquifer","definition":"An aquifer whose upper saturated boundary is the water table.","tier":2},{"term":"Recharge zone","definition":"A land area through which water enters and replenishes an aquifer.","tier":2},{"term":"Drawdown","definition":"The reduction in water level or hydraulic head caused by pumping or drainage.","tier":2},{"term":"Monitoring well (MW)","definition":"A well installed to measure groundwater levels, collect water samples, or monitor subsurface conditions.","tier":2},{"term":"Subsidence","definition":"Sinking or lowering of the ground surface caused by compaction, extraction, dissolution, mining, or collapse.","tier":2},{"term":"Recharge","definition":"Water added to groundwater storage through infiltration or another inflow process.","tier":2},{"term":"Discharge","definition":"Groundwater leaving an aquifer through wells, springs, streams, wetlands, evapotranspiration, or other outlets.","tier":2},{"term":"Vein","definition":"A tabular mineral body deposited in a fracture or other opening in rock.","tier":2},{"term":"Geologic cross section","definition":"A diagram representing interpreted geological relationships along a vertical slice through the ground.","tier":2},{"term":"Effervescence","definition":"Bubbling produced when acid reacts with a carbonate mineral or carbonate-bearing rock.","tier":3},{"term":"Lithology","definition":"The observable physical character of a rock, including its composition, color, grain size, texture, and fabric.","tier":3},{"term":"Competent rock","definition":"Rock sufficiently strong and intact to resist deformation or remain stable under the conditions being discussed.","tier":3},{"term":"Basement","definition":"Older crystalline or strongly deformed rock underlying younger sedimentary or volcanic cover.","tier":3},{"term":"Reservoir rock","definition":"Porous and permeable rock capable of storing and transmitting groundwater, hydrocarbons, carbon dioxide, or other fluids.","tier":3},{"term":"Orogeny","definition":"A regional episode of mountain building involving tectonic deformation, uplift, and commonly metamorphism or magmatism.","tier":3},{"term":"Hanging wall","definition":"The block of rock lying above an inclined fault plane.","tier":3},{"term":"Footwall","definition":"The block of rock lying below an inclined fault plane.","tier":3},{"term":"Dip direction","definition":"The compass direction toward which a planar geological surface descends most steeply.","tier":3},{"term":"Anticline","definition":"A fold that is convex upward and normally contains the oldest beds in its core when not overturned.","tier":3},{"term":"Syncline","definition":"A fold that is concave upward and normally contains the youngest beds in its core when not overturned.","tier":3},{"term":"Shear zone","definition":"A tabular zone in which brittle or ductile deformation is concentrated.","tier":3},{"term":"Lamination","definition":"Very thin sedimentary layering within a bed.","tier":3},{"term":"Lithostratigraphic unit","definition":"A formally or informally defined body of rock distinguished primarily by its observable lithology.","tier":3},{"term":"Member","definition":"A formally named subdivision of a geological formation.","tier":3},{"term":"Group","definition":"A formal lithostratigraphic unit composed of two or more related formations.","tier":3},{"term":"Graded bedding","definition":"Bedding in which grain size changes systematically upward through a layer.","tier":3},{"term":"Turbidite","definition":"A sedimentary deposit produced by a sediment-laden underwater density current.","tier":3},{"term":"Provenance","definition":"The source area and geological origin of sediment or sedimentary components.","tier":3},{"term":"Correlation","definition":"Matching equivalent geological units or events between different locations.","tier":3},{"term":"Index fossil","definition":"A widespread, readily recognized fossil with a short geological range used to date and correlate strata.","tier":3},{"term":"100-year floodplain","definition":"The area subject to inundation by a flood having a 1 percent probability of being equaled or exceeded in any year.","tier":3},{"term":"Base level","definition":"The lowest level toward which a stream can erode its channel.","tier":3},{"term":"Riprap","definition":"A layer of large, durable stones placed to protect a bank, shoreline, channel, or slope from erosion.","tier":3},{"term":"Aquitard","definition":"A relatively low-permeability geological unit that restricts but does not necessarily prevent groundwater flow.","tier":3},{"term":"Hydraulic head","definition":"The mechanical energy of groundwater at a point, expressed as an equivalent water elevation.","tier":3},{"term":"Hydraulic gradient","definition":"Change in hydraulic head divided by the distance over which the change occurs.","tier":3},{"term":"Hydraulic conductivity (K)","definition":"A measure of how readily a geological material transmits a particular fluid.","tier":3},{"term":"Effective porosity","definition":"The fraction of interconnected pore space that contributes to fluid flow.","tier":3},{"term":"Cone of depression","definition":"The roughly cone-shaped lowering of hydraulic head surrounding a pumping well.","tier":3},{"term":"Piezometer","definition":"A small well or instrument used to measure hydraulic head at a specific depth.","tier":3},{"term":"Geophysics","definition":"The use of physical measurements to investigate Earth's materials, structures, and processes.","tier":3},{"term":"P-wave","definition":"A compressional seismic body wave that travels through solids, liquids, and gases.","tier":3},{"term":"S-wave","definition":"A shear seismic body wave that travels through solids but not through fluids.","tier":3},{"term":"Seismic velocity","definition":"The speed at which a seismic wave travels through a material.","tier":3},{"term":"Seismic reflection","definition":"A method that images subsurface boundaries by recording seismic energy reflected from contrasts in material properties.","tier":3},{"term":"Seismic refraction","definition":"A method that uses the travel times of refracted seismic waves to estimate subsurface velocities and layer depths.","tier":3},{"term":"Electrical resistivity","definition":"A material property, or survey method based on it, describing resistance to the flow of electrical current.","tier":3},{"term":"Magnetics","definition":"Measurement and interpretation of variations in Earth's magnetic field caused by rocks, minerals, or buried objects.","tier":3},{"term":"Magnetic anomaly","definition":"A local departure from the expected magnetic field caused by contrasts in magnetic properties.","tier":3},{"term":"Gravity survey","definition":"Measurement of small gravitational variations caused by subsurface density contrasts.","tier":3},{"term":"Borehole log / well log (wireline log)","definition":"A continuous record of geological or physical properties measured or described along a borehole.","tier":3},{"term":"Economic geology","definition":"The study of geological materials and deposits that have potential economic use.","tier":3},{"term":"Prospect","definition":"An exploration target showing evidence of mineralization but not yet demonstrated to be an economic deposit.","tier":3},{"term":"Mineralization","definition":"The introduction or concentration of minerals in rock, especially potentially valuable minerals.","tier":3},{"term":"Alteration","definition":"Mineralogical or chemical change in rock caused by fluids, heat, weathering, or other processes.","tier":3},{"term":"Hydrothermal","definition":"Relating to hot, chemically active water or other fluids circulating through rock.","tier":3},{"term":"Orebody","definition":"A defined body of mineralized material having sufficient continuity and potential economic value for evaluation or extraction.","tier":3},{"term":"Cutoff grade","definition":"The minimum grade used under stated assumptions to separate potentially economic material from waste.","tier":3},{"term":"Resource","definition":"A concentration of material with geological evidence and reasonable prospects for eventual economic extraction.","tier":3},{"term":"Reserve","definition":"The economically mineable portion of a measured or indicated resource after relevant modifying factors have been applied.","tier":3},{"term":"Host rock","definition":"The rock containing or enclosing a mineral deposit, vein, intrusion, or other geological feature.","tier":3},{"term":"Gangue","definition":"Economically unwanted minerals occurring with valuable ore minerals.","tier":3},{"term":"Placer deposit","definition":"A concentration of dense, resistant, valuable minerals produced by mechanical sorting in sediment.","tier":3},{"term":"Waste rock","definition":"Mined rock that is not processed as ore or is rejected as uneconomic.","tier":3},{"term":"Float","definition":"Loose rock fragments displaced from their original bedrock source.","tier":3},{"term":"Traverse","definition":"A planned route followed for systematic field observations, measurements, or sampling.","tier":3},{"term":"Field station (station)","definition":"A uniquely identified location at which geological observations, measurements, photographs, or samples are recorded.","tier":3},{"term":"Core recovery","definition":"The percentage of a drilled interval successfully retrieved as core.","tier":3},{"term":"Cuttings","definition":"Small fragments of subsurface material brought to the surface during drilling.","tier":3},{"term":"Trenching","definition":"Excavating a shallow linear opening to expose bedrock, structures, soil, or mineralization beneath surface cover.","tier":3},{"term":"Assay","definition":"A quantitative laboratory determination of valuable elements, minerals, compounds, or other constituents in a sample.","tier":3},{"term":"Thin section","definition":"A very thin slice of rock mounted on glass for microscopic mineralogical and textural examination.","tier":3},{"term":"Geophysical anomaly (anomaly)","definition":"A measured departure from expected background conditions or from a calculated geological model.","tier":4},{"term":"Electromagnetic survey (EM)","definition":"A geophysical method that uses electromagnetic fields to measure subsurface conductivity or related properties.","tier":4},{"term":"Map unit","definition":"A distinct body of geological material represented by a consistent symbol and color on a map.","tier":4},{"term":"Measured section","definition":"A systematically measured and described vertical or inclined succession of rock or sediment layers.","tier":4},{"term":"Brunton compass","definition":"A pocket transit with a compass and clinometer used to measure geological orientations and field bearings.","tier":4},{"term":"Grab sample","definition":"A conveniently or selectively collected sample that is not necessarily representative of a precisely defined interval.","tier":4},{"term":"Chip sample","definition":"A sample assembled from small rock chips collected systematically across a surface or interval.","tier":4},{"term":"Channel sample","definition":"A continuous sample cut along a uniform channel across a geological feature or exposure.","tier":4},{"term":"Composite sample","definition":"A sample formed by combining material from multiple increments, locations, or intervals.","tier":4},{"term":"Sample interval","definition":"The documented length, depth range, area, or time period represented by a sample.","tier":4},{"term":"Quality assurance / quality control (QA/QC)","definition":"Planned procedures and checks used to establish and evaluate the reliability of sampling and analytical data.","tier":4},{"term":"Chain of custody (COC)","definition":"The documented record of a sample's possession, transfer, handling, and storage.","tier":4},{"term":"Blank","definition":"A quality-control sample used to detect contamination introduced during collection, preparation, transport, or analysis.","tier":4},{"term":"Duplicate","definition":"A second sample or repeated analysis used to evaluate sampling or analytical precision.","tier":4},{"term":"Global Navigation Satellite System (GNSS)","definition":"The general term for satellite constellations that provide positioning and navigation data, including GPS.","tier":4},{"term":"Geographic information system (GIS)","definition":"A computer system for storing, analyzing, and displaying spatially referenced data.","tier":4},{"term":"Landslide susceptibility","definition":"The relative likelihood that terrain may produce landslides based on its geological and physical characteristics.","tier":4},{"term":"Debris flow","definition":"A rapid, channelized flow of water mixed with soil, rock, organic matter, and debris.","tier":4},{"term":"Seismic hazard","definition":"The potential for damaging earthquake effects at a location.","tier":4},{"term":"Earthquake magnitude","definition":"A logarithmic measure of the energy or seismic moment associated with an earthquake source.","tier":4},{"term":"Earthquake intensity","definition":"A measure of observed shaking and effects at a particular location.","tier":4},{"term":"Return period (recurrence interval)","definition":"The long-term average interval associated with an event of a specified size or exceedance probability.","tier":4},{"term":"Mitigation","definition":"An action taken to reduce the probability or consequences of geological or environmental harm.","tier":4},{"term":"Brownfield","definition":"Property whose reuse or redevelopment is complicated by actual or suspected contamination.","tier":4},{"term":"Phase I Environmental Site Assessment (Phase I ESA)","definition":"A records-based and visual property assessment used to identify recognized environmental conditions and potential liability concerns.","tier":4},{"term":"Phase II Environmental Site Assessment (Phase II ESA)","definition":"A follow-up investigation using sampling and testing to evaluate suspected contamination.","tier":4},{"term":"Contaminant plume (plume)","definition":"A three-dimensional body of contaminated groundwater, soil gas, or another medium extending from a source.","tier":4},{"term":"Remediation","definition":"Removal, treatment, containment, monitoring, or management of contamination to reduce risk.","tier":4},{"term":"Polymorph","definition":"One of two or more minerals having the same chemical composition but different crystal structures.","tier":5},{"term":"Protolith","definition":"The original rock from which a metamorphic rock formed.","tier":5},{"term":"Country rock","definition":"Preexisting rock surrounding an intrusion, vein, mineral deposit, or other younger geological body.","tier":5},{"term":"Sequence stratigraphy","definition":"The study of genetically related sedimentary packages bounded by unconformities or equivalent surfaces.","tier":5},{"term":"Aquiclude","definition":"An idealized geological unit that stores water but transmits negligible quantities of it.","tier":5},{"term":"Potentiometric surface","definition":"The imaginary surface representing the level to which water would rise in wells completed in the same aquifer.","tier":5},{"term":"Transmissivity (T)","definition":"The rate at which an aquifer transmits water through its full saturated thickness, commonly equal to hydraulic conductivity multiplied by thickness.","tier":5},{"term":"Slug test","definition":"A field test that estimates hydraulic conductivity from water-level recovery after an abrupt change in well water level.","tier":5},{"term":"Electrical resistivity tomography (ERT)","definition":"A multi-electrode method that produces two- or three-dimensional models of subsurface electrical resistivity.","tier":5},{"term":"Induced polarization (IP)","definition":"A method that measures delayed electrical charge storage in subsurface materials.","tier":5},{"term":"Gamma log","definition":"A borehole log measuring natural gamma radiation, commonly used to distinguish lithologies and correlate strata.","tier":5},{"term":"Disseminated mineralization","definition":"Mineralization distributed as scattered grains or small aggregates throughout a rock mass.","tier":5},{"term":"Pay zone","definition":"A subsurface interval capable of producing hydrocarbons at commercially useful rates under stated conditions.","tier":5},{"term":"Strip ratio","definition":"The quantity of waste material removed per unit of ore recovered in a surface mine.","tier":5},{"term":"Grade control","definition":"Detailed sampling, mapping, and short-range modeling used to separate and manage ore and waste during mining.","tier":5},{"term":"Rock Quality Designation (RQD)","definition":"The percentage of a core run composed of sound core pieces at least 100 millimeters long.","tier":5},{"term":"X-ray diffraction (XRD)","definition":"An analytical method that identifies crystalline phases from their diffraction patterns.","tier":5},{"term":"X-ray fluorescence (XRF)","definition":"An analytical method that estimates elemental composition from characteristic fluorescent X-rays.","tier":5},{"term":"Inductively coupled plasma mass spectrometry (ICP-MS)","definition":"A highly sensitive laboratory method for measuring trace elements and isotopes.","tier":5},{"term":"Lahar","definition":"A rapidly flowing mixture of volcanic debris and water moving downslope from a volcano.","tier":5},{"term":"Conceptual site model (CSM)","definition":"A working representation of contaminant sources, release mechanisms, geology, transport pathways, receptors, and uncertainties.","tier":5},{"term":"Source–pathway–receptor","definition":"A framework linking a hazard or contaminant source to its transport route and the people or ecosystems that may be exposed.","tier":5},{"term":"Monitored natural attenuation (MNA)","definition":"Reliance on documented natural processes, supported by monitoring, to reduce contaminant mass, concentration, or mobility.","tier":5},{"term":"Acid mine drainage (AMD)","definition":"Acidic, commonly metal-bearing drainage generated when sulfide minerals oxidize in the presence of water and oxygen.","tier":5},{"term":"Light nonaqueous-phase liquid (LNAPL)","definition":"A liquid contaminant that does not readily mix with water and is less dense than water.","tier":5},{"term":"Dense nonaqueous-phase liquid (DNAPL)","definition":"A liquid contaminant that does not readily mix with water and is denser than water.","tier":5},{"term":"Resource Conservation and Recovery Act (RCRA)","definition":"The principal U.S. federal law governing the management of solid and hazardous waste from generation through disposal.","tier":5},{"term":"Comprehensive Environmental Response, Compensation, and Liability Act (CERCLA / Superfund)","definition":"The U.S. federal law authorizing responses to hazardous-substance releases and assigning cleanup liability.","tier":5},{"term":"National Pollutant Discharge Elimination System (NPDES)","definition":"The U.S. Clean Water Act permit program regulating point-source pollutant discharges to waters of the United States.","tier":5},{"term":"National Environmental Policy Act (NEPA)","definition":"The U.S. law requiring federal agencies to evaluate environmental effects before making decisions on covered federal actions.","tier":5}];
+
+const scene = document.getElementById('scene');
+const ctx = scene.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const ui = {
+  quiz: document.getElementById('quiz'),
+  progress: document.getElementById('progress'),
+  tier: document.getElementById('tierLabel'),
+  timer: document.getElementById('timer'),
+  timefill: document.getElementById('timefill'),
+  definition: document.getElementById('definition'),
+  answer: document.getElementById('answer'),
+  feedback: document.getElementById('feedback'),
+  submit: document.getElementById('submit'),
+  readiness: document.getElementById('readinessValue'),
+  readinessBar: document.getElementById('readinessBar'),
+  start: document.getElementById('startOverlay'),
+  end: document.getElementById('endOverlay'),
+  endTitle: document.getElementById('endTitle'),
+  endDetail: document.getElementById('endDetail'),
+  endEyebrow: document.getElementById('endEyebrow'),
+  map: document.getElementById('mapSheet'),
+  flash: document.getElementById('flash'),
+  mute: document.getElementById('mute')
+};
+
+const SETTINGS = {
+  1: { seconds: 15, penalty: 30, label: 'Tier 1 · Common field language' },
+  2: { seconds: 15, penalty: 28, label: 'Tier 2 · Foundational vocabulary' },
+  3: { seconds: 15, penalty: 25, label: 'Tier 3 · Professional terminology' },
+  4: { seconds: 20, penalty: 22, label: 'Tier 4 · Advanced fieldwork' },
+  5: { seconds: 25, penalty: 20, label: 'Tier 5 · Specialist terminology' }
+};
+
+let state = {
+  running: false,
+  locked: true,
+  deck: [],
+  index: 0,
+  score: 100,
+  correct: 0,
+  missed: 0,
+  startedAt: 0,
+  deadline: 0,
+  duration: 15,
+  raf: 0,
+  shakeUntil: 0,
+  pebbleBurst: 0,
+  soundOn: true
+};
+
+function shuffle(items) {
+  const a = items.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+function normalize(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function acceptedAnswers(term) {
+  const answers = new Set([term]);
+  const withoutParens = term.replace(/\s*\([^)]*\)/g, '').trim();
+  if (withoutParens) answers.add(withoutParens);
+  const parens = term.match(/\(([^)]*)\)/g) || [];
+  parens.forEach(function(group) {
+    group.slice(1, -1).split(/\s*\/\s*|\s*;\s*|\s*,\s*/).forEach(function(part) {
+      if (part.trim()) answers.add(part.trim());
+    });
+  });
+  withoutParens.split(/\s*\/\s*/).forEach(function(part) {
+    if (part.trim()) answers.add(part.trim());
+  });
+  term.split(/\s*\/\s*/).forEach(function(part) {
+    const clean = part.replace(/[()]/g, '').trim();
+    if (clean) answers.add(clean);
+  });
+  return Array.from(answers).map(normalize).filter(Boolean);
+}
+
+function displayTerm(term) {
+  return term;
+}
+
+function updateReadiness() {
+  state.score = Math.max(0, Math.min(100, state.score));
+  ui.readiness.textContent = Math.round(state.score) + '%';
+  ui.readinessBar.style.width = state.score + '%';
+  if (state.score <= 25) {
+    ui.readinessBar.style.background = 'linear-gradient(90deg,#7b2f24,#c9583e)';
+  } else if (state.score <= 55) {
+    ui.readinessBar.style.background = 'linear-gradient(90deg,#936321,#d2a347)';
+  } else {
+    ui.readinessBar.style.background = 'linear-gradient(90deg,#526b45,#9bb676 75%,#d6c174)';
+  }
+}
+
+function startGame() {
+  state.deck = shuffle(BANK);
+  state.index = 0;
+  state.score = 100;
+  state.correct = 0;
+  state.missed = 0;
+  state.running = true;
+  state.locked = false;
+  ui.start.classList.remove('show');
+  ui.end.classList.remove('show');
+  ui.map.classList.remove('unfold');
+  updateReadiness();
+  ensureAudio();
+  nextQuestion();
+}
+
+function nextQuestion() {
+  if (!state.running) return;
+  if (state.index >= state.deck.length) {
+    finishGame(true);
+    return;
+  }
+  const item = state.deck[state.index];
+  const settings = SETTINGS[item.tier];
+  state.duration = settings.seconds;
+  state.startedAt = performance.now();
+  state.deadline = state.startedAt + settings.seconds * 1000;
+  state.locked = false;
+  ui.progress.textContent = 'Field entry ' + (state.index + 1) + ' of ' + state.deck.length;
+  ui.tier.textContent = settings.label + ' · −' + settings.penalty + '% on a miss';
+  ui.definition.textContent = item.definition;
+  ui.timer.textContent = settings.seconds;
+  ui.timer.className = 'safe';
+  ui.timefill.style.width = '100%';
+  ui.timefill.style.background = '#64794f';
+  ui.answer.value = '';
+  ui.answer.disabled = false;
+  ui.submit.disabled = false;
+  ui.feedback.textContent = 'Type the term and press Enter.';
+  ui.feedback.className = '';
+  window.clearTimeout(state.focusTimer);
+  state.focusTimer = window.setTimeout(function() { ui.answer.focus(); }, 70);
+}
+
+function submitAnswer() {
+  if (!state.running || state.locked) return;
+  const typed = normalize(ui.answer.value);
+  if (!typed) {
+    ui.feedback.textContent = 'Enter a geological term first.';
+    ui.feedback.className = 'bad';
+    return;
+  }
+  const item = state.deck[state.index];
+  const correct = acceptedAnswers(item.term).includes(typed);
+  resolveQuestion(correct, false);
+}
+
+function resolveQuestion(correct, timedOut) {
+  if (state.locked || !state.running) return;
+  state.locked = true;
+  ui.answer.disabled = true;
+  ui.submit.disabled = true;
+  const item = state.deck[state.index];
+  const remaining = Math.max(0, (state.deadline - performance.now()) / 1000);
+
+  if (correct) {
+    state.correct++;
+    const earnedBonus = remaining >= 5;
+    if (earnedBonus) state.score = Math.min(100, state.score + 10);
+    ui.feedback.textContent = earnedBonus ? 'Correct · Early identification +10%' : 'Correct · Sample logged';
+    ui.feedback.className = 'good';
+    pulse(ui.quiz, 'correct');
+    playConfirm();
+  } else {
+    state.missed++;
+    state.score -= SETTINGS[item.tier].penalty;
+    ui.feedback.textContent = (timedOut ? 'Time expired · ' : 'Incorrect · ') + 'Correct term: ' + displayTerm(item.term);
+    ui.feedback.className = 'bad';
+    state.shakeUntil = performance.now() + 500;
+    state.pebbleBurst = performance.now();
+    pulse(ui.quiz, 'wrong');
+    pulse(ui.flash, 'hit');
+    playMiss();
+  }
+
+  updateReadiness();
+  if (state.score <= 0) {
+    window.setTimeout(function() { finishGame(false); }, 1500);
+    return;
+  }
+  state.index++;
+  window.setTimeout(nextQuestion, 1500);
+}
+
+function pulse(el, name) {
+  el.classList.remove(name);
+  void el.offsetWidth;
+  el.classList.add(name);
+  window.setTimeout(function() { el.classList.remove(name); }, 650);
+}
+
+function finishGame(won) {
+  state.running = false;
+  state.locked = true;
+  ui.answer.disabled = true;
+  ui.submit.disabled = true;
+  ui.timer.textContent = '—';
+  ui.timefill.style.width = '0%';
+  if (won) {
+    ui.map.classList.add('unfold');
+    ui.endEyebrow.textContent = 'Survey No. 225 · Complete';
+    ui.endTitle.textContent = 'Map Completed';
+    ui.endDetail.textContent = 'All 225 geological entries were surveyed.\nCorrect: ' + state.correct + ' · Missed: ' + state.missed + ' · Readiness: ' + Math.round(state.score) + '%';
+    playVictory();
+    window.setTimeout(function() { ui.end.classList.add('show'); }, 2350);
+  } else {
+    ui.endEyebrow.textContent = 'Expedition Closed';
+    ui.endTitle.textContent = 'Field Readiness Lost';
+    ui.endDetail.textContent = 'The geologist closes the fieldbook as the survey light fades.\nCompleted: ' + state.index + ' of 225 · Correct: ' + state.correct;
+    playFailure();
+    window.setTimeout(function() { ui.end.classList.add('show'); }, 650);
+  }
+}
+
+function tick(now) {
+  if (state.running && !state.locked) {
+    const left = Math.max(0, state.deadline - now);
+    const seconds = Math.ceil(left / 1000);
+    const ratio = left / (state.duration * 1000);
+    ui.timer.textContent = seconds;
+    ui.timefill.style.width = Math.max(0, ratio * 100) + '%';
+    if (left <= 3000) {
+      ui.timer.className = 'danger';
+      ui.timefill.style.background = '#a33e2c';
+    } else if (left <= 6000) {
+      ui.timer.className = 'warn';
+      ui.timefill.style.background = '#b07b2f';
+    } else {
+      ui.timer.className = 'safe';
+      ui.timefill.style.background = '#64794f';
+    }
+    if (left <= 0) resolveQuestion(false, true);
+  }
+  drawScene(now / 1000);
+  state.raf = requestAnimationFrame(tick);
+}
+
+ui.submit.addEventListener('click', submitAnswer);
+ui.answer.addEventListener('keydown', function(event) {
+  if (event.key === 'Enter') { event.preventDefault(); submitAnswer(); }
+});
+document.getElementById('begin').addEventListener('click', startGame);
+document.getElementById('restart').addEventListener('click', startGame);
+ui.mute.addEventListener('click', function() {
+  state.soundOn = !state.soundOn;
+  ui.mute.textContent = state.soundOn ? 'Sound: On' : 'Sound: Off';
+  ui.mute.setAttribute('aria-pressed', String(!state.soundOn));
+  if (masterGain) masterGain.gain.setTargetAtTime(state.soundOn ? 0.34 : 0, audioCtx.currentTime, .08);
+  if (state.soundOn) ensureAudio();
+});
+
+/* Gentle procedural ambience: no external files are required. */
+let audioCtx = null;
+let masterGain = null;
+let birdTimer = 0;
+function ensureAudio() {
+  if (!state.soundOn) return;
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audioCtx = new AC();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = .34;
+    masterGain.connect(audioCtx.destination);
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 4, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = Math.random() * 2 - 1;
+      last = last * .985 + white * .015;
+      data[i] = last * 2.1;
+    }
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer; noise.loop = true;
+    const windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'lowpass'; windFilter.frequency.value = 520;
+    const windGain = audioCtx.createGain(); windGain.gain.value = .035;
+    noise.connect(windFilter).connect(windGain).connect(masterGain);
+    noise.start();
+    const water = audioCtx.createBufferSource();
+    water.buffer = buffer; water.loop = true; water.playbackRate.value = 1.37;
+    const waterFilter = audioCtx.createBiquadFilter();
+    waterFilter.type = 'bandpass'; waterFilter.frequency.value = 1250; waterFilter.Q.value = .7;
+    const waterGain = audioCtx.createGain(); waterGain.gain.value = .018;
+    water.connect(waterFilter).connect(waterGain).connect(masterGain);
+    water.start();
+    scheduleBird();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function tone(freq, duration, gainValue, delay) {
+  if (!audioCtx || !state.soundOn) return;
+  const start = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine'; osc.frequency.setValueAtTime(freq, start); osc.frequency.exponentialRampToValueAtTime(freq * 1.18, start + duration);
+  gain.gain.setValueAtTime(.0001, start); gain.gain.exponentialRampToValueAtTime(gainValue, start + .025); gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
+  osc.connect(gain).connect(masterGain); osc.start(start); osc.stop(start + duration + .03);
+}
+function scheduleBird() {
+  window.clearTimeout(birdTimer);
+  birdTimer = window.setTimeout(function() {
+    if (state.soundOn && audioCtx) { tone(1450, .16, .025, 0); tone(1840, .13, .018, .15); }
+    scheduleBird();
+  }, 17000 + Math.random() * 24000);
+}
+function playConfirm() { tone(520, .09, .035, 0); tone(720, .11, .028, .08); }
+function playMiss() { tone(170, .22, .045, 0); }
+function playVictory() { [440,554,659,880].forEach(function(n,i){ tone(n,.45,.035,i*.16); }); }
+function playFailure() { [220,185,147].forEach(function(n,i){ tone(n,.5,.035,i*.2); }); }
+
+/* Pixel-art field station */
+function rect(x,y,w,h,color) { ctx.fillStyle=color; ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); }
+function poly(points,color) { ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]); ctx.closePath(); ctx.fill(); }
+function line(points,color,width) { ctx.strokeStyle=color; ctx.lineWidth=width||1; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]); ctx.stroke(); }
+
+function drawScene(t) {
+  const shake = performance.now() < state.shakeUntil ? Math.sin(performance.now()*.12)*1.2 : 0;
+  ctx.save(); ctx.translate(shake,0);
+  const sky = ctx.createLinearGradient(0,0,0,150);
+  sky.addColorStop(0,'#718e91'); sky.addColorStop(.56,'#aeb49f'); sky.addColorStop(1,'#d0bf91');
+  ctx.fillStyle=sky; ctx.fillRect(-4,0,488,270);
+  drawClouds(t);
+  drawDistantHills();
+  drawRoadcut(t);
+  drawGround();
+  drawStream(t);
+  drawDrillRig(t);
+  drawFieldStation(t);
+  drawVegetation(t);
+  drawGeologist(t);
+  drawBirds(t);
+  drawPebbles(t);
+  if (!state.running && state.score <= 0) {
+    ctx.fillStyle='rgba(15,19,17,.38)'; ctx.fillRect(0,0,480,270);
+  }
+  ctx.restore();
+}
+
+function drawClouds(t) {
+  const clouds = [[30,23,34],[151,42,48],[320,19,40],[420,50,30]];
+  clouds.forEach(function(c,i){
+    let x=(c[0]+t*(i%2?0.7:0.45))%560-40;
+    const y=c[1]; const w=c[2];
+    rect(x,y,w,5,'rgba(216,218,194,.56)'); rect(x+7,y-4,w*.5,5,'rgba(223,221,198,.52)'); rect(x+18,y+5,w*.7,3,'rgba(185,194,178,.42)');
+  });
+}
+
+function drawDistantHills() {
+  poly([[0,93],[45,71],[89,84],[133,63],[190,88],[248,67],[310,91],[370,69],[430,82],[480,66],[480,155],[0,155]],'#657465');
+  poly([[0,111],[67,90],[122,105],[190,86],[250,110],[319,91],[381,112],[438,91],[480,103],[480,164],[0,164]],'#77816a');
+  rect(0,125,480,44,'#7f866b');
+}
+
+function drawRoadcut(t) {
+  poly([[0,68],[44,57],[92,63],[132,54],[176,70],[214,65],[247,79],[265,99],[267,201],[0,206]],'#795e43');
+  const strata = [
+    {y:74,c:'#a87952',h:16,s:0}, {y:91,c:'#705445',h:17,s:4}, {y:108,c:'#b18a5e',h:18,s:-2},
+    {y:126,c:'#865e46',h:18,s:3}, {y:144,c:'#c19a69',h:17,s:-3}, {y:162,c:'#725849',h:20,s:2}, {y:183,c:'#9c7752',h:20,s:-1}
+  ];
+  strata.forEach(function(a,i){
+    poly([[0,a.y],[46,a.y-5+a.s],[93,a.y+2],[137,a.y-6],[184,a.y+4+a.s],[230,a.y-2],[267,a.y+10],[267,a.y+a.h+5],[220,a.y+a.h],[171,a.y+a.h+4],[125,a.y+a.h-3],[70,a.y+a.h+3],[0,a.y+a.h]],a.c);
+    if(i%2===0) line([[4,a.y+4],[55,a.y+1],[107,a.y+6],[159,a.y+1],[215,a.y+6]],'rgba(53,39,31,.42)',1);
+  });
+  poly([[159,64],[178,68],[164,200],[145,201]],'rgba(55,45,39,.62)');
+  line([[169,66],[155,201]],'#3d3732',2);
+  line([[31,105],[81,116],[117,114],[144,122]],'#d3b278',2);
+  line([[23,177],[77,168],[118,174]],'#4f4540',2);
+  rect(94,131,3,2,'#d7c3a0'); rect(105,136,2,2,'#d7c3a0'); rect(117,133,3,2,'#d7c3a0');
+  if (Math.floor(t)%43===0) rect(216,198+(t%1)*8,2,2,'#504333');
+}
+
+function drawGround() {
+  poly([[0,202],[97,197],[184,203],[267,196],[351,190],[480,194],[480,270],[0,270]],'#5d6346');
+  poly([[150,223],[222,207],[291,199],[374,202],[463,221],[480,270],[104,270]],'#8f805c');
+  line([[151,224],[218,210],[290,202],[370,205],[456,223]],'#b0a27d',2);
+  for(let i=0;i<34;i++) rect((i*47)%480,205+(i*23)%54,2+(i%3),1,'rgba(39,45,31,.55)');
+}
+
+function drawStream(t) {
+  poly([[0,223],[52,219],[101,224],[142,237],[181,270],[0,270]],'#435e60');
+  poly([[0,231],[53,226],[98,231],[134,242],[158,270],[0,270]],'#627d78');
+  for(let i=0;i<11;i++) {
+    const x=((i*31+t*5)%178)-12;
+    const y=235+(i*13)%30;
+    rect(x,y,8+(i%3)*4,1,'rgba(196,205,180,.55)');
+  }
+  poly([[9,223],[18,218],[29,222],[23,228]],'#6d6a55'); poly([[79,229],[88,224],[98,229],[93,234]],'#77715a');
+}
+
+function drawDrillRig(t) {
+  const x=421,y=105;
+  line([[x,y+71],[x+11,y],[x+22,y+71]],'#454b42',3);
+  line([[x+4,y+53],[x+18,y+53],[x+7,y+32],[x+15,y+32],[x+10,y+12]],'#596057',2);
+  rect(x-10,y+68,42,7,'#555642'); rect(x+7,y+18,8,4,'#a16c3b');
+  rect(x+31,y+61,26,13,'#805437'); rect(x+35,y+55,13,7,'#a77849');
+  rect(x+37,y+73,5,4,'#282d29'); rect(x+51,y+73,5,4,'#282d29');
+  if (Math.sin(t*.8)>.25) rect(x+10,y+23,2,8,'#d4b76d');
+}
+
+function drawFieldStation(t) {
+  poly([[275,143],[314,111],[363,143]],'#c5ad79');
+  poly([[276,143],[312,115],[318,143]],'#8b6b46');
+  rect(276,143,88,48,'#b89c69'); rect(283,148,31,36,'#514a38'); rect(321,148,35,29,'#d0bd8e');
+  line([[321,157],[356,157]],'#746344',1); line([[321,165],[356,165]],'#746344',1);
+  rect(289,185,63,4,'#5a4934'); rect(296,189,3,18,'#463c2f'); rect(345,189,3,18,'#463c2f');
+  rect(304,178,18,6,'#8b4f33'); rect(306,175,14,3,'#d1bd8c');
+  rect(326,180,17,5,'#465b51'); rect(329,176,11,4,'#91a18e');
+  rect(281,206,54,8,'#725638'); rect(284,199,48,7,'#a77c4c');
+  for(let i=0;i<4;i++){ rect(289+i*10,201,7,2,['#6a5843','#9b7653','#4c5f4d','#a36e42'][i]); }
+  rect(373,164,5,35,'#b5a46f'); rect(370,162,11,4,'#d8c991'); rect(374,170,3,22,'#4c6c75');
+  line([[379,177],[392,172]],'#6c5c3f',1); rect(390,169,4,7,'#817251');
+  const flap=Math.sin(t*.35)>0?1:0; poly([[360,143],[364,143],[363,166+flap]],'#76583b');
+}
+
+function drawVegetation(t) {
+  const sway=Math.sin(t*.7);
+  for(let i=0;i<26;i++){
+    const x=8+(i*67)%469, y=201+(i*19)%43;
+    line([[x,y],[x+sway*(i%3),y-5-(i%4)]], i%2?'#405039':'#526046',1);
+    if(i%4===0) rect(x-1+sway,y-7,2,2,i%8===0?'#b59354':'#8c7145');
+  }
+  rect(393,188,3,16,'#3b4934'); rect(387,179,14,11,'#526446'); rect(391,174,10,9,'#60704d');
+  rect(454,184,4,19,'#35452f'); rect(445,174,19,13,'#516343'); rect(451,167,12,12,'#5e704b');
+}
+
+function drawGeologist(t) {
+  const cycle=(t%32);
+  let x=220;
+  if(cycle<9) x=220;
+  else if(cycle<15) x=220+(cycle-9)*7;
+  else if(cycle<23) x=262;
+  else if(cycle<29) x=262-(cycle-23)*7;
+  const walk=(cycle>=9&&cycle<15)||(cycle>=23&&cycle<29);
+  const bob=walk?Math.round(Math.abs(Math.sin(t*7))):0;
+  const y=190-bob;
+  rect(x-5,y-24,10,9,'#c79870'); rect(x-6,y-27,12,4,'#c39b4f'); rect(x-3,y-31,7,4,'#b18a43');
+  rect(x-7,y-15,14,15,'#b8843f'); rect(x-5,y-14,10,12,'#cf9b4d');
+  rect(x-8,y-14,3,12,'#70543c'); rect(x+5,y-14,3,12,'#70543c');
+  const step=walk?Math.sin(t*7):0;
+  rect(x-6+(step>0?2:0),y,4,12,'#454a3d'); rect(x+2+(step<0?-2:0),y,4,12,'#454a3d');
+  rect(x-7+(step>0?2:0),y+11,5,3,'#2f322c'); rect(x+2+(step<0?-2:0),y+11,5,3,'#2f322c');
+  if(!walk && cycle<9){ line([[x-7,y-6],[x-13,y-12]],'#70543c',2); rect(x-15,y-15,4,5,'#d8c591'); }
+  if(!walk && cycle>=15&&cycle<23){ rect(x+8,y-10,10,7,'#e0cf9e'); line([[x+6,y-7],[x+13,y-6]],'#70543c',2); }
+}
+
+function drawBirds(t) {
+  for(let i=0;i<3;i++){
+    const x=((t*(2+i*.3)+i*151)%560)-40;
+    const y=31+i*11+Math.sin(t*.8+i)*3;
+    line([[x-4,y+1],[x,y-1],[x+4,y+1]],'#35433d',1);
+  }
+}
+
+function drawPebbles(t) {
+  if(!state.pebbleBurst) return;
+  const age=performance.now()-state.pebbleBurst;
+  if(age>900){state.pebbleBurst=0;return;}
+  for(let i=0;i<7;i++){
+    const p=age/900;
+    const x=138+i*13+(i%2?1:-1)*p*12;
+    const y=180+p*38+i%3;
+    rect(x,y,2+(i%2),2,'#4f4133');
+  }
+}
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
