@@ -1,576 +1,1019 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Strong Winds and Rain</title>
-    <style>
-        :root {
-            --parchment: #e8dcc4;
-            --brass: #a67c52;
-            --brass-dim: #5c442a;
-            --wood-dark: rgba(15, 12, 10, 0.85);
-            --sea-dark: #0a1118;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ancient Egypt 101 — Descent of the Unknown Relic</title>
+<style>
+/* ============================================================
+   ANCIENT EGYPT 101
+   Palette
+     sand-lit   #f0b45c   torchlight amber (Room 1)
+     ochre      #c08a48   carved stone highlight (Room 2)
+     verdigris  #6fa39c   cold temple light (Room 3)
+     bitumen    #0b0906   deep tomb black
+     linen      #ece0c8   parchment / UI text
+     minium     #b8412c   red-ochre alarm (damage, death)
+   Type
+     display: Baskerville / Palatino serif, wide-tracked caps — carved lapidary
+     utility: mono — the explorer's instruments
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --sand:#f0b45c; --ochre:#c08a48; --verd:#6fa39c;
+  --bitumen:#0b0906; --linen:#ece0c8; --minium:#b8412c;
+  --serif:"Hoefler Text",Baskerville,"Palatino Linotype",Palatino,Georgia,serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace;
+  --woozy:0;
+}
+html,body{height:100%;overflow:hidden;background:var(--bitumen);color:var(--linen);
+  font-family:var(--serif);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+input{font:inherit}
 
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: var(--sea-dark);
-            font-family: 'Georgia', 'Times New Roman', serif;
-            color: var(--parchment);
-        }
+/* ---------- world layers ---------- */
+#sunset,#scene{position:fixed;inset:0}
+#sunset{z-index:0}
+#scene{z-index:1;transform-origin:50% 46%;
+  transition:transform 2.6s cubic-bezier(.7,.02,.36,1),opacity 2.6s ease,filter .55s ease;
+  filter:sepia(calc(var(--woozy)*.72)) saturate(calc(1 - var(--woozy)*.85))
+         blur(calc(var(--woozy)*4px)) brightness(calc(1 - var(--woozy)*.18))
+         contrast(calc(1 + var(--woozy)*.15))}
+#scene.collapsed{transform:scale(.02) translateY(-2%);opacity:0}
+.room{position:absolute;inset:0;opacity:0;transition:opacity 1.1s ease;pointer-events:none}
+.room.live{opacity:1}
+.room svg{width:100%;height:100%;display:block}
 
-        #game-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            overflow: hidden;
-            perspective: 1200px;
-        }
+/* torch flicker + cold shimmer */
+.flicker{animation:flick 4.1s steps(24,end) infinite;transform-origin:50% 50%}
+@keyframes flick{0%,100%{opacity:.86}17%{opacity:.62}31%{opacity:.98}44%{opacity:.7}
+  58%{opacity:.92}72%{opacity:.58}86%{opacity:.88}}
 
-        /* The Deep, Rolling Ocean */
-        #ocean-stage {
-            position: absolute;
-            top: -20%;
-            left: -20%;
-            width: 140%;
-            height: 140%;
-            background: url('https://images.unsplash.com/photo-1505672678657-cc7037095e60?q=80&w=2000&auto=format&fit=crop') center/cover;
-            filter: grayscale(0.5) sepia(0.2) contrast(1.2) brightness(0.4);
-            animation: oceanRoll 16s infinite ease-in-out alternate;
-            z-index: 1;
-        }
+/* motes of dust */
+#motes{position:absolute;inset:0;overflow:hidden}
+.mote{position:absolute;border-radius:50%;background:currentColor;
+  filter:blur(.4px);animation:drift linear infinite}
+@keyframes drift{
+  0%{transform:translate3d(0,110vh,0) scale(.7);opacity:0}
+  12%{opacity:var(--mo)}
+  88%{opacity:var(--mo)}
+  100%{transform:translate3d(var(--dx),-12vh,0) scale(1.15);opacity:0}}
 
-        /* Meditative Whiteout Overlay */
-        #whiteout-overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at 50% 40%, rgba(200, 210, 220, 0.2) 0%, rgba(90, 110, 130, 0.8) 70%, rgba(20, 30, 40, 0.95) 100%);
-            z-index: 2;
-            pointer-events: none;
-            transition: opacity 5s ease;
-        }
+/* tremor */
+#scene.tremor{animation:tremor .62s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes tremor{
+  10%{transform:translate3d(-9px,4px,0) rotate(-.5deg)}
+  20%{transform:translate3d(11px,-6px,0) rotate(.55deg)}
+  30%{transform:translate3d(-14px,-3px,0) rotate(-.4deg)}
+  45%{transform:translate3d(9px,7px,0) rotate(.35deg)}
+  60%{transform:translate3d(-7px,-5px,0) rotate(-.25deg)}
+  75%{transform:translate3d(5px,3px,0) rotate(.15deg)}
+  90%{transform:translate3d(-2px,-1px,0)}
+  100%{transform:none}}
 
-        /* --- THE SHIP'S BOW --- */
-        #ship-assembly {
-            position: absolute;
-            bottom: -5vh;
-            left: 50%;
-            width: 100vw;
-            height: 70vh;
-            transform-origin: bottom center;
-            animation: shipBob 14s infinite ease-in-out alternate;
-            z-index: 3;
-            pointer-events: none;
-        }
+/* ---------- the unknown relic ---------- */
+#relic{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
+  z-index:4;text-align:center;width:min(46vw,420px);min-width:270px}
+#relic .halo{position:absolute;left:50%;top:38%;width:340px;height:340px;
+  transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(240,180,92,.30),rgba(240,180,92,.06) 46%,transparent 70%);
+  animation:breathe 5.4s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.55;transform:translate(-50%,-50%) scale(.94)}
+  50%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}}
+#relic svg{position:relative;width:100%;height:auto}
+#relicName{position:relative;margin-top:-.4rem;font-size:clamp(.68rem,1.5vw,.82rem);
+  letter-spacing:.42em;text-transform:uppercase;color:rgba(236,224,200,.62);
+  text-shadow:0 0 18px rgba(0,0,0,.9)}
+#relic.hit .halo{background:radial-gradient(circle,rgba(184,65,44,.42),transparent 70%)}
+#relic.got .halo{background:radial-gradient(circle,rgba(180,224,170,.40),transparent 70%)}
 
-        /* The detailed wooden deck */
-        #ship-bow {
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            width: 120vw;
-            height: 100%;
-            transform: translateX(-50%);
-            /* Finer detailed wet wood texture */
-            background: 
-                /* Subtle dark vignette fading into the mist */
-                linear-gradient(to top, rgba(10, 5, 2, 0.95) 0%, rgba(20, 12, 5, 0.7) 50%, rgba(0,0,0,0) 100%),
-                /* Wood plank seams (vertical) */
-                repeating-linear-gradient(89.5deg, rgba(0,0,0,0.8) 0px, rgba(0,0,0,0.8) 3px, transparent 3px, transparent 38px),
-                repeating-linear-gradient(90.5deg, rgba(0,0,0,0.8) 0px, rgba(0,0,0,0.8) 3px, transparent 3px, transparent 42px),
-                /* Wood grain lines (fine) */
-                repeating-linear-gradient(to right, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 5px),
-                /* Wood grain swirls/knots (subtle) */
-                radial-gradient(ellipse at 35% 65%, rgba(0,0,0,0.3) 0%, transparent 15%),
-                radial-gradient(ellipse at 65% 40%, rgba(0,0,0,0.3) 0%, transparent 18%),
-                /* Base rich wet wood color */
-                #2c1a0e;
-            clip-path: polygon(0% 100%, 100% 100%, 70% 35%, 52% 15%, 48% 15%, 30% 35%);
-            box-shadow: inset 0 20px 50px rgba(0,0,0,0.9);
-        }
+/* ---------- the expedition panel ---------- */
+#hud{position:fixed;z-index:60;top:clamp(.6rem,2vw,1.6rem);left:clamp(.6rem,2vw,1.6rem);
+  width:min(94vw,392px);padding:1.05rem 1.15rem 1.15rem;
+  background:rgba(11,9,6,.74);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+  backdrop-filter:blur(14px) saturate(1.2);
+  border:1px solid rgba(236,224,200,.20);border-radius:2px;
+  box-shadow:0 24px 70px rgba(0,0,0,.75),inset 0 1px 0 rgba(236,224,200,.10);
+  opacity:0;transform:translateY(-10px);transition:opacity .7s ease,transform .7s ease}
+#hud.up{opacity:1;transform:none}
+#hud::before{content:"";position:absolute;inset:4px;border:1px solid rgba(236,224,200,.09);
+  border-radius:1px;pointer-events:none}
 
-        /* Center Bowsprit / Keel line */
-        #ship-bow::before {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            width: 12px;
-            height: 90%;
-            background: linear-gradient(to top, #050302 0%, #1c1008 60%, transparent 100%);
-            border-left: 2px solid rgba(255, 255, 255, 0.05);
-            border-right: 2px solid rgba(0, 0, 0, 0.8);
-            transform: translateX(-50%);
-        }
+.slug{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;
+  font-family:var(--mono);font-size:.58rem;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(236,224,200,.5)}
+.slug b{color:var(--sand);font-weight:400;letter-spacing:.18em}
 
-        /* The Guiding Lantern */
-        #lantern {
-            position: absolute;
-            top: 13%;
-            left: 50%;
-            width: 14px;
-            height: 22px;
-            transform: translateX(-50%);
-            background: #ffcc66;
-            border-radius: 40% 40% 10% 10%;
-            box-shadow: 
-                0 0 45px 18px rgba(255, 160, 50, 0.45),
-                inset 0 0 5px #fff;
-            animation: lanternFlicker 4s infinite alternate;
-        }
+/* power bar */
+.gauge{margin:.85rem 0 .2rem;height:9px;background:rgba(236,224,200,.11);
+  border:1px solid rgba(236,224,200,.18);position:relative;overflow:hidden}
+#powerFill{position:absolute;inset:0;width:100%;transform-origin:0 50%;
+  background:linear-gradient(90deg,#7a3a1c,var(--sand) 62%,#ffe0a8);
+  transition:transform .5s cubic-bezier(.2,.8,.2,1),background .5s ease}
+.gauge.low #powerFill{background:linear-gradient(90deg,#5c1a10,var(--minium) 70%,#e8724f)}
+.gaugeRow{display:flex;justify-content:space-between;font-family:var(--mono);
+  font-size:.56rem;letter-spacing:.16em;text-transform:uppercase;color:rgba(236,224,200,.45)}
+#powerNum{color:var(--linen)}
 
-        /* Canvas for dynamic snow */
-        #snow-canvas {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 4;
-            pointer-events: none;
-        }
+/* clue */
+#clueWrap{margin:1.15rem 0 0;padding-top:.95rem;border-top:1px solid rgba(236,224,200,.14)}
+#diff{display:inline-block;font-family:var(--mono);font-size:.55rem;letter-spacing:.24em;
+  text-transform:uppercase;padding:.2rem .5rem;border:1px solid currentColor;margin-bottom:.7rem}
+#diff.easy{color:#9dbf7e}#diff.medium{color:var(--sand)}#diff.hard{color:#d9705a}
+#clue{font-size:clamp(.95rem,2.1vw,1.06rem);line-height:1.52;color:var(--linen)}
 
-        /* --- UI LAYER (Antique & Meditative) --- */
-        #ui-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-        }
+/* timer */
+#timerWrap{margin:1.05rem 0 .9rem}
+.fuse{height:3px;background:rgba(236,224,200,.13);position:relative;overflow:hidden}
+#fuseFill{position:absolute;inset:0;background:var(--sand);transform-origin:0 50%;
+  transition:transform .1s linear,background .3s}
+.fuse.urgent #fuseFill{background:var(--minium)}
+#clock{font-family:var(--mono);font-size:.6rem;letter-spacing:.2em;
+  color:rgba(236,224,200,.5);margin-top:.4rem;display:flex;justify-content:space-between}
+#clock .urgent{color:var(--minium)}
 
-        #question-box {
-            background: var(--wood-dark);
-            border: 2px solid var(--brass-dim);
-            padding: 40px;
-            text-align: center;
-            max-width: 600px;
-            width: 90%;
-            border-radius: 4px;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.9), inset 0 0 20px rgba(0,0,0,0.8);
-            pointer-events: auto;
-            backdrop-filter: blur(2px);
-            position: relative;
-        }
+/* answer */
+#answerRow{display:flex;gap:.5rem}
+#answer{flex:1;min-width:0;padding:.72rem .8rem;background:rgba(236,224,200,.06);
+  border:1px solid rgba(236,224,200,.28);border-radius:1px;color:var(--linen);
+  font-size:1rem;letter-spacing:.02em}
+#answer::placeholder{color:rgba(236,224,200,.34);font-style:italic}
+#answer:focus{outline:2px solid var(--sand);outline-offset:1px;background:rgba(236,224,200,.1)}
+#submit{padding:.72rem 1rem;border:1px solid var(--sand);color:var(--sand);
+  font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;
+  transition:background .2s,color .2s}
+#submit:hover,#submit:focus-visible{background:var(--sand);color:#1a0f04;outline:none}
+#verdict{min-height:1.35rem;margin-top:.7rem;font-family:var(--mono);font-size:.62rem;
+  letter-spacing:.1em;line-height:1.4;color:rgba(236,224,200,.55)}
+#verdict.bad{color:#e8836a}#verdict.good{color:#a8cf88}
 
-        /* Brass corner accents */
-        #question-box::before, #question-box::after {
-            content: ''; position: absolute; width: 15px; height: 15px; border: 2px solid var(--brass);
-        }
-        #question-box::before { top: 10px; left: 10px; border-right: none; border-bottom: none; }
-        #question-box::after { bottom: 10px; right: 10px; border-left: none; border-top: none; }
+/* ---------- overlays ---------- */
+.veil{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:1.5rem;
+  background:radial-gradient(ellipse at 50% 40%,rgba(20,12,4,.86),rgba(4,3,2,.97));
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .8s ease}
+.veil.on{opacity:1;pointer-events:auto}
+.card{max-width:640px;text-align:center}
+.eyebrow{font-family:var(--mono);font-size:.6rem;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--sand);margin-bottom:1.4rem}
+.card h1{font-size:clamp(2.1rem,7vw,3.9rem);font-weight:400;line-height:.98;
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:1.1rem}
+.card h1 em{display:block;font-style:normal;font-size:.34em;letter-spacing:.34em;
+  color:var(--ochre);margin-top:1rem}
+.card h2{font-size:clamp(1.4rem,4.6vw,2.3rem);font-weight:400;letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:1rem}
+.card p{font-size:clamp(.95rem,2.2vw,1.08rem);line-height:1.68;
+  color:rgba(236,224,200,.82);max-width:46ch;margin:0 auto 1.1rem}
+.rules{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;line-height:2.1;
+  color:rgba(236,224,200,.6);text-align:left;display:inline-block;margin:.6rem 0 1.6rem}
+.rules span{color:var(--sand)}
+.big{margin-top:1.6rem;padding:.9rem 2.2rem;border:1px solid var(--sand);color:var(--sand);
+  font-family:var(--mono);font-size:.72rem;letter-spacing:.28em;text-transform:uppercase;
+  transition:background .25s,color .25s}
+.big:hover,.big:focus-visible{background:var(--sand);color:#1a0f04;outline:none}
+#death .card h2{color:var(--minium)}
+#death{background:radial-gradient(ellipse at 50% 45%,rgba(72,14,6,.9),rgba(6,2,1,.98))}
+#win{background:radial-gradient(ellipse at 50% 60%,rgba(28,16,6,.42),rgba(8,4,2,.72))}
+.tally{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;color:var(--sand);
+  margin-top:1.2rem}
+.missed{font-family:var(--mono);font-size:.6rem;line-height:1.9;letter-spacing:.04em;
+  color:rgba(236,224,200,.5);margin-top:1.1rem;max-width:52ch}
 
-        #timer {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-            transition: color 1s ease;
-        }
+/* red flash on damage */
+#flash{position:fixed;inset:0;z-index:80;pointer-events:none;opacity:0;
+  background:radial-gradient(ellipse at 50% 50%,transparent 32%,rgba(184,65,44,.5))}
+#flash.go{animation:fl .6s ease-out}
+@keyframes fl{0%{opacity:1}100%{opacity:0}}
 
-        .timer-safe { color: #b39d73; } /* Muted Gold */
-        .timer-warn { color: #a86c47; } /* Burnt Orange */
-        .timer-danger { color: #8a3324; } /* Deep Crimson */
-
-        #definition {
-            font-size: 1.4rem;
-            margin-bottom: 30px;
-            line-height: 1.6;
-            font-style: italic;
-            letter-spacing: 0.5px;
-            color: var(--parchment);
-        }
-
-        #answer-input {
-            width: 80%;
-            padding: 12px;
-            font-size: 1.2rem;
-            background: rgba(0, 0, 0, 0.6);
-            border: 1px solid var(--brass-dim);
-            color: var(--parchment);
-            text-align: center;
-            outline: none;
-            font-family: inherit;
-            letter-spacing: 1px;
-            transition: all 0.5s ease;
-        }
-
-        #answer-input:focus {
-            background: rgba(20, 15, 10, 0.8);
-            border-color: var(--brass);
-            box-shadow: 0 0 15px rgba(166, 124, 82, 0.2);
-        }
-
-        /* Compass Grip HUD */
-        #hud {
-            position: absolute;
-            bottom: 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background: var(--wood-dark);
-            padding: 20px 30px;
-            border: 1px solid var(--brass-dim);
-            border-radius: 4px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.9);
-            pointer-events: auto;
-        }
-
-        #grip-bar-container {
-            width: 250px;
-            height: 12px;
-            background: #050505;
-            border: 1px solid #333;
-            margin-bottom: 10px;
-            position: relative;
-        }
-
-        #grip-bar {
-            width: 100%;
-            height: 100%;
-            background: #b39d73;
-            transition: width 0.5s ease, background-color 0.5s ease;
-            box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
-        }
-
-        .hud-text {
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #8c7d62;
-        }
-
-        /* End Screens */
-        #message-screen {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(5, 8, 12, 0.98);
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 4s ease, background 4s ease, color 4s ease;
-        }
-        
-        #message-screen h1 { font-size: 3.5rem; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 6px; font-weight: normal; }
-        #message-screen p { font-size: 1.4rem; font-style: italic; color: #8c7d62; letter-spacing: 1px; }
-
-        /* Animations */
-        @keyframes oceanRoll {
-            0% { transform: rotate(-2deg) translateY(0px) scale(1.02); }
-            50% { transform: rotate(1.5deg) translateY(-15px) scale(1.05); }
-            100% { transform: rotate(-1.5deg) translateY(10px) scale(1.02); }
-        }
-
-        @keyframes shipBob {
-            0% { transform: translateX(-50%) rotate(-1.5deg) translateY(0px); }
-            50% { transform: translateX(-50%) rotate(1deg) translateY(-8px); }
-            100% { transform: translateX(-50%) rotate(-1deg) translateY(5px); }
-        }
-
-        @keyframes lanternFlicker {
-            0% { opacity: 0.8; transform: translateX(-50%) scale(0.95); }
-            50% { opacity: 1; transform: translateX(-50%) scale(1.05); }
-            100% { opacity: 0.9; transform: translateX(-50%) scale(1); }
-        }
-    </style>
+@media (max-width:720px){
+  #hud{width:calc(100vw - 1.2rem);padding:.85rem .95rem 1rem}
+  #relic{top:64%;width:min(72vw,340px)}
+  #clue{font-size:.98rem}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+    transition-duration:.14s!important}
+  #scene.collapsed{transform:none;opacity:0}
+}
+</style>
 </head>
 <body>
 
-    <div id="game-container">
-        <div id="ocean-stage"></div>
-        <div id="whiteout-overlay"></div>
-        
-        <!-- Detailed, Old-Fashioned Ship Bow (No Rigging) -->
-        <div id="ship-assembly">
-            <div id="ship-bow"></div>
-            <div id="lantern"></div>
-        </div>
+<!-- ================= VICTORY BACKDROP (revealed when the tomb shrinks away) ============ -->
+<div id="sunset" aria-hidden="true">
+<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2f52"/><stop offset=".32" stop-color="#7a4a63"/>
+      <stop offset=".58" stop-color="#d8763f"/><stop offset=".78" stop-color="#f2b45c"/>
+      <stop offset="1" stop-color="#f7d79a"/>
+    </linearGradient>
+    <radialGradient id="sunGlow"><stop offset="0" stop-color="#fff3cf"/>
+      <stop offset=".5" stop-color="#f9c26a" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#f0a848" stop-opacity="0"/></radialGradient>
+    <linearGradient id="pyrLit" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f0c079"/><stop offset="1" stop-color="#d99a4e"/></linearGradient>
+    <linearGradient id="pyrDark" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#6b4526"/><stop offset="1" stop-color="#4a2e19"/></linearGradient>
+    <linearGradient id="dune" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c9954f"/><stop offset="1" stop-color="#7d5528"/></linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <circle cx="1090" cy="600" r="330" fill="url(#sunGlow)"/>
+  <circle cx="1090" cy="600" r="74" fill="#fff0c4"/>
+  <!-- distant haze band -->
+  <rect y="560" width="1600" height="60" fill="#f5c983" opacity=".28"/>
+  <!-- far pyramid -->
+  <path d="M 300 620 L 470 400 L 640 620 Z" fill="#a97a44" opacity=".55"/>
+  <!-- great pyramid -->
+  <path d="M 560 660 L 830 330 L 830 660 Z" fill="url(#pyrLit)"/>
+  <path d="M 830 330 L 1100 660 L 830 660 Z" fill="url(#pyrDark)"/>
+  <!-- third -->
+  <path d="M 1040 660 L 1220 430 L 1400 660 Z" fill="#b8853f"/>
+  <path d="M 1220 430 L 1400 660 L 1220 660 Z" fill="#6d4622" opacity=".8"/>
+  <!-- dunes -->
+  <path d="M 0 660 Q 400 610 800 668 T 1600 646 L 1600 900 L 0 900 Z" fill="url(#dune)"/>
+  <path d="M 0 762 Q 520 704 1010 780 T 1600 748 L 1600 900 L 0 900 Z" fill="#6d4a23"/>
+  <path d="M 0 856 Q 620 806 1180 866 T 1600 850 L 1600 900 L 0 900 Z" fill="#4b3117"/>
+  <!-- palms -->
+  <g fill="#2e1d0d">
+    <rect x="182" y="700" width="9" height="120"/>
+    <path d="M186 702 q -62 -30 -84 -6 q 40 -6 84 22 Z"/><path d="M186 702 q 62 -30 84 -6 q -40 -6 -84 22 Z"/>
+    <path d="M186 700 q -34 -56 -70 -60 q 34 22 62 74 Z"/><path d="M186 700 q 34 -56 70 -60 q -34 22 -62 74 Z"/>
+    <rect x="252" y="742" width="7" height="86"/>
+    <path d="M255 744 q -48 -24 -66 -4 q 32 -4 66 18 Z"/><path d="M255 744 q 48 -24 66 -4 q -32 -4 -66 18 Z"/>
+  </g>
+  <!-- birds -->
+  <g stroke="#3a2410" stroke-width="3" fill="none" opacity=".7">
+    <path d="M1310 250 q 14 -12 26 0 q 12 -12 26 0"/>
+    <path d="M1218 196 q 10 -9 19 0 q 9 -9 19 0"/>
+    <path d="M1386 168 q 8 -7 15 0 q 7 -7 15 0"/>
+  </g>
+</svg>
+</div>
 
-        <canvas id="snow-canvas"></canvas>
-        
-        <div id="ui-layer">
-            <div id="question-box">
-                <div id="timer" class="timer-safe">0</div>
-                <div id="definition">Hold fast to the compass...</div>
-                <input type="text" id="answer-input" placeholder="Type the term..." autocomplete="off" autofocus>
-            </div>
+<!-- ================= THE THREE CHAMBERS ============ -->
+<div id="scene">
 
-            <div id="hud">
-                <div id="grip-bar-container">
-                    <div id="grip-bar"></div>
-                </div>
-                <div class="hud-text">Grip Strength: <span id="grip-text">100%</span></div>
-            </div>
-        </div>
-    </div>
+  <!-- ---------- ROOM 1 · THE ANCIENT LIBRARY OF ALEXANDRIA ---------- -->
+  <div class="room" id="room1">
+  <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="r1air" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3a1f09"/><stop offset=".55" stop-color="#251306"/>
+        <stop offset="1" stop-color="#150a03"/></linearGradient>
+      <radialGradient id="r1torch"><stop offset="0" stop-color="#ffd489" stop-opacity=".92"/>
+        <stop offset=".45" stop-color="#f0a848" stop-opacity=".35"/>
+        <stop offset="1" stop-color="#e07a20" stop-opacity="0"/></radialGradient>
+      <linearGradient id="r1col" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#3c250f"/><stop offset=".34" stop-color="#8a5c2a"/>
+        <stop offset=".62" stop-color="#c08a48"/><stop offset="1" stop-color="#4a2d12"/></linearGradient>
+      <linearGradient id="r1floor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6b4620"/><stop offset="1" stop-color="#1a0d04"/></linearGradient>
+      <!-- glyph fill used for the Keeper of Scrolls -->
+      <pattern id="glyphs" width="30" height="30" patternUnits="userSpaceOnUse">
+        <rect width="30" height="30" fill="#1c0f05"/>
+        <path d="M4 7 q5 -5 10 0 q-5 5 -10 0 Z" fill="#f0b45c" opacity=".85"/>
+        <circle cx="9" cy="7" r="1.5" fill="#1c0f05"/>
+        <path d="M19 4 l7 4 l-7 4 Z" fill="#c08a48" opacity=".8"/>
+        <path d="M3 17 q4 -3 8 0 t8 0" stroke="#f0b45c" stroke-width="1.3" fill="none" opacity=".7"/>
+        <rect x="22" y="16" width="2.4" height="10" fill="#f0b45c" opacity=".75"/>
+        <path d="M6 23 h9 v2.4 h-9 Z" fill="#c08a48" opacity=".7"/>
+      </pattern>
+      <filter id="soft"><feGaussianBlur stdDeviation="9"/></filter>
+    </defs>
 
-    <div id="message-screen">
-        <h1 id="end-title">Game Over</h1>
-        <p id="end-desc">The cold took your hands, and the sea took the rest.</p>
-    </div>
+    <rect width="1600" height="900" fill="url(#r1air)"/>
 
-    <script>
-        const termDatabase = [
-            { term: "Conditioning", def: "Learning through association or consequences.", diff: "easy" },
-            { term: "Reinforcement", def: "Consequence that increases behavior.", diff: "easy" },
-            { term: "Extinction", def: "Weakening of a learned response.", diff: "easy" },
-            { term: "Schema", def: "Mental framework organizing knowledge.", diff: "easy" },
-            { term: "Attachment", def: "Enduring emotional bond with another.", diff: "easy" },
-            { term: "Habituation", def: "Reduced response after repeated exposure.", diff: "easy" },
-            { term: "Self-efficacy", def: "Belief in one’s ability to succeed.", diff: "easy" },
-            { term: "Cognitive bias", def: "Systematic distortion in judgment.", diff: "easy" },
+    <!-- barrel-vaulted arcade receding -->
+    <g stroke="#5c3a17" fill="none" opacity=".55">
+      <path d="M300 760 L300 300 Q800 130 1300 300 L1300 760" stroke-width="6"/>
+      <path d="M420 730 L420 340 Q800 200 1180 340 L1180 730" stroke-width="5"/>
+      <path d="M530 706 L530 380 Q800 262 1070 380 L1070 706" stroke-width="4"/>
+      <path d="M630 686 L630 414 Q800 316 970 414 L970 686" stroke-width="3"/>
+    </g>
 
-            { term: "Affect", def: "Experienced or expressed emotional state.", diff: "medium" },
-            { term: "Cognition", def: "Mental processing of information.", diff: "medium" },
-            { term: "Working memory", def: "Short-term mental workspace.", diff: "medium" },
-            { term: "Attribution", def: "Explanation assigned to behavior or events.", diff: "medium" },
-            { term: "Locus of control", def: "Where one locates control over outcomes.", diff: "medium" },
-            { term: "Resilience", def: "Capacity to recover from adversity.", diff: "medium" },
-            { term: "Projection", def: "Attributing one’s own impulses to others.", diff: "medium" },
-            { term: "Rumination", def: "Repetitive dwelling on distressing thoughts.", diff: "medium" },
+    <!-- scroll shelving, left and right -->
+    <g>
+      <rect x="40" y="300" width="230" height="440" fill="#2a1808"/>
+      <rect x="1330" y="300" width="230" height="440" fill="#2a1808"/>
+      <g fill="#c08a48" opacity=".62">
+        <g id="shelfL">
+          <rect x="52" y="330" width="206" height="8"/><rect x="52" y="428" width="206" height="8"/>
+          <rect x="52" y="526" width="206" height="8"/><rect x="52" y="624" width="206" height="8"/>
+        </g>
+        <use href="#shelfL" x="1290"/>
+      </g>
+      <!-- scroll ends -->
+      <g fill="#e6cfa2" opacity=".78">
+        <circle cx="70" cy="360" r="9"/><circle cx="96" cy="360" r="9"/><circle cx="122" cy="360" r="9"/>
+        <circle cx="148" cy="362" r="9"/><circle cx="174" cy="360" r="9"/><circle cx="200" cy="361" r="9"/>
+        <circle cx="226" cy="360" r="9"/>
+        <circle cx="70" cy="458" r="9"/><circle cx="96" cy="459" r="9"/><circle cx="122" cy="458" r="9"/>
+        <circle cx="174" cy="458" r="9"/><circle cx="200" cy="459" r="9"/><circle cx="226" cy="458" r="9"/>
+        <circle cx="70" cy="556" r="9"/><circle cx="122" cy="556" r="9"/><circle cx="148" cy="557" r="9"/>
+        <circle cx="200" cy="556" r="9"/><circle cx="226" cy="556" r="9"/>
+        <circle cx="1372" cy="360" r="9"/><circle cx="1398" cy="360" r="9"/><circle cx="1424" cy="361" r="9"/>
+        <circle cx="1450" cy="360" r="9"/><circle cx="1502" cy="360" r="9"/><circle cx="1528" cy="360" r="9"/>
+        <circle cx="1372" cy="458" r="9"/><circle cx="1424" cy="458" r="9"/><circle cx="1450" cy="459" r="9"/>
+        <circle cx="1476" cy="458" r="9"/><circle cx="1528" cy="458" r="9"/>
+        <circle cx="1372" cy="556" r="9"/><circle cx="1398" cy="557" r="9"/><circle cx="1450" cy="556" r="9"/>
+        <circle cx="1502" cy="556" r="9"/><circle cx="1528" cy="556" r="9"/>
+      </g>
+    </g>
 
-            { term: "Heuristic", def: "Fast mental shortcut for judgment.", diff: "hard" },
-            { term: "Executive function", def: "Control of attention, planning, and inhibition.", diff: "hard" },
-            { term: "Metacognition", def: "Thinking about one’s own thinking.", diff: "hard" },
-            { term: "Neuroplasticity", def: "Brain’s capacity to reorganize itself.", diff: "hard" },
-            { term: "Cognitive dissonance", def: "Tension from conflicting beliefs or behavior.", diff: "hard" },
-            { term: "Priming", def: "Prior exposure influencing later response.", diff: "hard" },
-            { term: "Sensitization", def: "Increased response after repeated stimulation.", diff: "hard" },
-            { term: "Transference", def: "Redirecting past relationship feelings onto another.", diff: "hard" },
-            { term: "Countertransference", def: "Therapist’s emotional reaction to a client.", diff: "hard" },
-            { term: "Dissociation", def: "Disconnection among awareness, memory, or identity.", diff: "hard" },
-            { term: "Psychometrics", def: "Measurement of psychological traits.", diff: "hard" },
-            { term: "Construct", def: "Theoretical trait being measured or studied.", diff: "hard" },
-            { term: "Reliability", def: "Consistency of a measurement.", diff: "hard" },
-            { term: "Validity", def: "Whether a measure captures what it claims.", diff: "hard" }
-        ];
+    <!-- columns with papyrus capitals -->
+    <g>
+      <g>
+        <rect x="286" y="300" width="58" height="470" fill="url(#r1col)"/>
+        <path d="M276 300 q34 -46 78 0 Z" fill="#c08a48"/>
+        <rect x="272" y="762" width="86" height="20" fill="#7a5223"/>
+      </g>
+      <g>
+        <rect x="1256" y="300" width="58" height="470" fill="url(#r1col)"/>
+        <path d="M1246 300 q34 -46 78 0 Z" fill="#c08a48"/>
+        <rect x="1242" y="762" width="86" height="20" fill="#7a5223"/>
+      </g>
+    </g>
 
-        let grip = 100;
-        let timeElapsed = 0;
-        let currentQuestion = null;
-        let timerInterval = null;
-        let questionsRemaining = [...termDatabase]; 
-        let winThreshold = 10;
-        let score = 0;
+    <!-- braziers -->
+    <g class="flicker">
+      <circle cx="315" cy="520" r="250" fill="url(#r1torch)"/>
+      <circle cx="1285" cy="520" r="250" fill="url(#r1torch)"/>
+    </g>
+    <g>
+      <path d="M292 700 h46 l-8 34 h-30 Z" fill="#6b4a1e"/>
+      <path d="M315 620 q26 40 0 78 q-26 -38 0 -78 Z" fill="#ffcf7e" class="flicker"/>
+      <path d="M1262 700 h46 l-8 34 h-30 Z" fill="#6b4a1e"/>
+      <path d="M1285 620 q26 40 0 78 q-26 -38 0 -78 Z" fill="#ffcf7e" class="flicker"/>
+    </g>
 
-        const gripBar = document.getElementById('grip-bar');
-        const gripText = document.getElementById('grip-text');
-        const timerDisplay = document.getElementById('timer');
-        const definitionDisplay = document.getElementById('definition');
-        const answerInput = document.getElementById('answer-input');
-        const gameContainer = document.getElementById('game-container');
-        const msgScreen = document.getElementById('message-screen');
-        const oceanStage = document.getElementById('ocean-stage');
-        const whiteoutOverlay = document.getElementById('whiteout-overlay');
-        const shipAssembly = document.getElementById('ship-assembly');
+    <!-- KHA'Y, CHIEF KEEPER OF SCROLLS — a figure built of hieroglyphs -->
+    <g opacity=".92" transform="translate(1010 356) scale(1.02)">
+      <ellipse cx="52" cy="330" rx="120" ry="18" fill="#000" opacity=".5"/>
+      <!-- body -->
+      <path d="M52 96 q40 8 44 62 l10 118 q3 26 -14 28 l-8 82 q-2 18 -18 18 h-28
+               q-16 0 -18 -18 l-8 -82 q-17 -2 -14 -28 l10 -118 q4 -54 44 -62 Z"
+            fill="url(#glyphs)" stroke="#f0b45c" stroke-width="2"/>
+      <!-- ibis head + long beak -->
+      <path d="M52 96 q-26 -6 -30 -34 q-4 -30 30 -34 q34 4 30 34 q-4 28 -30 34 Z"
+            fill="url(#glyphs)" stroke="#f0b45c" stroke-width="2"/>
+      <path d="M30 42 q-46 12 -62 46 q22 -18 62 -30 Z" fill="#f0b45c" opacity=".9"/>
+      <circle cx="62" cy="28" r="4" fill="#fff0c4"/>
+      <!-- arms holding a scroll -->
+      <path d="M14 176 q-24 26 -6 48 q14 16 34 8" stroke="#f0b45c" stroke-width="7" fill="none"/>
+      <path d="M90 176 q24 26 6 48 q-14 16 -34 8" stroke="#f0b45c" stroke-width="7" fill="none"/>
+      <rect x="26" y="216" width="56" height="14" rx="7" fill="#e6cfa2"/>
+      <!-- staff -->
+      <rect x="128" y="20" width="7" height="330" fill="#8a5c2a"/>
+      <path d="M131 20 q-22 -18 -4 -34 q20 -14 30 6" stroke="#c08a48" stroke-width="7" fill="none"/>
+    </g>
 
-        function updateGrip(amount) {
-            grip += amount;
-            if (grip > 100) grip = 100;
-            if (grip < 0) grip = 0;
+    <!-- floor + dust haze -->
+    <rect y="770" width="1600" height="130" fill="url(#r1floor)"/>
+    <g opacity=".2" filter="url(#soft)"><rect y="740" width="1600" height="90" fill="#f0b45c"/></g>
+    <rect width="1600" height="900" fill="#000" opacity=".18"/>
+  </svg>
+  </div>
 
-            gripBar.style.width = grip + '%';
-            gripText.innerText = grip + '%';
+  <!-- ---------- ROOM 2 · THE HALL OF MONUMENTS ---------- -->
+  <div class="room" id="room2">
+  <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="r2air" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#160e05"/><stop offset=".5" stop-color="#241706"/>
+        <stop offset="1" stop-color="#0d0703"/></linearGradient>
+      <linearGradient id="r2wall" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#4d341a"/><stop offset=".5" stop-color="#6d4a24"/>
+        <stop offset="1" stop-color="#3a2611"/></linearGradient>
+      <radialGradient id="r2lamp"><stop offset="0" stop-color="#ffcf86" stop-opacity=".55"/>
+        <stop offset="1" stop-color="#c08a48" stop-opacity="0"/></radialGradient>
+      <linearGradient id="r2stat" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#241708"/><stop offset=".42" stop-color="#5e3f1d"/>
+        <stop offset=".7" stop-color="#8a6130"/><stop offset="1" stop-color="#1d1206"/></linearGradient>
+      <!-- sunk-relief register carving -->
+      <pattern id="relief" width="120" height="96" patternUnits="userSpaceOnUse">
+        <rect width="120" height="96" fill="url(#r2wall)"/>
+        <rect y="90" width="120" height="3" fill="#2c1c0b" opacity=".8"/>
+        <g fill="#2c1c0b" opacity=".62">
+          <path d="M12 20 q10 -12 22 0 q-10 12 -22 0 Z"/><circle cx="23" cy="20" r="3"/>
+          <path d="M46 8 l16 10 l-16 10 Z"/>
+          <rect x="72" y="8" width="5" height="24"/><path d="M84 8 h16 v5 h-16 Z"/>
+          <path d="M10 46 q9 -7 18 0 t18 0" stroke="#2c1c0b" stroke-width="3" fill="none"/>
+          <path d="M56 42 h10 v22 h-10 Z"/><circle cx="82" cy="52" r="9"/><circle cx="82" cy="52" r="4" fill="url(#r2wall)"/>
+          <path d="M14 70 q14 -10 28 0 l-4 12 h-20 Z"/>
+          <rect x="54" y="72" width="24" height="5"/><path d="M90 66 l10 8 l-10 8 Z"/>
+        </g>
+      </pattern>
+    </defs>
 
-            if (grip <= 50) gripBar.style.background = '#a86c47'; // Orange
-            if (grip <= 25) gripBar.style.background = '#8a3324'; // Red
-            if (grip > 50) gripBar.style.background = '#b39d73'; // Gold
+    <rect width="1600" height="900" fill="url(#r2air)"/>
+    <!-- carved back wall -->
+    <rect x="0" y="60" width="1600" height="700" fill="url(#relief)"/>
+    <rect x="0" y="60" width="1600" height="700" fill="#1a1004" opacity=".42"/>
+    <!-- deep doorway -->
+    <path d="M700 760 L700 300 q100 -46 200 0 L900 760 Z" fill="#080502"/>
+    <path d="M700 300 q100 -46 200 0" stroke="#8a6130" stroke-width="7" fill="none"/>
 
-            if (grip === 0) {
-                endGame(false);
-            }
-        }
+    <!-- the two colossi -->
+    <g>
+      <g transform="translate(300 250)">
+        <rect x="-96" y="430" width="252" height="80" fill="#3a2611"/>
+        <!-- seated body -->
+        <path d="M-40 430 L-40 190 q0 -60 70 -60 q70 0 70 60 L100 430 Z" fill="url(#r2stat)"/>
+        <!-- legs forward -->
+        <path d="M-40 430 h140 v-46 q-70 -14 -140 0 Z" fill="#6d4a24"/>
+        <path d="M-96 430 h56 v-40 h-56 Z" fill="#5e3f1d"/>
+        <!-- nemes head -->
+        <path d="M-4 130 q-26 -14 -26 -52 q0 -46 60 -46 q60 0 60 46 q0 38 -26 52 Z" fill="url(#r2stat)"/>
+        <path d="M-30 92 l-22 74 h34 Z" fill="#8a6130"/><path d="M90 92 l22 74 h-34 Z" fill="#8a6130"/>
+        <!-- eroded face: no features, weathered -->
+        <path d="M6 62 q24 -10 48 0" stroke="#2c1c0b" stroke-width="5" fill="none" opacity=".7"/>
+        <ellipse cx="30" cy="104" rx="20" ry="9" fill="#2c1c0b" opacity=".55"/>
+        <!-- fists on knees -->
+        <circle cx="-14" cy="372" r="20" fill="#7d5628"/><circle cx="76" cy="372" r="20" fill="#7d5628"/>
+        <g opacity=".5" fill="#2c1c0b">
+          <rect x="-30" y="250" width="4" height="120"/><rect x="86" y="250" width="4" height="120"/>
+        </g>
+      </g>
+      <g transform="translate(1300 250) scale(-1 1)">
+        <rect x="-96" y="430" width="252" height="80" fill="#3a2611"/>
+        <path d="M-40 430 L-40 190 q0 -60 70 -60 q70 0 70 60 L100 430 Z" fill="url(#r2stat)"/>
+        <path d="M-40 430 h140 v-46 q-70 -14 -140 0 Z" fill="#6d4a24"/>
+        <path d="M-96 430 h56 v-40 h-56 Z" fill="#5e3f1d"/>
+        <path d="M-4 130 q-26 -14 -26 -52 q0 -46 60 -46 q60 0 60 46 q0 38 -26 52 Z" fill="url(#r2stat)"/>
+        <path d="M-30 92 l-22 74 h34 Z" fill="#8a6130"/><path d="M90 92 l22 74 h-34 Z" fill="#8a6130"/>
+        <path d="M6 62 q24 -10 48 0" stroke="#2c1c0b" stroke-width="5" fill="none" opacity=".7"/>
+        <ellipse cx="30" cy="104" rx="20" ry="9" fill="#2c1c0b" opacity=".55"/>
+        <circle cx="-14" cy="372" r="20" fill="#7d5628"/><circle cx="76" cy="372" r="20" fill="#7d5628"/>
+      </g>
+    </g>
 
-        function getPenalty(difficulty) {
-            if (difficulty === 'easy') return -35;
-            if (difficulty === 'medium') return -30;
-            if (difficulty === 'hard') return -25;
-            return -30;
-        }
+    <!-- canopic jars on a ledge -->
+    <g transform="translate(560 640)">
+      <rect x="-20" y="86" width="480" height="16" fill="#3a2611"/>
+      <g>
+        <g transform="translate(0 0)"><path d="M0 86 q-4 -56 24 -56 q28 0 24 56 Z" fill="#c9a86e"/>
+          <path d="M6 30 q6 -22 18 -22 q12 0 18 22 Z" fill="#8a6130"/></g>
+        <g transform="translate(110 0)"><path d="M0 86 q-4 -56 24 -56 q28 0 24 56 Z" fill="#c9a86e"/>
+          <ellipse cx="24" cy="18" rx="15" ry="18" fill="#8a6130"/><path d="M12 6 l-8 -18 l14 8 Z" fill="#8a6130"/>
+          <path d="M36 6 l8 -18 l-14 8 Z" fill="#8a6130"/></g>
+        <g transform="translate(220 0)"><path d="M0 86 q-4 -56 24 -56 q28 0 24 56 Z" fill="#c9a86e"/>
+          <circle cx="24" cy="16" r="16" fill="#8a6130"/><path d="M8 16 q16 -24 32 0 Z" fill="#c9a86e" opacity=".5"/></g>
+        <g transform="translate(330 0)"><path d="M0 86 q-4 -56 24 -56 q28 0 24 56 Z" fill="#c9a86e"/>
+          <path d="M8 22 q4 -22 16 -22 q12 0 16 22 Z" fill="#8a6130"/>
+          <path d="M24 0 q-18 -6 -22 12 q10 -8 22 -4 Z" fill="#8a6130"/></g>
+      </g>
+    </g>
 
-        function nextQuestion() {
-            if (score >= winThreshold) {
-                endGame(true);
-                return;
-            }
+    <!-- oil lamps -->
+    <g class="flicker">
+      <circle cx="430" cy="470" r="200" fill="url(#r2lamp)"/>
+      <circle cx="1170" cy="470" r="200" fill="url(#r2lamp)"/>
+      <circle cx="800" cy="700" r="240" fill="url(#r2lamp)"/>
+    </g>
+    <rect y="760" width="1600" height="140" fill="#1a1004"/>
+    <rect y="760" width="1600" height="6" fill="#6d4a24" opacity=".6"/>
+    <rect width="1600" height="900" fill="#0b0704" opacity=".34"/>
+  </svg>
+  </div>
 
-            if (questionsRemaining.length === 0) {
-                questionsRemaining = [...termDatabase]; 
-            }
+  <!-- ---------- ROOM 3 · THE VAULT OF SYMBOLS ---------- -->
+  <div class="room" id="room3">
+  <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="r3air" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#05070a"/><stop offset=".55" stop-color="#080a0d"/>
+        <stop offset="1" stop-color="#020303"/></linearGradient>
+      <linearGradient id="shaft" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#9fc6c0" stop-opacity=".34"/>
+        <stop offset="1" stop-color="#6fa39c" stop-opacity="0"/></linearGradient>
+      <linearGradient id="r3pil" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#080a0c"/><stop offset=".4" stop-color="#20282a"/>
+        <stop offset=".64" stop-color="#39474a"/><stop offset="1" stop-color="#070909"/></linearGradient>
+      <pattern id="carve" width="60" height="80" patternUnits="userSpaceOnUse">
+        <g fill="#5d7a78" opacity=".5">
+          <path d="M8 12 q9 -10 18 0 q-9 10 -18 0 Z"/><circle cx="17" cy="12" r="2.4" fill="#0a0d0e"/>
+          <path d="M36 6 l12 8 l-12 8 Z"/>
+          <rect x="10" y="34" width="4" height="18"/><path d="M22 34 h13 v4 h-13 Z"/>
+          <path d="M40 36 q7 -6 14 0 t-14 0 Z"/>
+          <path d="M8 62 q8 -7 16 0 t16 0" stroke="#5d7a78" stroke-width="2.4" fill="none"/>
+          <circle cx="48" cy="66" r="6"/><circle cx="48" cy="66" r="2.6" fill="#0a0d0e"/>
+        </g>
+      </pattern>
+    </defs>
 
-            const rIndex = Math.floor(Math.random() * questionsRemaining.length);
-            currentQuestion = questionsRemaining.splice(rIndex, 1)[0];
+    <rect width="1600" height="900" fill="url(#r3air)"/>
+    <!-- shaft of moonlight from a broken ceiling -->
+    <path d="M740 0 L860 0 L1010 900 L590 900 Z" fill="url(#shaft)"/>
+    <ellipse cx="800" cy="880" rx="230" ry="40" fill="#9fc6c0" opacity=".12"/>
 
-            definitionDisplay.innerText = `"${currentQuestion.def}"`;
-            answerInput.value = '';
-            answerInput.focus();
+    <!-- hypostyle forest of Karnak pillars -->
+    <g>
+      <!-- back row, faint -->
+      <g opacity=".5">
+        <rect x="640" y="150" width="70" height="640" fill="#141a1c"/>
+        <rect x="900" y="150" width="70" height="640" fill="#141a1c"/>
+      </g>
+      <!-- mid row -->
+      <g>
+        <rect x="470" y="90" width="120" height="710" fill="url(#r3pil)"/>
+        <rect x="474" y="120" width="112" height="640" fill="url(#carve)" opacity=".55"/>
+        <rect x="452" y="60" width="164" height="36" fill="#2b3436"/>
+        <rect x="452" y="786" width="164" height="26" fill="#222a2b"/>
+        <rect x="1010" y="90" width="120" height="710" fill="url(#r3pil)"/>
+        <rect x="1014" y="120" width="112" height="640" fill="url(#carve)" opacity=".55"/>
+        <rect x="992" y="60" width="164" height="36" fill="#2b3436"/>
+        <rect x="992" y="786" width="164" height="26" fill="#222a2b"/>
+      </g>
+      <!-- foreground pillars, nearly black, cropping the frame -->
+      <g>
+        <rect x="60" y="-40" width="230" height="980" fill="#040607"/>
+        <rect x="70" y="40" width="210" height="800" fill="url(#carve)" opacity=".2"/>
+        <rect x="30" y="-40" width="290" height="70" fill="#0a0e10"/>
+        <rect x="1320" y="-40" width="230" height="980" fill="#040607"/>
+        <rect x="1330" y="40" width="210" height="800" fill="url(#carve)" opacity=".2"/>
+        <rect x="1290" y="-40" width="290" height="70" fill="#0a0e10"/>
+      </g>
+    </g>
 
-            resetTimer();
-        }
+    <!-- architrave overhead -->
+    <rect y="-10" width="1600" height="70" fill="#060809"/>
+    <rect y="52" width="1600" height="8" fill="#39474a" opacity=".5"/>
 
-        function resetTimer() {
-            clearInterval(timerInterval);
-            timeElapsed = 0;
-            updateTimerDisplay();
+    <!-- votive symbols glinting in the dark: ankh, djed, wedjat -->
+    <g opacity=".75" stroke="#6fa39c" fill="none" stroke-width="7">
+      <g transform="translate(360 470)">
+        <ellipse cx="0" cy="-34" rx="24" ry="30"/><path d="M0 -4 V 74"/><path d="M-32 14 H 32"/>
+      </g>
+      <g transform="translate(1240 500)">
+        <path d="M0 -46 V 60"/><path d="M-30 -40 H 30"/><path d="M-26 -22 H 26"/><path d="M-22 -4 H 22"/>
+      </g>
+    </g>
+    <g transform="translate(800 250)" opacity=".6">
+      <path d="M-58 0 q30 -34 68 -6 q-10 26 -40 24 q-24 -2 -28 -18 Z" fill="none" stroke="#6fa39c" stroke-width="6"/>
+      <circle cx="-6" cy="4" r="9" fill="#6fa39c"/>
+      <path d="M-58 6 q-14 22 -6 34" stroke="#6fa39c" stroke-width="6" fill="none"/>
+      <path d="M-30 22 q-6 24 -22 30" stroke="#6fa39c" stroke-width="6" fill="none"/>
+    </g>
 
-            timerInterval = setInterval(() => {
-                timeElapsed++;
-                updateTimerDisplay();
+    <rect y="812" width="1600" height="88" fill="#030405"/>
+    <rect width="1600" height="900" fill="#000" opacity=".28"/>
+  </svg>
+  </div>
 
-                if (timeElapsed >= 15) {
-                    handleMiss();
-                }
-            }, 1000);
-        }
+  <div id="motes" aria-hidden="true"></div>
 
-        function updateTimerDisplay() {
-            timerDisplay.innerText = timeElapsed;
-            timerDisplay.className = ''; 
+  <!-- ---------- THE UNKNOWN RELIC ---------- -->
+  <div id="relic" aria-hidden="true">
+    <div class="halo"></div>
+    <svg viewBox="0 0 300 300">
+      <defs>
+        <linearGradient id="plinth" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2a1e10"/><stop offset=".45" stop-color="#6b502c"/>
+          <stop offset="1" stop-color="#1d150a"/></linearGradient>
+      </defs>
+      <ellipse cx="150" cy="272" rx="96" ry="16" fill="#000" opacity=".55"/>
+      <path d="M84 262 L96 214 H204 L216 262 Z" fill="url(#plinth)"/>
+      <rect x="94" y="204" width="112" height="12" fill="#8a6130"/>
+      <!-- floating cartouche -->
+      <g>
+        <rect x="104" y="52" width="92" height="140" rx="46" fill="rgba(10,8,5,.72)"
+              stroke="#f0b45c" stroke-width="4"/>
+        <path d="M104 178 h92" stroke="#f0b45c" stroke-width="4"/>
+        <text x="150" y="145" text-anchor="middle" font-family="Georgia,serif" font-size="86"
+              fill="#f0b45c" opacity=".95">?</text>
+      </g>
+    </svg>
+    <div id="relicName">Unknown relic</div>
+  </div>
+</div>
 
-            if (timeElapsed <= 7) {
-                timerDisplay.classList.add('timer-safe');
-            } else if (timeElapsed === 8 || timeElapsed === 9) {
-                timerDisplay.classList.add('timer-warn');
-            } else if (timeElapsed >= 10) {
-                timerDisplay.classList.add('timer-danger');
-            }
-        }
+<div id="flash" aria-hidden="true"></div>
 
-        function handleMiss() {
-            clearInterval(timerInterval);
-            const penalty = getPenalty(currentQuestion.diff);
-            updateGrip(penalty);
-            
-            document.getElementById('question-box').style.borderColor = '#8a3324';
-            setTimeout(() => {
-                document.getElementById('question-box').style.borderColor = 'var(--brass-dim)';
-                if (grip > 0) nextQuestion();
-            }, 600);
-        }
+<!-- ================= THE PANEL ============ -->
+<section id="hud" aria-live="polite">
+  <div class="slug">
+    <span id="chamber">Chamber I · The Library</span>
+    <b id="count">01 / 30</b>
+  </div>
 
-        function handleHit() {
-            clearInterval(timerInterval);
-            score++;
-            
-            document.getElementById('question-box').style.borderColor = '#b39d73';
-            setTimeout(() => {
-                document.getElementById('question-box').style.borderColor = 'var(--brass-dim)';
-                nextQuestion();
-            }, 600);
-        }
+  <div class="gauge" id="gauge"><div id="powerFill"></div></div>
+  <div class="gaugeRow"><span>Exploration power</span><span id="powerNum">100%</span></div>
 
-        answerInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                const userAns = answerInput.value.trim().toLowerCase();
-                const correctAns = currentQuestion.term.toLowerCase();
+  <div id="clueWrap">
+    <span id="diff" class="easy">Easy</span>
+    <p id="clue">—</p>
+  </div>
 
-                if (userAns === correctAns) {
-                    handleHit();
-                } else {
-                    handleMiss();
-                }
-            }
-        });
+  <div id="timerWrap">
+    <div class="fuse" id="fuse"><div id="fuseFill"></div></div>
+    <div id="clock"><span id="secs">15.0s</span><span id="bonusHint">+10% under 10s</span></div>
+  </div>
 
-        function endGame(won) {
-            clearInterval(timerInterval);
-            answerInput.disabled = true;
+  <div id="answerRow">
+    <input id="answer" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+           placeholder="Name the relic…" aria-label="Name the relic">
+    <button id="submit">Identify</button>
+  </div>
+  <p id="verdict"></p>
+</section>
 
-            if (won) {
-                whiteoutOverlay.style.opacity = '0';
-                document.getElementById('snow-canvas').style.opacity = '0';
-                
-                // Clear the storm
-                oceanStage.style.filter = "grayscale(0.1) sepia(0.1) contrast(1.1) brightness(0.9)";
-                
-                setTimeout(() => {
-                    msgScreen.style.opacity = '1';
-                    msgScreen.style.background = 'rgba(232, 220, 196, 0.95)'; // Parchment wash
-                    msgScreen.style.color = '#1a120c';
-                    document.getElementById('end-title').innerText = "The Storm Breaks";
-                    document.getElementById('end-desc').innerText = "You held your grip through the gale. The horizon clears.";
-                }, 4000);
-            } else {
-                // Fade to black ocean depths
-                gameContainer.style.filter = 'brightness(0)';
-                
-                setTimeout(() => {
-                    msgScreen.style.opacity = '1';
-                    document.getElementById('end-title').innerText = "Lost to the Deep";
-                    document.getElementById('end-desc').innerText = "The cold took your hands, and the sea took the rest.";
-                }, 3000);
-            }
-        }
+<!-- ================= OVERLAYS ============ -->
+<div class="veil on" id="start">
+  <div class="card">
+    <p class="eyebrow">Ancient Egypt 101</p>
+    <h1>Descent of the<br>Unknown Relic<em>Thirty relics · three chambers</em></h1>
+    <p>The sand took you somewhere it shouldn't have. You are standing in the stacks of a library
+      that burned two thousand years ago, and the only way out is down — through the monuments,
+      through the vault, naming every object you meet.</p>
+    <div class="rules">
+      <span>15s</span> per relic · read the definition, type the name<br>
+      <span>+10%</span> power if you answer with 5s or more left<br>
+      <span>−35 / −30 / −25%</span> for a miss on easy / medium / hard<br>
+      <span>0%</span> power and the tomb keeps you
+    </div><br>
+    <button class="big" id="begin">Begin the descent</button>
+  </div>
+</div>
 
-        /* Hypnotic, Meditative Canvas Snow */
-        const canvas = document.getElementById('snow-canvas');
-        const ctx = canvas.getContext('2d');
-        let width = canvas.width = window.innerWidth;
-        let height = canvas.height = window.innerHeight;
+<div class="veil" id="transition">
+  <div class="card">
+    <p class="eyebrow" id="transEyebrow">Chamber II</p>
+    <h2 id="transTitle">The Hall of Monuments</h2>
+    <p id="transBody">—</p>
+    <button class="big" id="descend">Descend</button>
+  </div>
+</div>
 
-        window.addEventListener('resize', () => {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        });
+<div class="veil" id="death">
+  <div class="card">
+    <p class="eyebrow">Exploration power exhausted</p>
+    <h2 id="deathTitle">The tomb keeps you</h2>
+    <p id="deathBody">—</p>
+    <p class="tally" id="deathTally">—</p>
+    <button class="big" id="retryDeath">Try the descent again</button>
+  </div>
+</div>
 
-        const particles = [];
-        const particleCount = 900; 
+<div class="veil" id="win">
+  <div class="card">
+    <p class="eyebrow">Thirty of thirty · the way out</p>
+    <h2>You surface at sunset</h2>
+    <p>The tomb is mapped and the texts are secured. Every chamber you walked is now a page —
+      the scrolls of Alexandria, the colossi at their vigil, the amulets in their dark. The desert
+      simply hands you back.</p>
+    <p class="tally" id="winTally">—</p>
+    <p class="missed" id="winMissed"></p>
+    <button class="big" id="retryWin">Descend again</button>
+  </div>
+</div>
 
-        for (let i = 0; i < particleCount; i++) {
-            particles.push({
-                x: Math.random() * width,
-                y: Math.random() * height,
-                r: Math.random() * 3 + 0.5,
-                d: Math.random() * particleCount,
-                speedX: Math.random() * 4 + 2,
-                speedY: Math.random() * 2 + 1,
-                opacity: Math.random() * 0.6 + 0.2
-            });
-        }
+<script>
+"use strict";
 
-        function drawSnow() {
-            ctx.clearRect(0, 0, width, height);
-            
-            for (let i = 0; i < particleCount; i++) {
-                let p = particles[i];
-                ctx.fillStyle = `rgba(220, 230, 240, ${p.opacity})`;
-                ctx.beginPath();
-                ctx.moveTo(p.x, p.y);
-                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2, true);
-                ctx.fill();
-            }
-            updateSnow();
-            requestAnimationFrame(drawSnow);
-        }
+/* ============================================================
+   RELIC TABLE — 30 entries, ten per chamber
+   ============================================================ */
+const RELICS = [
+  /* ---- Chamber I · The Ancient Library of Alexandria ---- */
+  {d:"easy",   c:"A granodiorite stele carrying one royal decree in three scripts — the bilingual key that finally cracked hieroglyphic writing in 1822.", a:["Rosetta Stone"]},
+  {d:"easy",   c:"A painted limestone and stucco portrait head of an Amarna queen, found in the abandoned workshop of the sculptor Thutmose.", a:["Bust of Nefertiti","Nefertiti Bust","Nefertiti"]},
+  {d:"medium", c:"A shield-shaped siltstone tablet showing one king wearing both the White and the Red crown — often called the first historical document.", a:["Narmer Palette","Palette of Narmer"]},
+  {d:"easy",   c:"A collection of funerary spells copied onto papyrus and buried with the dead to steer them safely past the perils of the underworld.", a:["Book of the Dead","Book of Coming Forth by Day"]},
+  {d:"easy",   c:"A writing surface manufactured by slicing the pith of a river reed into strips, laying them crosswise, and pressing them dry.", a:["Papyrus"]},
+  {d:"medium", c:"An oval loop of knotted rope drawn around a royal name so that the name — and its owner — could not be undone.", a:["Cartouche","Shenu"]},
+  {d:"hard",   c:"The cursive priestly shorthand of the scribes: brushed rapidly onto papyrus for letters and accounts rather than chiselled into stone.", a:["Hieratic","Hieratic script"]},
+  {d:"medium", c:"A shard of broken pot or a flake of limestone used as free scratch paper — for laundry lists, sketches, gossip, and schoolboy exercises.", a:["Ostracon","Ostraca"]},
+  {d:"hard",   c:"A fragment of a black basalt royal annal recording the earliest kings alongside the height of each year's inundation.", a:["Palermo Stone"]},
+  {d:"hard",   c:"A twenty-metre medical scroll of some seven hundred remedies and incantations, among the oldest surviving treatises on healing.", a:["Ebers Papyrus","Papyrus Ebers"]},
 
-        let angle = 0;
-        function updateSnow() {
-            angle += 0.005; // Slower oscillation for a meditative drift
-            for (let i = 0; i < particleCount; i++) {
-                let p = particles[i];
-                p.y += Math.cos(angle + p.d) + p.speedY;
-                p.x += Math.sin(angle) * 1.5 + p.speedX; 
+  /* ---- Chamber II · The Hall of Monuments ---- */
+  {d:"medium", c:"Two eighteen-metre quartzite guardians left standing before a mortuary temple that has entirely vanished; one of them once sang at dawn.", a:["Colossi of Memnon","Colossus of Memnon"]},
+  {d:"hard",   c:"A seated diorite statue in which a falcon stands behind the king's head and folds its wings protectively around it.", a:["Khafre Enthroned","Seated Khafre","Statue of Khafre","Khafre"]},
+  {d:"easy",   c:"Four stoppered vessels, each watched by one of the Four Sons of Horus, holding the organs taken out during embalming.", a:["Canopic Jars","Canopic Jar","Canopic"]},
+  {d:"easy",   c:"A recumbent lion with a king's face, carved in place out of the living limestone of a quarry on the Giza plateau.", a:["Great Sphinx of Giza","Great Sphinx","Sphinx of Giza","Sphinx"]},
+  {d:"easy",   c:"A tapering four-sided monolith of a single stone, capped with a small gilded pyramidion and raised in pairs before temple gates.", a:["Obelisk","Tekhenu"]},
+  {d:"medium", c:"A bench-shaped tomb of mudbrick or stone with a flat roof and inward-sloping walls — the direct ancestor of the pyramid.", a:["Mastaba"]},
+  {d:"medium", c:"The pair of massive tapering towers flanking a temple gateway, their faces grooved to hold enormous flagstaffs.", a:["Pylon","Pylons"]},
+  {d:"hard",   c:"A roofed chamber whose ceiling is carried by a whole forest of closely spaced columns, lit only by stone grilles high on the walls.", a:["Hypostyle Hall","Hypostyle"]},
+  {d:"easy",   c:"The outer stone container, lidded and inscribed, into which the nested wooden coffins were finally lowered.", a:["Sarcophagus"]},
+  {d:"medium", c:"Imhotep's six-tiered stack of shrinking platforms at Saqqara — the world's first monumental building in cut stone.", a:["Step Pyramid of Djoser","Step Pyramid","Pyramid of Djoser","Djoser Step Pyramid"]},
 
-                if (p.x > width + 10 || p.x < -10 || p.y > height + 10) {
-                    if (i % 3 > 0) {
-                        particles[i] = { x: -10, y: Math.random() * height, r: p.r, d: p.d, speedX: p.speedX, speedY: p.speedY, opacity: p.opacity };
-                    } else {
-                        particles[i] = { x: Math.random() * width, y: -10, r: p.r, d: p.d, speedX: p.speedX, speedY: p.speedY, opacity: p.opacity };
-                    }
-                }
-            }
-        }
+  /* ---- Chamber III · The Vault of Symbols ---- */
+  {d:"easy",   c:"A looped cross held out by the gods toward the nostrils of kings: the sign for life itself.", a:["Ankh"]},
+  {d:"medium", c:"A tiered column of four stacked crossbars — the backbone of Osiris, worn as the emblem of stability and endurance.", a:["Djed","Djed Pillar"]},
+  {d:"easy",   c:"A stylised falcon eye finished with a curled tail and a teardrop, worn above all other amulets for healing and protection.", a:["Eye of Horus","Wedjat","Wedjat Eye","Udjat"]},
+  {d:"easy",   c:"A dung-beetle amulet: because it rolled the sun across the sky, it became the sign of rebirth and was laid over the heart of the dead.", a:["Scarab","Heart Scarab","Scarab Amulet"]},
+  {d:"hard",   c:"A staff with a forked foot and the head of a strange long-eared beast, carried by the gods as the sign of dominion and wellbeing.", a:["Was Sceptre","Was Scepter","Was","Was Staff"]},
+  {d:"medium", c:"A small mummiform servant figure placed in the tomb to answer when called and do the labour of the deceased.", a:["Shabti","Ushabti","Shawabti"]},
+  {d:"hard",   c:"The knotted girdle amulet of Isis — a looped sash sometimes read as her blood, and set beside the backbone of Osiris.", a:["Tyet","Knot of Isis","Isis Knot","Tiet","Tit"]},
+  {d:"medium", c:"The shepherd's hook and the threshing implement, crossed over a king's chest as the paired insignia of rule.", a:["Crook and Flail","Heka and Nekhakha","Crook & Flail"]},
+  {d:"hard",   c:"The rearing cobra fixed to the royal brow, spitting fire at the enemies of the king.", a:["Uraeus"]},
+  {d:"medium", c:"The striped royal headcloth, gathered into a tail behind and falling in two broad lappets over the shoulders.", a:["Nemes","Nemes Headdress"]}
+];
 
-        drawSnow();
-        setTimeout(nextQuestion, 3000);
-    </script>
+const CHAMBERS = [
+  {n:"Chamber I · The Library", room:"room1",
+   death:"The ancient texts crumble to dust in your hands, and the Chief Keeper of Scrolls curses you to the shadows between the shelves.",
+   mote:"#f0b45c"},
+  {n:"Chamber II · The Monuments", room:"room2",
+   eyebrow:"Chamber II", title:"The Hall of Monuments",
+   body:"The shelves end. You feel your way down a shaft cut through bedrock and come out between two seated giants, their faces worn smooth by four thousand years of wind. Everything here is carved, and everything here is watching.",
+   death:"You step back onto a slab that gives a little too easily, and the floor opens onto a pit of upright stakes.",
+   mote:"#c08a48"},
+  {n:"Chamber III · The Vault", room:"room3",
+   eyebrow:"Chamber III", title:"The Vault of Symbols",
+   body:"Lower still, and the torchlight stops helping. You are among pillars too wide to embrace, and the only light is a cold shaft falling through a break in the roof. On every surface: amulets, knots, eyes. The last thirty steps are the small things.",
+   death:"Something heavy uncoils from the architrave above you, drops onto your shoulders, and strikes.",
+   mote:"#9fc6c0"}
+];
+
+const LIMIT   = 15;      // seconds per relic
+const BONUS_AT= 5;       // seconds remaining needed for the speed bonus
+const COST    = {easy:35, medium:30, hard:25};
+
+/* ---------- element handles ---------- */
+const $ = id => document.getElementById(id);
+const el = {
+  scene:$("scene"), relic:$("relic"), relicName:$("relicName"), motes:$("motes"),
+  hud:$("hud"), chamber:$("chamber"), count:$("count"), gauge:$("gauge"),
+  powerFill:$("powerFill"), powerNum:$("powerNum"), diff:$("diff"), clue:$("clue"),
+  fuse:$("fuse"), fuseFill:$("fuseFill"), secs:$("secs"), answer:$("answer"),
+  submit:$("submit"), verdict:$("verdict"), flash:$("flash"),
+  start:$("start"), transition:$("transition"), death:$("death"), win:$("win"),
+  transEyebrow:$("transEyebrow"), transTitle:$("transTitle"), transBody:$("transBody"),
+  deathTitle:$("deathTitle"), deathBody:$("deathBody"), deathTally:$("deathTally"),
+  winTally:$("winTally"), winMissed:$("winMissed")
+};
+
+/* ---------- state ---------- */
+let S = null;
+function fresh(){
+  return {i:0, power:100, chamber:-1, left:LIMIT, ticker:null, last:0,
+          locked:true, correct:0, bonuses:0, missed:[], over:false};
+}
+
+/* ---------- answer matching: normalise, then allow near-misses ---------- */
+function norm(s){
+  return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/&/g," and ").replace(/[^a-z0-9\s]/g," ")
+    .replace(/\b(the|of|a|an|and)\b/g," ").replace(/\s+/g,"");
+}
+function lev(a,b){
+  const m=a.length,n=b.length;
+  if(!m) return n; if(!n) return m;
+  let prev=Array.from({length:n+1},(_,j)=>j), cur=new Array(n+1);
+  for(let i=1;i<=m;i++){
+    cur[0]=i;
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    const t=prev; prev=cur; cur=t;
+  }
+  return prev[n];
+}
+function accepts(input, aliases){
+  const g = norm(input);
+  if(g.length < 3) return false;
+  for(const alias of aliases){
+    const t = norm(alias);
+    if(!t) continue;
+    if(g === t) return true;
+    const tol = t.length >= 12 ? 3 : t.length >= 8 ? 2 : t.length >= 5 ? 1 : 0;
+    if(tol && lev(g,t) <= tol) return true;
+  }
+  return false;
+}
+
+/* ---------- atmosphere ---------- */
+function seedMotes(color, n){
+  el.motes.innerHTML = "";
+  el.motes.style.color = color;
+  const frag = document.createDocumentFragment();
+  for(let k=0;k<n;k++){
+    const m = document.createElement("div");
+    m.className = "mote";
+    const size = 1.4 + Math.random()*3.6;
+    m.style.width = m.style.height = size.toFixed(1)+"px";
+    m.style.left = (Math.random()*100).toFixed(2)+"%";
+    m.style.setProperty("--mo", (0.14 + Math.random()*0.5).toFixed(2));
+    m.style.setProperty("--dx", (Math.random()*90-45).toFixed(0)+"px");
+    m.style.animationDuration = (16 + Math.random()*26).toFixed(1)+"s";
+    m.style.animationDelay = (-Math.random()*38).toFixed(1)+"s";
+    frag.appendChild(m);
+  }
+  el.motes.appendChild(frag);
+}
+function paintPower(){
+  const p = Math.max(0, Math.min(100, S.power));
+  el.powerFill.style.transform = "scaleX("+(p/100)+")";
+  el.powerNum.textContent = Math.round(p)+"%";
+  el.gauge.classList.toggle("low", p <= 35);
+  /* the woozy effect: the world sickens as the explorer does */
+  document.documentElement.style.setProperty("--woozy", ((100-p)/100).toFixed(3));
+}
+function tremor(){
+  el.scene.classList.remove("tremor");
+  void el.scene.offsetWidth;
+  el.scene.classList.add("tremor");
+  el.flash.classList.remove("go");
+  void el.flash.offsetWidth;
+  el.flash.classList.add("go");
+}
+function pulse(cls){
+  el.relic.classList.remove("hit","got");
+  if(cls) el.relic.classList.add(cls);
+  setTimeout(()=>el.relic.classList.remove("hit","got"), 700);
+}
+
+/* ---------- clock ---------- */
+function startClock(){
+  stopClock();
+  S.left = LIMIT;
+  S.last = performance.now();
+  paintClock();
+  S.ticker = setInterval(()=>{
+    const now = performance.now();
+    S.left -= (now - S.last)/1000;
+    S.last = now;
+    if(S.left <= 0){ S.left = 0; paintClock(); stopClock(); timeout(); return; }
+    paintClock();
+  }, 80);
+}
+function stopClock(){ if(S.ticker){ clearInterval(S.ticker); S.ticker = null; } }
+function paintClock(){
+  el.fuseFill.style.transform = "scaleX("+(S.left/LIMIT)+")";
+  el.secs.textContent = S.left.toFixed(1)+"s";
+  const urgent = S.left <= BONUS_AT;
+  el.fuse.classList.toggle("urgent", urgent);
+  el.secs.classList.toggle("urgent", urgent);
+}
+
+/* ---------- flow ---------- */
+function veil(node, on){ node.classList.toggle("on", !!on); }
+
+function begin(){
+  S = fresh();
+  el.hud.classList.add("up");
+  el.scene.classList.remove("collapsed");
+  paintPower();
+  veil(el.start,false); veil(el.death,false); veil(el.win,false);
+  enterChamber(0);
+}
+
+function enterChamber(idx){
+  S.chamber = idx;
+  const c = CHAMBERS[idx];
+  document.querySelectorAll(".room").forEach(r => r.classList.remove("live"));
+  $(c.room).classList.add("live");
+  seedMotes(c.mote, idx === 2 ? 26 : 44);
+  el.chamber.textContent = c.n;
+  serve();
+}
+
+function serve(){
+  const q = RELICS[S.i];
+  el.count.textContent = String(S.i+1).padStart(2,"0")+" / 30";
+  el.diff.className = q.d;
+  el.diff.textContent = q.d.charAt(0).toUpperCase()+q.d.slice(1)+" · −"+COST[q.d]+"%";
+  el.clue.textContent = q.c;
+  el.relicName.textContent = "Unknown relic";
+  el.verdict.textContent = "";
+  el.verdict.className = "";
+  el.answer.value = "";
+  el.answer.disabled = false;
+  el.submit.disabled = false;
+  S.locked = false;
+  el.answer.focus({preventScroll:true});
+  startClock();
+}
+
+function judge(){
+  if(S.locked) return;
+  const guess = el.answer.value.trim();
+  if(!guess){ el.answer.focus(); return; }
+  const q = RELICS[S.i];
+  if(accepts(guess, q.a)) resolve(true, q, S.left);
+  else resolve(false, q, S.left);
+}
+function timeout(){
+  if(S.locked) return;
+  resolve(false, RELICS[S.i], 0, true);
+}
+
+function resolve(right, q, leftAtAnswer, ranOut){
+  S.locked = true;
+  stopClock();
+  el.answer.disabled = true;
+  el.submit.disabled = true;
+  el.relicName.textContent = q.a[0];
+
+  if(right){
+    S.correct++;
+    const bonus = leftAtAnswer >= BONUS_AT;
+    if(bonus){
+      S.bonuses++;
+      S.power = Math.min(100, S.power + 10);
+      el.verdict.className = "good";
+      el.verdict.textContent = "Identified with "+leftAtAnswer.toFixed(1)+"s to spare · +10% power";
+    }else{
+      el.verdict.className = "good";
+      el.verdict.textContent = "Identified · the relic settles back onto its plinth";
+    }
+    pulse("got");
+    paintPower();
+    setTimeout(advance, 1250);
+  }else{
+    S.missed.push(q.a[0]);
+    S.power -= COST[q.d];
+    el.verdict.className = "bad";
+    el.verdict.textContent = (ranOut ? "Out of time · " : "Wrong · ") + "it was the "+q.a[0]+" · −"+COST[q.d]+"% power";
+    tremor();
+    pulse("hit");
+    paintPower();
+    if(S.power <= 0){ setTimeout(perish, 900); return; }
+    setTimeout(advance, 1900);
+  }
+}
+
+function advance(){
+  S.i++;
+  if(S.i >= RELICS.length){ triumph(); return; }
+  const nextChamber = Math.floor(S.i/10);
+  if(nextChamber !== S.chamber){ intermission(nextChamber); return; }
+  serve();
+}
+
+function intermission(idx){
+  const c = CHAMBERS[idx];
+  el.transEyebrow.textContent = c.eyebrow;
+  el.transTitle.textContent = c.title;
+  el.transBody.textContent = c.body;
+  veil(el.transition,true);
+  setTimeout(()=>$("descend").focus({preventScroll:true}), 220);
+  $("descend").onclick = ()=>{ veil(el.transition,false); enterChamber(idx); };
+}
+
+function perish(){
+  S.over = true;
+  S.power = 0; paintPower();
+  const c = CHAMBERS[S.chamber];
+  el.deathTitle.textContent = ["The shelves close over you","The floor was never floor","Something was already here"][S.chamber];
+  el.deathBody.textContent = c.death;
+  el.deathTally.textContent = S.correct+" of 30 relics named · "+S.bonuses+" quick identifications · fell in "+c.n.split("·")[1].trim();
+  veil(el.death,true);
+  setTimeout(()=>$("retryDeath").focus({preventScroll:true}), 260);
+}
+
+function triumph(){
+  S.over = true;
+  stopClock();
+  document.documentElement.style.setProperty("--woozy","0");
+  el.scene.classList.add("collapsed");
+  el.hud.classList.remove("up");
+  el.winTally.textContent = S.correct+" of 30 named · "+S.bonuses+" under ten seconds · "+
+    Math.round(Math.max(0,S.power))+"% exploration power remaining";
+  el.winMissed.textContent = S.missed.length
+    ? "Still owed to the sand: "+S.missed.join(" · ")
+    : "Nothing left behind. A perfect descent.";
+  setTimeout(()=>{
+    veil(el.win,true);
+    setTimeout(()=>$("retryWin").focus({preventScroll:true}), 260);
+  }, 2200);
+}
+
+/* ---------- wiring ---------- */
+$("begin").onclick   = begin;
+$("retryDeath").onclick = begin;
+$("retryWin").onclick   = begin;
+el.submit.onclick = judge;
+el.answer.addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); judge(); } });
+document.addEventListener("keydown", e => {
+  if(e.key !== "Enter") return;
+  if(el.start.classList.contains("on")){ e.preventDefault(); begin(); }
+  else if(el.transition.classList.contains("on")){ e.preventDefault(); $("descend").click(); }
+  else if(el.death.classList.contains("on") || el.win.classList.contains("on")){ e.preventDefault(); begin(); }
+});
+document.addEventListener("visibilitychange", ()=>{
+  if(document.hidden && S && S.ticker) stopClock();
+  else if(!document.hidden && S && !S.locked && !S.over) { S.last = performance.now(); startClockResume(); }
+});
+function startClockResume(){
+  if(S.ticker) return;
+  S.last = performance.now();
+  S.ticker = setInterval(()=>{
+    const now = performance.now();
+    S.left -= (now - S.last)/1000; S.last = now;
+    if(S.left <= 0){ S.left = 0; paintClock(); stopClock(); timeout(); return; }
+    paintClock();
+  }, 80);
+}
+
+/* idle atmosphere before the game starts */
+$("room1").classList.add("live");
+seedMotes("#f0b45c", 44);
+$("begin").focus({preventScroll:true});
+</script>
 </body>
 </html>
