@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Electrical Trade — Voltage Challenge</title>
+<style>
+  :root{
+    --bg:#101417;
+    --panel:rgba(11,15,18,.94);
+    --panel-border:rgba(255,255,255,.12);
+    --text:#f3f5f6;
+    --muted:#aeb7bd;
+    --green:#53d769;
+    --orange:#ffad33;
+    --red:#ff5a52;
+    --accent:#85c9ff;
+    --shadow:0 18px 60px rgba(0,0,0,.45);
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:#090c0e;color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
+
+  body{
+    display:grid;
+    place-items:center;
+  }
+
+  .game-shell{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    overflow:hidden;
+    background:var(--bg);
+  }
+
+  /* ---------- ROOM / SCENE ---------- */
+  .room{
+    position:absolute;
+    inset:0;
+    overflow:hidden;
+  }
+
+  .room svg{
+    width:100%;
+    height:100%;
+    display:block;
+  }
+
+  .scene-vignette{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+      linear-gradient(90deg, rgba(0,0,0,.18), rgba(0,0,0,0) 36%, rgba(0,0,0,.12) 64%, rgba(0,0,0,.34)),
+      linear-gradient(0deg, rgba(0,0,0,.32), transparent 42%);
+  }
+
+  /* ---------- QUIZ UI ---------- */
+  .quiz-wrap{
+    position:absolute;
+    z-index:20;
+    right:2.2vw;
+    top:50%;
+    transform:translateY(-50%);
+    width:min(37vw, 650px);
+    min-width:390px;
+    max-height:92vh;
+    padding:22px;
+    border:1px solid var(--panel-border);
+    border-radius:20px;
+    background:var(--panel);
+    box-shadow:var(--shadow);
+    backdrop-filter:blur(9px);
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  .topline{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+  }
+
+  .eyebrow{
+    font-size:12px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    color:var(--muted);
+    font-weight:800;
+  }
+
+  .meta{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  .chip{
+    padding:7px 10px;
+    border-radius:999px;
+    background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.08);
+    color:#dce3e7;
+    font-size:12px;
+    font-weight:700;
+  }
+
+  .prompt{
+    font-size:clamp(20px,2vw,30px);
+    line-height:1.24;
+    font-weight:760;
+    letter-spacing:-.02em;
+    min-height:118px;
+    display:flex;
+    align-items:center;
+  }
+
+  .answer-zone{
+    display:grid;
+    gap:10px;
+  }
+
+  input[type="text"]{
+    width:100%;
+    border:1px solid rgba(255,255,255,.13);
+    background:#090d10;
+    color:white;
+    border-radius:14px;
+    padding:15px 16px;
+    font-size:18px;
+    outline:none;
+    transition:.2s ease;
+  }
+
+  input[type="text"]:focus{
+    border-color:rgba(133,201,255,.7);
+    box-shadow:0 0 0 4px rgba(133,201,255,.12);
+  }
+
+  .choice-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+
+  button{
+    appearance:none;
+    border:0;
+    border-radius:13px;
+    padding:13px 15px;
+    color:white;
+    background:#1a2228;
+    font-weight:750;
+    font-size:15px;
+    cursor:pointer;
+    transition:transform .13s ease, background .13s ease, opacity .13s ease;
+  }
+
+  button:hover{transform:translateY(-1px);background:#222c33}
+  button:active{transform:translateY(0)}
+  button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  .primary{
+    background:linear-gradient(180deg,#1e7ec0,#17689f);
+  }
+  .primary:hover{background:linear-gradient(180deg,#248ccf,#1a73ae)}
+
+  .bottom-row{
+    display:grid;
+    grid-template-columns:1fr auto;
+    gap:12px;
+    align-items:end;
+  }
+
+  .timer-block{
+    display:grid;
+    gap:7px;
+  }
+
+  .timer-numbers{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    color:var(--muted);
+    font-weight:750;
+  }
+
+  .timer-track{
+    height:8px;
+    border-radius:999px;
+    overflow:hidden;
+    background:rgba(255,255,255,.08);
+  }
+
+  .timer-fill{
+    width:100%;
+    height:100%;
+    background:linear-gradient(90deg,#78c6ff,#b5e1ff);
+    transform-origin:left;
+    transition:width .1s linear;
+  }
+
+  .feedback{
+    min-height:27px;
+    font-size:14px;
+    color:var(--muted);
+    font-weight:650;
+  }
+  .feedback.good{color:#85e999}
+  .feedback.bad{color:#ff8b84}
+
+  .next-btn{
+    min-width:110px;
+  }
+
+  .footer-stats{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    color:var(--muted);
+    font-size:12px;
+    border-top:1px solid rgba(255,255,255,.07);
+    padding-top:12px;
+  }
+
+  .brandline{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  .tiny-dot{
+    width:7px;height:7px;border-radius:50%;background:#56cf70;box-shadow:0 0 12px rgba(86,207,112,.55);
+  }
+
+  /* ---------- VOLTAGE GAUGE AS A ROOM OBJECT ---------- */
+  .gauge-ui{
+    position:absolute;
+    z-index:12;
+    left:48%;
+    top:9%;
+    width:210px;
+    height:142px;
+    transform:translateX(-50%) rotate(-.8deg);
+    filter:drop-shadow(0 10px 18px rgba(0,0,0,.45));
+    pointer-events:none;
+  }
+
+  .gauge-box{
+    position:absolute;
+    inset:0;
+    border-radius:9px;
+    background:linear-gradient(180deg,#90979a,#676d70);
+    border:2px solid #303638;
+    box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);
+  }
+
+  .gauge-face{
+    position:absolute;
+    left:19px;right:19px;top:16px;height:93px;
+    border-radius:50% 50% 18% 18%/70% 70% 26% 26%;
+    background:#e8e4d9;
+    border:4px solid #4f5659;
+    overflow:hidden;
+  }
+
+  .gauge-face::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:
+      conic-gradient(from 220deg at 50% 96%,
+      var(--red) 0deg 34deg,
+      var(--orange) 34deg 67deg,
+      var(--green) 67deg 120deg,
+      transparent 120deg 360deg);
+    opacity:.9;
+  }
+
+  .gauge-cover{
+    position:absolute;
+    inset:11px 11px 0;
+    background:#e8e4d9;
+    border-radius:50% 50% 18% 18%/70% 70% 26% 26%;
+    clip-path:polygon(0 0,100% 0,100% 79%,0 79%);
+  }
+
+  .gauge-needle{
+    position:absolute;
+    left:50%;
+    bottom:11px;
+    width:4px;
+    height:68px;
+    background:#1d2326;
+    border-radius:99px;
+    transform-origin:50% calc(100% - 4px);
+    transform:translateX(-50%) rotate(60deg);
+    transition:transform .55s cubic-bezier(.2,.8,.2,1);
+    box-shadow:0 1px 0 rgba(255,255,255,.2);
+  }
+
+  .gauge-hub{
+    position:absolute;
+    width:17px;height:17px;border-radius:50%;
+    background:#2b3033;border:3px solid #777;
+    left:50%;bottom:3px;transform:translateX(-50%);
+  }
+
+  .gauge-title{
+    position:absolute;
+    bottom:8px;
+    width:100%;
+    text-align:center;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.08em;
+    color:#242a2d;
+  }
+
+  .charge-readout{
+    position:absolute;
+    right:8px;top:7px;
+    color:#172026;
+    background:rgba(224,247,255,.82);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-weight:900;
+    font-size:14px;
+    padding:3px 6px;
+    border-radius:4px;
+    border:1px solid rgba(0,0,0,.25);
+  }
+
+  .gauge-label{
+    position:absolute;
+    bottom:-24px;
+    width:100%;
+    text-align:center;
+    color:#d4d9dc;
+    font-size:11px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    font-weight:800;
+    text-shadow:0 2px 3px #000;
+  }
+
+  /* ---------- AMBIENT ANIMATIONS ---------- */
+  #fan-blades{
+    transform-origin:178px 448px;
+    animation:fanSpin 2.3s linear infinite;
+  }
+
+  @keyframes fanSpin{to{transform:rotate(360deg)}}
+
+  #paper1{animation:paperFlutter 2.2s ease-in-out infinite alternate}
+  #paper2{animation:paperFlutter 2.7s ease-in-out infinite alternate-reverse}
+
+  @keyframes paperFlutter{
+    from{transform:rotate(-1deg) translateY(0)}
+    to{transform:rotate(2deg) translateY(-2px)}
+  }
+
+  #plantLeaves{animation:plantSway 3.2s ease-in-out infinite alternate;transform-origin:265px 580px}
+  @keyframes plantSway{to{transform:rotate(2.5deg)}}
+
+  #indicatorA{animation:blinkA 3.8s steps(1) infinite}
+  #indicatorB{animation:blinkB 5.2s steps(1) infinite}
+  @keyframes blinkA{0%,82%,100%{opacity:1}83%,88%{opacity:.2}}
+  @keyframes blinkB{0%,66%,100%{opacity:.35}67%,73%{opacity:1}}
+
+  .room-light-flicker{animation:roomFlicker .9s linear 1}
+  @keyframes roomFlicker{
+    0%,16%,38%,52%,76%,100%{filter:brightness(1)}
+    18%,36%,54%,73%{filter:brightness(.63)}
+  }
+
+  #electricianGroup{
+    transform-origin:1015px 594px;
+    transition:transform 1.1s ease;
+  }
+
+  .bend{
+    transform:translateY(13px) rotate(2.4deg) !important;
+  }
+
+  #mouse{
+    opacity:0;
+  }
+
+  .mouse-run{
+    animation:mouseRun 4.7s ease-in-out 1;
+  }
+
+  @keyframes mouseRun{
+    0%{opacity:0;transform:translateX(0) translateY(0)}
+    5%{opacity:1}
+    44%{transform:translateX(365px) translateY(0)}
+    52%{transform:translateX(397px) translateY(-17px) rotate(-12deg)}
+    60%{transform:translateX(435px) translateY(-52px) rotate(-24deg);opacity:1}
+    65%{opacity:0}
+    100%{opacity:0;transform:translateX(435px) translateY(-52px)}
+  }
+
+  #clipboard{
+    animation:clipShift 8s ease-in-out infinite;
+    transform-origin:987px 487px;
+  }
+
+  @keyframes clipShift{
+    0%,78%,100%{transform:rotate(0)}
+    82%,91%{transform:rotate(-4deg)}
+  }
+
+  /* ---------- START SCREEN ---------- */
+  .start-overlay{
+    position:absolute;
+    inset:0;
+    z-index:50;
+    display:grid;
+    place-items:center;
+    background:rgba(4,7,9,.78);
+    backdrop-filter:blur(7px);
+  }
+
+  .start-card{
+    width:min(560px,90vw);
+    padding:28px;
+    border-radius:22px;
+    background:#10171c;
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:var(--shadow);
+  }
+
+  .start-card h1{
+    margin:0 0 10px;
+    font-size:34px;
+    letter-spacing:-.03em;
+  }
+
+  .start-card p{
+    color:#c3ccd2;
+    line-height:1.55;
+    margin:0 0 20px;
+  }
+
+  .rules{
+    display:grid;
+    gap:8px;
+    margin:18px 0 22px;
+    color:#d7dde1;
+    font-size:14px;
+  }
+
+  .rule{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+  }
+
+  .rule b{color:white}
+
+  .hide{display:none !important}
+
+  @media (max-width: 980px){
+    .quiz-wrap{
+      width:min(48vw,620px);
+      right:1.5vw;
+      min-width:360px;
+    }
+    .gauge-ui{
+      left:42%;
+      transform:translateX(-50%) scale(.87);
+    }
+  }
+
+  @media (max-width: 760px){
+    body{overflow:auto}
+    .game-shell{min-height:100vh;height:auto;overflow:hidden}
+    .room{position:fixed}
+    .quiz-wrap{
+      position:relative;
+      margin:32vh auto 5vh;
+      right:auto;
+      top:auto;
+      transform:none;
+      width:92vw;
+      min-width:0;
+      max-height:none;
+    }
+    .gauge-ui{
+      position:fixed;
+      left:50%;
+      top:5%;
+      transform:translateX(-50%) scale(.8);
+    }
+    .choice-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="game-shell" id="gameShell">
+
+  <!-- Environmental illustration -->
+  <div class="room" id="room">
+    <svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-label="Industrial back-of-house electrical service room">
+      <defs>
+        <linearGradient id="wallGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#42494c"/>
+          <stop offset=".58" stop-color="#30373a"/>
+          <stop offset="1" stop-color="#252c2f"/>
+        </linearGradient>
+        <linearGradient id="floorGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#353b3d"/>
+          <stop offset="1" stop-color="#1e2325"/>
+        </linearGradient>
+        <linearGradient id="doorGlow" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#f7f2d2"/>
+          <stop offset=".55" stop-color="#b8d5c2"/>
+          <stop offset="1" stop-color="#798b82"/>
+        </linearGradient>
+        <filter id="softGlow">
+          <feGaussianBlur stdDeviation="5"/>
+        </filter>
+        <filter id="shadow">
+          <feDropShadow dx="0" dy="9" stdDeviation="10" flood-opacity=".35"/>
+        </filter>
+      </defs>
+
+      <!-- room -->
+      <rect width="1600" height="900" fill="url(#wallGrad)"/>
+      <polygon points="0,680 1600,650 1600,900 0,900" fill="url(#floorGrad)"/>
+
+      <!-- ceiling beams -->
+      <rect x="0" y="0" width="1600" height="85" fill="#202628"/>
+      <rect x="0" y="82" width="1600" height="11" fill="#161b1d"/>
+      <rect x="115" y="45" width="1360" height="24" rx="4" fill="#4d5457"/>
+      <rect x="115" y="50" width="1360" height="5" fill="#6d7477" opacity=".5"/>
+
+      <!-- upper pipes -->
+      <g>
+        <rect x="40" y="112" width="810" height="22" rx="10" fill="#737c80"/>
+        <rect x="38" y="138" width="670" height="15" rx="7" fill="#8c6f55"/>
+        <rect x="320" y="160" width="720" height="16" rx="7" fill="#5c6d72"/>
+        <rect x="740" y="107" width="15" height="158" rx="6" fill="#6d777b"/>
+        <rect x="575" y="133" width="13" height="112" rx="6" fill="#866b54"/>
+        <circle cx="748" cy="222" r="18" fill="#9b2d2d" stroke="#e18585" stroke-width="4"/>
+        <line x1="732" y1="222" x2="764" y2="222" stroke="#eee" stroke-width="5"/>
+        <line x1="748" y1="206" x2="748" y2="238" stroke="#eee" stroke-width="5"/>
+      </g>
+
+      <!-- open door to brighter factory area -->
+      <g opacity=".88">
+        <rect x="38" y="210" width="170" height="385" fill="#151a1c" stroke="#61696d" stroke-width="8"/>
+        <rect x="49" y="221" width="148" height="361" fill="url(#doorGlow)"/>
+        <rect x="63" y="244" width="121" height="13" fill="#62726c" opacity=".52"/>
+        <rect x="65" y="330" width="112" height="210" fill="#85928d" opacity=".22"/>
+        <path d="M70 530 L171 530 M73 490 L171 490 M80 448 L174 448" stroke="#4c5d56" stroke-width="5" opacity=".42"/>
+        <rect x="52" y="550" width="142" height="33" fill="#454f4b" opacity=".55"/>
+      </g>
+
+      <!-- left shelving -->
+      <g filter="url(#shadow)">
+        <rect x="238" y="292" width="267" height="18" fill="#676e70"/>
+        <rect x="248" y="307" width="10" height="305" fill="#5b6264"/>
+        <rect x="484" y="307" width="10" height="305" fill="#5b6264"/>
+        <rect x="238" y="403" width="267" height="13" fill="#5f6668"/>
+        <rect x="238" y="507" width="267" height="13" fill="#5f6668"/>
+        <rect x="238" y="607" width="267" height="13" fill="#5f6668"/>
+        <rect x="273" y="328" width="71" height="57" fill="#6c5e48"/>
+        <rect x="356" y="337" width="50" height="48" fill="#3d5058"/>
+        <rect x="419" y="330" width="47" height="55" fill="#695f55"/>
+        <circle cx="302" cy="462" r="26" fill="#434d50" stroke="#768084" stroke-width="9"/>
+        <circle cx="378" cy="464" r="23" fill="#5f696c" stroke="#2d3638" stroke-width="9"/>
+        <rect x="428" y="436" width="48" height="52" rx="5" fill="#787f81"/>
+        <rect x="268" y="534" width="80" height="51" fill="#4a5558"/>
+        <rect x="365" y="543" width="42" height="41" fill="#98865d"/>
+        <rect x="424" y="538" width="51" height="47" fill="#385047"/>
+      </g>
+
+      <!-- old desk and fan -->
+      <g>
+        <rect x="82" y="638" width="355" height="30" fill="#654e3f"/>
+        <rect x="99" y="665" width="20" height="158" fill="#514137"/>
+        <rect x="397" y="665" width="20" height="158" fill="#514137"/>
+        <rect x="128" y="602" width="132" height="28" rx="3" fill="#d5d0bd" transform="rotate(-2 128 602)" id="paper1"/>
+        <rect x="243" y="610" width="104" height="21" rx="2" fill="#b9b49f" transform="rotate(3 243 610)" id="paper2"/>
+
+        <!-- plant -->
+        <g id="plantLeaves">
+          <rect x="269" y="598" width="7" height="48" rx="3" fill="#4d654e"/>
+          <ellipse cx="256" cy="610" rx="22" ry="8" fill="#657c5e" transform="rotate(-25 256 610)"/>
+          <ellipse cx="287" cy="600" rx="20" ry="8" fill="#6a845f" transform="rotate(30 287 600)"/>
+          <ellipse cx="260" cy="588" rx="18" ry="7" fill="#64775b" transform="rotate(18 260 588)"/>
+          <rect x="249" y="638" width="48" height="38" rx="5" fill="#6e5b4c"/>
+        </g>
+
+        <!-- fan cage -->
+        <circle cx="178" cy="548" r="57" fill="#343a3d" stroke="#8a9194" stroke-width="6"/>
+        <circle cx="178" cy="548" r="48" fill="#22282a" stroke="#60686b" stroke-width="2"/>
+        <g id="fan-blades">
+          <path d="M178 548 C189 505 217 503 226 518 C233 533 208 546 178 548Z" fill="#697174"/>
+          <path d="M178 548 C136 538 133 511 148 502 C163 493 177 519 178 548Z" fill="#697174"/>
+          <path d="M178 548 C170 591 143 595 132 581 C121 567 145 551 178 548Z" fill="#697174"/>
+          <path d="M178 548 C220 557 224 584 210 594 C195 604 179 578 178 548Z" fill="#697174"/>
+        </g>
+        <circle cx="178" cy="548" r="8" fill="#9da4a7"/>
+        <rect x="171" y="605" width="14" height="42" fill="#697174"/>
+        <rect x="145" y="645" width="68" height="9" rx="4" fill="#61696b"/>
+      </g>
+
+      <!-- gas cylinder / misc service stuff -->
+      <g>
+        <rect x="534" y="530" width="54" height="154" rx="24" fill="#5e686b"/>
+        <rect x="546" y="514" width="30" height="26" rx="7" fill="#4a5153"/>
+        <circle cx="561" cy="511" r="14" fill="#8a2f2f"/>
+        <path d="M526 701 H602" stroke="#22282a" stroke-width="11"/>
+        <rect x="611" y="612" width="92" height="72" rx="6" fill="#77694e"/>
+        <text x="626" y="646" fill="#d6cda9" font-size="18" font-weight="800">PARTS</text>
+      </g>
+
+      <!-- conduit bank mid-wall -->
+      <g>
+        <rect x="640" y="260" width="20" height="335" rx="8" fill="#9aa1a4"/>
+        <rect x="668" y="260" width="20" height="335" rx="8" fill="#8b9396"/>
+        <rect x="696" y="260" width="20" height="335" rx="8" fill="#a0a7aa"/>
+        <path d="M650 270 Q650 210 710 210 H875" fill="none" stroke="#9aa1a4" stroke-width="20"/>
+        <path d="M678 270 Q678 235 726 235 H876" fill="none" stroke="#8b9396" stroke-width="20"/>
+        <path d="M706 270 Q706 260 745 260 H876" fill="none" stroke="#a0a7aa" stroke-width="20"/>
+      </g>
+
+      <!-- central electrical panel bank -->
+      <g filter="url(#shadow)">
+        <rect x="800" y="264" width="340" height="423" rx="6" fill="#737a7d" stroke="#2d3437" stroke-width="7"/>
+        <rect x="825" y="291" width="291" height="360" rx="4" fill="#626a6d" stroke="#929a9d" stroke-width="3"/>
+        <rect x="843" y="312" width="255" height="46" fill="#363d40"/>
+        <text x="867" y="342" fill="#d8e0e3" font-size="19" font-weight="900" letter-spacing="2">MAIN DISTRIBUTION</text>
+        <!-- breaker rows -->
+        <g fill="#262c2f">
+          <rect x="853" y="381" width="94" height="23" rx="3"/>
+          <rect x="967" y="381" width="119" height="23" rx="3"/>
+          <rect x="853" y="414" width="94" height="23" rx="3"/>
+          <rect x="967" y="414" width="119" height="23" rx="3"/>
+          <rect x="853" y="447" width="94" height="23" rx="3"/>
+          <rect x="967" y="447" width="119" height="23" rx="3"/>
+          <rect x="853" y="480" width="94" height="23" rx="3"/>
+          <rect x="967" y="480" width="119" height="23" rx="3"/>
+          <rect x="853" y="513" width="94" height="23" rx="3"/>
+          <rect x="967" y="513" width="119" height="23" rx="3"/>
+          <rect x="853" y="546" width="94" height="23" rx="3"/>
+          <rect x="967" y="546" width="119" height="23" rx="3"/>
+        </g>
+        <g fill="#9ba4a7">
+          <rect x="897" y="385" width="36" height="15" rx="2"/>
+          <rect x="1022" y="385" width="44" height="15" rx="2"/>
+          <rect x="897" y="418" width="36" height="15" rx="2"/>
+          <rect x="1022" y="418" width="44" height="15" rx="2"/>
+          <rect x="897" y="451" width="36" height="15" rx="2"/>
+          <rect x="1022" y="451" width="44" height="15" rx="2"/>
+          <rect x="897" y="484" width="36" height="15" rx="2"/>
+          <rect x="1022" y="484" width="44" height="15" rx="2"/>
+          <rect x="897" y="517" width="36" height="15" rx="2"/>
+          <rect x="1022" y="517" width="44" height="15" rx="2"/>
+          <rect x="897" y="550" width="36" height="15" rx="2"/>
+          <rect x="1022" y="550" width="44" height="15" rx="2"/>
+        </g>
+        <circle cx="1087" cy="335" r="7" fill="#6fe17d" id="indicatorA"/>
+        <circle cx="1063" cy="335" r="7" fill="#ffb44f" id="indicatorB"/>
+        <rect x="1084" y="596" width="12" height="36" rx="5" fill="#272d30"/>
+      </g>
+
+      <!-- small disconnect -->
+      <g filter="url(#shadow)">
+        <rect x="1173" y="310" width="111" height="164" rx="4" fill="#858c8f" stroke="#343a3c" stroke-width="6"/>
+        <rect x="1193" y="335" width="71" height="62" fill="#6b7275"/>
+        <line x1="1244" y1="414" x2="1264" y2="448" stroke="#2b3134" stroke-width="9" stroke-linecap="round"/>
+        <circle cx="1241" cy="411" r="10" fill="#b7bec1"/>
+      </g>
+
+      <!-- electrician -->
+      <g id="electricianGroup" filter="url(#shadow)">
+        <!-- boots -->
+        <path d="M1010 806 h55 q10 0 10 10 v14 h-75z" fill="#272526"/>
+        <path d="M1094 806 h58 q10 0 10 10 v14 h-77z" fill="#272526"/>
+        <!-- legs -->
+        <path d="M1004 648 q8-20 55-18 l24 10 -13 174 h-57z" fill="#3e4c59"/>
+        <path d="M1063 640 q25-11 55 6 l28 168 h-58z" fill="#354451"/>
+        <!-- torso / reflective work shirt -->
+        <path d="M974 440 q38-38 98-22 q54 15 73 70 l-18 171 q-76 35-157 3 l-25-163z" fill="#c6a63b"/>
+        <path d="M995 444 q56 51 131 4" stroke="#f2dc76" stroke-width="12" opacity=".9"/>
+        <path d="M982 596 q69 28 151 2" stroke="#f2dc76" stroke-width="12" opacity=".9"/>
+        <!-- tool belt -->
+        <path d="M974 634 q75 26 159 2" fill="none" stroke="#3b302c" stroke-width="18"/>
+        <rect x="979" y="633" width="47" height="57" rx="7" fill="#5a4537"/>
+        <rect x="1095" y="635" width="42" height="53" rx="7" fill="#514136"/>
+        <path d="M1002 650 v29 M1117 650 v26" stroke="#1f2325" stroke-width="6"/>
+        <!-- head, side/back -->
+        <ellipse cx="1046" cy="391" rx="51" ry="53" fill="#b78363"/>
+        <path d="M999 382 q9-62 79-47 q33 7 31 52 q-22-13-41-7 q-30 7-69 2z" fill="#b9b9b7"/>
+        <path d="M1084 390 q15 7 24 23" stroke="#5a3c2d" stroke-width="6" stroke-linecap="round"/>
+        <path d="M1084 381 h33" stroke="#394146" stroke-width="5"/>
+        <circle cx="1083" cy="383" r="10" fill="none" stroke="#394146" stroke-width="4"/>
+        <!-- hard hat -->
+        <path d="M995 351 q14-58 77-52 q45 4 54 51z" fill="#ecebe5" stroke="#c4c4c0" stroke-width="4"/>
+        <rect x="989" y="346" width="146" height="14" rx="7" fill="#ecebe5" stroke="#c4c4c0" stroke-width="4"/>
+        <!-- arm to panel -->
+        <path d="M1120 468 q48 20 66 56" stroke="#c6a63b" stroke-width="31" stroke-linecap="round"/>
+        <path d="M1186 522 q17 20 7 38" stroke="#b78363" stroke-width="22" stroke-linecap="round"/>
+        <!-- glove -->
+        <path d="M1185 547 q13 8 11 22 q-14 15-31 4 q-2-18 20-26z" fill="#1f2528"/>
+        <!-- rear arm -->
+        <path d="M978 487 q-34 37-19 83" stroke="#c6a63b" stroke-width="30" stroke-linecap="round"/>
+        <!-- clipboard -->
+        <g id="clipboard">
+          <rect x="942" y="540" width="72" height="101" rx="5" fill="#9a7a4f" transform="rotate(7 942 540)"/>
+          <rect x="953" y="552" width="50" height="75" rx="2" fill="#ded8c8" transform="rotate(7 953 552)"/>
+          <path d="M965 571 h28 M965 584 h26 M964 597 h30" stroke="#7f7a70" stroke-width="3" transform="rotate(7 965 571)"/>
+        </g>
+      </g>
+
+      <!-- electrician bag -->
+      <g id="toolBag" filter="url(#shadow)">
+        <path d="M1150 735 q13-44 68-44 q54 0 69 44 v83 h-137z" fill="#41382f"/>
+        <path d="M1173 705 q18-32 46-31 q31 2 45 31" fill="none" stroke="#272624" stroke-width="11"/>
+        <rect x="1163" y="747" width="111" height="13" rx="5" fill="#675140"/>
+        <path d="M1190 719 l-9-31 M1213 719 l6-41 M1237 720 l16-29" stroke="#9aa1a3" stroke-width="6"/>
+        <rect x="1182" y="675" width="16" height="18" fill="#b38c3c"/>
+      </g>
+
+      <!-- rear chair -->
+      <g opacity=".85">
+        <rect x="455" y="710" width="82" height="71" rx="11" fill="#303638"/>
+        <rect x="470" y="775" width="10" height="72" fill="#272c2e"/>
+        <rect x="516" y="775" width="10" height="72" fill="#272c2e"/>
+        <path d="M473 846 h-31 M521 846 h31" stroke="#272c2e" stroke-width="8"/>
+      </g>
+
+      <!-- mouse route near lower left, then up pipe/rafter -->
+      <g id="mouse" transform="translate(85 708)">
+        <ellipse cx="0" cy="0" rx="19" ry="10" fill="#77706c"/>
+        <circle cx="15" cy="-4" r="8" fill="#817974"/>
+        <circle cx="16" cy="-11" r="4" fill="#9a8f89"/>
+        <circle cx="20" cy="-5" r="1.8" fill="#0d1011"/>
+        <path d="M-18 1 q-31 3-38 19" fill="none" stroke="#77706c" stroke-width="3" stroke-linecap="round"/>
+      </g>
+
+      <!-- floor markings / clutter -->
+      <path d="M641 724 l130 -5" stroke="#d0b542" stroke-width="7" opacity=".55"/>
+      <path d="M638 744 l130 -5" stroke="#d0b542" stroke-width="7" opacity=".55"/>
+      <rect x="608" y="788" width="74" height="35" rx="5" fill="#30373a"/>
+      <circle cx="1404" cy="722" r="39" fill="#272d2f" stroke="#555d60" stroke-width="8"/>
+      <circle cx="1404" cy="722" r="20" fill="#171b1d"/>
+
+      <!-- subdued left overhead practical light -->
+      <rect x="252" y="87" width="288" height="17" rx="6" fill="#cbd0c8" opacity=".7"/>
+      <rect x="282" y="94" width="225" height="8" fill="#f5f6e3" filter="url(#softGlow)" opacity=".4"/>
+    </svg>
+    <div class="scene-vignette"></div>
+  </div>
+
+  <!-- Real wall-mounted voltage gauge -->
+  <div class="gauge-ui" aria-live="polite">
+    <div class="gauge-box"></div>
+    <div class="gauge-face">
+      <div class="gauge-cover"></div>
+      <div class="gauge-needle" id="gaugeNeedle"></div>
+      <div class="gauge-hub"></div>
+    </div>
+    <div class="charge-readout" id="chargeReadout">100%</div>
+    <div class="gauge-title">VOLTAGE</div>
+    <div class="gauge-label">System Charge</div>
+  </div>
+
+  <!-- Quiz interaction panel -->
+  <main class="quiz-wrap" aria-label="Electrical terminology quiz">
+    <div class="topline">
+      <div>
+        <div class="eyebrow">Electrical Trade</div>
+        <div style="font-size:18px;font-weight:850;margin-top:2px">Voltage Challenge</div>
+      </div>
+      <div class="meta">
+        <span class="chip" id="modeChip">Typed</span>
+        <span class="chip" id="difficultyChip">Medium</span>
+      </div>
+    </div>
+
+    <div class="prompt" id="prompt">
+      Press Start to begin.
+    </div>
+
+    <div class="answer-zone" id="answerZone">
+      <input id="typedAnswer" type="text" autocomplete="off" placeholder="Type the correct electrical term…" disabled />
+      <div class="choice-grid hide" id="choiceGrid"></div>
+      <button class="primary" id="submitBtn" disabled>Submit Answer</button>
+    </div>
+
+    <div class="bottom-row">
+      <div class="timer-block">
+        <div class="timer-numbers">
+          <span>Time remaining</span>
+          <span id="timeLabel">—</span>
+        </div>
+        <div class="timer-track">
+          <div class="timer-fill" id="timerFill"></div>
+        </div>
+        <div class="feedback" id="feedback">Quick answers can restore +10% charge.</div>
+      </div>
+      <button class="next-btn" id="nextBtn" disabled>Next</button>
+    </div>
+
+    <div class="footer-stats">
+      <div class="brandline"><span class="tiny-dot"></span><span id="scoreText">Charge 100%</span></div>
+      <div>Correct: <b id="correctCount">0</b></div>
+      <div>Streak: <b id="streakCount">0</b></div>
+    </div>
+  </main>
+
+  <!-- Start overlay -->
+  <div class="start-overlay" id="startOverlay">
+    <section class="start-card">
+      <div class="eyebrow">Training Game Prototype</div>
+      <h1>Voltage Challenge</h1>
+      <p>Read the definition and identify the electrical term before the timer expires. More difficult questions get more time and smaller charge penalties.</p>
+      <div class="rules">
+        <div class="rule"><span>⚡</span><span><b>Start at 100% charge.</b> Misses reduce charge by 20–30% depending on difficulty.</span></div>
+        <div class="rule"><span>⏱</span><span><b>15 / 20 / 25 seconds.</b> Longer or harder items receive a larger time window.</span></div>
+        <div class="rule"><span>＋</span><span><b>Quick-answer bonus:</b> answer inside the early window to recover 10%, capped at 100%.</span></div>
+      </div>
+      <button class="primary" id="startBtn" style="width:100%;padding:15px 18px;font-size:17px">Start Training</button>
+    </section>
+  </div>
+</div>
+
+<script>
+/*
+  DATA MODEL
+  ----------
+  mode: "typed" | "mc" | "yn"
+  difficulty: 1 (easy), 2 (medium), 3 (hard)
+  seconds: 15 / 20 / 25
+  penalty: 30 / 25 / 20
+  quickWindow: seconds threshold for +10% bonus
+*/
+const QUESTION_BANK = [
+  {
+    term:"Voltage",
+    aliases:["volt","volts","potential difference"],
+    definition:"Electrical potential difference between two points; the quantity that provides the potential to drive current.",
+    mode:"typed", difficulty:1, seconds:15, penalty:30, quickWindow:10
+  },
+  {
+    term:"Current",
+    aliases:["amperage","amps","ampere"],
+    definition:"The rate at which electric charge flows through a circuit.",
+    mode:"typed", difficulty:1, seconds:15, penalty:30, quickWindow:10
+  },
+  {
+    term:"Ohm’s Law",
+    aliases:["ohms law","e=ir","e = i x r"],
+    definition:"The relationship E = I × R, connecting voltage, current, and resistance.",
+    mode:"typed", difficulty:1, seconds:15, penalty:30, quickWindow:10
+  },
+  {
+    term:"Power Factor",
+    aliases:["pf"],
+    definition:"The ratio of real power to apparent power in an AC circuit.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"Triplen Harmonics",
+    aliases:["triplen harmonic"],
+    definition:"Harmonics that are multiples of the third harmonic and can add together in the neutral of certain three-phase four-wire systems.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"Feeder",
+    aliases:[],
+    definition:"Conductors supplying downstream distribution or equipment before the final branch-circuit overcurrent protective device.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"Branch Circuit",
+    aliases:[],
+    definition:"The circuit conductors between the final overcurrent protective device and the outlets or utilization equipment supplied by that circuit.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"GFCI",
+    aliases:["ground fault circuit interrupter","ground-fault circuit interrupter"],
+    definition:"A protective device that compares outgoing and returning current and rapidly opens the circuit when the imbalance exceeds its designed threshold.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"AFCI",
+    aliases:["arc fault circuit interrupter","arc-fault circuit interrupter"],
+    definition:"A protective device intended to detect characteristic hazardous arcing conditions and interrupt the circuit.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"Equipment Grounding Conductor",
+    aliases:["egc"],
+    definition:"The conductive path connecting normally non-current-carrying metal equipment parts to the grounding and bonding point so fault current has an effective return path.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"Main Bonding Jumper",
+    aliases:["mbj"],
+    definition:"The connection between the grounded service conductor and the equipment grounding and bonding system at service equipment.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"True",
+    aliases:["yes"],
+    definition:"True or false: A neutral normally carries load current, while an equipment grounding conductor normally carries no current except during faults or abnormal conditions.",
+    mode:"yn", difficulty:2, seconds:20, penalty:25, quickWindow:12,
+    choices:["True","False"]
+  },
+  {
+    term:"False",
+    aliases:["no"],
+    definition:"True or false: Simply moving a breaker handle to OFF automatically establishes an electrically safe work condition.",
+    mode:"yn", difficulty:2, seconds:20, penalty:25, quickWindow:12,
+    choices:["True","False"]
+  },
+  {
+    term:"Grounding",
+    aliases:[],
+    definition:"Which term means connecting an electrical system or conductor to earth or to a conductive body extending the earth connection?",
+    mode:"mc", difficulty:2, seconds:20, penalty:25, quickWindow:12,
+    choices:["Grounding","Bonding","Derating","Coordination"]
+  },
+  {
+    term:"Bonding",
+    aliases:[],
+    definition:"Which term means connecting conductive parts together to establish electrical continuity and conductivity?",
+    mode:"mc", difficulty:2, seconds:20, penalty:25, quickWindow:12,
+    choices:["Grounding","Bonding","Backfeeding","Isolation"]
+  },
+  {
+    term:"MCA",
+    aliases:["minimum circuit ampacity"],
+    definition:"The equipment nameplate value specifying the minimum required ampacity of the supply circuit conductors.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"MOCP",
+    aliases:["mop","maximum overcurrent protection"],
+    definition:"The equipment nameplate value specifying the maximum permitted rating of the branch-circuit overcurrent protective device.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"Available Fault Current",
+    aliases:[],
+    definition:"The maximum prospective fault current that a system can supply at a particular point under specified conditions.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  },
+  {
+    term:"One-Line Diagram",
+    aliases:["single line diagram","single-line diagram","one line diagram"],
+    definition:"A simplified drawing showing major electrical distribution relationships without depicting every individual conductor.",
+    mode:"typed", difficulty:2, seconds:20, penalty:25, quickWindow:12
+  },
+  {
+    term:"Live-Dead-Live",
+    aliases:["live dead live"],
+    definition:"A test-verification method in which the tester is proved on a known energized source, used on the circuit being checked, then proved again on a known source.",
+    mode:"typed", difficulty:3, seconds:25, penalty:20, quickWindow:15
+  }
+];
+
+const state = {
+  charge:100,
+  idx:-1,
+  current:null,
+  startedAt:0,
+  timerId:null,
+  timeLeft:0,
+  correct:0,
+  streak:0,
+  locked:false
+};
+
+const els = {
+  startOverlay:document.getElementById("startOverlay"),
+  startBtn:document.getElementById("startBtn"),
+  prompt:document.getElementById("prompt"),
+  typed:document.getElementById("typedAnswer"),
+  choiceGrid:document.getElementById("choiceGrid"),
+  submit:document.getElementById("submitBtn"),
+  next:document.getElementById("nextBtn"),
+  feedback:document.getElementById("feedback"),
+  timerFill:document.getElementById("timerFill"),
+  timeLabel:document.getElementById("timeLabel"),
+  modeChip:document.getElementById("modeChip"),
+  difficultyChip:document.getElementById("difficultyChip"),
+  correctCount:document.getElementById("correctCount"),
+  streakCount:document.getElementById("streakCount"),
+  scoreText:document.getElementById("scoreText"),
+  gaugeNeedle:document.getElementById("gaugeNeedle"),
+  chargeReadout:document.getElementById("chargeReadout"),
+  room:document.getElementById("room"),
+  electrician:document.getElementById("electricianGroup"),
+  mouse:document.getElementById("mouse")
+};
+
+function normalize(s){
+  return String(s)
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[’']/g,"")
+    .replace(/[^a-z0-9]+/g," ")
+    .trim()
+    .replace(/\s+/g," ");
+}
+
+function difficultyLabel(n){
+  return n===1 ? "Easy" : n===2 ? "Medium" : "Hard";
+}
+
+function modeLabel(m){
+  return m==="typed" ? "Typed" : m==="mc" ? "Multiple Choice" : "True / False";
+}
+
+function updateGauge(){
+  state.charge = Math.max(0,Math.min(100,state.charge));
+  const angle = -60 + (state.charge/100)*120;
+  els.gaugeNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+  els.chargeReadout.textContent = `${Math.round(state.charge)}%`;
+  els.scoreText.textContent = `Charge ${Math.round(state.charge)}%`;
+
+  let c = getComputedStyle(document.documentElement).getPropertyValue(
+    state.charge > 60 ? "--green" : state.charge > 30 ? "--orange" : "--red"
+  );
+  els.chargeReadout.style.boxShadow = `0 0 18px ${c.trim()}55`;
+}
+
+function shuffle(arr){
+  return [...arr].sort(()=>Math.random()-.5);
+}
+
+function pickNext(){
+  clearInterval(state.timerId);
+  state.locked = false;
+  state.idx = (state.idx + 1) % QUESTION_BANK.length;
+  state.current = QUESTION_BANK[state.idx];
+  const q = state.current;
+
+  els.prompt.textContent = q.definition;
+  els.modeChip.textContent = modeLabel(q.mode);
+  els.difficultyChip.textContent = `${difficultyLabel(q.difficulty)} · −${q.penalty}%`;
+  els.feedback.textContent = `Quick bonus: +10% if answered within ${q.quickWindow} seconds.`;
+  els.feedback.className = "feedback";
+  els.next.disabled = true;
+
+  els.typed.value = "";
+  els.choiceGrid.innerHTML = "";
+  els.choiceGrid.classList.add("hide");
+  els.typed.classList.remove("hide");
+  els.submit.classList.remove("hide");
+
+  if(q.mode === "typed"){
+    els.typed.disabled = false;
+    els.submit.disabled = false;
+    setTimeout(()=>els.typed.focus(),80);
+  } else {
+    els.typed.disabled = true;
+    els.typed.classList.add("hide");
+    els.submit.classList.add("hide");
+    els.choiceGrid.classList.remove("hide");
+
+    shuffle(q.choices).forEach(choice=>{
+      const b = document.createElement("button");
+      b.textContent = choice;
+      b.addEventListener("click",()=>evaluateAnswer(choice));
+      els.choiceGrid.appendChild(b);
+    });
+  }
+
+  state.startedAt = performance.now();
+  state.timeLeft = q.seconds;
+  els.timeLabel.textContent = `${q.seconds.toFixed(1)} s`;
+  els.timerFill.style.width = "100%";
+
+  state.timerId = setInterval(()=>{
+    const elapsed = (performance.now() - state.startedAt)/1000;
+    const left = Math.max(0, q.seconds - elapsed);
+    state.timeLeft = left;
+    els.timeLabel.textContent = `${left.toFixed(1)} s`;
+    els.timerFill.style.width = `${(left/q.seconds)*100}%`;
+
+    if(left <= 0){
+      clearInterval(state.timerId);
+      timeoutQuestion();
+    }
+  },100);
+}
+
+function isCorrectAnswer(input){
+  const q = state.current;
+  const accepted = [q.term, ...(q.aliases||[])].map(normalize);
+  return accepted.includes(normalize(input));
+}
+
+function evaluateAnswer(input){
+  if(state.locked) return;
+  state.locked = true;
+  clearInterval(state.timerId);
+
+  const elapsed = (performance.now() - state.startedAt)/1000;
+  const correct = isCorrectAnswer(input);
+
+  lockInputs();
+
+  if(correct){
+    state.correct += 1;
+    state.streak += 1;
+    let bonus = 0;
+    if(elapsed <= state.current.quickWindow){
+      bonus = 10;
+      state.charge = Math.min(100, state.charge + bonus);
+    }
+    els.feedback.textContent = bonus
+      ? `Correct — quick-answer bonus +10%.`
+      : `Correct.`;
+    els.feedback.className = "feedback good";
+  } else {
+    state.streak = 0;
+    state.charge -= state.current.penalty;
+    els.feedback.textContent = `Not quite. Correct answer: ${state.current.term}. Charge −${state.current.penalty}%.`;
+    els.feedback.className = "feedback bad";
+  }
+
+  finishQuestion();
+}
+
+function timeoutQuestion(){
+  if(state.locked) return;
+  state.locked = true;
+  lockInputs();
+  state.streak = 0;
+  state.charge -= state.current.penalty;
+  els.feedback.textContent = `Time. Correct answer: ${state.current.term}. Charge −${state.current.penalty}%.`;
+  els.feedback.className = "feedback bad";
+  finishQuestion();
+}
+
+function lockInputs(){
+  els.typed.disabled = true;
+  els.submit.disabled = true;
+  [...els.choiceGrid.querySelectorAll("button")].forEach(b=>b.disabled=true);
+}
+
+function finishQuestion(){
+  updateGauge();
+  els.correctCount.textContent = state.correct;
+  els.streakCount.textContent = state.streak;
+  els.next.disabled = false;
+
+  if(state.charge <= 0){
+    els.feedback.textContent += " System charge depleted — press Next to restart at 100%.";
+  }
+}
+
+els.submit.addEventListener("click",()=>{
+  if(!els.typed.value.trim()) return;
+  evaluateAnswer(els.typed.value);
+});
+
+els.typed.addEventListener("keydown",e=>{
+  if(e.key==="Enter" && !els.submit.disabled) els.submit.click();
+});
+
+els.next.addEventListener("click",()=>{
+  if(state.charge <= 0){
+    state.charge = 100;
+    state.correct = 0;
+    state.streak = 0;
+    state.idx = -1;
+    updateGauge();
+    els.correctCount.textContent = "0";
+    els.streakCount.textContent = "0";
+  }
+  pickNext();
+});
+
+els.startBtn.addEventListener("click",()=>{
+  els.startOverlay.classList.add("hide");
+  pickNext();
+});
+
+/* Ambient room behavior */
+function runMouse(){
+  els.mouse.classList.remove("mouse-run");
+  void els.mouse.getBoundingClientRect();
+  els.mouse.classList.add("mouse-run");
+}
+setInterval(runMouse, 140000); // exactly 2:20
+
+function flickerRoom(){
+  els.room.classList.remove("room-light-flicker");
+  void els.room.getBoundingClientRect();
+  els.room.classList.add("room-light-flicker");
+}
+setInterval(flickerRoom, 300000); // exactly 5:00
+
+function electricianBagMotion(){
+  els.electrician.classList.add("bend");
+  setTimeout(()=>els.electrician.classList.remove("bend"), 1700);
+  const next = 26000 + Math.random()*34000;
+  setTimeout(electricianBagMotion,next);
+}
+setTimeout(electricianBagMotion,18000);
+
+/* Small natural room event: initial mouse pass after 14s for demo, then exact 2:20 cadence continues. */
+setTimeout(runMouse,14000);
+
+updateGauge();
+</script>
+</body>
+</html>
