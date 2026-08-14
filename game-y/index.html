@@ -585,15 +585,15 @@
 
     <div class="meta">
       <span id="category">Loading vocabulary…</span>
-      <span class="difficulty" id="difficulty">—</span>
+      <span><span class="difficulty" id="difficulty">—</span> <span class="difficulty" id="timingLabel">— sec</span></span>
     </div>
 
     <div class="definition" id="definition">Preparing the first definition…</div>
 
     <div class="timer-row">
-      <div class="timer" id="timer">15</div>
+      <div class="timer" id="timer">20</div>
       <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
-      <div class="bonus-note">+10% through 10 sec.</div>
+      <div class="bonus-note" id="bonusNote">Bonus window</div>
     </div>
 
     <label class="answer-label" for="answer">Type the theatre term</label>
@@ -723,8 +723,8 @@ const $ = id => document.getElementById(id);
 const els = {
   notebook:$("notebook"), end:$("endScreen"),
   restartBtn:$("restartBtn"), submit:$("submitBtn"),
-  input:$("answer"), def:$("definition"), category:$("category"), difficulty:$("difficulty"),
-  timer:$("timer"), timerFill:$("timerFill"), feedback:$("feedback"),
+  input:$("answer"), def:$("definition"), category:$("category"), difficulty:$("difficulty"), timingLabel:$("timingLabel"),
+  timer:$("timer"), timerFill:$("timerFill"), bonusNote:$("bonusNote"), feedback:$("feedback"),
   mastery:$("masteryValue"), masteryFill:$("masteryFill"),
   progress:$("progress"), streak:$("streak"), penalty:$("penaltyNote"),
   endTitle:$("endTitle"), endText:$("endText")
@@ -784,6 +784,32 @@ function startGame(){
   nextRound();
 }
 
+
+function difficultyScore(level){
+  // 0 = common, 0.5 = medium, 1 = hard/obscure
+  if(level === "Hard") return 1;
+  if(level === "Medium") return 0.5;
+  return 0;
+}
+
+function lengthScore(definition){
+  // Reading-load score based on this glossary's practical range.
+  // Short definitions around <= 120 chars score 0; long ones >= 260 score 1.
+  var n = definition.length;
+  return Math.max(0, Math.min(1, (n - 120) / 140));
+}
+
+function timingFor(item){
+  // User-requested weighting: 60% character count, 40% conceptual obscurity/difficulty.
+  var weighted = (0.60 * lengthScore(item.d)) + (0.40 * difficultyScore(item.level));
+  var totalSeconds = weighted >= 0.50 ? 25 : 20;
+  return {
+    total: totalSeconds,
+    bonus: totalSeconds - 5,
+    weighted: weighted
+  };
+}
+
 function nextRound(){
   if(index >= deck.length){
     endGame();
@@ -793,7 +819,10 @@ function nextRound(){
   current = deck[index];
   answered = false;
   roundStart = performance.now();
-  deadline = roundStart + 15000;
+  var timing = timingFor(current);
+  current._timing = timing;
+  deadline = roundStart + (timing.total * 1000);
+  if(els.timingLabel){ els.timingLabel.textContent = timing.total + " sec"; }
 
   els.category.textContent = current.cat;
   els.difficulty.textContent = current.level;
@@ -806,9 +835,12 @@ function nextRound(){
   els.progress.textContent = `${index + 1} / ${deck.length}`;
   els.streak.textContent = `Streak: ${streak}`;
   els.penalty.textContent = `Penalty: −${current.penalty}%`;
-  els.timer.textContent = "15";
+  els.timer.textContent = String(current._timing.total);
   els.timerFill.style.width = "100%";
   els.timerFill.style.background = "#765131";
+  if(els.bonusNote){
+    els.bonusNote.textContent = "+10% through " + current._timing.bonus + " sec.";
+  }
   els.input.focus();
 
   cancelAnimationFrame(timerRAF);
@@ -817,14 +849,20 @@ function nextRound(){
 
 function tick(){
   if(answered) return;
-  const now = performance.now();
-  const left = Math.max(0, deadline - now);
-  const sec = Math.ceil(left / 1000);
-  els.timer.textContent = sec;
-  els.timerFill.style.width = `${(left/15000)*100}%`;
+  var now = performance.now();
+  var totalMs = current._timing.total * 1000;
+  var bonusMs = current._timing.bonus * 1000;
+  var left = Math.max(0, deadline - now);
+  var elapsed = Math.max(0, now - roundStart);
+  var sec = Math.ceil(left / 1000);
 
+  els.timer.textContent = String(sec);
+  els.timerFill.style.width = ((left / totalMs) * 100) + "%";
+
+  // Final five seconds are always the grace period.
   if(left <= 5000) els.timerFill.style.background = "#8c3e2d";
-  else if(left <= 10000) els.timerFill.style.background = "#a06f33";
+  else if(elapsed >= bonusMs) els.timerFill.style.background = "#a06f33";
+  else els.timerFill.style.background = "#765131";
 
   if(left <= 0){
     resolveAnswer(false, true);
@@ -854,7 +892,7 @@ function resolveAnswer(correct, timedOut){
   if(correct){
     streak++;
     correctCount++;
-    const fast = elapsed <= 10;
+    const fast = elapsed <= current._timing.bonus;
     if(fast) setMastery(mastery + 10);
     els.feedback.className = "feedback good";
     els.feedback.innerHTML = fast
@@ -904,7 +942,7 @@ function wireGame(){
     });
     document.documentElement.setAttribute("data-game-ready","true");
     var gs = document.getElementById("gameStatus");
-    if(gs){ gs.textContent = "Game active"; }
+    if(gs){ gs.textContent = "Game active • adaptive timing"; }
     startGame();
   }catch(err){
     console.error(err);
