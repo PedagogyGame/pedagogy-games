@@ -1,1 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#17140f" />
+  <title>The Vine</title>
+  <style>
+    :root {
+      --cream: #f3e8ce;
+      --paper: #ead9b5;
+      --ink: #241c15;
+      --wine: #742d3b;
+      --wine-dark: #3b1721;
+      --gold: #d5aa59;
+      --green: #697b49;
+      --panel: rgba(28, 21, 16, .94);
+      --line: rgba(234, 217, 181, .28);
+    }
 
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #15120e; }
+    body {
+      color: var(--cream);
+      font-family: Georgia, "Times New Roman", serif;
+      user-select: none;
+    }
+    button, input { font: inherit; }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #222016;
+      image-rendering: pixelated;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(8,7,5,.08), transparent 30%, rgba(8,6,4,.25)),
+        radial-gradient(ellipse at center, transparent 35%, rgba(8,6,5,.55) 115%);
+      z-index: 2;
+    }
+
+    #hud {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .5s ease;
+    }
+    #hud.active { opacity: 1; }
+
+    .brand {
+      position: absolute;
+      top: clamp(16px, 2.4vw, 34px);
+      left: clamp(18px, 3vw, 44px);
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      text-shadow: 0 2px 6px #000;
+    }
+    .brand strong { display: block; font-size: clamp(24px, 3vw, 42px); font-weight: 500; letter-spacing: .13em; }
+    .brand span { font: 700 10px/1.4 Arial, sans-serif; color: #d7bd87; }
+
+    .topbar {
+      position: absolute;
+      top: clamp(16px, 2.2vw, 32px);
+      right: clamp(18px, 3vw, 44px);
+      width: min(430px, 46vw);
+      padding: 13px 15px 12px;
+      background: rgba(24,18,14,.86);
+      border: 1px solid rgba(230,202,145,.35);
+      box-shadow: 0 8px 24px rgba(0,0,0,.3), inset 0 0 0 2px rgba(255,255,255,.025);
+      backdrop-filter: blur(4px);
+    }
+    .meter-row, .question-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+    .meter-row { margin-bottom: 8px; }
+    .meter-row label, .question-row { font: 700 10px/1.3 Arial, sans-serif; text-transform: uppercase; letter-spacing: .15em; color: #d7bd87; }
+    #readinessValue { font-size: 14px; color: #fff0cd; }
+    .meter-track { height: 9px; background: #0d0b09; border: 1px solid rgba(255,255,255,.13); overflow: hidden; }
+    #readinessFill {
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, #6a7d4b, #b7a451, #c88d3d);
+      transition: width .6s cubic-bezier(.2,.8,.2,1), background .4s;
+      box-shadow: 0 0 12px rgba(203,176,82,.25);
+    }
+    .question-row { margin-top: 8px; color: rgba(243,232,206,.72); }
+
+    #quiz {
+      position: absolute;
+      right: clamp(18px, 3vw, 44px);
+      bottom: clamp(18px, 3vw, 40px);
+      width: min(520px, calc(100vw - 36px));
+      min-height: 250px;
+      padding: 18px 20px 19px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.025), transparent 42%),
+        var(--panel);
+      border: 1px solid rgba(230,202,145,.45);
+      box-shadow: 0 14px 42px rgba(0,0,0,.5), inset 0 0 0 3px rgba(255,255,255,.02);
+      pointer-events: auto;
+      backdrop-filter: blur(5px);
+    }
+    #quiz::before {
+      content: "CELLAR WORK ORDER";
+      position: absolute;
+      top: -13px; left: 17px;
+      padding: 6px 10px;
+      background: #6c2b38;
+      border: 1px solid #b68169;
+      color: #f6e7c8;
+      font: 700 9px/1 Arial, sans-serif;
+      letter-spacing: .15em;
+    }
+    .timer-row { display: flex; align-items: center; gap: 11px; margin: 3px 0 13px; }
+    #timerNumber { width: 35px; color: #f6e6c6; font: 700 19px/1 Arial, sans-serif; }
+    .timer-track { flex: 1; height: 7px; background: #0c0a08; border: 1px solid rgba(255,255,255,.12); overflow: hidden; }
+    #timerFill { width: 100%; height: 100%; background: #76905b; transform-origin: left; }
+    #difficulty {
+      min-width: 66px;
+      text-align: right;
+      color: #c5ad7d;
+      font: 700 9px/1 Arial, sans-serif;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    #definition {
+      margin: 0 0 17px;
+      min-height: 67px;
+      font-size: clamp(19px, 2vw, 25px);
+      line-height: 1.25;
+      color: #f4e7cb;
+      text-shadow: 0 1px 0 #000;
+    }
+    .answer-row { display: flex; gap: 9px; }
+    #answer {
+      flex: 1;
+      min-width: 0;
+      padding: 12px 13px;
+      color: #241b14;
+      background: #efe3c8;
+      border: 2px solid #9f8965;
+      outline: none;
+      user-select: text;
+      box-shadow: inset 0 2px 5px rgba(48,34,22,.15);
+    }
+    #answer:focus { border-color: #d2ad64; box-shadow: 0 0 0 2px rgba(210,173,100,.15), inset 0 2px 5px rgba(48,34,22,.15); }
+    #submit {
+      padding: 0 17px;
+      color: #f7e8ca;
+      background: #6c2b38;
+      border: 1px solid #a96970;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      font: 700 10px Arial, sans-serif;
+    }
+    #submit:hover { background: #823748; }
+    #submit:active { transform: translateY(1px); }
+    #feedback {
+      min-height: 24px;
+      padding-top: 10px;
+      font: 700 11px/1.2 Arial, sans-serif;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: #d9bd83;
+    }
+    #feedback.good { color: #a9ca81; }
+    #feedback.bad { color: #ef9c89; }
+
+    #start, #endScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(90deg, rgba(12,9,7,.68), rgba(12,9,7,.24) 58%, rgba(12,9,7,.48));
+      transition: opacity .7s ease, visibility .7s;
+    }
+    #start.hidden, #endScreen.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .title-card {
+      position: relative;
+      width: min(620px, 92vw);
+      padding: clamp(29px, 5vw, 58px) clamp(25px, 6vw, 66px) clamp(25px, 4vw, 42px);
+      text-align: center;
+      background: rgba(25,19,14,.88);
+      border: 1px solid rgba(225,197,141,.48);
+      box-shadow: 0 25px 80px rgba(0,0,0,.55), inset 0 0 0 4px rgba(255,255,255,.025);
+      backdrop-filter: blur(4px);
+    }
+    .vine-ornament { color: #7f925e; font-size: 29px; letter-spacing: .12em; }
+    h1 {
+      margin: 7px 0 2px;
+      font-weight: 400;
+      font-size: clamp(54px, 10vw, 98px);
+      line-height: .95;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #f0e2c3;
+      text-shadow: 0 4px 18px #000;
+    }
+    .subtitle {
+      margin: 12px 0 26px;
+      color: #cdb27b;
+      font: 700 clamp(9px, 1.5vw, 12px)/1.5 Arial, sans-serif;
+      letter-spacing: .28em;
+      text-transform: uppercase;
+    }
+    .instructions {
+      max-width: 460px;
+      margin: 0 auto 25px;
+      color: rgba(242,228,197,.78);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .primary {
+      min-width: 210px;
+      padding: 14px 25px;
+      color: #fff0d0;
+      background: linear-gradient(#843d4c, #622633);
+      border: 1px solid #bc7e76;
+      box-shadow: 0 5px 15px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.14);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      font: 700 11px Arial, sans-serif;
+    }
+    .primary:hover { filter: brightness(1.12); }
+    .primary:active { transform: translateY(1px); }
+    .small-note { margin-top: 18px; color: rgba(242,228,197,.5); font: 10px/1.4 Arial, sans-serif; letter-spacing: .05em; }
+
+    #endScreen { background: rgba(12,9,7,.66); }
+    #endScreen .title-card { max-width: 520px; }
+    #endTitle { margin: 8px 0 12px; font-size: clamp(38px, 7vw, 66px); font-weight: 400; }
+    #endCopy { color: #dbc69c; line-height: 1.5; margin: 0 0 22px; }
+
+    #mute {
+      position: fixed;
+      left: clamp(18px, 3vw, 44px);
+      bottom: clamp(18px, 3vw, 35px);
+      z-index: 7;
+      width: 39px; height: 39px;
+      display: grid; place-items: center;
+      color: #e2cc9f;
+      background: rgba(25,19,14,.82);
+      border: 1px solid rgba(225,197,141,.4);
+      cursor: pointer;
+      opacity: .85;
+    }
+    #mute:hover { opacity: 1; }
+
+    .score-pop {
+      position: fixed;
+      z-index: 12;
+      pointer-events: none;
+      font: 700 22px Arial, sans-serif;
+      color: #c6e19b;
+      text-shadow: 0 2px 5px #000;
+      animation: pop 1s ease-out forwards;
+    }
+    @keyframes pop { from { transform: translateY(0) scale(.85); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-50px) scale(1.05); opacity: 0; } }
+
+    @media (max-width: 760px), (max-height: 650px) {
+      .brand { top: 12px; left: 14px; }
+      .brand strong { font-size: 24px; }
+      .topbar { top: 12px; right: 12px; width: min(390px, 60vw); padding: 9px 10px; }
+      #quiz { right: 12px; bottom: 12px; min-height: 0; padding: 15px 15px 13px; }
+      #definition { min-height: 48px; margin-bottom: 12px; font-size: 18px; }
+      #feedback { min-height: 18px; padding-top: 7px; }
+      #mute { left: 12px; bottom: 12px; }
+    }
+    @media (max-width: 520px) {
+      .brand span { display: none; }
+      .topbar { width: calc(100vw - 24px); top: 57px; }
+      #quiz { width: calc(100vw - 24px); }
+      .answer-row { flex-direction: column; }
+      #answer { width: 100%; }
+      #submit { min-height: 38px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div class="vignette"></div>
+
+  <main id="hud" aria-live="polite">
+    <div class="brand"><strong>The Vine</strong><span>Winery &amp; Cellar Vocabulary</span></div>
+    <section class="topbar" aria-label="Game status">
+      <div class="meter-row"><label>Cellar Readiness</label><b id="readinessValue">100%</b></div>
+      <div class="meter-track"><div id="readinessFill"></div></div>
+      <div class="question-row"><span id="questionCount">Lot 1 of 40</span><span id="fastWindow">Fast bonus: 10 sec</span></div>
+    </section>
+
+    <section id="quiz" aria-label="Vocabulary question">
+      <div class="timer-row">
+        <span id="timerNumber">15</span>
+        <div class="timer-track"><div id="timerFill"></div></div>
+        <span id="difficulty">Cellar</span>
+      </div>
+      <p id="definition">Definition appears here.</p>
+      <form id="answerForm" autocomplete="off">
+        <div class="answer-row">
+          <input id="answer" type="text" spellcheck="false" autocapitalize="off" aria-label="Type the matching winery term" placeholder="Type the term…" />
+          <button id="submit" type="submit">Enter</button>
+        </div>
+      </form>
+      <div id="feedback" role="status"></div>
+    </section>
+  </main>
+
+  <section id="start">
+    <div class="title-card">
+      <div class="vine-ornament">❦</div>
+      <h1>The Vine</h1>
+      <div class="subtitle">A cellar vocabulary game</div>
+      <p class="instructions">Identify the winery term from its definition. Work quickly to restore readiness, and keep the vintage on course through all 40 cellar lots.</p>
+      <button class="primary" id="startButton">Begin the Crush</button>
+      <div class="small-note">15 seconds standard · 20 seconds for specialized terms · +10% fast bonus</div>
+    </div>
+  </section>
+
+  <section id="endScreen" class="hidden">
+    <div class="title-card">
+      <div class="vine-ornament">❦</div>
+      <h2 id="endTitle">Vintage Complete</h2>
+      <p id="endCopy">The final cases are ready for the cellar door.</p>
+      <button class="primary" id="restartButton">Work Another Vintage</button>
+    </div>
+  </section>
+
+  <button id="mute" title="Mute ambient cellar sound" aria-label="Mute ambient cellar sound">♪</button>
+
+  <script>
+  (() => {
+    "use strict";
+
+    const TERMS = [
+      {t:"Crush", q:"Harvest-season winemaking period.", d:1, a:["harvest crush"]},
+      {t:"Crush pad", q:"Receiving and processing area for grapes.", d:1},
+      {t:"Brix", q:"Measurement associated with grape sugar level.", d:2, a:["degrees brix"]},
+      {t:"Must", q:"Grape juice containing skins, seeds, and solids before fermentation.", d:1},
+      {t:"Lot", q:"A separately tracked batch of wine or grapes.", d:1},
+      {t:"Destem", q:"Remove grape berries from their stems.", d:1, a:["destemming"]},
+      {t:"Press", q:"Extract juice or wine by applying pressure.", d:1, a:["pressing"]},
+      {t:"Free-run", q:"Liquid that drains from grape solids without pressing.", d:2, a:["free run","free run wine","free run juice"]},
+      {t:"Press fraction", q:"Wine or juice obtained through pressing rather than natural drainage.", d:2},
+      {t:"Pomace", q:"The skins, seeds, and other solids remaining after grapes are pressed.", d:2},
+      {t:"Maceration", q:"Soaking juice or wine in contact with grape solids.", d:2},
+      {t:"Cold soak", q:"A cool, pre-fermentation maceration used to extract color and flavor.", d:2, a:["cold soaking"]},
+      {t:"Cap", q:"The layer of grape solids that floats atop fermenting red wine.", d:1},
+      {t:"Punch-down", q:"Submerging the floating cap into fermenting wine by hand or tool.", d:1, a:["punch down","punchdown"]},
+      {t:"Pump-over", q:"Circulating fermenting wine from below and pouring it over the cap.", d:2, a:["pump over","pumpover"]},
+      {t:"Primary fermentation", q:"The stage in which yeast converts grape sugar into alcohol.", d:1, a:["alcoholic fermentation"]},
+      {t:"Inoculation", q:"Deliberately adding cultured yeast or bacteria to a wine lot.", d:2, a:["inoculate"]},
+      {t:"Native fermentation", q:"Fermentation driven by microorganisms naturally present on grapes or in the cellar.", d:2, a:["wild fermentation","spontaneous fermentation"]},
+      {t:"Yeast nutrient", q:"A supplement added to support healthy fermentation activity.", d:2, a:["yeast nutrients"]},
+      {t:"MLF", q:"The conversion of sharp malic acid into softer lactic acid by bacteria.", d:3, a:["malolactic fermentation","malo"]},
+      {t:"Lees", q:"Settled yeast cells and fermentation solids at the bottom of a vessel.", d:1},
+      {t:"Gross lees", q:"The heavier initial sediment that settles after fermentation.", d:2},
+      {t:"Fine lees", q:"Smaller sediment sometimes retained during aging to influence texture and flavor.", d:2},
+      {t:"Racking", q:"Transferring wine into another vessel while leaving sediment behind.", d:1, a:["rack"]},
+      {t:"Topping", q:"Replacing wine lost from a barrel or tank to minimize air exposure.", d:2, a:["top up","topping up"]},
+      {t:"Ullage", q:"Empty headspace above wine inside a barrel, tank, or bottle.", d:3},
+      {t:"RS", q:"The sugar remaining in wine after fermentation is complete or stopped.", d:3, a:["residual sugar"]},
+      {t:"TA", q:"A laboratory measure of the total titratable acids in wine.", d:3, a:["titratable acidity","total acidity"]},
+      {t:"VA", q:"Acidity from volatile compounds that can become a vinegar-like fault at high levels.", d:3, a:["volatile acidity"]},
+      {t:"SO₂", q:"A compound used to control microbes and protect wine from oxidation.", d:3, a:["so2","sulfur dioxide","sulphur dioxide"]},
+      {t:"Barrel program", q:"A winery's planned selection and use of barrels for aging.", d:2},
+      {t:"Toast", q:"The degree to which the inside of an oak barrel was heat-treated.", d:2, a:["barrel toast"]},
+      {t:"Blending", q:"Combining separate wine lots to create a desired finished wine.", d:1, a:["blend"]},
+      {t:"Fining", q:"Adding a material that binds with and removes unwanted compounds from wine.", d:2, a:["fine"]},
+      {t:"Filtration", q:"Physically removing suspended particles or microorganisms from wine.", d:1, a:["filtering"]},
+      {t:"Cold stabilization", q:"Chilling wine so tartrate crystals form and can be removed before bottling.", d:3, a:["cold stabilize","cold stabilisation"]},
+      {t:"Bench trial", q:"A small-scale test performed before treating an entire wine lot.", d:2, a:["bench trials"]},
+      {t:"Cellar hand", q:"A production worker who performs routine winery and cellar operations.", d:1, a:["cellar worker"]},
+      {t:"Bottling line", q:"Equipment used to fill, close, label, and package finished wine.", d:1},
+      {t:"TCA / cork taint", q:"A musty, moldy-smelling wine fault commonly associated with contaminated cork.", d:3, a:["tca","cork taint","trichloroanisole","tca cork taint"]}
+    ];
+
+    const $ = s => document.querySelector(s);
+    const canvas = $("#scene");
+    const ctx = canvas.getContext("2d", { alpha: false });
+    const hud = $("#hud"), start = $("#start"), endScreen = $("#endScreen");
+    const answer = $("#answer"), form = $("#answerForm"), submit = $("#submit");
+    const definition = $("#definition"), feedback = $("#feedback");
+    const timerFill = $("#timerFill"), timerNumber = $("#timerNumber"), difficulty = $("#difficulty");
+    const readinessFill = $("#readinessFill"), readinessValue = $("#readinessValue");
+    const questionCount = $("#questionCount"), fastWindow = $("#fastWindow");
+
+    let deck = [], index = 0, readiness = 100, limit = 15, remaining = 15;
+    let running = false, locked = false, lastTick = 0, gameStartedAt = 0;
+    let state = "intro", actionPulse = 0, missPulse = 0, finishTime = 0;
+    let muted = false, audio = null, ambientNodes = [];
+
+    function shuffle(list) {
+      const out = [...list];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [out[i], out[j]] = [out[j], out[i]];
+      }
+      return out;
+    }
+
+    function normalize(value) {
+      return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/₂/g, "2").replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+    }
+
+    function accepted(item, value) {
+      const n = normalize(value);
+      return [item.t, ...(item.a || [])].some(v => normalize(v) === n);
+    }
+
+    function updateReadiness() {
+      readiness = Math.max(0, Math.min(100, readiness));
+      readinessValue.textContent = `${Math.round(readiness)}%`;
+      readinessFill.style.width = `${readiness}%`;
+      readinessFill.style.background = readiness <= 30
+        ? "linear-gradient(90deg,#7b202b,#d25b47)"
+        : readiness <= 55
+          ? "linear-gradient(90deg,#a55b35,#d39a48)"
+          : "linear-gradient(90deg,#617848,#b5a54e,#c58e3f)";
+    }
+
+    function showQuestion() {
+      if (index >= deck.length) return endGame(true);
+      const item = deck[index];
+      limit = item.d === 3 ? 20 : 15;
+      remaining = limit;
+      lastTick = performance.now();
+      locked = false;
+      definition.textContent = item.q;
+      questionCount.textContent = `Lot ${index + 1} of ${deck.length}`;
+      difficulty.textContent = item.d === 3 ? "Specialized" : item.d === 2 ? "Cellar" : "Foundation";
+      fastWindow.textContent = "Fast bonus: 10 sec";
+      answer.value = "";
+      answer.disabled = false;
+      submit.disabled = false;
+      feedback.textContent = "";
+      feedback.className = "";
+      updateTimer();
+      answer.focus({preventScroll:true});
+    }
+
+    function updateTimer() {
+      const ratio = Math.max(0, remaining / limit);
+      timerNumber.textContent = String(Math.ceil(remaining));
+      timerFill.style.width = `${ratio * 100}%`;
+      timerFill.style.background = ratio > .53 ? "#718c57" : ratio > .24 ? "#d3963f" : "#cb5545";
+      timerNumber.style.color = ratio > .53 ? "#f6e6c6" : ratio > .24 ? "#efbc61" : "#f17c69";
+    }
+
+    function pop(text, good) {
+      const el = document.createElement("div");
+      const box = $("#quiz").getBoundingClientRect();
+      el.className = "score-pop";
+      el.textContent = text;
+      el.style.left = `${box.left + 24}px`;
+      el.style.top = `${box.top + 20}px`;
+      if (!good) el.style.color = "#f39b86";
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1050);
+    }
+
+    function resolve(correct, timedOut = false) {
+      if (locked || !running) return;
+      locked = true;
+      answer.disabled = true;
+      submit.disabled = true;
+      const item = deck[index];
+      if (correct) {
+        const elapsed = limit - remaining;
+        const fast = elapsed <= 10;
+        if (fast) {
+          const before = readiness;
+          readiness = Math.min(100, readiness + 10);
+          feedback.textContent = before < 100 ? "Fast cellar work · +10%" : "Fast cellar work · readiness full";
+          pop(before < 100 ? "+10%" : "FAST", true);
+        } else {
+          feedback.textContent = "Correct · lot remains on course";
+        }
+        feedback.className = "good";
+        actionPulse = 1;
+        softChime(true);
+      } else {
+        const penalty = item.d === 1 ? 30 : item.d === 2 ? 25 : 20;
+        readiness -= penalty;
+        feedback.textContent = `${timedOut ? "Time" : "Incorrect"} · ${item.t} · −${penalty}%`;
+        feedback.className = "bad";
+        pop(`−${penalty}%`, false);
+        missPulse = 1;
+        softChime(false);
+      }
+      updateReadiness();
+      if (readiness <= 0) {
+        setTimeout(() => endGame(false), 1650);
+      } else {
+        setTimeout(() => { index++; showQuestion(); }, 1550);
+      }
+    }
+
+    function startGame() {
+      deck = shuffle(TERMS);
+      index = 0; readiness = 100; running = true; locked = false;
+      state = "play"; gameStartedAt = performance.now();
+      start.classList.add("hidden");
+      endScreen.classList.add("hidden");
+      hud.classList.add("active");
+      updateReadiness();
+      startAmbient();
+      showQuestion();
+    }
+
+    function endGame(won) {
+      running = false; locked = true; state = won ? "win" : "lose"; finishTime = performance.now();
+      answer.disabled = true; submit.disabled = true;
+      setTimeout(() => {
+        $("#endTitle").textContent = won ? "Vintage Complete" : "Shift Ended";
+        $("#endCopy").textContent = won
+          ? `All 40 lots are accounted for. The finished wine is moving through the bottling line at ${Math.round(readiness)}% readiness.`
+          : `Cellar readiness reached 0% after ${index + 1} lots. The correct term was ${deck[index]?.t || "still in the cellar"}.`;
+        endScreen.classList.remove("hidden");
+      }, won ? 2200 : 1700);
+    }
+
+    form.addEventListener("submit", e => {
+      e.preventDefault();
+      if (!answer.value.trim()) return;
+      resolve(accepted(deck[index], answer.value));
+    });
+    $("#startButton").addEventListener("click", startGame);
+    $("#restartButton").addEventListener("click", startGame);
+    $("#mute").addEventListener("click", () => {
+      muted = !muted;
+      $("#mute").textContent = muted ? "×" : "♪";
+      $("#mute").setAttribute("aria-label", muted ? "Unmute ambient cellar sound" : "Mute ambient cellar sound");
+      ambientNodes.forEach(n => { if (n.gain) n.gain.setTargetAtTime(muted ? 0 : n.base || .02, audio.currentTime, .2); });
+    });
+
+    function startAmbient() {
+      if (audio) { if (audio.state === "suspended") audio.resume(); return; }
+      try {
+        audio = new (window.AudioContext || window.webkitAudioContext)();
+        const master = audio.createGain(); master.gain.value = muted ? 0 : .024; master.base = .024; master.connect(audio.destination);
+        const hum = audio.createOscillator(); hum.type = "sine"; hum.frequency.value = 58;
+        const hum2 = audio.createOscillator(); hum2.type = "triangle"; hum2.frequency.value = 116;
+        const hg = audio.createGain(); hg.gain.value = .38; hum.connect(hg); hum2.connect(hg); hg.connect(master);
+        hum.start(); hum2.start(); ambientNodes.push(master);
+      } catch (_) {}
+    }
+
+    function softChime(good) {
+      if (!audio || muted) return;
+      try {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = good ? "sine" : "sawtooth";
+        o.frequency.setValueAtTime(good ? 440 : 115, audio.currentTime);
+        if (good) o.frequency.exponentialRampToValueAtTime(660, audio.currentTime + .16);
+        g.gain.setValueAtTime(.035, audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(.0001, audio.currentTime + .35);
+        o.connect(g); g.connect(audio.destination); o.start(); o.stop(audio.currentTime + .36);
+      } catch (_) {}
+    }
+
+    function resize() {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(innerWidth * dpr);
+      canvas.height = Math.round(innerHeight * dpr);
+      canvas.style.width = `${innerWidth}px`; canvas.style.height = `${innerHeight}px`;
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.imageSmoothingEnabled = false;
+    }
+    addEventListener("resize", resize); resize();
+
+    function rect(x,y,w,h,c) { ctx.fillStyle=c; ctx.fillRect(x,y,w,h); }
+    function line(x1,y1,x2,y2,c,w=1) { ctx.strokeStyle=c; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+    function poly(points,c) { ctx.fillStyle=c; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);ctx.closePath();ctx.fill(); }
+    function ellipse(x,y,rx,ry,c) { ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fill(); }
+
+    function drawStoneWall(x,y,w,h,scale=1) {
+      rect(x,y,w,h,"#554d3f");
+      const bh=22*scale,bw=52*scale;
+      for(let r=0; r<Math.ceil(h/bh); r++) {
+        const off=(r%2)*bw*.48;
+        line(x,y+r*bh,x+w,y+r*bh,"#312e27",1.4*scale);
+        for(let c=-1;c<Math.ceil(w/bw)+1;c++) {
+          const xx=x+c*bw+off;
+          line(xx,y+r*bh,xx,y+Math.min(h,(r+1)*bh),"#373229",1.2*scale);
+          const shade=((r+c)%4===0)?"rgba(194,174,133,.10)":"rgba(0,0,0,.035)";
+          rect(xx+2,y+r*bh+2,bw-4,bh-4,shade);
+        }
+      }
+      rect(x,y,w,5,"#716756");
+    }
+
+    function drawWindow(x,y,w,h,t) {
+      // Deep stone arched window looking onto the old tiered estate.
+      rect(x-18,y-16,w+36,h+32,"#302c25");
+      rect(x-11,y-9,w+22,h+18,"#80715b");
+      rect(x,y,w,h,"#afbea6");
+      const sky=ctx.createLinearGradient(0,y,0,y+h); sky.addColorStop(0,"#9eb2ac");sky.addColorStop(.55,"#d7c39d");sky.addColorStop(1,"#aa8e63");ctx.fillStyle=sky;ctx.fillRect(x,y,w,h);
+      // Distant vineyard hillside.
+      poly([[x,y+h*.62],[x+w*.28,y+h*.5],[x+w*.52,y+h*.58],[x+w,y+h*.37],[x+w,y+h],[x,y+h]],"#69734c");
+      for(let i=0;i<8;i++) line(x-20+i*48,y+h,x+85+i*43,y+h*.47,"rgba(49,65,37,.45)",2);
+      // Tiered stone winery: lower terrace, stepped wing, upper old building and tower.
+      const bx=x+w*.12, base=y+h*.75;
+      rect(bx,base-68,w*.78,68,"#817563");
+      rect(bx+w*.16,base-117,w*.56,50,"#8e806a");
+      rect(bx+w*.34,base-157,w*.31,41,"#9b8a70");
+      poly([[bx+w*.31,base-157],[bx+w*.5,base-184],[bx+w*.68,base-157]],"#4c4339");
+      rect(bx+w*.48,base-207,w*.11,51,"#82725f");
+      poly([[bx+w*.465,base-207],[bx+w*.535,base-228],[bx+w*.605,base-207]],"#443b33");
+      // Terraces and retaining masonry.
+      rect(bx-10,base-3,w*.86,9,"#5a5144");
+      rect(bx+w*.07,base-75,w*.74,8,"#5e5446");
+      rect(bx+w*.25,base-123,w*.55,7,"#665a4a");
+      for(let r=0;r<5;r++) for(let c=0;c<10;c++) {
+        const xx=bx+c*30+(r%2)*14, yy=base-66+r*14;
+        rect(xx,yy,27,1,"rgba(45,39,33,.48)");
+      }
+      // Arched windows and old doors.
+      for(let i=0;i<6;i++) {
+        const wx=bx+18+i*(w*.70/6), wy=base-44;
+        rect(wx,wy,10,27,"#363b37"); ellipse(wx+5,wy,5,7,"#363b37");
+        rect(wx+2,wy+4,2,20,"#d7b673");
+      }
+      for(let i=0;i<4;i++) {
+        const wx=bx+w*.2+i*w*.12, wy=base-98;
+        rect(wx,wy,9,18,"#47433b"); ellipse(wx+4.5,wy,4.5,5,"#47433b");
+      }
+      rect(bx+w*.493,base-195,5,19,"#d1ae6f");
+      // Stone stairs between levels.
+      for(let s=0;s<7;s++) rect(bx+w*.71+s*4,base-64+s*9,42-s*4,3,"#c0aa82");
+      // Parapet blocks, vines and ivy.
+      for(let i=0;i<11;i++) rect(bx+i*27,base-79-(i>2&&i<8?48:0),16,8,"#766a58");
+      ctx.strokeStyle="#405237";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(bx+w*.07,base-8);ctx.bezierCurveTo(bx+w*.16,base-50,bx+w*.05,base-83,bx+w*.23,base-105);ctx.stroke();
+      for(let i=0;i<12;i++) ellipse(bx+w*.07+i*9,base-15-i*7,5,3,i%2?"#556743":"#738052");
+      // Thick inner frame and leaded glass.
+      rect(x+w*.49,y,8,h,"#504a40");
+      line(x,y+h*.52,x+w,y+h*.52,"rgba(66,61,52,.75)",5);
+      rect(x-7,y-7,w+14,7,"#a09073"); rect(x-7,y+h,w+14,9,"#403b33");
+      rect(x-7,y-7,7,h+16,"#756956"); rect(x+w,y-7,7,h+16,"#756956");
+      rect(x+8,y+8,w-16,h-16,"rgba(238,220,177,.06)");
+    }
+
+    function drawTank(x,y,w,h,t,alert=false) {
+      const grad=ctx.createLinearGradient(x,0,x+w,0);grad.addColorStop(0,"#626b69");grad.addColorStop(.2,"#aeb8b2");grad.addColorStop(.55,"#697472");grad.addColorStop(.83,"#c6cbc4");grad.addColorStop(1,"#4b5655");
+      ctx.fillStyle=grad;ctx.fillRect(x,y,w,h);
+      ellipse(x+w/2,y,w/2,12,"#aeb6af"); ellipse(x+w/2,y+h,w/2,10,"#4b504c");
+      rect(x-2,y+27,w+4,6,"#3d4545");rect(x-2,y+h-42,w+4,5,"#3d4545");
+      ellipse(x+w*.52,y+62,14,14,"#e7e0c9");ellipse(x+w*.52,y+62,9,9,"#303b38");
+      line(x+w*.52,y+62,x+w*.52+Math.sin(t*.0007+x)*7,y+55,"#d4b55e",2);
+      rect(x+w*.42,y+87,w*.23,17,"#ece2c9");rect(x+w*.45,y+91,w*.17,2,"#4d4236");rect(x+w*.45,y+96,w*.11,2,"#4d4236");
+      rect(x+w*.44,y+h-20,10,18,"#313936");rect(x+w*.38,y+h-4,25,6,"#242a28");
+      if(alert) { ellipse(x+w*.78,y+46,5,5,Math.sin(t*.012)>0?"#f25845":"#701f20"); }
+      else ellipse(x+w*.78,y+46,4,4,"#6b8d58");
+      // Slow fermentation bubbles in sight glass.
+      for(let i=0;i<3;i++) ellipse(x+w*.18,y+112+((t*.012+i*21)%44),2,2,"rgba(236,226,196,.55)");
+    }
+
+    function drawBarrel(x,y,s=1) {
+      ellipse(x,y+19*s,10*s,19*s,"#38261a");
+      rect(x-29*s,y,29*s,38*s,"#8e5b31");
+      ellipse(x-29*s,y+19*s,10*s,19*s,"#a06d3b");
+      line(x-28*s,y+5*s,x,y+5*s,"#362921",3*s);line(x-30*s,y+31*s,x,y+31*s,"#362921",3*s);
+      line(x-20*s,y+1*s,x-20*s,y+37*s,"rgba(225,162,85,.2)",1.5*s);
+      ellipse(x-29*s,y+19*s,3*s,3*s,"#422b1d");
+    }
+
+    function drawWorker(x,y,t,phase=0) {
+      const step=Math.sin(t*.0023+phase)*3;
+      const bob=Math.abs(Math.sin(t*.00115+phase))*1.2;
+      // shadow and grounded legs
+      ellipse(x,y+48,15,4,"rgba(0,0,0,.28)");
+      line(x-5,y+25-bob,x-7+step,y+46,"#242623",5);line(x+5,y+25-bob,x+8-step,y+46,"#242623",5);
+      rect(x-11,y-1-bob,22,30,"#6d5037");
+      rect(x-8,y+3-bob,16,22,"#8b6d46");
+      // apron
+      poly([[x-6,y+4-bob],[x+7,y+4-bob],[x+10,y+27-bob],[x-9,y+27-bob]],"#46594e");
+      ellipse(x,y-8-bob,8,10,"#c79e79");
+      rect(x-9,y-15-bob,18,5,"#503b2a");rect(x-6,y-18-bob,14,5,"#5d4631");
+      // slow arm work
+      const arm=Math.sin(t*.0016+phase)*5;
+      line(x-8,y+5-bob,x-15,y+18+arm-bob,"#b98f6e",5);line(x+8,y+5-bob,x+17,y+16-arm-bob,"#b98f6e",5);
+    }
+
+    function drawCrates(t) {
+      // Bottling line at left foreground.
+      rect(25,568,325,12,"#34342e");
+      for(let x=30;x<350;x+=25) ellipse(x,584,8,8,"#252622");
+      const move=(t*.025)%50;
+      for(let i=-1;i<7;i++) {
+        const x=35+i*52+move;
+        rect(x,534,24,33,"#4b5836");ellipse(x+12,533,7,3,"#6b7b4c");rect(x+9,513,6,23,"#52643b");
+        rect(x+8,510,8,5,"#2e3027");rect(x+4,545,16,10,"#dcc89f");
+      }
+      rect(360,528,76,59,"#725332");line(365,541,431,541,"#b18450",2);line(365,559,431,559,"#b18450",2);
+      ctx.fillStyle="#e7d1a8";ctx.font="bold 9px Arial";ctx.fillText("THE VINE",374,553);
+    }
+
+    function drawScene(now) {
+      const W=innerWidth,H=innerHeight, sx=W/1280, sy=H/720;
+      ctx.save();ctx.scale(sx,sy);
+      const t=now;
+      // Ceiling and back stone cellar.
+      const lightPulse=.96+Math.sin(t*.00008)*.025;
+      rect(0,0,1280,720,"#25231c");
+      drawStoneWall(0,0,1280,468,1);
+      // Heavy timber ceiling and beams.
+      rect(0,0,1280,55,"#282019");
+      for(let i=0;i<7;i++){poly([[i*215-60,0],[i*215+2,0],[i*215+112,130],[i*215+64,138]],"#392a20");line(i*215+5,4,i*215+79,126,"#6a4b34",4)}
+      // Upper estate view and extra stonework.
+      drawWindow(76,72,430,260,t);
+      drawStoneWall(522,52,240,285,.72);
+      // stone shelves, arch blocks and a high recessed niche
+      rect(542,101,198,12,"#817563");rect(565,134,150,130,"#302f29");ellipse(640,134,75,48,"#302f29");
+      drawBarrel(608,187,.75);drawBarrel(667,187,.75);drawBarrel(638,224,.75);
+      for(let i=0;i<8;i++) rect(528+i*29,42,19,15,"#6d6252");
+      // Side doorway to crush pad.
+      rect(1020,38,218,345,"#26231e");rect(1041,61,176,315,"#b8ad8c");
+      const doorSky=ctx.createLinearGradient(0,61,0,376);doorSky.addColorStop(0,"#a6b9b1");doorSky.addColorStop(.55,"#d7c095");doorSky.addColorStop(1,"#77664a");ctx.fillStyle=doorSky;ctx.fillRect(1049,69,160,299);
+      poly([[1049,265],[1110,218],[1209,246],[1209,368],[1049,368]],"#6d784e");
+      // grape bins and tiny slow crush-pad worker
+      rect(1060,305,58,37,"#62414b");line(1065,313,1113,313,"#9b6a73",2);ellipse(1074,304,4,3,"#39254a");ellipse(1082,302,4,3,"#4c2950");ellipse(1090,305,4,3,"#39254a");
+      rect(1148,315,46,31,"#715c35");
+      const outsideX=1174+Math.sin(t*.00022)*16;drawWorker(outsideX,286,t,2.3);
+      rect(1031,49,12,336,"#6f6250");rect(1217,49,12,336,"#443c32");rect(1025,376,210,14,"#2d2923");
+      // Stone floor perspective.
+      poly([[0,440],[1280,422],[1280,720],[0,720]],"#5b5549");
+      for(let y=470;y<720;y+=44) line(0,y,1280,y-15,"#39372f",2);
+      for(let x=-300;x<1500;x+=95) line(x,440,x+230,720,"#403d35",1.4);
+      rect(0,430,1280,22,"#39352c");
+      // Barrel racks along left wall.
+      rect(18,349,450,13,"#32231b");rect(18,417,450,14,"#32231b");
+      for(let i=0;i<8;i++){drawBarrel(73+i*55,363,.82);drawBarrel(73+i*55,400,.82)}
+      // Stainless tanks.
+      drawTank(500,280,118,248,t,state==="lose" || readiness<=30);
+      drawTank(636,255,132,270,t,state==="lose" || readiness<=30);
+      drawTank(788,291,107,221,t,state==="lose" || readiness<=30);
+      // hoses, floor drains, clipboard bench.
+      ctx.strokeStyle="#403830";ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(705,511);ctx.bezierCurveTo(696,575,780,596,830,552);ctx.stroke();
+      line(844,561,915,551,"#262723",5);for(let i=0;i<6;i++)line(860+i*10,551,860+i*10,560,"#797467",1);
+      rect(925,382,80,12,"#4d3423");rect(935,392,5,96,"#342820");rect(991,392,5,96,"#342820");
+      rect(946,360,32,23,"#d4c099");line(952,366,972,366,"#59493b",2);line(952,372,968,372,"#59493b",2);
+      ellipse(990,373,9,8,"#662b38");
+      // Main cellar workers—grounded, slow, varied.
+      drawWorker(606,521,t,0);
+      drawWorker(880,535,t,1.7);
+      // A rolling hand truck with grape cases.
+      line(449,524,468,579,"#292a25",5);line(468,579,508,579,"#292a25",5);ellipse(466,584,8,8,"#20211e");ellipse(507,584,8,8,"#20211e");
+      rect(456,510,48,32,"#765432");rect(460,476,44,32,"#65462c");
+      // Hanging lamps.
+      for(const x of [550,855,1140]){line(x,0,x,92,"#1e1b17",3);ellipse(x,100,31,13,"#30291e");ellipse(x,104,15,7,`rgba(244,198,111,${.55*lightPulse})`);}
+      // warm pools of light
+      const lg=ctx.createRadialGradient(710,380,10,710,380,420);lg.addColorStop(0,`rgba(246,196,106,${.09*lightPulse})`);lg.addColorStop(1,"rgba(0,0,0,0)");ctx.fillStyle=lg;ctx.fillRect(280,80,860,610);
+      // Feedback animations.
+      if(actionPulse>0){
+        actionPulse=Math.max(0,actionPulse-.02);
+        ctx.globalAlpha=actionPulse*.35;ellipse(690,360,170*(1-actionPulse)+15,80*(1-actionPulse)+8,"#efd080");ctx.globalAlpha=1;
+      }
+      if(missPulse>0){
+        missPulse=Math.max(0,missPulse-.017);
+        const foamY=260+(1-missPulse)*55;
+        for(let i=0;i<8;i++)ellipse(694+i*10,foamY+Math.sin(i)*5,7,5,`rgba(238,220,185,${missPulse*.75})`);
+      }
+      if(state==="lose"){
+        const p=Math.min(1,(t-finishTime)/1500);
+        for(let i=0;i<22;i++)ellipse(650+(i%7)*21,280+Math.floor(i/7)*14+p*140,14,9,"#e1d1ae");
+        rect(639,244,125,9,Math.sin(t*.015)>0?"#ba3d32":"#4c1919");
+      }
+      if(state==="win") drawCrates(t);
+      // dark foreground edge and subtle color grade
+      rect(0,690,1280,30,"#28241e");
+      ctx.fillStyle="rgba(73,39,27,.05)";ctx.fillRect(0,0,1280,720);
+      ctx.restore();
+    }
+
+    function loop(now) {
+      if (running && !locked) {
+        const dt = Math.min(.1, (now - lastTick) / 1000);
+        lastTick = now;
+        remaining -= dt;
+        updateTimer();
+        if (remaining <= 0) { remaining = 0; updateTimer(); resolve(false, true); }
+      } else lastTick = now;
+      drawScene(now);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
