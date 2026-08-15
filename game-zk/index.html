@@ -761,9 +761,9 @@
     function swingClub(kind, special=false) {
       swing = { active:true, start:performance.now(), kind, special };
       if (kind !== "miss") {
-        setTimeout(() => createShot(kind === "fast" || special, special), 630);
+        setTimeout(() => createShot(kind === "fast" || special, special), 930);
       } else {
-        setTimeout(() => createPuff(368, 574, "whiff"), 630);
+        setTimeout(() => createPuff(368, 574, "whiff"), 930);
       }
     }
 
@@ -1040,7 +1040,7 @@
       // current ball and tee
       if (!(phase === "defeat" || phase === "lost")) {
         px(366,572,4,9,"#eadcbe");
-        px(362,568,10,8,swing.active && swing.kind !== "miss" && performance.now()-swing.start>625 ? "rgba(0,0,0,0)" : "#f6f2e4");
+        px(362,568,10,8,swing.active && swing.kind !== "miss" && performance.now()-swing.start>920 ? "rgba(0,0,0,0)" : "#f6f2e4");
       }
     }
 
@@ -1050,8 +1050,9 @@
 
     function golferPose(now) {
       // The ball is at local (97,-1), with the open range extending up and right.
-      // Both hands and the club draw distinctly to screen-left, descend through
-      // the ball, then cross to the golfer's screen-right side toward the field.
+      // The slow preparation loads on screen-left. The actual striking motion
+      // is a fast, unmistakable sweep from screen-left through the ball and far
+      // into screen-right, where the range and landing area continue.
       const address = {
         body:0,
         nearElbow:{x:18,y:-20}, farElbow:{x:31,y:-25},
@@ -1059,27 +1060,33 @@
       };
       if (!swing.active) return {...address,knee:0};
       const elapsed = now - swing.start;
-      if (elapsed > 1350) { swing.active=false; return {...address,knee:0}; }
-      const t = Math.min(1, elapsed/1050);
+      if (elapsed > 1800) { swing.active=false; return {...address,knee:0}; }
+      const t = Math.min(1, elapsed/1500);
       const backswing = {
-        body:-.14,
-        nearElbow:{x:-22,y:-48}, farElbow:{x:-8,y:-62},
-        hands:{x:-31,y:-70}, clubHead:{x:-105,y:-101}
+        body:-.16,
+        nearElbow:{x:-32,y:-46}, farElbow:{x:-18,y:-64},
+        hands:{x:-48,y:-72}, clubHead:{x:-125,y:-104}
       };
       const impactHead = swing.kind === "miss" ? {x:91,y:-14} : address.clubHead;
       const impact = {...address, body:.04, clubHead:impactHead};
       const follow = {
-        body:.2,
-        nearElbow:{x:42,y:-30}, farElbow:{x:60,y:-38},
-        hands:{x:85,y:-58}, clubHead:{x:160,y:-102}
+        body:.22,
+        nearElbow:{x:56,y:-25}, farElbow:{x:78,y:-34},
+        hands:{x:112,y:-54}, clubHead:{x:215,y:-96}
       };
       let from, to, p;
-      if (t < .38) {
-        from=address; to=backswing; p=t/.38;
-      } else if (t < .6) {
-        from=backswing; to=impact; p=(t-.38)/.22;
+      if (t < .42) {
+        // Slow, clearly preparatory draw to the left.
+        from=address; to=backswing; p=1-Math.pow(1-t/.42,2);
+      } else if (t < .5) {
+        // A short hold makes the next movement read as the true swing.
+        from=backswing; to=backswing; p=0;
+      } else if (t < .62) {
+        // Fast left-to-right downswing into the ball.
+        from=backswing; to=impact; p=Math.pow((t-.5)/.12,.72);
       } else {
-        from=impact; to=follow; p=(t-.6)/.4;
+        // Continue decisively past the ball to the right side of the screen.
+        from=impact; to=follow; p=1-Math.pow(1-(t-.62)/.38,3);
       }
       return {
         body:from.body+(to.body-from.body)*p,
