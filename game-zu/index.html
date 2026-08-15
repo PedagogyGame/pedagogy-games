@@ -1,1 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#143930">
+  <title>Hold Court — Tennis Vocabulary Game</title>
+  <style>
+    :root {
+      --cream: #f6edcf;
+      --ink: #14241f;
+      --green: #1f5c4d;
+      --green2: #2d8066;
+      --lime: #cfe66e;
+      --gold: #f4c75e;
+      --red: #dc6855;
+      --panel: rgba(14, 37, 32, .92);
+      --line: rgba(246, 237, 207, .22);
+    }
 
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      color: var(--cream);
+      background: #102d28;
+      font-family: Georgia, "Times New Roman", serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .game { position: relative; width: 100%; height: 100%; min-height: 520px; isolation: isolate; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+
+    .grain {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .16;
+      background-image:
+        repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0 1px, transparent 1px 4px),
+        repeating-linear-gradient(90deg, rgba(0,0,0,.025) 0 1px, transparent 1px 5px);
+      mix-blend-mode: overlay;
+    }
+
+    .hud {
+      position: absolute; z-index: 5; top: 0; left: 0; right: 0;
+      display: grid; grid-template-columns: minmax(220px, 460px) auto;
+      align-items: start; justify-content: space-between; gap: 18px;
+      padding: max(18px, env(safe-area-inset-top)) 22px 0;
+      pointer-events: none;
+    }
+    .meter-card, .progress-card {
+      background: rgba(10, 32, 27, .86); border: 1px solid rgba(246, 237, 207, .28);
+      box-shadow: 0 7px 0 rgba(5, 20, 17, .28), 0 18px 36px rgba(0,0,0,.16);
+      backdrop-filter: blur(5px);
+    }
+    .meter-card { padding: 11px 13px 13px; border-radius: 4px; }
+    .meter-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .meter-label { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; opacity: .82; }
+    .meter-value { font: 700 23px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--lime); }
+    .meter-track { margin-top: 8px; height: 13px; padding: 2px; border: 1px solid rgba(255,255,255,.26); background: rgba(0,0,0,.2); }
+    .meter-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#7fcf72,var(--lime)); transition: width .45s cubic-bezier(.2,.8,.2,1), background .25s; }
+    .progress-card { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 4px; pointer-events: auto; }
+    .question-count { font: 700 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+    .icon-button { width: 35px; height: 35px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.07); border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+    .icon-button:hover { background: rgba(255,255,255,.14); }
+
+    .quiz-panel {
+      position: absolute; z-index: 6; right: clamp(16px, 3vw, 46px); bottom: clamp(18px, 4vh, 48px);
+      width: min(590px, calc(100vw - 32px)); padding: 20px 22px 22px;
+      background: var(--panel); border: 1px solid rgba(246,237,207,.35); border-top: 4px solid var(--gold);
+      box-shadow: 10px 12px 0 rgba(5, 20, 17, .3), 0 24px 70px rgba(0,0,0,.28);
+      transform-origin: bottom right; transition: opacity .25s, transform .25s;
+    }
+    .quiz-panel.hidden { opacity: 0; transform: translateY(18px) scale(.98); pointer-events: none; }
+    .quiz-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .difficulty { font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; padding: 6px 8px; color: #173027; background: var(--gold); }
+    .instruction { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+    .definition { margin: 0 0 17px; min-height: 62px; font-size: clamp(20px, 2vw, 27px); line-height: 1.26; }
+    .answer-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+    .answer {
+      width: 100%; min-width: 0; padding: 13px 15px; border: 1px solid rgba(246,237,207,.34); border-radius: 2px;
+      outline: none; background: rgba(246,237,207,.09); color: #fff8df; font-size: 18px;
+    }
+    .answer::placeholder { color: rgba(246,237,207,.45); }
+    .answer:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(207,230,110,.12); }
+    .submit { padding: 0 22px; border: 0; border-radius: 2px; background: var(--cream); color: #17342d; font-weight: 700; cursor: pointer; letter-spacing: .04em; }
+    .submit:hover { background: #fff8df; transform: translateY(-1px); }
+    .submit:disabled, .answer:disabled { opacity: .55; cursor: default; }
+
+    .timer-wrap { display: flex; align-items: center; gap: 10px; margin-top: 13px; }
+    .timer-track { flex: 1; height: 7px; background: rgba(255,255,255,.1); overflow: hidden; }
+    .timer-fill { height: 100%; width: 100%; background: var(--lime); transform-origin: left; }
+    .timer-number { width: 48px; text-align: right; font: 700 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--lime); }
+    .feedback { min-height: 20px; margin-top: 10px; font: 700 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
+    .feedback.good { color: var(--lime); }
+    .feedback.bad { color: #ff9a86; }
+
+    .overlay {
+      position: absolute; z-index: 10; inset: 0; display: grid; place-items: center; padding: 22px;
+      background: linear-gradient(90deg, rgba(7,25,21,.2), rgba(7,25,21,.48));
+      transition: opacity .45s, visibility .45s;
+    }
+    .overlay.closed { opacity: 0; visibility: hidden; pointer-events: none; }
+    .title-card {
+      width: min(720px, 94vw); padding: clamp(28px, 5vw, 58px); text-align: center;
+      background: rgba(16, 48, 40, .91); border: 1px solid rgba(246,237,207,.43);
+      box-shadow: 14px 16px 0 rgba(6,23,19,.34), 0 30px 90px rgba(0,0,0,.32);
+      backdrop-filter: blur(7px); position: relative;
+    }
+    .title-card::before, .title-card::after { content:""; position:absolute; left: 18px; right:18px; height:1px; background:rgba(246,237,207,.2); }
+    .title-card::before { top:18px; } .title-card::after { bottom:18px; }
+    .eyebrow { margin: 0 0 10px; color: var(--gold); font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .27em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(56px, 10vw, 112px); font-weight: 400; line-height: .88; letter-spacing: -.055em; text-shadow: 0 5px 0 rgba(0,0,0,.16); }
+    .subtitle { margin: 16px auto 24px; max-width: 530px; font-size: clamp(15px, 2vw, 20px); line-height: 1.45; color: rgba(246,237,207,.82); }
+    .rules { display:flex; justify-content:center; flex-wrap:wrap; gap:8px 18px; margin: 0 0 25px; font: 700 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing:.05em; text-transform:uppercase; color:rgba(246,237,207,.7); }
+    .start-button { padding: 15px 27px; border: 1px solid #fff3c6; background: var(--gold); color: #17342d; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 0 #a36f26; }
+    .start-button:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #a36f26; }
+    .start-button:active { transform: translateY(4px); box-shadow: 0 2px 0 #a36f26; }
+    .end-title { font-size: clamp(45px, 8vw, 84px); }
+    .end-score { margin: 20px 0 26px; color: var(--lime); font: 700 clamp(22px,4vw,36px)/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    @media (max-width: 700px) {
+      .game { min-height: 600px; }
+      .hud { grid-template-columns: 1fr auto; padding: 11px 11px 0; gap: 9px; }
+      .meter-card { padding: 9px 10px 10px; }
+      .meter-label { font-size: 9px; letter-spacing: .12em; }
+      .meter-value { font-size: 18px; }
+      .progress-card { gap: 7px; padding: 7px; }
+      .question-count { font-size: 11px; }
+      .quiz-panel { right: 10px; bottom: 10px; width: calc(100vw - 20px); padding: 16px; }
+      .definition { font-size: 19px; min-height: 48px; }
+      .answer-row { grid-template-columns: 1fr; }
+      .submit { height: 44px; }
+      .title-card { padding: 34px 22px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" aria-label="Hold Court tennis vocabulary game">
+    <canvas id="court" width="1600" height="900" aria-hidden="true"></canvas>
+    <div class="grain"></div>
+
+    <header class="hud">
+      <section class="meter-card" aria-label="Court Command score">
+        <div class="meter-row"><span class="meter-label">Court Command</span><span class="meter-value" id="scoreValue">100%</span></div>
+        <div class="meter-track"><div class="meter-fill" id="scoreFill"></div></div>
+      </section>
+      <section class="progress-card">
+        <span class="question-count" id="questionCount">Warm-up · 27 terms</span>
+        <button class="icon-button" id="soundButton" aria-label="Mute sound" title="Mute sound">♪</button>
+      </section>
+    </header>
+
+    <section class="quiz-panel hidden" id="quizPanel" aria-live="polite">
+      <div class="quiz-top">
+        <span class="difficulty" id="difficulty">Familiar · 15 sec</span>
+        <span class="instruction">Type the matching term</span>
+      </div>
+      <p class="definition" id="definition"></p>
+      <form id="answerForm" autocomplete="off">
+        <div class="answer-row">
+          <input class="answer" id="answerInput" type="text" spellcheck="false" autocapitalize="off" aria-label="Tennis term" placeholder="Your answer…">
+          <button class="submit" id="submitButton" type="submit">Return</button>
+        </div>
+      </form>
+      <div class="timer-wrap">
+        <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+        <span class="timer-number" id="timerNumber">15.0s</span>
+      </div>
+      <div class="feedback" id="feedback"></div>
+    </section>
+
+    <section class="overlay" id="startOverlay">
+      <div class="title-card">
+        <p class="eyebrow">A tennis vocabulary match</p>
+        <h1>Hold Court</h1>
+        <p class="subtitle">Read the definition. Type the term. Keep your Court Command above zero through all 27 points.</p>
+        <div class="rules"><span>15–20 second points</span><span>Fast return: +10%</span><span>Miss: −20% to −30%</span></div>
+        <button class="start-button" id="startButton">Serve It Up</button>
+      </div>
+    </section>
+
+    <section class="overlay closed" id="endOverlay">
+      <div class="title-card">
+        <p class="eyebrow" id="endEyebrow">Match complete</p>
+        <h2 class="end-title" id="endTitle">You Held Court</h2>
+        <p class="end-score" id="endScore">Court Command: 100%</p>
+        <button class="start-button" id="restartButton">Play Another Match</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const TERMS = [
+        { term: "Love", definition: "Zero in tennis scoring.", level: 1, answers: ["love"] },
+        { term: "Deuce", definition: "A game tied at 40–40.", level: 1, answers: ["deuce"] },
+        { term: "Ad-in", definition: "The server has the advantage after deuce.", level: 2, answers: ["ad-in", "ad in", "adin", "advantage in"] },
+        { term: "Ad-out", definition: "The receiver has the advantage after deuce.", level: 2, answers: ["ad-out", "ad out", "adout", "advantage out"] },
+        { term: "Hold", definition: "The server wins their own service game.", level: 1, answers: ["hold", "service hold"] },
+        { term: "Break", definition: "The receiver wins the opponent’s service game.", level: 1, answers: ["break", "service break"] },
+        { term: "Break point", definition: "A point that, if won by the receiver, produces a service break.", level: 1, answers: ["break point", "breakpoint"] },
+        { term: "Set point", definition: "A point that could decide and win the current set.", level: 1, answers: ["set point", "setpoint"] },
+        { term: "Match point", definition: "A point that could decide and win the entire match.", level: 1, answers: ["match point", "matchpoint"] },
+        { term: "Let", definition: "A point or serve replayed under specified circumstances.", level: 1, answers: ["let"] },
+        { term: "Ace", definition: "A legal serve that the receiver does not touch.", level: 1, answers: ["ace"] },
+        { term: "Double fault", definition: "Loss of a point after two unsuccessful serve attempts.", level: 1, answers: ["double fault", "doublefault"] },
+        { term: "Tiebreak", definition: "A special game used to decide a set that has reached a specified tied score.", level: 1, answers: ["tiebreak", "tie break", "tie-break"] },
+        { term: "Changeover", definition: "The interval when players switch ends of the court.", level: 1, answers: ["changeover", "change over"] },
+        { term: "Service box", definition: "The marked area in which a legal serve must land.", level: 2, answers: ["service box", "serve box"] },
+        { term: "Alley", definition: "The narrow strip between the singles and doubles sidelines.", level: 2, answers: ["alley", "doubles alley"] },
+        { term: "Approach shot", definition: "A shot played while moving forward toward the net.", level: 2, answers: ["approach shot", "approach"] },
+        { term: "Volley", definition: "A shot struck before the ball bounces.", level: 1, answers: ["volley"] },
+        { term: "Half-volley", definition: "A shot struck immediately after the ball bounces, usually very close to the court.", level: 3, answers: ["half-volley", "half volley", "halfvolley"] },
+        { term: "Overhead / smash", definition: "A high ball struck aggressively above the player’s head.", level: 2, answers: ["overhead", "smash", "overhead smash"] },
+        { term: "Passing shot", definition: "A groundstroke directed past an opponent positioned at the net.", level: 2, answers: ["passing shot", "pass"] },
+        { term: "Unforced error", definition: "A mistake not caused primarily by pressure from the opponent.", level: 2, answers: ["unforced error", "unforcederror"] },
+        { term: "Winner", definition: "A successful shot that the opponent cannot return.", level: 1, answers: ["winner"] },
+        { term: "Walkover (W/O)", definition: "A match awarded to a player without the match being played.", level: 3, answers: ["walkover", "w/o", "wo"] },
+        { term: "NTRP", definition: "The U.S. player-rating system commonly used to organize league competition.", level: 3, answers: ["ntrp", "national tennis rating program"] },
+        { term: "Rally", definition: "The sequence of exchanged shots after the serve until the point ends.", level: 1, answers: ["rally"] },
+        { term: "Groundstroke", definition: "A forehand or backhand shot struck after the ball bounces.", level: 1, answers: ["groundstroke", "ground stroke"] }
+      ];
+
+      const LEVELS = {
+        1: { name: "Familiar", seconds: 15, penalty: 30 },
+        2: { name: "Intermediate", seconds: 18, penalty: 25 },
+        3: { name: "Specialized", seconds: 20, penalty: 20 }
+      };
+
+      const $ = id => document.getElementById(id);
+      const canvas = $("court");
+      const ctx = canvas.getContext("2d");
+      const els = {
+        scoreValue: $("scoreValue"), scoreFill: $("scoreFill"), questionCount: $("questionCount"),
+        soundButton: $("soundButton"), quizPanel: $("quizPanel"), difficulty: $("difficulty"),
+        definition: $("definition"), answerForm: $("answerForm"), answerInput: $("answerInput"),
+        submitButton: $("submitButton"), timerFill: $("timerFill"), timerNumber: $("timerNumber"),
+        feedback: $("feedback"), startOverlay: $("startOverlay"), startButton: $("startButton"),
+        endOverlay: $("endOverlay"), endEyebrow: $("endEyebrow"), endTitle: $("endTitle"),
+        endScore: $("endScore"), restartButton: $("restartButton")
+      };
+
+      let order = [], index = 0, score = 100, running = false, locked = false;
+      let questionStart = 0, timeAllowed = 15, timerFrame = 0, muted = false, audio = null;
+      let sceneStart = performance.now(), shot = null, finish = null;
+
+      function shuffle(items) {
+        const copy = [...items];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      }
+
+      function normalize(value) {
+        return value.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
+      }
+
+      function updateScore() {
+        els.scoreValue.textContent = `${score}%`;
+        els.scoreFill.style.width = `${score}%`;
+        if (score <= 25) els.scoreFill.style.background = "#dc6855";
+        else if (score <= 50) els.scoreFill.style.background = "#f4c75e";
+        else els.scoreFill.style.background = "linear-gradient(90deg,#7fcf72,#cfe66e)";
+      }
+
+      function initAudio() {
+        if (audio || muted) return;
+        audio = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      function tone(freq, duration, type = "sine", volume = .035, delay = 0) {
+        if (muted) return;
+        initAudio();
+        if (!audio) return;
+        const start = audio.currentTime + delay;
+        const osc = audio.createOscillator();
+        const gain = audio.createGain();
+        osc.type = type; osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(volume, start); gain.gain.exponentialRampToValueAtTime(.0001, start + duration);
+        osc.connect(gain).connect(audio.destination); osc.start(start); osc.stop(start + duration);
+      }
+
+      function sound(kind) {
+        if (kind === "hit") { tone(145, .07, "triangle", .055); tone(92, .05, "sine", .03, .035); }
+        if (kind === "fast") { tone(170, .07, "triangle", .06); tone(250, .11, "sine", .035, .08); }
+        if (kind === "miss") { tone(110, .14, "square", .025); tone(76, .24, "sine", .028, .08); }
+        if (kind === "win") { [262,330,392,523].forEach((f,i)=>tone(f,.34,"sine",.028,i*.1)); }
+      }
+
+      function startGame() {
+        initAudio();
+        order = shuffle(TERMS); index = 0; score = 100; running = true; locked = false; finish = null;
+        updateScore();
+        els.startOverlay.classList.add("closed"); els.endOverlay.classList.add("closed");
+        els.quizPanel.classList.remove("hidden");
+        showQuestion();
+      }
+
+      function showQuestion() {
+        if (!running) return;
+        if (index >= order.length) { endGame(true); return; }
+        locked = false;
+        const item = order[index]; const level = LEVELS[item.level];
+        timeAllowed = level.seconds;
+        els.questionCount.textContent = `Point ${index + 1} of ${order.length}`;
+        els.difficulty.textContent = `${level.name} · ${level.seconds} sec`;
+        els.definition.textContent = item.definition;
+        els.answerInput.value = ""; els.answerInput.disabled = false; els.submitButton.disabled = false;
+        els.feedback.textContent = ""; els.feedback.className = "feedback";
+        questionStart = performance.now();
+        cancelAnimationFrame(timerFrame); timerFrame = requestAnimationFrame(updateTimer);
+        setTimeout(() => els.answerInput.focus({ preventScroll: true }), 50);
+      }
+
+      function updateTimer(now) {
+        if (!running || locked) return;
+        const elapsed = (now - questionStart) / 1000;
+        const remaining = Math.max(0, timeAllowed - elapsed);
+        const ratio = remaining / timeAllowed;
+        els.timerFill.style.transform = `scaleX(${ratio})`;
+        els.timerNumber.textContent = `${remaining.toFixed(1)}s`;
+        const color = ratio > .5 ? "#cfe66e" : ratio > .25 ? "#f4c75e" : "#ff8069";
+        els.timerFill.style.background = color; els.timerNumber.style.color = color;
+        if (remaining <= 0) handleResult(false, true);
+        else timerFrame = requestAnimationFrame(updateTimer);
+      }
+
+      function handleResult(correct, timedOut = false) {
+        if (locked || !running) return;
+        locked = true; cancelAnimationFrame(timerFrame);
+        els.answerInput.disabled = true; els.submitButton.disabled = true;
+        const item = order[index]; const level = LEVELS[item.level];
+        const elapsed = (performance.now() - questionStart) / 1000;
+        if (correct) {
+          const fast = elapsed <= 10;
+          if (fast) score = Math.min(100, score + 10);
+          els.feedback.textContent = fast ? `Fast winner — ${score === 100 ? "Court Command held at 100%" : "+10% Court Command"}` : "Clean return — point secured";
+          els.feedback.className = "feedback good";
+          shot = { start: performance.now(), kind: fast ? "fast" : "correct" };
+          sound(fast ? "fast" : "hit");
+        } else {
+          score = Math.max(0, score - level.penalty);
+          els.feedback.textContent = `${timedOut ? "Time —" : "Out —"} correct term: ${item.term} · −${level.penalty}%`;
+          els.feedback.className = "feedback bad";
+          shot = { start: performance.now(), kind: timedOut ? "timeout" : "miss" };
+          sound("miss");
+        }
+        updateScore(); index++;
+        const delay = correct ? 1250 : 1950;
+        setTimeout(() => {
+          if (score <= 0) endGame(false);
+          else if (index >= order.length) endGame(true);
+          else showQuestion();
+        }, delay);
+      }
+
+      function endGame(completed) {
+        running = false; locked = true; cancelAnimationFrame(timerFrame);
+        els.quizPanel.classList.add("hidden");
+        finish = { start: performance.now(), success: completed };
+        if (completed) {
+          els.endEyebrow.textContent = "Match complete";
+          els.endTitle.textContent = "You Held Court";
+          sound("win");
+        } else {
+          els.endEyebrow.textContent = `Reached point ${Math.max(1, index)} of ${order.length}`;
+          els.endTitle.textContent = "Court Lost";
+        }
+        els.endScore.textContent = `Court Command: ${score}%`;
+        setTimeout(() => els.endOverlay.classList.remove("closed"), completed ? 2200 : 900);
+      }
+
+      els.answerForm.addEventListener("submit", event => {
+        event.preventDefault();
+        if (locked || !running) return;
+        const value = normalize(els.answerInput.value);
+        if (!value) { els.answerInput.focus(); return; }
+        const correct = order[index].answers.some(answer => normalize(answer) === value);
+        handleResult(correct, false);
+      });
+      els.startButton.addEventListener("click", startGame);
+      els.restartButton.addEventListener("click", startGame);
+      els.soundButton.addEventListener("click", () => {
+        muted = !muted;
+        els.soundButton.textContent = muted ? "×" : "♪";
+        els.soundButton.setAttribute("aria-label", muted ? "Unmute sound" : "Mute sound");
+        els.soundButton.title = muted ? "Unmute sound" : "Mute sound";
+        if (!muted) { initAudio(); tone(220,.08,"sine",.025); }
+      });
+
+      function rect(x,y,w,h,color) { ctx.fillStyle=color; ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); }
+      function line(x1,y1,x2,y2,color,width=2) { ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+      function poly(points, color) { ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(points[0][0],points[0][1]); for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]); ctx.closePath(); ctx.fill(); }
+
+      function drawCloud(x,y,s) {
+        ctx.fillStyle="rgba(255,239,199,.38)";
+        ctx.beginPath(); ctx.ellipse(x,y,70*s,22*s,0,0,Math.PI*2); ctx.ellipse(x+45*s,y-10*s,48*s,28*s,0,0,Math.PI*2); ctx.ellipse(x-38*s,y-7*s,38*s,25*s,0,0,Math.PI*2); ctx.fill();
+      }
+
+      function drawTree(x,y,s,t) {
+        rect(x-5*s,y,10*s,70*s,"#594a31");
+        const sway=Math.sin(t*.00045+x)*3*s;
+        [[0,0,34],[20,-5,29],[-22,4,31],[8,-26,29],[-9,-31,25]].forEach(([dx,dy,r],i)=>{
+          ctx.fillStyle=i%2?"#2f6145":"#3c7450"; ctx.beginPath(); ctx.arc(x+dx*s+sway,y+dy*s,r*s,0,Math.PI*2);ctx.fill();
+        });
+      }
+
+      function drawPlayer(x,y,s,facing,t,active,far=false) {
+        const bob=Math.sin(t*.003 + x)*1.5*s;
+        const skin=far?"#bb8c63":"#d8a57a", shirt=far?"#e5c75b":"#f2e5c0", shorts=far?"#596d74":"#294d46";
+        ctx.save(); ctx.translate(x,y+bob); if(facing<0)ctx.scale(-1,1);
+        const swing = active ? Math.sin(Math.min(1,active)*Math.PI) : Math.sin(t*.0015)*.08;
+        rect(-6*s,-76*s,14*s,18*s,skin); rect(-9*s,-58*s,22*s,34*s,shirt); rect(-8*s,-24*s,10*s,23*s,shorts); rect(5*s,-24*s,10*s,23*s,shorts);
+        line(-2*s,-1*s,-8*s,18*s,"#e8d0ab",5*s); line(10*s,-1*s,17*s,18*s,"#e8d0ab",5*s);
+        line(10*s,-50*s,(25+20*swing)*s,(-36-25*swing)*s,skin,5*s);
+        ctx.save(); ctx.translate((29+20*swing)*s,(-39-25*swing)*s); ctx.rotate(-.6-swing*1.2);
+        line(0,0,25*s,-18*s,"#4a3326",3*s); ctx.strokeStyle="#e7eee5";ctx.lineWidth=3*s;ctx.beginPath();ctx.ellipse(33*s,-25*s,12*s,18*s,-.55,0,Math.PI*2);ctx.stroke(); ctx.restore();
+        rect(-7*s,-80*s,15*s,5*s,far?"#403229":"#9c5b35");
+        ctx.restore();
+      }
+
+      function drawCourt(t) {
+        const w=canvas.width,h=canvas.height, sx=w/1600, sy=h/900;
+        ctx.save(); ctx.scale(sx,sy);
+        const dusk=.5+.5*Math.sin(t*.000045);
+        const sky=ctx.createLinearGradient(0,0,0,520); sky.addColorStop(0,`rgb(${88+20*dusk},${139+14*dusk},${144+10*dusk})`); sky.addColorStop(1,"#efbd78"); rect(0,0,1600,900,sky);
+        drawCloud(290+(t*.004)%1800,125,.9); drawCloud(1110+(t*.002)%1900,205,.65);
+
+        // distant clubhouse
+        rect(1050,205,430,180,"#d7c398"); poly([[1015,215],[1260,115],[1518,215]],"#704939"); rect(1100,265,92,120,"#6b765e"); rect(1240,250,70,68,"#87a39b"); rect(1350,250,70,68,"#87a39b");
+        line(1275,250,1275,318,"#e5d6ad",5); line(1385,250,1385,318,"#e5d6ad",5); rect(1020,376,490,18,"#594936");
+        for(let i=0;i<11;i++) rect(1025+i*46,386,3,65,"rgba(34,43,36,.42)");
+        line(1025,410,1510,410,"rgba(34,43,36,.42)",3); line(1025,438,1510,438,"rgba(34,43,36,.42)",3);
+
+        drawTree(85,325,1.15,t); drawTree(230,345,.9,t); drawTree(440,335,1.05,t); drawTree(610,352,.8,t); drawTree(850,340,1.0,t); drawTree(1540,330,1.15,t);
+        rect(0,395,1600,505,"#406846");
+        // neighboring court
+        poly([[110,420],[710,420],[845,555],[40,555]],"#547b72");
+        line(70,510,790,510,"rgba(246,237,207,.68)",3); line(410,420,410,555,"rgba(246,237,207,.5)",3);
+        drawPlayer(285,493,.43,1,t,Math.max(0,Math.sin(t*.001)*.4),true); drawPlayer(565,460,.38,-1,t,Math.max(0,Math.sin(t*.001+2)*.4),true);
+
+        // main court, perspective trapezoid
+        poly([[235,440],[1290,440],[1570,875],[20,875]],"#47766a");
+        poly([[280,470],[1250,470],[1465,830],[105,830]],"#b96950");
+        // sidelines and baselines
+        line(280,470,105,830,"#f7ebcb",5); line(1250,470,1465,830,"#f7ebcb",5); line(280,470,1250,470,"#f7ebcb",5); line(105,830,1465,830,"#f7ebcb",6);
+        line(345,470,205,830,"rgba(247,235,203,.85)",3); line(1185,470,1365,830,"rgba(247,235,203,.85)",3);
+        // service lines/center
+        line(405,610,1318,610,"#f7ebcb",4); line(765,470,765,610,"#f7ebcb",4); line(765,610,775,830,"rgba(247,235,203,.8)",3);
+        // net
+        line(180,648,1390,648,"#eee6d3",6); rect(174,632,8,96,"#d8d1c1"); rect(1386,632,8,96,"#d8d1c1");
+        for(let x=190;x<1390;x+=24)line(x,649,x,704,"rgba(225,225,210,.35)",1);
+        for(let y=660;y<705;y+=11)line(180,y,1390,y,"rgba(225,225,210,.25)",1);
+
+        let nearActive=0, farActive=0;
+        if(shot){ const p=Math.min(1,(t-shot.start)/800); nearActive=p; if(p>=1)shot=null; }
+        drawPlayer(440,800,1.25,1,t,nearActive,false);
+        drawPlayer(1050,545,.75,-1,t,farActive,true);
+
+        // ball and answer result motion
+        let bx=775, by=658;
+        if(shot){
+          const p=Math.min(1,(t-shot.start)/800);
+          if(shot.kind==="correct"||shot.kind==="fast"){
+            bx=500+(650*p); by=735-260*p-90*Math.sin(p*Math.PI);
+          } else if(shot.kind==="miss") { bx=500+420*p; by=735-95*p-40*Math.sin(p*Math.PI); }
+          else { bx=1070-600*p; by=520+210*p-70*Math.sin(p*Math.PI); }
+        } else { const p=(t%3600)/3600; bx=520+540*p; by=700-165*Math.sin(p*Math.PI); }
+        ctx.fillStyle="#e9ee79";ctx.beginPath();ctx.arc(bx,by,7,0,Math.PI*2);ctx.fill();
+
+        // a stray ball and long shadows
+        ctx.fillStyle="#dce86a";ctx.beginPath();ctx.arc(116,846,5,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle="rgba(20,48,40,.15)";ctx.beginPath();ctx.ellipse(445,825,78,16,-.1,0,Math.PI*2);ctx.fill();
+
+        if(finish && finish.success){
+          const p=Math.min(1,(t-finish.start)/1800);
+          // net-approach silhouettes after the final winner
+          drawPlayer(440+300*p,800-120*p,1.25-.35*p,1,t,0,false);
+          drawPlayer(1050-260*p,545+125*p,.75+.2*p,-1,t,0,true);
+        }
+        ctx.restore();
+      }
+
+      function animate(t) { drawCourt(t); requestAnimationFrame(animate); }
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>
