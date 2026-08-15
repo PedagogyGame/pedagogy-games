@@ -761,9 +761,9 @@
     function swingClub(kind, special=false) {
       swing = { active:true, start:performance.now(), kind, special };
       if (kind !== "miss") {
-        setTimeout(() => createShot(kind === "fast" || special, special), 470);
+        setTimeout(() => createShot(kind === "fast" || special, special), 630);
       } else {
-        setTimeout(() => createPuff(368, 574, "whiff"), 480);
+        setTimeout(() => createPuff(368, 574, "whiff"), 630);
       }
     }
 
@@ -1040,25 +1040,55 @@
       // current ball and tee
       if (!(phase === "defeat" || phase === "lost")) {
         px(366,572,4,9,"#eadcbe");
-        px(362,568,10,8,swing.active && swing.kind !== "miss" && performance.now()-swing.start>560 ? "rgba(0,0,0,0)" : "#f6f2e4");
+        px(362,568,10,8,swing.active && swing.kind !== "miss" && performance.now()-swing.start>625 ? "rgba(0,0,0,0)" : "#f6f2e4");
       }
     }
 
+    function mixPoint(a,b,p) {
+      return { x:a.x+(b.x-a.x)*p, y:a.y+(b.y-a.y)*p };
+    }
+
     function golferPose(now) {
-      if (!swing.active) return { body:0, arm:-.15, club:-.58, knee:0 };
+      // The ball is at local (97,-1), with the open range extending up and right.
+      // Both hands and the club draw distinctly to screen-left, descend through
+      // the ball, then cross to the golfer's screen-right side toward the field.
+      const address = {
+        body:0,
+        nearElbow:{x:18,y:-20}, farElbow:{x:31,y:-25},
+        hands:{x:49,y:-15}, clubHead:{x:97,y:-1}
+      };
+      if (!swing.active) return {...address,knee:0};
       const elapsed = now - swing.start;
-      if (elapsed > 1350) { swing.active=false; return { body:0, arm:-.15, club:-.58, knee:0 }; }
+      if (elapsed > 1350) { swing.active=false; return {...address,knee:0}; }
       const t = Math.min(1, elapsed/1050);
-      let arm, club, body;
-      if (t < .35) {
-        const p=t/.35; arm=-.15-p*1.4; club=-.58-p*1.9; body=-p*.12;
-      } else if (t < .58) {
-        const p=(t-.35)/.23; arm=-1.55+p*3.0; club=-2.48+p*4.4; body=-.12+p*.34;
+      const backswing = {
+        body:-.14,
+        nearElbow:{x:-22,y:-48}, farElbow:{x:-8,y:-62},
+        hands:{x:-31,y:-70}, clubHead:{x:-105,y:-101}
+      };
+      const impactHead = swing.kind === "miss" ? {x:91,y:-14} : address.clubHead;
+      const impact = {...address, body:.04, clubHead:impactHead};
+      const follow = {
+        body:.2,
+        nearElbow:{x:42,y:-30}, farElbow:{x:60,y:-38},
+        hands:{x:85,y:-58}, clubHead:{x:160,y:-102}
+      };
+      let from, to, p;
+      if (t < .38) {
+        from=address; to=backswing; p=t/.38;
+      } else if (t < .6) {
+        from=backswing; to=impact; p=(t-.38)/.22;
       } else {
-        const p=(t-.58)/.42; arm=1.45-p*.78; club=1.92-p*.65; body=.22-p*.22;
+        from=impact; to=follow; p=(t-.6)/.4;
       }
-      if (swing.kind === "miss") club += .1;
-      return {body,arm,club,knee:Math.sin(t*Math.PI)*2};
+      return {
+        body:from.body+(to.body-from.body)*p,
+        nearElbow:mixPoint(from.nearElbow,to.nearElbow,p),
+        farElbow:mixPoint(from.farElbow,to.farElbow,p),
+        hands:mixPoint(from.hands,to.hands,p),
+        clubHead:mixPoint(from.clubHead,to.clubHead,p),
+        knee:Math.sin(t*Math.PI)*2
+      };
     }
 
     function drawGolfer(now) {
@@ -1086,23 +1116,21 @@
       ctx.fillStyle="#d39a70";ctx.beginPath();ctx.arc(0,-94,20,0,Math.PI*2);ctx.fill();
       px(-17,-101,35,8,"#23533d"); px(-20,-108,29,10,"#1d4835"); px(9,-102,17,5,"#1d4835");
       px(12,-94,3,3,"#2b2922");
-      // arms and club
-      ctx.save();
-      ctx.translate(1,-45);
-      ctx.rotate(pose.arm);
-      ctx.strokeStyle="#c9875f";ctx.lineWidth=11;
-      ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(29,26);ctx.stroke();
+      ctx.restore();
+      // Two arms converge on the grip while the club head follows a readable
+      // backswing → ball → range-side follow-through path.
+      ctx.strokeStyle="#bd7d58";ctx.lineWidth=9;ctx.lineCap="round";ctx.lineJoin="round";
+      ctx.beginPath();ctx.moveTo(-8,-44);ctx.lineTo(pose.nearElbow.x,pose.nearElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
       ctx.strokeStyle="#d69b70";ctx.lineWidth=10;
-      ctx.beginPath();ctx.moveTo(29,26);ctx.lineTo(49,43);ctx.stroke();
-      ctx.save();
-      ctx.translate(49,43);
-      ctx.rotate(pose.club);
-      ctx.strokeStyle="#d2d0c2";ctx.lineWidth=3;
-      ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,117);ctx.stroke();
-      px(-4,112,17,8,"#3b403d");
-      ctx.restore();
-      ctx.restore();
-      ctx.restore();
+      ctx.beginPath();ctx.moveTo(10,-42);ctx.lineTo(pose.farElbow.x,pose.farElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
+      ctx.fillStyle="#efe7cf";ctx.beginPath();ctx.arc(pose.hands.x,pose.hands.y,6,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle="#d2d0c2";ctx.lineWidth=3;ctx.lineCap="square";
+      ctx.beginPath();ctx.moveTo(pose.hands.x,pose.hands.y);ctx.lineTo(pose.clubHead.x,pose.clubHead.y);ctx.stroke();
+      const shaftX=pose.clubHead.x-pose.hands.x, shaftY=pose.clubHead.y-pose.hands.y;
+      const shaftLength=Math.hypot(shaftX,shaftY)||1;
+      const normalX=-shaftY/shaftLength, normalY=shaftX/shaftLength;
+      ctx.strokeStyle="#3b403d";ctx.lineWidth=7;
+      ctx.beginPath();ctx.moveTo(pose.clubHead.x-normalX*7,pose.clubHead.y-normalY*7);ctx.lineTo(pose.clubHead.x+normalX*7,pose.clubHead.y+normalY*7);ctx.stroke();
       ctx.restore();
     }
 
