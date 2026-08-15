@@ -1048,54 +1048,87 @@
       return { x:a.x+(b.x-a.x)*p, y:a.y+(b.y-a.y)*p };
     }
 
-    function golferPose(now) {
-      // The ball is at local (97,-1), with the open range extending up and right.
-      // The slow preparation loads on screen-left. The actual striking motion
-      // is a fast, unmistakable sweep from screen-left through the ball and far
-      // into screen-right, where the range and landing area continue.
-      const address = {
-        body:0,
-        nearElbow:{x:18,y:-20}, farElbow:{x:31,y:-25},
-        hands:{x:49,y:-15}, clubHead:{x:97,y:-1}
+    function mixPose(a,b,p) {
+      return {
+        body:a.body+(b.body-a.body)*p,
+        trailHeel:a.trailHeel+(b.trailHeel-a.trailHeel)*p,
+        weightShift:a.weightShift+(b.weightShift-a.weightShift)*p,
+        nearShoulder:mixPoint(a.nearShoulder,b.nearShoulder,p),
+        farShoulder:mixPoint(a.farShoulder,b.farShoulder,p),
+        nearElbow:mixPoint(a.nearElbow,b.nearElbow,p),
+        farElbow:mixPoint(a.farElbow,b.farElbow,p),
+        hands:mixPoint(a.hands,b.hands,p),
+        clubHead:mixPoint(a.clubHead,b.clubHead,p)
       };
-      if (!swing.active) return {...address,knee:0};
+    }
+
+    function golferPose(now) {
+      // A golf-specific sequence: athletic address, low takeaway, high hinged
+      // backswing, club dropping behind the hands, impact at the bottom of the
+      // arc, target-line extension, then a tall balanced finish.
+      const address = {
+        body:.12, trailHeel:0, weightShift:0,
+        nearShoulder:{x:-2,y:-48}, farShoulder:{x:13,y:-44},
+        nearElbow:{x:17,y:-27}, farElbow:{x:26,y:-23},
+        hands:{x:34,y:-16}, clubHead:{x:97,y:-1}
+      };
+      if (!swing.active) return address;
       const elapsed = now - swing.start;
-      if (elapsed > 1800) { swing.active=false; return {...address,knee:0}; }
-      const t = Math.min(1, elapsed/1500);
-      const backswing = {
-        body:-.16,
-        nearElbow:{x:-32,y:-46}, farElbow:{x:-18,y:-64},
-        hands:{x:-48,y:-72}, clubHead:{x:-125,y:-104}
+      if (elapsed > 1800) { swing.active=false; return address; }
+      const t = Math.min(1, elapsed/1600);
+      const takeaway = {
+        body:.04, trailHeel:0, weightShift:-2,
+        nearShoulder:{x:-9,y:-49}, farShoulder:{x:8,y:-49},
+        nearElbow:{x:5,y:-42}, farElbow:{x:17,y:-46},
+        hands:{x:10,y:-46}, clubHead:{x:-50,y:-21}
+      };
+      const top = {
+        body:-.12, trailHeel:0, weightShift:-4,
+        nearShoulder:{x:-12,y:-51}, farShoulder:{x:7,y:-54},
+        nearElbow:{x:-28,y:-70}, farElbow:{x:18,y:-68},
+        hands:{x:-2,y:-92}, clubHead:{x:-67,y:-90}
+      };
+      const slot = {
+        body:-.01, trailHeel:2, weightShift:2,
+        nearShoulder:{x:-5,y:-49}, farShoulder:{x:13,y:-47},
+        nearElbow:{x:2,y:-45}, farElbow:{x:22,y:-38},
+        hands:{x:29,y:-36}, clubHead:{x:-18,y:-81}
       };
       const impactHead = swing.kind === "miss" ? {x:91,y:-14} : address.clubHead;
-      const impact = {...address, body:.04, clubHead:impactHead};
-      const follow = {
-        body:.22,
-        nearElbow:{x:56,y:-25}, farElbow:{x:78,y:-34},
-        hands:{x:112,y:-54}, clubHead:{x:215,y:-96}
+      const impact = {
+        body:.1, trailHeel:5, weightShift:5,
+        nearShoulder:{x:0,y:-49}, farShoulder:{x:16,y:-43},
+        nearElbow:{x:20,y:-30}, farElbow:{x:31,y:-24},
+        hands:{x:34,y:-16}, clubHead:impactHead
       };
-      let from, to, p;
-      if (t < .42) {
-        // Slow, clearly preparatory draw to the left.
-        from=address; to=backswing; p=1-Math.pow(1-t/.42,2);
-      } else if (t < .5) {
-        // A short hold makes the next movement read as the true swing.
-        from=backswing; to=backswing; p=0;
-      } else if (t < .62) {
-        // Fast left-to-right downswing into the ball.
-        from=backswing; to=impact; p=Math.pow((t-.5)/.12,.72);
-      } else {
-        // Continue decisively past the ball to the right side of the screen.
-        from=impact; to=follow; p=1-Math.pow(1-(t-.62)/.38,3);
-      }
-      return {
-        body:from.body+(to.body-from.body)*p,
-        nearElbow:mixPoint(from.nearElbow,to.nearElbow,p),
-        farElbow:mixPoint(from.farElbow,to.farElbow,p),
-        hands:mixPoint(from.hands,to.hands,p),
-        clubHead:mixPoint(from.clubHead,to.clubHead,p),
-        knee:Math.sin(t*Math.PI)*2
+      const extension = {
+        body:.16, trailHeel:9, weightShift:7,
+        nearShoulder:{x:3,y:-48}, farShoulder:{x:19,y:-42},
+        nearElbow:{x:44,y:-29}, farElbow:{x:54,y:-22},
+        hands:{x:94,y:-27}, clubHead:{x:158,y:-15}
       };
+      const finish = {
+        body:.02, trailHeel:14, weightShift:8,
+        nearShoulder:{x:4,y:-51}, farShoulder:{x:21,y:-45},
+        nearElbow:{x:38,y:-69}, farElbow:{x:58,y:-72},
+        hands:{x:66,y:-94}, clubHead:{x:124,y:-124}
+      };
+      const frames = [
+        {at:0,pose:address},
+        {at:.16,pose:takeaway},
+        {at:.37,pose:top},
+        {at:.47,pose:slot},
+        {at:.58,pose:impact},
+        {at:.72,pose:extension},
+        {at:1,pose:finish}
+      ];
+      let i=0;
+      while(i<frames.length-2 && t>frames[i+1].at) i++;
+      const from=frames[i], to=frames[i+1];
+      let p=(t-from.at)/(to.at-from.at);
+      p=Math.max(0,Math.min(1,p));
+      p=p*p*(3-2*p);
+      return mixPose(from.pose,to.pose,p);
     }
 
     function drawGolfer(now) {
@@ -1104,14 +1137,17 @@
       ctx.translate(269,569);
       // shadow
       ctx.fillStyle="rgba(10,28,21,.35)";ctx.beginPath();ctx.ellipse(2,75,61,12,0,0,Math.PI*2);ctx.fill();
-      // legs
+      // Legs: the trail heel rises only after impact as the body turns through.
+      const shift=pose.weightShift;
+      const trailFootX=-32+pose.trailHeel*.9;
+      const trailFootY=69-pose.trailHeel*.72;
       ctx.strokeStyle="#d8d0b7";ctx.lineWidth=15;ctx.lineCap="square";
-      ctx.beginPath();ctx.moveTo(-13,22);ctx.lineTo(-17,64+pose.knee);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(13,22);ctx.lineTo(21,65);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-13+shift*.2,22);ctx.lineTo(-17+pose.trailHeel*.5,63-pose.trailHeel*.38);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(13+shift*.25,22);ctx.lineTo(21+shift*.3,65);ctx.stroke();
       // shoes
       ctx.strokeStyle="#27352f";ctx.lineWidth=9;
-      ctx.beginPath();ctx.moveTo(-18,66);ctx.lineTo(-32,69);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(21,67);ctx.lineTo(36,70);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(-17+pose.trailHeel*.5,64-pose.trailHeel*.38);ctx.lineTo(trailFootX,trailFootY);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(21+shift*.3,67);ctx.lineTo(36+shift*.45,70);ctx.stroke();
       ctx.save();
       ctx.rotate(pose.body);
       // torso polo
@@ -1124,12 +1160,12 @@
       px(-17,-101,35,8,"#23533d"); px(-20,-108,29,10,"#1d4835"); px(9,-102,17,5,"#1d4835");
       px(12,-94,3,3,"#2b2922");
       ctx.restore();
-      // Two arms converge on the grip while the club head follows a readable
-      // backswing → ball → range-side follow-through path.
+      // The elbows bend and unfold around a hinged club; this creates a golf
+      // swing plane instead of a horizontal, baseball-like arm sweep.
       ctx.strokeStyle="#bd7d58";ctx.lineWidth=9;ctx.lineCap="round";ctx.lineJoin="round";
-      ctx.beginPath();ctx.moveTo(-8,-44);ctx.lineTo(pose.nearElbow.x,pose.nearElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(pose.nearShoulder.x,pose.nearShoulder.y);ctx.lineTo(pose.nearElbow.x,pose.nearElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
       ctx.strokeStyle="#d69b70";ctx.lineWidth=10;
-      ctx.beginPath();ctx.moveTo(10,-42);ctx.lineTo(pose.farElbow.x,pose.farElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(pose.farShoulder.x,pose.farShoulder.y);ctx.lineTo(pose.farElbow.x,pose.farElbow.y);ctx.lineTo(pose.hands.x,pose.hands.y);ctx.stroke();
       ctx.fillStyle="#efe7cf";ctx.beginPath();ctx.arc(pose.hands.x,pose.hands.y,6,0,Math.PI*2);ctx.fill();
       ctx.strokeStyle="#d2d0c2";ctx.lineWidth=3;ctx.lineCap="square";
       ctx.beginPath();ctx.moveTo(pose.hands.x,pose.hands.y);ctx.lineTo(pose.clubHead.x,pose.clubHead.y);ctx.stroke();
