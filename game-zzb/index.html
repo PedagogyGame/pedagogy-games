@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lower Limb — Click the Structure</title>
+<style>
+  :root{
+    --bg:#0e131a; --panel:#161f2a; --panel2:#1d2836; --line:#2a3849;
+    --ink:#e9eef4; --muted:#93a4b8; --accent:#3fd0c9; --accent2:#f5b544;
+    --ok:#4ed08a; --bad:#f06a63;
+    --bone:#e7dfcb; --bone-s:#b0a482;
+    --muscle:#b1544b; --muscle-d:#8f3f38; --muscle-l:#c9695d;
+    --nerve:#f2cb45; --artery:#e04b4b; --cart:#7fb4cf; --lig:#ded7c3;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 50% -10%,#1b2735 0%,var(--bg) 60%);
+    color:var(--ink); font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh; padding:18px 16px 40px;
+  }
+  .wrap{max-width:1120px;margin:0 auto}
+
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;margin-bottom:14px}
+  h1{margin:0;font-size:22px;letter-spacing:.2px;font-weight:650}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .stats{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 12px;min-width:76px;text-align:center}
+  .stat b{display:block;font-size:18px;line-height:1.2;font-variant-numeric:tabular-nums}
+  .stat i{font-style:normal;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
+
+  .promptbar{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--line);border-left:4px solid var(--accent);
+    border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    margin-bottom:12px;min-height:76px;
+  }
+  .promptbar .cue{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .promptbar .term{font-size:23px;font-weight:650;letter-spacing:.2px}
+  .promptbar .def{color:var(--muted);font-size:13.5px;margin-top:1px}
+  .feedback{margin-left:auto;text-align:right;font-size:14px;font-weight:550;min-width:200px}
+  .feedback small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+  .fb-ok{color:var(--ok)} .fb-bad{color:var(--bad)} .fb-hint{color:var(--accent2)}
+  .dots{display:flex;gap:5px;margin-top:6px;justify-content:flex-end}
+  .dot{width:9px;height:9px;border-radius:50%;background:#33455a}
+  .dot.used{background:var(--bad)}
+
+  .board{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;position:relative;overflow:hidden}
+  svg{display:block;width:100%;height:auto;touch-action:manipulation}
+  .clickable{cursor:crosshair}
+  .locked{cursor:progress}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  button{
+    background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:9px;
+    padding:8px 14px;font:inherit;font-size:13.5px;cursor:pointer;transition:.15s;
+  }
+  button:hover{background:#25344a;border-color:#3a4d66}
+  button.primary{background:var(--accent);color:#06231f;border-color:transparent;font-weight:600}
+  button.primary:hover{background:#5ce0d8}
+  button[aria-pressed="true"]{background:#24404a;border-color:var(--accent);color:var(--accent)}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{border:0;border-radius:0;border-right:1px solid var(--line);font-size:12.5px;padding:8px 11px}
+  .seg button:last-child{border-right:0}
+  .spacer{flex:1}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:12px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  /* results */
+  .overlay{position:fixed;inset:0;background:rgba(6,10,15,.82);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px;z-index:20}
+  .overlay.on{display:flex}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:520px;width:100%;max-height:88vh;overflow:auto}
+  .card h2{margin:0 0 4px;font-size:22px}
+  .card p.lead{color:var(--muted);margin:0 0 16px;font-size:13.5px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .grid div{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+  .grid b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+  .grid i{font-style:normal;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+  .misslist{list-style:none;padding:0;margin:0 0 18px;max-height:200px;overflow:auto}
+  .misslist li{padding:7px 10px;border-radius:8px;background:var(--panel2);margin-bottom:6px;font-size:13px}
+  .misslist li span{color:var(--muted)}
+  @media(max-width:640px){
+    .promptbar .term{font-size:19px}
+    .feedback{margin-left:0;text-align:left;width:100%}
+    .dots{justify-content:flex-start}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Lower Limb — <span>Click the Structure</span></h1>
+    <div class="sub">Hip through ankle · 20 essential structures · bones, muscles, nerves, vessels</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="s-score">0</b><i>Score</i></div>
+    <div class="stat"><b id="s-streak">0</b><i>Streak</i></div>
+    <div class="stat"><b id="s-prog">0/20</b><i>Progress</i></div>
+    <div class="stat"><b id="s-acc">—</b><i>First try</i></div>
+  </div>
+</header>
+
+<div class="promptbar">
+  <div>
+    <div class="cue" id="p-cue">Find this structure</div>
+    <div class="term" id="p-term">Ready?</div>
+    <div class="def" id="p-def">Press Start to begin.</div>
+  </div>
+  <div class="feedback">
+    <div id="p-fb">&nbsp;</div>
+    <div class="dots" id="p-dots"></div>
+  </div>
+</div>
+
+<div class="board">
+<svg id="board" viewBox="0 0 940 660" role="img" aria-label="Lower limb anatomy diagram">
+  <defs>
+    <path id="limbSil" d="M168,58 C150,128 162,200 178,254 C190,300 208,330 218,364 C228,420 228,482 234,540 L266,540 C272,482 272,420 282,364 C292,330 310,300 322,254 C338,200 350,128 330,58 Z"/>
+    <linearGradient id="musc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c9695d"/><stop offset="1" stop-color="#8f3f38"/>
+    </linearGradient>
+    <linearGradient id="musc2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8f3f38"/><stop offset="1" stop-color="#c9695d"/>
+    </linearGradient>
+    <linearGradient id="bonez" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f2ecdc"/><stop offset="1" stop-color="#cfc4a6"/>
+    </linearGradient>
+    <filter id="soft"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity=".45"/></filter>
+  </defs>
+
+  <!-- ============ view headings ============ -->
+  <g font-family="ui-sans-serif,system-ui,sans-serif" fill="#93a4b8">
+    <text x="249" y="30" font-size="13" text-anchor="middle" letter-spacing="1.6">ANTERIOR VIEW</text>
+    <text x="690" y="30" font-size="13" text-anchor="middle" letter-spacing="1.6">POSTERIOR VIEW</text>
+    <text x="430" y="292" font-size="11.5" text-anchor="middle" letter-spacing="1.4">KNEE — CUTAWAY</text>
+  </g>
+
+  <!-- ============ silhouettes ============ -->
+  <g fill="#ffffff" fill-opacity=".035" stroke="#3a4c62" stroke-width="1.2">
+    <use href="#limbSil"/>
+    <use href="#limbSil" transform="translate(441,0)"/>
+  </g>
+  <!-- feet -->
+  <g fill="#ffffff" fill-opacity=".035" stroke="#3a4c62" stroke-width="1.2">
+    <path d="M234,538 C226,556 228,578 238,586 C252,594 288,590 296,578 C302,566 286,556 266,540 Z"/>
+    <path d="M675,538 C662,552 660,576 672,584 C688,592 716,586 720,572 C723,558 712,552 707,538 Z"/>
+  </g>
+
+  <!-- ============================================================
+       ANTERIOR FIGURE
+       ============================================================ -->
+  <!-- pelvis -->
+  <g class="bone" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.4" filter="url(#soft)">
+    <!-- hip bone: iliac wing -->
+    <path d="M198,106 C180,92 176,64 194,52 C226,38 282,42 310,58 C318,74 310,92 296,102
+             C276,112 240,118 220,114 C209,112 202,110 198,106 Z"/>
+    <!-- superior pubic ramus + ischium -->
+    <path d="M214,124 C194,132 180,152 188,166 C202,174 218,160 226,142 Z"/>
+    <path d="M246,130 C260,142 260,160 250,168 C240,166 234,150 236,132 Z"/>
+    <!-- femoral neck -->
+    <path d="M240,130 L274,152 L280,174 L242,152 Z"/>
+    <!-- femoral head -->
+    <circle cx="232" cy="120" r="18"/>
+    <!-- acetabular rim -->
+    <path d="M213,106 A20,20 0 0 1 251,108" fill="none" stroke="#9c8f6d" stroke-width="3.4" stroke-linecap="round"/>
+    <!-- iliac fossa + crest detail -->
+    <path d="M200,96 C196,74 210,58 240,54 C272,50 296,58 306,70" fill="none" stroke="#bdb08d" stroke-width="1.5" opacity=".9"/>
+    <path d="M196,52 C228,42 282,46 310,58" fill="none" stroke="#9c8f6d" stroke-width="2.4" stroke-linecap="round" opacity=".8"/>
+  </g>
+
+  <!-- adductors (medial) -->
+  <g filter="url(#soft)">
+    <path d="M206,146 C186,160 162,196 160,238 C158,276 170,300 186,314 C204,320 216,300 218,268 C220,226 216,182 206,146 Z"
+          fill="url(#musc2)" stroke="#7d352f" stroke-width="1.2"/>
+  </g>
+  <!-- quadriceps (anterior/lateral) -->
+  <g filter="url(#soft)">
+    <path d="M292,146 C320,164 340,206 338,250 C336,290 322,314 306,326 L286,318 C276,300 274,268 276,232 C278,194 282,166 292,146 Z"
+          fill="url(#musc)" stroke="#7d352f" stroke-width="1.2"/>
+    <path d="M300,160 C310,200 310,266 300,314" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+    <path d="M320,190 C326,226 324,272 314,308" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+    <!-- quad tendon -->
+    <path d="M306,326 C292,332 278,330 268,326" fill="none" stroke="#ded7c3" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- femur shaft + condyles -->
+  <g class="bone" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.4">
+    <rect x="245" y="150" width="27" height="170" rx="13" transform="rotate(2.5 258 235)"/>
+    <ellipse cx="262" cy="330" rx="33" ry="18"/>
+  </g>
+  <!-- patella -->
+  <ellipse cx="258" cy="326" rx="17" ry="14" fill="#f4eee0" stroke="#a89b78" stroke-width="1.5"/>
+  <!-- knee joint line -->
+  <path d="M222,352 C238,358 282,358 296,352" fill="none" stroke="#7fb4cf" stroke-width="5" stroke-linecap="round" opacity=".95"/>
+
+  <!-- tibia + fibula -->
+  <g class="bone" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.4">
+    <ellipse cx="250" cy="364" rx="29" ry="11"/>
+    <rect x="235" y="368" width="29" height="162" rx="13"/>
+    <path d="M238,522 C234,540 234,552 242,556 C250,558 254,548 254,530 Z"/>
+    <ellipse cx="296" cy="372" rx="11" ry="10"/>
+    <rect x="290" y="378" width="13" height="146" rx="6"/>
+    <path d="M290,520 C288,538 292,550 300,550 C307,548 306,534 303,518 Z"/>
+  </g>
+  <!-- tibialis anterior -->
+  <g filter="url(#soft)">
+    <path d="M266,384 C282,392 290,420 288,450 C286,474 280,490 272,498 L262,494 C260,466 260,420 266,384 Z"
+          fill="url(#musc)" stroke="#7d352f" stroke-width="1.1"/>
+    <path d="M268,498 C266,516 262,532 258,542" fill="none" stroke="#ded7c3" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- femoral artery -->
+  <path d="M204,150 C200,190 204,236 214,290" fill="none" stroke="var(--artery)" stroke-width="5.5" stroke-linecap="round"/>
+  <!-- femoral nerve -->
+  <path d="M226,150 C224,180 228,214 234,240" fill="none" stroke="var(--nerve)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M226,168 L214,182 M228,196 L240,208" stroke="var(--nerve)" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+
+  <!-- ============================================================
+       KNEE CUTAWAY INSET
+       ============================================================ -->
+  <g>
+    <rect x="356" y="300" width="150" height="176" rx="12" fill="#131c26" stroke="#2a3849" stroke-width="1.3"/>
+    <!-- femoral condyles -->
+    <path d="M386,318 C382,344 392,358 406,362 L456,362 C470,358 480,344 476,318 Z" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.3"/>
+    <!-- tibial plateau -->
+    <path d="M386,424 L476,424 L470,462 L392,462 Z" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.3"/>
+    <!-- menisci -->
+    <path d="M382,412 L416,412 L406,424 L388,424 Z" fill="var(--cart)" stroke="#5d95b0" stroke-width="1.2"/>
+    <path d="M480,412 L446,412 L456,424 L474,424 Z" fill="var(--cart)" stroke="#5d95b0" stroke-width="1.2"/>
+    <!-- PCL (unlabelled, faint) -->
+    <path d="M448,420 C440,398 434,372 424,354" stroke="#8c8676" stroke-width="6" fill="none" stroke-linecap="round" opacity=".55"/>
+    <!-- ACL -->
+    <path d="M412,420 C420,398 428,374 444,354" stroke="var(--lig)" stroke-width="8" fill="none" stroke-linecap="round"/>
+    <text x="431" y="474" font-size="9" fill="#6f8299" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif">knee opened from the front</text>
+  </g>
+
+  <!-- ============================================================
+       POSTERIOR FIGURE
+       ============================================================ -->
+  <!-- sacrum / pelvis behind -->
+  <g class="bone" fill="url(#bonez)" stroke="var(--bone-s)" stroke-width="1.2" opacity=".7">
+    <path d="M632,84 C640,58 686,46 724,56 C740,70 738,94 724,104 C692,114 650,108 634,96 Z"/>
+    <path d="M690,74 C704,66 716,74 718,90 C716,106 702,110 692,102 Z" opacity=".9"/>
+  </g>
+  <!-- gluteus medius -->
+  <g filter="url(#soft)">
+    <path d="M622,66 C644,56 670,60 680,76 C684,94 674,110 656,116 C636,118 618,106 614,90 C613,78 616,70 622,66 Z"
+          fill="url(#musc2)" stroke="#7d352f" stroke-width="1.2"/>
+    <path d="M624,72 C640,82 660,94 672,108" fill="none" stroke="#7d352f" stroke-width="1.4" opacity=".7"/>
+  </g>
+  <!-- gluteus maximus -->
+  <g filter="url(#soft)">
+    <path d="M644,110 C676,96 726,100 750,120 C764,140 762,170 746,186 C720,200 674,198 652,182 C638,168 634,132 644,110 Z"
+          fill="url(#musc)" stroke="#7d352f" stroke-width="1.3"/>
+    <path d="M652,124 C684,132 722,140 750,132" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+    <path d="M650,152 C684,160 722,166 752,158" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+  </g>
+  <!-- hamstrings -->
+  <g filter="url(#soft)">
+    <path d="M660,190 C640,220 640,282 652,326 C668,344 716,344 730,326 C742,282 740,218 722,190 Z"
+          fill="url(#musc)" stroke="#7d352f" stroke-width="1.3"/>
+    <path d="M686,196 C680,244 680,296 686,332" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+    <path d="M710,200 C706,246 706,296 712,330" fill="none" stroke="#8d423a" stroke-width="1.6" opacity=".8"/>
+  </g>
+  <!-- popliteal fossa -->
+  <path d="M656,348 C672,342 710,342 726,348 C722,374 716,386 690,390 C666,386 660,372 656,348 Z"
+        fill="#131c26" stroke="#2a3849" stroke-width="1.1"/>
+  <!-- gastrocnemius -->
+  <g filter="url(#soft)">
+    <path d="M654,388 C640,414 642,462 654,492 L688,500 L722,492 C736,462 738,414 724,388 C706,380 672,380 654,388 Z"
+          fill="url(#musc)" stroke="#7d352f" stroke-width="1.3"/>
+    <path d="M689,384 C686,420 686,462 689,498" fill="none" stroke="#7d352f" stroke-width="2.2"/>
+  </g>
+  <!-- soleus (deep, visible below/around) -->
+  <g>
+    <path d="M652,468 C646,500 654,528 664,544 L716,544 C726,528 732,500 726,468 C710,486 668,486 652,468 Z"
+          fill="url(#musc2)" stroke="#7d352f" stroke-width="1.2" opacity=".97"/>
+  </g>
+  <!-- achilles -->
+  <path d="M672,544 C678,556 700,556 708,544" fill="none" stroke="#ded7c3" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- sciatic nerve -->
+  <path d="M662,132 C654,170 660,232 672,300 C676,318 680,330 684,340" fill="none" stroke="var(--nerve)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M684,340 L676,362 M684,340 L694,362" fill="none" stroke="var(--nerve)" stroke-width="3" stroke-linecap="round"/>
+  <!-- popliteal artery -->
+  <path d="M694,336 C688,352 688,372 692,392" fill="none" stroke="var(--artery)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M692,392 L682,410 M692,392 L702,410" fill="none" stroke="var(--artery)" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- ============ overlays drawn by JS ============ -->
+  <g id="overlay"></g>
+  <g id="labels"></g>
+</svg>
+</div>
+
+<div class="controls">
+  <button class="primary" id="btn-start">Start game</button>
+  <button id="btn-hint">Hint</button>
+  <button id="btn-reveal">Show me</button>
+  <button id="btn-skip">Skip</button>
+  <button id="btn-labels" aria-pressed="false">Study labels</button>
+  <div class="spacer"></div>
+  <div class="seg" id="modeSeg" title="What the prompt shows">
+    <button data-mode="both" aria-pressed="true">Term + definition</button>
+    <button data-mode="def" aria-pressed="false">Definition only</button>
+    <button data-mode="term" aria-pressed="false">Term only</button>
+  </div>
+</div>
+
+<div class="legend">
+  <span><i style="background:#ded7c3"></i>Bone / ligament / tendon</span>
+  <span><i style="background:#b1544b"></i>Muscle</span>
+  <span><i style="background:#f2cb45"></i>Nerve</span>
+  <span><i style="background:#e04b4b"></i>Artery</span>
+  <span><i style="background:#7fb4cf"></i>Cartilage / joint</span>
+</div>
+
+</div>
+
+<div class="overlay" id="results">
+  <div class="card">
+    <h2 id="r-title">Round complete</h2>
+    <p class="lead" id="r-lead"></p>
+    <div class="grid">
+      <div><b id="r-score">0</b><i>Score</i></div>
+      <div><b id="r-first">0</b><i>First try</i></div>
+      <div><b id="r-best">0</b><i>Best streak</i></div>
+    </div>
+    <div id="r-misswrap">
+      <div style="font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Worth another look</div>
+      <ul class="misslist" id="r-miss"></ul>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="primary" id="r-again">Play all 20 again</button>
+      <button id="r-practice">Practice the missed ones</button>
+      <button id="r-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------
+   Structures. Order = hit-test priority (first match wins),
+   so small / superficial things are listed before big ones.
+   --------------------------------------------------------- */
+const S = [
+  {id:'fem_n',  name:'Femoral nerve',      def:'major anterior-thigh nerve',            view:'Anterior',
+   hit:[{cx:228,cy:186,rx:13,ry:38}], lx:-72, ly:-6},
+  {id:'fem_a',  name:'Femoral artery',     def:'major artery of the thigh',             view:'Anterior',
+   hit:[{cx:206,cy:238,rx:12,ry:50}], lx:-70, ly:14},
+  {id:'sciatic',name:'Sciatic nerve',      def:'major nerve of the posterior lower limb', view:'Posterior',
+   hit:[{cx:668,cy:230,rx:13,ry:66}], lx:-74, ly:-10},
+  {id:'pop_a',  name:'Popliteal artery',   def:'major artery behind the knee',          view:'Posterior',
+   hit:[{cx:692,cy:366,rx:16,ry:26}], lx:78, ly:0},
+  {id:'patella',name:'Patella',            def:'the kneecap',                           view:'Anterior',
+   hit:[{cx:258,cy:326,rx:18,ry:15}], lx:-56, ly:-14},
+  {id:'tib_ant',name:'Tibialis anterior',  def:'muscle along the front of the shin',    view:'Anterior',
+   hit:[{cx:275,cy:440,rx:16,ry:56}], lx:66, ly:-34, short:'Tibialis ant.'},
+  {id:'acl',    name:'Anterior cruciate ligament (ACL)', def:'major stabiliser inside the knee', view:'Knee cutaway',
+   hit:[{cx:428,cy:386,rx:15,ry:33}], lx:34, ly:-46, short:'ACL'},
+  {id:'menisc', name:'Meniscus',           def:'fibrocartilage cushioning the knee',    view:'Knee cutaway',
+   hit:[{cx:398,cy:416,rx:19,ry:11},{cx:463,cy:416,rx:19,ry:11}], lx:32, ly:38},
+  {id:'knee',   name:'Knee joint',         def:'the major hinge joint of the limb',     view:'Anterior',
+   hit:[{cx:258,cy:353,rx:42,ry:11}], lx:-72, ly:12},
+  {id:'hip',    name:'Hip joint',          def:'connection of pelvis and femur',        view:'Anterior',
+   hit:[{cx:232,cy:120,rx:23,ry:21}], lx:-68, ly:-6},
+  {id:'quads',  name:'Quadriceps',         def:'anterior thigh muscle group',           view:'Anterior',
+   hit:[{cx:306,cy:236,rx:32,ry:90}], lx:52, ly:-16},
+  {id:'adduct', name:'Adductors',          def:'inner-thigh muscle group',              view:'Anterior',
+   hit:[{cx:186,cy:234,rx:29,ry:82}], lx:-64, ly:70},
+  {id:'hams',   name:'Hamstrings',         def:'posterior thigh muscle group',          view:'Posterior',
+   hit:[{cx:692,cy:262,rx:46,ry:76}], lx:62, ly:0},
+  {id:'gl_med', name:'Gluteus medius',     def:'major hip stabiliser',                  view:'Posterior',
+   hit:[{cx:646,cy:88,rx:34,ry:26}], lx:-58, ly:-34},
+  {id:'gl_max', name:'Gluteus maximus',    def:'powerful hip extensor',                 view:'Posterior',
+   hit:[{cx:702,cy:152,rx:57,ry:41}], lx:72, ly:-16},
+  {id:'gastroc',name:'Gastrocnemius',      def:'superficial calf muscle',               view:'Posterior',
+   hit:[{cx:690,cy:436,rx:46,ry:52}], lx:66, ly:-20},
+  {id:'soleus', name:'Soleus',             def:'deep calf muscle',                      view:'Posterior',
+   hit:[{cx:690,cy:518,rx:38,ry:30}], lx:64, ly:14},
+  {id:'femur',  name:'Femur',              def:'the thigh bone',                        view:'Anterior',
+   hit:[{cx:259,cy:236,rx:16,ry:84}], lx:72, ly:-96},
+  {id:'tibia',  name:'Tibia',              def:'main weight-bearing lower-leg bone',    view:'Anterior',
+   hit:[{cx:249,cy:452,rx:16,ry:82}], lx:-58, ly:24},
+  {id:'fibula', name:'Fibula',             def:'slender lateral lower-leg bone',        view:'Anterior',
+   hit:[{cx:296,cy:452,rx:11,ry:76}], lx:44, ly:52}
+];
+const byId = Object.fromEntries(S.map(s=>[s.id,s]));
+window.__hot = S; // debug hook: inspect hit regions from the console
+
+/* ---------------------------------------------------------
+   Elements & state
+   --------------------------------------------------------- */
+const svg   = document.getElementById('board');
+const ovl   = document.getElementById('overlay');
+const labG  = document.getElementById('labels');
+const el = id => document.getElementById(id);
+
+let queue = [], qi = -1, attempts = 0, score = 0, streak = 0, best = 0,
+    firstTry = 0, playing = false, locked = false, mode = 'both',
+    missed = [], total = 0, usedHelp = false;
+
+const MAX_TRIES = 3;
+
+/* ---------------------------------------------------------
+   Geometry helpers
+   --------------------------------------------------------- */
+function toSvg(evt){
+  const pt = svg.createSVGPoint();
+  const src = evt.touches && evt.touches[0] ? evt.touches[0] : evt;
+  pt.x = src.clientX; pt.y = src.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function inRegion(p, r){
+  const dx = (p.x - r.cx)/r.rx, dy = (p.y - r.cy)/r.ry;
+  return dx*dx + dy*dy <= 1;
+}
+function hitTest(p){
+  for (const s of S) for (const r of s.hit) if (inRegion(p, r)) return s;
+  return null;
+}
+window.__hitTest = hitTest; // debug hook
+const NS = 'http://www.w3.org/2000/svg';
+function mk(tag, attrs){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+/* ---------------------------------------------------------
+   Visual feedback on the diagram
+   --------------------------------------------------------- */
+function clearOverlay(){ ovl.textContent = ''; }
+
+function ring(s, color, dur, pulse){
+  s.hit.forEach(r=>{
+    const e = mk('ellipse',{cx:r.cx, cy:r.cy, rx:r.rx+5, ry:r.ry+5,
+      fill:color, 'fill-opacity':.16, stroke:color, 'stroke-width':3, 'stroke-linecap':'round'});
+    if (pulse){
+      const a = mk('animate',{attributeName:'stroke-opacity', values:'1;.25;1', dur:'1s', repeatCount:'indefinite'});
+      e.appendChild(a);
+    }
+    ovl.appendChild(e);
+  });
+  if (dur) setTimeout(clearOverlay, dur);
+}
+
+function tag(s, color){
+  const r = s.hit[0];
+  const x = r.cx + (s.lx||0), y = r.cy + (s.ly||0);
+  const g = mk('g',{});
+  const t = mk('text',{x:x, y:y+4, 'font-size':12, 'font-family':'ui-sans-serif,system-ui,sans-serif',
+    'text-anchor':'middle', fill:'#0e131a', 'font-weight':'600'});
+  t.textContent = s.short || s.name;
+  const bg = mk('rect',{rx:6, fill:color||'#e9eef4', 'fill-opacity':.94});
+  g.appendChild(bg); g.appendChild(t);
+  labG.appendChild(g);
+  const b = t.getBBox();
+  bg.setAttribute('x', b.x-7); bg.setAttribute('y', b.y-4);
+  bg.setAttribute('width', b.width+14); bg.setAttribute('height', b.height+8);
+  // connector
+  const line = mk('line',{x1:x, y1:y+(s.ly>0?-8:8), x2:r.cx, y2:r.cy,
+    stroke:color||'#e9eef4', 'stroke-width':1.2, 'stroke-opacity':.5});
+  labG.insertBefore(line, g);
+  return g;
+}
+function clearLabels(){ labG.textContent = ''; }
+
+/* ---------------------------------------------------------
+   HUD
+   --------------------------------------------------------- */
+function hud(){
+  el('s-score').textContent = score;
+  el('s-streak').textContent = streak;
+  el('s-prog').textContent = (playing ? Math.min(qi+1, queue.length) : 0) + '/' + (queue.length||20);
+  const done = qi >= 0 ? qi + (locked?1:0) : 0;
+  el('s-acc').textContent = total ? Math.round(100*firstTry/total)+'%' : '—';
+}
+function dots(){
+  const d = el('p-dots'); d.textContent='';
+  for (let i=0;i<MAX_TRIES;i++){
+    const s = document.createElement('div');
+    s.className = 'dot' + (i < attempts ? ' used' : '');
+    d.appendChild(s);
+  }
+}
+function fb(html, cls){
+  const e = el('p-fb');
+  e.className = cls || '';
+  e.innerHTML = html || '&nbsp;';
+}
+
+/* ---------------------------------------------------------
+   Game flow
+   --------------------------------------------------------- */
+function shuffle(a){
+  a = a.slice();
+  for (let i=a.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+function start(list){
+  queue = shuffle(list && list.length ? list : S.map(s=>s.id));
+  qi = -1; score = 0; streak = 0; best = 0; firstTry = 0; total = 0;
+  missed = []; playing = true;
+  el('results').classList.remove('on');
+  el('btn-start').textContent = 'Restart';
+  next();
+}
+
+function next(){
+  clearOverlay();
+  if (!labelsOn) clearLabels();
+  qi++;
+  if (qi >= queue.length){ finish(); return; }
+  attempts = 0; usedHelp = false; locked = false;
+  const s = byId[queue[qi]];
+  el('p-cue').textContent = 'Click on the diagram — ' + (qi+1) + ' of ' + queue.length;
+  if (mode === 'def'){
+    el('p-term').textContent = s.def.charAt(0).toUpperCase() + s.def.slice(1);
+    el('p-def').textContent  = 'Name it by finding it.';
+  } else if (mode === 'term'){
+    el('p-term').textContent = s.name;
+    el('p-def').textContent  = ' ';
+  } else {
+    el('p-term').textContent = s.name;
+    el('p-def').textContent  = s.def;
+  }
+  fb('&nbsp;');
+  dots(); hud();
+  svg.classList.add('clickable'); svg.classList.remove('locked');
+}
+
+function award(){
+  const pts = [100, 55, 25][Math.min(attempts, 2)];
+  const bonus = streak >= 3 ? Math.min(50, (streak-2)*10) : 0;
+  const gained = usedHelp ? Math.round(pts*0.4) : pts + bonus;
+  score += gained;
+  return gained;
+}
+
+function correct(s){
+  const gained = award();
+  total++;
+  if (attempts === 0 && !usedHelp) firstTry++;
+  streak++; best = Math.max(best, streak);
+  ring(s, '#4ed08a', 0, false);
+  tag(s, '#4ed08a');
+  fb('Correct — <b>'+s.name+'</b> <small>+'+gained+' points'+(streak>2?' · streak '+streak:'')+'</small>', 'fb-ok');
+  lockThen(950);
+}
+
+function wrong(s, clicked){
+  attempts++;
+  dots();
+  if (attempts >= MAX_TRIES){
+    streak = 0; total++;
+    missed.push(s.id);
+    ring(s, '#f06a63', 0, false);
+    tag(s, '#f06a63');
+    fb('Out of tries — this is <b>'+s.name+'</b>', 'fb-bad');
+    lockThen(1900);
+    return;
+  }
+  const hitTxt = clicked ? 'That’s the <b>'+clicked.name+'</b>.' : 'Nothing there.';
+  const help = attempts === 2 ? ' Look in the <b>'+s.view+'</b> panel.' : '';
+  fb(hitTxt + ' Try again.' + help, attempts===2 ? 'fb-hint' : 'fb-bad');
+  hud();
+}
+
+function lockThen(ms){
+  locked = true;
+  svg.classList.remove('clickable'); svg.classList.add('locked');
+  hud();
+  setTimeout(next, ms);
+}
+
+function finish(){
+  playing = false;
+  el('r-score').textContent = score;
+  el('r-first').textContent = firstTry + '/' + total;
+  el('r-best').textContent  = best;
+  const pct = total ? Math.round(100*firstTry/total) : 0;
+  el('r-title').textContent = pct === 100 ? 'Flawless.' : pct >= 75 ? 'Strong round.' : pct >= 50 ? 'Solid start.' : 'Good practice run.';
+  el('r-lead').textContent = 'You placed ' + firstTry + ' of ' + total + ' structures on the first click (' + pct + '%).';
+  const ul = el('r-miss'); ul.textContent = '';
+  const uniq = [...new Set(missed)];
+  uniq.forEach(id=>{
+    const s = byId[id];
+    const li = document.createElement('li');
+    li.innerHTML = '<b>'+s.name+'</b> <span>— '+s.def+' · '+s.view+'</span>';
+    ul.appendChild(li);
+  });
+  el('r-misswrap').style.display = uniq.length ? '' : 'none';
+  el('r-practice').style.display = uniq.length ? '' : 'none';
+  el('results').classList.add('on');
+}
+
+/* ---------------------------------------------------------
+   Input
+   --------------------------------------------------------- */
+function onClick(evt){
+  if (!playing || locked) return;
+  evt.preventDefault();
+  const p = toSvg(evt);
+  const clicked = hitTest(p);
+  const target = byId[queue[qi]];
+  if (clicked && clicked.id === target.id) correct(target);
+  else wrong(target, clicked);
+}
+svg.addEventListener('click', onClick);
+
+/* ---------------------------------------------------------
+   Controls
+   --------------------------------------------------------- */
+let labelsOn = false;
+el('btn-labels').addEventListener('click', function(){
+  labelsOn = !labelsOn;
+  this.setAttribute('aria-pressed', labelsOn);
+  clearLabels();
+  if (labelsOn) S.forEach(s=>tag(s, '#dbe6f2'));
+});
+
+el('btn-start').addEventListener('click', ()=>start(null));
+
+el('btn-hint').addEventListener('click', ()=>{
+  if (!playing || locked) return;
+  const s = byId[queue[qi]];
+  usedHelp = true;
+  fb('Hint — it is in the <b>'+s.view+'</b> panel.', 'fb-hint');
+  const r = s.hit[0];
+  clearOverlay();
+  const e = mk('circle',{cx:r.cx, cy:r.cy, r:Math.max(r.rx,r.ry)+34,
+    fill:'none', stroke:'#f5b544', 'stroke-width':2, 'stroke-dasharray':'6 6'});
+  ovl.appendChild(e);
+  setTimeout(clearOverlay, 1600);
+});
+
+el('btn-reveal').addEventListener('click', ()=>{
+  if (!playing || locked) return;
+  const s = byId[queue[qi]];
+  total++; streak = 0; missed.push(s.id);
+  ring(s, '#f5b544', 0, false);
+  tag(s, '#f5b544');
+  fb('This is <b>'+s.name+'</b> <small>'+s.def+'</small>', 'fb-hint');
+  lockThen(1900);
+});
+
+el('btn-skip').addEventListener('click', ()=>{
+  if (!playing || locked) return;
+  queue.push(queue[qi]);           // comes back later in the round
+  fb('Skipped — it will come back.', 'fb-hint');
+  lockThen(500);
+});
+
+document.getElementById('modeSeg').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', x===b));
+  if (playing && !locked){
+    const s = byId[queue[qi]];
+    if (mode === 'def'){ el('p-term').textContent = s.def.charAt(0).toUpperCase()+s.def.slice(1); el('p-def').textContent='Name it by finding it.'; }
+    else if (mode === 'term'){ el('p-term').textContent = s.name; el('p-def').textContent=' '; }
+    else { el('p-term').textContent = s.name; el('p-def').textContent = s.def; }
+  }
+});
+
+el('r-again').addEventListener('click', ()=>start(null));
+el('r-practice').addEventListener('click', ()=>start([...new Set(missed)]));
+el('r-close').addEventListener('click', ()=>el('results').classList.remove('on'));
+
+document.addEventListener('keydown', e=>{
+  if (e.key === 'Enter' && !playing) start(null);
+  if (e.key.toLowerCase() === 'h') el('btn-hint').click();
+  if (e.key.toLowerCase() === 'l') el('btn-labels').click();
+});
+
+hud();
+})();
+</script>
+</body>
+</html>
