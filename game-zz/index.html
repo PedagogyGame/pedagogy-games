@@ -100,9 +100,12 @@ body::after{
 #banner{
   position:absolute;z-index:6;left:50%;top:50%;transform:translate(-50%,-50%);
   text-align:center;pointer-events:none;display:none;
+  background:rgba(3,7,14,.92);border:1px solid var(--cyan-dim);
+  padding:10px 18px;max-width:90%;box-shadow:0 0 30px rgba(0,0,0,.8);
 }
 #banner b{display:block;font-size:clamp(14px,3vw,26px);color:#fff;text-shadow:0 0 16px var(--cyan)}
-#banner s{display:block;text-decoration:none;font-size:10px;color:var(--amber);margin-top:6px}
+#banner s{display:block;text-decoration:none;font-size:10px;color:var(--amber);
+  margin-top:6px;line-height:1.6;white-space:normal}
 .pop{position:absolute;z-index:7;pointer-events:none;font-size:12px;color:var(--green);
   text-shadow:0 0 10px var(--green);animation:up .8s ease-out forwards}
 @keyframes up{0%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-42px);opacity:0}}
@@ -183,7 +186,7 @@ h1 em{font-style:normal;color:var(--mag);text-shadow:0 0 6px var(--mag),0 0 22px
     <!-- TITLE -->
     <div class="screen" id="scTitle">
       <h1>CRANIO<em>SCAN</em></h1>
-      <div class="sub">Head &amp; face visual vocabulary. A term and its definition appear — locate the structure on the scan and click it before the clock drains. 21 targets. Wrong shots cost time.</div>
+      <div class="sub">Head &amp; face visual vocabulary. A term and its definition appear — locate the structure on the scan and click it before the clock drains. 21 targets, <b style="color:#ff4d6d">one shot each</b>: a wrong click burns the target, so aim before you fire.</div>
       <div class="legend">
         <span><i style="background:#cfe9ff"></i>BONE</span>
         <span><i style="background:#ff5ecf"></i>CEREBRUM</span>
@@ -232,7 +235,11 @@ h1 em{font-style:normal;color:var(--mag);text-shadow:0 0 6px var(--mag),0 0 22px
    CRANIOSCAN — pixel-grid anatomy. Art and hit-zones share one source:
    every structure is a geometric predicate rasterized onto a 72x72 grid.
    ======================================================================= */
-const G = 72;
+/* Geometry is authored in a 72-unit anatomical space; U is the pixel
+   subdivision. U=2 => a 144x144 render grid, so every curve, suture and
+   tooth resolves at twice the fidelity without retuning a coordinate. */
+const U = 2;
+const G = 72 * U;
 
 /* ---------- geometry helpers (tested at cell centers) ---------- */
 const ell=(x,y,cx,cy,rx,ry)=>((x-cx)**2)/(rx*rx)+((y-cy)**2)/(ry*ry)<=1;
@@ -249,7 +256,12 @@ const path=(x,y,pts,w)=>{for(let i=0;i<pts.length-1;i++)
 /* angle from the cranial vault centre — gives radial, suture-like boundaries
    instead of rectangular cuts. 0 = anterior, -90 = superior, 180 = posterior. */
 const VCX=30, VCY=25;
-const A=(x,y)=>Math.atan2(y-VCY,x-VCX)*180/Math.PI;
+/* Aw perturbs the angle by two sine terms in the radius, so bone boundaries
+   come out as interdigitated suture lines rather than clean pie-slice cuts. */
+const Aw=(x,y)=>{
+  const dx=x-VCX, dy=y-VCY, d=Math.hypot(dx,dy);
+  return Math.atan2(dy,dx)*180/Math.PI + Math.sin(d*1.55)*5.5 + Math.sin(d*3.7)*2.4;
+};
 
 /* ---------- palette ---------- */
 const COL={
@@ -259,7 +271,10 @@ const COL={
   ear:'#ff7ab8', eye:'#4fd6ff',
   cerebrum:'#ff5ecf', gyrus:'#c22b96', cerebellum:'#a97bff', cbfold:'#6c40b8',
   brainstem:'#38f2c8', trigeminal:'#ff8c42', facial:'#7cff5e', optic:'#ffd23f',
-  vestibulo:'#4fd6ff', decor:'#0e2438', globe:'#1d4a6b'
+  vestibulo:'#4fd6ff', decor:'#0e2438', globe:'#1d4a6b',
+  /* fine detail unlocked by the higher grid */
+  maxteeth:'#fffaf2', mandteeth:'#fff1e2', pupil:'#03070f', meatus:'#050b14',
+  septum:'#e3d2bb', fissure:'#8f1f6b'
 };
 const shade=(h,f)=>{const n=parseInt(h.slice(1),16);
   let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
@@ -270,26 +285,35 @@ const shade=(h,f)=>{const n=parseInt(h.slice(1),16);
 /* craniofacial skeleton (everything except the mandible) */
 const CRANIO=[[32,6],[39,6],[45,9],[49,14],[51,20],[52,25],[53,29],[55,32],[59,36],
   [61,39],[59,41],[60,44],[61,46],[60,49],[56,50],[48,50],[45,49],[41,48],[37,47],
-  [31,48],[25,49],[19,47],[14,42],[10,35],[9,26],[12,17],[18,10],[25,6]];
-/* mandible — L-shaped: vertical ramus + horizontal body to the chin */
-const MAND=[[33,46],[34,40],[39,40],[42,49],[54,51],[60,54],[60,57],[52,58],
-  [43,58],[37,56],[34,51]];
+  [31,48],[27,48.5],[26,51],[23,50],[21,48],[16,45],[12,40],[9.5,33],[9,26],
+  [12,17],[18,10],[25,6]];
+/* mandible — ramus with a true condyle / mandibular notch / coronoid profile,
+   then the body sweeping forward to the chin */
+const MAND=[[33,46],[34,40],[36,39.5],[37.5,43],[39,38.5],[41,39.8],[42.5,49],
+  [54,51],[60,54],[60,57],[52,58],[43,58],[37,56],[34,51]];
+const MAXP=[[50,42],[59,44],[61,46],[60,49],[56,50],[48,50],[45,47],[46,43]];
 const V_LAT={
   key:'lat', name:'LATERAL SKULL',
   regions:[
-    {id:'tmj',       t:(x,y)=>disc(x,y,36,41,2.8)},
+    {id:'meatus',    t:(x,y)=>disc(x,y,29,42,1.7)},
+    {id:'tmj',       t:(x,y)=>disc(x,y,35.4,40.6,2.4)},
     {id:'ear',       t:(x,y)=>ring(x,y,29,42,3.2,6.2)&&!(x>30&&Math.abs(y-42)<2.2)},
     {id:'orbit',     t:(x,y)=>disc(x,y,46,26,5.8)},
+    {id:'septum',    t:(x,y)=>path(x,y,[[52.5,36],[57,40.5]],0.45)},
     {id:'nasalcav',  t:(x,y)=>poly(x,y,[[52,34],[58,37],[60,43],[53,45],[50,39]])},
-    {id:'zygomatic', t:(x,y)=>path(x,y,[[30,36],[35,35],[41,35],[46,36]],2.0)||
+    {id:'zygomatic', t:(x,y)=>path(x,y,[[29.5,36.6],[33,35.2],[38,34.6],[43,35.6],[46,36.6]],1.55)||
                               poly(x,y,[[44,33],[51,35],[51,41],[45,43],[42,39]])},
+    {id:'mandteeth', t:(x,y)=>poly(x,y,MAND)&&path(x,y,[[45,50.4],[59,54.2]],1.15)&&
+                              Math.sin((x-45)*2.45)>0.05},
     {id:'mandible',  t:(x,y)=>poly(x,y,MAND)},
-    {id:'maxilla',   t:(x,y)=>poly(x,y,[[50,42],[59,44],[61,46],[60,49],[56,50],[48,50],[45,47],[46,43]])},
-    {id:'sphenoid',  t:(x,y)=>poly(x,y,[[35,27],[42,28],[42,34],[35,33]])},
-    {id:'frontal',   t:(x,y,I)=>I&&A(x,y)>-85&&A(x,y)<-6},
-    {id:'parietal',  t:(x,y,I)=>I&&A(x,y)<=-85&&A(x,y)>-165},
-    {id:'occipital', t:(x,y,I)=>I&&(A(x,y)<=-165||A(x,y)>=118)},
-    {id:'temporal',  t:(x,y,I)=>I&&A(x,y)>=52&&A(x,y)<118},
+    {id:'maxteeth',  t:(x,y)=>poly(x,y,MAXP)&&y>48.1&&Math.sin((x-47.6)*2.45)>0.05},
+    {id:'maxilla',   t:(x,y)=>poly(x,y,MAXP)},
+    /* greater wing of the sphenoid, at the pterion behind the orbit */
+    {id:'sphenoid',  t:(x,y)=>poly(x,y,[[34.6,30.4],[35.2,27.6],[39,26.9],[42,28.6],[42.4,32],[40,34],[36,33.6]])},
+    {id:'frontal',   t:(x,y,I)=>I&&Aw(x,y)>-85&&Aw(x,y)<-6},
+    {id:'parietal',  t:(x,y,I)=>I&&Aw(x,y)<=-85&&Aw(x,y)>-172},
+    {id:'occipital', t:(x,y,I)=>I&&(Aw(x,y)<=-172||Aw(x,y)>=132)},
+    {id:'temporal',  t:(x,y,I)=>I&&Aw(x,y)>=52&&Aw(x,y)<132},
     {id:'cranium',   t:(x,y,I)=>I}
   ],
   inside:(x,y)=>poly(x,y,CRANIO)
@@ -301,18 +325,27 @@ const FACE=[[36,5],[45,7],[52,12],[55,20],[56,28],[54,36],[51,44],[47,52],[42,58
 const V_ANT={
   key:'ant', name:'ANTERIOR FACE',
   regions:[
+    {id:'pupil',     t:(x,y)=>disc(x,y,26,28,1.5)||disc(x,y,46,28,1.5)},
     {id:'eye',       t:(x,y)=>disc(x,y,26,28,3.4)||disc(x,y,46,28,3.4)},
     {id:'orbit',     t:(x,y)=>disc(x,y,26,28,6.2)||disc(x,y,46,28,6.2)},
+    {id:'septum',    t:(x,y)=>path(x,y,[[36,32],[36,43]],0.5)},
     {id:'nasalcav',  t:(x,y)=>poly(x,y,[[33,30],[39,30],[41,42],[36,45],[31,42]])},
+    {id:'meatus',    t:(x,y)=>disc(x,y,16,32,1.5)||disc(x,y,56,32,1.5)},
     {id:'ear',       t:(x,y)=>(ring(x,y,16,32,2.4,5.4)&&!(x>16.5&&Math.abs(y-32)<2))||
                               (ring(x,y,56,32,2.4,5.4)&&!(x<55.5&&Math.abs(y-32)<2))},
-    {id:'zygomatic', t:(x,y)=>poly(x,y,[[21,35],[29,36],[29,41],[22,40]])||
-                              poly(x,y,[[51,35],[43,36],[43,41],[50,40]])},
+    {id:'zygomatic', t:(x,y)=>poly(x,y,[[20.5,34.5],[29,36],[29.5,41],[22,40.5]])||
+                              poly(x,y,[[51.5,34.5],[43,36],[42.5,41],[50,40.5]])},
+    {id:'mandteeth', t:(x,y)=>poly(x,y,[[24,50],[48,50],[46,56],[41,60],[31,60],[26,56]])&&
+                              y<52&&Math.sin((x-26)*2.45)>0.05},
     {id:'mandible',  t:(x,y)=>poly(x,y,[[24,50],[48,50],[46,56],[41,60],[31,60],[26,56]])},
+    {id:'maxteeth',  t:(x,y)=>poly(x,y,[[25,44],[47,44],[46,50],[26,50]])&&
+                              y>48&&Math.sin((x-26)*2.45)>0.05},
     {id:'maxilla',   t:(x,y)=>poly(x,y,[[25,44],[47,44],[46,50],[26,50]])},
-    {id:'temporal',  t:(x,y,I)=>I&&y>=22&&y<=34&&Math.abs(x-36)>=14},
-    {id:'parietal',  t:(x,y,I)=>I&&y<=18&&Math.abs(x-36)>7},
-    {id:'frontal',   t:(x,y,I)=>I&&y<=23},
+    /* sine-jittered borders keep the sutures consistent with the lateral view */
+    {id:'temporal',  t:(x,y,I)=>I&&y>=22&&y<=34&&Math.abs(x-36)>=14+Math.sin(y*1.4)*1.1},
+    {id:'parietal',  t:(x,y,I)=>I&&y<=18+Math.sin(x*1.15)*1.3&&
+                                 Math.abs(x-36)>7+Math.sin(y*1.05)*1.4},
+    {id:'frontal',   t:(x,y,I)=>I&&y<=23+Math.sin(x*0.95)*1.2},
     {id:'cranium',   t:(x,y,I)=>I&&y<=44}
   ],
   inside:(x,y)=>poly(x,y,FACE)
@@ -320,7 +353,7 @@ const V_ANT={
 
 /* ---------- VIEW 3 : BRAIN & CRANIAL NERVES (lateral schematic) ---------- */
 /* wavy vertical bands = gyri / sulci of the cortex */
-const sulcus=(x,y)=>Math.sin((x-30)*0.78+Math.sin((y-23)*0.55)*2.2)>0.72;
+const sulcus=(x,y)=>Math.sin((x-30)*1.05+Math.sin((y-23)*0.62)*2.4)>0.78;
 const V_BRAIN={
   key:'brn', name:'BRAIN + CRANIAL NERVES',
   regions:[
@@ -334,8 +367,10 @@ const V_BRAIN={
                               path(x,y,[[40,45],[44,51]],1.4)},
     {id:'vestibulo', t:(x,y)=>path(x,y,[[29,42],[22,46]],1.8)||ring(x,y,19.5,48,0.8,3.2)},
     {id:'brainstem', t:(x,y)=>poly(x,y,[[28,32],[34,32],[33,45],[31,54],[27,54],[26,42]])},
-    {id:'cbfold',    t:(x,y)=>ell(x,y,17,40,8.5,6.5)&&Math.floor(y)%3===0},
+    {id:'cbfold',    t:(x,y)=>ell(x,y,17,40,8.5,6.5)&&Math.floor(y*2)%3===0},
     {id:'cerebellum',t:(x,y)=>ell(x,y,17,40,8.5,6.5)},
+    /* lateral (Sylvian) fissure — the deep cleft above the temporal lobe */
+    {id:'fissure',   t:(x,y)=>ell(x,y,30,23,19,12)&&path(x,y,[[15,28],[25,31],[36,29.5]],0.6)},
     {id:'gyrus',     t:(x,y)=>ell(x,y,30,23,19,12)&&sulcus(x,y)},
     {id:'cerebrum',  t:(x,y)=>ell(x,y,30,23,19,12)},
     {id:'decor',     t:(x,y)=>poly(x,y,CRANIO)||poly(x,y,MAND)}
@@ -348,18 +383,24 @@ const VIEWS={lat:V_LAT, ant:V_ANT, brn:V_BRAIN};
 function rasterize(V){
   const m=new Array(G*G).fill(null);
   for(let y=0;y<G;y++)for(let x=0;x<G;x++){
-    const cx=x+0.5, cy=y+0.5, I=V.inside(cx,cy);
+    /* sample at the cell centre, converted back to 72-unit anatomical space */
+    const cx=(x+0.5)/U, cy=(y+0.5)/U, I=V.inside(cx,cy);
     for(const r of V.regions){
       if(r.t(cx,cy,I)){ m[y*G+x]=r.id; break; }
     }
   }
   return m;
 }
-for(const k in VIEWS) VIEWS[k].map=rasterize(VIEWS[k]);
+for(const k in VIEWS){
+  const V=VIEWS[k];
+  V.map=rasterize(V);
+  V.cells={};                       // id -> flat indices, for fast overlays
+  V.map.forEach((id,i)=>{ if(id)(V.cells[id]||(V.cells[id]=[])).push(i); });
+}
 
 /* ---------- the 21 targets ---------- */
 const BONES=['cranium','frontal','parietal','temporal','occipital','sphenoid',
-             'maxilla','mandible','zygomatic','orbit'];
+             'maxilla','mandible','zygomatic','orbit','maxteeth','mandteeth','septum'];
 const TARGETS=[
  {n:1, term:'Skull / Cranium', def:'bony framework of head',            view:'lat', reg:BONES},
  {n:2, term:'Frontal bone',    def:'forehead portion of skull',          view:'lat', reg:['frontal']},
@@ -367,17 +408,17 @@ const TARGETS=[
  {n:4, term:'Temporal bones',  def:'lateral skull around ears',          view:'lat', reg:['temporal']},
  {n:5, term:'Occipital bone',  def:'posterior / base of skull',          view:'lat', reg:['occipital']},
  {n:6, term:'Sphenoid bone',   def:'central skull-base bone',            view:'lat', reg:['sphenoid']},
- {n:7, term:'Maxilla',         def:'upper jaw',                          view:'ant', reg:['maxilla']},
- {n:8, term:'Mandible',        def:'lower jaw',                          view:'lat', reg:['mandible']},
+ {n:7, term:'Maxilla',         def:'upper jaw',                          view:'ant', reg:['maxilla','maxteeth']},
+ {n:8, term:'Mandible',        def:'lower jaw',                          view:'lat', reg:['mandible','mandteeth']},
  {n:9, term:'Zygomatic bone',  def:'cheekbone',                          view:'ant', reg:['zygomatic']},
- {n:10,term:'Orbit',           def:'bony eye socket',                    view:'ant', reg:['orbit','eye']},
- {n:11,term:'Nasal cavity',    def:'internal space of nose',             view:'ant', reg:['nasalcav']},
+ {n:10,term:'Orbit',           def:'bony eye socket',                    view:'ant', reg:['orbit','eye','pupil']},
+ {n:11,term:'Nasal cavity',    def:'internal space of nose',             view:'ant', reg:['nasalcav','septum']},
  {n:12,term:'Temporomandibular joint',def:'jaw joint (TMJ)',             view:'lat', reg:['tmj']},
- {n:13,term:'Cerebrum',        def:'largest part of brain',              view:'brn', reg:['cerebrum','gyrus']},
+ {n:13,term:'Cerebrum',        def:'largest part of brain',              view:'brn', reg:['cerebrum','gyrus','fissure']},
  {n:14,term:'Cerebellum',      def:'coordination / balance region',      view:'brn', reg:['cerebellum','cbfold']},
  {n:15,term:'Brainstem',       def:'connection between brain and spinal cord', view:'brn', reg:['brainstem']},
- {n:16,term:'Eye / Globe',     def:'organ of vision',                    view:'ant', reg:['eye']},
- {n:17,term:'External ear / Auricle',def:'visible ear structure',        view:'lat', reg:['ear']},
+ {n:16,term:'Eye / Globe',     def:'organ of vision',                    view:'ant', reg:['eye','pupil']},
+ {n:17,term:'External ear / Auricle',def:'visible ear structure',        view:'lat', reg:['ear','meatus']},
  {n:18,term:'Trigeminal nerve (CN V)',def:'major facial sensation nerve',view:'brn', reg:['trigeminal']},
  {n:19,term:'Facial nerve (CN VII)',def:'major facial-expression nerve', view:'brn', reg:['facial']},
  {n:20,term:'Optic nerve (CN II)',def:'carries visual information',      view:'brn', reg:['optic']},
@@ -393,69 +434,86 @@ NAMES.orbit={term:'Orbit',def:'bony eye socket'};
 NAMES.eye={term:'Eye / Globe',def:'organ of vision'};
 NAMES.globe={term:'Eye (reference)',def:'target of the optic nerve'};
 NAMES.gyrus={term:'Cerebrum',def:'largest part of brain'};
+NAMES.fissure={term:'Cerebrum',def:'largest part of brain'};
 NAMES.cbfold={term:'Cerebellum',def:'coordination / balance region'};
+NAMES.maxteeth={term:'Maxilla',def:'upper jaw'};
+NAMES.mandteeth={term:'Mandible',def:'lower jaw'};
+NAMES.pupil={term:'Eye / Globe',def:'organ of vision'};
+NAMES.meatus={term:'External ear / Auricle',def:'visible ear structure'};
+NAMES.septum={term:'Nasal cavity',def:'internal space of nose'};
 
 /* ---------- canvas / rendering ---------- */
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const stage=document.getElementById('stage');
-let S=8, curView='lat', highlight=null, hlPhase=0, hoverCell=null;
+let curView='lat', highlight=null, hlCells=null, hlEdge=null, hlPhase=0, hoverCell=null;
 
-function fit(){
-  const pad=24;
-  const w=stage.clientWidth-pad, h=stage.clientHeight-pad;
-  S=Math.max(3,Math.floor(Math.min(w,h)/G));
-  cv.width=G*S; cv.height=G*S;
-  cv.style.width=(G*S)+'px'; cv.style.height=(G*S)+'px';
-  draw();
-}
-window.addEventListener('resize',fit);
-
-function draw(){
-  const V=VIEWS[curView], m=V.map;
-  ctx.clearRect(0,0,cv.width,cv.height);
-  // faint scan grid
-  ctx.fillStyle='rgba(79,214,255,.045)';
-  for(let i=0;i<G;i+=6){ ctx.fillRect(i*S,0,1,cv.height); ctx.fillRect(0,i*S,cv.width,1); }
-
+/* Each view is shaded once into an offscreen buffer; the live canvas just
+   blits it and paints overlays, so the 144x144 grid costs nothing per frame. */
+const baked={};
+function bake(k){
+  const V=VIEWS[k], m=V.map;
+  const c=document.createElement('canvas'); c.width=G; c.height=G;
+  const g=c.getContext('2d');
+  g.fillStyle='rgba(79,214,255,.05)';
+  for(let i=0;i<G;i+=12){ g.fillRect(i,0,1,G); g.fillRect(0,i,G,1); }
   for(let y=0;y<G;y++)for(let x=0;x<G;x++){
     const id=m[y*G+x]; if(!id) continue;
     const base=COL[id]||'#888';
     const up=y>0?m[(y-1)*G+x]:null, dn=y<G-1?m[(y+1)*G+x]:null;
     const lt=x>0?m[y*G+x-1]:null,   rt=x<G-1?m[y*G+x+1]:null;
-    let c=base;
-    if(!dn||!lt||!rt)      c=shade(base,0.42);   // dark silhouette rim
-    else if(!up)           c=shade(base,1.32);   // bright top rim
-    else if(up!==id)       c=shade(base,1.18);   // lit internal edge
-    else if(dn!==id||rt!==id) c=shade(base,0.70);// shaded internal edge
-    ctx.fillStyle=c;
-    ctx.fillRect(x*S,y*S,S,S);
+    let col=base;
+    if(!dn||!lt||!rt)         col=shade(base,0.42); // dark silhouette rim
+    else if(!up)              col=shade(base,1.32); // bright top rim
+    else if(up!==id)          col=shade(base,1.18); // lit internal edge
+    else if(dn!==id||rt!==id) col=shade(base,0.70); // shaded internal edge
+    g.fillStyle=col; g.fillRect(x,y,1,1);
   }
-  // highlight overlay
-  if(highlight){
+  baked[k]=c;
+}
+for(const k in VIEWS) bake(k);
+
+/* precompute the pulsing cells + their outline once per reveal */
+function setHighlight(regs){
+  if(!regs){ highlight=hlCells=hlEdge=null; return; }
+  const V=VIEWS[curView], m=V.map, set=new Set(regs);
+  highlight=regs; hlCells=[]; hlEdge=[];
+  for(const r of regs) for(const i of (V.cells[r]||[])) hlCells.push(i);
+  for(const i of hlCells){
+    const x=i%G, y=(i/G)|0;
+    if(x===0||y===0||x===G-1||y===G-1||
+       !set.has(m[i-1])||!set.has(m[i+1])||!set.has(m[i-G])||!set.has(m[i+G]))
+      hlEdge.push(i);
+  }
+}
+
+function fit(){
+  const pad=22;
+  const px=Math.max(120,Math.floor(Math.min(stage.clientWidth-pad, stage.clientHeight-pad)));
+  cv.width=G; cv.height=G;
+  cv.style.width=px+'px'; cv.style.height=px+'px';
+  draw();
+}
+window.addEventListener('resize',fit);
+
+function draw(){
+  ctx.clearRect(0,0,G,G);
+  ctx.drawImage(baked[curView],0,0);
+  if(hlCells){
     const a=0.32+0.30*Math.sin(hlPhase);
     ctx.fillStyle=`rgba(255,255,255,${a.toFixed(3)})`;
-    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
-      if(highlight.includes(m[y*G+x])) ctx.fillRect(x*S,y*S,S,S);
-    }
-    ctx.fillStyle=`rgba(255,210,63,${(a*0.9).toFixed(3)})`;
-    for(let y=0;y<G;y++)for(let x=0;x<G;x++){
-      if(!highlight.includes(m[y*G+x]))continue;
-      const nb=[[1,0],[-1,0],[0,1],[0,-1]];
-      for(const[a2,b2]of nb){const nx=x+a2,ny=y+b2;
-        if(nx<0||ny<0||nx>=G||ny>=G||!highlight.includes(m[ny*G+nx])){
-          ctx.fillRect(x*S,y*S,S,S); break;}}
-    }
+    for(const i of hlCells) ctx.fillRect(i%G,(i/G)|0,1,1);
+    ctx.fillStyle=`rgba(255,210,63,${(a*0.95).toFixed(3)})`;
+    for(const i of hlEdge)  ctx.fillRect(i%G,(i/G)|0,1,1);
   }
-  // scan-mode hover outline
   if(mode==='scan'&&hoverCell){
-    const id=m[hoverCell[1]*G+hoverCell[0]];
+    const V=VIEWS[curView], id=V.map[hoverCell[1]*G+hoverCell[0]];
     if(id&&id!=='decor'){
       ctx.fillStyle='rgba(255,255,255,.22)';
-      for(let y=0;y<G;y++)for(let x=0;x<G;x++) if(m[y*G+x]===id) ctx.fillRect(x*S,y*S,S,S);
+      for(const i of (V.cells[id]||[])) ctx.fillRect(i%G,(i/G)|0,1,1);
     }
   }
 }
-function anim(){ if(highlight){hlPhase+=0.14; draw();} requestAnimationFrame(anim); }
+function anim(){ if(hlCells){hlPhase+=0.14; draw();} requestAnimationFrame(anim); }
 requestAnimationFrame(anim);
 
 /* ---------- audio ---------- */
@@ -477,7 +535,7 @@ const sGO =()=>{[440,554,660,880].forEach((f,i)=>setTimeout(()=>beep(f,.1),i*70)
 const sTick=()=>beep(1100,.03,'square',.025);
 
 /* ---------- game state ---------- */
-const T_LIMIT=11000, PENALTY=1800;
+const T_LIMIT=11000;
 let mode='menu', queue=[], idx=0, score=0, streak=0, best=0, shots=0, hits=0;
 let tStart=0, tEnd=0, raf=null, locked=true, missed=[], lockTimes=[], lastTick=99;
 /* generation counter — bumped whenever the session changes, so pending
@@ -508,7 +566,7 @@ function next(){
   if(mode!=='play') return;
   if(idx>=queue.length){ return end(); }
   const g=gen;
-  const t=queue[idx]; highlight=null; locked=true; lastTick=99;
+  const t=queue[idx]; setHighlight(null); locked=true; lastTick=99;
   setView(t.view);
   pTerm.textContent=t.term; pDef.textContent='— '+t.def;
   timeBar.style.transform='scaleX(1)'; timeBar.className='';
@@ -536,22 +594,26 @@ function timeout(){
   locked=true; cancelAnimationFrame(raf);
   const t=queue[idx]; shots++; streak=0; missed.push(t); sOUT();
   flash.className='no'; setTimeout(()=>flash.className='',420);
-  reveal(t,'TIME OUT');
+  reveal(t,'TIME OUT','CLOCK RAN OUT',false);
 }
-function reveal(t,label){
+function reveal(t,label,note,ok){
   const g=gen;
-  highlight=t.reg.slice(); hlPhase=0;
+  setHighlight(t.reg); hlPhase=0; cross.style.display='none';
   banner.style.display='block';
-  banner.querySelector('b').textContent=label;
-  banner.querySelector('s').textContent=t.term.toUpperCase()+' — '+t.def;
+  const b=banner.querySelector('b');
+  b.textContent=label; b.style.color=ok?'#7cff5e':'#ff4d6d';
+  b.style.textShadow='0 0 16px '+(ok?'#7cff5e':'#ff4d6d');
+  banner.querySelector('s').textContent =
+    note ? note+'   ·   ANSWER: '+t.term.toUpperCase()
+         : t.term.toUpperCase()+' — '+t.def;
   setTimeout(()=>{
     if(g!==gen||mode!=='play'){ return; }
-    banner.style.display='none'; highlight=null; draw();
+    banner.style.display='none'; setHighlight(null); draw();
     idx++; hud(); next();
-  },1650);
+  }, ok?1500:2300);
 }
 function end(){
-  gen++; mode='end'; cancelAnimationFrame(raf); highlight=null; draw();
+  gen++; mode='end'; cancelAnimationFrame(raf); setHighlight(null); draw();
   banner.style.display='none'; $('scTitle').classList.add('hide');
   idx=TARGETS.length-1; hud(); timeBar.style.transform='scaleX(0)';
   pTerm.textContent='SCAN COMPLETE'; pDef.textContent='— review below';
@@ -606,12 +668,16 @@ cv.addEventListener('pointerdown',e=>{
     p.textContent='+'+pts+(mult()>1?'  x'+mult().toFixed(1).replace('.0',''):'');
     p.style.left=(e.clientX-sr.left)+'px'; p.style.top=(e.clientY-sr.top-14)+'px';
     stage.appendChild(p); setTimeout(()=>p.remove(),820);
-    hud(); reveal(t,'LOCKED');
+    hud(); reveal(t,'LOCKED',null,true);
   } else {
-    streak=0; tEnd-=PENALTY; sNO(); hud();
+    /* ONE SHOT PER TARGET — a wrong click burns it, no retries. */
+    locked=true; cancelAnimationFrame(raf);
+    streak=0; missed.push(t); sNO(); hud();
     flash.className='no'; setTimeout(()=>flash.className='',420);
     document.getElementById('app').classList.add('shake');
     setTimeout(()=>document.getElementById('app').classList.remove('shake'),300);
+    const n=(id&&id!=='decor'&&NAMES[id])?NAMES[id].term.toUpperCase():null;
+    reveal(t,'MISS', n?'YOU HIT '+n:'YOU HIT EMPTY SPACE', false);
   }
 });
 
@@ -625,7 +691,7 @@ function showScan(c){
   el.innerHTML=n.term.toUpperCase()+' <em>— '+n.def+'</em>';
 }
 function scanMode(){
-  gen++; mode='scan'; highlight=null; locked=true; cancelAnimationFrame(raf);
+  gen++; mode='scan'; setHighlight(null); locked=true; cancelAnimationFrame(raf);
   banner.style.display='none';
   $('scTitle').classList.add('hide'); $('scEnd').classList.add('hide');
   $('scScan').classList.remove('hide');
@@ -642,7 +708,7 @@ function scanMode(){
   setView(curView); draw();
 }
 function menu(){
-  gen++; mode='menu'; locked=true; cancelAnimationFrame(raf); highlight=null;
+  gen++; mode='menu'; locked=true; cancelAnimationFrame(raf); setHighlight(null);
   banner.style.display='none';
   $('scScan').classList.add('hide'); $('scEnd').classList.add('hide');
   $('scTitle').classList.remove('hide');
