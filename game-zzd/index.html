@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foot — Visual Vocabulary Trainer</title>
+<style>
+  :root{
+    --paper:#f6f1e7; --card:#fffdf8; --ink:#2c2a26; --muted:#7a7266;
+    --line:#ded3bf; --accent:#1f6f8b; --good:#2e8b57; --bad:#b8452f; --warn:#d18b1f;
+    --bone:#f3e9d6; --boneEdge:#8d7a58; --skin:#f7e0d3; --skinEdge:#d9b4a0;
+    --tendon:#eef1e6; --tendonEdge:#8f9a7c; --fascia:#e2cfa8; --fasciaEdge:#a58a55;
+    --artery:#bf3c2c; --joint:#8fc0d8; --arch:#1f6f8b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper); color:var(--ink);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    padding:14px 14px 40px;
+  }
+  .wrap{max-width:1240px;margin:0 auto}
+
+  header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
+  h1{font-size:20px;margin:0;letter-spacing:.2px}
+  h1 span{color:var(--muted);font-weight:500}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button{
+    font:inherit;font-size:13.5px;padding:7px 13px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:var(--card);color:var(--ink);
+    transition:background .15s,border-color .15s,transform .06s;
+  }
+  button:hover{background:#f2ece0}
+  button:active{transform:translateY(1px)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#195a72}
+  button[disabled]{opacity:.42;cursor:default}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--card)}
+  .seg button{border:0;border-radius:0;padding:7px 14px}
+  .seg button.on{background:var(--ink);color:#fff}
+  label.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer;user-select:none}
+
+  /* HUD */
+  .hud{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 12px;min-width:82px}
+  .stat b{display:block;font-size:17px;line-height:1.25;font-variant-numeric:tabular-nums}
+  .stat i{font-style:normal;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+
+  /* Prompt */
+  .prompt{
+    background:var(--card);border:1px solid var(--line);border-left:5px solid var(--accent);
+    border-radius:12px;padding:12px 16px;margin-bottom:10px;
+    display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  }
+  .prompt.shake{animation:shake .32s}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+  .prompt .q{min-width:240px;flex:1}
+  .prompt .lead{font-size:11px;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)}
+  .prompt .term{font-size:21px;font-weight:650;letter-spacing:.2px}
+  .prompt .def{color:var(--muted);font-size:14px}
+  .prompt .btns{display:flex;gap:8px;flex-wrap:wrap}
+
+  .msg{min-height:22px;font-size:14px;margin:0 2px 8px;font-weight:500}
+  .msg.good{color:var(--good)} .msg.bad{color:var(--bad)} .msg.warn{color:var(--warn)} .msg.neutral{color:var(--muted)}
+
+  /* Board */
+  .boardwrap{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:6px;overflow-x:auto}
+  svg#dg{display:block;width:100%;height:auto;min-width:880px;touch-action:manipulation}
+
+  text{font-family:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+  .pf{fill:#fffdf8;stroke:var(--line);stroke-width:1.2}
+  .pf.flash{animation:pflash 1.1s ease-out 2}
+  @keyframes pflash{0%{stroke:var(--warn);stroke-width:3.4}100%{stroke:var(--line);stroke-width:1.2}}
+  .pt{fill:#6b6355;font-size:13px;font-weight:600;text-anchor:middle;letter-spacing:.3px}
+  .pc{fill:#a09684;font-size:10.5px;text-anchor:middle}
+  .skin{fill:var(--skin);stroke:var(--skinEdge);stroke-width:1.6;stroke-linejoin:round}
+  .skin.nol{stroke:none}
+  .bone{fill:var(--bone);stroke:var(--boneEdge);stroke-width:1.4;stroke-linejoin:round;stroke-linecap:round}
+  .bone.soft{stroke-opacity:.55}
+  .capO path{fill:none;stroke:var(--boneEdge);stroke-linecap:round}
+  .capF path{fill:none;stroke:var(--bone);stroke-linecap:round}
+  .tendon{fill:var(--tendon);stroke:var(--tendonEdge);stroke-width:1.3;stroke-linejoin:round}
+  .tendonline{fill:none;stroke:var(--tendon);stroke-width:9;stroke-linecap:round}
+  .tendonline2{fill:none;stroke:var(--tendonEdge);stroke-width:10.6;stroke-linecap:round;stroke-opacity:.55}
+  .fasc{fill:var(--fascia);stroke:var(--fasciaEdge);stroke-width:1.2;stroke-linejoin:round}
+  .fascline{fill:none;stroke:var(--fascia);stroke-width:10;stroke-linecap:round}
+  .fascline2{fill:none;stroke:var(--fasciaEdge);stroke-width:11.6;stroke-linecap:round;stroke-opacity:.5}
+  .art{fill:none;stroke:var(--artery);stroke-width:5;stroke-linecap:round}
+  .art2{fill:none;stroke:var(--artery);stroke-width:2.6;stroke-linecap:round;stroke-opacity:.8}
+  .joint{fill:var(--joint);stroke:#4e8aa6;stroke-width:1.1}
+  .archline{fill:none;stroke:var(--arch);stroke-width:3;stroke-dasharray:9 6;stroke-linecap:round}
+  .ground{stroke:#cfc4ae;stroke-width:2;stroke-linecap:round}
+  .sep{stroke:var(--skinEdge);stroke-width:1.1;stroke-opacity:.7;fill:none}
+
+  /* Hotspots */
+  .hs{fill:#000;fill-opacity:0;stroke:none;pointer-events:all;cursor:crosshair;transition:fill-opacity .16s}
+  .hs.ln{fill:none;stroke:#000;stroke-opacity:0;pointer-events:stroke;stroke-linecap:round;stroke-linejoin:round;transition:stroke-opacity .16s}
+  .hs.done{fill:var(--good);fill-opacity:.15}
+  .hs.ln.done{fill:none;stroke:var(--good);stroke-opacity:.3}
+  .hs.flash{fill:var(--good);fill-opacity:.45}
+  .hs.ln.flash{stroke:var(--good);stroke-opacity:.72}
+  .hs.reveal{fill:var(--warn);fill-opacity:.5}
+  .hs.ln.reveal{stroke:var(--warn);stroke-opacity:.8}
+  body.study .hs:hover{fill-opacity:.2}
+  body.study .hs.ln:hover{stroke-opacity:.36}
+  body.study svg#dg{cursor:default}
+
+  .lbl{font-size:11.5px;font-weight:600;fill:#1d3f4d;paint-order:stroke;stroke:#fffdf8;stroke-width:3.4;stroke-linejoin:round;text-anchor:middle;pointer-events:none}
+  .lbldot{fill:#1d3f4d;pointer-events:none}
+  .xmark{stroke:var(--bad);stroke-width:3.6;stroke-linecap:round;pointer-events:none}
+
+  /* Study list */
+  .study-panel{display:none;margin-top:12px}
+  body.study .study-panel{display:block}
+  .glist{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:8px}
+  .gitem{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer}
+  .gitem:hover{border-color:var(--accent)}
+  .gitem b{display:block;font-size:13.5px}
+  .gitem span{color:var(--muted);font-size:12px}
+
+  /* End overlay */
+  .overlay{position:fixed;inset:0;background:rgba(35,32,28,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+  .overlay.on{display:flex}
+  .sheet{background:var(--card);border-radius:16px;max-width:520px;width:100%;padding:22px 24px;border:1px solid var(--line);max-height:88vh;overflow:auto}
+  .sheet h2{margin:0 0 4px;font-size:22px}
+  .sheet .big{display:flex;gap:20px;margin:14px 0 6px;flex-wrap:wrap}
+  .sheet .big div b{display:block;font-size:26px;line-height:1.15}
+  .sheet .big div i{font-style:normal;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .sheet ul{margin:10px 0 0;padding-left:18px;color:var(--muted);font-size:13.5px}
+  .sheet .row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .foot{color:var(--muted);font-size:12px;margin-top:14px}
+</style>
+</head>
+<body class="quiz">
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Foot <span>— essential visual vocabulary</span></h1>
+    <div class="sub">Click the structure on the diagram. All views show a <b>right foot</b>.</div>
+  </div>
+  <div class="controls">
+    <div class="seg" id="modeSeg">
+      <button data-mode="quiz" class="on">Quiz</button>
+      <button data-mode="study">Study</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="defOnly"> Definition only (harder)</label>
+    <button id="restart">Restart</button>
+  </div>
+</header>
+
+<div class="hud" id="hud">
+  <div class="stat"><b id="sProg">1 / 15</b><i>Progress</i></div>
+  <div class="stat"><b id="sScore">0</b><i>Score</i></div>
+  <div class="stat"><b id="sStreak">0</b><i>Streak</i></div>
+  <div class="stat"><b id="sAcc">—</b><i>Accuracy</i></div>
+  <div class="stat"><b id="sTime">0:00</b><i>Time</i></div>
+</div>
+
+<div class="prompt" id="prompt">
+  <div class="q">
+    <div class="lead" id="pLead">Find this structure</div>
+    <div class="term" id="pTerm">—</div>
+    <div class="def" id="pDef">—</div>
+  </div>
+  <div class="btns">
+    <button id="bHint">Hint</button>
+    <button id="bReveal">Show me</button>
+    <button id="bSkip">Skip</button>
+  </div>
+</div>
+
+<div class="msg neutral" id="msg">Pick the spot on the diagram that matches the prompt.</div>
+
+<div class="boardwrap">
+<svg id="dg" viewBox="0 0 1200 780" role="img" aria-label="Foot anatomy diagram with five views">
+
+  <!-- ================= PANEL FRAMES + TITLES ================= -->
+  <g class="panel" data-view="dorsal">
+    <rect class="pf" x="24" y="56" width="332" height="692" rx="14"/>
+  </g>
+  <g class="panel" data-view="medial">
+    <rect class="pf" x="376" y="56" width="484" height="364" rx="14"/>
+  </g>
+  <g class="panel" data-view="posterior">
+    <rect class="pf" x="880" y="56" width="296" height="364" rx="14"/>
+  </g>
+  <g class="panel" data-view="plantar">
+    <rect class="pf" x="376" y="440" width="484" height="308" rx="14"/>
+  </g>
+  <g class="panel" data-view="cross">
+    <rect class="pf" x="880" y="440" width="296" height="308" rx="14"/>
+  </g>
+
+  <text class="pt" x="190" y="80">Dorsal (top) view</text>
+  <text class="pt" x="618" y="80">Medial (inner side) view</text>
+  <text class="pt" x="1028" y="78">Posterior (back) view</text>
+  <text class="pc" x="1028" y="94">inner ankle on the right</text>
+  <text class="pt" x="618" y="466">Plantar (sole) view</text>
+  <text class="pt" x="1028" y="464">Cross-section</text>
+  <text class="pc" x="1028" y="480">through the metatarsals, seen end-on</text>
+
+  <!-- ================= ART: DORSAL ================= -->
+  <g transform="translate(30,96) scale(0.97)">
+    <!-- silhouette -->
+    <path class="skin" d="M 150 664 C 108 664, 86 634, 88 590 C 90 548, 104 514, 104 470 C 104 424, 94 390, 94 344 C 94 300, 88 258, 94 222 C 100 190, 122 172, 156 172 C 190 172, 226 180, 244 196 C 258 208, 262 228, 258 254 C 252 296, 244 350, 238 402 C 232 456, 224 512, 214 562 C 204 614, 186 664, 150 664 Z"/>
+    <!-- toes -->
+    <rect class="skin" x="102" y="112" width="46" height="86" rx="23"/>
+    <rect class="skin" x="154" y="128" width="32" height="78" rx="16"/>
+    <rect class="skin" x="190" y="142" width="30" height="68" rx="15"/>
+    <rect class="skin" x="224" y="156" width="27" height="58" rx="13.5"/>
+    <rect class="skin" x="252" y="170" width="23" height="48" rx="11.5"/>
+
+    <!-- bone outlines -->
+    <g class="capO">
+      <path style="stroke-width:20.8" d="M 127 196 L 125 150"/>
+      <path style="stroke-width:18.8" d="M 124 144 L 123 122"/>
+      <path style="stroke-width:13.8" d="M 170 202 L 169 166"/>
+      <path style="stroke-width:11.8" d="M 169 160 L 168 148"/>
+      <path style="stroke-width:10.8" d="M 168 142 L 167 136"/>
+      <path style="stroke-width:12.8" d="M 205 206 L 204 174"/>
+      <path style="stroke-width:11.3" d="M 204 168 L 203 158"/>
+      <path style="stroke-width:10.3" d="M 203 153 L 202 148"/>
+      <path style="stroke-width:12.3" d="M 237 212 L 236 184"/>
+      <path style="stroke-width:10.8" d="M 236 178 L 235 170"/>
+      <path style="stroke-width:9.8" d="M 235 165 L 234 161"/>
+      <path style="stroke-width:11.8" d="M 263 216 L 262 192"/>
+      <path style="stroke-width:10.3" d="M 262 187 L 261 181"/>
+      <path style="stroke-width:9.3" d="M 261 177 L 260 174"/>
+      <path style="stroke-width:19.8" d="M 140 310 L 128 210"/>
+      <path style="stroke-width:13.8" d="M 168 314 L 170 214"/>
+      <path style="stroke-width:13.8" d="M 194 320 L 205 218"/>
+      <path style="stroke-width:12.8" d="M 216 328 L 237 224"/>
+      <path style="stroke-width:12.8" d="M 232 346 L 263 228"/>
+    </g>
+    <!-- bone fills -->
+    <g class="capF">
+      <path style="stroke-width:18" d="M 127 196 L 125 150"/>
+      <path style="stroke-width:16" d="M 124 144 L 123 122"/>
+      <path style="stroke-width:11" d="M 170 202 L 169 166"/>
+      <path style="stroke-width:9" d="M 169 160 L 168 148"/>
+      <path style="stroke-width:8" d="M 168 142 L 167 136"/>
+      <path style="stroke-width:10" d="M 205 206 L 204 174"/>
+      <path style="stroke-width:8.5" d="M 204 168 L 203 158"/>
+      <path style="stroke-width:7.5" d="M 203 153 L 202 148"/>
+      <path style="stroke-width:9.5" d="M 237 212 L 236 184"/>
+      <path style="stroke-width:8" d="M 236 178 L 235 170"/>
+      <path style="stroke-width:7" d="M 235 165 L 234 161"/>
+      <path style="stroke-width:9" d="M 263 216 L 262 192"/>
+      <path style="stroke-width:7.5" d="M 262 187 L 261 181"/>
+      <path style="stroke-width:6.5" d="M 261 177 L 260 174"/>
+      <path style="stroke-width:17" d="M 140 310 L 128 210"/>
+      <path style="stroke-width:11" d="M 168 314 L 170 214"/>
+      <path style="stroke-width:11" d="M 194 320 L 205 218"/>
+      <path style="stroke-width:10" d="M 216 328 L 237 224"/>
+      <path style="stroke-width:10" d="M 232 346 L 263 228"/>
+    </g>
+    <circle class="bone" cx="230" cy="350" r="9"/>
+
+    <!-- tarsals -->
+    <rect class="bone" x="126" y="320" width="36" height="42" rx="8"/>
+    <rect class="bone" x="160" y="326" width="28" height="34" rx="7"/>
+    <rect class="bone" x="186" y="330" width="30" height="38" rx="7"/>
+    <rect class="bone" x="210" y="348" width="38" height="50" rx="10"/>
+    <ellipse class="bone" cx="158" cy="390" rx="33" ry="17"/>
+    <!-- talus + calcaneus -->
+    <ellipse class="bone" cx="188" cy="448" rx="36" ry="32"/>
+    <ellipse class="bone" cx="168" cy="552" rx="42" ry="58"/>
+
+    <!-- tibialis anterior tendon -->
+    <path class="tendonline2" d="M 200 508 C 186 466, 166 414, 152 376 C 146 362, 143 354, 142 348"/>
+    <path class="tendonline" d="M 200 508 C 186 466, 166 414, 152 376 C 146 362, 143 354, 142 348"/>
+    <!-- dorsalis pedis artery -->
+    <path class="art" d="M 214 500 C 206 462, 194 420, 180 384 C 170 356, 160 330, 155 306"/>
+    <path class="art2" d="M 180 384 C 194 372, 210 366, 224 364"/>
+    <path class="art2" d="M 163 340 C 172 330, 184 324, 196 322"/>
+  </g>
+
+  <!-- ================= ART: MEDIAL ================= -->
+  <g transform="translate(380,90) scale(0.88)">
+    <!-- silhouette -->
+    <path class="skin" d="M 104 6 L 104 214 C 100 226, 92 234, 84 246 C 72 264, 70 296, 82 318 C 92 336, 112 348, 140 348 C 180 348, 210 336, 250 330 C 300 323, 350 330, 400 340 C 424 345, 442 346, 456 344 C 474 341, 486 330, 486 314 C 486 300, 476 292, 462 290 C 430 286, 396 274, 360 258 C 320 240, 280 236, 250 226 C 226 218, 210 214, 202 200 L 196 6 Z"/>
+    <!-- achilles -->
+    <path class="tendon" d="M 104 6 L 136 6 L 130 210 C 128 228, 120 240, 106 246 C 96 250, 90 244, 92 230 L 100 60 Z"/>
+    <!-- tibia -->
+    <rect class="bone" x="146" y="6" width="44" height="192" rx="7"/>
+    <!-- medial malleolus -->
+    <ellipse class="bone" cx="152" cy="228" rx="22" ry="27"/>
+    <!-- calcaneus -->
+    <path class="bone" d="M 96 252 C 112 242, 142 242, 170 250 C 198 258, 210 274, 206 292 C 202 310, 178 320, 148 320 C 118 320, 94 308, 86 290 C 78 272, 84 258, 96 252 Z"/>
+    <!-- talus -->
+    <path class="bone" d="M 168 214 C 190 204, 218 208, 236 220 C 248 228, 250 242, 240 250 C 226 262, 196 262, 178 254 C 164 248, 158 224, 168 214 Z"/>
+    <!-- ankle joint space -->
+    <path class="joint" d="M 162 200 C 186 190, 216 194, 236 206 L 233 215 C 213 203, 186 200, 164 210 Z"/>
+    <!-- navicular / cuneiform / MT1 / hallux -->
+    <ellipse class="bone" cx="252" cy="256" rx="13" ry="22"/>
+    <rect class="bone" x="270" y="246" width="34" height="40" rx="8"/>
+    <path class="bone" d="M 306 256 L 392 276 L 396 296 L 304 286 Z"/>
+    <path class="bone" d="M 404 288 L 448 296 L 448 314 L 402 306 Z"/>
+    <path class="bone" d="M 452 298 L 474 302 L 474 318 L 452 314 Z"/>
+
+    <!-- medial longitudinal arch -->
+    <path class="archline" d="M 114 296 C 152 266, 200 248, 252 246 C 300 244, 348 258, 388 280"/>
+    <!-- plantar fascia -->
+    <path class="fascline2" d="M 120 326 C 170 326, 210 316, 258 310 C 310 304, 356 314, 396 324"/>
+    <path class="fascline" d="M 120 326 C 170 326, 210 316, 258 310 C 310 304, 356 314, 396 324"/>
+
+    <line class="ground" x1="66" y1="356" x2="494" y2="356"/>
+  </g>
+
+  <!-- ================= ART: POSTERIOR ================= -->
+  <g transform="translate(896,96) scale(0.86)">
+    <path class="skin" d="M 92 6 C 72 60, 68 118, 80 170 C 86 196, 74 216, 68 242 C 63 268, 84 294, 98 314 C 106 328, 118 336, 136 336 L 166 336 C 184 336, 196 328, 204 314 C 218 294, 239 268, 234 242 C 228 216, 216 196, 222 170 C 234 118, 230 60, 210 6 Z"/>
+    <!-- achilles -->
+    <path class="tendon" d="M 122 34 C 118 106, 128 168, 130 206 C 132 230, 140 250, 151 258 C 162 250, 170 230, 172 206 C 174 168, 184 106, 180 34 Z"/>
+    <!-- malleoli -->
+    <ellipse class="bone" cx="86" cy="240" rx="21" ry="27"/>
+    <ellipse class="bone" cx="216" cy="224" rx="21" ry="27"/>
+    <!-- calcaneus -->
+    <path class="bone" d="M 106 264 C 106 254, 114 250, 126 250 L 176 250 C 188 250, 196 256, 196 268 L 196 314 C 196 326, 186 332, 172 332 L 130 332 C 116 332, 106 326, 106 314 Z"/>
+    <line class="ground" x1="50" y1="344" x2="252" y2="344"/>
+  </g>
+
+  <!-- ================= ART: PLANTAR ================= -->
+  <g transform="translate(301,441) scale(1.11)">
+    <!-- sole built from merged primitives (no strokes so they fuse) -->
+    <g class="skin nol">
+      <ellipse cx="132" cy="152" rx="52" ry="54"/>
+      <rect x="150" y="112" width="176" height="86" rx="42"/>
+      <ellipse cx="374" cy="150" rx="92" ry="62"/>
+    </g>
+
+    <!-- plantar fascia fan -->
+    <g class="fasc">
+      <path d="M 105 148 L 396 100 L 398 112 L 108 155 Z"/>
+      <path d="M 105 150 L 408 128 L 408 140 L 108 156 Z"/>
+      <path d="M 105 152 L 406 156 L 406 168 L 108 158 Z"/>
+      <path d="M 106 154 L 394 182 L 392 194 L 108 160 Z"/>
+      <path d="M 107 156 L 374 204 L 372 216 L 109 162 Z"/>
+    </g>
+    <ellipse class="fasc" cx="110" cy="153" rx="14" ry="17"/>
+
+    <!-- metatarsal heads -->
+    <circle class="bone soft" cx="408" cy="102" r="13"/>
+    <circle class="bone soft" cx="418" cy="132" r="12"/>
+    <circle class="bone soft" cx="416" cy="162" r="12"/>
+    <circle class="bone soft" cx="404" cy="188" r="11"/>
+    <circle class="bone soft" cx="384" cy="210" r="10"/>
+  </g>
+
+  <!-- ================= ART: CROSS-SECTION ================= -->
+  <g transform="translate(872,392) scale(1.15)">
+    <circle class="bone" cx="70" cy="196" r="17"/>
+    <circle class="bone" cx="108" cy="172" r="15"/>
+    <circle class="bone" cx="146" cy="164" r="15"/>
+    <circle class="bone" cx="184" cy="174" r="14"/>
+    <circle class="bone" cx="218" cy="194" r="13"/>
+    <path class="archline" d="M 56 178 C 78 152, 110 134, 146 132 C 182 130, 210 148, 232 178"/>
+    <line class="ground" x1="44" y1="216" x2="246" y2="216"/>
+    <text class="pc" x="70" y="234">1st</text>
+    <text class="pc" x="218" y="232">5th</text>
+  </g>
+
+  <!-- ================= HOTSPOTS ================= -->
+  <g id="hotspots">
+
+    <!-- DORSAL -->
+    <g transform="translate(30,96) scale(0.97)" data-view="dorsal">
+      <path class="hs" data-hs="metatarsals" d="M 116 206 L 268 222 L 250 334 L 130 318 Z"/>
+      <path class="hs" data-hs="tarsals" data-primary="1" d="M 120 314 L 250 332 L 250 410 L 122 410 Z"/>
+      <ellipse class="hs" data-hs="calcaneus" cx="168" cy="552" rx="46" ry="58"/>
+      <path class="hs" data-hs="phalanges" data-primary="1" d="M 152 206 L 276 220 L 268 120 L 152 118 Z"/>
+      <path class="hs" data-hs="hallux" data-primary="1" d="M 98 200 L 152 202 L 150 104 L 102 104 Z"/>
+      <path class="hs ln" data-hs="tibant" data-primary="1" stroke-width="22" d="M 200 508 C 186 466, 166 414, 152 376 C 146 362, 143 354, 142 348"/>
+      <path class="hs ln" data-hs="dorsalis" data-primary="1" stroke-width="20" d="M 214 500 C 206 462, 194 420, 180 384 C 170 356, 160 330, 155 306"/>
+    </g>
+
+    <!-- MEDIAL -->
+    <g transform="translate(380,90) scale(0.88)" data-view="medial">
+      <ellipse class="hs" data-hs="calcaneus" data-primary="1" cx="142" cy="291" rx="58" ry="32"/>
+      <ellipse class="hs" data-hs="talus" data-primary="1" cx="204" cy="232" rx="46" ry="26"/>
+      <path class="hs" data-hs="tarsals" d="M 236 236 L 308 250 L 308 292 L 236 284 Z"/>
+      <path class="hs" data-hs="metatarsals" d="M 306 266 L 394 285 L 398 302 L 304 291 Z"/>
+      <path class="hs" data-hs="hallux" d="M 400 284 L 480 296 L 480 322 L 400 310 Z"/>
+      <ellipse class="hs" data-hs="anklejoint" data-primary="1" cx="199" cy="203" rx="40" ry="13"/>
+      <ellipse class="hs" data-hs="medmall" cx="151" cy="228" rx="25" ry="29"/>
+      <path class="hs ln" data-hs="achilles" stroke-width="30" d="M 117 30 L 112 200 C 110 224, 104 240, 99 248"/>
+      <path class="hs ln" data-hs="medarch" data-primary="1" stroke-width="15" d="M 132 282 C 164 262, 204 249, 252 246 C 300 244, 348 258, 386 278"/>
+      <path class="hs ln" data-hs="fascia" stroke-width="20" d="M 120 326 C 170 326, 210 316, 258 310 C 310 304, 356 314, 396 324"/>
+    </g>
+
+    <!-- POSTERIOR -->
+    <g transform="translate(896,96) scale(0.86)" data-view="posterior">
+      <ellipse class="hs" data-hs="calcaneus" cx="151" cy="292" rx="50" ry="42"/>
+      <path class="hs ln" data-hs="achilles" data-primary="1" stroke-width="48" d="M 151 40 L 151 250"/>
+      <ellipse class="hs" data-hs="latmall" data-primary="1" cx="85" cy="240" rx="24" ry="29"/>
+      <ellipse class="hs" data-hs="medmall" data-primary="1" cx="217" cy="224" rx="24" ry="29"/>
+    </g>
+
+    <!-- PLANTAR -->
+    <g transform="translate(301,441) scale(1.11)" data-view="plantar">
+      <path class="hs" data-hs="fascia" data-primary="1" d="M 100 138 L 394 94 L 386 222 L 102 168 Z"/>
+      <path class="hs" data-hs="metatarsals" d="M 396 84 L 434 92 L 400 228 L 368 214 Z"/>
+      <circle class="hs" data-hs="calcaneus" cx="116" cy="152" r="36"/>
+    </g>
+
+    <!-- CROSS-SECTION -->
+    <g transform="translate(872,392) scale(1.15)" data-view="cross">
+      <circle class="hs" data-hs="metatarsals" cx="70" cy="196" r="18"/>
+      <circle class="hs" data-hs="metatarsals" cx="108" cy="172" r="16"/>
+      <circle class="hs" data-hs="metatarsals" cx="146" cy="164" r="16"/>
+      <circle class="hs" data-hs="metatarsals" cx="184" cy="174" r="15"/>
+      <circle class="hs" data-hs="metatarsals" cx="218" cy="194" r="14"/>
+      <path class="hs ln" data-hs="transarch" data-primary="1" stroke-width="16" d="M 56 178 C 78 152, 110 134, 146 132 C 182 130, 210 148, 232 178"/>
+    </g>
+  </g>
+
+  <g id="labels"></g>
+  <g id="marks"></g>
+</svg>
+</div>
+
+<div class="study-panel">
+  <div class="msg neutral" style="margin-top:10px">Study mode — hover or click any structure on the diagram, or click a term below to have it highlighted.</div>
+  <div class="glist" id="glist"></div>
+</div>
+
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <h2 id="endTitle">Round complete</h2>
+    <div id="endSub" class="foot" style="margin-top:0"></div>
+    <div class="big">
+      <div><b id="endScore">0</b><i>Score</i></div>
+      <div><b id="endAcc">0%</b><i>First-try</i></div>
+      <div><b id="endTime">0:00</b><i>Time</i></div>
+      <div><b id="endBest">0</b><i>Best streak</i></div>
+    </div>
+    <div id="endList"></div>
+    <div class="row">
+      <button class="primary" id="againBtn">Play again</button>
+      <button id="missedBtn">Practice missed</button>
+      <button id="studyBtn">Study mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const TERMS = [
+  {id:'talus',       name:'Talus',                     def:'major ankle bone',                          view:'medial',    hint:'Side view — the bone sitting on top of the heel bone, under the leg.'},
+  {id:'calcaneus',   name:'Calcaneus',                 def:'heel bone',                                 view:'medial',    hint:'The heel itself — findable in the side, back and sole views.'},
+  {id:'tarsals',     name:'Tarsals',                   def:'rear/midfoot bones',                        view:'dorsal',    hint:'Top view — the cluster of short blocky bones between ankle and the long bones.'},
+  {id:'metatarsals', name:'Metatarsals',               def:'long bones of the foot',                    view:'dorsal',    hint:'Top view — the five long shafts fanning toward the toes.'},
+  {id:'phalanges',   name:'Phalanges',                 def:'toe bones',                                 view:'dorsal',    hint:'Top view — the small bones of the lesser toes (2–5).'},
+  {id:'hallux',      name:'Hallux',                    def:'great toe',                                 view:'dorsal',    hint:'The big toe.'},
+  {id:'anklejoint',  name:'Ankle joint',               def:'articulation connecting leg and foot',      view:'medial',    hint:'Side view — the blue gap between the leg bone and the talus.'},
+  {id:'medmall',     name:'Medial malleolus',          def:'inner ankle prominence',                    view:'posterior', hint:'The bump on the INNER ankle — right-hand bump in the back view.'},
+  {id:'latmall',     name:'Lateral malleolus',         def:'outer ankle prominence',                    view:'posterior', hint:'Back view — the OUTER bump, sitting lower than its partner.'},
+  {id:'achilles',    name:'Achilles tendon',           def:'large tendon behind ankle',                 view:'posterior', hint:'Back view — the thick pale cord running down into the heel.'},
+  {id:'fascia',      name:'Plantar fascia',            def:'strong connective tissue beneath foot',     view:'plantar',   hint:'Sole view — the tan fan spreading from the heel to the ball.'},
+  {id:'medarch',     name:'Medial longitudinal arch',  def:'major inner foot arch',                     view:'medial',    hint:'Side view — the dashed blue curve running through the bones, heel to big toe.'},
+  {id:'transarch',   name:'Transverse arch',           def:'side-to-side arch',                         view:'cross',     hint:'Cross-section panel — the dashed curve arching across the bones.'},
+  {id:'tibant',      name:'Tibialis anterior tendon',  def:'helps raise/invert the foot',               view:'dorsal',    hint:'Top view — the pale cord crossing the front of the ankle to the inner midfoot.'},
+  {id:'dorsalis',    name:'Dorsalis pedis artery',     def:'important artery on top of foot',           view:'dorsal',    hint:'Top view — the red vessel between the first and second metatarsals.'}
+];
+const BY_ID = Object.fromEntries(TERMS.map(t=>[t.id,t]));
+
+const svg  = document.getElementById('dg');
+const hsAll= () => Array.from(svg.querySelectorAll('.hs'));
+const labelsG = document.getElementById('labels');
+const marksG  = document.getElementById('marks');
+
+const el = id => document.getElementById(id);
+const msg = el('msg');
+
+let order=[], idx=0, score=0, streak=0, best=0, tries=0, firstTry=0, hinted=false, revealed=false;
+let startT=0, tick=null, running=false, mode='quiz', results={};
+
+/* ---------- helpers ---------- */
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function fmt(s){const m=Math.floor(s/60);return m+':'+String(Math.floor(s%60)).padStart(2,'0');}
+function spotsFor(id){return hsAll().filter(e=>e.dataset.hs===id);}
+function primaryFor(id){const s=spotsFor(id);return s.find(e=>e.dataset.primary)||s[0];}
+function toRoot(node,x,y){
+  const p=svg.createSVGPoint();p.x=x;p.y=y;
+  const m=svg.getScreenCTM().inverse().multiply(node.getScreenCTM());
+  return p.matrixTransform(m);
+}
+function centerOf(node){const b=node.getBBox();return toRoot(node,b.x+b.width/2,b.y+b.height/2);}
+function say(text,cls){msg.textContent=text;msg.className='msg '+(cls||'neutral');}
+
+/* ---------- rendering ---------- */
+function clearMarks(){marksG.innerHTML='';}
+function clearAll(){
+  labelsG.innerHTML=''; clearMarks();
+  hsAll().forEach(e=>e.classList.remove('done','flash','reveal'));
+}
+function flash(id,cls,ms){
+  const s=spotsFor(id); s.forEach(e=>e.classList.add(cls));
+  setTimeout(()=>s.forEach(e=>e.classList.remove(cls)), ms||900);
+}
+function addLabel(id){
+  const node=primaryFor(id); if(!node) return;
+  const c=centerOf(node);
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('class','lbldot');dot.setAttribute('cx',c.x);dot.setAttribute('cy',c.y);dot.setAttribute('r',2.6);
+  const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+  t.setAttribute('class','lbl');t.setAttribute('x',c.x);t.setAttribute('y',c.y-8);
+  t.textContent=BY_ID[id].name;
+  g.appendChild(dot);g.appendChild(t);labelsG.appendChild(g);
+}
+function xMark(pt){
+  const g=document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('class','xmark');
+  const r=9;
+  [[-r,-r,r,r],[-r,r,r,-r]].forEach(c=>{
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',pt.x+c[0]);l.setAttribute('y1',pt.y+c[1]);
+    l.setAttribute('x2',pt.x+c[2]);l.setAttribute('y2',pt.y+c[3]);
+    g.appendChild(l);
+  });
+  marksG.appendChild(g);
+  setTimeout(()=>g.remove(),1100);
+}
+function flashPanel(view){
+  const p=svg.querySelector('.panel[data-view="'+view+'"] .pf');
+  if(!p) return; p.classList.remove('flash'); void p.getBBox(); p.classList.add('flash');
+  setTimeout(()=>p.classList.remove('flash'),2400);
+}
+
+/* ---------- HUD ---------- */
+function updHud(){
+  el('sProg').textContent=(Math.min(idx+1,order.length))+' / '+order.length;
+  el('sScore').textContent=score;
+  el('sStreak').textContent=streak;
+  const done=Object.keys(results).length;
+  el('sAcc').textContent = done ? Math.round(firstTry/done*100)+'%' : '—';
+}
+function startTimer(){
+  startT=Date.now(); running=true;
+  clearInterval(tick);
+  tick=setInterval(()=>{ if(running) el('sTime').textContent=fmt((Date.now()-startT)/1000); },250);
+}
+
+/* ---------- game flow ---------- */
+function startRound(list){
+  order = list && list.length ? shuffle(list) : shuffle(TERMS.map(t=>t.id));
+  idx=0;score=0;streak=0;best=0;firstTry=0;results={};
+  clearAll(); el('overlay').classList.remove('on');
+  el('sTime').textContent='0:00';
+  startTimer(); showPrompt();
+  say('Pick the spot on the diagram that matches the prompt.','neutral');
+}
+function showPrompt(){
+  tries=0;hinted=false;revealed=false;
+  const t=BY_ID[order[idx]];
+  const defOnly=el('defOnly').checked;
+  el('pLead').textContent = defOnly ? 'Which structure is this?' : 'Find this structure';
+  el('pTerm').textContent = defOnly ? '“'+t.def+'”' : t.name;
+  el('pTerm').style.fontSize = defOnly ? '18px' : '21px';
+  el('pDef').textContent  = defOnly ? '' : t.def;
+  ['bHint','bReveal','bSkip'].forEach(b=>el(b).disabled=false);
+  updHud();
+}
+function correct(){
+  const id=order[idx];
+  const gained = revealed ? 0 : Math.max(3, 10 - tries*3 - (hinted?3:0));
+  score+=gained;
+  if(tries===0 && !hinted && !revealed){streak++;firstTry++;}
+  else streak=0;
+  best=Math.max(best,streak);
+  results[id]={tries:tries,hinted:hinted,revealed:revealed};
+  spotsFor(id).forEach(e=>e.classList.add('done'));
+  flash(id,'flash',700);
+  addLabel(id);
+  const t=BY_ID[id];
+  say('✓ '+t.name+' — '+t.def+(gained?'  (+'+gained+')':'  (revealed, no points)'),'good');
+  ['bHint','bReveal','bSkip'].forEach(b=>el(b).disabled=true);
+  setTimeout(next,850);
+}
+function next(){
+  idx++;
+  if(idx>=order.length){ endRound(); return; }
+  showPrompt();
+}
+function wrong(pt,hitId){
+  tries++; streak=0;
+  xMark(pt);
+  const p=el('prompt'); p.classList.remove('shake'); void p.offsetWidth; p.classList.add('shake');
+  const target=BY_ID[order[idx]];
+  if(hitId){
+    const h=BY_ID[hitId];
+    flash(hitId,'reveal',600);
+    say('✗ That is the '+h.name.toLowerCase()+' ('+h.def+'). Looking for the '+target.name.toLowerCase()+'.','bad');
+  } else {
+    say('✗ Not a labelled structure there. Try again — or use Hint.','bad');
+  }
+  if(tries>=2 && !hinted){ setTimeout(()=>{ if(!revealed) doHint(true); },700); }
+  updHud();
+}
+function doHint(auto){
+  const t=BY_ID[order[idx]];
+  hinted=true;
+  flashPanel(t.view);
+  say((auto?'Hint: ':'')+t.hint,'warn');
+}
+function doReveal(){
+  const t=BY_ID[order[idx]];
+  revealed=true;
+  flash(t.id,'reveal',1500);
+  say('Here it is — '+t.name+': '+t.def,'warn');
+  setTimeout(()=>{ if(order[idx]===t.id) correct(); },1200);
+}
+function doSkip(){
+  const id=order[idx];
+  results[id]={tries:99,hinted:hinted,revealed:true,skipped:true};
+  streak=0;
+  flash(id,'reveal',1100);
+  say('Skipped — that was the '+BY_ID[id].name+'.','warn');
+  ['bHint','bReveal','bSkip'].forEach(b=>el(b).disabled=true);
+  setTimeout(next,1000);
+}
+function endRound(){
+  running=false; clearInterval(tick);
+  const secs=(Date.now()-startT)/1000;
+  const total=order.length;
+  el('endScore').textContent=score;
+  el('endAcc').textContent=Math.round(firstTry/total*100)+'%';
+  el('endTime').textContent=fmt(secs);
+  el('endBest').textContent=best;
+  const missed=order.filter(id=>{const r=results[id];return !r||r.tries>0||r.revealed;});
+  el('endTitle').textContent = missed.length===0 ? 'Clean sweep' : 'Round complete';
+  el('endSub').textContent = missed.length===0
+    ? 'Every structure on the first click.'
+    : missed.length+' of '+total+' needed more than one try.';
+  el('endList').innerHTML = missed.length
+    ? '<ul>'+missed.map(id=>'<li><b>'+BY_ID[id].name+'</b> — '+BY_ID[id].def+'</li>').join('')+'</ul>'
+    : '';
+  el('missedBtn').disabled = missed.length===0;
+  el('missedBtn').dataset.list = missed.join(',');
+  el('overlay').classList.add('on');
+  updHud();
+}
+
+/* ---------- interaction ---------- */
+svg.addEventListener('click', ev=>{
+  const spot = ev.target.closest ? ev.target.closest('.hs') : null;
+  if(mode==='study'){
+    if(spot){ const t=BY_ID[spot.dataset.hs]; flash(t.id,'flash',900); say(t.name+' — '+t.def,'good'); }
+    return;
+  }
+  if(!running) return;
+  const p=svg.createSVGPoint(); p.x=ev.clientX; p.y=ev.clientY;
+  const pt=p.matrixTransform(svg.getScreenCTM().inverse());
+  const targetId=order[idx];
+  if(spot && spot.dataset.hs===targetId) correct();
+  else wrong(pt, spot?spot.dataset.hs:null);
+});
+
+svg.addEventListener('mousemove', ev=>{
+  if(mode!=='study') return;
+  const spot = ev.target.closest ? ev.target.closest('.hs') : null;
+  if(spot){ const t=BY_ID[spot.dataset.hs]; say(t.name+' — '+t.def,'neutral'); }
+});
+
+el('bHint').onclick   = ()=>{ if(running) doHint(false); };
+el('bReveal').onclick = ()=>{ if(running) doReveal(); };
+el('bSkip').onclick   = ()=>{ if(running) doSkip(); };
+el('restart').onclick = ()=>startRound(null);
+el('againBtn').onclick= ()=>{ setMode('quiz'); startRound(null); };
+el('missedBtn').onclick=()=>{ const l=el('missedBtn').dataset.list; setMode('quiz'); startRound(l?l.split(','):null); };
+el('studyBtn').onclick =()=>{ el('overlay').classList.remove('on'); setMode('study'); };
+el('defOnly').onchange = ()=>{ if(running) showPrompt(); };
+
+document.addEventListener('keydown', e=>{
+  if(mode!=='quiz'||!running) return;
+  if(e.key==='h'||e.key==='H') doHint(false);
+  if(e.key==='r'||e.key==='R') doReveal();
+  if(e.key==='s'||e.key==='S') doSkip();
+});
+
+function setMode(m){
+  mode=m;
+  document.body.classList.toggle('study',m==='study');
+  document.body.classList.toggle('quiz',m==='quiz');
+  Array.from(el('modeSeg').children).forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  el('prompt').style.display = m==='quiz' ? '' : 'none';
+  el('hud').style.display    = m==='quiz' ? '' : 'none';
+  if(m==='study'){
+    running=false; clearInterval(tick); clearAll();
+    say('Study mode — hover or click any structure, or pick a term from the list below.','neutral');
+  } else {
+    el('overlay').classList.remove('on');
+    startRound(null);
+  }
+}
+Array.from(el('modeSeg').children).forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+
+/* study list */
+el('glist').innerHTML = TERMS.map((t,i)=>
+  '<div class="gitem" data-id="'+t.id+'"><b>'+(i+1)+'. '+t.name+'</b><span>'+t.def+'</span></div>'
+).join('');
+el('glist').addEventListener('click', ev=>{
+  const it=ev.target.closest('.gitem'); if(!it) return;
+  const t=BY_ID[it.dataset.id];
+  flashPanel(t.view); flash(t.id,'flash',1600); say(t.name+' — '+t.def,'good');
+});
+
+startRound(null);
+})();
+</script>
+</body>
+</html>
