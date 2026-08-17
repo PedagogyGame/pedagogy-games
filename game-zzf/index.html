@@ -42,7 +42,7 @@
   .prompt .kicker{font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--muted)}
   .prompt h1{margin:5px 0 4px; font-size:clamp(22px,3.4vw,34px); letter-spacing:-.01em}
   .prompt h1 em{font-style:normal; color:var(--copper)}
-  .feedback{min-height:22px; font-size:14px; font-weight:600}
+  .feedback{min-height:38px; font-size:14px; font-weight:600; max-width:900px; margin:0 auto; line-height:1.4}
   .feedback.good{color:var(--good)}
   .feedback.bad{color:var(--bad)}
   .feedback.idle{color:var(--muted); font-weight:400}
@@ -76,6 +76,23 @@
   body.calib .spot.sel .tag{background:var(--accent); color:#06202c}
   .handle{position:absolute; right:-6px; bottom:-6px; width:12px; height:12px; background:#fff; border:2px solid #ff3b3b; border-radius:3px; cursor:nwse-resize; display:none}
   body.calib .spot .handle{display:block}
+
+  /* the answer reveal that lingers before auto-advancing */
+  .reveal{
+    position:absolute; border-radius:6px; pointer-events:none; z-index:9;
+    background:rgba(255,255,255,.10);
+    box-shadow:0 0 0 3px currentColor, 0 0 30px 8px currentColor;
+    animation:breathe 1s ease-in-out infinite alternate;
+  }
+  .reveal.good{color:var(--good)}
+  .reveal.bad{color:var(--bad)}
+  .reveal .rtag{
+    position:absolute; left:0; top:-20px; font-size:11px; font-weight:700; white-space:nowrap;
+    padding:2px 7px; border-radius:5px;
+  }
+  .reveal.good .rtag{background:var(--good); color:#06231a}
+  .reveal.bad  .rtag{background:var(--bad);  color:#2c0808}
+  @keyframes breathe{from{opacity:.7}to{opacity:1}}
 
   .pulse{position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; border-radius:50%; pointer-events:none; animation:pop .7s ease-out forwards}
   .pulse.good{background:rgba(61,220,132,.9); box-shadow:0 0 0 0 rgba(61,220,132,.6)}
@@ -123,7 +140,7 @@
 <header>
   <div class="brand">⚡ Electric Motor <span>Anatomy</span></div>
   <div class="stat"><b id="score">0</b><i>Score</i></div>
-  <div class="stat"><b id="found">0<span style="color:#8b98a6">/16</span></b><i>Found</i></div>
+  <div class="stat"><b id="found">0<span style="color:#8b98a6">/16</span></b><i>Correct</i></div>
   <div class="stat"><b id="streak">0</b><i>Streak</i></div>
   <div class="spacer"></div>
   <button id="btnSkip">Skip ▸</button>
@@ -276,6 +293,8 @@ const DEFAULT_PARTS = [
 ];
 
 const POINTS_HIT = 100, POINTS_MISS = -25;
+/* one attempt per part — how long the answer stays lit before moving on (ms) */
+const LINGER_HIT = 2000, LINGER_MISS = 3000;
 
 /* ============================================================
    3. ENGINE
@@ -283,7 +302,8 @@ const POINTS_HIT = 100, POINTS_MISS = -25;
 let PARTS = structuredClone(DEFAULT_PARTS);
 const $ = s => document.querySelector(s);
 const stage=$("#stage"), art=$("#art"), spots=$("#spots");
-let idx=0, score=0, streak=0, solved=new Set(), asked=new Set(), calib=false, sel=null, curView="motor";
+let idx=0, score=0, streak=0, solved=new Set(), correct=new Set(), asked=new Set();
+let calib=false, sel=null, curView="motor", locked=false, timer=null;
 
 const cur = () => PARTS[idx];
 
@@ -313,9 +333,19 @@ function setRotation(a){ stage.style.transform="rotate("+a+"deg)"; }
 
 function paintHUD(){
   $("#score").textContent=score;
-  $("#found").innerHTML=solved.size+'<span style="color:#8b98a6">/'+PARTS.length+'</span>';
+  $("#found").innerHTML=correct.size+'<span style="color:#8b98a6">/'+PARTS.length+'</span>';
   $("#streak").textContent=streak;
-  $("#prog").style.width=(solved.size/PARTS.length*100)+"%";
+  $("#prog").style.width=(idx/PARTS.length*100)+"%";
+}
+
+/* light up the right answer and hold it there before advancing */
+function reveal(p,cls){
+  const d=document.createElement("div");
+  d.className="reveal "+cls;
+  d.style.left=p.box.x+"%"; d.style.top=p.box.y+"%";
+  d.style.width=p.box.w+"%"; d.style.height=p.box.h+"%";
+  d.innerHTML='<span class="rtag">'+p.name+'</span>';
+  spots.appendChild(d);
 }
 
 function ask(){
@@ -364,25 +394,38 @@ function whatWasClicked(pt){
 }
 
 stage.addEventListener("click",e=>{
-  if(calib) return;
-  if(idx>=PARTS.length) return;
+  if(calib || locked || idx>=PARTS.length) return;
   const pt=toLocal(e.clientX,e.clientY);
   const p=cur();
-  if(inBox(pt,p.box)){
-    score+=POINTS_HIT; streak++; solved.add(p.id);
+  const got=inBox(pt,p.box);
+
+  locked=true;                      // one attempt per part
+  solved.add(p.id);                 // taken off the board either way
+  let wait;
+
+  if(got){
+    score+=POINTS_HIT; streak++; correct.add(p.id);
     ping(e.clientX,e.clientY,"good");
+    reveal(p,"good");
     say("Correct — "+p.name+". "+p.blurb,"good");
-    paintHUD();
-    idx++;
-    setTimeout(()=>{ if(idx<PARTS.length){ say("Click the part on the diagram.","idle"); } ask(); }, 1900);
+    wait=LINGER_HIT;
   } else {
     score=Math.max(0,score+POINTS_MISS); streak=0;
     ping(e.clientX,e.clientY,"bad");
+    reveal(p,"bad");
     const hit=whatWasClicked(pt);
-    say(hit ? "Incorrect — that's the "+hit.name+". Look closely and try again!"
-            : "Incorrect. Look closely and try again!","bad");
-    paintHUD();
+    say((hit ? "Incorrect — you clicked the "+hit.name+". " : "Incorrect. ")
+        +"The "+p.name+" is here. "+p.blurb,"bad");
+    wait=LINGER_MISS;
   }
+
+  idx++; paintHUD();
+  clearTimeout(timer);
+  timer=setTimeout(()=>{
+    locked=false;
+    if(idx<PARTS.length) say("Click the part on the diagram.","idle");
+    ask();
+  }, wait);
 });
 
 function finish(){
@@ -390,12 +433,13 @@ function finish(){
   $("#endScore").textContent=score;
   const max=PARTS.length*POINTS_HIT;
   $("#endTitle").textContent = score>=max*0.9 ? "Motor mastered!" : score>=max*0.6 ? "Solid work." : "Run it again.";
-  $("#endMsg").textContent = "You identified all "+PARTS.length+" components. Perfect run is "+max+" points.";
+  $("#endMsg").textContent = "You got "+correct.size+" of "+PARTS.length+" on the first try. A perfect run is "+max+" points.";
   $("#endLegend").innerHTML = PARTS.map(p=>"<div><b>"+p.name+"</b> — "+p.blurb+"</div>").join("");
 }
 
 function restart(){
-  idx=0; score=0; streak=0; solved=new Set(); asked=new Set();
+  clearTimeout(timer); locked=false;
+  idx=0; score=0; streak=0; solved=new Set(); correct=new Set(); asked=new Set();
   $("#veil").classList.remove("show");
   say("Click the part on the diagram.","idle");
   ask();
@@ -404,11 +448,13 @@ function restart(){
 $("#btnRestart").onclick=restart;
 $("#btnAgain").onclick=restart;
 $("#btnSkip").onclick=()=>{
-  if(calib||idx>=PARTS.length) return;
-  const p=cur(); solved.add(p.id); streak=0; idx++;
-  say("Skipped — "+p.name+". "+p.blurb,"idle");
+  if(calib||locked||idx>=PARTS.length) return;
+  const p=cur(); locked=true; solved.add(p.id); streak=0; idx++;
+  reveal(p,"bad");
+  say("Skipped — the "+p.name+" is here. "+p.blurb,"idle");
   paintHUD();
-  setTimeout(ask,1200);
+  clearTimeout(timer);
+  timer=setTimeout(()=>{ locked=false; if(idx<PARTS.length) say("Click the part on the diagram.","idle"); ask(); }, LINGER_MISS);
 };
 
 /* ============================================================
