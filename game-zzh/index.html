@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IT Ticket Queue</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Consolas, Monaco, monospace;
+      background:
+        radial-gradient(circle at top, #19374a 0%, #0b1720 45%, #05090d 100%);
+      color: #d9f7ff;
+      overflow-x: hidden;
+    }
+
+    .office {
+      min-height: 100vh;
+      padding: 30px 18px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .desk {
+      width: min(900px, 100%);
+    }
+
+    .top-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .status-box {
+      background: #0c1d27;
+      border: 1px solid #28566c;
+      padding: 12px;
+      border-radius: 6px;
+      text-align: center;
+      box-shadow: 0 0 20px rgba(0, 190, 255, 0.08);
+    }
+
+    .label {
+      color: #77a9ba;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .value {
+      margin-top: 5px;
+      font-size: 21px;
+      color: #8eeaff;
+    }
+
+    .monitor {
+      position: relative;
+      background: #071117;
+      border: 8px solid #26343b;
+      border-radius: 10px;
+      box-shadow:
+        0 25px 70px #000,
+        inset 0 0 40px rgba(0, 225, 255, 0.04);
+      overflow: hidden;
+    }
+
+    .monitor::after {
+      content: "";
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 3px,
+        rgba(255,255,255,.015) 4px
+      );
+    }
+
+    .screen-header {
+      padding: 13px 18px;
+      border-bottom: 1px solid #1e4657;
+      background: #0b1c25;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      color: #72b5cb;
+    }
+
+    .game {
+      padding: 25px;
+    }
+
+    .ticket-title {
+      color: #70defc;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .definition {
+      min-height: 100px;
+      padding: 20px;
+      background: #0a1921;
+      border-left: 4px solid #49bddb;
+      font-size: clamp(17px, 3vw, 23px);
+      line-height: 1.45;
+      display: flex;
+      align-items: center;
+    }
+
+    .answers {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    button.answer {
+      border: 1px solid #29586b;
+      background: #102530;
+      color: #d8f8ff;
+      padding: 17px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 16px;
+      text-align: left;
+      border-radius: 5px;
+      transition: 0.15s;
+    }
+
+    button.answer:hover:not(:disabled) {
+      background: #183c4b;
+      transform: translateY(-2px);
+      border-color: #5dd9ff;
+    }
+
+    button.answer.correct {
+      background: #123d2c;
+      border-color: #45e695;
+    }
+
+    button.answer.wrong {
+      background: #501f26;
+      border-color: #ff6674;
+    }
+
+    button:disabled {
+      cursor: default;
+    }
+
+    .feedback {
+      min-height: 60px;
+      margin-top: 18px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #a9c9d4;
+    }
+
+    .stability-area {
+      margin-top: 20px;
+    }
+
+    .stability-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 7px;
+      font-size: 12px;
+      color: #83aaba;
+    }
+
+    .bar {
+      height: 15px;
+      border: 1px solid #315363;
+      background: #071016;
+      overflow: hidden;
+      border-radius: 10px;
+    }
+
+    .fill {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, #ff5964, #ffc857, #45e695);
+      transition: width .35s;
+    }
+
+    .messages {
+      margin-top: 15px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .message {
+      border-left: 3px solid #566b76;
+      background: rgba(12, 28, 36, .85);
+      padding: 10px 13px;
+      color: #91aeb8;
+      font-size: 12px;
+      animation: appear .3s ease;
+    }
+
+    @keyframes appear {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+    }
+
+    .next {
+      display: none;
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px;
+      font: inherit;
+      font-weight: bold;
+      color: #071117;
+      background: #69ddfb;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+
+    .next:hover {
+      background: white;
+    }
+
+    .game-over {
+      display: none;
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .game-over h1 {
+      color: #ff6674;
+      font-size: 35px;
+    }
+
+    .restart {
+      padding: 15px 28px;
+      background: #69ddfb;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: bold;
+    }
+
+    @media (max-width: 650px) {
+      .answers {
+        grid-template-columns: 1fr;
+      }
+
+      .top-bar {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="office">
+  <div class="desk">
+
+    <div class="top-bar">
+      <div class="status-box">
+        <div class="label">Tickets Resolved</div>
+        <div class="value" id="score">0</div>
+      </div>
+
+      <div class="status-box">
+        <div class="label">Shift</div>
+        <div class="value" id="round">1 / 10</div>
+      </div>
+
+      <div class="status-box">
+        <div class="label">System Status</div>
+        <div class="value" id="systemStatus">ONLINE</div>
+      </div>
+    </div>
+
+    <div class="monitor">
+
+      <div class="screen-header">
+        <span>HELPDESK // TICKET QUEUE</span>
+        <span id="ticketID">INC-1042</span>
+      </div>
+
+      <div class="game" id="game">
+
+        <div class="ticket-title">
+          INCOMING TICKET — IDENTIFY THE IT TERM
+        </div>
+
+        <div class="definition" id="definition"></div>
+
+        <div class="answers" id="answers"></div>
+
+        <div class="feedback" id="feedback">
+          Select the term that best matches the definition.
+        </div>
+
+        <button class="next" id="nextButton">
+          RESOLVE NEXT TICKET →
+        </button>
+
+        <div class="stability-area">
+          <div class="stability-labels">
+            <span>NETWORK STABILITY</span>
+            <span id="stabilityText">100%</span>
+          </div>
+
+          <div class="bar">
+            <div class="fill" id="stabilityBar"></div>
+          </div>
+        </div>
+
+        <div class="messages" id="messages">
+          <div class="message">
+            [07:42] SERVICE DESK: Morning queue opened. Good luck.
+          </div>
+        </div>
+
+      </div>
+
+      <div class="game-over" id="gameOver">
+        <h1>SYSTEM FAILURE</h1>
+        <p>Your network stability reached zero.</p>
+        <p id="finalScore"></p>
+        <button class="restart" onclick="restartGame()">
+          RESTART SHIFT
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+
+const terms = [
+
+  {
+    term: "LAN",
+    definition: "A network connecting computers and devices within a limited area such as an office, building, or campus.",
+    related: ["WAN", "VLAN", "Subnet"]
+  },
+
+  {
+    term: "WAN",
+    definition: "A network connecting separate LANs or locations across large geographic distances.",
+    related: ["LAN", "VLAN", "Gateway"]
+  },
+
+  {
+    term: "DNS",
+    definition: "The system that translates human-readable domain names into IP addresses computers can use.",
+    related: ["DHCP", "Gateway", "ISP"]
+  },
+
+  {
+    term: "DHCP",
+    definition: "A service that automatically assigns IP addresses and other network settings to devices.",
+    related: ["DNS", "Subnet", "Gateway"]
+  },
+
+  {
+    term: "SSD",
+    definition: "A fast, non-mechanical storage device used to store files, applications, and operating systems.",
+    related: ["RAM", "VM", "Endpoint"]
+  },
+
+  {
+    term: "RAM",
+    definition: "Short-term working memory used by programs and processes currently running on a computer.",
+    related: ["SSD", "VM", "Endpoint"]
+  },
+
+  {
+    term: "Active Directory",
+    definition: "Microsoft's centralized system for managing organizational users, computers, authentication, and permissions.",
+    related: ["Group Policy", "SSO", "Provisioning"]
+  },
+
+  {
+    term: "Group Policy",
+    definition: "A Microsoft feature used to centrally enforce Windows settings and restrictions for users and computers.",
+    related: ["Active Directory", "Least privilege", "Patch management"]
+  },
+
+  {
+    term: "SSO",
+    definition: "An authentication system that allows one login to provide access to multiple connected applications.",
+    related: ["MFA", "Active Directory", "Least privilege"]
+  },
+
+  {
+    term: "MFA",
+    definition: "A security method requiring more than one form of verification before granting access.",
+    related: ["SSO", "Least privilege", "Zero trust"]
+  },
+
+  {
+    term: "VM",
+    definition: "A software-created computer that behaves like a separate physical machine and runs its own operating system.",
+    related: ["Container", "Hypervisor", "Hosting"]
+  },
+
+  {
+    term: "Container",
+    definition: "A lightweight isolated environment containing an application and the dependencies it needs to run.",
+    related: ["VM", "Hypervisor", "DevOps"]
+  },
+
+  {
+    term: "Hypervisor",
+    definition: "Software responsible for creating, running, and managing virtual machines.",
+    related: ["VM", "Container", "Hosting"]
+  },
+
+  {
+    term: "Load balancing",
+    definition: "The practice of distributing traffic or workloads across multiple servers to prevent overload.",
+    related: ["Hosting", "Gateway", "Firewall rule"]
+  },
+
+  {
+    term: "Firewall rule",
+    definition: "A specific instruction that determines which network traffic should be allowed, blocked, or restricted.",
+    related: ["Port", "VLAN", "Gateway"]
+  },
+
+  {
+    term: "VLAN",
+    definition: "A logical separation of devices into different networks while using the same physical networking equipment.",
+    related: ["LAN", "Subnet", "Firewall rule"]
+  },
+
+  {
+    term: "Subnet",
+    definition: "A smaller logical IP network created by dividing a larger network.",
+    related: ["VLAN", "Gateway", "LAN"]
+  },
+
+  {
+    term: "Gateway",
+    definition: "A network device or address that provides a path for traffic to travel from one network to another.",
+    related: ["Subnet", "DNS", "Router"]
+  },
+
+  {
+    term: "CLI",
+    definition: "A text-based interface where a user controls a computer by typing commands.",
+    related: ["GUI", "Log", "DevOps"]
+  },
+
+  {
+    term: "GUI",
+    definition: "A visual computer interface using windows, icons, buttons, menus, and other graphical controls.",
+    related: ["CLI", "CMS", "Endpoint"]
+  },
+
+  {
+    term: "Log",
+    definition: "A time-stamped record of events, errors, actions, or activity generated by a system or application.",
+    related: ["Incident", "CLI", "Patch management"]
+  },
+
+  {
+    term: "Incident",
+    definition: "An unexpected IT event that disrupts, degrades, or threatens a system or service.",
+    related: ["Escalation", "SLA", "Log"]
+  },
+
+  {
+    term: "Escalation",
+    definition: "Passing an issue to a higher support level or specialist when additional expertise or authority is needed.",
+    related: ["Incident", "SLA", "Provisioning"]
+  },
+
+  {
+    term: "SLA",
+    definition: "An agreed service standard defining targets such as response time, resolution time, and availability.",
+    related: ["Incident", "Escalation", "RTO / RPO"]
+  },
+
+  {
+    term: "Provisioning",
+    definition: "Creating and configuring accounts, devices, software, permissions, or infrastructure for use.",
+    related: ["Deprovisioning", "Active Directory", "Least privilege"]
+  },
+
+  {
+    term: "Deprovisioning",
+    definition: "Removing or disabling accounts, permissions, devices, and resources that are no longer required.",
+    related: ["Provisioning", "Active Directory", "Least privilege"]
+  },
+
+  {
+    term: "Least privilege",
+    definition: "The security principle of giving users and systems only the minimum access necessary to perform their tasks.",
+    related: ["Zero trust", "MFA", "Active Directory"]
+  },
+
+  {
+    term: "Zero trust",
+    definition: "A security model where users and devices must continually prove they are authorized rather than being automatically trusted.",
+    related: ["Least privilege", "MFA", "Firewall rule"]
+  },
+
+  {
+    term: "Patch management",
+    definition: "The process of identifying, testing, deploying, and tracking software and security updates.",
+    related: ["Endpoint", "Zero trust", "Provisioning"]
+  },
+
+  {
+    term: "RTO / RPO",
+    definition: "Disaster-recovery measurements describing how quickly systems must recover and how much recent data loss is acceptable.",
+    related: ["SLA", "Incident", "Hosting"]
+  },
+
+  {
+    term: "DevOps",
+    definition: "Practices combining software development and IT operations to automate and improve building, deploying, and maintaining systems.",
+    related: ["Agile", "Container", "Middleware"]
+  },
+
+  {
+    term: "Agile",
+    definition: "An iterative approach to work using short development cycles, frequent feedback, and continuous adjustment.",
+    related: ["DevOps", "SLA", "Provisioning"]
+  },
+
+  {
+    term: "Middleware",
+    definition: "Software that sits between applications or systems and helps them communicate and exchange data.",
+    related: ["ERP", "CRM", "DevOps"]
+  },
+
+  {
+    term: "Big data",
+    definition: "Extremely large or complex datasets requiring specialized technologies for storage, processing, and analysis.",
+    related: ["ERP", "CRM", "Hosting"]
+  },
+
+  {
+    term: "ERP",
+    definition: "Integrated business software connecting functions such as finance, purchasing, inventory, manufacturing, and HR.",
+    related: ["CRM", "CMS", "Middleware"]
+  },
+
+  {
+    term: "CRM",
+    definition: "Software used to manage customer information, sales activity, leads, and business relationships.",
+    related: ["ERP", "CMS", "Big data"]
+  },
+
+  {
+    term: "CMS",
+    definition: "Software used to create, organize, edit, and publish website or digital content.",
+    related: ["CRM", "ERP", "Hosting"]
+  },
+
+  {
+    term: "FTP",
+    definition: "A network protocol used to transfer files between computers or servers.",
+    related: ["Port", "Hosting", "ISP"]
+  },
+
+  {
+    term: "ISP",
+    definition: "A company that provides internet connectivity to individuals or organizations.",
+    related: ["WAN", "Hosting", "Gateway"]
+  },
+
+  {
+    term: "Hosting",
+    definition: "Providing server infrastructure on which websites, applications, databases, or online services operate.",
+    related: ["VM", "ISP", "Load balancing"]
+  }
+
+];
+
+const unrelatedAnswers = [
+  "Payroll",
+  "Escrow",
+  "Supply Chain",
+  "Graphic Design",
+  "Accounting",
+  "Marketing",
+  "Inventory",
+  "Recruiting",
+  "Invoice",
+  "Legal Hold",
+  "Sales Forecast",
+  "Purchase Order",
+  "Brand Strategy",
+  "Shipping",
+  "Customer Survey"
+];
+
+const officeMessages = [
+  "[CHAT] Karen: Is the internet down or is it just me?",
+  "[EMAIL] Manager: Need an update on that ticket.",
+  "[ALERT] Authentication failures detected.",
+  "[CHAT] User: I restarted it. Still broken.",
+  "[ALERT] CPU utilization increased.",
+  "[EMAIL] HR: New employee starts tomorrow.",
+  "[CHAT] Finance: We can't access the shared drive.",
+  "[ALERT] Backup completed successfully.",
+  "[CHAT] User: What do you mean by clear my cache?",
+  "[EMAIL] Security: Please review outstanding patches.",
+  "[ALERT] VPN connection restored.",
+  "[CHAT] Manager: Are we still within SLA?",
+  "[EMAIL] Service Desk: Three new tickets assigned.",
+  "[ALERT] Endpoint disconnected.",
+  "[CHAT] User: My password definitely worked yesterday."
+];
+
+let stability = 100;
+let score = 0;
+let currentRound = 0;
+let maxRounds = 10;
+let currentQuestion = null;
+let questionPool = [];
+
+function shuffle(array) {
+  return [...array].sort(() => Math.random() - 0.5);
+}
+
+function startGame() {
+  stability = 100;
+  score = 0;
+  currentRound = 0;
+
+  questionPool = shuffle(terms).slice(0, maxRounds);
+
+  document.getElementById("game").style.display = "block";
+  document.getElementById("gameOver").style.display = "none";
+
+  updateStatus();
+  loadQuestion();
+}
+
+function loadQuestion() {
+
+  if (currentRound >= maxRounds) {
+    finishShift();
+    return;
+  }
+
+  currentQuestion = questionPool[currentRound];
+
+  document.getElementById("definition").textContent =
+    currentQuestion.definition;
+
+  document.getElementById("feedback").textContent =
+    "Select the term that best matches the definition.";
+
+  document.getElementById("nextButton").style.display = "none";
+
+  document.getElementById("ticketID").textContent =
+    "INC-" + Math.floor(1000 + Math.random() * 9000);
+
+  /*
+    ANSWER DESIGN:
+    Correct answer
+    + two related IT distractors
+    + one unrelated distractor
+  */
+
+  const related = shuffle(currentQuestion.related).slice(0, 2);
+
+  let randomIT = shuffle(
+    terms
+      .map(x => x.term)
+      .filter(x =>
+        x !== currentQuestion.term &&
+        !related.includes(x)
+      )
+  )[0];
+
+  /*
+    Half the time the fourth answer is another IT term.
+    Half the time it comes from outside IT.
+  */
+
+  const fourthAnswer =
+    Math.random() < 0.5
+      ? randomIT
+      : unrelatedAnswers[
+          Math.floor(Math.random() * unrelatedAnswers.length)
+        ];
+
+  let choices = [
+    currentQuestion.term,
+    ...related,
+    fourthAnswer
+  ];
+
+  choices = [...new Set(choices)];
+
+  while (choices.length < 4) {
+    const filler = shuffle(terms.map(x => x.term))[0];
+
+    if (!choices.includes(filler)) {
+      choices.push(filler);
+    }
+  }
+
+  choices = shuffle(choices);
+
+  const answerBox = document.getElementById("answers");
+  answerBox.innerHTML = "";
+
+  choices.forEach((choice, index) => {
+
+    const button = document.createElement("button");
+
+    button.className = "answer";
+
+    button.textContent =
+      String.fromCharCode(65 + index) + ". " + choice;
+
+    button.onclick = () =>
+      answerQuestion(choice, button);
+
+    answerBox.appendChild(button);
+
+  });
+
+  addOfficeMessage();
+  updateStatus();
+}
+
+function answerQuestion(choice, clickedButton) {
+
+  const buttons = document.querySelectorAll(".answer");
+
+  buttons.forEach(button => {
+    button.disabled = true;
+
+    if (
+      button.textContent
+        .substring(3) === currentQuestion.term
+    ) {
+      button.classList.add("correct");
+    }
+  });
+
+  if (choice === currentQuestion.term) {
+
+    score++;
+
+    stability = Math.min(100, stability + 10);
+
+    document.getElementById("feedback").innerHTML =
+      "<strong>✓ TICKET RESOLVED.</strong> " +
+      currentQuestion.term +
+      " is correct. System stability recovered.";
+
+  } else {
+
+    clickedButton.classList.add("wrong");
+
+    stability -= 25;
+
+    document.getElementById("feedback").innerHTML =
+      "<strong>✕ INCORRECT.</strong> The correct term was <strong>" +
+      currentQuestion.term +
+      "</strong>. Network stability -25%.";
+
+  }
+
+  updateStatus();
+
+  if (stability <= 0) {
+    setTimeout(gameOver, 600);
+    return;
+  }
+
+  document.getElementById("nextButton").style.display = "block";
+}
+
+function nextQuestion() {
+  currentRound++;
+  loadQuestion();
+}
+
+function updateStatus() {
+
+  document.getElementById("score").textContent = score;
+
+  document.getElementById("round").textContent =
+    Math.min(currentRound + 1, maxRounds) +
+    " / " +
+    maxRounds;
+
+  document.getElementById("stabilityText").textContent =
+    Math.max(0, stability) + "%";
+
+  document.getElementById("stabilityBar").style.width =
+    Math.max(0, stability) + "%";
+
+  let status = "ONLINE";
+
+  if (stability <= 30) {
+    status = "CRITICAL";
+  } else if (stability <= 60) {
+    status = "DEGRADED";
+  } else if (stability <= 80) {
+    status = "WARNING";
+  }
+
+  document.getElementById("systemStatus").textContent = status;
+}
+
+function addOfficeMessage() {
+
+  if (Math.random() > 0.75) return;
+
+  const message =
+    officeMessages[
+      Math.floor(Math.random() * officeMessages.length)
+    ];
+
+  const div = document.createElement("div");
+  div.className = "message";
+  div.textContent = message;
+
+  const box = document.getElementById("messages");
+
+  box.prepend(div);
+
+  while (box.children.length > 3) {
+    box.removeChild(box.lastChild);
+  }
+}
+
+function gameOver() {
+
+  document.getElementById("game").style.display = "none";
+  document.getElementById("gameOver").style.display = "block";
+
+  document.getElementById("finalScore").textContent =
+    "Tickets correctly resolved: " + score;
+}
+
+function finishShift() {
+
+  document.getElementById("game").innerHTML = `
+    <div style="text-align:center;padding:40px 10px;">
+      <div style="font-size:13px;color:#74b9ce;">
+        SHIFT COMPLETE
+      </div>
+
+      <h1 style="font-size:38px;color:#8eeaff;">
+        ${score} / ${maxRounds}
+      </h1>
+
+      <p>
+        Final system stability: ${stability}%
+      </p>
+
+      <p style="color:#92adb7;">
+        ${getPerformanceMessage()}
+      </p>
+
+      <button class="restart" onclick="location.reload()">
+        START NEW SHIFT
+      </button>
+    </div>
+  `;
+}
+
+function getPerformanceMessage() {
+
+  if (score === maxRounds)
+    return "Flawless shift. The infrastructure team is suspiciously impressed.";
+
+  if (score >= 8)
+    return "Excellent work. Very few tickets survived your shift.";
+
+  if (score >= 6)
+    return "Solid shift. The network lived to see another day.";
+
+  if (score >= 4)
+    return "Some tickets got away from you, but production survived.";
+
+  return "The incident review meeting has already been scheduled.";
+}
+
+function restartGame() {
+  location.reload();
+}
+
+document
+  .getElementById("nextButton")
+  .addEventListener("click", nextQuestion);
+
+startGame();
+
+</script>
+
+</body>
+</html>
