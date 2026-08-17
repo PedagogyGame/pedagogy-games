@@ -11,11 +11,12 @@
     --good:#4fbf7a; --bad:#e05a4d; --warn:#e8b13a;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
+  html,body{margin:0}
   body{
     background:radial-gradient(1200px 700px at 50% -10%,#1d2632,var(--bg));
     color:var(--ink); font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    font-size:15px; line-height:1.5; display:flex; flex-direction:column; min-height:100%;
+    font-size:15px; line-height:1.5; display:flex; flex-direction:column;
+    min-height:100vh; position:relative;
   }
   header{
     display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -73,19 +74,29 @@
   .vtab{font-size:11px; letter-spacing:.1em; text-transform:uppercase; padding:6px 14px;
         border-radius:8px; border:1px solid var(--line); color:var(--dim)}
   .vtab.on{color:#0d1319; background:var(--accent); border-color:var(--accent); font-weight:700}
-  .plate{position:relative; width:fit-content; max-width:100%; margin:0 auto;
+  .plate{position:relative; width:100%; max-width:540px; max-width:var(--plateMax,540px); margin:0 auto;
          background:radial-gradient(600px 480px at 46% 24%, #fdfaf3, #e9dfcc);
          border-radius:10px; border:1px solid #cdbfa6; overflow:hidden}
-  .plate::after{content:""; position:absolute; inset:0; pointer-events:none;
+  .plate::after{content:""; position:absolute; top:0; right:0; bottom:0; left:0; pointer-events:none;
                 box-shadow:inset 0 0 70px rgba(120,100,70,.15)}
-  svg.view{display:block; height:min(74vh,760px); width:auto; cursor:crosshair}
+  svg.view{display:block; width:100%; height:auto; cursor:crosshair}
   svg.view.locked{cursor:default}
   svg.view.off{display:none}
   .plateCap{text-align:center; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
             color:#7f8d9c; padding-top:2px}
 
-  #veil{position:absolute; inset:0; display:none; align-items:center; justify-content:center;
-        background:rgba(10,14,19,.92); border-radius:14px; z-index:20; padding:22px; overflow-y:auto}
+  #veil{position:fixed; top:0; right:0; bottom:0; left:0; display:none;
+        align-items:flex-start; justify-content:center;
+        background:rgba(10,14,19,.94); z-index:20; padding:24px 22px; overflow-y:auto}
+  #veil.on{display:flex}
+  #veil .card{margin:auto 0}
+  #bootErr{display:none; margin:14px auto 0; max-width:640px; text-align:left;
+           border:1px solid #6b2a24; background:#2a1613; color:#f0b5ad;
+           border-radius:10px; padding:12px 14px; font-size:12.5px; white-space:pre-wrap}
+  #bootErr.on{display:block}
+  .fxin{animation:fxin .35s ease-out both}
+  @keyframes fxin{from{opacity:0}to{opacity:1}}
+  noscript .rules{max-width:560px; margin:16px auto}
   #veil.on{display:flex}
   .card{max-width:640px; width:100%; text-align:center}
   .card h1{font-size:27px; margin:0 0 6px; letter-spacing:-.01em}
@@ -210,7 +221,7 @@
       </defs></svg>
 
       <!-- ══════════════ PLATE 1 · ANTERIOR DISSECTION ══════════════ -->
-      <svg class="view off" id="svgA" viewBox="0 0 420 520">
+      <svg class="view" id="svgA" viewBox="0 0 420 520">
        <g stroke-linejoin="round" stroke-linecap="round">
 
         <!-- ── skin silhouette ── -->
@@ -625,7 +636,30 @@
   </div>
 </main>
 
-<div id="veil" class="on"><div class="card" id="veilCard"></div></div>
+<div id="veil" class="on"><div class="card" id="veilCard">
+    <h1>Cervical Region — Localisation Trainer</h1>
+    <p>Sixteen structures of the neck. You are given the name and the definition; you must click the exact
+       spot on the plate. There are no second attempts.</p>
+    <ul class="rules">
+      <li><b>One click, one verdict.</b> Wherever you click is your answer. Land on a neighbour and you will
+          be told which structure you actually hit — it still counts as a miss.</li>
+      <li><b>Expertise starts at 50.</b> Every miss costs <b class="miss">−9</b>.</li>
+      <li><b>Speed earns a little back.</b> Answer inside the bonus window for <b class="hit">+4</b>;
+          answer correctly but late for only <b class="slow">+1</b>. The reward never outweighs the penalty.</li>
+      <li><b>The window is tighter for the easy ones</b> — 5 seconds for obvious structures, 10 for demanding ones.</li>
+      <li><b>Twenty seconds is the hard limit.</b> No answer is scored as a miss.</li>
+      <li><b>Reach zero and the run is over.</b></li>
+    </ul>
+    <button class="primary" id="btnStart">Begin assessment</button>
+    <div class="hint">Two plates are used — an anterior dissection and a median section of the neck.</div>
+    <div id="bootErr"></div>
+    <noscript>
+      <div class="rules" style="border-color:#6b2a24;background:#2a1613;color:#f0b5ad">
+        This trainer needs JavaScript to run. The plate below is drawn, but scoring and
+        click detection are disabled while scripts are blocked.
+      </div>
+    </noscript>
+  </div></div>
 
 <script>
 "use strict";
@@ -733,7 +767,8 @@ const RANKS = [[1,"First-year anxiety"],[25,"Preclinical"],[45,"Competent genera
                [65,"Attending"],[80,"Head & neck specialist"],[93,"Consultant anatomist"]];
 function rankOf(v){ if (v <= 0) return "Struck off"; let r = RANKS[0][1]; for (const [t,n] of RANKS) if (v >= t) r = n; return r; }
 
-const MAP = Object.fromEntries(S.map(s => [s.id, s]));
+const MAP = {};
+S.forEach(function(s){ MAP[s.id] = s; });
 
 const el = {};
 ["svgA","svgS","fxA","fxS","term","def","diffTag","timerFill","timerVal","timerLabel",
@@ -741,7 +776,9 @@ const el = {};
  "tabA","tabS","plateCap","log","veil","veilCard","studyBar"].forEach(k => el[k] = document.getElementById(k));
 
 let G = null, studyMode = false;
+const BOOT_START_HTML = el.veilCard.innerHTML;
 
+const VBW = 420, VBH = 520;
 const svgOf = v => v === "ant" ? el.svgA : el.svgS;
 const fxOf  = v => v === "ant" ? el.fxA  : el.fxS;
 
@@ -761,9 +798,16 @@ function mk(tag, attrs, parent){
   if (parent) parent.appendChild(n);
   return n;
 }
+/* Map a pointer event to viewBox units. Plain rect maths — works even where
+   getScreenCTM/createSVGPoint are unavailable or return null. */
 function toLocal(svg, ev){
-  const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
-  return pt.matrixTransform(svg.getScreenCTM().inverse());
+  const r = svg.getBoundingClientRect();
+  if (!r.width || !r.height) return { x:-999, y:-999 };
+  const sc = Math.min(r.width / VBW, r.height / VBH);
+  return {
+    x: (ev.clientX - (r.left + (r.width  - VBW * sc) / 2)) / sc,
+    y: (ev.clientY - (r.top  + (r.height - VBH * sc) / 2)) / sc
+  };
 }
 
 /* nearest-wins: whichever structure the click sits most centrally within */
@@ -874,10 +918,8 @@ function revealCorrect(view, s, colour){
   const list = s.t[view]; if (!list) return;
   const fx = fxOf(view);
   for (const [cx, cy, r] of list){
-    const c = mk("circle", { cx, cy, r: r + 2, fill: colour, "fill-opacity": .14,
-                             stroke: colour, "stroke-width": 2.6, opacity: 0 }, fx);
-    const a = mk("animate", { attributeName:"opacity", values:"0;1;.75", dur:".45s", fill:"freeze" }, c);
-    if (a.beginElement) a.beginElement();
+    mk("circle", { cx, cy, r: r + 2, fill: colour, "fill-opacity": .14,
+                   stroke: colour, "stroke-width": 2.6, class: "fxin" }, fx);
   }
   const [lx, ly] = list[0];
   const w = s.name.length * 6.5 + 18;
@@ -895,10 +937,8 @@ function markClick(view, x, y, ok){
   const g = mk("g", {}, fx);
   mk("line", { x1:x-7, y1:y-7, x2:x+7, y2:y+7, stroke:col, "stroke-width":3, "stroke-linecap":"round" }, g);
   mk("line", { x1:x+7, y1:y-7, x2:x-7, y2:y+7, stroke:col, "stroke-width":3, "stroke-linecap":"round" }, g);
-  const ring = mk("circle", { cx:x, cy:y, r:5, fill:"none", stroke:col, "stroke-width":2.4, opacity:.9 }, g);
-  const a1 = mk("animate", { attributeName:"r", values:"5;28", dur:".6s", fill:"freeze" }, ring);
-  const a2 = mk("animate", { attributeName:"opacity", values:".9;0", dur:".6s", fill:"freeze" }, ring);
-  if (a1.beginElement){ a1.beginElement(); a2.beginElement(); }
+  mk("circle", { cx:x, cy:y, r:15, fill:"none", stroke:col,
+                 "stroke-width":2, opacity:.55, class:"fxin" }, g);
 }
 
 function onClick(view, ev){
@@ -941,24 +981,10 @@ function settle(kind, pts, msg){
 
 /* ══════════════ SCREENS ══════════════ */
 function startScreen(){
-  el.veilCard.innerHTML = `
-    <h1>Cervical Region — Localisation Trainer</h1>
-    <p>Sixteen structures of the neck. You are given the name and the definition; you must click the exact
-       spot on the plate. There are no second attempts.</p>
-    <ul class="rules">
-      <li><b>One click, one verdict.</b> Wherever you click is your answer. Land on a neighbour and you will
-          be told which structure you actually hit — it still counts as a miss.</li>
-      <li><b>Expertise starts at 50.</b> Every miss costs <b class="miss">−9</b>.</li>
-      <li><b>Speed earns a little back.</b> Answer inside the bonus window for <b class="hit">+4</b>;
-          answer correctly but late for only <b class="slow">+1</b>. The reward never outweighs the penalty.</li>
-      <li><b>The window is tighter for the easy ones</b> — 5 seconds for obvious structures, 10 for demanding ones.</li>
-      <li><b>Twenty seconds is the hard limit.</b> No answer is scored as a miss.</li>
-      <li><b>Reach zero and the run is over.</b></li>
-    </ul>
-    <button class="primary" id="btnStart">Begin assessment</button>
-    <div class="hint">Two plates are used — an anterior dissection and a median sagittal section.</div>`;
+  el.veilCard.innerHTML = BOOT_START_HTML;
   el.veil.classList.add("on");
-  document.getElementById("btnStart").onclick = () => { el.veil.classList.remove("on"); newGame(); };
+  const btn = document.getElementById("btnStart");
+  if (btn) btn.onclick = () => { el.veil.classList.remove("on"); newGame(); };
 }
 
 function endGame(){
@@ -1023,11 +1049,29 @@ function wireTabs(){
   el.tabS.onclick = () => { if (studyMode){ G.view = "sag"; showView("sag"); refreshStudy(); } };
 }
 
-el.svgA.addEventListener("click", e => onClick("ant", e));
-el.svgS.addEventListener("click", e => onClick("sag", e));
+function sizePlate(){
+  const h = window.innerHeight || 0;
+  let w = 540;
+  if (h > 560) w = Math.max(320, Math.min(560, Math.round((h - 250) * VBW / VBH)));
+  document.documentElement.style.setProperty("--plateMax", w + "px");
+}
 
-showView("ant");
-startScreen();
+/* Any failure here would otherwise leave a blank screen — surface it instead. */
+function boot(){
+  el.svgA.addEventListener("click", e => onClick("ant", e));
+  el.svgS.addEventListener("click", e => onClick("sag", e));
+  sizePlate();
+  window.addEventListener("resize", sizePlate);
+  showView("ant");
+  startScreen();
+}
+function showBootError(msg){
+  const box = document.getElementById("bootErr");
+  if (box){ box.textContent = "The trainer failed to start:\n" + msg; box.classList.add("on"); }
+  el.veil.classList.add("on");
+}
+window.addEventListener("error", e => showBootError((e && e.message) || "unknown script error"));
+try { boot(); } catch (e) { showBootError(e && e.message ? e.message : String(e)); }
 
 window.__game = { S, resolve, get state(){ return G; } };
 </script>
