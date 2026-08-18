@@ -1,1 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Mystic → Newport: Deckhand Passage</title>
+<style>
+  :root{
+    --ink:#13202a;
+    --paper:#f4f1e8;
+    --water:#a9ced8;
+    --water2:#7fb5c4;
+    --land:#b9c59c;
+    --land2:#8fa875;
+    --navy:#24495a;
+    --line:#fff8da;
+    --good:#2c6f55;
+    --bad:#984b42;
+    --muted:#64717a;
+    --card:rgba(250,248,241,.94);
+    --shadow:0 16px 50px rgba(14,38,49,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color:var(--ink);
+    background:linear-gradient(#c8dde2 0 34%, #8dbfca 34% 100%);
+    overflow:hidden;
+  }
+  button{font:inherit}
+  .app{height:100%;display:grid;grid-template-rows:auto 1fr}
+  .topbar{
+    display:grid;
+    grid-template-columns:1.2fr .8fr .8fr .8fr;
+    gap:10px;
+    padding:12px 16px;
+    background:rgba(244,241,232,.92);
+    border-bottom:1px solid rgba(19,32,42,.14);
+    backdrop-filter:blur(8px);
+    z-index:20;
+  }
+  .metric{min-width:0}
+  .metric .label{
+    font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700
+  }
+  .metric .value{font-size:18px;font-weight:780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .game{min-height:0;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr)}
+  .world{position:relative;overflow:hidden}
+  .sea{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(ellipse at 50% 15%, rgba(255,255,255,.32), transparent 28%),
+      linear-gradient(#b9d9df 0 13%, #8fc4cf 33%, #7aafbc 100%);
+  }
+  .sea::after{
+    content:"";position:absolute;inset:35% 0 0;
+    opacity:.18;
+    background:
+      repeating-linear-gradient(174deg,transparent 0 17px,rgba(255,255,255,.65) 18px 19px,transparent 20px 39px);
+    animation:waterDrift 18s linear infinite;
+  }
+  @keyframes waterDrift{to{background-position:120px 0}}
+  svg.routeMap{position:absolute;inset:0;width:100%;height:100%}
+  .coastShadow{filter:drop-shadow(0 6px 5px rgba(42,61,38,.15))}
+  .course{
+    fill:none;stroke:var(--line);stroke-width:3.5;stroke-dasharray:8 8;
+    opacity:.86;vector-effect:non-scaling-stroke
+  }
+  .scheduleDot{fill:#fff8da;opacity:.48}
+  .routeGlow{fill:none;stroke:rgba(255,255,255,.18);stroke-width:12;vector-effect:non-scaling-stroke}
+  .labelText{font-size:12px;font-weight:800;fill:#203742;letter-spacing:.04em}
+  .labelSmall{font-size:9px;font-weight:700;fill:#35505b;opacity:.8}
+  .boatWrap{
+    position:absolute;width:86px;height:110px;left:14%;top:67%;
+    transform:translate(-50%,-50%);
+    transform-origin:50% 68%;
+    transition:left 2.7s cubic-bezier(.2,.7,.2,1), top 2.7s cubic-bezier(.2,.7,.2,1), transform 2.7s ease;
+    z-index:6;
+  }
+  .boat{
+    position:absolute;left:50%;top:50%;width:36px;height:76px;
+    transform:translate(-50%,-50%);
+  }
+  .hull{
+    position:absolute;left:8px;top:27px;width:20px;height:42px;
+    background:#f6f0df;
+    border:2px solid rgba(20,50,61,.75);
+    clip-path:polygon(15% 0,85% 0,100% 70%,50% 100%,0 70%);
+    box-shadow:0 8px 13px rgba(20,50,61,.24);
+  }
+  .mast{
+    position:absolute;left:17px;top:1px;width:2px;height:58px;background:#4e4b42;border-radius:3px
+  }
+  .sail{
+    position:absolute;left:18px;top:5px;width:22px;height:37px;background:rgba(250,248,239,.92);
+    clip-path:polygon(0 0,100% 92%,0 78%);
+    filter:drop-shadow(1px 2px 1px rgba(30,50,60,.14));
+    transform-origin:0 0;
+    transition:transform 1.7s ease;
+  }
+  .sail2{
+    position:absolute;right:18px;top:10px;width:16px;height:29px;background:rgba(248,245,234,.88);
+    clip-path:polygon(100% 0,100% 80%,0 95%);
+  }
+  .wakeTrail{
+    position:absolute;left:50%;top:73%;width:3px;height:42px;
+    transform:translateX(-50%);
+    background:linear-gradient(rgba(255,255,255,.5),transparent);
+    filter:blur(1px);opacity:.66
+  }
+  .crew,.dog{
+    position:absolute;border-radius:50%;opacity:0;transition:opacity 1.8s ease,transform 6s ease;
+  }
+  .crew{width:5px;height:5px;background:#42525a;top:48px;left:10px}
+  .crew.c2{left:25px;top:54px}
+  .dog{width:4px;height:4px;background:#755a3d;left:13px;top:60px}
+  .ambient .crew,.ambient .dog{opacity:.8}
+  .ambient .crew{transform:translateX(11px)}
+  .ambient .c2{transform:translate(-8px,-5px)}
+  .ambient .dog{transform:translate(7px,3px)}
+  .wrongManeuver .sail{transform:skewX(13deg) scaleX(.88)}
+  .wrongManeuver{transform:translate(-50%,-50%) rotate(7deg) !important}
+  .storm{
+    position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 3s ease;z-index:7;
+    background:
+      radial-gradient(ellipse at 78% 10%,rgba(30,42,51,.8),transparent 23%),
+      linear-gradient(to bottom,rgba(33,46,55,.22),rgba(42,65,70,.08) 42%,rgba(35,58,65,.26));
+  }
+  .storm.on{opacity:1}
+  .storm.on::after{
+    content:"";position:absolute;inset:48% 0 0;
+    background:repeating-linear-gradient(176deg,transparent 0 12px,rgba(255,255,255,.2) 13px 14px,transparent 15px 30px);
+    animation:chop .8s linear infinite;
+  }
+  @keyframes chop{to{background-position:32px 0}}
+  .panel{
+    position:relative;z-index:10;background:var(--card);border-left:1px solid rgba(19,32,42,.14);
+    padding:20px;display:flex;flex-direction:column;min-height:0;box-shadow:-8px 0 30px rgba(25,44,51,.06);
+  }
+  .eyebrow{font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+  .question{font-size:28px;line-height:1.08;font-weight:820;margin:8px 0 8px}
+  .prompt{font-size:14px;color:var(--muted);margin-bottom:14px}
+  .timerRow{display:flex;align-items:baseline;justify-content:space-between;margin:2px 0 12px}
+  .timer{font-variant-numeric:tabular-nums;font-size:26px;font-weight:850}
+  .fast{font-size:12px;color:var(--good);font-weight:750}
+  .answers{display:grid;gap:9px;overflow:auto;padding-right:2px}
+  .answer{
+    text-align:left;border:1px solid rgba(19,32,42,.15);background:rgba(255,255,255,.7);
+    border-radius:12px;padding:12px 13px;cursor:pointer;line-height:1.32;font-weight:650;
+    transition:transform .12s ease,border-color .18s ease,background .18s ease;
+  }
+  .answer:hover{transform:translateY(-1px);border-color:rgba(36,73,90,.5)}
+  .answer.correct{background:#dfeee6;border-color:#6ca087}
+  .answer.wrong{background:#f1ded9;border-color:#b8756c}
+  .answer:disabled{cursor:default;transform:none}
+  .feedback{
+    min-height:40px;margin-top:12px;font-size:13px;line-height:1.35;color:var(--muted)
+  }
+  .kbd{display:inline-block;border:1px solid rgba(19,32,42,.18);border-bottom-width:2px;border-radius:5px;padding:1px 5px;background:white;font-size:11px}
+  .overlay{
+    position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    background:rgba(18,39,49,.35);backdrop-filter:blur(8px);padding:24px;
+  }
+  .card{
+    width:min(620px,100%);background:#f8f5ec;border-radius:18px;padding:28px;box-shadow:var(--shadow)
+  }
+  .card h1{margin:0 0 8px;font-size:34px;line-height:1.05}
+  .card p{line-height:1.5;color:#4c5a62}
+  .rules{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
+  .rule{padding:12px;border-radius:12px;background:rgba(36,73,90,.06);font-size:13px;line-height:1.4}
+  .primary{
+    border:0;background:var(--navy);color:white;border-radius:12px;padding:13px 17px;font-weight:800;cursor:pointer
+  }
+  .secondary{
+    border:1px solid rgba(19,32,42,.2);background:transparent;border-radius:12px;padding:12px 16px;font-weight:750;cursor:pointer
+  }
+  .endTitle{font-size:36px;font-weight:900;margin:0 0 8px}
+  .endStat{font-size:19px;font-weight:800;margin:8px 0}
+  .captain{
+    width:82px;height:86px;margin:12px auto 4px;position:relative
+  }
+  .head{width:30px;height:30px;border-radius:50%;background:#d6b08d;position:absolute;left:26px;top:20px}
+  .body{width:46px;height:35px;border-radius:22px 22px 8px 8px;background:#334e5e;position:absolute;left:18px;top:47px}
+  .hat{width:42px;height:8px;border-radius:50%;background:#f0eee4;position:absolute;left:20px;top:15px;transform:rotate(-18deg)}
+  .hat::before{content:"";position:absolute;left:11px;top:-7px;width:21px;height:10px;background:#f0eee4;border-radius:5px 5px 1px 1px}
+  .fail .head{transform:rotate(28deg) translate(4px,8px);transform-origin:50% 100%}
+  .fail .hat{transform:translate(18px,22px) rotate(34deg)}
+  .fail .body{transform:translateY(5px)}
+  .tiny{font-size:12px;color:var(--muted)}
+  .routeBadge{
+    position:absolute;left:18px;top:18px;background:rgba(248,245,236,.83);backdrop-filter:blur(5px);
+    padding:8px 10px;border-radius:10px;font-size:11px;font-weight:800;z-index:8;box-shadow:0 5px 20px rgba(20,45,55,.08)
+  }
+  .legend{
+    position:absolute;left:18px;bottom:18px;background:rgba(248,245,236,.78);padding:7px 9px;border-radius:9px;
+    font-size:10px;color:#49606a;z-index:8
+  }
+  @media(max-width:820px){
+    body{overflow:auto}
+    .app{height:auto;min-height:100%}
+    .topbar{grid-template-columns:1fr 1fr;padding:9px 10px}
+    .game{grid-template-columns:1fr;grid-template-rows:47vh auto}
+    .panel{border-left:0;border-top:1px solid rgba(19,32,42,.14);min-height:53vh}
+    .question{font-size:25px}
+    .rules{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="metric"><div class="label">Passage</div><div class="value">Mystic → Newport</div></div>
+    <div class="metric"><div class="label">Schedule</div><div class="value" id="schedule">On time</div></div>
+    <div class="metric"><div class="label">Projected arrival</div><div class="value" id="eta">17:45</div></div>
+    <div class="metric"><div class="label">Question</div><div class="value" id="qcount">0 / 36</div></div>
+  </header>
 
+  <main class="game">
+    <section class="world" aria-label="Stylized coastal sailing passage">
+      <div class="sea"></div>
+      <svg class="routeMap" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
+        <g class="coastShadow">
+          <path d="M0,0 H1000 V145 C930,152 900,127 839,149 C785,168 735,143 684,162 C635,181 603,166 560,191 C518,214 469,191 431,220 C386,253 336,224 298,249 C251,278 212,258 168,287 C118,318 74,299 0,334 Z" fill="var(--land)"/>
+          <path d="M0,0 H1000 V90 C918,98 861,75 812,103 C748,136 699,111 643,132 C573,159 508,127 449,162 C390,198 337,170 281,204 C206,248 133,221 0,280 Z" fill="var(--land2)" opacity=".42"/>
+          <path d="M0,700 H1000 V626 C942,610 900,628 842,605 C780,581 731,604 674,578 C618,551 570,579 514,557 C443,527 398,545 330,521 C263,497 201,514 138,488 C91,470 47,480 0,460 Z" fill="var(--land)" opacity=".95"/>
+        </g>
+        <path class="routeGlow" d="M110,535 C220,492 277,458 342,421 C421,376 479,398 541,353 C612,301 673,327 736,278 C799,229 854,243 910,205"/>
+        <path class="course" id="coursePath" d="M110,535 C220,492 277,458 342,421 C421,376 479,398 541,353 C612,301 673,327 736,278 C799,229 854,243 910,205"/>
+        <circle cx="110" cy="535" r="8" fill="#f8f1d5"/>
+        <circle cx="910" cy="205" r="8" fill="#f8f1d5"/>
+        <text x="76" y="564" class="labelText">MYSTIC</text>
+        <text x="73" y="578" class="labelSmall">CONNECTICUT</text>
+        <text x="872" y="182" class="labelText">NEWPORT</text>
+        <text x="870" y="195" class="labelSmall">RHODE ISLAND</text>
+        <text x="520" y="124" class="labelSmall">SOUTHERN NEW ENGLAND COAST</text>
+      </svg>
+
+      <div class="routeBadge">Clear & steady · training passage</div>
+      <div class="legend">White dashed line = optimal course</div>
+
+      <div class="boatWrap" id="boatWrap">
+        <div class="wakeTrail"></div>
+        <div class="boat">
+          <div class="hull"></div>
+          <div class="mast"></div>
+          <div class="sail"></div>
+          <div class="sail2"></div>
+          <div class="crew c1"></div>
+          <div class="crew c2"></div>
+          <div class="dog"></div>
+        </div>
+      </div>
+      <div class="storm" id="storm"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="eyebrow" id="difficulty">Working-boat vocabulary</div>
+      <div class="question" id="question">Ready to depart?</div>
+      <div class="prompt" id="prompt">Choose the best definition.</div>
+      <div class="timerRow">
+        <div class="timer" id="timer">—</div>
+        <div class="fast" id="fastHint">Fast correct ≤ 10s banks time</div>
+      </div>
+      <div class="answers" id="answers"></div>
+      <div class="feedback" id="feedback"></div>
+    </aside>
+  </main>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <div class="eyebrow">One continuous passage · no saves</div>
+    <h1>Mystic → Newport<br>Deckhand Passage</h1>
+    <p>Keep the sailboat on its optimal coastal course by recognizing working-boat vocabulary. The passage begins exactly on schedule.</p>
+    <div class="rules">
+      <div class="rule"><strong>Correct in ≤ 10 seconds:</strong><br>bank passage time. There is no cap.</div>
+      <div class="rule"><strong>Correct after 10 seconds:</strong><br>stay on schedule.</div>
+      <div class="rule"><strong>Wrong answer:</strong><br>lose 4 simulated minutes and make an inefficient maneuver.</div>
+      <div class="rule"><strong>Timeout:</strong><br>lose 7 simulated minutes. Harder terms receive up to 20 seconds.</div>
+    </div>
+    <p class="tiny">36 questions are drawn from the complete 128-term bank, weighted across basic, intermediate, difficult, and expert vocabulary. Use keys 1–4 if you prefer.</p>
+    <button class="primary" id="startBtn">Cast off</button>
+  </div>
+</div>
+
+<div class="overlay" id="endOverlay" style="display:none">
+  <div class="card" id="endCard">
+    <div class="captain" id="captain">
+      <div class="head"></div><div class="body"></div><div class="hat"></div>
+    </div>
+    <div class="endTitle" id="endTitle">Newport reached.</div>
+    <div class="endStat" id="endStat"></div>
+    <p id="endCopy"></p>
+    <button class="primary" id="againBtn">Sail again</button>
+  </div>
+</div>
+
+<script>
+const BANK = [
+["Bow","Front end of the vessel.",1],["Stern","Rear end of the vessel.",1],
+["Port","Left side when facing forward.",1],["Starboard","Right side when facing forward.",1],
+["Forward / Fore","Toward the bow.",1],["Aft","Toward the stern.",1],
+["Abeam","Directly off the vessel's side at roughly 90°.",4],["Abaft","Behind a specified point toward the stern.",4],
+["Amidships","Middle portion of the vessel.",2],["Inboard","Toward the vessel's centerline.",2],
+["Outboard","Toward or beyond the vessel's side.",2],["Beam","Vessel's width; also the direction directly off its side.",2],
+["Hull","Main structural body of the vessel.",1],["Deck","Working or walking surface of a vessel.",1],
+["Gunwale / Gunnel","Upper edge of the vessel's side.",4],["Transom","Stern-facing structural surface of the hull.",2],
+["Helm","Steering station or steering control.",1],["Wheelhouse / Pilothouse","Enclosed station from which the vessel is operated.",2],
+["Hatch","Closable opening into a lower compartment.",1],["Hold","Below-deck space for cargo, catch, or equipment.",2],
+["Bilge","Lowest interior area where water collects.",2],["Scupper","Opening or drain that clears water from a deck.",4],
+["Watertight door","Sealed door designed to prevent flooding between compartments.",3],["Void","Normally empty enclosed compartment within a vessel.",4],
+["Draft","Depth of the vessel below the waterline.",2],["Freeboard","Vertical distance from waterline to deck edge.",2],
+["Ahead","Forward movement or propulsion.",1],["Astern","Backward movement or propulsion.",1],
+["Underway","Not anchored, made fast to shore, or aground.",3],["Headway","Forward movement through the water.",4],
+["Sternway","Backward movement through the water.",4],["Way","Movement of a vessel through the water.",4],
+["Heading","Direction the bow is pointing.",1],["Course","Intended or traveled direction.",1],
+["Bearing","Direction from the vessel to another object or position.",1],["Dead reckoning","Estimating position from course, speed, time, and movement.",3],
+["Set","Direction a current flows; also putting fishing gear into the water.",4],["Drift","Speed of a current or uncontrolled movement with wind/current.",1],
+["Tide","Periodic rise and fall of water level.",1],["Ebb","Outgoing tidal current.",3],
+["Flood","Incoming tidal current.",3],["Slack water","Interval when tidal current is minimal.",3],
+["Shoal","Shallow-water area or underwater obstruction.",3],["Grounding / Aground","Vessel contacting or resting on the bottom.",1],
+["Leeway","Sideways displacement caused primarily by wind.",3],["Wake","Waves produced by a moving vessel.",1],
+["Following sea","Waves approaching from astern.",3],["Beam sea","Waves striking roughly broadside.",3],
+["Swell","Long, regular waves generated by distant weather.",3],["Sea state","Overall condition and size of waves.",3],
+["Knot","One nautical mile per hour.",1],["Line","Rope assigned a working purpose aboard a vessel.",1],
+["Bight","Curved or looped middle section of a line.",3],["Bitter end","Extreme end of a line, chain, or cable.",3],
+["Coil","Line arranged in orderly circular loops.",3],["Heave","Pull or haul on a line.",3],
+["Pay out","Let line, cable, or chain run out under control.",3],["Take a strain","Gradually place tension on a line.",3],
+["Make fast","Securely fasten a line or object.",3],["Cast off","Release a securing or mooring line.",1],
+["Cleat","Fitting around which a line is secured.",1],["Bitt","Heavy deck post used to secure lines.",4],
+["Bollard","Heavy post, usually ashore, for securing vessels.",4],["Chock","Fitting through or around which a line is led.",4],
+["Fairlead","Fitting that guides a line in the desired direction.",4],["Chafe","Wear caused by line rubbing against another surface.",3],
+["Fender","Cushion protecting a vessel from docks or other vessels.",1],["Mooring line","Line used to secure a vessel in place.",3],
+["Spring line","Diagonal mooring line limiting fore-and-aft movement.",3],["Hawser","Large heavy line used for mooring or towing.",4],
+["Towline","Main line connecting a towing vessel to its tow.",3],["Bridle","Multi-leg rig that distributes towing or lifting force.",4],
+["Anchor","Device used to secure a vessel to the seabed.",1],["Rode","Line, chain, or combination connecting vessel to anchor.",3],
+["Scope","Ratio of anchor rode deployed to vertical depth.",3],["Windlass","Machine primarily used for handling anchor chain or rode.",3],
+["Winch","Powered machine used to haul line, wire, or gear.",1],["Snap-back zone","Area a tensioned line may violently recoil through if it parts.",3],
+["Mast","Vertical spar supporting sails and rigging.",1],["Boom","Horizontal sail spar; also a projecting arm used to handle loads.",1],
+["Mainsail","Principal sail carried behind the mast.",1],["Jib","Triangular headsail set forward of the mast.",1],
+["Genoa","Large overlapping type of headsail.",2],["Halyard","Line used to raise or lower a sail.",2],
+["Sheet","Line controlling a sail's angle to the wind.",2],["Tack","Turn the bow through the wind to change sailing side.",2],
+["Jibe / Gybe","Turn the stern through the wind, shifting the sail across.",2],["Heeling","Vessel leaning sideways under wind or other forces.",2],
+["Keel","Fixed underwater structure providing stability and resisting sideways movement.",1],["Centerboard","Retractable underwater foil that reduces sideways drift.",2],
+["Rudder","Underwater steering surface.",1],["Tiller","Lever directly controlling a rudder.",1],
+["Windward","Direction from which the wind is coming.",2],["Leeward","Direction toward which the wind is blowing.",2],
+["Points of sail","Sailing directions defined relative to the wind.",4],["In the irons","Stalled with the bow pointed directly into the wind.",4],
+["Reefing","Reducing sail area in stronger conditions.",2],["Trolling","Towing bait or lures behind a moving vessel.",1],
+["Drift fishing","Fishing while allowing wind/current to move the vessel.",2],["Outrigger","Arm that spreads trolling lines outward from the vessel.",2],
+["Downrigger","Weighted system that holds trolling gear at a selected depth.",2],["Livewell","Aerated tank for keeping bait or catch alive.",2],
+["Chumming","Putting bait or fish material into the water to attract fish.",1],["Gaff","Pole with a hook used to control or land large fish.",1],
+["Fishfinder","Electronic display used to locate fish and bottom structure.",1],["Sonar","Sound-based system for detecting underwater objects and depth.",1],
+["Haul","Retrieve fishing gear, line, nets, traps, or catch.",2],["Gear","Collective term for fishing equipment used to catch fish.",1],
+["Pot / Trap","Baited enclosure used to capture crab, lobster, fish, or similar species.",1],["Longline","Main fishing line carrying numerous branch lines and hooks.",1],
+["Trawl","Large net towed through the water or along the bottom.",1],["Seine","Net used to surround or encircle fish.",2],
+["Gillnet","Net designed to entangle fish, commonly around the gills.",1],["Net drum","Large powered reel used to store or handle fishing nets.",4],
+["Block","Pulley used to redirect a line or mechanical force.",4],["Davit","Projecting lifting arm for boats, equipment, or gear.",4],
+["Hydraulics","Pressurized-fluid systems powering deck machinery.",2],["Hauler","Powered machine used to retrieve fishing line or gear.",4],
+["Pinch point","Place where a person can be caught between moving objects.",2],["Nip point","Point where converging or rotating machinery can grab material or a person.",4],
+["Entanglement","Catching of clothing or body parts in lines or machinery.",2],["PFD / Life jacket","Personal flotation device worn to keep a person afloat.",1],
+["Kill switch / Lanyard","Device that stops an engine if the operator is displaced.",2],["Rules of the Road / COLREGs","Navigation rules designed to prevent vessel collisions.",4],
+["Man overboard / MOB","Emergency involving a person falling into the water.",1],["Mayday","Radio distress call for grave and imminent danger.",1],
+["Pan-pan","Radio urgency call for a serious but not immediately life-threatening situation.",4],["Line of fire","Position where moving gear, loads, lines, or machinery could strike a person.",4]
+];
+
+const TOTAL_QUESTIONS = 36;
+const BASE_ARRIVAL_MIN = 17*60 + 45; // 17:45
+const difficultyNames = ["","Basic","Intermediate","Difficult","Expert"];
+
+let run = [];
+let index = 0;
+let scheduleDelta = 0; // positive = ahead, negative = behind
+let startedAt = 0;
+let timerId = null;
+let timeLimit = 15;
+let answered = false;
+let correctCount = 0;
+let ambientCueSet = new Set();
+
+const el = id => document.getElementById(id);
+const boat = el("boatWrap");
+const startOverlay = el("startOverlay");
+const endOverlay = el("endOverlay");
+const answersEl = el("answers");
+const storm = el("storm");
+
+function shuffle(a){
+  const x=[...a];
+  for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}
+  return x;
+}
+
+function buildRun(){
+  // Balanced sampling: 9 from each tier; every term remains available across runs.
+  let picked=[];
+  for(let d=1;d<=4;d++){
+    picked.push(...shuffle(BANK.filter(x=>x[2]===d)).slice(0,9));
+  }
+  run=shuffle(picked);
+}
+
+function chooseAmbientCues(){
+  ambientCueSet.clear();
+  const count = Math.random() < .5 ? 4 : 5;
+  const candidates = shuffle([...Array(TOTAL_QUESTIONS-4)].map((_,i)=>i+2));
+  candidates.slice(0,count).forEach(i=>ambientCueSet.add(i));
+}
+
+function formatClock(totalMin){
+  totalMin=Math.round(totalMin);
+  let m=((totalMin%1440)+1440)%1440;
+  const h=Math.floor(m/60);
+  const mm=String(m%60).padStart(2,"0");
+  return `${String(h).padStart(2,"0")}:${mm}`;
+}
+
+function updateMetrics(){
+  const s=el("schedule");
+  if(Math.abs(scheduleDelta)<.05){
+    s.textContent="On time";
+    s.style.color="";
+  }else if(scheduleDelta>0){
+    s.textContent=`${scheduleDelta.toFixed(1)} min ahead`;
+    s.style.color="var(--good)";
+  }else{
+    s.textContent=`${Math.abs(scheduleDelta).toFixed(1)} min behind`;
+    s.style.color="var(--bad)";
+  }
+  el("eta").textContent=formatClock(BASE_ARRIVAL_MIN - scheduleDelta);
+  el("qcount").textContent=`${Math.min(index+1,TOTAL_QUESTIONS)} / ${TOTAL_QUESTIONS}`;
+}
+
+function timeForDifficulty(d){
+  return [0,15,17,19,20][d];
+}
+
+function makeOptions(correctItem){
+  const correctDef=correctItem[1];
+  const d=correctItem[2];
+  const sameTier=shuffle(BANK.filter(x=>x!==correctItem && x[2]===d));
+  const other=shuffle(BANK.filter(x=>x!==correctItem && x[2]!==d));
+  const distractors=[...sameTier.slice(0,2),...other.slice(0,1)].map(x=>x[1]);
+  return shuffle([correctDef,...distractors]);
+}
+
+function showQuestion(){
+  if(index>=TOTAL_QUESTIONS){finish();return}
+  answered=false;
+  const item=run[index];
+  timeLimit=timeForDifficulty(item[2]);
+  el("difficulty").textContent=`${difficultyNames[item[2]]} · ${timeLimit} second limit`;
+  el("question").textContent=item[0];
+  el("prompt").textContent="Choose the best shipboard definition.";
+  el("feedback").textContent="";
+  answersEl.innerHTML="";
+  const opts=makeOptions(item);
+  opts.forEach((text,i)=>{
+    const b=document.createElement("button");
+    b.className="answer";
+    b.innerHTML=`<span class="kbd">${i+1}</span>&nbsp;&nbsp;${text}`;
+    b.dataset.text=text;
+    b.onclick=()=>answer(text,b);
+    answersEl.appendChild(b);
+  });
+  startedAt=performance.now();
+  updateTimer();
+  clearInterval(timerId);
+  timerId=setInterval(updateTimer,100);
+  updateMetrics();
+  moveBoat(false);
+  if(ambientCueSet.has(index))triggerAmbient();
+}
+
+function updateTimer(){
+  if(answered)return;
+  const elapsed=(performance.now()-startedAt)/1000;
+  const remaining=Math.max(0,timeLimit-elapsed);
+  el("timer").textContent=`${remaining.toFixed(1)}s`;
+  if(elapsed<=10){
+    el("fastHint").textContent="Fast-correct window open";
+    el("fastHint").style.color="var(--good)";
+  }else{
+    el("fastHint").textContent="Correct now = stay on schedule";
+    el("fastHint").style.color="var(--muted)";
+  }
+  if(remaining<=0)timeout();
+}
+
+function answer(text,button){
+  if(answered)return;
+  answered=true;
+  clearInterval(timerId);
+  const elapsed=(performance.now()-startedAt)/1000;
+  const correct=run[index][1];
+  const buttons=[...answersEl.querySelectorAll(".answer")];
+  buttons.forEach(b=>b.disabled=true);
+  const isCorrect=text===correct;
+
+  buttons.forEach(b=>{
+    if(b.dataset.text===correct)b.classList.add("correct");
+  });
+
+  if(isCorrect){
+    correctCount++;
+    if(elapsed<=10){
+      // Any fast correct earns time. Faster knowledge earns more, without a cumulative cap.
+      const gain = 0.75 + Math.max(0,10-elapsed)*0.45;
+      scheduleDelta += gain;
+      el("feedback").innerHTML=`Correct in <strong>${elapsed.toFixed(1)}s</strong>. You banked <strong>${gain.toFixed(1)} passage minutes</strong>.`;
+    }else{
+      el("feedback").innerHTML=`Correct in <strong>${elapsed.toFixed(1)}s</strong>. Clean sailing; schedule unchanged.`;
+    }
+  }else{
+    button.classList.add("wrong");
+    scheduleDelta -= 4;
+    el("feedback").innerHTML=`Not quite. <strong>−4.0 passage minutes.</strong> ${run[index][0]}: ${correct}`;
+    inefficientManeuver();
+  }
+  updateMetrics();
+  setTimeout(()=>{index++;showQuestion()},1250);
+}
+
+function timeout(){
+  if(answered)return;
+  answered=true;
+  clearInterval(timerId);
+  scheduleDelta -= 7;
+  const correct=run[index][1];
+  [...answersEl.querySelectorAll(".answer")].forEach(b=>{
+    b.disabled=true;
+    if(b.dataset.text===correct)b.classList.add("correct");
+  });
+  el("timer").textContent="0.0s";
+  el("feedback").innerHTML=`Time. <strong>−7.0 passage minutes.</strong> ${run[index][0]}: ${correct}`;
+  inefficientManeuver();
+  updateMetrics();
+  setTimeout(()=>{index++;showQuestion()},1450);
+}
+
+function inefficientManeuver(){
+  boat.classList.add("wrongManeuver");
+  setTimeout(()=>boat.classList.remove("wrongManeuver"),1800);
+}
+
+function triggerAmbient(){
+  boat.classList.add("ambient");
+  setTimeout(()=>boat.classList.remove("ambient"),6500);
+}
+
+function bezierPoint(t){
+  // Approximate the SVG course with a visually aligned cubic-ish path.
+  const pts=[
+    [11,76],[22,70],[34,60],[46,57],[54,50],[66,46],[74,40],[84,34],[91,29]
+  ];
+  const scaled=t*(pts.length-1);
+  const i=Math.min(pts.length-2,Math.floor(scaled));
+  const f=scaled-i;
+  return [
+    pts[i][0]+(pts[i+1][0]-pts[i][0])*f,
+    pts[i][1]+(pts[i+1][1]-pts[i][1])*f
+  ];
+}
+
+function moveBoat(forceEnd){
+  let p=forceEnd?1:Math.min(.985,index/TOTAL_QUESTIONS);
+  const [x,y]=bezierPoint(p);
+  boat.style.left=x+"%";
+  boat.style.top=y+"%";
+  const rot=-18 + p*7;
+  boat.style.transform=`translate(-50%,-50%) rotate(${rot}deg)`;
+}
+
+function finish(){
+  clearInterval(timerId);
+  moveBoat(true);
+  const success=scheduleDelta>=0;
+  const accuracy=Math.round(correctCount/TOTAL_QUESTIONS*100);
+  endOverlay.style.display="flex";
+  const card=el("endCard");
+  const captain=el("captain");
+  if(success){
+    storm.classList.remove("on");
+    card.classList.remove("fail");
+    captain.classList.remove("fail");
+    el("endTitle").textContent=scheduleDelta>0.05 ? "Newport — ahead of schedule." : "Newport — exactly on time.";
+    el("endStat").textContent=`${accuracy}% correct · ${scheduleDelta>0? scheduleDelta.toFixed(1)+" minutes ahead":"on schedule"}`;
+    el("endCopy").textContent="The harbor opens ahead, the sails stay drawing, and the boat glides in cleanly.";
+  }else{
+    storm.classList.add("on");
+    card.classList.add("fail");
+    captain.classList.add("fail");
+    el("endTitle").textContent="Newport — missed the schedule.";
+    el("endStat").textContent=`${accuracy}% correct · ${Math.abs(scheduleDelta).toFixed(1)} minutes behind`;
+    el("endCopy").textContent="A little chop arrives under a darkening horizon. The skipper removes his cap and hangs his head in disappointed shame at the lost passage time.";
+  }
+}
+
+function start(){
+  index=0;scheduleDelta=0;correctCount=0;
+  storm.classList.remove("on");
+  endOverlay.style.display="none";
+  startOverlay.style.display="none";
+  buildRun();chooseAmbientCues();
+  boat.style.left="11%";boat.style.top="76%";
+  showQuestion();
+}
+
+el("startBtn").onclick=start;
+el("againBtn").onclick=start;
+
+document.addEventListener("keydown",e=>{
+  if(startOverlay.style.display!=="none" && (e.key==="Enter"||e.key===" ")){start();return}
+  if(answered)return;
+  const n=parseInt(e.key,10);
+  if(n>=1&&n<=4){
+    const b=answersEl.querySelectorAll(".answer")[n-1];
+    if(b)b.click();
+  }
+});
+</script>
+</body>
+</html>
