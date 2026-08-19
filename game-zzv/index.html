@@ -1,1 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shiny Side Up — Motorcycle Vocab Race</title>
+  <meta name="description" content="Free vocabulary game: motorcycle slang on a country highway. Read the definition. Pick the term. Keep the shiny side up." />
+  <meta name="theme-color" content="#0e0d0b" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Shiny Side Up" />
+  <meta property="og:description" content="A free motorcycle slang vocabulary race. Ten definitions. Keep the shiny side up." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230e0d0b'/%3E%3Cpath d='M6 22h20M8 18c4-8 12-8 16 0' fill='none' stroke='%23ece6d8' stroke-width='2'/%3E%3Ccircle cx='11' cy='22' r='3' fill='none' stroke='%23ece6d8' stroke-width='1.6'/%3E%3Ccircle cx='21' cy='22' r='3' fill='none' stroke='%23ece6d8' stroke-width='1.6'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.min.js"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --bg: #0e0d0b;
+      --surface: #1a1814;
+      --raised: #242119;
+      --fg: #ece6d8;
+      --muted: #9a9284;
+      --subtle: #6b655a;
+      --border: #322d26;
+      --accent: #d5cfc2;
+      --accent-fg: #12100c;
+      --danger: #b44538;
+      --ok: #6f8f6c;
+      --boost: #c4d4c8;
+      --display: "Oswald", "Arial Narrow", sans-serif;
+      --sans: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--sans);
+      overflow: hidden;
+    }
+    button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+    button:disabled { cursor: default; }
+    button { font-family: inherit; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    #view {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    .vignette {
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 50%, rgba(14,13,11,0.42) 100%);
+      z-index: 2;
+    }
+    .hidden { display: none !important; }
+    .screen { position: fixed; inset: 0; z-index: 30; overflow: auto; }
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(14,13,11,0.92) 0%, rgba(14,13,11,0.72) 42%, rgba(14,13,11,0.28) 100%),
+        linear-gradient(180deg, rgba(14,13,11,0.45) 0%, transparent 40%, rgba(14,13,11,0.7) 100%);
+    }
+    .scrim.solid { background: var(--bg); }
+    .scrim.blur { background: rgba(14,13,11,0.78); backdrop-filter: blur(8px); }
+    .wrap {
+      position: relative;
+      display: flex;
+      min-height: 100dvh;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 1.25rem 1.25rem 1.5rem;
+    }
+    @media (min-width: 640px) { .wrap { padding: 2rem 2.5rem; } }
+    .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+    .kicker {
+      font-family: var(--display);
+      font-size: 0.75rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .ghost {
+      border: 1px solid var(--border);
+      background: rgba(26,24,20,0.8);
+      color: var(--muted);
+      border-radius: 0.375rem;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.75rem;
+      backdrop-filter: blur(8px);
+    }
+    .ghost:hover { color: var(--fg); }
+    h1 {
+      margin: 0;
+      font-family: var(--display);
+      font-weight: 600;
+      font-size: clamp(3rem, 10vw, 4.5rem);
+      line-height: 0.9;
+      letter-spacing: -0.02em;
+    }
+    .lede { margin: 1.25rem 0 0; max-width: 28rem; color: var(--muted); font-size: 0.95rem; line-height: 1.55; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+    .btn {
+      min-height: 44px;
+      border-radius: 0.375rem;
+      padding: 0.6rem 1.35rem;
+      font-size: 0.9rem;
+      border: 1px solid var(--border);
+      background: rgba(26,24,20,0.7);
+      color: var(--fg);
+      backdrop-filter: blur(6px);
+    }
+    .btn:hover { background: var(--raised); }
+    .btn-go {
+      font-family: var(--display);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-color: var(--accent);
+    }
+    .btn-go:hover { opacity: 0.92; background: var(--accent); }
+    .rules { margin: 2rem 0 0; padding: 0; list-style: none; color: var(--subtle); font-size: 0.75rem; line-height: 1.6; }
+    .best { font-family: var(--display); font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+    .study-inner { width: min(48rem, 100%); margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+    .study-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; }
+    #study-q {
+      margin-top: 1.5rem; width: 100%; height: 44px; border-radius: 0.375rem;
+      border: 1px solid var(--border); background: var(--surface); color: var(--fg);
+      padding: 0 0.75rem; font: inherit; font-size: 0.9rem; outline: none;
+    }
+    #study-q:focus { border-color: var(--accent); }
+    #study-list { list-style: none; margin: 1.5rem 0 0; padding: 0; }
+    #study-list li { padding: 1rem 0; border-top: 1px solid var(--border); }
+    #study-list h2 { margin: 0; font-family: var(--display); font-size: 1.15rem; font-weight: 500; letter-spacing: 0.04em; }
+    .term-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+    .diff { font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
+    #study-list p { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+    .hud {
+      pointer-events: none; position: fixed; inset: 0 auto auto 0; right: 0; z-index: 20;
+      display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.75rem;
+    }
+    @media (min-width: 640px) { .hud { padding: 1.25rem; } }
+    .chip {
+      border: 1px solid rgba(50,45,38,0.8); background: rgba(14,13,11,0.7);
+      backdrop-filter: blur(8px); border-radius: 0.5rem; padding: 0.5rem 0.75rem;
+    }
+    .chip p { margin: 0; }
+    .label { font-family: var(--display); font-size: 0.65rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+    .big { font-family: var(--display); font-size: 1.85rem; line-height: 1; }
+    .sub { margin-top: 0.25rem; font-size: 0.7rem; color: var(--subtle); }
+    .right { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; text-align: right; }
+    .warn {
+      background: var(--danger); color: var(--fg); border-radius: 0.375rem;
+      padding: 0.25rem 0.5rem; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .toast { font-family: var(--display); font-size: 1.25rem; letter-spacing: 0.06em; }
+    .toast.ok { color: var(--ok); }
+    .toast.boost { color: var(--boost); }
+    .toast.wrong { color: var(--danger); }
+    .danger { color: var(--danger); }
+    .panel {
+      position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; max-height: 52dvh;
+      overflow: auto; border-top: 1px solid var(--border); background: rgba(14,13,11,0.82);
+      backdrop-filter: blur(12px); padding: 0.75rem;
+    }
+    @media (min-width: 640px) {
+      .panel {
+        inset: 0 0 0 auto; width: min(24rem, 38vw); max-height: none; height: 100%;
+        border-top: 0; border-left: 1px solid var(--border); padding: 1.25rem;
+      }
+    }
+    .panel .kicker { font-size: 0.7rem; letter-spacing: 0.24em; }
+    .prompt { margin: 0.5rem 0 0; font-size: 0.95rem; line-height: 1.5; }
+    .bar { margin-top: 0.75rem; height: 4px; border-radius: 99px; background: var(--raised); overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 100%; background: rgba(213,207,194,0.8); }
+    .bar.slim { height: 2px; margin-top: 4px; }
+    .bar.slim > i { background: rgba(111,143,108,0.8); }
+    .hint { margin: 0.35rem 0 0; font-size: 0.65rem; color: var(--subtle); }
+    .choices { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+    .choices button {
+      display: flex; width: 100%; min-height: 44px; align-items: center; gap: 0.75rem;
+      text-align: left; border-radius: 0.375rem; border: 1px solid var(--border);
+      background: var(--surface); color: var(--fg); padding: 0.5rem 0.75rem; font-size: 0.9rem;
+    }
+    .choices button:hover:not(:disabled) { background: var(--raised); }
+    .choices button.good { border-color: var(--ok); background: rgba(111,143,108,0.15); }
+    .choices button.dim { color: var(--muted); }
+    .num {
+      display: grid; place-items: center; width: 1.5rem; height: 1.5rem; flex: 0 0 auto;
+      border-radius: 0.2rem; border: 1px solid var(--border); font-family: var(--display);
+      font-size: 0.75rem; color: var(--muted);
+    }
+    .center { display: grid; place-items: center; padding: 1.25rem; }
+    .card { width: min(28rem, 100%); border-radius: 0.75rem; border: 1px solid var(--border); background: var(--surface); padding: 1.5rem; }
+    @media (min-width: 640px) { .card { padding: 2rem; } }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 1.5rem; }
+    .stat { background: var(--raised); border-radius: 0.375rem; padding: 0.75rem 0.5rem; text-align: center; }
+    .stat dt { font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
+    .stat dd { margin: 0.25rem 0 0; font-family: var(--display); font-size: 1.25rem; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="vignette"></div>
 
+  <section id="title" class="screen">
+    <div class="scrim"></div>
+    <div class="wrap">
+      <div class="row">
+        <p class="kicker"><a href="../" style="color:inherit;text-decoration:none">Pedagogy</a> · Free vocab game</p>
+        <button type="button" class="ghost" id="mute-btn">Sound on</button>
+      </div>
+      <div>
+        <h1>SHINY<br />SIDE UP</h1>
+        <p class="lede">Motorcycle slang on a country highway. Read the definition. Pick the term. Miss too many and the tank slapper takes you.</p>
+        <div class="actions">
+          <button type="button" class="btn btn-go" id="ride-btn">Ride</button>
+          <button type="button" class="btn" id="study-btn">Word bank</button>
+        </div>
+        <ul class="rules">
+          <li>Ten definitions. Four terms. Fifteen seconds each.</li>
+          <li>Answer in the first eight seconds for a boost. Wrong answers cost the field.</li>
+          <li>Three misses in a row — or a dead meter — is game over.</li>
+          <li>Keys 1–4 select answers. No steering. The road drives itself.</li>
+        </ul>
+      </div>
+      <p class="best" id="best-line"></p>
+    </div>
+  </section>
+
+  <section id="study" class="screen hidden">
+    <div class="scrim solid"></div>
+    <div class="study-inner">
+      <div class="study-head">
+        <div>
+          <p class="kicker">Study</p>
+          <h1 style="font-size:2.4rem;margin-top:0.25rem">Word bank</h1>
+        </div>
+        <button type="button" class="btn" id="study-back">Back</button>
+      </div>
+      <input id="study-q" type="search" placeholder="Search terms" autocomplete="off" />
+      <ul id="study-list"></ul>
+    </div>
+  </section>
+
+  <div id="hud" class="hud hidden">
+    <div class="chip">
+      <p class="label">Place</p>
+      <p class="big tabular" id="hud-place">1st</p>
+      <p class="sub tabular" id="hud-q">1/10 · field of 7</p>
+    </div>
+    <div class="right">
+      <div class="chip">
+        <p class="label" id="hud-clock-label">Boost window</p>
+        <p class="big tabular" id="hud-clock">15.0</p>
+      </div>
+      <p class="warn hidden" id="hud-warn">Tank slapper incoming</p>
+      <p class="toast hidden" id="hud-toast"></p>
+    </div>
+  </div>
+
+  <aside id="panel" class="panel hidden">
+    <p class="kicker">Word bank</p>
+    <p class="prompt" id="q-prompt"></p>
+    <div class="bar"><i id="clock-bar"></i></div>
+    <div class="bar slim"><i id="boost-bar"></i></div>
+    <p class="hint">Green bar: answer in 8s for a +10 boost</p>
+    <ol class="choices" id="choices"></ol>
+  </aside>
+
+  <section id="result" class="screen hidden">
+    <div class="scrim blur"></div>
+    <div class="center">
+      <div class="card">
+        <p class="kicker" id="res-kicker">Checkered</p>
+        <h1 id="res-title" style="font-size:2.4rem;margin-top:0.4rem">You finished</h1>
+        <p class="lede" id="res-blurb" style="margin-top:1rem"></p>
+        <dl class="stats">
+          <div class="stat"><dt>Place</dt><dd class="tabular" id="res-place">1st</dd></div>
+          <div class="stat"><dt>Bank</dt><dd class="tabular" id="res-bank">0/10</dd></div>
+          <div class="stat"><dt>Form</dt><dd id="res-form">Up</dd></div>
+        </dl>
+        <div class="actions">
+          <button type="button" class="btn btn-go" id="again-btn">Ride again</button>
+          <button type="button" class="btn" id="res-study">Word bank</button>
+          <button type="button" class="btn" id="res-title">Title</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script type="module">
+import * as THREE from "three";
+
+const GLOSSARY = [
+  ["one-percenter", "1%er / one-percenter", "A term historically associated with outlaw motorcycle clubs, distinguishing them from the vast majority of ordinary, law-abiding riders.", "rider"],
+  ["abs", "ABS", "Anti-lock braking system: a safety system that helps prevent wheel lockup during hard braking.", "common"],
+  ["adv", "ADV", "Short for “adventure”; refers to adventure motorcycles and the hybrid on- and off-road riding style.", "rider"],
+  ["ape-hangers", "Ape hangers", "Extra-tall handlebars that place the rider's hands high above the normal riding position, especially associated with cruisers and choppers.", "rider"],
+  ["apex", "Apex", "The point in a corner where the motorcycle comes closest to the inside edge of the turn.", "rider"],
+  ["atgatt", "ATGATT", "“All the gear, all the time”: the safety mindset of wearing a helmet, jacket, gloves, boots, and proper riding pants on every ride.", "rider"],
+  ["bagger", "Bagger", "A touring-oriented motorcycle equipped with integrated saddlebags, built for longer trips.", "rider"],
+  ["bobber", "Bobber", "A custom motorcycle stripped of excess weight, with unnecessary bodywork removed or shortened (historically, the fenders were “bobbed”).", "rider"],
+  ["brain-bucket", "Brain bucket", "Slang for a minimalist novelty beanie helmet that offers very little coverage.", "obscure"],
+  ["cager", "Cager", "A slang term for a person driving a car or truck, usually used when contrasting motorists with riders.", "obscure"],
+  ["chicken-strips", "Chicken strips", "The relatively unworn strips along the outer edges of a motorcycle tire's tread, jokingly taken as evidence that the rider doesn't lean the bike very far.", "obscure"],
+  ["chopper", "Chopper", "A heavily customized motorcycle characterized by altered frame geometry, an extended front end, a raked-out frame, and minimalist bodywork.", "common"],
+  ["clodbuster", "Clodbuster", "An insulting term for an inexperienced or clumsy rider.", "obscure"],
+  ["colors", "Colors / patch", "Insignia worn by members of motorcycle clubs, usually on a vest or jacket. They communicate club identity, chapter, and status.", "rider"],
+  ["countersteering", "Countersteering", "The essential technique for initiating a motorcycle turn at speed: briefly pushing the handlebar on the side toward which you want to turn.", "rider"],
+  ["cut", "Cut", "A vest — usually leather or denim — featuring a rider's club patches and insignia, with the sleeves cut off.", "rider"],
+  ["escape-route", "Escape route", "A planned, open path a rider can use to maneuver out of harm's way if traffic suddenly creates danger.", "rider"],
+  ["fairing", "Fairing", "The body panels around the front or sides of a motorcycle, used for wind protection, weather deflection, and aerodynamics.", "common"],
+  ["friction-zone", "Friction zone", "The small range of clutch-lever movement where power begins transferring to the rear wheel; used for smooth, controlled low-speed maneuvers.", "obscure"],
+  ["full-face", "Full-face", "A helmet that covers the entire head and face, including a chin bar and visor.", "common"],
+  ["high-side", "High-side", "A severe crash in which the rear tire loses traction, slides sideways, then abruptly regains grip, violently throwing the rider over or off the motorcycle.", "obscure"],
+  ["hog", "Hog", "Informal term often used for a large Harley-Davidson.", "common"],
+  ["iron-butt", "Iron Butt", "A term for long-distance endurance riders, or members of the Iron Butt Association who complete massive mileage milestones such as 1,000 miles in 24 hours.", "obscure"],
+  ["knees-breeze", "Knees in the breeze", "A classic phrase expressing the pure enjoyment of riding out on the open road.", "rider"],
+  ["lane-filtering", "Lane filtering", "Moving between lanes of stopped or nearly stopped traffic.", "rider"],
+  ["lane-splitting", "Lane splitting", "Riding between lanes of moving or slow-moving traffic.", "rider"],
+  ["lean-angle", "Lean angle", "How far the bike and rider lean away from vertical while cornering.", "common"],
+  ["line", "Line", "The specific path a rider chooses through a turn — incorporating entry, apex, and exit — to optimize visibility, stability, and speed.", "rider"],
+  ["low-side", "Low-side", "A crash in which the motorcycle loses traction and slides down onto the same side toward which it is leaning.", "obscure"],
+  ["mc", "MC", "Short for motorcycle club.", "common"],
+  ["naked", "Naked bike", "A performance-oriented street motorcycle with little or no aerodynamic fairing, leaving the engine and frame exposed.", "rider"],
+  ["organ-donor", "Organ donor", "A dark, colloquial slang term used by some riders and emergency personnel for those who refuse to wear a helmet.", "obscure"],
+  ["pegs", "Pegs / footpegs", "Short footrests for the rider or passenger. “Scraping the pegs” means leaning far enough for a peg to touch the road surface.", "common"],
+  ["pillion", "Pillion", "The passenger riding behind the motorcycle operator; also refers to the passenger seat itself (“riding two-up”).", "rider"],
+  ["pipes", "Pipes", "The motorcycle’s exhaust system, particularly referenced regarding its sound or aftermarket upgrades.", "common"],
+  ["rally", "Rally", "A large social gathering, convention, or event for motorcycle riders.", "common"],
+  ["rev-matching", "Rev matching", "Adjusting engine RPM during a downshift so the new gear engages smoothly, often executed with a quick throttle blip.", "rider"],
+  ["road-captain", "Road Captain", "The designated member responsible for leading a group ride, planning routes, and managing stops.", "rider"],
+  ["road-rash", "Road rash", "Abrasion injuries sustained from sliding across pavement during a fall, especially when riding without proper gear.", "common"],
+  ["saddlebags", "Saddlebags / panniers", "Luggage containers mounted on either side of the rear of a motorcycle.", "common"],
+  ["shiny-side-up", "Shiny side up", "A well-wish among riders meaning “don’t crash” — keep the rubber on the road and the shiny paint facing the sky.", "rider"],
+  ["sissy-bar", "Sissy bar", "A tall, vertical metal backrest mounted behind the passenger seat, often used for securing luggage or bedrolls.", "rider"],
+  ["space-cushion", "Space cushion", "The buffer of time and physical distance a rider maintains around traffic and hazards.", "rider"],
+  ["tank-slapper", "Speed wobble / tank slapper", "A violent, rapid, and dangerous oscillation of the handlebars and front end.", "obscure"],
+  ["sportbike", "Sportbike", "A performance-focused motorcycle engineered for cornering, braking, acceleration, and a forward-leaning riding position.", "common"],
+  ["squid", "Squid", "A reckless or inexperienced rider, especially one on a powerful sportbike riding aggressively without adequate protective gear.", "obscure"],
+  ["staggered", "Staggered formation", "The standard safety formation for group riding, where riders alternate left and right positions within a single lane to maintain stopping distance.", "rider"],
+  ["tail-gunner", "Tail gunner / sweep", "The experienced rider positioned at the very back of a group ride to watch for stragglers, manage traffic, and assist with breakdowns.", "obscure"],
+  ["target-fixation", "Target fixation", "Looking so intently at an obstacle or hazard that you unintentionally steer right into it.", "rider"],
+  ["trailer-queen", "Trailer queen", "A custom or expensive motorcycle hauled around to shows on a trailer rather than actually being ridden.", "obscure"],
+  ["twisties", "Twisties", "A winding stretch of road filled with tight curves and turns (“riding the twisties”).", "rider"],
+  ["two-wheel-therapy", "Two-wheeled therapy", "Riding as a form of mental escape, stress relief, and solitude.", "rider"],
+  ["waveless", "Waveless", "The awkward moment — or joke — when the unspoken biker-wave rules break down between different styles of riders, such as cruisers versus sportbikes or trikes.", "obscure"],
+].map(([id, term, definition, difficulty]) => ({ id, term, definition, difficulty }));
+
+const QUESTIONS_PER_RACE = 10;
+const QUESTION_SECONDS = 15;
+const BOOST_WINDOW = 8;
+const MISS_STREAK_LIMIT = 3;
+const BOOST_GAIN = 10;
+const PENALTY = { common: 15, rider: 25, obscure: 30 };
+const ROAD_WIDTH = 11.2;
+const TREE_COUNT = 220;
+const RIVAL_SKILL = [92, 78, 64, 48, 32];
+const RIVAL_COLORS = ["#6b3a2c", "#2c3a48", "#3d3428", "#4a2f38", "#2f3d30"];
+const BEST_KEY = "ssu-best";
+
+const $ = (id) => document.getElementById(id);
+
+function shuffle(items) {
+  const next = items.slice();
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+}
+
+function buildQuestions() {
+  return shuffle(GLOSSARY).slice(0, QUESTIONS_PER_RACE).map((term) => {
+    const distractors = shuffle(GLOSSARY.filter((t) => t.id !== term.id)).slice(0, 3).map((t) => t.term);
+    const choices = shuffle([term.term, ...distractors]);
+    return { prompt: term.definition, choices, correctIndex: choices.indexOf(term.term), difficulty: term.difficulty };
+  });
+}
+
+function placeFromMeter(meter) {
+  if (meter >= 85) return 1;
+  if (meter >= 70) return 2;
+  if (meter >= 55) return 3;
+  if (meter >= 40) return 4;
+  if (meter >= 25) return 5;
+  if (meter >= 10) return 6;
+  return 7;
+}
+
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return n + "th";
+  return n + ({ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th");
+}
+
+const state = {
+  phase: "title", meter: 100, streakMiss: 0, questionIndex: 0, questions: [],
+  questionStartedAt: 0, locked: false, lastVerdict: null, toast: null,
+  correctCount: 0, asked: 0, muted: false, crashed: false,
+};
+
+const race = { t: 0.03, steer: 0, crashed: false, crashAge: 0 };
+function resetRace() { race.t = 0.03; race.steer = 0; race.crashed = false; race.crashAge = 0; }
+
+let audioCtx = null, master = null, engineOsc = null, engineGain = null, engineFilter = null, windGain = null, audioReady = false;
+
+function getAudio() {
+  if (audioCtx) return audioCtx;
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return null;
+  audioCtx = new Ctor({ latencyHint: "interactive" });
+  master = audioCtx.createGain();
+  master.gain.value = 0.7;
+  master.connect(audioCtx.destination);
+  return audioCtx;
+}
+
+function unlockAudio() {
+  const a = getAudio();
+  if (!a || !master) return;
+  if (a.state === "suspended") a.resume();
+  if (audioReady) return;
+  audioReady = true;
+  engineOsc = a.createOscillator();
+  engineOsc.type = "sawtooth";
+  engineOsc.frequency.value = 72;
+  engineFilter = a.createBiquadFilter();
+  engineFilter.type = "lowpass";
+  engineFilter.frequency.value = 280;
+  engineGain = a.createGain();
+  engineGain.gain.value = 0;
+  engineOsc.connect(engineFilter);
+  engineFilter.connect(engineGain);
+  engineGain.connect(master);
+  engineOsc.start();
+  const wind = a.createBufferSource();
+  const buffer = a.createBuffer(1, a.sampleRate * 2, a.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.4;
+  wind.buffer = buffer;
+  wind.loop = true;
+  const windFilter = a.createBiquadFilter();
+  windFilter.type = "bandpass";
+  windFilter.frequency.value = 900;
+  windFilter.Q.value = 0.6;
+  windGain = a.createGain();
+  windGain.gain.value = 0;
+  wind.connect(windFilter);
+  windFilter.connect(windGain);
+  windGain.connect(master);
+  wind.start();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && a.state === "suspended") a.resume();
+  });
+}
+
+function setRideMix(speed01, muted) {
+  if (!audioCtx || !engineOsc || !engineGain || !engineFilter || !windGain) return;
+  const now = audioCtx.currentTime;
+  const vol = muted ? 0 : 1;
+  engineOsc.frequency.setTargetAtTime(68 + speed01 * 140, now, 0.08);
+  engineFilter.frequency.setTargetAtTime(220 + speed01 * 520, now, 0.08);
+  engineGain.gain.setTargetAtTime(0.045 * vol * (0.4 + speed01), now, 0.06);
+  windGain.gain.setTargetAtTime(0.02 * vol * speed01, now, 0.1);
+}
+
+function beep(freq, dur, type, gain = 0.08) {
+  const a = getAudio();
+  if (!a || !master) return;
+  const osc = a.createOscillator();
+  const g = a.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(gain, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+  osc.connect(g);
+  g.connect(master);
+  osc.start();
+  osc.stop(a.currentTime + dur);
+}
+
+function playCorrect() { beep(660, 0.12, "triangle", 0.07); setTimeout(() => beep(880, 0.16, "triangle", 0.06), 70); }
+function playBoost() { beep(523, 0.1, "sawtooth", 0.05); setTimeout(() => beep(784, 0.12, "sawtooth", 0.05), 80); setTimeout(() => beep(1046, 0.18, "triangle", 0.06), 160); }
+function playWrong() { beep(140, 0.22, "square", 0.06); }
+function playFinish() { beep(523, 0.14, "triangle", 0.06); setTimeout(() => beep(659, 0.14, "triangle", 0.06), 120); setTimeout(() => beep(784, 0.28, "triangle", 0.07), 240); }
+function playCrash() {
+  const a = getAudio();
+  if (!a || !master) return;
+  const noise = a.createBufferSource();
+  const buffer = a.createBuffer(1, a.sampleRate * 0.7, a.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  noise.buffer = buffer;
+  const filter = a.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 700;
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.18, a.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.7);
+  noise.connect(filter);
+  filter.connect(g);
+  g.connect(master);
+  noise.start();
+  beep(80, 0.4, "sawtooth", 0.08);
+}
+
+function createRoadCurve() {
+  const points = [];
+  for (let i = 0; i <= 80; i++) {
+    const t = i / 80;
+    points.push(new THREE.Vector3(
+      Math.sin(t * Math.PI * 2.15) * 64 + Math.sin(t * Math.PI * 0.85) * 28,
+      1.6 + Math.sin(t * Math.PI * 1.05) * 3.2,
+      -t * 2600,
+    ));
+  }
+  return new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.25);
+}
+
+function createRibbon(curve, width, segments, yLift, vRepeat) {
+  const half = width / 2;
+  const positions = new Float32Array((segments + 1) * 6);
+  const uvs = new Float32Array((segments + 1) * 4);
+  const indices = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  const p = new THREE.Vector3();
+  const tan = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    curve.getPointAt(t, p);
+    curve.getTangentAt(t, tan).normalize();
+    right.crossVectors(tan, up).normalize();
+    const b = i * 6;
+    positions[b] = p.x - right.x * half;
+    positions[b + 1] = p.y + yLift;
+    positions[b + 2] = p.z - right.z * half;
+    positions[b + 3] = p.x + right.x * half;
+    positions[b + 4] = p.y + yLift;
+    positions[b + 5] = p.z + right.z * half;
+    const u = i * 4;
+    uvs[u] = 0; uvs[u + 1] = t * vRepeat; uvs[u + 2] = 1; uvs[u + 3] = t * vRepeat;
+    if (i < segments) {
+      const a = i * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function createOffsetRibbon(curve, offset, width, segments, yDrop) {
+  const half = width / 2;
+  const positions = new Float32Array((segments + 1) * 6);
+  const indices = [];
+  const up = new THREE.Vector3(0, 1, 0);
+  const p = new THREE.Vector3();
+  const tan = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  const mid = new THREE.Vector3();
+  for (let i = 0; i <= segments; i++) {
+    const t = i / segments;
+    curve.getPointAt(t, p);
+    curve.getTangentAt(t, tan).normalize();
+    right.crossVectors(tan, up).normalize();
+    mid.copy(p).addScaledVector(right, offset);
+    const b = i * 6;
+    positions[b] = mid.x - right.x * half;
+    positions[b + 1] = mid.y + yDrop;
+    positions[b + 2] = mid.z - right.z * half;
+    positions[b + 3] = mid.x + right.x * half;
+    positions[b + 4] = mid.y + yDrop;
+    positions[b + 5] = mid.z + right.z * half;
+    if (i < segments) {
+      const a = i * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function makeAsphaltTexture() {
+  const c = document.createElement("canvas");
+  c.width = 128; c.height = 256;
+  const g = c.getContext("2d");
+  g.fillStyle = "#32312e";
+  g.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 2200; i++) {
+    const n = 36 + Math.random() * 28;
+    g.fillStyle = `rgb(${n},${n - 1},${n - 4})`;
+    g.fillRect(Math.random() * 128, Math.random() * 256, 2, 2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function makeSkyTexture() {
+  const c = document.createElement("canvas");
+  c.width = 1024; c.height = 512;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, "#6e7c88");
+  grad.addColorStop(0.42, "#c4b79a");
+  grad.addColorStop(0.55, "#9aa08a");
+  grad.addColorStop(1, "#3a4a30");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 1024, 512);
+  g.fillStyle = "rgba(255,215,160,0.35)";
+  g.beginPath();
+  g.ellipse(720, 200, 180, 90, 0, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function sampleRoad(curve, t, target, tangent) {
+  const clamped = THREE.MathUtils.clamp(t, 0.001, 0.999);
+  curve.getPointAt(clamped, target);
+  curve.getTangentAt(clamped, tangent).normalize();
+}
+
+function makeRivalBike(color) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.28, 1.15), new THREE.MeshStandardMaterial({ color, roughness: 0.45, metalness: 0.25 }));
+  body.position.y = 0.12;
+  const tank = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.38, 0.4), new THREE.MeshStandardMaterial({ color: "#1c1916", roughness: 0.8 }));
+  tank.position.set(0, 0.42, -0.05);
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), new THREE.MeshStandardMaterial({ color: "#2a241e", roughness: 0.7 }));
+  helm.position.set(0, 0.68, -0.02);
+  const rubber = new THREE.MeshStandardMaterial({ color: "#161616" });
+  const fw = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.12, 10), rubber);
+  fw.rotation.z = Math.PI / 2;
+  fw.position.set(0, -0.08, 0.42);
+  const rw = fw.clone();
+  rw.position.z = -0.46;
+  g.add(body, tank, helm, fw, rw);
+  return g;
+}
+
+function makeHandlebars() {
+  const group = new THREE.Group();
+  group.position.set(0, -0.38, -0.62);
+  group.scale.setScalar(0.95);
+  const chrome = new THREE.MeshStandardMaterial({ color: "#c8c4bc", metalness: 0.92, roughness: 0.22 });
+  const grip = new THREE.MeshStandardMaterial({ color: "#1a1714", roughness: 0.82, metalness: 0.08 });
+  const leather = new THREE.MeshStandardMaterial({ color: "#2b221c", roughness: 0.78, metalness: 0.05 });
+  const left = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.72, 10), chrome);
+  left.rotation.z = 0.42; left.position.set(-0.42, 0.08, 0.04);
+  const right = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.72, 10), chrome);
+  right.rotation.z = -0.42; right.position.set(0.42, 0.08, 0.04);
+  const cross = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.34, 8), chrome);
+  cross.rotation.z = Math.PI / 2; cross.position.set(0, 0.22, 0.02);
+  const lg = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.034, 0.16, 10), grip);
+  lg.rotation.z = Math.PI / 2; lg.position.set(-0.62, 0.34, 0.05);
+  const rg = lg.clone(); rg.position.x = 0.62;
+  const lgrip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.22), leather);
+  lgrip.position.set(-0.62, 0.3, 0.12); lgrip.rotation.set(0.4, 0.2, 0.15);
+  const rgrip = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.22), leather);
+  rgrip.position.set(0.62, 0.3, 0.12); rgrip.rotation.set(0.4, -0.2, -0.15);
+  const lk = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), leather);
+  lk.position.set(-0.58, 0.18, 0.18);
+  const rk = lk.clone(); rk.position.x = 0.58;
+  const dash = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.12), new THREE.MeshStandardMaterial({ color: "#1c1a16", metalness: 0.4, roughness: 0.5 }));
+  dash.position.set(0, 0.02, 0.16);
+  group.add(left, right, cross, lg, rg, lgrip, rgrip, lk, rk, dash);
+  return group;
+}
+
+const canvas = $("view");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#8a9188");
+scene.fog = new THREE.Fog("#9aa08a", 55, 380);
+
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 900);
+camera.position.set(0, 1.2, 4);
+scene.add(camera);
+
+scene.add(new THREE.HemisphereLight("#f3e6c8", "#2a3324", 0.8));
+const sun = new THREE.DirectionalLight("#ffd7a0", 1.45);
+sun.position.set(50, 34, 8);
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff, 0.28));
+
+const curve = createRoadCurve();
+const asphalt = makeAsphaltTexture();
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(2800, 3200), new THREE.MeshStandardMaterial({ color: "#3a4a30", roughness: 1 }));
+ground.rotation.x = -Math.PI / 2;
+ground.position.set(0, -6, -800);
+scene.add(ground);
+
+scene.add(new THREE.Mesh(createRibbon(curve, 22, 300, 0, 16), new THREE.MeshStandardMaterial({ color: "#4a5538", roughness: 0.95 })));
+scene.add(new THREE.Mesh(createRibbon(curve, ROAD_WIDTH, 480, 0.08, 80), new THREE.MeshStandardMaterial({ map: asphalt, color: "#3f3e3b", roughness: 0.86, metalness: 0.05 })));
+scene.add(new THREE.Mesh(createRibbon(curve, 0.14, 400, 0.1, 110), new THREE.MeshStandardMaterial({ color: "#d4c48a", roughness: 0.55 })));
+scene.add(new THREE.Mesh(createOffsetRibbon(curve, -ROAD_WIDTH / 2 + 0.12, 0.14, 360, 0.1), new THREE.MeshStandardMaterial({ color: "#e8e2d4", roughness: 0.55 })));
+scene.add(new THREE.Mesh(createOffsetRibbon(curve, ROAD_WIDTH / 2 - 0.12, 0.14, 360, 0.1), new THREE.MeshStandardMaterial({ color: "#e8e2d4", roughness: 0.55 })));
+scene.add(new THREE.Mesh(createOffsetRibbon(curve, -26, 16, 200, -1.8), new THREE.MeshStandardMaterial({ color: "#3a6868", roughness: 0.16, metalness: 0.5 })));
+
+const skyMat = new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false });
+const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(780, 32, 20), skyMat);
+skyMesh.rotation.y = Math.PI * 0.15;
+scene.add(skyMesh);
+
+const dummy = new THREE.Object3D();
+const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.22, 0.32, 3.4, 5), new THREE.MeshStandardMaterial({ color: "#3a2a1e", roughness: 0.95 }), TREE_COUNT);
+const canopies = new THREE.InstancedMesh(new THREE.ConeGeometry(2.15, 9.8, 6), new THREE.MeshStandardMaterial({ color: "#1a3324", roughness: 0.9 }), TREE_COUNT);
+{
+  const p = new THREE.Vector3();
+  const tan = new THREE.Vector3();
+  const right = new THREE.Vector3();
+  for (let i = 0; i < TREE_COUNT; i++) {
+    const t = 0.02 + (i / TREE_COUNT) * 0.96;
+    curve.getPointAt(t, p);
+    curve.getTangentAt(t, tan).normalize();
+    right.crossVectors(tan, new THREE.Vector3(0, 1, 0)).normalize();
+    const side = i % 2 === 0 ? -1 : 1;
+    dummy.position.copy(p).addScaledVector(right, side * (16 + ((i * 17) % 30)));
+    dummy.position.y += 0.2;
+    dummy.rotation.y = (i * 1.7) % Math.PI;
+    const s = 0.85 + (i % 6) * 0.12;
+    dummy.scale.set(s, 1.15 + (i % 4) * 0.2, s);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(i, dummy.matrix);
+    dummy.position.y += 6.4 * (1.15 + (i % 4) * 0.2) * 0.42;
+    dummy.updateMatrix();
+    canopies.setMatrixAt(i, dummy.matrix);
+  }
+}
+scene.add(trunks, canopies);
+
+const rivals = RIVAL_COLORS.map((c) => {
+  const bike = makeRivalBike(c);
+  scene.add(bike);
+  return bike;
+});
+
+const handlebars = makeHandlebars();
+camera.add(handlebars);
+
+const _pos = new THREE.Vector3();
+const _tan = new THREE.Vector3();
+const _look = new THREE.Vector3();
+const _lookTan = new THREE.Vector3();
+const _ahead = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const clock = new THREE.Timer();
+
+function tickWorld(delta) {
+  const d = Math.min(delta, 0.1);
+  const playing = state.phase === "playing" || state.phase === "finish";
+  if (state.phase === "crash" && !race.crashed) race.crashed = true;
+  if (playing && !race.crashed) {
+    const boost = state.lastVerdict === "boost" ? 1.28 : 1;
+    race.t = Math.min(0.96, race.t + (0.01 + (state.meter / 100) * 0.022) * boost * d);
+  }
+  if (race.crashed) race.crashAge += d;
+
+  sampleRoad(curve, race.t, _pos, _tan);
+  sampleRoad(curve, race.t + 0.016, _look, _lookTan);
+  sampleRoad(curve, Math.min(0.999, race.t + 0.008), _ahead, _lookTan);
+
+  const yawNow = Math.atan2(_tan.x, -_tan.z);
+  const yawNext = Math.atan2(_lookTan.x, -_lookTan.z);
+  let steer = yawNext - yawNow;
+  if (steer > Math.PI) steer -= Math.PI * 2;
+  if (steer < -Math.PI) steer += Math.PI * 2;
+  race.steer = THREE.MathUtils.damp(race.steer, steer, 6, d);
+
+  const wobble = (100 - state.meter) / 100;
+  const crash = Math.min(1, race.crashAge);
+  const t = clock.getElapsed();
+  const shakeAmt = playing ? 0.008 + wobble * 0.035 + crash * 0.16 : 0.003;
+  camera.position.set(_pos.x + Math.sin(t * 21) * shakeAmt, _pos.y + 1.02 - crash * 0.5 + Math.cos(t * 17) * shakeAmt * 0.55, _pos.z);
+  _look.y = _pos.y + 0.22 - crash * 0.7;
+  camera.up.set(Math.sin(crash * 1.5) * 0.55, 1, 0);
+  camera.lookAt(_look);
+
+  const targetFov = 64 + (state.meter / 100) * 6 + (state.lastVerdict === "boost" ? 8 : 0) + crash * 10;
+  camera.fov += (targetFov - camera.fov) * Math.min(1, 4 * d);
+  camera.updateProjectionMatrix();
+
+  const speed01 = playing ? 0.35 + (state.meter / 100) * 0.65 : 0;
+  setRideMix(speed01, state.muted || state.phase === "title" || state.phase === "study");
+
+  const shake = (Math.sin(t * (14 + wobble * 20)) + Math.sin(t * 23)) * (0.01 + wobble * 0.03);
+  const targetZ = -race.steer * 0.55 + shake + crash * Math.sin(t * 28) * 0.25;
+  handlebars.rotation.z = THREE.MathUtils.damp(handlebars.rotation.z, targetZ, 8, d);
+  handlebars.rotation.x = THREE.MathUtils.damp(handlebars.rotation.x, crash * 0.55, 4, d);
+  handlebars.position.y = -0.38 + Math.sin(t * 18) * (0.004 + wobble * 0.01);
+
+  rivals.forEach((child, i) => {
+    const skill = RIVAL_SKILL[i] ?? 50;
+    const tt = THREE.MathUtils.clamp(race.t + (skill - state.meter) * 0.00105, 0.01, 0.98);
+    sampleRoad(curve, tt, _pos, _tan);
+    _right.crossVectors(_tan, new THREE.Vector3(0, 1, 0)).normalize();
+    child.position.copy(_pos).addScaledVector(_right, i % 2 === 0 ? -1.8 : 1.8);
+    child.position.y += 0.55;
+    child.rotation.y = Math.atan2(_tan.x, _tan.z) + Math.PI;
+  });
+}
+
+function loop(timestamp) {
+  clock.update(timestamp);
+  const delta = clock.getDelta();
+  tickWorld(delta);
+  if (state.phase === "playing" && !state.locked) {
+    const left = Math.max(0, QUESTION_SECONDS - (performance.now() - state.questionStartedAt) / 1000);
+    paintClock(left);
+    if (left <= 0) timeoutMiss();
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function show(el, on) { el.classList.toggle("hidden", !on); }
+
+function setPhase(phase) {
+  state.phase = phase;
+  show($("title"), phase === "title");
+  show($("study"), phase === "study");
+  show($("result"), phase === "crash" || phase === "finish");
+  show($("hud"), phase === "playing");
+  show($("panel"), phase === "playing");
+}
+
+function paintBest() {
+  try {
+    const raw = localStorage.getItem(BEST_KEY);
+    $("best-line").textContent = raw ? "Personal best · " + raw : "";
+  } catch {
+    $("best-line").textContent = "";
+  }
+}
+
+function saveBest() {
+  if (state.crashed) return;
+  const place = placeFromMeter(state.meter);
+  const line = ordinal(place) + " · " + state.correctCount + "/" + state.asked;
+  try {
+    const prev = localStorage.getItem(BEST_KEY);
+    const prevPlace = prev ? parseInt(prev, 10) : 99;
+    if (!prev || place < prevPlace || (place === prevPlace && state.correctCount > 0)) {
+      localStorage.setItem(BEST_KEY, line);
+    }
+  } catch { /* ignore */ }
+}
+
+function renderStudy(filter = "") {
+  const needle = filter.trim().toLowerCase();
+  const rows = GLOSSARY.filter((t) => !needle || t.term.toLowerCase().includes(needle) || t.definition.toLowerCase().includes(needle));
+  $("study-list").innerHTML = rows.map((t) => {
+    const cost = t.difficulty === "common" ? "−15 if missed" : t.difficulty === "rider" ? "−25 if missed" : "−30 if missed";
+    return `<li><div class="term-row"><h2>${t.term}</h2><span class="diff">${cost}</span></div><p>${t.definition}</p></li>`;
+  }).join("");
+}
+
+function paintClock(remaining) {
+  $("hud-clock").textContent = remaining.toFixed(1);
+  $("hud-clock").classList.toggle("danger", remaining <= 5);
+  $("hud-clock-label").textContent = remaining > QUESTION_SECONDS - BOOST_WINDOW ? "Boost window" : "Clock";
+  $("clock-bar").style.width = (remaining / QUESTION_SECONDS) * 100 + "%";
+  $("boost-bar").style.width = (Math.max(0, remaining - (QUESTION_SECONDS - BOOST_WINDOW)) / BOOST_WINDOW) * 100 + "%";
+}
+
+function renderQuestion() {
+  const q = state.questions[state.questionIndex];
+  if (!q) return;
+  $("hud-place").textContent = ordinal(placeFromMeter(state.meter));
+  $("hud-q").textContent = (state.questionIndex + 1) + "/" + state.questions.length + " · field of 7";
+  $("hud-warn").classList.toggle("hidden", state.streakMiss < 2);
+  $("q-prompt").textContent = q.prompt;
+  $("choices").innerHTML = q.choices.map((c, i) =>
+    `<li><button type="button" data-i="${i}"><span class="num">${i + 1}</span><span>${c}</span></button></li>`
+  ).join("");
+  $("choices").onclick = (e) => {
+    const btn = e.target.closest("button");
+    if (btn) answer(Number(btn.dataset.i));
+  };
+  paintClock(QUESTION_SECONDS);
+  if (state.toast) {
+    $("hud-toast").textContent = state.toast;
+    $("hud-toast").className = "toast " + (state.lastVerdict || "");
+    show($("hud-toast"), true);
+  } else {
+    show($("hud-toast"), false);
+  }
+}
+
+function start() {
+  unlockAudio();
+  resetRace();
+  Object.assign(state, {
+    meter: 100, streakMiss: 0, questionIndex: 0, questions: buildQuestions(),
+    questionStartedAt: performance.now(), locked: false, lastVerdict: null, toast: null,
+    correctCount: 0, asked: 0, crashed: false,
+  });
+  setPhase("playing");
+  renderQuestion();
+}
+
+function answer(choiceIndex) {
+  if (state.phase !== "playing" || state.locked) return;
+  const q = state.questions[state.questionIndex];
+  if (!q) return;
+  resolve(choiceIndex === q.correctIndex, (performance.now() - state.questionStartedAt) / 1000, q);
+}
+
+function timeoutMiss() {
+  if (state.phase !== "playing" || state.locked) return;
+  const q = state.questions[state.questionIndex];
+  if (!q) return;
+  resolve(false, QUESTION_SECONDS, q);
+}
+
+function resolve(correct, elapsed, q) {
+  if (correct) {
+    state.streakMiss = 0;
+    if (elapsed <= BOOST_WINDOW) {
+      state.meter = Math.min(100, state.meter + BOOST_GAIN);
+      state.lastVerdict = "boost";
+      state.toast = "BOOST +10";
+      playBoost();
+    } else {
+      state.lastVerdict = "correct";
+      state.toast = "CLEAN";
+      playCorrect();
+    }
+  } else {
+    state.streakMiss += 1;
+    const hit = PENALTY[q.difficulty];
+    state.meter = Math.max(0, state.meter - hit);
+    state.lastVerdict = "wrong";
+    state.toast = "−" + hit;
+    playWrong();
+  }
+  state.asked += 1;
+  if (correct) state.correctCount += 1;
+  state.locked = true;
+
+  const buttons = $("choices").querySelectorAll("button");
+  buttons.forEach((b, i) => {
+    b.disabled = true;
+    if (i === q.correctIndex) b.classList.add("good");
+    else b.classList.add("dim");
+  });
+  $("hud-place").textContent = ordinal(placeFromMeter(state.meter));
+  $("hud-warn").classList.toggle("hidden", state.streakMiss < 2);
+  $("hud-toast").textContent = state.toast;
+  $("hud-toast").className = "toast " + state.lastVerdict;
+  show($("hud-toast"), true);
+
+  const crashed = state.meter <= 0 || state.streakMiss >= MISS_STREAK_LIMIT;
+  const last = state.questionIndex >= state.questions.length - 1;
+  if (crashed) {
+    state.crashed = true;
+    playCrash();
+    setTimeout(() => finish(true), 700);
+    return;
+  }
+  if (last) {
+    playFinish();
+    setTimeout(() => finish(false), 900);
+    return;
+  }
+  setTimeout(() => {
+    if (state.phase !== "playing") return;
+    state.questionIndex += 1;
+    state.questionStartedAt = performance.now();
+    state.locked = false;
+    state.lastVerdict = null;
+    state.toast = null;
+    renderQuestion();
+  }, 850);
+}
+
+function finish(crashed) {
+  const place = placeFromMeter(state.meter);
+  saveBest();
+  paintBest();
+  $("res-kicker").textContent = crashed ? "High-side" : "Checkered";
+  $("res-title").textContent = crashed ? "GAME OVER" : place === 1 ? "First across" : place <= 3 ? "On the box" : "You finished";
+  $("res-blurb").textContent = crashed
+    ? (state.asked <= 2 ? "Barely off the line. The word bank is waiting." : state.correctCount === 0 ? "The road did not forgive that run. Read the bank, then come back." : "Too many wrong in a row. The front end tucked. Shiny side… not so up.")
+    : place === 1 ? "Iron Butt energy. You owned the twisties."
+    : place === 2 ? "Clean enough to stay shiny. One more boost and it’s yours."
+    : place === 3 ? "Solid ride. Knees in the breeze."
+    : "You brought it home. Study the bank and take another run.";
+  $("res-place").textContent = crashed ? "DNF" : ordinal(place);
+  $("res-bank").textContent = state.correctCount + "/" + state.asked;
+  $("res-form").textContent = crashed ? "Down" : "Up";
+  setPhase(crashed ? "crash" : "finish");
+}
+
+function goTitle() {
+  resetRace();
+  state.locked = false;
+  state.lastVerdict = null;
+  state.toast = null;
+  setPhase("title");
+}
+
+$("ride-btn").onclick = start;
+$("again-btn").onclick = start;
+$("study-btn").onclick = () => { renderStudy(); setPhase("study"); };
+$("res-study").onclick = () => { renderStudy(); setPhase("study"); };
+$("study-back").onclick = goTitle;
+$("res-title").onclick = goTitle;
+$("study-q").oninput = (e) => renderStudy(e.target.value);
+$("mute-btn").onclick = () => {
+  state.muted = !state.muted;
+  $("mute-btn").textContent = state.muted ? "Sound off" : "Sound on";
+};
+window.addEventListener("keydown", (e) => {
+  if (state.phase !== "playing") return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= 4) answer(n - 1);
+});
+
+paintBest();
+renderStudy();
+clock.connect(document);
+loop();
+  </script>
+</body>
+</html>
