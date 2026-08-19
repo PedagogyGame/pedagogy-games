@@ -1,1 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>The Nod — Rodeo Lexicon</title>
+  <meta name="description" content="Stay on the bronc. A rodeo terms game." />
+  <style>
+    :root {
+      --bg: #12100e;
+      --panel: #161310;
+      --raised: #26211c;
+      --fg: #f3ece3;
+      --muted: #a3988c;
+      --subtle: #7a7168;
+      --border: #3a342e;
+      --ok: #8fa37a;
+      --danger: #c46a4e;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: max(1rem, env(safe-area-inset-top)) 1.25rem 0;
+    }
+    .brand {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.4rem;
+      letter-spacing: -0.03em;
+    }
+    .score {
+      font-family: Fraunces, Georgia, serif;
+      font-size: 2.6rem;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+    .timer-wrap {
+      position: absolute;
+      left: 50%;
+      top: 4.4rem;
+      transform: translateX(-50%);
+      width: min(28rem, calc(100% - 2rem));
+    }
+    .timer {
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(243, 236, 227, 0.1);
+      overflow: hidden;
+    }
+    .timer > i {
+      display: block;
+      height: 100%;
+      width: 100%;
+      background: var(--fg);
+      border-radius: 99px;
+    }
+    .timer.late > i { background: var(--danger); }
+    .cover {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+    .cover h2 {
+      margin: 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: clamp(3rem, 8vw, 5rem);
+      letter-spacing: -0.04em;
+      text-shadow: 0 8px 30px rgba(0,0,0,.45);
+    }
+    .cover p {
+      margin: .4rem 0 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: 1.6rem;
+    }
+    .cover span { color: var(--muted); margin-left: .5rem; }
+    .sheet {
+      pointer-events: auto;
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: .6rem .6rem max(.8rem, env(safe-area-inset-bottom));
+    }
+    .card {
+      max-width: 48rem;
+      margin: 0 auto;
+      background: color-mix(in srgb, var(--panel) 95%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1rem 1.15rem 1.15rem;
+    }
+    .card h1 {
+      margin: .35rem 0 0;
+      font-family: Fraunces, Georgia, serif;
+      font-size: clamp(2rem, 5vw, 3rem);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .kicker {
+      margin: 0;
+      font-size: 11px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--subtle);
+    }
+    .lede {
+      color: var(--muted);
+      font-size: .95rem;
+      line-height: 1.5;
+      max-width: 32rem;
+    }
+    .def {
+      margin: 0;
+      font-size: 1.05rem;
+      line-height: 1.4;
+      max-width: 40rem;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.1rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .5rem;
+      margin-top: .85rem;
+    }
+    button, .choice {
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .btn {
+      border: 0;
+      background: var(--fg);
+      color: var(--bg);
+      height: 3.15rem;
+      padding: 0 1.3rem;
+      border-radius: .65rem;
+      font-weight: 600;
+    }
+    .btn.ghost {
+      background: var(--raised);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+    .choice {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      min-height: 2.85rem;
+      text-align: left;
+      border: 1px solid var(--border);
+      background: var(--raised);
+      border-radius: .65rem;
+      padding: .5rem .7rem;
+    }
+    .choice:disabled { cursor: default; }
+    .choice .key {
+      width: 1.7rem; height: 1.7rem;
+      display: grid; place-items: center;
+      border: 1px solid var(--border);
+      border-radius: .4rem;
+      font-size: .75rem;
+      color: var(--muted);
+      flex: none;
+    }
+    .choice.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--border)); background: color-mix(in srgb, var(--ok) 12%, var(--raised)); }
+    .choice.bad { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: color-mix(in srgb, var(--danger) 12%, var(--raised)); }
+    input[type="text"] {
+      width: 100%;
+      height: 3rem;
+      margin-top: .85rem;
+      border: 1px solid var(--border);
+      background: var(--raised);
+      color: var(--fg);
+      border-radius: .65rem;
+      padding: 0 .85rem;
+      font: inherit;
+      font-size: 1rem;
+      outline: none;
+    }
+    .reveal { margin: .55rem 0 0; font-weight: 600; }
+    .reveal.ok { color: var(--ok); }
+    .reveal.bad { color: var(--danger); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; margin-top: 1rem; }
+    .stats dt { color: var(--subtle); font-size: .85rem; }
+    .stats dd { margin: .15rem 0 0; font-family: Fraunces, Georgia, serif; font-size: 1.55rem; }
+    .hidden { display: none !important; }
+    @media (max-width: 640px) {
+      .score { font-size: 2rem; }
+      .def { font-size: .95rem; }
+      .card { padding: .8rem .85rem .9rem; }
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <canvas id="arena"></canvas>
+  <div class="hud">
+    <div class="top">
+      <div class="brand">The Nod</div>
+      <div class="score" id="score">100%</div>
+      <div style="width:4.5rem"></div>
+    </div>
+    <div class="timer-wrap hidden" id="timerWrap">
+      <div class="timer" id="timer"><i id="timerBar"></i></div>
+    </div>
+    <div class="cover hidden" id="coverFlash">
+      <div>
+        <h2>Covered</h2>
+        <p id="coverCard"></p>
+      </div>
+    </div>
 
+    <div class="sheet" id="titleSheet">
+      <div class="card">
+        <p class="kicker">Rodeo lexicon</p>
+        <h1>Stay on the bronc.</h1>
+        <p class="lede">Fifteen seconds. First five pull you back toward 100. Miss and they wreck. Stay on a roll and the next hand comes out of the chute.</p>
+        <div class="row">
+          <button class="btn" id="btnChoice">Multiple choice</button>
+          <button class="btn ghost" id="btnType">Type the term</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sheet hidden" id="quizSheet">
+      <div class="card">
+        <p class="def" id="definition"></p>
+        <div class="grid" id="choices"></div>
+        <form id="typeForm" class="hidden">
+          <input id="typeInput" type="text" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="Type the term" />
+          <p class="reveal hidden" id="typedReveal"></p>
+        </form>
+      </div>
+    </div>
+
+    <div class="sheet hidden" id="resultSheet">
+      <div class="card">
+        <p class="kicker" id="resultKicker">No score</p>
+        <h1 id="resultTitle">Bucked off.</h1>
+        <dl class="stats">
+          <div><dt>Finish</dt><dd id="statFinish">0%</dd></div>
+          <div><dt>Peak</dt><dd id="statPeak">0%</dd></div>
+          <div><dt>Covered</dt><dd id="statCovered">0</dd></div>
+        </dl>
+        <p class="lede" id="statCorrect"></p>
+        <div class="row">
+          <button class="btn" id="againChoice">Multiple choice</button>
+          <button class="btn ghost" id="againType">Type the term</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const TERMS = [
+  {id:"tack",term:"Tack",tier:1,definition:"The standard, widely known blanket term for horse gear."},
+  {id:"judges",term:"Judges",tier:1,definition:"The officials who score the competition."},
+  {id:"purse",term:"Purse",tier:1,definition:"The total prize money up for grabs."},
+  {id:"bucking",term:"Bucking",tier:1,definition:"The everyday word for an animal kicking, jumping, and twisting to throw a rider."},
+  {id:"eight-second",term:"8-Second Ride",tier:1,definition:"The pop-culture benchmark for staying on a bucking animal long enough to score. Also called a qualified ride.",aliases:["qualified ride","8 second ride","eight second ride"]},
+  {id:"barrel-racing",term:"Barrel Racing",tier:1,definition:"The most recognizable timed arena horse sport — a cloverleaf race around three barrels."},
+  {id:"steer-wrestling",term:"Steer Wrestling",tier:2,definition:"The well-known timed event of leaping from a horse and tackling a steer. Also called bulldogging.",aliases:["bulldogging"]},
+  {id:"tie-down",term:"Tie-Down Roping",tier:2,definition:"The classic timed event formerly known casually as calf roping.",aliases:["calf roping","tie down roping"]},
+  {id:"team-roping",term:"Team Roping",tier:2,definition:"The standard two-person steer-roping event."},
+  {id:"bareback",term:"Bareback Riding",tier:2,definition:"One of the three main roughstock events — riding without a saddle."},
+  {id:"saddle-bronc",term:"Saddle Bronc Riding",tier:2,definition:"The traditional rodeo event derived directly from breaking wild horses."},
+  {id:"chute",term:"Chute",tier:2,definition:"The holding pen and gate from which an animal bursts into the arena. Also called a bucking chute.",aliases:["bucking chute"]},
+  {id:"bronc",term:"Bronc",tier:2,definition:"A widely recognized colloquial term for a bucking horse."},
+  {id:"bullfighter",term:"Bullfighter",tier:2,definition:"The athletic protectors who shield thrown bull riders."},
+  {id:"barrelman",term:"Barrelman",tier:2,definition:"The entertainer and safety worker who works inside a padded barrel. A rodeo clown.",aliases:["rodeo clown"]},
+  {id:"all-around",term:"All-Around",tier:2,definition:"The prestigious multi-event championship title for a cowboy or cowgirl.",aliases:["all around"]},
+  {id:"timed-events",term:"Timed Events",tier:2,definition:"The broad category of races against the clock rather than judged rides."},
+  {id:"roughstock",term:"Roughstock",tier:2,definition:"The industry term for bucking horses, bulls, and the judged riding events."},
+  {id:"prca",term:"PRCA",tier:2,definition:"The Professional Rodeo Cowboys Association — the sport's governing body.",aliases:["professional rodeo cowboys association"]},
+  {id:"breakaway",term:"Breakaway Roping",tier:3,definition:"The fast-growing timed roping event where the rope detaches from the horn."},
+  {id:"pickup-man",term:"Pickup Man",tier:3,definition:"The mounted arena crew who assist riders during and after bronc rides.",aliases:["pick up man"]},
+  {id:"barrier",term:"Barrier",tier:3,definition:"The starting string mechanism that grants livestock a head start."},
+  {id:"breaking-barrier",term:"Breaking the Barrier",tier:3,definition:"The common 10-second penalty for jumping the start.",aliases:["broke the barrier","break the barrier"]},
+  {id:"go-round",term:"Go-Round",tier:3,definition:"A single scheduled turn of competition in a multi-day rodeo. Also called a round.",aliases:["go round"]},
+  {id:"average",term:"Average",tier:3,definition:"The aggregate score or cumulative time across multiple rounds."},
+  {id:"no-score",term:"No Score",tier:3,definition:"The standard disqualification or failed-run ruling. Also called no time.",aliases:["no time"]},
+  {id:"re-ride",term:"Re-Ride",tier:3,definition:"A granted second attempt due to poor animal performance or chute issues.",aliases:["reride","re ride"]},
+  {id:"stock-contractor",term:"Stock Contractor",tier:3,definition:"The company or rancher providing and managing the livestock."},
+  {id:"draw",term:"Draw",tier:3,definition:"The random assignment of livestock to competitors."},
+  {id:"roping-box",term:"Roping Box",tier:3,definition:"The fenced three-sided starting area for timed ropers."},
+  {id:"spurring",term:"Spurring",tier:3,definition:"The rhythmic foot movement required for rider style points."},
+  {id:"free-hand",term:"Free Hand",tier:3,definition:"The non-grip hand that must not touch anything during a roughstock ride.",aliases:["freehand"]},
+  {id:"cowboy-nod",term:"Cowboy Nod",tier:3,definition:"The physical gesture signaling the chute gate to open.",aliases:["the nod"]},
+  {id:"covering",term:"Covering",tier:3,definition:"Slang for successfully making the full 8-second whistle.",aliases:["cover","covered"]},
+  {id:"cloverleaf",term:"Cloverleaf",tier:3,definition:"The official geometric pattern run around the barrels in barrel racing."},
+  {id:"rope-horse",term:"Rope Horse",tier:3,definition:"A horse specifically trained to rate cattle, stop hard, and hold tension."},
+  {id:"bull-rope",term:"Bull Rope",tier:4,definition:"The weighted, flat braided rope used solely as the handhold in bull riding."},
+  {id:"flank-strap",term:"Flank Strap",tier:4,definition:"The fleece-lined strap placed around the animal's flank to prompt kicking."},
+  {id:"rigging",term:"Rigging",tier:4,definition:"The specialized leather suitcase-style grip cinched to a bareback horse."},
+  {id:"bronc-saddle",term:"Bronc Saddle",tier:4,definition:"The hornless, free-stirruped saddle built specifically for bronc riding."},
+  {id:"bronc-rein",term:"Bronc Rein",tier:4,definition:"The single thick braided rein used in saddle bronc riding."},
+  {id:"rosin",term:"Rosin",tier:4,definition:"Friction-enhancing pine resin rubbed onto gloves, ropes, and riggings."},
+  {id:"rowel",term:"Rowel",tier:4,definition:"The blunted, rotating wheel on the back of a competition spur."},
+  {id:"hang-up",term:"Hang-Up",tier:4,definition:"The dangerous scenario where a fallen rider's hand is trapped in the rope or rigging.",aliases:["hang up","hangup"]},
+  {id:"hazer",term:"Hazer",tier:4,definition:"The helper who rides alongside a steer in bulldogging to keep it running straight."},
+  {id:"header",term:"Header",tier:4,definition:"The first team roper, tasked with securing the steer's horns, neck, or half-head."},
+  {id:"heeler",term:"Heeler",tier:4,definition:"The second team roper, who must catch both hind legs on the turn."},
+  {id:"slack",term:"Slack",tier:4,definition:"Overflow competition runs staged during mornings or off-hours outside the main ticketed show."},
+  {id:"rank",term:"Rank",tier:4,definition:"Insider praise for an extraordinarily violent, difficult-to-ride bucking animal."},
+  {id:"mark-out",term:"Mark-Out Rule",tier:4,definition:"The requirement that a rider's heels touch above the horse's shoulders on the first jump out of the chute.",aliases:["mark out","mark out rule"]},
+  {id:"rider-score",term:"Rider Score",tier:4,definition:"The 50-point half of a roughstock judge's scorecard evaluating cowboy technique."},
+  {id:"stock-score",term:"Stock Score",tier:4,definition:"The 50-point half of a roughstock judge's scorecard evaluating animal difficulty."},
+  {id:"dally",term:"Dally",tier:5,definition:"Wrapping the rope around the saddle horn to stop a steer rather than tying off hard and fast."},
+  {id:"piggin-string",term:"Piggin' String",tier:5,definition:"The short specialized cord a roper carries in the teeth to tie three calf legs.",aliases:["piggin string","pigging string"]},
+  {id:"neck-rope",term:"Neck Rope",tier:5,definition:"The auxiliary rope on a calf or steer's neck used to trigger the barrier release."},
+  {id:"honda",term:"Honda",tier:5,definition:"The specialized tied eyelet or weighted ring at the rope's end through which the loop runs. Also spelled hondo.",aliases:["hondo"]},
+  {id:"hooey",term:"Hooey",tier:5,definition:"The traditional half-hitch knot used to lock the final wrap on a calf's tied legs."}
+];
+
+const PENALTY = {1:20,2:22,3:25,4:28,5:30};
+const QUESTION_SECONDS = 15;
+const BONUS_WINDOW = 5;
+const BONUS_POINTS = 10;
+const COVER_STREAK = 8;
+
+const HANDS = [
+  {id:"wes", name:"Wes Harlan", hat:"#e8dcc8", shirt:"#8a4a32", pants:"#3d342c", horse:"#5a3a22", mane:"#2a1c12", socks:"#d9c7a6"},
+  {id:"june", name:"June Calder", hat:"#c9a66b", shirt:"#efe4d2", pants:"#4a4036", horse:"#d7b36a", mane:"#f3e6c4", socks:"#f7efe0"},
+  {id:"cal", name:"Cal Boone", hat:"#1a1613", shirt:"#3a3530", pants:"#2b2622", horse:"#1c1a18", mane:"#0e0c0b", socks:"#2a2622"},
+  {id:"della", name:"Della Pike", hat:"#7a3d28", shirt:"#6b6a48", pants:"#3c332b", horse:"#d8cfc2", mane:"#2b2118", paint:true, socks:"#1f1a16"},
+  {id:"tate", name:"Tate Ruiz", hat:"#6b4a2e", shirt:"#9a4e32", pants:"#3a322b", horse:"#8a4b2a", mane:"#4a2414", socks:"#e6d3b0"},
+  {id:"rio", name:"Rio Voss", hat:"#e6d8c4", shirt:"#b15a38", pants:"#3d342c", horse:"#8b5344", mane:"#5a2e24", socks:"#ead9be"},
+  {id:"hob", name:"Hobie Grant", hat:"#4a3424", shirt:"#3f5340", pants:"#2f2a25", horse:"#9aa0a4", mane:"#6d7276", socks:"#ece6dc"}
+];
+
+const $ = (id) => document.getElementById(id);
+const shuffle = (arr) => {
+  const next = arr.slice();
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+  return next;
+};
+const pick = (list, exclude) => {
+  const pool = exclude ? list.filter((x) => x.id !== exclude) : list;
+  return pool[Math.floor(Math.random() * pool.length)] || list[0];
+};
+const norm = (s) => s.toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+const matches = (input, term) => {
+  const n = norm(input);
+  if (n.length < 2) return false;
+  return [term.term, ...(term.aliases || [])].map(norm).includes(n);
+};
+
+let audioCtx = null;
+function unlockAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+function tone(freq, start, dur, type, gain) {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, start);
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.exponentialRampToValueAtTime(gain, start + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(start); o.stop(start + dur + 0.02);
+}
+const sfx = {
+  whistle() { const t = audioCtx.currentTime; tone(1480,t,.16,"sine",.08); tone(1760,t+.14,.3,"sine",.07); },
+  buzzer() { const t = audioCtx.currentTime; tone(140,t,.28,"sawtooth",.05); tone(90,t+.04,.2,"square",.03); },
+  thud() { const t = audioCtx.currentTime; tone(70,t,.18,"sine",.09); },
+  gate() { const t = audioCtx.currentTime; tone(220,t,.08,"square",.03); tone(160,t+.05,.12,"triangle",.04); },
+  ok() { const t = audioCtx.currentTime; tone(660,t,.08,"sine",.035); tone(880,t+.07,.12,"sine",.04); }
+};
+
+const state = {
+  screen: "title",
+  difficulty: "choice",
+  phase: "idle",
+  rider: HANDS[0],
+  outgoing: null,
+  deck: [],
+  index: 0,
+  question: null,
+  score: 100,
+  peak: 100,
+  streak: 0,
+  covers: 0,
+  correct: 0,
+  bonusHits: 0,
+  locked: false,
+  picked: null,
+  startedAt: 0,
+  remaining: 15,
+  wreck: "dump",
+  judges: null,
+  throw: null,
+  phaseT: 0
+};
+
+function makeQuestion(term) {
+  if (state.difficulty === "type") return { term, choices: [], correctId: term.id };
+  const pool = shuffle(TERMS.filter((t) => t.id !== term.id));
+  const same = pool.filter((t) => t.tier === term.tier);
+  const rest = pool.filter((t) => t.tier !== term.tier);
+  const distractors = [...same, ...rest].slice(0, 3);
+  const choices = shuffle([{id: term.id, label: term.term}, ...distractors.map((t) => ({id: t.id, label: t.term}))]);
+  return { term, choices, correctId: term.id };
+}
+
+function grade(correct, timedOut, elapsed) {
+  const bonus = correct && elapsed <= BONUS_WINDOW;
+  const delta = correct ? (bonus ? BONUS_POINTS : 0) : -PENALTY[state.question.term.tier];
+  const nextScore = Math.max(0, Math.min(100, state.score + delta));
+  const nextStreak = correct ? state.streak + 1 : 0;
+  const covered = correct && nextStreak % COVER_STREAK === 0;
+  return { correct, timedOut, bonus, delta, nextScore, nextStreak, covered };
+}
+
+function show(id, on) { $(id).classList.toggle("hidden", !on); }
+
+function renderHUD() {
+  $("score").textContent = Math.round(state.score) + "%";
+  const playing = state.screen === "playing" && state.question;
+  show("timerWrap", playing);
+  show("titleSheet", state.screen === "title");
+  show("quizSheet", playing);
+  show("resultSheet", state.screen === "wrecked" || state.screen === "allaround");
+  show("coverFlash", state.judges && state.phase === "cover");
+  if (state.judges) {
+    $("coverCard").innerHTML = state.judges.rider + " / " + state.judges.stock + "<span>" + state.judges.total + "</span>";
+  }
+  if (!playing) return;
+  $("definition").textContent = state.question.term.definition;
+  const pct = Math.max(0, state.remaining / QUESTION_SECONDS);
+  $("timerBar").style.width = pct * 100 + "%";
+  $("timer").classList.toggle("late", state.remaining <= QUESTION_SECONDS - BONUS_WINDOW);
+  const isType = state.difficulty === "type";
+  show("choices", !isType);
+  show("typeForm", isType);
+  if (isType) {
+    const rev = $("typedReveal");
+    if (state.locked) {
+      rev.classList.remove("hidden");
+      rev.className = "reveal " + (state.phase === "thrown" || state.phase === "pickup" ? "bad" : "ok");
+      rev.textContent = state.question.term.term;
+    } else {
+      rev.classList.add("hidden");
+    }
+  } else {
+    const letters = ["A","B","C","D"];
+    $("choices").innerHTML = state.question.choices.map((c, i) => {
+      const right = c.id === state.question.correctId;
+      const picked = c.id === state.picked;
+      let cls = "choice";
+      if (state.locked && right) cls += " ok";
+      if (state.locked && picked && !right) cls += " bad";
+      return `<button class="${cls}" data-id="${c.id}" ${state.locked ? "disabled" : ""}><span class="key">${letters[i]}</span><span>${c.label}</span></button>`;
+    }).join("");
+  }
+}
+
+function startRide(difficulty) {
+  unlockAudio();
+  sfx.gate();
+  state.difficulty = difficulty;
+  state.deck = shuffle(TERMS);
+  state.index = 0;
+  state.score = 100;
+  state.peak = 100;
+  state.streak = 0;
+  state.covers = 0;
+  state.correct = 0;
+  state.bonusHits = 0;
+  state.outgoing = null;
+  state.rider = pick(HANDS);
+  state.screen = "playing";
+  state.phase = "burst";
+  state.phaseT = 0;
+  state.judges = null;
+  beginQuestion(0);
+}
+
+function beginQuestion(i) {
+  const term = state.deck[i];
+  if (!term) {
+    endRide(true);
+    return;
+  }
+  state.index = i;
+  state.question = makeQuestion(term);
+  state.locked = false;
+  state.picked = null;
+  state.startedAt = performance.now();
+  state.remaining = QUESTION_SECONDS;
+  state.judges = null;
+  $("typeInput").value = "";
+  if (state.difficulty === "type") setTimeout(() => $("typeInput").focus(), 30);
+  renderHUD();
+}
+
+function endRide(won) {
+  state.screen = won ? "allaround" : "wrecked";
+  state.phase = "idle";
+  state.outgoing = null;
+  state.question = null;
+  $("resultKicker").textContent = won ? "All-around" : "No score";
+  $("resultTitle").textContent = won ? "You covered the slate." : "Bucked off.";
+  $("statFinish").textContent = Math.round(state.score) + "%";
+  $("statPeak").textContent = Math.round(state.peak) + "%";
+  $("statCovered").textContent = state.covers;
+  $("statCorrect").textContent = state.correct + " terms right";
+  if (won) sfx.whistle();
+  renderHUD();
+}
+
+function apply(result, pickedId) {
+  if (state.locked || state.screen !== "playing") return;
+  state.locked = true;
+  state.picked = pickedId;
+  state.score = result.nextScore;
+  state.peak = Math.max(state.peak, result.nextScore);
+  state.streak = result.nextStreak;
+  if (result.correct) {
+    state.correct += 1;
+    if (result.bonus) state.bonusHits += 1;
+    sfx.ok();
+    if (result.covered) {
+      state.covers += 1;
+      state.judges = {
+        rider: Math.min(24, 16 + Math.min(6, state.bonusHits)),
+        stock: Math.min(25, 17 + Math.floor(Math.random() * 6))
+      };
+      state.judges.total = state.judges.rider + state.judges.stock;
+      state.phase = "cover";
+      state.phaseT = 0;
+      sfx.whistle();
+      setTimeout(handoff, 1400);
+    } else {
+      setTimeout(handoff, 480);
+    }
+  } else {
+    const roll = Math.random();
+    state.wreck = roll > .8 ? "over_head" : roll > .55 ? "kick_out" : roll > .3 ? "spin" : "dump";
+    state.phase = "thrown";
+    state.phaseT = 0;
+    const dir = state.wreck === "over_head" ? -1 : 1;
+    state.throw = { x:0, y:0, vx: dir * (180 + Math.random()*140), vy: -360 - Math.random()*120, rot:0, spin: 6 + Math.random()*8 };
+    sfx.buzzer(); sfx.thud();
+  }
+  renderHUD();
+}
+
+function handoff() {
+  if (state.score <= 0) { endRide(false); return; }
+  state.outgoing = state.rider;
+  state.rider = pick(HANDS, state.outgoing.id);
+  state.phase = "rideoff";
+  state.phaseT = 0;
+  state.judges = null;
+  sfx.gate();
+  renderHUD();
+}
+
+function resolveChoice(id) {
+  const elapsed = (performance.now() - state.startedAt) / 1000;
+  const timedOut = id === null;
+  apply(grade(!timedOut && id === state.question.correctId, timedOut, elapsed), id);
+}
+function resolveTyped(value) {
+  const elapsed = (performance.now() - state.startedAt) / 1000;
+  const timedOut = value === null;
+  apply(grade(!timedOut && matches(value || "", state.question.term), timedOut, elapsed), state.question.correctId);
+}
+
+$("btnChoice").onclick = () => startRide("choice");
+$("btnType").onclick = () => startRide("type");
+$("againChoice").onclick = () => startRide("choice");
+$("againType").onclick = () => startRide("type");
+$("choices").onclick = (e) => {
+  const btn = e.target.closest("button[data-id]");
+  if (btn) resolveChoice(btn.dataset.id);
+};
+$("typeForm").onsubmit = (e) => {
+  e.preventDefault();
+  resolveTyped($("typeInput").value);
+};
+window.addEventListener("keydown", (e) => {
+  if (state.screen !== "playing" || state.locked || state.difficulty !== "choice") return;
+  const keys = ["a","b","c","d","1","2","3","4"];
+  const slot = keys.indexOf(e.key.toLowerCase());
+  if (slot < 0) return;
+  const c = state.question.choices[slot % 4];
+  if (c) resolveChoice(c.id);
+});
+
+const canvas = $("arena");
+const ctx = canvas.getContext("2d");
+const dust = [];
+const SHIRTS = ["#3a3228","#4a3a2e","#2c2824","#5c4636","#6a5340","#2a2420","#4e4034","#7a5a44","#8a6a52"];
+const HATS = ["#e8dcc8","#c9a66b","#2a2118","#6b4a2e","#d4c4a8","#1a1613","#b08958"];
+const SKIN = ["#c9a07a","#d7b39a","#8d623e","#e2c4a0","#6a4630"];
+function mulberry(seed) {
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seedCrowd() {
+  const r = mulberry(20260819);
+  const fans = [];
+  const add = (x, y, s, kind) => fans.push({
+    x, y, s, kind,
+    body: SHIRTS[(r()*SHIRTS.length)|0],
+    hat: HATS[(r()*HATS.length)|0],
+    skin: SKIN[(r()*SKIN.length)|0],
+    phase: r()*Math.PI*2,
+    hatOn: r() > 0.1
+  });
+  for (let i = 0; i < 120; i++) add(0.02+r()*0.96, 0.16+r()*0.18, 0.26+r()*0.22, "far");
+  for (let i = 0; i < 40; i++) add(0.005+r()*0.18, 0.28+r()*0.2, 0.45+r()*0.28, "mid");
+  for (let i = 0; i < 40; i++) add(0.81+r()*0.185, 0.26+r()*0.22, 0.45+r()*0.28, "mid");
+  for (let i = 0; i < 12; i++) add(0.01+r()*0.17, 0.48+r()*0.1, 0.75+r()*0.35, "near");
+  for (let i = 0; i < 12; i++) add(0.82+r()*0.17, 0.48+r()*0.1, 0.75+r()*0.35, "near");
+  for (let i = 0; i < 8; i++) add(0.03+r()*0.3, r(), 1.15+r()*0.4, "row");
+  for (let i = 0; i < 8; i++) add(0.67+r()*0.3, r(), 1.15+r()*0.4, "row");
+  return fans;
+}
+const fans = seedCrowd();
+let last = performance.now();
+let t = 0;
+let hx = 0, hy = 0, hvx = 0, hvy = 0, tx = 0, ty = 0, retarget = 0.3, placed = false, rotS = 0, kickS = 0, outX = 0, outY = 0;
+function easeInOut(u) {
+  const x = Math.min(1, Math.max(0, u));
+  return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+}
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.floor(innerWidth * dpr);
+  canvas.height = Math.floor(innerHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resize);
+resize();
+
+function spawnDust(x, y, n, burst) {
+  for (let i = 0; i < n; i++) {
+    dust.push({
+      x: x + (Math.random()-.5)*80,
+      y: y + (Math.random()-.4)*16,
+      vx: (Math.random()-.15)*100*burst,
+      vy: -20 - Math.random()*70*burst,
+      life: .4 + Math.random()*.7,
+      size: 4 + Math.random()*14,
+      a: .16 + Math.random()*.2
+    });
+  }
+}
+
+function drawArena(w, h) {
+  const sky = ctx.createLinearGradient(0, 0, 0, h * 0.48);
+  sky.addColorStop(0, "#1c1814");
+  sky.addColorStop(0.35, "#4a3224");
+  sky.addColorStop(0.7, "#a8623a");
+  sky.addColorStop(1, "#d4844c");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = "rgba(232,210,170,.55)";
+  ctx.beginPath();
+  ctx.ellipse(w * 0.16, h * 0.36, 64, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#2a221c";
+  ctx.beginPath();
+  ctx.moveTo(0, h * 0.42);
+  ctx.lineTo(0, h * 0.12);
+  ctx.lineTo(w * 0.08, h * 0.1);
+  ctx.lineTo(w * 0.22, h * 0.16);
+  ctx.lineTo(w * 0.5, h * 0.14);
+  ctx.lineTo(w * 0.78, h * 0.16);
+  ctx.lineTo(w * 0.94, h * 0.1);
+  ctx.lineTo(w, h * 0.12);
+  ctx.lineTo(w, h * 0.42);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#3a3228";
+  for (let row = 0; row < 6; row++) {
+    ctx.fillRect(0, h * (0.16 + row * 0.038), w, 5);
+  }
+
+  ctx.fillStyle = "#241c16";
+  ctx.fillRect(0, h * 0.08, w, h * 0.07);
+  for (let i = 0; i < 8; i++) {
+    ctx.fillRect(w * (0.05 + i * 0.12), h * 0.05, 6, h * 0.12);
+  }
+
+  ctx.strokeStyle = "#c4a070";
+  ctx.lineWidth = 1.3;
+  for (let i = 0; i < 10; i++) {
+    const x = w * (0.07 + i * 0.09);
+    const wave = Math.sin(t * 2.2 + i) * 6;
+    ctx.beginPath();
+    ctx.moveTo(x, h * 0.055);
+    ctx.lineTo(x + 16 + wave, h * 0.055 + 18);
+    ctx.lineTo(x + 4, h * 0.055 + 18);
+    ctx.closePath();
+    ctx.fillStyle = i % 2 ? "#8a4a32" : "#d7c4a4";
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 16; i++) {
+    const x = w * (0.04 + i * 0.06);
+    ctx.fillStyle = `rgba(232,196,140,${0.28 + Math.sin(t * 3 + i) * 0.08})`;
+    ctx.beginPath();
+    ctx.arc(x, h * 0.125, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const dirt = ctx.createLinearGradient(0, h * 0.42, 0, h);
+  dirt.addColorStop(0, "#9a7448");
+  dirt.addColorStop(0.35, "#6e5334");
+  dirt.addColorStop(1, "#3e2c1c");
+  ctx.fillStyle = dirt;
+  ctx.fillRect(0, h * 0.42, w, h);
+
+  ctx.fillStyle = "rgba(40,28,16,.12)";
+  for (let i = 0; i < 18; i++) {
+    ctx.beginPath();
+    ctx.ellipse(w * (0.1 + (i % 6) * 0.15), h * (0.52 + Math.floor(i / 6) * 0.1), 70, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = "#4a3828";
+  ctx.fillRect(w * 0.015, h * 0.34, w * 0.2, h * 0.12);
+  ctx.fillStyle = "#2e241c";
+  for (let g = 0; g < 3; g++) {
+    ctx.fillRect(w * (0.03 + g * 0.062), h * 0.35, w * 0.05, h * 0.1);
+  }
+  ctx.fillStyle = "#1e1812";
+  ctx.fillRect(w * 0.2, h * 0.35, 8, h * 0.1);
+
+  ctx.fillStyle = "#b42424";
+  ctx.beginPath();
+  ctx.ellipse(w * 0.78, h * 0.5, 16, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(w * 0.84, h * 0.52, 14, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#efe8dc";
+  ctx.fillRect(w * 0.765, h * 0.48, 30, 5);
+  ctx.fillRect(w * 0.826, h * 0.5, 26, 5);
+
+  ctx.fillStyle = "#cfc2b0";
+  ctx.font = "600 12px DM Sans, sans-serif";
+  ctx.fillText("THE NOD", w * 0.028, h * 0.095);
+}
+
+function crowdMood() {
+  if (state.phase === "cover") return "cheer";
+  if (state.phase === "thrown" || state.phase === "pickup") return "wreck";
+  if (state.phase === "riding" || state.phase === "burst" || state.phase === "rideoff") return "ride";
+  return "idle";
+}
+
+function drawFans(kinds) {
+  const w = innerWidth, h = innerHeight;
+  const mood = crowdMood();
+  const bounce = mood === "cheer" ? 7 : mood === "ride" ? 2.2 : 0.9;
+  const unit = Math.min(w, h);
+  for (const fan of fans) {
+    if (!kinds.includes(fan.kind)) continue;
+    const s = fan.s * unit * (fan.kind === "row" ? 0.034 : 0.026);
+    const bob = Math.abs(Math.sin(t * (mood === "cheer" ? 5.2 : 2.1) + fan.phase)) * bounce * fan.s;
+    const lean = mood === "wreck" ? Math.sin(t * 3.4 + fan.phase) * 2 : 0;
+    const x = fan.x * w + lean;
+    const front = h * (w < 640 ? 0.44 : 0.62);
+    const y = fan.kind === "row" ? front + 22 + fan.y * 26 - bob : fan.y * h - bob;
+    oval(x, y, s * 0.55, s * 0.85, fan.body);
+    oval(x, y - s * 1.05, s * 0.38, s * 0.4, fan.skin);
+    if (fan.hatOn) {
+      oval(x, y - s * 1.28, s * 0.62, s * 0.16, fan.hat);
+      ctx.fillStyle = fan.hat;
+      ctx.fillRect(x - s * 0.28, y - s * 1.7, s * 0.56, s * 0.42);
+    }
+    if (mood === "cheer" && fan.kind !== "far") {
+      ctx.strokeStyle = fan.body;
+      ctx.lineWidth = Math.max(1.5, s * 0.18);
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(x - s * 0.4, y - s * 0.2);
+      ctx.lineTo(x - s * 0.85, y - s * 1.5);
+      ctx.moveTo(x + s * 0.4, y - s * 0.2);
+      ctx.lineTo(x + s * 0.8, y - s * 1.6);
+      ctx.stroke();
+    }
+  }
+}
+
+function oval(x, y, rx, ry, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawHorse(x, y, scale, pose, hand, mounted) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(pose.rot);
+  ctx.scale(scale, scale);
+
+  const H = hand.horse, M = hand.mane;
+  ctx.strokeStyle = H;
+  ctx.fillStyle = H;
+  ctx.lineCap = "round";
+  ctx.lineWidth = 7;
+  const kick = pose.kick;
+  ctx.beginPath();
+  ctx.moveTo(-36, 22);
+  ctx.lineTo(-42, 48 + kick * 10);
+  ctx.moveTo(-22, 24);
+  ctx.lineTo(-8, 50 - kick * 8);
+  ctx.moveTo(18, 18);
+  ctx.lineTo(10, 46 + kick * 16);
+  ctx.moveTo(30, 16);
+  ctx.lineTo(48, 28 - kick * 22);
+  ctx.stroke();
+  oval(34, 32 - kick * 18, 5, 3.2, hand.socks);
+  oval(-42, 50 + kick * 8, 5, 3, hand.socks);
+
+  oval(0, 4, 40, 18, H);
+  if (hand.paint) {
+    oval(12, 0, 10, 8, "#2b2118");
+    oval(-16, 8, 8, 6, "#2b2118");
+  }
+  ctx.beginPath();
+  ctx.moveTo(28, -2);
+  ctx.quadraticCurveTo(48, -18 - pose.lift * 8, 58, -6);
+  ctx.quadraticCurveTo(62, 4, 54, 8);
+  ctx.quadraticCurveTo(40, 6, 30, 8);
+  ctx.fill();
+  oval(58, -4, 10, 7, H);
+  ctx.fillStyle = M;
+  ctx.beginPath();
+  ctx.moveTo(24, -12);
+  ctx.quadraticCurveTo(36, -28, 50, -14);
+  ctx.lineTo(30, -6);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-36, -6);
+  ctx.quadraticCurveTo(-58, 4 + pose.lift * 10, -52, 22);
+  ctx.lineTo(-28, 8);
+  ctx.fill();
+  oval(64, -6, 2.2, 1.4, "#1a1410");
+
+  if (mounted) {
+    oval(-2, -18, 11, 14, hand.shirt);
+    oval(-1, -34, 7, 7.5, "#d7b39a");
+    ctx.fillStyle = hand.hat;
+    ctx.beginPath();
+    ctx.ellipse(-1, -38, 11, 3.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(-6, -46, 10, 9);
+    ctx.strokeStyle = hand.shirt;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(6, -22);
+    ctx.lineTo(22, -40 - pose.lift * 10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-8, -16);
+    ctx.lineTo(-4, 2);
+    ctx.stroke();
+    ctx.fillStyle = hand.pants;
+    oval(-6, -4, 7, 8, hand.pants);
+    oval(4, -2, 6, 7, hand.pants);
+  }
+
+  ctx.restore();
+}
+
+function drawCowboy(x, y, rot, hand, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  oval(0, 0, 8, 12, hand.shirt);
+  oval(0, -16, 6, 6, "#d7b39a");
+  ctx.fillStyle = hand.hat;
+  ctx.beginPath();
+  ctx.ellipse(0, -20, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = hand.pants;
+  oval(-4, 12, 5, 8, hand.pants);
+  oval(5, 11, 5, 8, hand.pants);
+  ctx.restore();
+}
+
+function drawBarrelman(x, y, scale, duck) {
+  ctx.save();
+  ctx.translate(x, y + duck * 16);
+  ctx.scale(scale * (1 - duck * .08), scale * (1 - duck * .2));
+  ctx.fillStyle = "#b42424";
+  ctx.beginPath();
+  ctx.ellipse(18, 10, 16, 20, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#efe8dc";
+  ctx.fillRect(6, -2, 24, 6);
+  ctx.fillRect(6, 16, 24, 6);
+  oval(-8, -6, 8, 11, "#c9c3a4");
+  oval(-8, -20, 6, 6, "#e6c8a8");
+  ctx.restore();
+}
+
+function drawPickup(x, y, scale) {
+  drawHorse(x, y, scale * .78, {rot: -0.05, kick: .2, lift: .1}, {
+    horse: "#5a3a22", mane: "#2a1c12", socks: "#d9c7a6",
+    hat: "#e8dcc8", shirt: "#3d5a7a", pants: "#3d342c"
+  }, true);
+}
+
+function tick(now) {
+  const dt = Math.min((now - last) / 1000, .1);
+  last = now;
+  t += dt;
+  state.phaseT += dt;
+
+  const w = innerWidth, h = innerHeight;
+  const groundY = h * (w < 640 ? 0.4 : 0.5);
+  const chuteX = w * 0.16;
+  const scale = Math.min(w, h) * (w < 640 ? 0.00105 : 0.00135);
+  const energy = state.phase === "idle" ? 0.28 : 0.36 + Math.min(1, state.streak / 8) * 0.32;
+  if (!placed) { hx = w * 0.52; hy = groundY; tx = hx; ty = hy; placed = true; }
+
+  if (state.phase === "rideoff" && state.phaseT < dt * 2) { outX = hx; outY = hy; }
+
+  retarget -= dt;
+  if (retarget <= 0 && ["riding","idle","cover"].includes(state.phase)) {
+    retarget = 1.1 + Math.random() * 1.8;
+    if (Math.random() < 0.35) {
+      tx = hx + (Math.random() > 0.5 ? 1 : -1) * (70 + Math.random() * 110);
+      ty = hy + (Math.random() - 0.5) * 46;
+      retarget = 0.7 + Math.random() * 0.6;
+    } else {
+      tx = w * (0.3 + Math.random() * 0.42);
+      ty = groundY + (Math.random() - 0.4) * h * 0.07;
+    }
+    tx = Math.min(w * 0.74, Math.max(w * 0.28, tx));
+    ty = Math.min(groundY + h * 0.05, Math.max(groundY - h * 0.06, ty));
+  }
+  if (["riding","idle","cover"].includes(state.phase)) {
+    hvx += ((tx - hx) * 2.1 - hvx * 2.4) * dt;
+    hvy += ((ty - hy) * 2.1 - hvy * 2.4) * dt;
+    const spd = Math.hypot(hvx, hvy);
+    const max = 110 + energy * 90;
+    if (spd > max) { hvx *= max / spd; hvy *= max / spd; }
+    hx += hvx * dt;
+    hy += hvy * dt;
+  }
+  const wantRot = Math.sin(t * 2.05) * (0.06 + energy * 0.09) + Math.sin(t * 3.15 + 1.1) * (0.035 + energy * 0.05) + (hvx / 280) * 0.12;
+  const wantKick = Math.pow(Math.abs(Math.sin(t * 3.05)), 1.65);
+  rotS += (wantRot - rotS) * Math.min(1, dt * 7);
+  kickS += (wantKick - kickS) * Math.min(1, dt * 8);
+  const pose = { rot: rotS, kick: kickS, lift: kickS };
+  const yOff = kickS * (10 + energy * 26);
+  const horseX = hx + Math.sin(t * 1.55) * (14 + energy * 22);
+  const horseY = hy - yOff;
+
+  if (state.screen === "playing" && !state.locked && state.question) {
+    const elapsed = (now - state.startedAt) / 1000;
+    state.remaining = Math.max(0, QUESTION_SECONDS - elapsed);
+    $("timerBar").style.width = (state.remaining / QUESTION_SECONDS) * 100 + "%";
+    $("timer").classList.toggle("late", state.remaining <= QUESTION_SECONDS - BONUS_WINDOW);
+    if (state.remaining <= 0) {
+      if (state.difficulty === "type") resolveTyped(null);
+      else resolveChoice(null);
+    }
+  }
+
+  if (state.phase === "thrown" && state.phaseT > 1.9) {
+    state.phase = "pickup";
+    state.phaseT = 0;
+  } else if (state.phase === "pickup" && state.phaseT > 1.8) {
+    if (state.score <= 0) endRide(false);
+    else {
+      state.rider = pick(HANDS, state.rider.id);
+      state.phase = "burst";
+      state.phaseT = 0;
+      sfx.gate();
+      beginQuestion(state.index + 1);
+    }
+  } else if (state.phase === "burst" && state.phaseT > 1.05) {
+    state.phase = "riding";
+  } else if (state.phase === "rideoff" && state.phaseT > 1.85) {
+    state.outgoing = null;
+    state.phase = "riding";
+    beginQuestion(state.index + 1);
+  }
+
+  if (["riding","idle","cover","burst","rideoff"].includes(state.phase) && Math.random() < 0.1 + energy * 0.14) {
+    spawnDust(horseX, horseY + 10, 1, 0.45 + energy * 0.5);
+  }
+  if (state.phase === "thrown" && state.phaseT < .4) spawnDust(horseX, horseY + 10, 3, 1.3);
+
+  ctx.clearRect(0, 0, w, h);
+  drawArena(w, h);
+  drawFans(["far", "mid"]);
+
+  for (let i = dust.length - 1; i >= 0; i--) {
+    const p = dust[i];
+    p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 80 * dt;
+    if (p.life <= 0) dust.splice(i, 1);
+  }
+  for (const p of dust) {
+    ctx.fillStyle = `rgba(196,164,118,${Math.max(0, p.a * p.life / .8)})`;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.size, p.size * .55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const duck = state.phase === "thrown" || state.phase === "pickup" ? Math.min(1, state.phaseT * 2) : 0;
+  drawBarrelman(w * .8, groundY + 8, scale * 1.1, duck);
+
+  if (state.phase === "thrown" || state.phase === "pickup") {
+    drawHorse(horseX, horseY, scale, pose, state.outgoing || state.rider, false);
+    if (state.throw) {
+      if (state.phase === "thrown") {
+        state.throw.x += state.throw.vx * dt;
+        state.throw.y += state.throw.vy * dt;
+        state.throw.vy += 980 * dt;
+        state.throw.rot += state.throw.spin * dt;
+      }
+      drawCowboy(horseX + state.throw.x, horseY - 24 + Math.min(state.throw.y, 40), state.throw.rot, state.outgoing || state.rider, scale * 1.05);
+    }
+    if (state.phase === "pickup") {
+      drawPickup(w + 20 - state.phaseT * w * 0.42, groundY + 4, scale);
+    }
+  } else if (state.phase === "rideoff") {
+    const exitU = easeInOut(state.phaseT / 1.25);
+    const enterU = easeInOut((state.phaseT - 0.55) / 1.15);
+    if (state.outgoing) {
+      ctx.globalAlpha = 1 - easeInOut(state.phaseT / 1.15);
+      drawHorse(outX + exitU * w * 0.62, outY - yOff * 0.6, scale, pose, state.outgoing, true);
+      ctx.globalAlpha = 1;
+    }
+    if (state.phaseT > 0.5) {
+      ctx.globalAlpha = easeInOut((state.phaseT - 0.5) / 0.4);
+      drawHorse(chuteX + enterU * (hx - chuteX), groundY + enterU * (hy - groundY) - yOff, scale, pose, state.rider, true);
+      ctx.globalAlpha = 1;
+    }
+  } else {
+    const burstU = state.phase === "burst" ? easeInOut(state.phaseT / 1.05) : 1;
+    const bx = state.phase === "burst" ? chuteX + burstU * (hx - chuteX) : horseX;
+    const by = state.phase === "burst" ? groundY + burstU * (hy - groundY) - yOff : horseY;
+    ctx.globalAlpha = state.phase === "burst" ? easeInOut(state.phaseT / 0.35) : 1;
+    drawHorse(bx, by, scale * (state.phase === "cover" ? 1.03 : 1), pose, state.rider, true);
+    ctx.globalAlpha = 1;
+    if (state.phase === "idle" || state.phase === "riding") {
+      ctx.globalAlpha = 0.5;
+      drawPickup(w * 0.86 + Math.sin(t * 0.35) * 24, groundY + 8, scale * 0.72);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  drawFans(["near"]);
+
+  const railY = h * (w < 640 ? 0.44 : 0.62);
+  ctx.fillStyle = "#4a3c2c";
+  ctx.fillRect(0, railY, w, 9);
+  ctx.fillStyle = "#2a221a";
+  ctx.fillRect(0, railY + 12, w, 5);
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = "#3a2e22";
+    ctx.fillRect(w * (0.015 + i * 0.085), railY - 8, 8, 34);
+  }
+  ctx.fillStyle = "#6a5640";
+  ctx.fillRect(0, railY - 4, w, 4);
+  drawFans(["row"]);
+
+  const vg = ctx.createLinearGradient(0, 0, 0, h);
+  vg.addColorStop(0, "rgba(12,10,8,.28)");
+  vg.addColorStop(.45, "rgba(12,10,8,0)");
+  vg.addColorStop(1, "rgba(12,10,8,.52)");
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, w, h);
+
+  requestAnimationFrame(tick);
+}
+renderHUD();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
