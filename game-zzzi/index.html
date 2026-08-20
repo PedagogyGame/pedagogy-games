@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Grounds — Landscape Vocabulary Challenge</title>
+<style>
+:root{
+  --ink:#f6f3df;
+  --muted:#c9d5c0;
+  --panel:rgba(17,39,26,.86);
+  --panel2:rgba(10,24,17,.94);
+  --edge:rgba(231,244,207,.18);
+  --good:#c8f06a;
+  --warn:#ffd46a;
+  --bad:#ff8c73;
+  --shadow:0 24px 70px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#6db7d5;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button,input{font:inherit}
+#game{position:relative;width:100%;height:100%;isolation:isolate;color:var(--ink);overflow:hidden}
+#sceneWrap{position:absolute;inset:0;overflow:hidden;background:#7ec6df}
+#scene{width:100%;height:100%;display:block;transform:scale(1.015);transform-origin:center center}
+#sceneTint{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(90deg,rgba(6,25,17,.04),transparent 45%,rgba(9,28,19,.09)),
+  linear-gradient(0deg,rgba(6,18,11,.08),transparent 38%)}
+#sceneVignette{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 140px rgba(10,36,19,.16)}
+
+#hud{
+  position:absolute;left:22px;top:20px;right:22px;display:flex;justify-content:space-between;align-items:flex-start;
+  gap:16px;pointer-events:none;z-index:6
+}
+.brand{
+  background:rgba(18,43,27,.74);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(9px);
+  box-shadow:0 10px 30px rgba(0,0,0,.15);padding:10px 14px 11px;border-radius:14px
+}
+.brand strong{display:block;font-family:Georgia,serif;font-size:18px;letter-spacing:.13em;text-transform:uppercase}
+.brand span{display:block;margin-top:2px;font-size:10px;letter-spacing:.22em;color:#d7e5cb;text-transform:uppercase}
+#controls{display:flex;gap:8px;pointer-events:auto}
+.iconBtn{
+  border:1px solid rgba(255,255,255,.18);background:rgba(18,43,27,.76);color:#eef6e9;border-radius:12px;
+  padding:9px 11px;cursor:pointer;backdrop-filter:blur(9px);box-shadow:0 10px 24px rgba(0,0,0,.13);
+  font-size:12px;letter-spacing:.09em;text-transform:uppercase
+}
+.iconBtn:hover{background:rgba(28,63,41,.9)}
+
+#quiz{
+  position:absolute;z-index:7;right:2.2vw;bottom:3.1vh;width:min(420px,27vw);min-width:315px;
+  background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--edge);border-radius:20px;
+  box-shadow:var(--shadow);backdrop-filter:blur(12px);overflow:hidden
+}
+#meterWrap{padding:15px 17px 12px;border-bottom:1px solid rgba(255,255,255,.08)}
+.meterTop{display:flex;justify-content:space-between;align-items:end;gap:14px}
+.meterLabel{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#cedac9}
+#scoreText{font:700 21px/1 Georgia,serif;color:#f5f0cf}
+#meter{height:7px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden;margin-top:10px}
+#meterFill{height:100%;width:100%;background:linear-gradient(90deg,#9ccf5c,#e0ef84);border-radius:99px;transition:width .55s ease,filter .55s ease}
+#quizBody{padding:16px 17px 17px}
+.meta{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:11px}
+#progress,#difficulty{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#aebfac}
+#difficulty{padding:4px 7px;border-radius:999px;background:rgba(255,255,255,.07)}
+#definition{font-family:Georgia,serif;font-size:clamp(17px,1.35vw,22px);line-height:1.38;color:#fffdf0;min-height:100px}
+#feedback{min-height:34px;margin-top:11px;font-size:12px;line-height:1.35;color:#cdd9c8}
+#feedback.good{color:var(--good)}
+#feedback.bad{color:#ffb19e}
+.answerRow{display:grid;grid-template-columns:1fr auto;gap:9px;margin-top:8px}
+#answer{
+  min-width:0;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;
+  outline:none;border-radius:12px;padding:12px 13px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)
+}
+#answer::placeholder{color:#9cad9f}
+#answer:focus{border-color:rgba(210,237,159,.55);box-shadow:0 0 0 3px rgba(185,224,109,.09)}
+#submit{
+  border:0;border-radius:12px;padding:0 14px;background:#d5e98d;color:#1d351f;font-weight:800;cursor:pointer;
+  text-transform:uppercase;letter-spacing:.09em;font-size:11px
+}
+#submit:disabled,#answer:disabled{opacity:.55;cursor:default}
+.timerLine{display:flex;align-items:center;gap:11px;margin-top:13px}
+#timerNum{font:700 25px/1 Georgia,serif;min-width:48px;color:#eef7d5}
+#timerTrack{height:6px;background:rgba(255,255,255,.09);border-radius:99px;overflow:hidden;flex:1}
+#timerFill{height:100%;width:100%;border-radius:99px;background:#bde167;transform-origin:left center}
+.hint{margin-top:10px;font-size:9px;letter-spacing:.11em;color:#7f9484;text-transform:uppercase}
+
+#startScreen,#endScreen{
+  position:absolute;inset:0;z-index:12;display:grid;place-items:center;background:rgba(6,20,13,.28);backdrop-filter:blur(2px);
+  transition:opacity .55s ease,visibility .55s ease
+}
+.modal{
+  width:min(650px,86vw);padding:34px 38px 31px;text-align:center;background:rgba(15,37,23,.90);
+  border:1px solid rgba(255,255,255,.16);border-radius:24px;box-shadow:0 28px 100px rgba(0,0,0,.38);backdrop-filter:blur(15px)
+}
+.modal .eyebrow{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:#c1d6b7}
+.modal h1{font:700 clamp(42px,7vw,76px)/.95 Georgia,serif;margin:10px 0 9px;letter-spacing:.03em;color:#fff8d5}
+.modal p{max-width:520px;margin:0 auto;color:#d1ddcb;font-size:14px;line-height:1.55}
+.rules{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;margin:19px 0 22px}
+.rules span{border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.05);padding:7px 9px;border-radius:999px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#d8e5d2}
+.primary{
+  border:0;background:#d7eb8e;color:#1c321d;border-radius:13px;padding:13px 21px;font-size:12px;font-weight:900;
+  letter-spacing:.12em;text-transform:uppercase;cursor:pointer;box-shadow:0 10px 26px rgba(0,0,0,.2)
+}
+.primary:hover{filter:brightness(1.06)}
+.hidden{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+
+#endScreen{background:rgba(6,20,13,.48)}
+#endTitle{font-size:48px}
+#finalStats{margin:15px 0 22px;font-size:13px;line-height:1.6;color:#d4dfd0}
+
+.scene-note{
+  position:absolute;left:22px;bottom:20px;z-index:5;font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(245,250,235,.68);background:rgba(14,38,24,.42);padding:7px 9px;border-radius:9px;backdrop-filter:blur(5px)
+}
+@media(max-width:900px){
+  #quiz{right:12px;bottom:12px;width:min(410px,calc(100vw - 24px));min-width:0}
+  .brand{display:none}
+  #hud{right:12px;top:12px;justify-content:flex-end}
+  #definition{min-height:86px}
+  .scene-note{display:none}
+}
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="sceneWrap" aria-hidden="true">
+    <svg id="scene" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#52c3ed"/><stop offset="1" stop-color="#9dd9ed"/>
+        </linearGradient>
+        <linearGradient id="lawn" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8dc840"/><stop offset="1" stop-color="#4f9229"/>
+        </linearGradient>
+        <linearGradient id="mulch" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#76502b"/><stop offset="1" stop-color="#4b2d1b"/>
+        </linearGradient>
+        <linearGradient id="brick" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#d89c54"/><stop offset="1" stop-color="#a96b31"/>
+        </linearGradient>
+        <linearGradient id="greenShirt" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6b9847"/><stop offset="1" stop-color="#416f35"/>
+        </linearGradient>
+        <linearGradient id="overalls" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#255e4a"/><stop offset="1" stop-color="#173d34"/>
+        </linearGradient>
+        <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+          <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#123319" flood-opacity=".28"/>
+        </filter>
+        <pattern id="stone" width="92" height="52" patternUnits="userSpaceOnUse">
+          <rect width="92" height="52" fill="#b49b6d"/>
+          <path d="M2 3h34l7 11-4 30H4L1 26z M45 4h43l2 22-13 20H46l-7-18z" fill="#c5b083" stroke="#806d4f" stroke-width="3"/>
+        </pattern>
+      </defs>
+
+      <rect width="1600" height="900" fill="url(#sky)"/>
+
+      <g id="clouds" fill="#fff" opacity=".86">
+        <g transform="translate(80 76)"><ellipse cx="0" cy="20" rx="62" ry="22"/><circle cx="-26" cy="9" r="28"/><circle cx="17" cy="0" r="37"/><circle cx="54" cy="14" r="27"/></g>
+        <g transform="translate(1110 105) scale(.78)"><ellipse cx="0" cy="20" rx="62" ry="22"/><circle cx="-26" cy="9" r="28"/><circle cx="17" cy="0" r="37"/><circle cx="54" cy="14" r="27"/></g>
+        <g transform="translate(1430 54) scale(.58)"><ellipse cx="0" cy="20" rx="62" ry="22"/><circle cx="-26" cy="9" r="28"/><circle cx="17" cy="0" r="37"/><circle cx="54" cy="14" r="27"/></g>
+      </g>
+
+      <!-- house and boundary -->
+      <g filter="url(#softShadow)">
+        <path d="M80 330V105L325 5l242 100v290H80z" fill="url(#brick)" stroke="#6d432b" stroke-width="7"/>
+        <path d="M56 120L324 0l276 120-32 28L325 44 82 150z" fill="#553b2b"/>
+        <path d="M196 217h118v150H196z" fill="#183b43" stroke="#60402b" stroke-width="10"/>
+        <path d="M385 176h86v118h-86z" fill="#234f59" stroke="#60402b" stroke-width="9"/>
+        <path d="M82 310H0v230h1600V294h-520v220H82z" fill="url(#stone)" stroke="#715f48" stroke-width="5"/>
+        <rect x="0" y="284" width="1600" height="28" fill="#d2bc85" stroke="#765f3c" stroke-width="4"/>
+      </g>
+
+      <!-- tall evergreen -->
+      <g id="evergreen" transform="translate(730 150)" filter="url(#softShadow)">
+        <rect x="-18" y="90" width="36" height="430" rx="14" fill="#694928"/>
+        <g fill="#247036" stroke="#17542b" stroke-width="4">
+          <path d="M0 -90L-165 155H165z"/><path d="M0 -20L-210 240H210z"/><path d="M0 80L-245 330H245z"/><path d="M0 180L-270 430H270z"/>
+        </g>
+        <g fill="#4c9a3b" opacity=".95">
+          <path d="M0 -65L-120 120H120z"/><path d="M0 28L-170 205H170z"/><path d="M0 128L-190 295H190z"/>
+        </g>
+      </g>
+
+      <!-- rose mass left -->
+      <g transform="translate(160 360)">
+        <g fill="#356f2f"><ellipse cx="100" cy="80" rx="150" ry="115"/><ellipse cx="220" cy="120" rx="140" ry="120"/><ellipse cx="45" cy="170" rx="120" ry="105"/></g>
+        <g id="roseFlowers" fill="#e94631" stroke="#a52c20" stroke-width="3">
+          <circle cx="48" cy="31" r="22"/><circle cx="128" cy="68" r="19"/><circle cx="210" cy="23" r="23"/>
+          <circle cx="265" cy="102" r="21"/><circle cx="170" cy="153" r="23"/><circle cx="72" cy="156" r="20"/>
+          <circle cx="290" cy="186" r="18"/><circle cx="10" cy="112" r="19"/>
+        </g>
+      </g>
+
+      <!-- mulched bed -->
+      <path d="M0 760C260 650 440 735 610 650C765 574 885 548 1095 580C1210 598 1310 642 1600 620V900H0z" fill="url(#mulch)"/>
+      <path d="M0 770C262 668 448 746 620 660C780 578 902 561 1102 594C1250 618 1380 672 1600 637" fill="none" stroke="#d0b26c" stroke-width="20"/>
+      <path d="M0 775C262 673 448 751 620 665C780 583 902 566 1102 599C1250 623 1380 677 1600 642" fill="none" stroke="#7b5b30" stroke-width="4"/>
+
+      <!-- lawn foreground -->
+      <path d="M620 665C805 575 1000 590 1175 622C1330 650 1430 645 1600 632V900H470c42-98 89-175 150-235z" fill="url(#lawn)"/>
+      <g opacity=".22" stroke="#235e27" stroke-width="2">
+        <path d="M700 830l7-20m13 21 4-17m44 5 7-22m22 31 2-20m76 4 7-22m71 28 5-18m76 2 3-16m100 23 5-18m121 8 3-17m88 14 7-22"/>
+      </g>
+
+      <!-- shrubs framing rose planting spot -->
+      <g filter="url(#softShadow)">
+        <g id="leftShrub" transform="translate(675 590)">
+          <ellipse cx="0" cy="0" rx="118" ry="88" fill="#4f9138"/><ellipse cx="-30" cy="-20" rx="83" ry="65" fill="#65aa45"/>
+          <ellipse cx="38" cy="-14" rx="74" ry="58" fill="#78b84d"/>
+        </g>
+        <g id="rightShrub" transform="translate(1036 563)">
+          <ellipse cx="0" cy="0" rx="130" ry="91" fill="#668c2d"/><ellipse cx="-36" cy="-24" rx="86" ry="66" fill="#a8b92f"/>
+          <ellipse cx="45" cy="-10" rx="84" ry="62" fill="#d0ca38"/>
+        </g>
+      </g>
+
+      <!-- plant-site progress -->
+      <g id="plantSite" transform="translate(875 642)">
+        <ellipse id="hole" cx="0" cy="0" rx="44" ry="16" fill="#26180f" opacity="0"/>
+        <path id="soilPile" d="M58 9q36-34 78 0q-37 18-78 0z" fill="#3b2517" opacity="0"/>
+        <g id="rosePlanted" opacity="0" transform="translate(0 -20) scale(.6)">
+          <path d="M0 33C-5 5-18-25-33-47M0 31C9 4 23-20 43-38M-1 15C-22-3-34-15-45-20M5 7C28-5 43-11 56-10" stroke="#2f6f35" stroke-width="8" fill="none" stroke-linecap="round"/>
+          <g fill="#3f9345"><ellipse cx="-38" cy="-41" rx="17" ry="9" transform="rotate(25 -38 -41)"/><ellipse cx="42" cy="-31" rx="17" ry="9" transform="rotate(-25 42 -31)"/><ellipse cx="-32" cy="-13" rx="15" ry="8"/><ellipse cx="51" cy="-4" rx="15" ry="8"/></g>
+          <g fill="#e54a36" stroke="#a82d24" stroke-width="3"><circle cx="-34" cy="-54" r="15"/><circle cx="45" cy="-43" r="14"/><circle cx="3" cy="-18" r="16"/></g>
+        </g>
+        <ellipse id="mulchRing" cx="0" cy="8" rx="78" ry="25" fill="none" stroke="#7c4b27" stroke-width="18" opacity="0"/>
+      </g>
+
+      <!-- foreground props -->
+      <g transform="translate(1160 760)" filter="url(#softShadow)">
+        <path d="M0 95l24-108 14 3-20 110z" fill="#d48f39"/><path d="M17 -12q10-26 28 0" fill="none" stroke="#26372a" stroke-width="10" stroke-linecap="round"/>
+        <path d="M3 86l-32 27h48l17-28z" fill="#53605a" stroke="#27332d" stroke-width="4"/>
+      </g>
+      <g transform="translate(1300 750)" filter="url(#softShadow)">
+        <path d="M0 0h110l-4 120H12z" fill="#b98d4e" stroke="#725329" stroke-width="4"/>
+        <path d="M0 0q55-25 110 0" fill="#d7b26e"/><rect x="24" y="42" width="65" height="41" rx="4" fill="#4e7a36"/>
+        <text x="56" y="67" text-anchor="middle" fill="#f2efd9" font-size="18" font-family="Arial" font-weight="700">MULCH</text>
+      </g>
+
+      <!-- WORKER A -->
+      <g id="workerA" transform="translate(250 650)" filter="url(#softShadow)">
+        <g id="aKneel">
+          <ellipse cx="0" cy="122" rx="68" ry="18" fill="#2b3e22" opacity=".22"/>
+          <path d="M-35 52q-50 30-48 92h80q26-50 16-96z" fill="url(#overalls)" stroke="#17372e" stroke-width="4"/>
+          <path d="M12 72q44 23 54 72H-5q-3-43 17-72z" fill="url(#overalls)" stroke="#17372e" stroke-width="4"/>
+          <path d="M-40 11q31-40 78-3l-4 74h-80z" fill="url(#greenShirt)" stroke="#294f2b" stroke-width="4"/>
+          <circle cx="-2" cy="-19" r="29" fill="#efad77" stroke="#6b422d" stroke-width="4"/>
+          <path d="M-34-30q28-39 69-9l-4 18h-64z" fill="#4b7c38" stroke="#284e2c" stroke-width="4"/>
+          <path d="M24 10q48 20 71 65" stroke="#efad77" stroke-width="15" stroke-linecap="round"/>
+          <path d="M-35 8q-33 24-51 61" stroke="#efad77" stroke-width="15" stroke-linecap="round"/>
+          <g id="aShears" transform="translate(64 70) rotate(4)">
+            <path d="M0 0l68 13M2 5l62 33" stroke="#aab4ad" stroke-width="7" stroke-linecap="round"/>
+            <path d="M1 1l-32-17M1 6l-36 11" stroke="#8b3b2f" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="1" cy="4" r="7" fill="#37413b"/>
+          </g>
+        </g>
+        <g id="aStand" opacity="0" transform="translate(8 -12)">
+          <ellipse cx="0" cy="178" rx="42" ry="12" fill="#253d22" opacity=".2"/>
+          <path d="M-20 72l-18 100h33L4 84zM18 73l7 99h34L41 68z" fill="url(#overalls)" stroke="#17372e" stroke-width="4"/>
+          <path d="M-36 0q35-25 76 2l2 82h-82z" fill="url(#greenShirt)" stroke="#294f2b" stroke-width="4"/>
+          <rect x="-20" y="19" width="48" height="70" rx="8" fill="url(#overalls)"/>
+          <circle cx="2" cy="-26" r="29" fill="#efad77" stroke="#6b422d" stroke-width="4"/>
+          <path d="M-33-36q31-38 69-7l-5 18h-62z" fill="#4b7c38" stroke="#284e2c" stroke-width="4"/>
+          <path d="M-33 16q-24 31-19 67M36 17q29 28 30 65" stroke="#efad77" stroke-width="14" stroke-linecap="round"/>
+          <g id="aRoseCarry" opacity="0" transform="translate(67 80)">
+            <path d="M-19 7h38l-5 31h-28z" fill="#363d34"/>
+            <path d="M0 4v-53M0-32l-24-18M2-26l24-22" stroke="#2f7a37" stroke-width="6" stroke-linecap="round"/>
+            <g fill="#e34a36"><circle cx="-27" cy="-54" r="10"/><circle cx="28" cy="-52" r="10"/><circle cx="2" cy="-66" r="11"/></g>
+          </g>
+        </g>
+      </g>
+
+      <!-- WORKER B -->
+      <g id="workerB" transform="translate(905 465)" filter="url(#softShadow)">
+        <ellipse cx="0" cy="184" rx="45" ry="13" fill="#253d22" opacity=".22"/>
+        <path d="M-26 79l-20 100h34L3 87zM18 80l9 99h35L44 75z" fill="url(#overalls)" stroke="#17372e" stroke-width="4"/>
+        <path d="M-42 8q44-30 84 1l1 83h-88z" fill="url(#greenShirt)" stroke="#294f2b" stroke-width="4"/>
+        <circle cx="-2" cy="-21" r="28" fill="#efad77" stroke="#6b422d" stroke-width="4"/>
+        <path d="M-34-31q29-38 66-9l-2 18h-63z" fill="#315f32" stroke="#234728" stroke-width="4"/>
+        <path d="M-35 24q-28 33-34 70M35 24q25 35 22 71" stroke="#efad77" stroke-width="14" stroke-linecap="round"/>
+        <g id="bRake" transform="translate(-67 88) rotate(11)">
+          <path d="M0 0l-160 82" stroke="#bb8143" stroke-width="8" stroke-linecap="round"/>
+          <path d="M-159 81l-38 1M-160 82l-28 20M-160 82l-16 30M-160 82l-1 33" stroke="#4e5a50" stroke-width="6" stroke-linecap="round"/>
+        </g>
+        <g id="bShovel" opacity="0" transform="translate(-67 88) rotate(-7)">
+          <path d="M0 0l-34 145" stroke="#b57a3c" stroke-width="8" stroke-linecap="round"/>
+          <path d="M-34 144l-22 34h41l8-30z" fill="#505954" stroke="#29332d" stroke-width="4"/>
+        </g>
+      </g>
+
+      <!-- WORKER C / wheelbarrow -->
+      <g id="workerC" transform="translate(1275 465)" filter="url(#softShadow)">
+        <ellipse cx="0" cy="184" rx="48" ry="13" fill="#253d22" opacity=".2"/>
+        <path d="M-22 79l-17 100h33L4 87zM17 79l12 100h35L43 73z" fill="url(#overalls)" stroke="#17372e" stroke-width="4"/>
+        <path d="M-43 6q42-31 86 1v82h-89z" fill="url(#greenShirt)" stroke="#294f2b" stroke-width="4"/>
+        <rect x="-21" y="18" width="47" height="73" rx="7" fill="url(#overalls)"/>
+        <circle cx="0" cy="-22" r="29" fill="#efad77" stroke="#6b422d" stroke-width="4"/>
+        <path d="M-33-34q29-37 67-7l-2 19h-64z" fill="#315f32" stroke="#234728" stroke-width="4"/>
+        <path d="M-36 25q-38 24-56 58M36 25q37 26 51 57" stroke="#efad77" stroke-width="14" stroke-linecap="round"/>
+        <g id="wheelbarrow" transform="translate(-115 90)">
+          <path d="M0 0h160l-27 70H31z" fill="#386547" stroke="#183d31" stroke-width="5"/>
+          <path d="M20 5q58-44 119 0" fill="#6f4b2c"/>
+          <path d="M16 66l-29 54M127 66l50 31M126 66l39-65" stroke="#3e4742" stroke-width="8" stroke-linecap="round"/>
+          <circle cx="4" cy="105" r="30" fill="#1e2925" stroke="#111a17" stroke-width="5"/><circle cx="4" cy="105" r="11" fill="#cf7629"/>
+        </g>
+      </g>
+
+      <!-- subtle fence-side garden accents -->
+      <g fill="#87a92e" opacity=".9">
+        <circle cx="1170" cy="500" r="45"/><circle cx="1208" cy="480" r="51"/><circle cx="1140" cy="462" r="40"/>
+      </g>
+    </svg>
+    <div id="sceneTint"></div><div id="sceneVignette"></div>
+  </div>
+
+  <div id="hud">
+    <div class="brand"><strong>The Grounds</strong><span>Landscape Vocabulary Challenge</span></div>
+    <div id="controls"><button class="iconBtn" id="soundBtn">Sound: On</button></div>
+  </div>
+
+  <div id="quiz">
+    <div id="meterWrap">
+      <div class="meterTop"><div class="meterLabel">Landscape Readiness</div><div id="scoreText">100%</div></div>
+      <div id="meter"><div id="meterFill"></div></div>
+    </div>
+    <div id="quizBody">
+      <div class="meta"><span id="progress">Question 1 / 74</span><span id="difficulty">Common</span></div>
+      <div id="definition">Press “Begin Shift” to start.</div>
+      <div id="feedback"></div>
+      <div class="answerRow">
+        <input id="answer" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type the term…" disabled>
+        <button id="submit" disabled>Enter</button>
+      </div>
+      <div class="timerLine"><div id="timerNum">15.0</div><div id="timerTrack"><div id="timerFill"></div></div></div>
+      <div class="hint">Fast answer bonus: +10% when submitted within the first 10 seconds</div>
+    </div>
+  </div>
+
+  <div class="scene-note">Crew choreography runs on real elapsed time • garden remains completed after 13 minutes</div>
+
+  <div id="startScreen">
+    <div class="modal">
+      <div class="eyebrow">Professional landscaping terminology</div>
+      <h1>The Grounds</h1>
+      <p>Read the definition and type the correct landscaping term. Common misses hurt most; specialized terms receive more time and a lighter penalty.</p>
+      <div class="rules">
+        <span>74 terms</span><span>15–20 sec</span><span>Fast answer +10%</span><span>Wrong −20% to −30%</span><span>No saving</span>
+      </div>
+      <button class="primary" id="startBtn">Begin Shift</button>
+    </div>
+  </div>
+
+  <div id="endScreen" class="hidden">
+    <div class="modal">
+      <div class="eyebrow" id="endEyebrow">Shift complete</div>
+      <h1 id="endTitle">Grounds Cleared</h1>
+      <div id="finalStats"></div>
+      <button class="primary" id="restartBtn">Start New Shift</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BANK = [{"n": 1, "term": "Hardscape", "definition": "Nonliving constructed landscape features such as patios, walls, walks, and stonework.", "difficulty": "medium", "answers": ["Hardscape"]}, {"n": 2, "term": "Softscape", "definition": "Living or horticultural landscape elements such as plants, turf, trees, and soil.", "difficulty": "medium", "answers": ["Softscape"]}, {"n": 3, "term": "Grade", "definition": "Ground elevation or slope at a particular location.", "difficulty": "easy", "answers": ["Grade"]}, {"n": 4, "term": "Grading", "definition": "Shaping or leveling land to establish elevations and drainage.", "difficulty": "medium", "answers": ["Grading"]}, {"n": 5, "term": "Rough grade", "definition": "Initial shaping of soil before final landscape work.", "difficulty": "hard", "answers": ["Rough grade"]}, {"n": 6, "term": "Finish grade", "definition": "Final soil elevation and contour before planting, sod, seed, or mulch.", "difficulty": "hard", "answers": ["Finish grade"]}, {"n": 7, "term": "Drainage", "definition": "Movement or removal of surface or subsurface water.", "difficulty": "easy", "answers": ["Drainage"]}, {"n": 8, "term": "Positive drainage", "definition": "Slope arranged to carry water away from structures or problem areas.", "difficulty": "hard", "answers": ["Positive drainage"]}, {"n": 9, "term": "Fall / Pitch", "definition": "Amount or direction of downward slope.", "difficulty": "medium", "answers": ["fall", "pitch"]}, {"n": 10, "term": "Runoff", "definition": "Water flowing across the ground surface.", "difficulty": "easy", "answers": ["Runoff"]}, {"n": 11, "term": "Swale", "definition": "Shallow graded channel that directs surface water.", "difficulty": "medium", "answers": ["Swale"]}, {"n": 12, "term": "Berm", "definition": "Raised mound of soil used for drainage, screening, or landscape form.", "difficulty": "easy", "answers": ["Berm"]}, {"n": 13, "term": "Low spot", "definition": "Depressed area where water tends to collect.", "difficulty": "easy", "answers": ["Low spot"]}, {"n": 14, "term": "Topsoil", "definition": "Upper soil layer used for planting and finish grading.", "difficulty": "easy", "answers": ["Topsoil"]}, {"n": 15, "term": "Amendment", "definition": "Material added to soil to improve its condition.", "difficulty": "medium", "answers": ["Amendment"]}, {"n": 16, "term": "Compost", "definition": "Decomposed organic matter used to improve soil.", "difficulty": "easy", "answers": ["Compost"]}, {"n": 17, "term": "Backfill", "definition": "Soil or aggregate placed into an excavated area or behind a structure.", "difficulty": "easy", "answers": ["Backfill"]}, {"n": 18, "term": "Compaction", "definition": "Densifying soil or aggregate through pressure or vibration.", "difficulty": "medium", "answers": ["Compaction"]}, {"n": 19, "term": "Subgrade", "definition": "Prepared soil beneath pavement, base material, or another installation.", "difficulty": "medium", "answers": ["Subgrade"]}, {"n": 20, "term": "Base rock / Aggregate base", "definition": "Compacted stone forming a structural foundation beneath hardscape.", "difficulty": "hard", "answers": ["base rock", "aggregate base"]}, {"n": 21, "term": "Base course", "definition": "Lowest structural layer or lowest installed row of a construction system.", "difficulty": "medium", "answers": ["Base course"]}, {"n": 22, "term": "Geotextile / Landscape fabric", "definition": "Fabric used for separation, stabilization, filtration, or weed suppression.", "difficulty": "hard", "answers": ["geotextile", "landscape fabric"]}, {"n": 23, "term": "Bed / Planting bed", "definition": "Prepared area designated for plants.", "difficulty": "medium", "answers": ["bed", "planting bed"]}, {"n": 24, "term": "Bed line", "definition": "Boundary between a planting bed and the surrounding surface.", "difficulty": "medium", "answers": ["Bed line"]}, {"n": 25, "term": "Edging", "definition": "Material or cut edge defining a lawn, bed, or paved area.", "difficulty": "easy", "answers": ["Edging"]}, {"n": 26, "term": "Mulch", "definition": "Protective material spread over soil around plants.", "difficulty": "easy", "answers": ["Mulch"]}, {"n": 27, "term": "Turf", "definition": "Managed grass surface forming a lawn.", "difficulty": "easy", "answers": ["Turf"]}, {"n": 28, "term": "Sod", "definition": "Pre-grown turf installed in rolls or sections.", "difficulty": "easy", "answers": ["Sod"]}, {"n": 29, "term": "Seed", "definition": "Grass seed used to establish a lawn rather than installing sod.", "difficulty": "easy", "answers": ["Seed"]}, {"n": 30, "term": "Overseed / Overseeding", "definition": "Adding grass seed to an existing lawn to improve density.", "difficulty": "medium", "answers": ["overseed", "overseeding"]}, {"n": 31, "term": "Aeration", "definition": "Creating holes or removing soil cores to reduce turf compaction.", "difficulty": "medium", "answers": ["Aeration"]}, {"n": 32, "term": "Dethatch", "definition": "Remove excess accumulated thatch from turf.", "difficulty": "medium", "answers": ["Dethatch"]}, {"n": 33, "term": "Scalp", "definition": "Cut turf extremely short, intentionally or accidentally.", "difficulty": "medium", "answers": ["Scalp"]}, {"n": 34, "term": "Annual", "definition": "Plant that normally completes its life cycle in one growing season.", "difficulty": "easy", "answers": ["Annual"]}, {"n": 35, "term": "Perennial", "definition": "Plant that normally survives and returns for multiple growing seasons.", "difficulty": "easy", "answers": ["Perennial"]}, {"n": 36, "term": "Groundcover", "definition": "Low-growing plants used to cover exposed soil.", "difficulty": "easy", "answers": ["Groundcover"]}, {"n": 37, "term": "Paver", "definition": "Manufactured concrete, brick, or stone unit used for paving.", "difficulty": "easy", "answers": ["Paver"]}, {"n": 38, "term": "Bedding sand / Screed sand", "definition": "Thin leveled sand layer placed directly beneath pavers.", "difficulty": "hard", "answers": ["bedding sand", "screed sand"]}, {"n": 39, "term": "Joint sand", "definition": "Sand swept into the joints between installed pavers.", "difficulty": "medium", "answers": ["Joint sand"]}, {"n": 40, "term": "Polymeric sand", "definition": "Joint sand containing binders that harden after activation with water.", "difficulty": "hard", "answers": ["Polymeric sand"]}, {"n": 41, "term": "Edge restraint", "definition": "Rigid border that prevents installed pavers from spreading outward.", "difficulty": "hard", "answers": ["Edge restraint"]}, {"n": 42, "term": "Retaining wall", "definition": "Structure built to hold back soil at a change in elevation.", "difficulty": "easy", "answers": ["Retaining wall"]}, {"n": 43, "term": "Capstone", "definition": "Finishing unit installed along the top of a retaining wall.", "difficulty": "medium", "answers": ["Capstone"]}, {"n": 44, "term": "Drainage aggregate", "definition": "Clean stone used to allow water movement around drains or behind walls.", "difficulty": "hard", "answers": ["Drainage aggregate"]}, {"n": 45, "term": "Deadman", "definition": "Buried structural anchor used to reinforce a retaining wall.", "difficulty": "hard", "answers": ["Deadman"]}, {"n": 46, "term": "Geogrid", "definition": "Synthetic reinforcing grid embedded in soil behind a retaining wall.", "difficulty": "hard", "answers": ["Geogrid"]}, {"n": 47, "term": "French drain", "definition": "Gravel-filled trench, normally with perforated pipe, that collects and redirects water.", "difficulty": "medium", "answers": ["French drain"]}, {"n": 48, "term": "Drain tile", "definition": "Perforated subsurface pipe used to collect and redirect water.", "difficulty": "medium", "answers": ["Drain tile"]}, {"n": 49, "term": "Catch basin", "definition": "Box or chamber that collects surface water and directs it into drainpipe.", "difficulty": "medium", "answers": ["Catch basin"]}, {"n": 50, "term": "Downspout tie-in", "definition": "Connection carrying roof-gutter discharge into an underground drainage system.", "difficulty": "hard", "answers": ["Downspout tie-in"]}, {"n": 51, "term": "Irrigation", "definition": "Controlled application of water to plants or turf.", "difficulty": "easy", "answers": ["Irrigation"]}, {"n": 52, "term": "Irrigation zone / Zone", "definition": "Group of irrigation outlets controlled together by one valve.", "difficulty": "medium", "answers": ["irrigation zone", "zone"]}, {"n": 53, "term": "Valve", "definition": "Device controlling water flow to an irrigation zone.", "difficulty": "easy", "answers": ["Valve"]}, {"n": 54, "term": "Controller / Timer", "definition": "Device that schedules and operates irrigation zones.", "difficulty": "medium", "answers": ["controller", "timer"]}, {"n": 55, "term": "Spray head", "definition": "Fixed-pattern sprinkler generally used for smaller areas.", "difficulty": "medium", "answers": ["Spray head"]}, {"n": 56, "term": "Rotor", "definition": "Rotating sprinkler head generally used for larger areas.", "difficulty": "medium", "answers": ["Rotor"]}, {"n": 57, "term": "Drip irrigation", "definition": "Low-volume irrigation applying water slowly near plant roots.", "difficulty": "medium", "answers": ["Drip irrigation"]}, {"n": 58, "term": "Drip line", "definition": "Tubing carrying low-volume irrigation water to planting areas.", "difficulty": "medium", "answers": ["Drip line"]}, {"n": 59, "term": "Emitter", "definition": "Small drip-system outlet that releases a controlled amount of water.", "difficulty": "hard", "answers": ["Emitter"]}, {"n": 60, "term": "Rain sensor", "definition": "Device that prevents irrigation from running after sufficient rainfall.", "difficulty": "medium", "answers": ["Rain sensor"]}, {"n": 61, "term": "Root ball", "definition": "Mass of roots and soil attached to a transplanted plant.", "difficulty": "easy", "answers": ["Root ball"]}, {"n": 62, "term": "Balled-and-burlapped / B&B", "definition": "Nursery plant sold with its root ball wrapped in burlap.", "difficulty": "hard", "answers": ["balled and burlapped", "balled-and-burlapped", "b&b", "bb"]}, {"n": 63, "term": "Container stock", "definition": "Nursery plant grown and sold in a container.", "difficulty": "medium", "answers": ["Container stock"]}, {"n": 64, "term": "Caliper", "definition": "Tree-trunk diameter measurement used for nursery sizing and pricing.", "difficulty": "hard", "answers": ["Caliper"]}, {"n": 65, "term": "Root flare", "definition": "Area where a tree trunk widens and transitions into major roots.", "difficulty": "medium", "answers": ["Root flare"]}, {"n": 66, "term": "Crown / Canopy", "definition": "Upper branching and foliage portion of a tree.", "difficulty": "medium", "answers": ["crown", "canopy"]}, {"n": 67, "term": "Spacing on center", "definition": "Distance from the center of one plant or object to the center of the next.", "difficulty": "hard", "answers": ["Spacing on center"]}, {"n": 68, "term": "Prune / Pruning", "definition": "Selectively remove plant growth for health, structure, clearance, or appearance.", "difficulty": "easy", "answers": ["prune", "pruning"]}, {"n": 69, "term": "Deadhead / Deadheading", "definition": "Remove spent flowers from a plant.", "difficulty": "medium", "answers": ["deadhead", "deadheading"]}, {"n": 70, "term": "Shear", "definition": "Uniformly trim the outside growth of shrubs or hedges.", "difficulty": "easy", "answers": ["Shear"]}, {"n": 71, "term": "Limb up", "definition": "Remove lower branches from a tree to raise its canopy.", "difficulty": "medium", "answers": ["Limb up"]}, {"n": 72, "term": "Site plan", "definition": "Drawing showing property features, dimensions, utilities, grades, and proposed work.", "difficulty": "easy", "answers": ["Site plan"]}, {"n": 73, "term": "Layout", "definition": "Marking the planned locations of landscape features on the site.", "difficulty": "easy", "answers": ["Layout"]}, {"n": 74, "term": "Crew lead / Foreman", "definition": "Person responsible for directing and coordinating a landscape crew.", "difficulty": "easy", "answers": ["crew lead", "foreman"]}];
+
+const $ = s => document.querySelector(s);
+const answerEl = $("#answer"), submitEl = $("#submit"), definitionEl = $("#definition");
+const feedbackEl = $("#feedback"), timerNum = $("#timerNum"), timerFill = $("#timerFill");
+const scoreText = $("#scoreText"), meterFill = $("#meterFill"), progressEl = $("#progress"), difficultyEl = $("#difficulty");
+const startScreen = $("#startScreen"), endScreen = $("#endScreen"), finalStats = $("#finalStats");
+
+let deck=[], index=0, score=100, current=null, questionStart=0, questionDeadline=0, questionDuration=15;
+let raf=0, locked=true, correctCount=0, fastCount=0, missedCount=0;
+let gameStartedAt=0, sceneRunning=false, sceneRaf=0, soundOn=true, audioCtx=null;
+
+function shuffle(arr){
+  const a=[...arr];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function norm(s){
+  return s.toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g,"")
+    .trim();
+}
+function isCorrectAnswer(raw, item){
+  const n=norm(raw);
+  return item.answers.some(a=>norm(a)===n);
+}
+function difficultyLabel(d){ return d==="easy"?"Common":d==="hard"?"Specialized":"Trade"; }
+function durationFor(item){
+  let s=item.difficulty==="easy"?15:item.difficulty==="hard"?20:18;
+  if(item.definition.length>92 && s<20) s++;
+  if(item.definition.length>125 && s<20) s++;
+  return Math.min(20,s);
+}
+function penaltyFor(item){ return item.difficulty==="easy"?30:item.difficulty==="hard"?20:25; }
+
+function setScore(v){
+  score=Math.max(0,Math.min(100,v));
+  scoreText.textContent=Math.round(score)+"%";
+  meterFill.style.width=score+"%";
+  meterFill.style.filter=score<35?"saturate(.8) hue-rotate(285deg)":score<65?"hue-rotate(325deg)":"none";
+}
+
+function tone(kind){
+  if(!soundOn) return;
+  try{
+    audioCtx ??= new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    const t=audioCtx.currentTime;
+    if(kind==="good"){o.frequency.setValueAtTime(520,t);o.frequency.linearRampToValueAtTime(690,t+.08);}
+    else{o.frequency.setValueAtTime(220,t);o.frequency.linearRampToValueAtTime(145,t+.11);}
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.055,t+.015);g.gain.exponentialRampToValueAtTime(.0001,t+.18);
+    o.start(t);o.stop(t+.2);
+  }catch(e){}
+}
+
+function loadQuestion(){
+  if(index>=deck.length){ finish(true); return; }
+  current=deck[index];
+  questionDuration=durationFor(current);
+  questionStart=performance.now();
+  questionDeadline=questionStart+questionDuration*1000;
+  locked=false;
+  answerEl.disabled=false;submitEl.disabled=false;
+  answerEl.value="";answerEl.focus();
+  definitionEl.textContent=current.definition;
+  feedbackEl.textContent="";feedbackEl.className="";
+  progressEl.textContent=`Question ${index+1} / ${deck.length}`;
+  difficultyEl.textContent=difficultyLabel(current.difficulty);
+  timerNum.textContent=questionDuration.toFixed(1);
+  timerFill.style.width="100%";
+  cancelAnimationFrame(raf); raf=requestAnimationFrame(tick);
+}
+function tick(now){
+  if(locked) return;
+  const remain=Math.max(0,(questionDeadline-now)/1000);
+  const pct=remain/questionDuration;
+  timerNum.textContent=remain.toFixed(1);
+  timerFill.style.width=(pct*100)+"%";
+  const used=questionDuration-remain;
+  timerFill.style.background = pct>.5 ? "#bde167" : pct>.25 ? "#ffd46a" : "#ff8c73";
+  if(remain<=0){ submitAnswer(true); return; }
+  raf=requestAnimationFrame(tick);
+}
+function submitAnswer(timeout=false){
+  if(locked) return;
+  locked=true;cancelAnimationFrame(raf);
+  answerEl.disabled=true;submitEl.disabled=true;
+  const elapsed=(performance.now()-questionStart)/1000;
+  const ok=!timeout && isCorrectAnswer(answerEl.value,current);
+
+  if(ok){
+    correctCount++;
+    const fast=elapsed<=10;
+    if(fast){fastCount++;setScore(score+10);}
+    feedbackEl.className="good";
+    feedbackEl.innerHTML=fast ? "Correct — <b>+10% fast-answer bonus.</b>" : "Correct.";
+    tone("good");
+    setTimeout(()=>{index++;loadQuestion();},1250);
+  }else{
+    missedCount++;
+    const p=penaltyFor(current);
+    setScore(score-p);
+    feedbackEl.className="bad";
+    feedbackEl.innerHTML=(timeout?"Time expired. ":"Incorrect. ")+`Correct answer: <b>${current.term}</b> &nbsp; −${p}%`;
+    tone("bad");
+    if(score<=0){ setTimeout(()=>finish(false),2100); }
+    else setTimeout(()=>{index++;loadQuestion();},2100);
+  }
+}
+function startGame(){
+  deck=shuffle(BANK);index=0;score=100;correctCount=fastCount=missedCount=0;
+  setScore(100);startScreen.classList.add("hidden");endScreen.classList.add("hidden");
+  gameStartedAt=performance.now();sceneRunning=true;cancelAnimationFrame(sceneRaf);sceneRaf=requestAnimationFrame(sceneTick);
+  loadQuestion();
+}
+function finish(completed){
+  locked=true;cancelAnimationFrame(raf);answerEl.disabled=true;submitEl.disabled=true;
+  $("#endEyebrow").textContent=completed?"Shift complete":"Job shut down";
+  $("#endTitle").textContent=completed?"Grounds Cleared":"Readiness: 0%";
+  finalStats.innerHTML=`Final readiness: <b>${Math.round(score)}%</b><br>Correct: <b>${correctCount}</b> &nbsp;•&nbsp; Fast bonuses: <b>${fastCount}</b> &nbsp;•&nbsp; Missed: <b>${missedCount}</b>`;
+  endScreen.classList.remove("hidden");
+}
+submitEl.addEventListener("click",()=>submitAnswer(false));
+answerEl.addEventListener("keydown",e=>{if(e.key==="Enter")submitAnswer(false)});
+$("#startBtn").addEventListener("click",startGame);
+$("#restartBtn").addEventListener("click",startGame);
+$("#soundBtn").addEventListener("click",()=>{
+  soundOn=!soundOn;$("#soundBtn").textContent="Sound: "+(soundOn?"On":"Off");
+});
+
+/* ---------- 13-minute ambient crew choreography ---------- */
+const workerA=$("#workerA"), workerB=$("#workerB"), workerC=$("#workerC");
+const aKneel=$("#aKneel"), aStand=$("#aStand"), aShears=$("#aShears"), aRoseCarry=$("#aRoseCarry");
+const bRake=$("#bRake"), bShovel=$("#bShovel");
+const hole=$("#hole"), soilPile=$("#soilPile"), rose=$("#rosePlanted"), mulchRing=$("#mulchRing");
+const clouds=$("#clouds"), evergreen=$("#evergreen"), roseFlowers=$("#roseFlowers");
+
+function clamp(v,a=0,b=1){return Math.max(a,Math.min(b,v))}
+function smooth(v){v=clamp(v);return v*v*(3-2*v)}
+function tween(t,a,b,from,to){if(t<=a)return from;if(t>=b)return to;return from+(to-from)*smooth((t-a)/(b-a))}
+function pulse(t,a,b,cycles=1){
+  if(t<a||t>b)return 0;
+  const u=(t-a)/(b-a);
+  return Math.sin(u*Math.PI*2*cycles);
+}
+function tx(el,x,y,rot=0,scale=1){el.setAttribute("transform",`translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${scale})`)}
+
+function sceneTick(now){
+  if(!sceneRunning)return;
+  const t=Math.min((now-gameStartedAt)/1000,780);
+
+  // world ambience: extremely slow, never tied to quiz
+  clouds.setAttribute("transform",`translate(${(t*.55).toFixed(1)} 0)`);
+  evergreen.setAttribute("transform",`translate(730 150) rotate(${(Math.sin(t/18)*.45).toFixed(2)} 0 380)`);
+  roseFlowers.setAttribute("transform",`rotate(${(Math.sin(t/11)*.35).toFixed(2)} 160 110)`);
+
+  // Worker A: pruning -> leaves -> returns with rose -> plants -> cleanup -> exits
+  let ax=250, ay=650, aStandOp=0, aKneelOp=1, roseCarry=0;
+  if(t<240){
+    aShears.setAttribute("transform",`translate(64 70) rotate(${(4+pulse(t,8,18,.5)*4+pulse(t,70,82,.5)*3+pulse(t,120,132,.5)*3).toFixed(2)})`);
+  }
+  if(t>=240&&t<255){aStandOp=smooth((t-240)/15);aKneelOp=1-aStandOp;}
+  if(t>=255){aStandOp=1;aKneelOp=0;}
+  if(t>=255&&t<275) ax=tween(t,255,275,250,-120);
+  else if(t>=275&&t<330) ax=-120;
+  else if(t>=330&&t<352){ax=tween(t,330,352,-120,785); roseCarry=smooth((t-330)/8);}
+  else if(t>=352&&t<365){ax=785;roseCarry=1;}
+  else if(t>=365&&t<380){ax=785;aStandOp=1-smooth((t-365)/15);aKneelOp=smooth((t-365)/15);roseCarry=1-smooth((t-365)/15);}
+  else if(t>=380&&t<555){ax=785;aStandOp=0;aKneelOp=1;}
+  else if(t>=555&&t<570){ax=785;aStandOp=smooth((t-555)/15);aKneelOp=1-aStandOp;}
+  else if(t>=570&&t<600){ax=785;aStandOp=1;aKneelOp=0;}
+  else if(t>=600&&t<625){ax=tween(t,600,625,785,610);aStandOp=1;aKneelOp=0;}
+  else if(t>=625&&t<655){ax=610;aStandOp=1;aKneelOp=0;}
+  else if(t>=655&&t<675){ax=tween(t,655,675,610,-120);aStandOp=1;aKneelOp=0;}
+  else if(t>=675){ax=-120;aStandOp=1;aKneelOp=0;}
+  tx(workerA,ax,ay,0,1);
+  aStand.style.opacity=aStandOp;aKneel.style.opacity=aKneelOp;aRoseCarry.style.opacity=roseCarry;
+
+  // Worker B: rake -> fetch shovel -> dig slowly -> backfill -> exits -> cleanup rake -> leaves
+  let bx=905, by=465, rakeOp=1, shovelOp=0, brot=0;
+  if(t>=108&&t<125) bx=tween(t,108,125,905,1175);
+  else if(t>=125&&t<165) bx=1175;
+  else if(t>=165&&t<183){bx=tween(t,165,183,1175,915);rakeOp=0;shovelOp=smooth((t-165)/10);}
+  else if(t>=183){rakeOp=0;shovelOp=1;}
+  if(t>=188&&t<=302){ brot=pulse(t,188,302,5)*1.7; }
+  if(t>=550&&t<570) bx=tween(t,550,570,915,1180);
+  else if(t>=570&&t<615) bx=1180;
+  else if(t>=615&&t<635){bx=tween(t,615,635,1180,930);rakeOp=smooth((t-615)/10);shovelOp=1-rakeOp;}
+  else if(t>=635&&t<700){bx=930;rakeOp=1;shovelOp=0;}
+  else if(t>=700&&t<725){bx=tween(t,700,725,930,1180);rakeOp=1;shovelOp=0;}
+  else if(t>=725){bx=1180;rakeOp=1;shovelOp=0;}
+  tx(workerB,bx,by,brot,1);
+  bRake.style.opacity=rakeOp;bShovel.style.opacity=shovelOp;
+  if(t>=188&&t<=302){
+    bShovel.setAttribute("transform",`translate(-67 88) rotate(${(-7+pulse(t,188,302,5)*10).toFixed(2)})`);
+  } else bShovel.setAttribute("transform","translate(-67 88) rotate(-7)");
+
+  // Worker C with wheelbarrow: exits, returns, assists mulch, then packs up and leaves
+  let cx=1275, cy=465;
+  if(t>=38&&t<55) cx=tween(t,38,55,1275,1570);
+  else if(t>=55&&t<138) cx=1570;
+  else if(t>=138&&t<158) cx=tween(t,138,158,1570,1260);
+  else if(t>=158&&t<480) cx=1260;
+  else if(t>=480&&t<500) cx=tween(t,480,500,1260,1090);
+  else if(t>=500&&t<540) cx=1090;
+  else if(t>=540&&t<560) cx=tween(t,540,560,1090,1260);
+  else if(t>=560&&t<720) cx=1260;
+  else if(t>=720&&t<760) cx=tween(t,720,760,1260,1570);
+  else if(t>=760) cx=1570;
+  tx(workerC,cx,cy,0,1);
+
+  // planting story
+  const dig=smooth(clamp((t-188)/(302-188)));
+  hole.style.opacity=t<188?0:Math.min(.95,dig);
+  hole.setAttribute("rx",(20+28*dig).toFixed(1));
+  hole.setAttribute("ry",(7+11*dig).toFixed(1));
+  soilPile.style.opacity=t<205?0:Math.min(.92,smooth((t-205)/80));
+
+  let roseOp=0, roseScale=.62;
+  if(t>=382&&t<405){roseOp=smooth((t-382)/23);roseScale=.62+.38*smooth((t-382)/23);}
+  else if(t>=405){roseOp=1;roseScale=1;}
+  rose.style.opacity=roseOp;
+  rose.setAttribute("transform",`translate(0 -20) scale(${roseScale.toFixed(3)})`);
+
+  const backfill=t<420?0:smooth(clamp((t-420)/70));
+  if(t>=420) hole.style.opacity=Math.max(0,.95-backfill*.8);
+  if(t>=505) mulchRing.style.opacity=smooth(clamp((t-505)/40));
+
+  // gentle rake action during cleanup
+  if(t>=635&&t<690){
+    bRake.setAttribute("transform",`translate(-67 88) rotate(${(11+pulse(t,635,690,2)*5).toFixed(2)})`);
+  } else bRake.setAttribute("transform","translate(-67 88) rotate(11)");
+
+  if(t<780) sceneRaf=requestAnimationFrame(sceneTick);
+}
+</script>
+</body>
+</html>
