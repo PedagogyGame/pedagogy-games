@@ -395,7 +395,7 @@
     <div>
       <div class="eyebrow">Canine cognition archive // 052</div>
       <h1>VOID MATCH: TEMPERAMENT</h1>
-      <div class="sub">Identify the temperament profile that best matches the named breed. Appearance is shown for recognition; every answer is about disposition, behavior, and character.</div>
+      <div class="sub">Identify the temperament profile that matches the named breed. Wrong answers are intentionally chosen to be clearly different, not near-matches or trick questions. Appearance is shown only for recognition.</div>
     </div>
 
     <div class="hud">
@@ -419,13 +419,13 @@
       <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
       <div class="question-kicker">Select the matching character profile</div>
       <h2 class="breed-name" id="breedName">Loading…</h2>
-      <p class="prompt">Which description best matches this breed's commonly associated temperament and disposition?</p>
+      <p class="prompt">Which clearly distinct profile matches this breed's commonly associated temperament and disposition?</p>
 
       <div class="choices" id="choices"></div>
-      <div class="feedback" id="feedback">Choose A, B, C, or D.</div>
+      <div class="feedback" id="feedback">Choose the clearly matching temperament profile.</div>
 
       <div class="next-row">
-        <div class="hint">Keyboard: 1–4 to answer · Enter for next</div>
+        <div class="hint">Keyboard: 1–3 to answer · Enter for next</div>
         <button class="next" id="nextBtn" disabled>Next breed →</button>
       </div>
     </article>
@@ -1057,11 +1057,63 @@ function shuffle(arr) {
   return a;
 }
 
+// Broad concept buckets are used ONLY to keep wrong answers clearly separated
+// from the correct temperament. If two profiles share a concept, they are less
+// likely to appear together in the same question.
+const CONCEPT_RULES = {
+  social: ["friendly", "sociable", "outgoing", "cheerful", "merry"],
+  bonding: ["affectionate", "devoted", "loyal", "people-oriented", "companion-oriented", "handler-focused", "highly attached", "eager to please", "cooperative", "responsive"],
+  cognition: ["intelligent", "highly intelligent", "exceptionally intelligent", "clever", "bright", "trainable"],
+  highDrive: ["energetic", "enthusiastic", "exuberant", "lively", "driven", "work-driven", "work-oriented", "intense"],
+  vigilance: ["alert", "watchful", "vigilant", "protective", "reserved", "serious"],
+  independent: ["independent", "stubborn", "determined", "strong-willed"],
+  gentleSteady: ["gentle", "calm", "patient", "steady", "sensitive", "quiet"],
+  confidence: ["bold", "confident", "self-confident", "dignified", "self-assured"],
+  playful: ["playful", "amusing", "charming", "mischievous"],
+  curious: ["curious", "adventurous", "inquisitive"]
+};
+
+function conceptSet(breed) {
+  const traitText = breed.traits.join(" ").toLowerCase();
+  const concepts = new Set();
+
+  for (const [concept, words] of Object.entries(CONCEPT_RULES)) {
+    if (words.some(word => traitText.includes(word))) concepts.add(concept);
+  }
+  return concepts;
+}
+
+function temperamentDistance(correct, candidate) {
+  const a = conceptSet(correct);
+  const b = conceptSet(candidate);
+  let overlap = 0;
+  for (const concept of a) {
+    if (b.has(concept)) overlap++;
+  }
+
+  // Same broad historical temperament family is deliberately discouraged.
+  const sameGroupPenalty = correct.group === candidate.group ? 2 : 0;
+
+  // Lower score = safer, more obviously different.
+  return overlap * 5 + sameGroupPenalty;
+}
+
 function makeDistractors(correct) {
-  // Prefer dogs from the same broad behavioral family so the game is not trivial.
-  const same = shuffle(BREEDS.filter(b => b.name !== correct.name && b.group === correct.group));
-  const other = shuffle(BREEDS.filter(b => b.name !== correct.name && b.group !== correct.group));
-  return [...same, ...other].slice(0, 3);
+  const ranked = shuffle(BREEDS.filter(b => b.name !== correct.name))
+    .map(b => ({ breed: b, score: temperamentDistance(correct, b) }))
+    .sort((a, b) => a.score - b.score);
+
+  // "Safe" means no broad temperament-concept overlap and not the same family.
+  const safe = ranked.filter(x => x.score === 0).map(x => x.breed);
+
+  // Prefer two very different wrong answers. If only one perfectly safe
+  // distractor exists, use just two choices total rather than introduce a
+  // misleading near-match.
+  if (safe.length >= 2) return safe.slice(0, 2);
+  if (safe.length === 1) return safe.slice(0, 1);
+
+  // Extremely unlikely fallback: choose the single least-similar profile.
+  return ranked.slice(0, 1).map(x => x.breed);
 }
 
 function safeCommonsQuery(name) {
@@ -1141,7 +1193,7 @@ function renderQuestion() {
   state.answered = false;
   el("nextBtn").disabled = true;
   el("feedback").className = "feedback";
-  el("feedback").innerHTML = "Choose A, B, C, or D.";
+  el("feedback").innerHTML = "Choose the clearly matching temperament profile.";
   el("chips").classList.remove("revealed");
 
   const current = state.deck[state.index];
@@ -1157,7 +1209,7 @@ function renderQuestion() {
 
   const choices = el("choices");
   choices.innerHTML = "";
-  const letters = ["A", "B", "C", "D"];
+  const letters = ["A", "B", "C"];
 
   state.currentOptions.forEach((option, idx) => {
     const btn = document.createElement("button");
@@ -1252,7 +1304,7 @@ el("nextBtn").addEventListener("click", nextQuestion);
 el("restartBtn").addEventListener("click", startGame);
 
 document.addEventListener("keydown", (e) => {
-  if (!state.answered && ["1","2","3","4"].includes(e.key)) {
+  if (!state.answered && ["1","2","3"].includes(e.key)) {
     const idx = Number(e.key) - 1;
     const btn = el("choices").querySelectorAll(".choice")[idx];
     if (btn) btn.click();
