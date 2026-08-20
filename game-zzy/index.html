@@ -19,6 +19,7 @@
     .glass-panel {
         background: rgba(20, 15, 40, 0.6);
         backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 15px;
         padding: 40px;
@@ -33,15 +34,28 @@
         font-size: 1.2rem;
         margin-bottom: 20px;
         color: #b3a0e5;
+        font-weight: bold;
+    }
+    .difficulty-badge {
+        font-size: 0.9rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        margin-bottom: 15px;
+        display: inline-block;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
     .definition {
         font-size: 1.5rem;
         margin-bottom: 30px;
         line-height: 1.4;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
     }
     input[type="text"] {
         width: 80%;
-        padding: 10px;
+        padding: 12px;
         font-size: 1.2rem;
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid #b3a0e5;
@@ -49,9 +63,21 @@
         border-radius: 5px;
         text-align: center;
         outline: none;
+        transition: border-color 0.3s ease;
     }
     input[type="text"]:focus {
         border-color: #fff;
+        background: rgba(255, 255, 255, 0.15);
+    }
+    input[type="text"]::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+    }
+    .feedback {
+        margin-top: 15px;
+        height: 20px;
+        font-size: 1rem;
+        font-weight: bold;
+        transition: color 0.3s ease;
     }
 </style>
 </head>
@@ -62,6 +88,143 @@
         <span id="scoreDisplay">Core Level: 100%</span>
         <span id="timerDisplay">Time: 15s</span>
     </div>
+    <div id="difficultyBadge" class="difficulty-badge">Loading...</div>
     <div class="definition" id="definitionText">Loading...</div>
     <input type="text" id="answerInput" placeholder="Type the term..." autocomplete="off">
+    <div class="feedback" id="feedbackText"></div>
 </div>
+
+<script>
+    // Vocabulary array with difficulty levels mapped to score penalties
+    const vocabulary = [
+        { term: "sun sign", definition: "The sign occupied by the Sun at birth; represents the core ego and overarching identity.", difficulty: "easy" },
+        { term: "ascendant", definition: "The zodiac sign rising on the eastern horizon at birth; shapes outward personality.", difficulty: "medium" },
+        { term: "ephemeris", definition: "A mathematical table or database showing the calculated positions of celestial bodies over time.", difficulty: "hard" },
+        { term: "conjunction", definition: "Two planets positioned close together (~0° apart); strongly blends their energies.", difficulty: "medium" }
+    ];
+
+    let currentTerm = 0;
+    let score = 100;
+    let timeLeft = 15;
+    let timerInterval;
+
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const definitionText = document.getElementById('definitionText');
+    const answerInput = document.getElementById('answerInput');
+    const difficultyBadge = document.getElementById('difficultyBadge');
+    const feedbackText = document.getElementById('feedbackText');
+
+    function loadTerm() {
+        if (currentTerm >= vocabulary.length) {
+            definitionText.innerText = "Challenge Complete! You have mastered the lexicon.";
+            answerInput.style.display = 'none';
+            difficultyBadge.style.display = 'none';
+            timerDisplay.innerText = "";
+            return;
+        }
+        
+        const currentData = vocabulary[currentTerm];
+        definitionText.innerText = currentData.definition;
+        difficultyBadge.innerText = `Difficulty: ${currentData.difficulty}`;
+        
+        // Color code difficulty badge slightly
+        if (currentData.difficulty === "easy") difficultyBadge.style.color = "#a8e6cf";
+        if (currentData.difficulty === "medium") difficultyBadge.style.color = "#ffd3b6";
+        if (currentData.difficulty === "hard") difficultyBadge.style.color = "#ff8b94";
+
+        answerInput.value = '';
+        answerInput.focus();
+        timeLeft = 15;
+        startTimer();
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerDisplay.innerText = `Time: ${timeLeft}s`;
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            timerDisplay.innerText = `Time: ${timeLeft}s`;
+            
+            // Visual warning when time is low
+            if (timeLeft <= 5) {
+                timerDisplay.style.color = "#ff8b94";
+            } else {
+                timerDisplay.style.color = "#b3a0e5";
+            }
+
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                processAnswer(false, true); // Timed out
+            }
+        }, 1000);
+    }
+
+    function processAnswer(isCorrect, isTimeout = false) {
+        const currentData = vocabulary[currentTerm];
+        
+        if (isCorrect) {
+            let bonusEarned = false;
+            if (timeLeft >= 5) { // Answered in first 10 seconds (15 - 5 = 10)
+                score += 10;
+                bonusEarned = true;
+            }
+            
+            feedbackText.innerText = bonusEarned ? "Correct! +10% Speed Bonus" : "Correct!";
+            feedbackText.style.color = "#a8e6cf";
+            currentTerm++;
+            
+        } else {
+            // Adjust penalty dynamically based on difficulty
+            let penalty = 25; // Base medium penalty
+            if (currentData.difficulty === "easy") {
+                penalty = 30; // Harder penalty for missing an easy question
+            } else if (currentData.difficulty === "hard") {
+                penalty = 20; // Lighter penalty for missing a hard question
+            }
+            
+            score -= penalty; 
+            
+            if (isTimeout) {
+                feedbackText.innerText = `Time's up! -${penalty}% Core Level`;
+            } else {
+                feedbackText.innerText = `Incorrect! -${penalty}% Core Level`;
+                // Briefly flash input border red to indicate error, but don't advance the term so they can try again
+                answerInput.style.borderColor = "#ff8b94";
+                setTimeout(() => answerInput.style.borderColor = "#b3a0e5", 500);
+            }
+            feedbackText.style.color = "#ff8b94";
+        }
+        
+        scoreDisplay.innerText = `Core Level: ${score}%`;
+        
+        if (score <= 0) {
+            scoreDisplay.innerText = `Core Level: 0%`;
+            definitionText.innerText = "Core Level Depleted. Game Over.";
+            difficultyBadge.style.display = 'none';
+            answerInput.style.display = 'none';
+            feedbackText.innerText = "";
+            clearInterval(timerInterval);
+        } else if (isCorrect || isTimeout) {
+            setTimeout(() => {
+                feedbackText.innerText = "";
+                loadTerm();
+            }, 1000); // Brief pause before loading next term
+        }
+    }
+
+    answerInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            const userAnswer = answerInput.value.trim().toLowerCase();
+            const correctAnswer = vocabulary[currentTerm].term.toLowerCase();
+            if (userAnswer !== "") {
+                processAnswer(userAnswer === correctAnswer);
+            }
+        }
+    });
+
+    // Initialize game
+    loadTerm();
+</script>
+</body>
+</html>
