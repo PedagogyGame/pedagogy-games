@@ -379,7 +379,7 @@ const state = {
   running:false, paused:false, locked:false, ended:false, muted:false,
   levelIndex:0, qIndex:0, levels:[], nav:10, correct:0, wrong:0, fast:0,
   questionStart:0, deadline:0, allotted:15, pausedRemaining:0,
-  sceneStart:performance.now(), failFade:0, win:false, winStart:0, lastTick:performance.now()
+  sceneStart:performance.now(), gameStart:0, pausedAt:0, pausedTotal:0, failFade:0, win:false, winStart:0, lastTick:performance.now()
 };
 
 // ---------- Audio ----------
@@ -427,199 +427,144 @@ function resize(){DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=inne
 window.addEventListener('resize',resize); resize();
 
 
-function caveGradient(top,bottom,glowColor='rgba(113,135,132,.08)'){
-  const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,top);g.addColorStop(.58,bottom);g.addColorStop(1,'#010202');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  const a=ctx.createRadialGradient(W*.54,H*.48,0,W*.54,H*.48,Math.max(W,H)*.62);a.addColorStop(0,glowColor);a.addColorStop(.55,'rgba(0,0,0,0)');a.addColorStop(1,'rgba(0,0,0,.25)');ctx.fillStyle=a;ctx.fillRect(0,0,W,H);
+function caveGradient(top,bottom,glowColor='rgba(104,119,112,.025)'){
+  const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,top);g.addColorStop(.62,bottom);g.addColorStop(1,'#010202');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  const a=ctx.createRadialGradient(W*.52,H*.47,0,W*.52,H*.47,Math.max(W,H)*.72);a.addColorStop(0,glowColor);a.addColorStop(.52,'rgba(0,0,0,0)');a.addColorStop(1,'rgba(0,0,0,.28)');ctx.fillStyle=a;ctx.fillRect(0,0,W,H);
 }
-function rockBlob(x,y,r,seed,fill,stroke){
-  const rnd=mulberry32(seed);ctx.beginPath();for(let i=0;i<22;i++){const a=(i/22)*Math.PI*2,rr=r*(.72+rnd()*.43),px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr*.72;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)}ctx.closePath();
-  const g=ctx.createRadialGradient(x-r*.22,y-r*.28,r*.08,x,y,r*1.1);g.addColorStop(0,'rgba(64,66,61,.72)');g.addColorStop(.5,fill);g.addColorStop(1,'rgba(8,10,10,.98)');ctx.fillStyle=g;ctx.fill();
+function rockBlob(x,y,r,seed,fill='rgba(23,25,23,.96)',stroke='rgba(176,165,140,.035)'){
+  const rnd=mulberry32(seed);ctx.beginPath();for(let i=0;i<28;i++){const a=(i/28)*Math.PI*2,rr=r*(.77+rnd()*.35),px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr*.69;if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py)}ctx.closePath();
+  const g=ctx.createRadialGradient(x-r*.24,y-r*.31,r*.05,x,y,r*1.12);g.addColorStop(0,'rgba(72,70,61,.42)');g.addColorStop(.38,fill);g.addColorStop(1,'rgba(4,6,6,.99)');ctx.fillStyle=g;ctx.fill();
   if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
 }
-function drawStrata(seed,alpha=.08){
-  const rnd=mulberry32(seed);ctx.save();ctx.strokeStyle=`rgba(194,183,155,${alpha})`;ctx.lineWidth=1;
-  for(let i=0;i<34;i++){const x=rnd()*W,y=rnd()*H,len=24+rnd()*120,curve=(rnd()-.5)*35;ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+len*.5,y+curve,x+len,y+curve*.45);ctx.stroke()}
+function drawStrata(seed,alpha=.032){
+  const rnd=mulberry32(seed);ctx.save();ctx.strokeStyle=`rgba(200,187,156,${alpha})`;ctx.lineWidth=1;
+  for(let i=0;i<44;i++){const x=rnd()*W,y=rnd()*H,len=18+rnd()*145,curve=(rnd()-.5)*26;ctx.beginPath();ctx.moveTo(x,y);ctx.bezierCurveTo(x+len*.28,y+curve*.5,x+len*.7,y+curve,x+len,y+curve*.35);ctx.stroke()}
   ctx.restore();
 }
-function drawRockWall(level,t){
-  const rnd=mulberry32(4100+level*97);
-  // distant roof / floor silhouettes
-  ctx.fillStyle='rgba(15,17,16,.94)';
-  ctx.beginPath();ctx.moveTo(0,0);for(let x=0;x<=W;x+=Math.max(55,W/15)){const y=H*(.095+.055*Math.sin(x*.006+level*.9)+rnd()*.075);ctx.lineTo(x,y)}ctx.lineTo(W,0);ctx.closePath();ctx.fill();
-  ctx.beginPath();ctx.moveTo(0,H);for(let x=0;x<=W;x+=Math.max(58,W/14)){const y=H*(.79+.045*Math.sin(x*.005+1.7)+rnd()*.06);ctx.lineTo(x,y)}ctx.lineTo(W,H);ctx.closePath();ctx.fill();
-  // side walls build depth and make a playable central tunnel
-  const sideG=ctx.createLinearGradient(0,0,W,0);sideG.addColorStop(0,'rgba(8,10,10,.99)');sideG.addColorStop(.15,'rgba(22,24,22,.96)');sideG.addColorStop(.31,'rgba(10,12,12,.36)');sideG.addColorStop(.69,'rgba(10,12,12,.34)');sideG.addColorStop(.85,'rgba(23,24,22,.96)');sideG.addColorStop(1,'rgba(7,9,9,.99)');ctx.fillStyle=sideG;ctx.fillRect(0,0,W,H);
-  // reopen the central passage with a soft darkness so side walls feel dimensional
-  const tunnel=ctx.createRadialGradient(W*.52,H*.48,Math.min(W,H)*.08,W*.52,H*.49,Math.max(W,H)*.58);tunnel.addColorStop(0,'rgba(3,7,8,.98)');tunnel.addColorStop(.48,'rgba(6,10,11,.86)');tunnel.addColorStop(.78,'rgba(10,12,11,.22)');tunnel.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=tunnel;ctx.fillRect(0,0,W,H);
-  for(let i=0;i<18;i++){
-    const side=i%2===0;const x=side?rnd()*W*.22:W*(.78+rnd()*.22),y=H*(.12+rnd()*.72),r=55+rnd()*125;
-    rockBlob(x,y,r,9000+level*100+i,'rgba(25,27,25,.94)','rgba(166,157,135,.055)');
-  }
-  drawStrata(900+level*31,.052);
+function drawCaveShell(level,opts={}){
+  const top=opts.top||'#060909',bottom=opts.bottom||'#010303',ambient=opts.ambient||'rgba(108,117,102,.018)';
+  caveGradient(top,bottom,ambient);
+  const rnd=mulberry32(3107+level*733);
+  // Geological silhouette: broad contiguous roof and floor rather than scattered blobs.
+  const ceilingBase=H*(opts.ceiling??.18), floorBase=H*(opts.floor??.79), ceilingAmp=H*(opts.ceilingAmp??.07), floorAmp=H*(opts.floorAmp??.065);
+  ctx.fillStyle='rgba(14,16,15,.985)';
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,ceilingBase);for(let x=0;x<=W+70;x+=70){const wave=Math.sin(x*.0062+level*.83)*.55+Math.sin(x*.013+level*.27)*.24;const y=ceilingBase+wave*ceilingAmp+(rnd()-.5)*ceilingAmp*.46;ctx.lineTo(x,y)}ctx.lineTo(W,0);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(0,H);ctx.lineTo(0,floorBase);for(let x=0;x<=W+70;x+=70){const wave=Math.sin(x*.0054+1.7+level*.69)*.48+Math.sin(x*.0105+level)*.20;const y=floorBase+wave*floorAmp+(rnd()-.5)*floorAmp*.42;ctx.lineTo(x,y)}ctx.lineTo(W,H);ctx.closePath();ctx.fill();
+  // Side massing creates an actual chamber volume and a clear route through it.
+  const leftW=opts.leftW??.16,rightW=opts.rightW??.14;
+  for(let i=0;i<9;i++){const side=i%2===0;const x=side?W*(rnd()*leftW):W*(1-rightW+rnd()*rightW),y=H*(.18+rnd()*.60),r=70+rnd()*150;rockBlob(x,y,r,6000+level*100+i,'rgba(22,24,22,.97)')}
+  // Distant aperture: not a random hole, but the continuation of the same passage.
+  const ax=W*(opts.apertureX??.72),ay=H*(opts.apertureY??.49),rx=W*(opts.apertureRX??.19),ry=H*(opts.apertureRY??.22);
+  const ag=ctx.createRadialGradient(ax,ay,4,ax,ay,Math.max(rx,ry));ag.addColorStop(0,'rgba(0,2,3,.995)');ag.addColorStop(.48,'rgba(1,4,5,.96)');ag.addColorStop(.78,'rgba(7,10,9,.56)');ag.addColorStop(1,'rgba(13,15,13,0)');ctx.fillStyle=ag;ctx.beginPath();ctx.ellipse(ax,ay,rx,ry,0,0,Math.PI*2);ctx.fill();
+  drawStrata(900+level*41,.028);
 }
-function pathFloor(vanishX=.52,horizon=.53){
-  const vx=W*vanishX,hy=H*horizon;
-  const g=ctx.createLinearGradient(0,hy,0,H);g.addColorStop(0,'rgba(51,48,41,.08)');g.addColorStop(.55,'rgba(38,35,31,.52)');g.addColorStop(1,'rgba(20,19,17,.98)');
-  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(vx-W*.07,hy);ctx.lineTo(vx+W*.07,hy);ctx.lineTo(W*.91,H);ctx.lineTo(W*.06,H);ctx.closePath();ctx.fill();
-  ctx.strokeStyle='rgba(204,190,157,.085)';ctx.lineWidth=1;
-  for(let i=0;i<12;i++){const q=(i+1)/12,y=hy+(H-hy)*q*q,half=W*(.07+.37*q);ctx.beginPath();ctx.moveTo(vx-half,y);ctx.quadraticCurveTo(vx,y-4,vx+half,y);ctx.stroke()}
-  // scattered small stones
-  const rnd=mulberry32(774);for(let i=0;i<25;i++){const y=hy+Math.pow(rnd(),.48)*(H-hy),q=(y-hy)/(H-hy),x=vx+(rnd()-.5)*W*(.14+.68*q);ctx.fillStyle=`rgba(111,105,91,${.06+.10*q})`;ctx.beginPath();ctx.ellipse(x,y,2+q*5,1+q*2.5,rnd()*2,0,Math.PI*2);ctx.fill()}
+function cubicPoint(spec,t){
+  const u=1-t,tt=t*t,uu=u*u;return{x:uu*u*spec[0].x+3*uu*t*spec[1].x+3*u*tt*spec[2].x+tt*t*spec[3].x,y:uu*u*spec[0].y+3*uu*t*spec[1].y+3*u*tt*spec[2].y+tt*t*spec[3].y};
 }
-function drawStalactite(x,baseY,len,w,alpha=.45){
-  const g=ctx.createLinearGradient(x,baseY,x,baseY+len);g.addColorStop(0,`rgba(103,101,89,${alpha})`);g.addColorStop(.48,`rgba(65,65,58,${alpha*.7})`);g.addColorStop(1,'rgba(24,26,24,.04)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-w,baseY);ctx.quadraticCurveTo(x-w*.5,baseY+len*.45,x,baseY+len);ctx.quadraticCurveTo(x+w*.45,baseY+len*.44,x+w,baseY);ctx.closePath();ctx.fill();
+function cubicTangent(spec,t){const u=1-t;return{x:3*u*u*(spec[1].x-spec[0].x)+6*u*t*(spec[2].x-spec[1].x)+3*t*t*(spec[3].x-spec[2].x),y:3*u*u*(spec[1].y-spec[0].y)+6*u*t*(spec[2].y-spec[1].y)+3*t*t*(spec[3].y-spec[2].y)}}
+function routePoint(spec,t){const q=cubicPoint(spec,clamp(t,0,1));return{x:q.x*W,y:q.y*H}}
+function drawPathRibbon(spec,nearWidth=.30,farWidth=.045,wet=false){
+  const left=[],right=[],N=34;
+  for(let i=0;i<=N;i++){const t=i/N,p=routePoint(spec,t),tan=cubicTangent(spec,t),mag=Math.hypot(tan.x*W,tan.y*H)||1,nx=-(tan.y*H)/mag,ny=(tan.x*W)/mag,w=W*(farWidth+(nearWidth-farWidth)*Math.pow(1-t,1.55));left.push([p.x+nx*w,p.y+ny*w]);right.push([p.x-nx*w,p.y-ny*w])}
+  const g=ctx.createLinearGradient(0,H*.46,0,H);if(wet){g.addColorStop(0,'rgba(54,57,50,.16)');g.addColorStop(.55,'rgba(37,38,33,.52)');g.addColorStop(1,'rgba(20,20,17,.96)')}else{g.addColorStop(0,'rgba(61,57,48,.12)');g.addColorStop(.55,'rgba(42,39,33,.52)');g.addColorStop(1,'rgba(20,19,16,.97)')}ctx.fillStyle=g;
+  ctx.beginPath();left.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));right.reverse().forEach(p=>ctx.lineTo(...p));ctx.closePath();ctx.fill();
+  // One barely visible worn edge is enough to imply a navigable path.
+  ctx.strokeStyle=wet?'rgba(181,187,164,.055)':'rgba(210,193,155,.05)';ctx.lineWidth=1.1;ctx.beginPath();left.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke();
+  const rnd=mulberry32(Math.floor(spec[3].x*9999+spec[1].y*1777));for(let i=0;i<19;i++){const t=.04+rnd()*.86,p=routePoint(spec,t),w=W*(farWidth+(nearWidth-farWidth)*Math.pow(1-t,1.55))*.58,x=p.x+(rnd()-.5)*w*1.25,y=p.y+(rnd()-.5)*w*.24,r=1.2+(1-t)*3.5;ctx.fillStyle=`rgba(128,118,99,${.025+(1-t)*.045})`;ctx.beginPath();ctx.ellipse(x,y,r*1.5,r*.65,rnd()*2,0,Math.PI*2);ctx.fill()}
 }
-function drawStalagmite(x,baseY,len,w,alpha=.48){
-  const g=ctx.createLinearGradient(x,baseY,x,baseY-len);g.addColorStop(0,`rgba(43,42,38,${alpha})`);g.addColorStop(.64,`rgba(81,79,68,${alpha*.75})`);g.addColorStop(1,'rgba(114,108,92,.05)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-w,baseY);ctx.quadraticCurveTo(x-w*.45,baseY-len*.45,x,baseY-len);ctx.quadraticCurveTo(x+w*.45,baseY-len*.46,x+w,baseY);ctx.closePath();ctx.fill();
-}
-function glow(x,y,r,color,alpha=1){const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color.replace('ALPHA',String(alpha)));g.addColorStop(.35,color.replace('ALPHA',String(alpha*.34)));g.addColorStop(1,color.replace('ALPHA','0'));ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}
+function drawStalactite(x,baseY,len,w,alpha=.20){const g=ctx.createLinearGradient(x,baseY,x,baseY+len);g.addColorStop(0,`rgba(105,101,87,${alpha})`);g.addColorStop(.58,`rgba(62,62,54,${alpha*.55})`);g.addColorStop(1,'rgba(19,20,18,.02)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-w,baseY);ctx.quadraticCurveTo(x-w*.38,baseY+len*.46,x,baseY+len);ctx.quadraticCurveTo(x+w*.35,baseY+len*.45,x+w,baseY);ctx.closePath();ctx.fill()}
+function drawStalagmite(x,baseY,len,w,alpha=.19){const g=ctx.createLinearGradient(x,baseY,x,baseY-len);g.addColorStop(0,`rgba(47,45,39,${alpha})`);g.addColorStop(.62,`rgba(86,80,67,${alpha*.55})`);g.addColorStop(1,'rgba(118,108,89,.02)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(x-w,baseY);ctx.quadraticCurveTo(x-w*.4,baseY-len*.45,x,baseY-len);ctx.quadraticCurveTo(x+w*.4,baseY-len*.45,x+w,baseY);ctx.closePath();ctx.fill()}
+function glow(x,y,r,color,alpha=1){const g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,color.replace('ALPHA',String(alpha)));g.addColorStop(.45,color.replace('ALPHA',String(alpha*.23)));g.addColorStop(1,color.replace('ALPHA','0'));ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}
 function drawBeam(x,y,tx,ty,power=1){
-  const dx=tx-x,dy=ty-y,len=Math.hypot(dx,dy),ang=Math.atan2(dy,dx);ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.globalCompositeOperation='screen';
-  // wide bloom
-  let g=ctx.createLinearGradient(0,0,len,0);g.addColorStop(0,`rgba(255,235,188,${.14*power})`);g.addColorStop(.48,`rgba(255,235,188,${.06*power})`);g.addColorStop(1,'rgba(255,235,188,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(len,len*.20);ctx.lineTo(len,-len*.20);ctx.closePath();ctx.fill();
-  // core beam
-  g=ctx.createLinearGradient(0,0,len,0);g.addColorStop(0,`rgba(255,244,211,${.53*power})`);g.addColorStop(.12,`rgba(255,239,198,${.28*power})`);g.addColorStop(.62,`rgba(255,232,184,${.09*power})`);g.addColorStop(1,'rgba(255,231,180,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,-2);ctx.lineTo(len,len*.085);ctx.lineTo(len,-len*.085);ctx.closePath();ctx.fill();ctx.restore();
-  glow(x,y,30,'rgba(255,226,170,ALPHA)',.22*power);
-}
-function drawCaver(x,y,s,dir=1,rope=false){
-  ctx.save();ctx.translate(x,y);ctx.scale(s*dir,s);
-  // soft grounding shadow
-  ctx.fillStyle='rgba(0,0,0,.42)';ctx.beginPath();ctx.ellipse(2,32,18,5,0,0,Math.PI*2);ctx.fill();
-  // rope behind body
-  if(rope){ctx.strokeStyle='rgba(218,200,157,.74)';ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(-1,-58);ctx.bezierCurveTo(1,-15,-2,18,1,49);ctx.stroke()}
-  // legs and boots
-  ctx.strokeStyle='#111716';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-4,14);ctx.lineTo(-8,29);ctx.moveTo(5,14);ctx.lineTo(11,29);ctx.stroke();ctx.strokeStyle='#050808';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-8,29);ctx.lineTo(-13,31);ctx.moveTo(11,29);ctx.lineTo(16,30);ctx.stroke();
-  // pack
-  const pg=ctx.createLinearGradient(-15,-4,-5,18);pg.addColorStop(0,'#24302f');pg.addColorStop(1,'#121b1b');ctx.fillStyle=pg;ctx.beginPath();ctx.roundRect?ctx.roundRect(-15,-4,9,22,3):ctx.rect(-15,-4,9,22);ctx.fill();
-  // torso / jacket
-  const bg=ctx.createLinearGradient(0,-7,0,18);bg.addColorStop(0,'#44504b');bg.addColorStop(1,'#222d2b');ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(-7,-6);ctx.lineTo(7,-6);ctx.lineTo(9,17);ctx.lineTo(-8,17);ctx.closePath();ctx.fill();
-  // harness accent
-  ctx.strokeStyle='rgba(205,177,118,.72)';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(-7,8);ctx.lineTo(8,8);ctx.moveTo(0,7);ctx.lineTo(0,16);ctx.stroke();
-  // arm
-  ctx.strokeStyle='#273230';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(5,-1);ctx.lineTo(14,9);ctx.lineTo(16,14);ctx.stroke();
-  // head and face
-  ctx.fillStyle='#c8b996';ctx.beginPath();ctx.arc(0,-12,6.5,0,Math.PI*2);ctx.fill();
-  // helmet
-  const hg=ctx.createLinearGradient(0,-21,0,-10);hg.addColorStop(0,'#879087');hg.addColorStop(1,'#4c5651');ctx.fillStyle=hg;ctx.beginPath();ctx.arc(0,-14,8.4,Math.PI,0);ctx.lineTo(8.5,-11);ctx.lineTo(-8.5,-11);ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,-14,7.2,Math.PI*1.08,Math.PI*1.87);ctx.stroke();
-  // headlamp + chest glint
-  ctx.fillStyle='#fff0bb';ctx.shadowColor='rgba(255,227,161,.8)';ctx.shadowBlur=8;ctx.fillRect(6.3,-15.7,3.4,3.1);ctx.shadowBlur=0;ctx.fillStyle='rgba(221,193,136,.68)';ctx.fillRect(5,8,2.5,2.5);
+  const dx=tx-x,dy=ty-y,len=Math.max(1,Math.hypot(dx,dy)),ang=Math.atan2(dy,dx);ctx.save();ctx.translate(x,y);ctx.rotate(ang);ctx.globalCompositeOperation='screen';
+  // Five feathered layers create a soft headlamp cone with no hard edge or flicker.
+  const layers=[{w:.19,a:.012},{w:.135,a:.018},{w:.095,a:.027},{w:.061,a:.040},{w:.034,a:.055}];
+  for(const L of layers){const g=ctx.createLinearGradient(0,0,len,0);g.addColorStop(0,`rgba(255,235,194,${L.a*1.4*power})`);g.addColorStop(.18,`rgba(255,232,188,${L.a*power})`);g.addColorStop(.70,`rgba(252,225,177,${L.a*.48*power})`);g.addColorStop(1,'rgba(255,224,170,0)');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(0,-2);ctx.quadraticCurveTo(len*.48,-len*L.w*.48,len,-len*L.w);ctx.quadraticCurveTo(len*.60,0,len,len*L.w);ctx.quadraticCurveTo(len*.48,len*L.w*.48,0,2);ctx.closePath();ctx.fill()}
   ctx.restore();
-  return {lx:x+(dir>0?8:-8)*s,ly:y-15*s};
+  const end=ctx.createRadialGradient(tx,ty,0,tx,ty,Math.min(92,len*.23));end.addColorStop(0,`rgba(255,233,190,${.040*power})`);end.addColorStop(.48,`rgba(255,225,175,${.013*power})`);end.addColorStop(1,'rgba(255,221,165,0)');ctx.globalCompositeOperation='screen';ctx.fillStyle=end;ctx.fillRect(tx-100,ty-100,200,200);ctx.globalCompositeOperation='source-over';
+  glow(x,y,20,'rgba(255,226,174,ALPHA)',.095*power);
 }
-function drawForegroundFrame(level,t){
-  ctx.save();
-  // near rocks add cinematic depth
-  const lg=ctx.createLinearGradient(0,0,W*.18,0);lg.addColorStop(0,'rgba(0,0,0,.98)');lg.addColorStop(.62,'rgba(7,9,9,.92)');lg.addColorStop(1,'rgba(8,10,10,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W*.13,0);ctx.bezierCurveTo(W*.09,H*.24,W*.17,H*.40,W*.10,H*.57);ctx.bezierCurveTo(W*.18,H*.73,W*.09,H*.86,W*.15,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
-  const rg=ctx.createLinearGradient(W,0,W*.82,0);rg.addColorStop(0,'rgba(0,0,0,.99)');rg.addColorStop(.62,'rgba(7,9,9,.93)');rg.addColorStop(1,'rgba(8,10,10,0)');ctx.fillStyle=rg;ctx.beginPath();ctx.moveTo(W,0);ctx.lineTo(W*.88,0);ctx.bezierCurveTo(W*.94,H*.23,W*.84,H*.39,W*.91,H*.55);ctx.bezierCurveTo(W*.84,H*.72,W*.94,H*.85,W*.87,H);ctx.lineTo(W,H);ctx.closePath();ctx.fill();
-  const count=5+level%3;for(let i=0;i<count;i++){const x=W*(.12+i/(count-1)*.76),len=25+((i*37+level*29)%65);drawStalactite(x,0,len,8+((i*13)%9),.30)}
-  ctx.restore();
+let walkAmount=0,walkPhase=0;
+function drawCaver(x,y,s,dir=1,phaseOffset=0){
+  const step=Math.sin(walkPhase+phaseOffset)*4.2*walkAmount,bob=Math.abs(Math.sin(walkPhase+phaseOffset))*1.1*walkAmount;ctx.save();ctx.translate(x,y-bob);ctx.scale(s*dir,s);
+  ctx.fillStyle='rgba(0,0,0,.50)';ctx.beginPath();ctx.ellipse(1,32,17,4.5,0,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#0d1211';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(-4,13);ctx.lineTo(-7-step*.46,29);ctx.moveTo(4,13);ctx.lineTo(9+step*.46,29);ctx.stroke();ctx.strokeStyle='#030505';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-7-step*.46,29);ctx.lineTo(-12-step*.55,31);ctx.moveTo(9+step*.46,29);ctx.lineTo(14+step*.52,30);ctx.stroke();
+  const pg=ctx.createLinearGradient(-14,-6,-6,18);pg.addColorStop(0,'#27302c');pg.addColorStop(1,'#101615');ctx.fillStyle=pg;ctx.beginPath();ctx.roundRect?ctx.roundRect(-15,-5,9,22,3):ctx.rect(-15,-5,9,22);ctx.fill();
+  const bg=ctx.createLinearGradient(0,-8,0,18);bg.addColorStop(0,'#39423c');bg.addColorStop(1,'#1c2421');ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(-7,-7);ctx.lineTo(7,-7);ctx.lineTo(9,17);ctx.lineTo(-8,17);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='rgba(183,155,106,.48)';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-7,8);ctx.lineTo(8,8);ctx.stroke();
+  ctx.strokeStyle='#222a27';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(5,-2);ctx.lineTo(13+step*.08,7);ctx.lineTo(16,12);ctx.stroke();
+  ctx.fillStyle='#b5a687';ctx.beginPath();ctx.arc(0,-13,6.2,0,Math.PI*2);ctx.fill();
+  const hg=ctx.createLinearGradient(0,-21,0,-10);hg.addColorStop(0,'#7f887f');hg.addColorStop(1,'#444d48');ctx.fillStyle=hg;ctx.beginPath();ctx.arc(0,-15,8.3,Math.PI,0);ctx.lineTo(8.5,-12);ctx.lineTo(-8.5,-12);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#fff0bd';ctx.shadowColor='rgba(255,229,176,.50)';ctx.shadowBlur=5;ctx.fillRect(6.5,-16.6,3.1,2.8);ctx.shadowBlur=0;ctx.restore();
 }
-function sceneProgress(){const len=state.levels[state.levelIndex]?.length||15;return clamp(state.qIndex/len,0,1)}
-function lightPower(){const low=clamp(state.nav/25,.28,1);const flicker=state.nav<15?(.68+.32*Math.sin(performance.now()*.03)):1;return clamp(.58+low*.42,.58,1)*flicker}
+function lampPoint(pos,s){return{x:pos.x+8*s,y:pos.y-15*s}}
+function drawParty(route,p,t,opts={}){
+  const leadP=clamp(.035+p*.90,0,1),trailP=clamp(leadP-.065,0,1),lead=routePoint(route,leadP),trail=routePoint(route,trailP),ahead=routePoint(route,clamp(leadP+.21,0,1));
+  const leadScale=(opts.scale||1)*(1.05-.34*leadP),trailScale=leadScale*.90;const sway=Math.sin(t*.00042+(opts.seed||0))*H*.0045;
+  const lp=lampPoint(lead,leadScale),tp=lampPoint(trail,trailScale);drawBeam(tp.x,tp.y,ahead.x-W*.025,ahead.y+sway+H*.012,lightPower()*.40);drawBeam(lp.x,lp.y,ahead.x,ahead.y+sway,lightPower());
+  drawCaver(trail.x,trail.y,trailScale,1,Math.PI*.82);drawCaver(lead.x,lead.y,leadScale,1,0);
+}
+function drawForegroundFrame(level){
+  ctx.save();const l=ctx.createLinearGradient(0,0,W*.16,0);l.addColorStop(0,'rgba(0,0,0,.995)');l.addColorStop(.72,'rgba(6,8,7,.96)');l.addColorStop(1,'rgba(7,8,7,0)');ctx.fillStyle=l;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W*.10,0);ctx.bezierCurveTo(W*.06,H*.22,W*.15,H*.43,W*.075,H*.61);ctx.bezierCurveTo(W*.14,H*.78,W*.08,H*.91,W*.13,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();const r=ctx.createLinearGradient(W,0,W*.84,0);r.addColorStop(0,'rgba(0,0,0,.998)');r.addColorStop(.72,'rgba(6,8,7,.97)');r.addColorStop(1,'rgba(7,8,7,0)');ctx.fillStyle=r;ctx.beginPath();ctx.moveTo(W,0);ctx.lineTo(W*.91,0);ctx.bezierCurveTo(W*.96,H*.25,W*.85,H*.42,W*.93,H*.60);ctx.bezierCurveTo(W*.86,H*.78,W*.95,H*.90,W*.88,H);ctx.lineTo(W,H);ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawWaterSide(route,t,side='right'){
+  const g=ctx.createLinearGradient(0,H*.58,0,H);g.addColorStop(0,'rgba(20,42,45,.16)');g.addColorStop(.52,'rgba(10,28,31,.45)');g.addColorStop(1,'rgba(3,13,15,.82)');ctx.fillStyle=g;ctx.beginPath();if(side==='right'){ctx.moveTo(W*.55,H*.66);ctx.bezierCurveTo(W*.72,H*.61,W*.86,H*.68,W,H*.62);ctx.lineTo(W,H);ctx.lineTo(W*.57,H)}else{ctx.moveTo(0,H*.66);ctx.bezierCurveTo(W*.18,H*.60,W*.35,H*.69,W*.47,H*.64);ctx.lineTo(W*.40,H);ctx.lineTo(0,H)}ctx.closePath();ctx.fill();ctx.strokeStyle='rgba(140,179,174,.045)';ctx.lineWidth=1;for(let i=0;i<13;i++){const y=H*(.68+i*.018),shift=Math.sin(t*.0011+i)*10;ctx.beginPath();ctx.moveTo(side==='right'?W*.60:W*.03,y);ctx.quadraticCurveTo(W*.78+shift,y-2,side==='right'?W*.98:W*.42,y+1);ctx.stroke()}}
 function drawEntrance(t,p){
-  caveGradient('#102024','#060909','rgba(118,149,136,.10)');
-  // daylight behind the party
-  const exitG=ctx.createRadialGradient(W*.015,H*.47,4,W*.015,H*.47,W*.43);exitG.addColorStop(0,'rgba(224,234,207,.77)');exitG.addColorStop(.18,'rgba(139,175,145,.40)');exitG.addColorStop(.48,'rgba(55,85,72,.10)');exitG.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=exitG;ctx.fillRect(0,0,W*.55,H);
-  drawRockWall(0,t);pathFloor(.53,.55);
-  // roots and moss at the threshold
-  ctx.strokeStyle='rgba(104,126,93,.32)';ctx.lineWidth=2;for(let i=0;i<16;i++){const x=i*38-30;ctx.beginPath();ctx.moveTo(x,0);ctx.bezierCurveTo(x+10,55,x+30,82+Math.sin(t*.0008+i)*8,x+13,142);ctx.stroke()}
-  ctx.fillStyle='rgba(89,108,72,.16)';for(let i=0;i<18;i++){ctx.beginPath();ctx.ellipse(i*47,54+(i%4)*12,18,5,.2,0,Math.PI*2);ctx.fill()}
-  const x=W*(.18+.48*p),y=H*.73;const c=drawCaver(x,y,1.05,1);drawBeam(c.lx,c.ly,x+W*.36,y-H*.09,lightPower());
-  // companion silhouette deeper ahead
-  if(p>.25){const c2=drawCaver(W*(.43+.18*p),H*.69,.70,1);drawBeam(c2.lx,c2.ly,W*(.68+.12*p),H*.60,lightPower()*.38)}
-  drawForegroundFrame(0,t);
+  const route=[{x:.12,y:.80},{x:.32,y:.73},{x:.51,y:.60},{x:.77,y:.53}];drawCaveShell(0,{top:'#07100f',bottom:'#020404',ambient:'rgba(114,128,107,.020)',apertureX:.78,apertureY:.50,apertureRX:.19,apertureRY:.20,ceiling:.16,floor:.81});
+  // The entrance behind them is only a thin, fading memory of daylight.
+  const dg=ctx.createRadialGradient(0,H*.46,0,0,H*.46,W*.26);dg.addColorStop(0,'rgba(190,203,173,.18)');dg.addColorStop(.33,'rgba(112,137,111,.07)');dg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=dg;ctx.fillRect(0,H*.12,W*.28,H*.65);
+  drawPathRibbon(route,.27,.042,false);for(let i=0;i<6;i++)drawStalactite(W*(.20+i*.11),H*.12,24+(i%3)*20,8+(i%2)*3,.13);drawParty(route,p,t,{seed:1});drawForegroundFrame(0);
 }
 function drawCorridor(t,p){
-  caveGradient('#081419','#030707','rgba(74,111,118,.08)');drawRockWall(1,t);pathFloor(.52,.51);
-  // distant archways
-  for(const [x,y,r] of [[.23,.44,.105],[.54,.34,.075],[.76,.40,.115]]){const g=ctx.createRadialGradient(W*x,H*y,2,W*x,H*y,W*r);g.addColorStop(0,'rgba(0,3,5,.95)');g.addColorStop(.55,'rgba(2,7,9,.84)');g.addColorStop(1,'rgba(14,16,15,0)');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(W*x,H*y,W*r,H*r*.72,0,0,Math.PI*2);ctx.fill()}
-  const rnd=mulberry32(701);for(let i=0;i<13;i++){const x=W*(.09+rnd()*.82),y=H*(.72+rnd()*.15),r=20+rnd()*48;rockBlob(x,y,r,200+i,'rgba(29,30,27,.96)','rgba(162,151,126,.065)')}
-  for(let i=0;i<10;i++)drawStalactite(W*(.14+i*.082),H*.095,28+(i%4)*18,7+(i%3)*3,.34);
-  const x=W*(.14+.60*p),y=H*.735;const c=drawCaver(x,y,1,1);drawBeam(c.lx,c.ly,x+W*.34,y-H*.055,lightPower());drawForegroundFrame(1,t);
+  const route=[{x:.10,y:.81},{x:.34,y:.76},{x:.55,y:.64},{x:.84,y:.56}];drawCaveShell(1,{top:'#05090a',bottom:'#010303',ambient:'rgba(83,104,101,.016)',apertureX:.84,apertureY:.54,apertureRX:.15,apertureRY:.18,ceiling:.15,floor:.81});drawPathRibbon(route,.29,.042,false);
+  // Long limestone ribs give the corridor depth without decorative clutter.
+  ctx.strokeStyle='rgba(169,160,140,.032)';ctx.lineWidth=2;for(let i=0;i<7;i++){ctx.beginPath();ctx.moveTo(W*(.15+i*.115),H*.19);ctx.bezierCurveTo(W*(.18+i*.11),H*.34,W*(.17+i*.105),H*.49,W*(.14+i*.11),H*.66);ctx.stroke()}for(let i=0;i<8;i++)drawStalactite(W*(.18+i*.09),H*.12,28+(i%4)*15,7+(i%3)*2,.12);drawParty(route,p,t,{seed:2});drawForegroundFrame(1);
 }
 function drawStream(t,p){
-  caveGradient('#07151b','#020708','rgba(64,131,151,.10)');drawRockWall(2,t);
-  // wet bank
-  const bank=ctx.createLinearGradient(0,H*.61,0,H);bank.addColorStop(0,'rgba(36,40,37,.12)');bank.addColorStop(1,'rgba(19,20,18,.9)');ctx.fillStyle=bank;ctx.fillRect(0,H*.62,W,H*.38);
-  // stream surface
-  const sg=ctx.createLinearGradient(0,H*.66,0,H);sg.addColorStop(0,'rgba(31,70,82,.38)');sg.addColorStop(.46,'rgba(14,42,53,.68)');sg.addColorStop(1,'rgba(5,20,27,.92)');ctx.fillStyle=sg;ctx.beginPath();ctx.moveTo(0,H*.72);ctx.bezierCurveTo(W*.23,H*.64,W*.43,H*.86,W*.69,H*.71);ctx.bezierCurveTo(W*.84,H*.65,W*.94,H*.72,W,H*.68);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
-  // moving reflections
-  for(let i=0;i<28;i++){const y=H*(.725+i*.0095),amp=8+6*Math.sin(t*.0018+i*.8);ctx.strokeStyle=`rgba(132,190,203,${.035+(i%5)*.007})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(W*.04,y);ctx.bezierCurveTo(W*.32+amp,y-2,W*.57-amp,y+3,W*.96,y);ctx.stroke()}
-  for(let i=0;i<10;i++){const x=W*(.10+i*.095),y=H*(.70+.032*Math.sin(i*1.55));rockBlob(x,y,16+9*(i%3),350+i,'rgba(45,43,37,.92)','rgba(183,172,143,.085)')}
-  // distant small cascade
-  ctx.fillStyle='rgba(140,187,194,.09)';ctx.fillRect(W*.79,H*.47,3,H*.17);glow(W*.79,H*.64,45,'rgba(82,151,170,ALPHA)',.07);
-  const x=W*(.13+.62*p),y=H*(.66+.03*Math.sin(p*8.5));const c=drawCaver(x,y,.96,1);drawBeam(c.lx,c.ly,x+W*.32,y-H*.09,lightPower());
-  ctx.strokeStyle='rgba(173,211,216,.22)';for(let i=0;i<10;i++){const x=(i*.117*W+t*.011)%W,y=(t*.085+i*127)%Math.max(1,H*.60);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+7);ctx.stroke()}
-  drawForegroundFrame(2,t);
+  const route=[{x:.10,y:.80},{x:.30,y:.74},{x:.50,y:.67},{x:.82,y:.57}];drawCaveShell(2,{top:'#04090a',bottom:'#010304',ambient:'rgba(71,106,109,.018)',apertureX:.83,apertureY:.54,apertureRX:.16,apertureRY:.19,ceiling:.17,floor:.80});drawWaterSide(route,t,'right');drawPathRibbon(route,.25,.040,true);
+  // Wet sheen exists, but no neon-blue cave lighting.
+  ctx.strokeStyle='rgba(176,186,166,.045)';for(let i=0;i<8;i++){const x=W*(.20+i*.08);ctx.beginPath();ctx.moveTo(x,H*.20);ctx.lineTo(x-3,H*(.28+(i%3)*.03));ctx.stroke()}drawParty(route,p,t,{seed:3});drawForegroundFrame(2);
 }
 function drawMaze(t,p){
-  caveGradient('#0e1010','#030505','rgba(115,98,75,.055)');drawRockWall(3,t);
-  // layered boulder choke
-  const rnd=mulberry32(1903);for(let i=0;i<27;i++){const x=W*(.05+rnd()*.9),y=H*(.24+rnd()*.60),r=25+rnd()*72;rockBlob(x,y,r,700+i,'rgba(31,31,28,.97)','rgba(181,165,133,.06)')}
-  // carve a winding low route using dark overlays
-  ctx.fillStyle='rgba(2,4,4,.95)';ctx.beginPath();ctx.moveTo(W*.08,H*.61);ctx.bezierCurveTo(W*.28,H*.52,W*.43,H*.67,W*.60,H*.57);ctx.bezierCurveTo(W*.76,H*.48,W*.87,H*.58,W*.97,H*.51);ctx.lineTo(W*.97,H*.72);ctx.bezierCurveTo(W*.76,H*.75,W*.51,H*.72,W*.08,H*.82);ctx.closePath();ctx.fill();
-  ctx.fillStyle='rgba(7,8,7,.96)';ctx.fillRect(0,H*.78,W,H*.22);
-  // thin airspace glow guides the squeeze
-  ctx.strokeStyle='rgba(226,205,165,.045)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(W*.1,H*.62);ctx.bezierCurveTo(W*.31,H*.55,W*.46,H*.68,W*.64,H*.58);ctx.bezierCurveTo(W*.80,H*.49,W*.89,H*.58,W*.96,H*.52);ctx.stroke();
-  const x=W*(.11+.70*p),y=H*(.72-.045*Math.sin(p*10));const c=drawCaver(x,y,.82,1);drawBeam(c.lx,c.ly,x+W*.22,y-H*.018,lightPower()*.9);drawForegroundFrame(3,t);
+  const route=[{x:.10,y:.82},{x:.30,y:.74},{x:.43,y:.62},{x:.82,y:.58}];drawCaveShell(3,{top:'#050707',bottom:'#010202',ambient:'rgba(103,91,74,.012)',apertureX:.82,apertureY:.56,apertureRX:.14,apertureRY:.15,ceiling:.20,floor:.79,ceilingAmp:.045,floorAmp:.045,leftW:.19,rightW:.18});
+  const rnd=mulberry32(1933);for(let i=0;i<15;i++){const side=i%2===0,x=side?W*(.08+rnd()*.22):W*(.67+rnd()*.25),y=H*(.40+rnd()*.37),r=28+rnd()*64;rockBlob(x,y,r,710+i,'rgba(28,27,24,.98)','rgba(165,150,126,.028)')}drawPathRibbon(route,.23,.038,false);drawParty(route,p,t,{seed:4,scale:.96});drawForegroundFrame(3);
 }
 function drawVertical(t,p){
-  caveGradient('#061015','#010304','rgba(65,102,117,.085)');
-  // enormous shaft walls
-  const wallL=ctx.createLinearGradient(0,0,W*.44,0);wallL.addColorStop(0,'#070909');wallL.addColorStop(.67,'rgba(28,30,28,.98)');wallL.addColorStop(1,'rgba(10,13,13,.22)');ctx.fillStyle=wallL;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(W*.37,0);ctx.bezierCurveTo(W*.44,H*.19,W*.39,H*.52,W*.42,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
-  const wallR=ctx.createLinearGradient(W,0,W*.57,0);wallR.addColorStop(0,'#070909');wallR.addColorStop(.66,'rgba(29,31,29,.98)');wallR.addColorStop(1,'rgba(10,13,13,.20)');ctx.fillStyle=wallR;ctx.beginPath();ctx.moveTo(W,0);ctx.lineTo(W*.65,0);ctx.bezierCurveTo(W*.57,H*.20,W*.62,H*.55,W*.58,H);ctx.lineTo(W,H);ctx.closePath();ctx.fill();
-  // abyss haze
-  glow(W*.5,H*.73,W*.27,'rgba(19,65,84,ALPHA)',.13);const fog=ctx.createLinearGradient(0,H*.55,0,H);fog.addColorStop(0,'rgba(29,61,70,0)');fog.addColorStop(1,'rgba(29,61,70,.11)');ctx.fillStyle=fog;ctx.fillRect(W*.32,H*.52,W*.36,H*.48);
-  drawStrata(503,.07);
-  const sway=Math.sin(t*.0013)*3.2;ctx.strokeStyle='rgba(214,197,153,.73)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(W*.47,H*.075);ctx.bezierCurveTo(W*.47+sway,H*.38,W*.50-sway,H*.68,W*.49,H*.98);ctx.stroke();
-  // anchors and rebelay loop
-  ctx.fillStyle='rgba(190,192,177,.60)';for(const [x,y] of [[.47,.075],[.485,.38]]){ctx.beginPath();ctx.arc(W*x,H*y,4.2,0,Math.PI*2);ctx.fill()}
-  ctx.strokeStyle='rgba(212,195,154,.45)';ctx.beginPath();ctx.arc(W*.485,H*.38,13,Math.PI*.7,Math.PI*1.65);ctx.stroke();
-  const x=W*.49+sway,y=H*(.18+.58*p);const c=drawCaver(x,y,.95,1,true);drawBeam(c.lx,c.ly,x+W*.27,y+H*.018,lightPower());
-  // teammate on upper ledge
-  ctx.fillStyle='rgba(25,26,24,.92)';ctx.beginPath();ctx.moveTo(W*.18,H*.30);ctx.lineTo(W*.39,H*.27);ctx.lineTo(W*.42,H*.34);ctx.lineTo(W*.18,H*.38);ctx.closePath();ctx.fill();const c2=drawCaver(W*.31,H*.285,.74,1);drawBeam(c2.lx,c2.ly,W*.48,H*.41,lightPower()*.52);
-  drawForegroundFrame(4,t);
+  // A walkable ledge skirts a black shaft: technical flavor, but the party stays on its feet.
+  const route=[{x:.10,y:.79},{x:.28,y:.73},{x:.52,y:.69},{x:.82,y:.55}];drawCaveShell(4,{top:'#030708',bottom:'#010202',ambient:'rgba(62,91,92,.014)',apertureX:.82,apertureY:.52,apertureRX:.14,apertureRY:.18,ceiling:.13,floor:.82,leftW:.13,rightW:.13});
+  const abyss=ctx.createRadialGradient(W*.57,H*.78,10,W*.57,H*.78,W*.25);abyss.addColorStop(0,'rgba(0,0,0,1)');abyss.addColorStop(.55,'rgba(0,1,2,.98)');abyss.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=abyss;ctx.beginPath();ctx.ellipse(W*.58,H*.81,W*.28,H*.22,0,0,Math.PI*2);ctx.fill();drawPathRibbon(route,.20,.036,false);
+  // A restrained handline is the only overt rigging element.
+  ctx.strokeStyle='rgba(176,160,127,.27)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(W*.30,H*.66);ctx.bezierCurveTo(W*.44,H*.61,W*.59,H*.61,W*.73,H*.57);ctx.stroke();for(const [x,y] of [[.30,.66],[.52,.61],[.73,.57]]){ctx.fillStyle='rgba(153,150,137,.30)';ctx.beginPath();ctx.arc(W*x,H*y,2.5,0,Math.PI*2);ctx.fill()}drawParty(route,p,t,{seed:5,scale:.96});drawForegroundFrame(4);
 }
 function drawGallery(t,p){
-  caveGradient('#09161a','#030506','rgba(73,139,157,.12)');drawRockWall(5,t);
-  // calcite draperies and stalactites
-  for(let i=0;i<20;i++){const x=(i+.5)*W/20,len=42+68*(.5+.5*Math.sin(i*2.2));drawStalactite(x,H*.07,len,8+(i%4)*4,.43)}
-  for(let i=0;i<12;i++){const x=W*(.08+i*.075),len=28+(i%5)*18;drawStalagmite(x,H*.83,len,9+(i%3)*4,.45)}
-  // flowstone curtain
-  const fg=ctx.createLinearGradient(W*.08,H*.28,W*.24,H*.74);fg.addColorStop(0,'rgba(126,123,104,.11)');fg.addColorStop(.48,'rgba(163,151,119,.20)');fg.addColorStop(1,'rgba(71,70,61,.05)');ctx.fillStyle=fg;ctx.beginPath();ctx.moveTo(W*.08,H*.19);ctx.bezierCurveTo(W*.14,H*.32,W*.11,H*.52,W*.18,H*.76);ctx.bezierCurveTo(W*.23,H*.61,W*.20,H*.38,W*.28,H*.17);ctx.closePath();ctx.fill();
-  // rimstone pools
-  for(let i=0;i<5;i++){const y=H*(.69+i*.037),rx=W*(.25-i*.024);ctx.strokeStyle=`rgba(166,208,202,${.18+i*.012})`;ctx.lineWidth=2.4;ctx.beginPath();ctx.ellipse(W*.62,y,rx,H*.032,0,0,Math.PI*2);ctx.stroke();ctx.strokeStyle='rgba(247,222,175,.045)';ctx.beginPath();ctx.ellipse(W*.62,y-2,rx*.86,H*.022,0,0,Math.PI*2);ctx.stroke()}
-  // crystals with subtle cyan glow
-  for(let i=0;i<18;i++){const x=W*(.07+(i%9)*.105),y=H*(.64+Math.floor(i/9)*.13);ctx.strokeStyle=`rgba(127,196,214,${.28+(i%3)*.06})`;ctx.lineWidth=1.5;for(let j=0;j<4;j++){const a=-1.47+j*.34;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(a)*(14+j*5),y+Math.sin(a)*(24+j*4));ctx.stroke()}if(i%4===0)glow(x,y-16,38,'rgba(70,155,184,ALPHA)',.05+.015*Math.sin(t*.001+i))}
-  const x=W*(.12+.68*p),y=H*.72;const c=drawCaver(x,y,.93,1);drawBeam(c.lx,c.ly,x+W*.31,y-H*.18,lightPower());
-  glow(W*.68,H*.63,W*.21,'rgba(64,143,171,ALPHA)',.07+.018*Math.sin(t*.001));drawForegroundFrame(5,t);
+  const route=[{x:.09,y:.81},{x:.31,y:.74},{x:.56,y:.67},{x:.85,y:.56}];drawCaveShell(5,{top:'#050909',bottom:'#010303',ambient:'rgba(106,112,98,.018)',apertureX:.85,apertureY:.54,apertureRX:.15,apertureRY:.18,ceiling:.14,floor:.81});drawPathRibbon(route,.27,.039,false);
+  // Formation gallery: calcite is mostly sensed in the beam, never glowing on its own.
+  for(let i=0;i<11;i++)drawStalactite(W*(.12+i*.075),H*.10,36+(i%4)*20,7+(i%3)*3,.16);for(let i=0;i<8;i++)drawStalagmite(W*(.18+i*.09),H*.83,24+(i%3)*18,8+(i%2)*3,.14);
+  ctx.strokeStyle='rgba(219,207,177,.055)';ctx.lineWidth=1;for(let i=0;i<10;i++){const x=W*(.17+i*.067),y=H*(.67+(i%2)*.06);for(let j=0;j<3;j++){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+(j-1)*5,y-(9+j*4));ctx.stroke()}}drawParty(route,p,t,{seed:6});drawForegroundFrame(5);
 }
 function drawLabyrinth(t,p){
-  caveGradient('#030b10','#010304','rgba(42,90,110,.10)');drawRockWall(6,t);
-  // phreatic tube openings
-  const holes=[[.18,.42,.12],[.42,.31,.10],[.64,.38,.14],[.79,.28,.08],[.54,.58,.09]];
-  holes.forEach((h,i)=>{const g=ctx.createRadialGradient(W*h[0],H*h[1],W*h[2]*.05,W*h[0],H*h[1],W*h[2]);g.addColorStop(0,'rgba(0,2,4,1)');g.addColorStop(.50,'rgba(1,6,10,.96)');g.addColorStop(.82,'rgba(13,21,21,.54)');g.addColorStop(1,'rgba(26,28,24,0)');ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(W*h[0],H*h[1],W*h[2],H*h[2]*.72,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(153,174,163,.045)';ctx.lineWidth=2;ctx.stroke()});
-  pathFloor(.58,.55);
-  // final exit glow grows through level
-  const winRise=state.win?Math.min(1,(performance.now()-state.winStart)/3500):0,exitAlpha=.035+p*.63+winRise*.58;const eg=ctx.createRadialGradient(W*.955,H*.45,2,W*.955,H*.45,W*.26);eg.addColorStop(0,`rgba(241,238,200,${exitAlpha})`);eg.addColorStop(.18,`rgba(185,211,174,${exitAlpha*.72})`);eg.addColorStop(.46,`rgba(108,149,124,${exitAlpha*.25})`);eg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=eg;ctx.fillRect(W*.68,H*.12,W*.32,H*.72);
-  // hints of vegetation only on victory
-  if(winRise>.22){ctx.strokeStyle=`rgba(91,132,81,${winRise*.32})`;ctx.lineWidth=2;for(let i=0;i<8;i++){const x=W*(.91+i*.012);ctx.beginPath();ctx.moveTo(x,H*.29);ctx.quadraticCurveTo(x-8,H*.39,x+3,H*.49);ctx.stroke()}}
-  const wp=state.win?clamp((performance.now()-state.winStart)/3600,0,1):0;const x=W*(.12+.68*(state.win?1:p)+.14*wp),y=H*.73;const c=drawCaver(x,y,.92,1);drawBeam(c.lx,c.ly,W*.96,H*.46,lightPower());drawForegroundFrame(6,t);
+  const route=[{x:.09,y:.81},{x:.31,y:.74},{x:.55,y:.64},{x:.92,y:.49}];drawCaveShell(6,{top:'#020506',bottom:'#010202',ambient:'rgba(57,78,78,.012)',apertureX:.92,apertureY:.48,apertureRX:.12,apertureRY:.16,ceiling:.16,floor:.81,leftW:.17,rightW:.12});drawPathRibbon(route,.27,.035,false);
+  // Rounded phreatic pockets are quiet side features, not distracting alternate paths.
+  for(const h of [[.22,.42,.065],[.48,.36,.052],[.70,.43,.057]]){ctx.fillStyle='rgba(0,2,3,.74)';ctx.beginPath();ctx.ellipse(W*h[0],H*h[1],W*h[2],H*h[2]*.70,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(139,148,132,.025)';ctx.stroke()}
+  const winRise=state.win?clamp((performance.now()-state.winStart)/3600,0,1):0,exitAlpha=.008+p*.028+winRise*.54;const eg=ctx.createRadialGradient(W*.975,H*.46,2,W*.975,H*.46,W*.20);eg.addColorStop(0,`rgba(226,225,188,${exitAlpha})`);eg.addColorStop(.24,`rgba(164,181,149,${exitAlpha*.52})`);eg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=eg;ctx.fillRect(W*.78,H*.18,W*.22,H*.56);drawParty(route,state.win?1:p,t,{seed:7});drawForegroundFrame(6);
 }
-function drawVignette(){
-  const g=ctx.createRadialGradient(W*.52,H*.50,Math.min(W,H)*.20,W*.52,H*.50,Math.max(W,H)*.72);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.62,'rgba(0,0,0,.055)');g.addColorStop(.84,'rgba(0,0,0,.34)');g.addColorStop(1,'rgba(0,0,0,.76)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
-  // subtle cinematic top/bottom shading
-  const c=ctx.createLinearGradient(0,0,0,H);c.addColorStop(0,'rgba(0,0,0,.42)');c.addColorStop(.14,'rgba(0,0,0,0)');c.addColorStop(.78,'rgba(0,0,0,0)');c.addColorStop(1,'rgba(0,0,0,.38)');ctx.fillStyle=c;ctx.fillRect(0,0,W,H);
+function lightPower(){
+  // Navigation affects reach very gently; there is deliberately no pulse, strobe or random flicker.
+  const target=clamp(.73+clamp(state.nav/100,0,1)*.27,.73,1);displayedLightPower+=(target-displayedLightPower)*.020;return displayedLightPower;
 }
+let displayedLightPower=1,visualProgress=0,visualLevel=-1;
+function sceneProgress(){const len=state.levels[state.levelIndex]?.length||15;return clamp(state.qIndex/len,0,1)}
+function batBurst(now){
+  if(!state.running||state.paused||state.ended||!state.gameStart)return null;const elapsed=(now-state.gameStart-(state.pausedTotal||0))/1000;if(elapsed<40)return null;let start,index;if(elapsed>=40&&elapsed<45){start=40;index=0}else if(elapsed>=55){const k=Math.floor((elapsed-55)/60);start=55+k*60;index=1+k}else return null;const local=elapsed-start;if(local<0||local>4.8)return null;const rnd=mulberry32(8801+index*971),count=2+((index*3+1)%5);return{local,index,count,rnd};
+}
+function drawBat(x,y,s,phase,dir=1){ctx.save();ctx.translate(x,y);ctx.scale(s*dir,s);ctx.fillStyle='rgba(0,0,0,.92)';ctx.beginPath();ctx.ellipse(0,0,4.5,2.4,0,0,Math.PI*2);ctx.fill();const flap=.45+.55*Math.sin(phase);ctx.beginPath();ctx.moveTo(-2,0);ctx.quadraticCurveTo(-10,-5-5*flap,-16,-1);ctx.quadraticCurveTo(-9,1,-2,1);ctx.fill();ctx.beginPath();ctx.moveTo(2,0);ctx.quadraticCurveTo(10,-5-5*flap,16,-1);ctx.quadraticCurveTo(9,1,2,1);ctx.fill();ctx.restore()}
+function drawBats(now){const b=batBurst(now);if(!b)return;const u=clamp(b.local/4.8,0,1),dir=b.index%2===0?1:-1;for(let i=0;i<b.count;i++){const r=mulberry32(9900+b.index*301+i*89),delay=i*.055+r()*.08,uu=clamp((u-delay)/(1-delay),0,1),baseY=H*(.24+r()*.25),arc=Math.sin(uu*Math.PI)*H*(.035+r()*.045),x=dir>0?W*(-.08+1.17*uu):W*(1.08-1.17*uu),y=baseY-arc+Math.sin(uu*9+i)*6,s=.55+r()*.55;drawBat(x,y,s,b.local*12+i*1.7,dir)}}
+function drawVignette(){const g=ctx.createRadialGradient(W*.51,H*.50,Math.min(W,H)*.14,W*.51,H*.50,Math.max(W,H)*.69);g.addColorStop(0,'rgba(0,0,0,.05)');g.addColorStop(.48,'rgba(0,0,0,.18)');g.addColorStop(.78,'rgba(0,0,0,.56)');g.addColorStop(1,'rgba(0,0,0,.90)');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);const c=ctx.createLinearGradient(0,0,0,H);c.addColorStop(0,'rgba(0,0,0,.52)');c.addColorStop(.17,'rgba(0,0,0,.06)');c.addColorStop(.72,'rgba(0,0,0,.05)');c.addColorStop(1,'rgba(0,0,0,.48)');ctx.fillStyle=c;ctx.fillRect(0,0,W,H)}
 function render(now){
-  const t=now-state.sceneStart;ctx.clearRect(0,0,W,H);
-  const li=state.levelIndex,p=sceneProgress();
+  const t=now-state.sceneStart;ctx.clearRect(0,0,W,H);const li=state.levelIndex;if(visualLevel!==li){visualLevel=li;visualProgress=0}const target=sceneProgress();visualProgress+=(target-visualProgress)*.018;walkAmount=clamp(Math.abs(target-visualProgress)*18,0,1);walkPhase=now*.0065;const p=visualProgress;
   [drawEntrance,drawCorridor,drawStream,drawMaze,drawVertical,drawGallery,drawLabyrinth][li](t,p);
-  // dust motes
-  ctx.fillStyle='rgba(230,223,199,.13)';for(let i=0;i<25;i++){const x=(i*173.3+t*.009*(1+i%3))%W,y=(i*91.7+Math.sin(t*.0005+i)*18)%H;ctx.fillRect(x,y,1.2,1.2)}
-  drawVignette();
-  if(state.running && !state.paused && !state.locked && !state.ended){updateTimer(now)}
-  requestAnimationFrame(render);
+  // Sparse dust, not television noise.
+  ctx.fillStyle='rgba(221,213,192,.055)';for(let i=0;i<12;i++){const x=(i*211.7+t*.003*(1+i%3))%W,y=(i*127.3+Math.sin(t*.00027+i)*12)%H;ctx.fillRect(x,y,1,1)}drawBats(now);drawVignette();if(state.running&&!state.paused&&!state.locked&&!state.ended)updateTimer(now);requestAnimationFrame(render);
 }
 requestAnimationFrame(render);
 
@@ -649,7 +594,7 @@ function showLevelIntro(li,ms=2200){
 }
 function startGame(){
   initAudio(); if(audioCtx?.state==='suspended')audioCtx.resume();
-  state.running=true;state.paused=false;state.locked=true;state.ended=false;state.levelIndex=0;state.qIndex=0;state.levels=splitLevels();state.nav=10;state.correct=0;state.wrong=0;state.fast=0;state.win=false;state.winStart=0;state.sceneStart=performance.now();
+  state.running=true;state.paused=false;state.locked=true;state.ended=false;state.levelIndex=0;state.qIndex=0;state.levels=splitLevels();state.nav=10;state.correct=0;state.wrong=0;state.fast=0;state.win=false;state.winStart=0;state.sceneStart=performance.now();state.gameStart=state.sceneStart;state.pausedAt=0;state.pausedTotal=0;visualLevel=-1;visualProgress=0;displayedLightPower=1;
   els.flash.classList.remove('out');els.end.classList.add('hidden');els.title.classList.add('hidden');els.hud.classList.remove('hidden');els.input.value='';els.feedback.className='';updateHud();showLevelIntro(0,2600);
 }
 function startQuestion(){
@@ -699,9 +644,9 @@ function showEnd(won){
   els.statCorrect.textContent=state.correct;els.statWrong.textContent=state.wrong;els.statFast.textContent=state.fast;els.statNav.textContent=`${state.nav.toFixed(1)}%`;els.end.classList.remove('hidden');
 }
 function pauseGame(){
-  if(!state.running||state.locked||state.ended)return;state.paused=true;state.pausedRemaining=Math.max(0,state.deadline-performance.now());els.pauseOverlay.classList.remove('hidden');els.input.blur();
+  if(!state.running||state.locked||state.ended)return;state.paused=true;state.pausedAt=performance.now();state.pausedRemaining=Math.max(0,state.deadline-state.pausedAt);els.pauseOverlay.classList.remove('hidden');els.input.blur();
 }
-function resumeGame(){if(!state.paused)return;state.paused=false;state.deadline=performance.now()+state.pausedRemaining;els.pauseOverlay.classList.add('hidden');els.input.focus()}
+function resumeGame(){if(!state.paused)return;const now=performance.now();if(state.pausedAt)state.pausedTotal+=now-state.pausedAt;state.pausedAt=0;state.paused=false;state.deadline=now+state.pausedRemaining;els.pauseOverlay.classList.add('hidden');els.input.focus()}
 
 els.start.addEventListener('click',startGame);els.restart.addEventListener('click',startGame);els.submit.addEventListener('click',submitAnswer);els.input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitAnswer()}});
 els.mute.addEventListener('click',toggleMute);els.titleMute.addEventListener('click',toggleMute);els.pause.addEventListener('click',pauseGame);els.resume.addEventListener('click',resumeGame);
