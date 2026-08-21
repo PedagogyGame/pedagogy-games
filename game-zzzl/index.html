@@ -1,1 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#10181d">
+  <title>Weld Integrity — Welding Vocabulary Game</title>
+  <meta name="description" content="A timed welding vocabulary game set during an animated evening fabrication shift.">
+  <style>
+    :root {
+      --ink: #f2f1e8;
+      --muted: #a9b5b8;
+      --steel: #18242b;
+      --steel-2: #22323a;
+      --line: rgba(190, 218, 222, .22);
+      --cyan: #83e4ed;
+      --blue: #5bbbc9;
+      --amber: #f4b357;
+      --red: #ef6b5d;
+      --green: #69d3a4;
+    }
 
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body {
+      color: var(--ink);
+      background: #0a1013;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    #game { position: relative; width: 100%; height: 100%; isolation: isolate; }
+    #shopCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #vignette {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(circle at 45% 42%, transparent 36%, rgba(3,8,10,.14) 76%, rgba(2,5,7,.62) 120%),
+        linear-gradient(180deg, rgba(2,8,12,.06), transparent 25%, rgba(0,0,0,.18));
+      z-index: 1;
+    }
+
+    .brand {
+      position: absolute; z-index: 3; top: clamp(18px, 3vw, 42px); left: clamp(20px, 4vw, 64px);
+      text-shadow: 0 2px 16px rgba(0,0,0,.7); user-select: none;
+      transition: opacity .4s ease;
+    }
+    .brand__kicker { color: var(--amber); font-size: 11px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; }
+    .brand__title { margin-top: 5px; font-family: Georgia, "Times New Roman", serif; font-size: clamp(25px, 3.3vw, 50px); line-height: .95; letter-spacing: -.03em; }
+    .brand__rule { width: 54px; height: 2px; margin-top: 12px; background: linear-gradient(90deg, var(--cyan), transparent); }
+
+    .icon-button {
+      position: absolute; z-index: 6; top: clamp(18px, 3vw, 36px); right: clamp(18px, 3vw, 36px);
+      width: 42px; height: 42px; border: 1px solid rgba(214,236,239,.26); border-radius: 50%;
+      background: rgba(13,23,28,.72); backdrop-filter: blur(10px); cursor: pointer;
+      display: grid; place-items: center; font-size: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.24);
+      transition: background .2s ease, transform .2s ease;
+    }
+    .icon-button:hover { background: rgba(38,58,66,.9); transform: translateY(-1px); }
+
+    .overlay {
+      position: absolute; inset: 0; z-index: 5; display: grid; align-items: center;
+      padding: clamp(22px, 5vw, 78px); pointer-events: none;
+      background: linear-gradient(90deg, rgba(3,8,11,.56) 0%, rgba(3,8,11,.26) 43%, transparent 72%);
+      transition: opacity .45s ease, visibility .45s;
+    }
+    .overlay.hidden { opacity: 0; visibility: hidden; }
+    .intro-card, .end-card {
+      pointer-events: auto; width: min(620px, 100%); border: 1px solid rgba(203,229,232,.25);
+      border-radius: 18px; padding: clamp(24px, 4vw, 44px);
+      background: linear-gradient(145deg, rgba(18,31,37,.94), rgba(9,17,21,.9));
+      box-shadow: 0 28px 80px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06);
+      backdrop-filter: blur(14px);
+    }
+    .eyebrow { color: var(--amber); font-size: 11px; font-weight: 800; letter-spacing: .24em; text-transform: uppercase; }
+    h1, h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; letter-spacing: -.035em; }
+    h1 { margin: 9px 0 12px; font-size: clamp(44px, 7vw, 78px); line-height: .9; }
+    h2 { margin: 8px 0 10px; font-size: clamp(36px, 5vw, 58px); line-height: .96; }
+    .lede { margin: 0; max-width: 52ch; color: #d3dcdb; line-height: 1.55; font-size: clamp(15px, 1.5vw, 18px); }
+    .rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 24px 0; }
+    .rule-card { min-height: 80px; padding: 13px; border: 1px solid rgba(196,222,225,.15); border-radius: 11px; background: rgba(255,255,255,.035); }
+    .rule-card strong { display: block; margin-bottom: 5px; color: var(--cyan); font-size: 13px; letter-spacing: .04em; }
+    .rule-card span { color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+    .primary-button {
+      border: 0; border-radius: 8px; padding: 13px 21px; min-height: 48px; cursor: pointer;
+      background: linear-gradient(135deg, #f5be65, #db842e); color: #1b140d;
+      font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+      box-shadow: 0 10px 28px rgba(216,126,38,.25), inset 0 1px 0 rgba(255,255,255,.35);
+      transition: filter .2s ease, transform .2s ease;
+    }
+    .primary-button:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .primary-button:active { transform: translateY(1px); }
+
+    #quizPanel {
+      position: absolute; z-index: 4; right: clamp(14px, 3vw, 44px); bottom: clamp(14px, 3vw, 38px);
+      width: min(520px, calc(100vw - 28px)); padding: clamp(17px, 2.2vw, 25px);
+      border: 1px solid rgba(190,218,222,.24); border-radius: 16px;
+      background: linear-gradient(145deg, rgba(20,34,41,.94), rgba(9,18,23,.93));
+      backdrop-filter: blur(13px); box-shadow: 0 22px 64px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.05);
+      transform: translateY(24px); opacity: 0; visibility: hidden;
+      transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .35s ease, visibility .35s;
+    }
+    #quizPanel.active { transform: translateY(0); opacity: 1; visibility: visible; }
+    #quizPanel.correct { animation: goodPulse .55s ease; }
+    #quizPanel.incorrect { animation: badPulse .55s ease; }
+    @keyframes goodPulse { 45% { border-color: rgba(105,211,164,.78); box-shadow: 0 0 0 3px rgba(105,211,164,.1), 0 22px 64px rgba(0,0,0,.48); } }
+    @keyframes badPulse { 45% { border-color: rgba(239,107,93,.8); box-shadow: 0 0 0 3px rgba(239,107,93,.1), 0 22px 64px rgba(0,0,0,.48); } }
+
+    .status-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: end; }
+    .meter-label, .progress-label { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    .integrity-line { display: flex; align-items: baseline; gap: 10px; }
+    #integrityValue { font-family: Georgia, "Times New Roman", serif; font-size: 27px; }
+    #reserveValue { color: var(--cyan); font-size: 11px; font-weight: 800; }
+    .progress-box { text-align: right; }
+    #questionCount { display: block; margin-top: 3px; color: #e7eded; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .integrity-track { height: 5px; margin: 8px 0 16px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.09); }
+    #integrityFill { height: 100%; width: 100%; border-radius: inherit; background: linear-gradient(90deg, #45ad82, #83e4c6); transition: width .45s ease, background .35s ease; }
+
+    #category { color: var(--amber); font-size: 10px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
+    #definition { margin: 9px 0 17px; min-height: 76px; color: #f1f1e8; font-family: Georgia, "Times New Roman", serif; font-size: clamp(18px, 2vw, 23px); line-height: 1.32; }
+    .answer-row { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+    #answerInput {
+      width: 100%; min-width: 0; min-height: 48px; padding: 0 14px; color: white;
+      border: 1px solid rgba(197,223,226,.25); border-radius: 8px; outline: 0;
+      background: rgba(2,9,12,.58); box-shadow: inset 0 2px 8px rgba(0,0,0,.22);
+      transition: border-color .2s, box-shadow .2s;
+    }
+    #answerInput:focus { border-color: rgba(131,228,237,.75); box-shadow: 0 0 0 3px rgba(131,228,237,.1), inset 0 2px 8px rgba(0,0,0,.22); }
+    #answerInput:disabled { opacity: .62; }
+    #submitButton { min-width: 102px; min-height: 48px; padding: 0 16px; }
+
+    .timer-line { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; margin-top: 15px; }
+    .timer-track { height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.09); }
+    #timerFill { height: 100%; width: 100%; transform-origin: left; border-radius: inherit; background: var(--green); transition: background .25s ease; }
+    #timerText { min-width: 34px; text-align: right; color: #dce5e5; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #feedback { min-height: 20px; margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    #feedback.good { color: var(--green); }
+    #feedback.bad { color: #ff9287; }
+
+    .end-stats { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0; }
+    .end-stat { min-width: 105px; padding: 12px 14px; border: 1px solid rgba(202,226,228,.14); border-radius: 10px; background: rgba(255,255,255,.035); }
+    .end-stat strong { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 500; }
+    .end-stat span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+
+    @media (max-width: 720px) {
+      .brand { top: 16px; left: 18px; }
+      .brand__title { font-size: 28px; }
+      .brand__rule { margin-top: 8px; }
+      .overlay { align-items: end; padding: 14px; background: linear-gradient(0deg, rgba(3,8,11,.7), rgba(3,8,11,.06) 72%); }
+      .intro-card, .end-card { padding: 22px; max-height: calc(100vh - 78px); overflow: auto; }
+      .rules { grid-template-columns: 1fr; gap: 7px; margin: 17px 0; }
+      .rule-card { min-height: 0; }
+      #quizPanel { bottom: 12px; padding: 16px; }
+      #definition { min-height: 62px; font-size: 18px; }
+      .answer-row { grid-template-columns: 1fr; }
+      #submitButton { width: 100%; }
+    }
+
+    @media (max-height: 690px) and (min-width: 721px) {
+      #quizPanel { padding: 15px 18px; width: min(500px, calc(100vw - 28px)); }
+      .integrity-track { margin-bottom: 11px; }
+      #definition { min-height: 52px; margin: 6px 0 11px; font-size: 18px; }
+      .timer-line { margin-top: 10px; }
+      #feedback { margin-top: 6px; }
+      .intro-card { padding: 26px 32px; }
+      h1 { font-size: 52px; }
+      .rules { margin: 16px 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="game" aria-label="Weld Integrity welding vocabulary game">
+    <canvas id="shopCanvas" aria-hidden="true"></canvas>
+    <div id="vignette"></div>
+
+    <div class="brand" id="brand">
+      <div class="brand__kicker">Evening fabrication shift</div>
+      <div class="brand__title">Weld Integrity</div>
+      <div class="brand__rule"></div>
+    </div>
+
+    <button class="icon-button" id="muteButton" type="button" aria-label="Mute ambient sound" title="Mute ambient sound">♪</button>
+
+    <section class="overlay" id="introOverlay" aria-labelledby="introTitle">
+      <div class="intro-card">
+        <div class="eyebrow">43-term welding vocabulary challenge</div>
+        <h1 id="introTitle">Clock in.<br>Build it right.</h1>
+        <p class="lede">Read each shop-floor definition and type the welding term. As you work, the crew will fit, weld, clean, and inspect the steel assembly behind you.</p>
+        <div class="rules" aria-label="Game rules">
+          <div class="rule-card"><strong>15–20 seconds</strong><span>Longer and more technical terms receive more time.</span></div>
+          <div class="rule-card"><strong>Quick arc +10</strong><span>Answer within ten seconds to restore integrity or build reserve.</span></div>
+          <div class="rule-card"><strong>Protect the weld</strong><span>Incorrect answers cost 20–30 points based on difficulty.</span></div>
+        </div>
+        <button class="primary-button" id="startButton" type="button">Start shift</button>
+      </div>
+    </section>
+
+    <section id="quizPanel" aria-live="polite" aria-label="Vocabulary question">
+      <div class="status-row">
+        <div>
+          <div class="meter-label">Weld integrity</div>
+          <div class="integrity-line"><span id="integrityValue">100%</span><span id="reserveValue">ARC RESERVE 0</span></div>
+        </div>
+        <div class="progress-box">
+          <span class="progress-label">Question</span>
+          <span id="questionCount">1 / 43</span>
+        </div>
+      </div>
+      <div class="integrity-track" aria-hidden="true"><div id="integrityFill"></div></div>
+      <div id="category">Fit-up & joint preparation</div>
+      <div id="definition">Loading the shift…</div>
+      <form id="answerForm" autocomplete="off">
+        <label class="sr-only" for="answerInput">Type the welding term</label>
+        <div class="answer-row">
+          <input id="answerInput" type="text" inputmode="text" spellcheck="false" autocapitalize="none" placeholder="Type the term…" maxlength="80">
+          <button class="primary-button" id="submitButton" type="submit">Submit</button>
+        </div>
+      </form>
+      <div class="timer-line">
+        <div class="timer-track" aria-hidden="true"><div id="timerFill"></div></div>
+        <div id="timerText">15.0</div>
+      </div>
+      <div id="feedback">Press Enter or select Submit when ready.</div>
+    </section>
+
+    <section class="overlay hidden" id="endOverlay" aria-labelledby="endTitle">
+      <div class="end-card">
+        <div class="eyebrow" id="endEyebrow">Shift complete</div>
+        <h2 id="endTitle">Weld accepted.</h2>
+        <p class="lede" id="endMessage">The assembly has passed its final inspection.</p>
+        <div class="end-stats">
+          <div class="end-stat"><strong id="finalIntegrity">100%</strong><span>Integrity</span></div>
+          <div class="end-stat"><strong id="finalCorrect">43</strong><span>Correct</span></div>
+          <div class="end-stat"><strong id="finalQuick">0</strong><span>Quick arcs</span></div>
+        </div>
+        <button class="primary-button" id="restartButton" type="button">Run another shift</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const TERMS = [
+        {term:'Fit-up', aliases:['fit up','fitup'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'Preparing and aligning pieces before welding, including the root opening, bevels, alignment, backing, tack welds, and cleanliness.'},
+        {term:'Tack weld', aliases:['tack'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'A short temporary weld that holds an assembly in position and may become part of the finished weld.'},
+        {term:'Root opening', aliases:['root gap','gap'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'The separation between members at the root of a joint; it strongly affects penetration and root-pass access.'},
+        {term:'Root face', aliases:['land','root land'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'The unbeveled portion at the root edge of a groove weld.'},
+        {term:'Bevel angle', aliases:['bevel'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'The angle machined, ground, or cut into one member for a groove weld.'},
+        {term:'Included angle', aliases:['groove angle'], category:'Fit-up & joint preparation', difficulty:'medium', definition:'The total angle between prepared groove faces, controlling access and the amount of filler required.'},
+        {term:'Hi-lo', aliases:['high low','hi lo','mismatch','internal mismatch'], category:'Fit-up & joint preparation', difficulty:'medium', definition:'Internal misalignment between two pipe ends or plate edges.'},
+        {term:'Backing', aliases:['backing bar','backing material'], category:'Fit-up & joint preparation', difficulty:'easy', definition:'Material placed at the root side of a joint to support molten weld metal or help ensure penetration.'},
+        {term:'Weld pass', aliases:['pass'], category:'Weld sequence & bead control', difficulty:'easy', definition:'One progression of welding along a joint; a multipass weld uses several of these.'},
+        {term:'Root pass', aliases:['root bead'], category:'Weld sequence & bead control', difficulty:'easy', definition:'The first pass deposited at the joint root, establishing penetration and the inside profile.'},
+        {term:'Hot pass', aliases:[], category:'Weld sequence & bead control', difficulty:'easy', definition:'A pass placed after the root to tie in or remove minor root-pass discontinuities before filling.'},
+        {term:'Fill pass', aliases:['filler pass','fill'], category:'Weld sequence & bead control', difficulty:'easy', definition:'A pass used to build a joint toward its final profile after the root and hot passes.'},
+        {term:'Cap pass', aliases:['cover pass','cap'], category:'Weld sequence & bead control', difficulty:'easy', definition:'The final visible pass or passes, intended to meet the required contour, size, and appearance.'},
+        {term:'Stringer bead', aliases:['stringer'], category:'Weld sequence & bead control', difficulty:'easy', definition:'A relatively narrow, straight bead made with little or no side-to-side weaving.'},
+        {term:'Weave bead', aliases:['weave'], category:'Weld sequence & bead control', difficulty:'easy', definition:'A bead made with intentional side-to-side electrode movement to cover more width.'},
+        {term:'Tie-in', aliases:['tie in','tiein'], category:'Weld sequence & bead control', difficulty:'medium', definition:'The point where a weld starts, stops, or joins another bead or segment.'},
+        {term:'Travel speed', aliases:['welding speed'], category:'Weld sequence & bead control', difficulty:'easy', definition:'The rate at which the arc moves along the joint, affecting bead shape, penetration, heat input, and defect risk.'},
+        {term:'Arc strike', aliases:['stray arc strike'], category:'Weld sequence & bead control', difficulty:'easy', definition:'An unintended arc mark outside the weld area that can locally harden or damage the base material.'},
+        {term:'Heat input', aliases:[], category:'Process control & metallurgy', difficulty:'medium', definition:'Energy put into a weld per unit length, driven mainly by voltage, amperage, and travel speed.'},
+        {term:'Interpass temperature', aliases:['interpass temp'], category:'Process control & metallurgy', difficulty:'hard', definition:'The temperature of the weld area before the next pass is deposited.'},
+        {term:'Back gouging', aliases:['backgouging','back gouge'], category:'Process control & metallurgy', difficulty:'medium', definition:'Removing weld or base metal from the reverse side of a joint to reach sound metal before welding the second side.'},
+        {term:'Purge', aliases:['back purge','purging'], category:'Process control & metallurgy', difficulty:'medium', definition:'Introducing inert gas inside pipe or behind a joint to protect the root side from oxidation.'},
+        {term:'PWHT', aliases:['post weld heat treatment','post-weld heat treatment'], category:'Process control & metallurgy', difficulty:'hard', definition:'Controlled heating after welding to relieve residual stress or achieve required mechanical and metallurgical properties.'},
+        {term:'Discontinuity', aliases:['weld discontinuity'], category:'Discontinuities & defects', difficulty:'medium', definition:'An irregularity in weld or base metal that may still be acceptable under the governing code.'},
+        {term:'Defect', aliases:['weld defect'], category:'Discontinuities & defects', difficulty:'easy', definition:'A discontinuity that fails the applicable acceptance criteria and must be repaired or rejected.'},
+        {term:'Porosity', aliases:['gas porosity'], category:'Discontinuities & defects', difficulty:'easy', definition:'Gas pockets trapped in solidified weld metal, appearing as pinholes or rounded internal indications.'},
+        {term:'Slag inclusion', aliases:['slag inclusions'], category:'Discontinuities & defects', difficulty:'medium', definition:'Nonmetallic material trapped in a weld, often because of poor cleaning, placement, or fusion between passes.'},
+        {term:'Lack of fusion', aliases:['incomplete fusion'], category:'Discontinuities & defects', difficulty:'medium', definition:'Failure of weld metal to fuse properly with base metal, a groove face, or a previous bead.'},
+        {term:'Undercut', aliases:[], category:'Discontinuities & defects', difficulty:'easy', definition:'A groove melted beside the weld toe or root and left unfilled.'},
+        {term:'VT', aliases:['visual testing','visual test','visual inspection'], category:'Inspection & NDT', difficulty:'medium', definition:'Direct visual examination of a weld and joint, often performed before other nondestructive methods.'},
+        {term:'NDT / NDE', aliases:['ndt','nde','nondestructive testing','non destructive testing','nondestructive examination','non destructive examination'], category:'Inspection & NDT', difficulty:'medium', definition:'Evaluating a weld without destroying the part.'},
+        {term:'UT', aliases:['ultrasonic testing','ultrasonic test'], category:'Inspection & NDT', difficulty:'medium', definition:'A method using high-frequency sound waves to locate and assess internal flaws.'},
+        {term:'RT', aliases:['radiographic testing','radiography','x ray','xray'], category:'Inspection & NDT', difficulty:'medium', definition:'X-ray or gamma-ray examination that reveals internal weld conditions such as porosity, slag, or incomplete penetration.'},
+        {term:'MT', aliases:['magnetic particle testing','magnetic particle test'], category:'Inspection & NDT', difficulty:'hard', definition:'A surface and near-surface crack-detection method for ferromagnetic materials such as carbon steel.'},
+        {term:'PT', aliases:['liquid penetrant testing','penetrant testing','dye penetrant'], category:'Inspection & NDT', difficulty:'hard', definition:'A penetrant-and-developer method used to reveal surface-breaking discontinuities in nonporous materials.'},
+        {term:'WPS', aliases:['welding procedure specification'], category:'Procedure, qualification & code', difficulty:'hard', definition:'Written production-welding instructions covering process, filler, preheat, joint design, parameters, passes, and positions.'},
+        {term:'PQR', aliases:['procedure qualification record'], category:'Procedure, qualification & code', difficulty:'hard', definition:'Documented test evidence proving that a welding procedure can produce an acceptable weld.'},
+        {term:'WPQ / WPQR', aliases:['wpq','wpqr','welder performance qualification','welder performance qualification record'], category:'Procedure, qualification & code', difficulty:'hard', definition:'The individual welder’s qualification record showing the process, position, thickness, and other limits passed.'},
+        {term:'Code', aliases:['welding code'], category:'Procedure, qualification & code', difficulty:'medium', definition:'The governing welding rulebook or standard, such as AWS D1.1, ASME Section IX, or API 1104.'},
+        {term:'Acceptance criteria', aliases:['acceptance standard','acceptance requirements'], category:'Procedure, qualification & code', difficulty:'hard', definition:'The exact limits used to determine whether a weld passes inspection.'},
+        {term:'Essential variable', aliases:['essential variables'], category:'Procedure, qualification & code', difficulty:'hard', definition:'A procedure variable that cannot change beyond permitted limits without requalifying the welding procedure.'},
+        {term:'Prequalified WPS', aliases:['prequalified welding procedure specification','prequalified procedure'], category:'Procedure, qualification & code', difficulty:'hard', definition:'A welding procedure permitted by a code without a separate PQR when every stated code condition is met.'},
+        {term:'Hot work', aliases:['hotwork'], category:'Job-site safety', difficulty:'easy', definition:'Temporary work involving flame, sparks, or heat that normally requires permits, fire watch, and combustible protection.'}
+      ];
+
+      const SETTINGS = {
+        easy: {time: 15, penalty: 30},
+        medium: {time: 18, penalty: 25},
+        hard: {time: 20, penalty: 20}
+      };
+
+      const els = {
+        canvas: document.getElementById('shopCanvas'), intro: document.getElementById('introOverlay'),
+        end: document.getElementById('endOverlay'), quiz: document.getElementById('quizPanel'),
+        brand: document.getElementById('brand'), start: document.getElementById('startButton'),
+        restart: document.getElementById('restartButton'), mute: document.getElementById('muteButton'),
+        form: document.getElementById('answerForm'), input: document.getElementById('answerInput'),
+        submit: document.getElementById('submitButton'), category: document.getElementById('category'),
+        definition: document.getElementById('definition'), questionCount: document.getElementById('questionCount'),
+        integrityValue: document.getElementById('integrityValue'), integrityFill: document.getElementById('integrityFill'),
+        reserveValue: document.getElementById('reserveValue'), timerFill: document.getElementById('timerFill'),
+        timerText: document.getElementById('timerText'), feedback: document.getElementById('feedback'),
+        endEyebrow: document.getElementById('endEyebrow'), endTitle: document.getElementById('endTitle'),
+        endMessage: document.getElementById('endMessage'), finalIntegrity: document.getElementById('finalIntegrity'),
+        finalCorrect: document.getElementById('finalCorrect'), finalQuick: document.getElementById('finalQuick')
+      };
+
+      let questions = [], index = 0, integrity = 100, reserve = 0, correct = 0, quick = 0;
+      let questionStart = 0, questionDuration = 15, timerRAF = 0, accepting = false, gameActive = false;
+      let questionsCompleted = 0, weldFlash = 0, qualityHold = false, completedShift = false;
+      let audioContext = null, ambientNodes = [], muted = false;
+
+      function shuffle(array) {
+        const copy = [...array];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy;
+      }
+
+      function makeQuestionOrder() {
+        return ['easy','medium','hard'].flatMap(level => shuffle(TERMS.filter(item => item.difficulty === level)));
+      }
+
+      function normalize(value) {
+        return value.toLowerCase().replace(/&/g, ' and ').replace(/post[\s-]?weld/g, 'post weld')
+          .replace(/non[\s-]?destructive/g, 'nondestructive').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+      }
+
+      function answerMatches(value, item) {
+        const attempt = normalize(value);
+        if (!attempt) return false;
+        return [item.term, ...item.aliases].some(answer => normalize(answer) === attempt);
+      }
+
+      function startGame() {
+        initAudio();
+        questions = makeQuestionOrder();
+        index = 0; integrity = 100; reserve = 0; correct = 0; quick = 0;
+        questionsCompleted = 0; qualityHold = false; completedShift = false; gameActive = true;
+        els.intro.classList.add('hidden'); els.end.classList.add('hidden'); els.quiz.classList.add('active');
+        updateIntegrity();
+        showQuestion();
+      }
+
+      function showQuestion() {
+        if (!gameActive) return;
+        if (index >= questions.length) { finishGame(true); return; }
+        const item = questions[index];
+        questionDuration = SETTINGS[item.difficulty].time;
+        els.category.textContent = item.category;
+        els.definition.textContent = item.definition;
+        els.questionCount.textContent = `${index + 1} / ${questions.length}`;
+        els.input.value = '';
+        els.input.disabled = false;
+        els.submit.disabled = false;
+        els.feedback.className = '';
+        els.feedback.textContent = `${questionDuration} seconds · incorrect answer −${SETTINGS[item.difficulty].penalty}`;
+        accepting = true;
+        questionStart = performance.now();
+        cancelAnimationFrame(timerRAF);
+        timerRAF = requestAnimationFrame(updateTimer);
+        requestAnimationFrame(() => els.input.focus({preventScroll:true}));
+      }
+
+      function updateTimer(now) {
+        if (!accepting) return;
+        const elapsed = (now - questionStart) / 1000;
+        const remaining = Math.max(0, questionDuration - elapsed);
+        const ratio = remaining / questionDuration;
+        els.timerFill.style.transform = `scaleX(${ratio})`;
+        els.timerFill.style.background = ratio > .5 ? 'var(--green)' : ratio > .25 ? 'var(--amber)' : 'var(--red)';
+        els.timerText.textContent = remaining.toFixed(1);
+        if (remaining <= 0) { resolveAnswer(false, true, elapsed); return; }
+        timerRAF = requestAnimationFrame(updateTimer);
+      }
+
+      function submitAnswer(event) {
+        event.preventDefault();
+        if (!accepting) return;
+        const elapsed = (performance.now() - questionStart) / 1000;
+        resolveAnswer(answerMatches(els.input.value, questions[index]), false, elapsed);
+      }
+
+      function resolveAnswer(isCorrect, timedOut, elapsed) {
+        if (!accepting) return;
+        accepting = false;
+        cancelAnimationFrame(timerRAF);
+        els.input.disabled = true;
+        els.submit.disabled = true;
+        const item = questions[index];
+        const fast = isCorrect && elapsed <= 10;
+        let delay = 3000;
+
+        if (isCorrect) {
+          correct++;
+          weldFlash = 1;
+          delay = 2000;
+          if (fast) {
+            quick++;
+            let award = 10;
+            const needed = 100 - integrity;
+            const restored = Math.min(needed, award);
+            integrity += restored;
+            award -= restored;
+            reserve = Math.min(20, reserve + award);
+            els.feedback.textContent = restored > 0 ? `Correct — QUICK ARC restored ${restored} integrity.` : `Correct — QUICK ARC +10 reserve.`;
+          } else {
+            els.feedback.textContent = `Correct — ${item.term}`;
+          }
+          els.feedback.className = 'good';
+          pulsePanel('correct');
+          playTone(true);
+        } else {
+          let penalty = SETTINGS[item.difficulty].penalty;
+          const absorbed = Math.min(reserve, penalty);
+          reserve -= absorbed;
+          penalty -= absorbed;
+          integrity = Math.max(0, integrity - penalty);
+          els.feedback.textContent = `${timedOut ? 'Time expired' : 'Incorrect'} — correct term: ${item.term}. ${absorbed ? `Reserve absorbed ${absorbed}.` : ''}`;
+          els.feedback.className = 'bad';
+          pulsePanel('incorrect');
+          playTone(false);
+        }
+        updateIntegrity();
+        questionsCompleted = index + 1;
+
+        if (integrity <= 0) {
+          qualityHold = true;
+          setTimeout(() => finishGame(false), delay);
+          return;
+        }
+        setTimeout(() => { index++; showQuestion(); }, delay);
+      }
+
+      function pulsePanel(className) {
+        els.quiz.classList.remove('correct','incorrect');
+        void els.quiz.offsetWidth;
+        els.quiz.classList.add(className);
+        setTimeout(() => els.quiz.classList.remove(className), 650);
+      }
+
+      function updateIntegrity() {
+        els.integrityValue.textContent = `${integrity}%`;
+        els.reserveValue.textContent = `ARC RESERVE ${reserve}`;
+        els.integrityFill.style.width = `${integrity}%`;
+        els.integrityFill.style.background = integrity > 60 ? 'linear-gradient(90deg,#45ad82,#83e4c6)' : integrity > 30 ? 'linear-gradient(90deg,#d88b32,#f4c267)' : 'linear-gradient(90deg,#be463c,#ef776b)';
+      }
+
+      function finishGame(success) {
+        gameActive = false; accepting = false; cancelAnimationFrame(timerRAF);
+        completedShift = success; qualityHold = !success;
+        els.quiz.classList.remove('active');
+        els.endEyebrow.textContent = success ? 'Shift complete' : 'Quality hold';
+        els.endTitle.textContent = success ? 'Weld accepted.' : 'Review the procedure.';
+        els.endMessage.textContent = success
+          ? 'The steel assembly has passed its final inspection. The evening shift is complete.'
+          : 'The inspector has placed the assembly on hold. Review the missed terminology and run another shift.';
+        els.finalIntegrity.textContent = `${integrity}%`;
+        els.finalCorrect.textContent = `${correct} / ${questions.length}`;
+        els.finalQuick.textContent = quick;
+        setTimeout(() => els.end.classList.remove('hidden'), 280);
+        playFinish(success);
+      }
+
+      function toggleMute() {
+        muted = !muted;
+        els.mute.textContent = muted ? '×' : '♪';
+        els.mute.setAttribute('aria-label', muted ? 'Unmute ambient sound' : 'Mute ambient sound');
+        ambientNodes.forEach(node => { if (node.gain) node.gain.value = muted ? 0 : node.datasetGain; });
+      }
+
+      function initAudio() {
+        if (audioContext) { if (audioContext.state === 'suspended') audioContext.resume(); return; }
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const master = audioContext.createGain(); master.gain.value = muted ? 0 : .035; master.datasetGain = .035;
+          const osc = audioContext.createOscillator(); osc.type = 'sine'; osc.frequency.value = 58;
+          const filter = audioContext.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 135;
+          osc.connect(filter).connect(master).connect(audioContext.destination); osc.start();
+          ambientNodes = [master];
+        } catch (_) { audioContext = null; }
+      }
+
+      function playTone(good) {
+        if (!audioContext || muted) return;
+        const osc = audioContext.createOscillator(); const gain = audioContext.createGain();
+        osc.type = good ? 'sine' : 'triangle'; osc.frequency.setValueAtTime(good ? 520 : 180, audioContext.currentTime);
+        if (good) osc.frequency.exponentialRampToValueAtTime(760, audioContext.currentTime + .18);
+        gain.gain.setValueAtTime(.0001, audioContext.currentTime); gain.gain.exponentialRampToValueAtTime(.055, audioContext.currentTime + .015);
+        gain.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + .28);
+        osc.connect(gain).connect(audioContext.destination); osc.start(); osc.stop(audioContext.currentTime + .3);
+      }
+
+      function playFinish(success) {
+        if (!audioContext || muted) return;
+        const notes = success ? [330,440,554,660] : [220,196,165];
+        notes.forEach((freq, i) => setTimeout(() => {
+          if (!audioContext || muted) return;
+          const osc = audioContext.createOscillator(); const gain = audioContext.createGain();
+          osc.frequency.value = freq; gain.gain.setValueAtTime(.045, audioContext.currentTime);
+          gain.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + .32);
+          osc.connect(gain).connect(audioContext.destination); osc.start(); osc.stop(audioContext.currentTime + .34);
+        }, i * 110));
+      }
+
+      // Animated fabrication shop -------------------------------------------------
+      const ctx = els.canvas.getContext('2d');
+      const BASE_W = 1600, BASE_H = 900;
+      let renderScale = 1, renderX = 0, renderY = 0, dpr = 1, startTime = performance.now();
+      const dust = Array.from({length: 42}, (_,i) => ({
+        x: 70 + ((i * 193) % 1430), y: 70 + ((i * 97) % 690), r: 1 + (i % 3) * .45, speed: 2 + (i % 5)
+      }));
+
+      function resizeCanvas() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = window.innerWidth, h = window.innerHeight;
+        els.canvas.width = Math.round(w * dpr); els.canvas.height = Math.round(h * dpr);
+        renderScale = Math.max(w / BASE_W, h / BASE_H);
+        renderX = (w - BASE_W * renderScale) / 2; renderY = (h - BASE_H * renderScale) / 2;
+      }
+
+      function rect(x,y,w,h,fill,stroke=null,line=1,r=0) {
+        ctx.beginPath();
+        if (r) ctx.roundRect(x,y,w,h,r); else ctx.rect(x,y,w,h);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = line; ctx.stroke(); }
+      }
+
+      function line(x1,y1,x2,y2,color,width=1) {
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.strokeStyle=color; ctx.lineWidth=width; ctx.stroke();
+      }
+
+      function drawShop(t) {
+        const wall = ctx.createLinearGradient(0,0,0,660); wall.addColorStop(0,'#1c2a31'); wall.addColorStop(1,'#2e393c');
+        rect(0,0,BASE_W,650,wall);
+        const floor = ctx.createLinearGradient(0,600,0,900); floor.addColorStop(0,'#303838'); floor.addColorStop(1,'#151d20');
+        rect(0,620,BASE_W,280,floor);
+
+        // Ceiling beams and softly humming industrial lights.
+        rect(0,0,BASE_W,40,'#0c151a');
+        [130,520,910,1300].forEach((x,i) => {
+          line(x,0,x+75,198,'rgba(9,16,19,.78)',16);
+          const flicker = i === 2 && Math.sin(t*7.1) > .993 ? .3 : 1;
+          ctx.save(); ctx.globalAlpha = flicker; rect(x-20,126,170,13,'#c9d5cb');
+          const glow = ctx.createLinearGradient(0,135,0,390); glow.addColorStop(0,'rgba(205,231,221,.105)'); glow.addColorStop(1,'rgba(205,231,221,0)');
+          ctx.beginPath(); ctx.moveTo(x-40,139); ctx.lineTo(x+175,139); ctx.lineTo(x+290,470); ctx.lineTo(x-155,470); ctx.closePath(); ctx.fillStyle=glow; ctx.fill(); ctx.restore();
+        });
+
+        // Wall panels and overhead crane rail.
+        for (let x=0; x<1600; x+=160) line(x,45,x,620,'rgba(198,221,219,.055)',2);
+        rect(0,225,1600,24,'#192328'); rect(0,229,1600,4,'rgba(161,188,190,.2)');
+        rect(468,92,530,30,'#7a663d'); rect(472,98,522,8,'#b49353');
+        rect(676,89,112,44,'#272f31',null,0,3); rect(695,102,74,10,'#e7b44f');
+
+        // Open bay door with distant evening yard.
+        rect(1120,194,390,428,'#11191d','#536266',9);
+        const sky = ctx.createLinearGradient(0,205,0,610); sky.addColorStop(0,'#42545f'); sky.addColorStop(.48,'#77675d'); sky.addColorStop(1,'#1b2427');
+        rect(1131,205,368,407,sky);
+        ctx.beginPath(); ctx.moveTo(1131,500); ctx.lineTo(1240,430); ctx.lineTo(1300,478); ctx.lineTo(1382,405); ctx.lineTo(1499,489); ctx.lineTo(1499,612); ctx.lineTo(1131,612); ctx.closePath(); ctx.fillStyle='#263236'; ctx.fill();
+        rect(1180,498,92,88,'#202b2e'); rect(1193,511,24,16,'#d29b48'); rect(1230,511,24,16,'#9e6c38');
+        const vehicleX = 1510 - ((t*24)%520);
+        rect(vehicleX,554,86,27,'#29373a',null,0,3); rect(vehicleX+17,541,42,16,'#31464a');
+        [vehicleX+20,vehicleX+67].forEach(x=>{ctx.beginPath();ctx.arc(x,583,8,0,Math.PI*2);ctx.fillStyle='#11181b';ctx.fill();});
+        for (let y=210; y<614; y+=82) rect(1127,y,378,7,'rgba(61,73,76,.75)');
+
+        // Stock rack at left.
+        rect(48,270,330,375,'#1a2326','#435156',5);
+        [335,445,555].forEach(y => { rect(58,y,310,9,'#4d5b5e'); line(73,y-52,73,y+58,'#596669',8); line(351,y-52,351,y+58,'#596669',8); });
+        const colors=['#7a4e36','#6f7c7b','#8a6d4f','#59686b'];
+        for (let row=0; row<3; row++) for (let i=0; i<6; i++) {
+          const y=306+row*110+i*5; const len=235-(i%3)*22;
+          rect(83,y,len,7,colors[(row+i)%colors.length]); ctx.beginPath(); ctx.ellipse(83+len,y+3.5,4,3.5,0,0,Math.PI*2); ctx.fillStyle='#9aa3a0'; ctx.fill();
+        }
+        rect(96,244,158,42,'#d3b45e',null,0,3); ctx.fillStyle='#192126';ctx.font='800 18px system-ui';ctx.fillText('STEEL STOCK',113,271);
+
+        // Welding curtain and a restrained suggestion of activity behind it.
+        rect(405,270,235,355,'#2a2020','#4d3938',6);
+        const curtain = ctx.createLinearGradient(405,0,640,0); curtain.addColorStop(0,'rgba(114,34,29,.88)'); curtain.addColorStop(.5,'rgba(158,49,39,.72)'); curtain.addColorStop(1,'rgba(92,25,25,.9)');
+        for (let x=414; x<632; x+=28) { ctx.beginPath(); ctx.moveTo(x,280); ctx.quadraticCurveTo(x+13,450+Math.sin(t+x)*4,x,620); ctx.strokeStyle=curtain; ctx.lineWidth=25; ctx.stroke(); }
+        if ((t%17)>7 && (t%17)<10.5) { const g=ctx.createRadialGradient(522,488,4,522,488,115);g.addColorStop(0,'rgba(100,221,255,.42)');g.addColorStop(1,'rgba(80,170,220,0)');ctx.fillStyle=g;ctx.fillRect(405,270,235,355); }
+
+        // Tool cabinet and safety station.
+        rect(1012,337,94,286,'#354349','#172126',4,4); for(let y=374;y<594;y+=44) line(1020,y,1098,y,'#1f2b2f',2);
+        rect(1033,294,54,43,'#d7e0d8',null,0,3); ctx.fillStyle='#bd493f';ctx.fillRect(1053,302,13,28);ctx.fillRect(1046,310,27,12);
+        rect(968,279,70,32,'#d7b350',null,0,3); ctx.fillStyle='#1a2427';ctx.font='800 11px system-ui';ctx.fillText('HOT WORK',976,299);
+
+        // Perspective floor markings and cable.
+        line(0,700,1600,660,'rgba(226,196,91,.13)',3); line(0,806,1600,727,'rgba(226,196,91,.08)',3);
+        ctx.beginPath(); ctx.moveTo(1014,688); ctx.bezierCurveTo(940,714,820,690,747,752); ctx.bezierCurveTo(674,815,620,770,576,789); ctx.strokeStyle='#11181a';ctx.lineWidth=11;ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1014,688); ctx.bezierCurveTo(940,714,820,690,747,752); ctx.bezierCurveTo(674,815,620,770,576,789); ctx.strokeStyle='#384448';ctx.lineWidth=3;ctx.stroke();
+
+        drawFabricationTable(t);
+        drawWelder(t);
+        drawInspector(t);
+        drawDust(t);
+      }
+
+      function drawFabricationTable(t) {
+        // Welding power source.
+        rect(912,568,112,151,'#24333a','#10191d',4,8); rect(922,578,92,44,'#172329');
+        ctx.beginPath();ctx.arc(948,600,12,0,Math.PI*2);ctx.fillStyle='#78d8dd';ctx.fill();
+        rect(975,590,24,12,'#d38e37'); rect(930,635,76,6,'#52646a'); rect(930,650,76,6,'#52646a');
+        [937,997].forEach(x=>{ctx.beginPath();ctx.arc(x,722,11,0,Math.PI*2);ctx.fillStyle='#10181b';ctx.fill();});
+        ctx.fillStyle='#d2d8d2';ctx.font='800 12px system-ui';ctx.fillText('CV 350',942,683);
+
+        // Heavy table.
+        rect(564,571,356,37,'#344347','#11191c',4,3); rect(580,607,25,158,'#263337'); rect(878,607,25,158,'#263337');
+        line(592,718,891,718,'#1b272b',13); rect(538,551,406,24,'#526064','#1a2427',3,2);
+
+        // Steel assembly: more completed weld seams appear as progress rises.
+        const progress = Math.max(.04, questionsCompleted / TERMS.length);
+        const steelGrad = ctx.createLinearGradient(0,450,0,585); steelGrad.addColorStop(0,'#738286');steelGrad.addColorStop(.5,'#4a5a5e');steelGrad.addColorStop(1,'#29373b');
+        rect(598,440,26,116,steelGrad,'#202b2e',2); rect(835,417,26,139,steelGrad,'#202b2e',2);
+        rect(604,448,250,22,steelGrad,'#202b2e',2); rect(604,518,250,22,steelGrad,'#202b2e',2);
+        line(621,471,837,517,'#2d393c',8); line(837,470,624,518,'#2d393c',8);
+        const seams = [[617,473,618,515],[838,472,839,515],[630,456,828,456],[630,528,828,528]];
+        seams.forEach((s,i)=>{
+          if (progress > i*.2) {
+            const local = Math.min(1,(progress-i*.2)/.22);
+            const ex=s[0]+(s[2]-s[0])*local, ey=s[1]+(s[3]-s[1])*local;
+            line(s[0],s[1],ex,ey,'#b78754',5); line(s[0],s[1],ex,ey,'rgba(236,188,126,.55)',1);
+          }
+        });
+        if (completedShift) {
+          rect(760,472,62,30,'#d9d5b4',null,0,2);ctx.fillStyle='#347455';ctx.font='900 12px system-ui';ctx.fillText('ACCEPT',769,492);
+        } else if (qualityHold) {
+          rect(760,472,62,30,'#c95c50',null,0,2);ctx.fillStyle='#fff4e8';ctx.font='900 12px system-ui';ctx.fillText('HOLD',774,492);
+        }
+
+        // C-clamps.
+        ctx.strokeStyle='#be7042';ctx.lineWidth=8;ctx.beginPath();ctx.arc(648,548,25,.2,Math.PI*1.6);ctx.stroke();
+        line(648,523,648,561,'#c6814c',5);
+      }
+
+      function drawWelder(t) {
+        const cycle = t % 18;
+        const welding = gameActive && cycle >= 5 && cycle < 10;
+        const grinding = gameActive && cycle >= 11.3 && cycle < 13.8;
+        const helmetDown = cycle >= 3.8 && cycle < 10.7;
+        const bob = Math.sin(t*1.2)*1.2;
+        const x=720, y=455+bob;
+
+        // Shadow.
+        ctx.beginPath();ctx.ellipse(708,774,92,17,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.27)';ctx.fill();
+        // Boots and legs, stable stance.
+        line(x-27,y+185,x-40,y+298,'#20282b',31); line(x+27,y+183,x+45,y+296,'#20282b',31);
+        rect(x-66,y+286,50,22,'#151d20',null,0,6);rect(x+26,y+286,57,22,'#151d20',null,0,6);
+        // Jacket body.
+        ctx.beginPath();ctx.moveTo(x-63,y+65);ctx.quadraticCurveTo(x-72,y+125,x-55,y+205);ctx.lineTo(x+58,y+205);ctx.quadraticCurveTo(x+73,y+120,x+56,y+65);ctx.closePath();
+        const jacket=ctx.createLinearGradient(x-60,0,x+60,0);jacket.addColorStop(0,'#6a4530');jacket.addColorStop(.5,'#8a5b3a');jacket.addColorStop(1,'#4a3328');ctx.fillStyle=jacket;ctx.fill();
+        line(x,y+78,x,y+199,'rgba(31,26,24,.55)',3);rect(x-52,y+145,104,8,'#2d2928');
+        // Head and welding helmet.
+        ctx.beginPath();ctx.arc(x,y+40,27,0,Math.PI*2);ctx.fillStyle='#b77e58';ctx.fill();
+        if (helmetDown) {
+          ctx.save();ctx.translate(x,y+35);ctx.rotate(.06);ctx.beginPath();ctx.moveTo(-34,-30);ctx.lineTo(31,-27);ctx.lineTo(37,34);ctx.lineTo(-28,43);ctx.lineTo(-40,7);ctx.closePath();ctx.fillStyle='#18252b';ctx.fill();
+          rect(-17,-4,34,20,'#3c555c','#6e8c91',2,2);ctx.restore();
+        } else {
+          ctx.beginPath();ctx.arc(x-3,y+15,31,Math.PI,Math.PI*2);ctx.lineTo(x+23,y+18);ctx.lineTo(x-31,y+18);ctx.closePath();ctx.fillStyle='#1a282e';ctx.fill();
+          rect(x-23,y-3,43,16,'#39535b','#71878b',2,2);
+        }
+
+        const toolX = welding ? 623 : grinding ? 638 : 668;
+        const toolY = welding ? 522 : grinding ? 530 : 500;
+        // Arms converge naturally toward the task.
+        line(x-52,y+86,toolX+16,toolY-12,'#765038',30); line(x+50,y+88,toolX+20,toolY+2,'#765038',30);
+        line(x-52,y+86,toolX+16,toolY-12,'#9a6540',18); line(x+50,y+88,toolX+20,toolY+2,'#9a6540',18);
+        [toolY-10,toolY+3].forEach((yy,i)=>{ctx.beginPath();ctx.arc(toolX+18+i*2,yy,11,0,Math.PI*2);ctx.fillStyle='#322c2b';ctx.fill();});
+        if (welding) {
+          line(toolX+10,toolY-20,toolX,toolY,'#242c2f',6);
+          drawArc(toolX,toolY,t,false);
+        } else if (grinding) {
+          ctx.save();ctx.translate(toolX,toolY);ctx.rotate(-.28);rect(-5,-12,42,21,'#45575c','#1c282b',2,4);ctx.beginPath();ctx.arc(0,0,15,0,Math.PI*2);ctx.strokeStyle='#8f9a99';ctx.lineWidth=5;ctx.stroke();ctx.restore();
+          drawArc(toolX-2,toolY+4,t,true);
+        } else {
+          // Measuring square/inspection pose.
+          line(toolX,toolY-5,toolX+42,toolY-5,'#c3aa5a',4);line(toolX,toolY-5,toolX,toolY+27,'#c3aa5a',4);
+        }
+
+        // Exhaust arm follows above the welding point.
+        line(868,286,801,326,'#29373b',28);line(801,326,745,384,'#29373b',25);line(745,384,680,409,'#29373b',22);
+        ctx.beginPath();ctx.ellipse(672,416,32,18,-.25,0,Math.PI*2);ctx.fillStyle='#172226';ctx.fill();ctx.strokeStyle='#637176';ctx.lineWidth=4;ctx.stroke();
+      }
+
+      function drawArc(x,y,t,grinding) {
+        if (!grinding) {
+          const pulse=.75+.25*Math.sin(t*48); const glow=ctx.createRadialGradient(x,y,2,x,y,105);
+          glow.addColorStop(0,`rgba(245,255,255,${pulse})`);glow.addColorStop(.08,'rgba(108,231,255,.95)');glow.addColorStop(1,'rgba(63,166,215,0)');ctx.fillStyle=glow;ctx.fillRect(x-110,y-110,220,220);
+          ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fillStyle='white';ctx.fill();
+        }
+        const count=grinding?24:15;
+        for(let i=0;i<count;i++){
+          const seed=(i*2.399+t*(grinding?7:13)); const life=(seed%1); const angle=grinding?(-1.4+(i/count)*1.1):(.2+(i/count)*2.45);
+          const dist=life*(grinding?92:67); const sx=x+Math.cos(angle)*dist; const sy=y+Math.sin(angle)*dist+life*life*34;
+          line(x+Math.cos(angle)*dist*.72,y+Math.sin(angle)*dist*.72+life*life*22,sx,sy,grinding?'rgba(255,166,59,.9)':'rgba(191,233,255,.86)',grinding?2:1.4);
+        }
+      }
+
+      function drawInspector(t) {
+        if (!gameActive && !completedShift && !qualityHold) return;
+        const phase=t%38;
+        let x;
+        if (phase<10) x=1540-phase*52;
+        else if (phase<24) x=1020;
+        else if (phase<34) x=1020+(phase-24)*52;
+        else return;
+        const walking=phase<10||phase>=24; const stride=walking?Math.sin(t*6.2)*16:0;
+        const y=500;
+        ctx.save();ctx.translate(x,y);
+        ctx.beginPath();ctx.ellipse(0,279,54,12,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.22)';ctx.fill();
+        // Correct alternating gait: opposing leg and arm angles.
+        line(-16,145,-18+stride,252,'#253034',23);line(16,145,18-stride,252,'#253034',23);
+        rect(-43+stride,244,43,18,'#151d20',null,0,5);rect(0-stride,244,45,18,'#151d20',null,0,5);
+        ctx.beginPath();ctx.moveTo(-43,50);ctx.lineTo(40,50);ctx.lineTo(52,160);ctx.lineTo(-48,160);ctx.closePath();ctx.fillStyle='#596a70';ctx.fill();
+        rect(-49,110,101,12,'#d3bb52');rect(-42,60,84,8,'rgba(227,238,232,.25)');
+        ctx.beginPath();ctx.arc(0,28,25,0,Math.PI*2);ctx.fillStyle='#95684c';ctx.fill();
+        ctx.beginPath();ctx.arc(0,15,28,Math.PI,Math.PI*2);ctx.lineTo(27,18);ctx.lineTo(-27,18);ctx.closePath();ctx.fillStyle='#d0a33d';ctx.fill();rect(-35,14,70,8,'#e1b64f');
+        const armSwing=walking?-stride*.75:0;
+        line(-36,68,-45+armSwing,151,'#596a70',24);line(35,68,44-armSwing,151,'#596a70',24);
+        if(!walking){rect(-57,121,82,58,'#d7d2bb','#5a5146',2,3);line(-46,138,12,138,'#667174',2);line(-46,149,7,149,'#667174',2);}
+        ctx.restore();
+      }
+
+      function drawDust(t) {
+        ctx.save();ctx.globalCompositeOperation='screen';
+        dust.forEach(p=>{
+          const y=(p.y+t*p.speed)%760+30; const x=p.x+Math.sin(t*.18+p.y)*7;
+          ctx.beginPath();ctx.arc(x,y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(221,210,171,.1)';ctx.fill();
+        });ctx.restore();
+      }
+
+      function render(now) {
+        const t=(now-startTime)/1000;
+        ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,els.canvas.width,els.canvas.height);
+        ctx.setTransform(dpr*renderScale,0,0,dpr*renderScale,dpr*renderX,dpr*renderY);
+        drawShop(t);
+        weldFlash=Math.max(0,weldFlash-.025);
+        requestAnimationFrame(render);
+      }
+
+      els.start.addEventListener('click', startGame);
+      els.restart.addEventListener('click', startGame);
+      els.form.addEventListener('submit', submitAnswer);
+      els.mute.addEventListener('click', toggleMute);
+      window.addEventListener('resize', resizeCanvas, {passive:true});
+      window.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !els.intro.classList.contains('hidden') && !gameActive) els.start.click();
+      });
+      resizeCanvas();
+      requestAnimationFrame(render);
+    })();
+  </script>
+</body>
+</html>
