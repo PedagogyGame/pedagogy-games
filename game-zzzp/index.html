@@ -1,0 +1,1576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#080712">
+  <meta name="description" content="A three-act live-audio vocabulary game for sound engineers, stagehands, and venue technicians.">
+  <title>LIVE SOUND — Keep the Show Alive</title>
+  <style>
+    :root {
+      --ink: #f6f2ff;
+      --muted: #bdb7cf;
+      --panel: rgba(11, 10, 23, .91);
+      --panel-edge: rgba(199, 184, 255, .2);
+      --violet: #9d68ff;
+      --cyan: #56e7ff;
+      --pink: #ff4da6;
+      --amber: #ffc857;
+      --good: #58f2b0;
+      --bad: #ff5571;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      color: var(--ink);
+      background: #05040b;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    button {
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+    }
+
+    #concert {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #05040b;
+    }
+
+    .vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(0,0,0,.05) 52%, rgba(2,2,9,.45) 100%),
+        radial-gradient(circle at 46% 42%, transparent 30%, rgba(0,0,0,.23) 74%, rgba(0,0,0,.66) 118%);
+    }
+
+    .brand {
+      position: fixed;
+      top: 22px;
+      left: 25px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 4;
+      text-shadow: 0 2px 12px #000;
+      pointer-events: none;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 2px;
+      align-items: end;
+      padding: 5px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 9px;
+      background: rgba(4,4,12,.66);
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    }
+
+    .brand-mark i {
+      display: block;
+      border-radius: 2px;
+      background: linear-gradient(#65efff, #9d68ff);
+      animation: meter 1.2s ease-in-out infinite alternate;
+    }
+
+    .brand-mark i:nth-child(1) { height: 38%; animation-delay: -.7s; }
+    .brand-mark i:nth-child(2) { height: 72%; animation-delay: -.3s; }
+    .brand-mark i:nth-child(3) { height: 94%; animation-delay: -.9s; }
+    .brand-mark i:nth-child(4) { height: 58%; animation-delay: -.1s; }
+    .brand-mark i:nth-child(5) { height: 81%; animation-delay: -.5s; }
+
+    @keyframes meter {
+      from { transform: scaleY(.48); opacity: .72; }
+      to { transform: scaleY(1); opacity: 1; }
+    }
+
+    .brand-copy strong {
+      display: block;
+      font-size: 13px;
+      letter-spacing: .22em;
+    }
+
+    .brand-copy span {
+      display: block;
+      margin-top: 2px;
+      color: #cbc3de;
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .sound-button {
+      position: fixed;
+      top: 23px;
+      right: 24px;
+      z-index: 12;
+      min-width: 96px;
+      padding: 10px 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 999px;
+      color: #e9e5f2;
+      background: rgba(8,7,18,.75);
+      backdrop-filter: blur(10px);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+      transition: border-color .2s, background .2s;
+    }
+
+    .sound-button:hover { border-color: rgba(86,231,255,.6); background: rgba(20,17,42,.88); }
+
+    .quiz-panel {
+      position: fixed;
+      right: clamp(15px, 2.2vw, 34px);
+      bottom: clamp(15px, 2.6vh, 30px);
+      z-index: 8;
+      width: min(545px, 39vw);
+      min-width: 420px;
+      padding: 19px 20px 18px;
+      border: 1px solid var(--panel-edge);
+      border-radius: 19px;
+      background:
+        linear-gradient(145deg, rgba(24,21,48,.95), var(--panel) 45%, rgba(8,8,17,.95));
+      box-shadow: 0 28px 70px rgba(0,0,0,.52), inset 0 1px rgba(255,255,255,.05);
+      backdrop-filter: blur(16px);
+      transition: opacity .25s, transform .25s;
+    }
+
+    .quiz-panel.hidden {
+      opacity: 0;
+      transform: translateY(18px);
+      pointer-events: none;
+    }
+
+    .panel-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .act-label {
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+
+    .progress-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .05em;
+    }
+
+    .integrity-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .integrity-row span {
+      color: #aaa3bd;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .integrity-row strong {
+      min-width: 40px;
+      color: var(--good);
+      font-size: 13px;
+      text-align: right;
+    }
+
+    .meter-track {
+      height: 7px;
+      overflow: hidden;
+      border-radius: 10px;
+      background: rgba(255,255,255,.09);
+      box-shadow: inset 0 1px 3px rgba(0,0,0,.6);
+    }
+
+    .meter-fill {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--cyan), var(--good));
+      box-shadow: 0 0 15px rgba(86,231,255,.44);
+      transition: width .5s ease, background .35s;
+    }
+
+    .prompt-kicker {
+      margin: 0 0 6px;
+      color: #8e86a2;
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+
+    .definition {
+      min-height: 67px;
+      margin: 0 0 14px;
+      color: #fcfaff;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(17px, 1.35vw, 21px);
+      line-height: 1.34;
+      text-wrap: balance;
+    }
+
+    .timer-wrap {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .timer-track {
+      height: 5px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: rgba(255,255,255,.08);
+    }
+
+    .timer-bar {
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--good);
+      transform-origin: left center;
+      transition: background .2s;
+    }
+
+    .timer-number {
+      width: 38px;
+      color: var(--good);
+      font-size: 12px;
+      font-weight: 900;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .choice {
+      min-height: 48px;
+      padding: 9px 11px;
+      border: 1px solid rgba(255,255,255,.11);
+      border-radius: 11px;
+      color: #ece9f4;
+      background: rgba(255,255,255,.055);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.2;
+      text-align: left;
+      transition: transform .15s, border-color .15s, background .15s;
+    }
+
+    .choice:hover {
+      transform: translateY(-1px);
+      border-color: rgba(86,231,255,.55);
+      background: rgba(86,231,255,.1);
+    }
+
+    .choice.correct {
+      border-color: var(--good);
+      color: #dffff2;
+      background: rgba(88,242,176,.16);
+    }
+
+    .choice.wrong {
+      border-color: var(--bad);
+      color: #ffe4e8;
+      background: rgba(255,85,113,.14);
+    }
+
+    .answer-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .answer-input {
+      min-width: 0;
+      padding: 12px 13px;
+      outline: 0;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 11px;
+      color: #fff;
+      background: rgba(0,0,0,.26);
+      font-size: 15px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .answer-input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 0 3px rgba(86,231,255,.11);
+    }
+
+    .submit-button {
+      padding: 0 17px;
+      border-radius: 11px;
+      color: #090713;
+      background: linear-gradient(135deg, var(--cyan), #c99cff);
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .feedback {
+      min-height: 20px;
+      margin-top: 10px;
+      color: #b8b0c8;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .feedback.good { color: var(--good); }
+    .feedback.bad { color: #ff8195; }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(circle at 50% 38%, rgba(36,20,70,.44), rgba(3,3,9,.82) 65%);
+      backdrop-filter: blur(7px);
+      transition: opacity .35s, visibility .35s;
+    }
+
+    .screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .start-card, .end-card {
+      width: min(720px, 94vw);
+      padding: clamp(28px, 5vw, 54px);
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 25px;
+      background:
+        linear-gradient(150deg, rgba(32,22,59,.97), rgba(10,9,22,.96) 53%, rgba(11,9,22,.98));
+      box-shadow: 0 35px 100px rgba(0,0,0,.65), inset 0 1px rgba(255,255,255,.06);
+      text-align: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 11px;
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+    }
+
+    .start-card h1, .end-card h1 {
+      margin: 0;
+      font-size: clamp(35px, 6vw, 68px);
+      line-height: .94;
+      letter-spacing: -.045em;
+      text-transform: uppercase;
+    }
+
+    .start-card h1 span {
+      display: block;
+      color: #a787ff;
+      font-size: .48em;
+      letter-spacing: .055em;
+      margin-top: 12px;
+    }
+
+    .intro {
+      max-width: 570px;
+      margin: 21px auto 26px;
+      color: #c8c1d6;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 16px;
+      line-height: 1.55;
+    }
+
+    .mode-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .mode-button {
+      min-height: 92px;
+      padding: 17px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 15px;
+      background: rgba(255,255,255,.055);
+      transition: transform .18s, border-color .18s, background .18s;
+    }
+
+    .mode-button:hover {
+      transform: translateY(-3px);
+      border-color: rgba(86,231,255,.62);
+      background: rgba(86,231,255,.1);
+    }
+
+    .mode-button strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .mode-button span {
+      display: block;
+      color: #bcb5ca;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .acts-preview {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 21px;
+      color: #8e87a0;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      flex-wrap: wrap;
+    }
+
+    .acts-preview i { color: #514b60; font-style: normal; }
+
+    .transition-card {
+      width: min(620px, 90vw);
+      text-align: center;
+      text-shadow: 0 4px 20px #000;
+    }
+
+    .transition-card .act-number {
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .28em;
+      text-transform: uppercase;
+    }
+
+    .transition-card h2 {
+      margin: 12px 0 10px;
+      font-size: clamp(38px, 7vw, 78px);
+      line-height: .95;
+      letter-spacing: -.05em;
+      text-transform: uppercase;
+    }
+
+    .transition-card p {
+      margin: 0;
+      color: #d0c9dc;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(15px, 2vw, 19px);
+    }
+
+    .end-score {
+      margin: 21px 0 5px;
+      color: var(--good);
+      font-size: clamp(48px, 9vw, 86px);
+      font-weight: 950;
+      letter-spacing: -.05em;
+    }
+
+    .end-summary {
+      margin: 0 auto 25px;
+      max-width: 530px;
+      color: #c9c2d6;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .restart {
+      padding: 14px 25px;
+      border-radius: 12px;
+      color: #080710;
+      background: linear-gradient(135deg, var(--good), var(--cyan));
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 850px) {
+      .brand { top: 13px; left: 14px; }
+      .brand-copy span { display: none; }
+      .sound-button { top: 13px; right: 14px; }
+      .quiz-panel {
+        right: 10px;
+        bottom: 10px;
+        left: 10px;
+        width: auto;
+        min-width: 0;
+        max-height: 62vh;
+        overflow-y: auto;
+        padding: 15px;
+      }
+      .definition { min-height: 0; font-size: 17px; }
+      .choices { gap: 6px; }
+      .choice { min-height: 42px; }
+    }
+
+    @media (max-width: 520px) {
+      .brand-copy { display: none; }
+      .sound-button { min-width: 78px; padding: 9px 11px; }
+      .mode-buttons { grid-template-columns: 1fr; }
+      .start-card, .end-card { padding: 28px 20px; }
+      .choices { grid-template-columns: 1fr; }
+      .definition { font-size: 16px; }
+      .integrity-row { grid-template-columns: auto 1fr auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .brand-mark i { animation: none; }
+      *, *::before, *::after { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="concert" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <div class="brand" aria-hidden="true">
+    <div class="brand-mark"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="brand-copy">
+      <strong>LIVE SOUND</strong>
+      <span>Keep the show alive</span>
+    </div>
+  </div>
+
+  <button id="soundButton" class="sound-button" type="button" aria-pressed="false">Sound: On</button>
+
+  <main id="quizPanel" class="quiz-panel hidden" aria-live="polite">
+    <div class="panel-top">
+      <span id="actLabel" class="act-label">Act I · Get the Signal</span>
+      <span id="progressLabel" class="progress-label">1 / 120</span>
+    </div>
+    <div class="integrity-row">
+      <span>Show integrity</span>
+      <div class="meter-track"><div id="integrityBar" class="meter-fill"></div></div>
+      <strong id="integrityValue">100%</strong>
+    </div>
+    <p class="prompt-kicker">Name the professional term</p>
+    <p id="definition" class="definition"></p>
+    <div class="timer-wrap">
+      <div class="timer-track"><div id="timerBar" class="timer-bar"></div></div>
+      <span id="timerNumber" class="timer-number">15.0</span>
+    </div>
+    <div id="answerArea"></div>
+    <div id="feedback" class="feedback" role="status"></div>
+  </main>
+
+  <section id="startScreen" class="screen">
+    <div class="start-card">
+      <p class="eyebrow">A three-act professional vocabulary game</p>
+      <h1>Live Sound <span>Keep the Show Alive</span></h1>
+      <p class="intro">Take control from front of house while the concert builds from basic signal flow to advanced system engineering. The show keeps moving; so does the mix.</p>
+      <div class="mode-buttons">
+        <button class="mode-button" type="button" data-mode="normal">
+          <strong>Normal Mode</strong>
+          <span>Choose from carefully written, plausible answers.</span>
+        </button>
+        <button class="mode-button" type="button" data-mode="hard">
+          <strong>Hard Mode</strong>
+          <span>Type the correct professional term yourself.</span>
+        </button>
+      </div>
+      <div class="acts-preview">
+        <span>Act I · Get the Signal</span><i>→</i>
+        <span>Act II · Build the Mix</span><i>→</i>
+        <span>Act III · Run the System</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="transitionScreen" class="screen hidden" aria-live="assertive">
+    <div class="transition-card">
+      <div id="transitionNumber" class="act-number">Act I</div>
+      <h2 id="transitionTitle">Get the Signal</h2>
+      <p id="transitionText">The opening set begins. Establish a clean, reliable path.</p>
+    </div>
+  </section>
+
+  <section id="endScreen" class="screen hidden" aria-live="assertive">
+    <div class="end-card">
+      <p class="eyebrow">Complete live-sound run finished</p>
+      <h1 id="endTitle">The Show Stayed Alive</h1>
+      <div id="endScore" class="end-score">100%</div>
+      <p id="endSummary" class="end-summary"></p>
+      <button id="restartButton" class="restart" type="button">Run the Show Again</button>
+    </div>
+  </section>
+
+  <script>
+    "use strict";
+
+    function q(term, definition, wrong, aliases, longRead) {
+      return { term: term, definition: definition, wrong: wrong, aliases: aliases || [], longRead: !!longRead };
+    }
+
+    const acts = [
+      {
+        roman: "I",
+        title: "Get the Signal",
+        transition: "The opening set begins. Establish a clean, reliable path.",
+        complete: "Signal established.",
+        items: [
+          q("Gain", "Amount of amplification applied to a signal.", ["Input force", "Signal weight", "Voltage reserve"]),
+          q("Preamp", "The first amplification stage that raises a microphone or instrument signal to a usable level.", ["Source booster", "Primary attenuator", "Front-end relay"], [], true),
+          q("Gain Staging", "Setting levels throughout the signal chain to minimize noise and distortion while preserving headroom.", ["Level mapping", "Signal balancing protocol", "Trim sequencing"], [], true),
+          q("dB / Decibel", "A logarithmic measurement of a level ratio whose meaning depends on the reference used.", ["Acoustic unit", "Level degree", "Amplitude index"], ["db", "decibel"], true),
+          q("SPL", "Sound Pressure Level; measurement of acoustic sound level, normally expressed in decibels.", ["Audience loudness rating", "Acoustic output index", "Pressure response value"], ["sound pressure level"], true),
+          q("Headroom", "Safety margin between normal signal level and the point of overload or clipping.", ["Level reserve", "Peak allowance", "Signal ceiling space"]),
+          q("Clipping", "Distortion caused when a signal exceeds the available maximum level.", ["Peak fracture", "Signal shearing", "Waveform overload"]),
+          q("Noise Floor", "Background noise inherently present in an audio system.", ["Idle hiss limit", "System silence baseline", "Residual sound bed"]),
+          q("Peak", "The highest instantaneous level reached by a signal.", ["Momentary ceiling", "Transient maximum", "Level summit"]),
+          q("Dynamic Range", "Difference between the quietest and loudest usable signal levels.", ["Level span", "Program contrast window", "Amplitude breadth"]),
+          q("Mic Level", "The very low signal level normally produced by microphones.", ["Capture voltage", "Source-low output", "Microphone feed range"], ["microphone level"]),
+          q("Line Level", "The higher operating signal level used between professional audio devices.", ["Equipment feed standard", "Device-link level", "Interconnect output range"]),
+          q("Instrument Level", "The signal level produced by sources such as passive electric guitars and basses.", ["Pickup feed", "Backline output range", "String-source voltage"]),
+          q("Channel / Input", "An individual signal path through a mixing console.", ["Source lane", "Console feed path", "Audio strip assignment"], ["channel", "input"]),
+          q("Channel Strip", "The complete group of controls associated with one console input.", ["Input control rail", "Console lane module", "Source processing row"]),
+          q("Fader", "The control used to adjust a channel, bus, or output level.", ["Level slider", "Mix rail", "Output lever"]),
+          q("Pan", "The control that positions a signal between left and right outputs.", ["Stereo placement control", "Image shift", "Lateral send"]),
+          q("Aux / Auxiliary Send", "A separate signal send commonly used for monitors, effects, or other mixes.", ["Secondary feed path", "Utility output", "Parallel mix tap"], ["aux", "aux send", "auxiliary send", "auxiliary"]),
+          q("Mute", "A function that silences a channel, bus, or output at a defined point in its signal path.", ["Signal stop", "Channel blank", "Audio cut control"]),
+          q("Main / Master", "The primary final mix or output of the console.", ["House sum", "Program total", "Final console feed"], ["main", "master", "main output", "master output"]),
+          q("Frequency", "Rate of vibration measured in hertz and strongly associated with perceived pitch.", ["Tone speed", "Wave count", "Pitch cycle value"]),
+          q("EQ / Equalization", "Boosting or cutting selected frequency ranges.", ["Tone contouring", "Spectrum shaping control", "Band correction"], ["eq", "equalization", "equalizer"]),
+          q("High-Pass Filter / HPF", "A filter that attenuates frequencies below a selected cutoff.", ["Low-cut circuit", "Bass rejection slope", "Bottom-range filter"], ["high pass filter", "hpf", "highpass filter"]),
+          q("Compressor", "A processor that reduces signal level once it exceeds a defined threshold.", ["Level constrainer", "Peak controller", "Amplitude reducer"], [], true),
+          q("Threshold", "The level at which a dynamics processor begins acting.", ["Trigger point", "Processing onset", "Activation level"]),
+          q("Limiter", "A high-ratio dynamics processor used to constrain maximum signal level.", ["Peak guard", "Ceiling processor", "Output restraint"]),
+          q("Gate", "A processor that attenuates or closes a signal when its level falls below a threshold.", ["Silence switcher", "Low-level closer", "Channel shutter"], [], true),
+          q("Reverb", "Natural or simulated reflections that create a sense of acoustic space.", ["Room tail", "Space field", "Reflection wash"]),
+          q("Delay", "A time-delayed copy of a signal used as an effect or for system alignment.", ["Echo line", "Time repeat", "Signal offset"]),
+          q("Polar Pattern", "A description of a microphone's sensitivity to sound arriving from different directions.", ["Pickup map", "Directional response field", "Capture-angle profile"], [], true),
+          q("Cardioid", "A directional microphone pattern that favors the front and rejects much of the rear.", ["Forward-heart pickup", "Front-focus pattern", "Rear-null response"]),
+          q("Dynamic Microphone", "A rugged moving-coil microphone commonly used for vocals, drums, and amplifiers.", ["Coil pickup microphone", "Stage-duty microphone", "Passive vocal capsule"], ["dynamic mic"]),
+          q("Condenser Microphone", "A sensitive microphone type that generally requires electrical power.", ["Capacitor pickup microphone", "Powered studio capsule", "Electrostatic stage mic"], ["condenser mic"]),
+          q("Phantom Power / +48 V", "DC power supplied through microphone cable for condensers and certain active devices.", ["Cable-fed microphone power", "Balanced-line supply", "Remote capsule voltage"], ["phantom power", "48v", "+48v", "48 volts"], true),
+          q("DI / Direct Box", "A device used to interface instrument or other source signals properly with mixer inputs.", ["Instrument interface", "Pickup matching box", "Stage input converter"], ["di", "direct box", "direct injection box"]),
+          q("PA / Public Address System", "The complete sound-reinforcement system used to reproduce sound for an audience.", ["House reinforcement rig", "Audience sound system", "Venue playback plant"], ["pa", "public address system"]),
+          q("Mains", "The primary audience-facing loudspeakers.", ["House-facing cabinets", "Audience arrays", "Primary room speakers"]),
+          q("Loudspeaker / Cabinet", "An enclosure containing one or more sound-producing speaker drivers.", ["Audio enclosure", "Driver box", "Reproduction cabinet"], ["loudspeaker", "speaker", "cabinet", "speaker cabinet"]),
+          q("Subwoofer / Sub", "A loudspeaker designed primarily for low-frequency reproduction.", ["Bass cabinet", "Low-end enclosure", "Bottom-frequency speaker"], ["subwoofer", "sub"]),
+          q("Active / Powered Speaker", "A loudspeaker containing its own amplifier and often internal processing.", ["Self-driven cabinet", "Amplified enclosure", "Powered PA box"], ["active speaker", "powered speaker"], true)
+        ]
+      },
+      {
+        roman: "II",
+        title: "Build the Mix",
+        transition: "The headliner takes the stage. Shape the house mix and control every route.",
+        complete: "The house mix is taking shape.",
+        items: [
+          q("Balanced Connection", "A connection using opposing signal conductors to reject interference picked up along the cable.", ["Differential audio link", "Noise-canceling cable path", "Dual-leg signal feed"], ["balanced cable", "balanced line"], true),
+          q("Unbalanced Connection", "A signal connection using one signal conductor and ground or shield, making it more vulnerable to interference over distance.", ["Single-leg audio link", "Ground-return feed", "Two-part signal path"], ["unbalanced cable", "unbalanced line"], true),
+          q("Hi-Z / High Impedance", "A high-impedance input designed particularly for passive instruments such as guitar or bass.", ["Pickup-ready input", "Instrument resistance mode", "Passive source port"], ["hi z", "high impedance"], true),
+          q("Pad", "A fixed amount of signal attenuation used to prevent an input or preamp from overloading.", ["Input drop switch", "Level reduction block", "Preamp protection cut"]),
+          q("Bus", "A signal path that combines or routes actual audio from multiple sources.", ["Mix transport lane", "Shared audio rail", "Summing path"]),
+          q("Pre-Fader Send", "A send whose level is independent of the channel fader.", ["Independent monitor tap", "Upstream auxiliary feed", "Fixed-fader send"], ["pre fader", "pre fader send"], true),
+          q("Post-Fader Send", "A send whose level follows changes made with the channel fader.", ["Tracking effects tap", "Downstream auxiliary feed", "Fader-linked send"], ["post fader", "post fader send"], true),
+          q("Group / Subgroup", "An audio bus used to combine several channels for common control or processing.", ["Channel family mix", "Shared processing lane", "Summed control path"], ["group", "subgroup", "audio group"]),
+          q("PFL", "Pre-Fader Listen; monitoring a signal before its fader level.", ["Input preview listen", "Upstream cue mode", "Pre-level audition"], ["pre fader listen"]),
+          q("AFL", "After-Fader Listen; monitoring a signal after its fader or output level.", ["Output preview listen", "Downstream cue mode", "Post-level audition"], ["after fader listen", "post fader listen"]),
+          q("Cue / Solo", "A function for monitoring selected channels or buses independently.", ["Isolated listen", "Private monitor select", "Channel audition mode"], ["cue", "solo"]),
+          q("Mute Group", "A single control that mutes several assigned channels together.", ["Silence bank", "Channel cut set", "Grouped kill control"]),
+          q("Insert / Insert Point", "A point where processing is placed directly in series with a channel or bus.", ["Processor break point", "Series effects slot", "Channel loop junction"], ["insert", "insert point"], true),
+          q("Send / Return", "A routing arrangement that sends audio to processing and returns the processed signal.", ["Effects loop route", "Processor round trip", "Parallel treatment path"], ["send return", "send and return"], true),
+          q("Routing", "Determining where signals travel through a console or audio system.", ["Signal assignment", "Path planning", "Audio destination mapping"]),
+          q("Patch / Patching", "Connecting or assigning audio sources and destinations physically or digitally.", ["I/O assignment", "Connection mapping", "Source landing"], ["patch", "patching"]),
+          q("Scene / Snapshot", "A stored digital-console configuration containing multiple settings.", ["Console memory state", "Show preset", "Desk configuration save"], ["scene", "snapshot"]),
+          q("Talkback", "A dedicated microphone and routing system that allows an engineer to speak to performers or crew.", ["Crew address channel", "Engineer communication mic", "Stage instruction feed"], [], true),
+          q("Mic Split / Splitter", "A system that sends one microphone signal independently to multiple destinations such as FOH and monitors.", ["Dual-desk microphone feed", "Parallel input distributor", "Source branch box"], ["mic split", "microphone split", "splitter"], true),
+          q("Parametric EQ", "An equalizer providing adjustable frequency, gain, and Q.", ["Variable-band equalizer", "Three-control tone section", "Sweepable correction EQ"]),
+          q("Graphic EQ", "A fixed-band equalizer using individual controls for predetermined frequency bands.", ["Slider-bank equalizer", "Fixed-spectrum shaper", "Band-row tone control"]),
+          q("Low-Pass Filter / LPF", "A filter that attenuates frequencies above a selected cutoff.", ["High-cut circuit", "Top-range filter", "Treble rejection slope"], ["low pass filter", "lpf", "lowpass filter"]),
+          q("Shelf EQ", "An equalizer that boosts or cuts frequencies above or below a selected frequency as a broad shelf.", ["Edge-band equalizer", "Broad-end tone control", "Spectrum shelf control"], ["shelving eq", "shelf equalizer"], true),
+          q("Notch Filter", "A very narrow equalizer cut used to reduce a specific resonance or troublesome frequency.", ["Precision frequency cut", "Resonance dip filter", "Narrow-band remover"], [], true),
+          q("Q", "The control that determines how narrow or broad an equalizer band's affected frequency range is.", ["Bandwidth sharpness", "Filter width factor", "Band focus value"], ["q factor", "quality factor"]),
+          q("Ratio", "The control that determines how strongly a compressor reduces signals above its threshold.", ["Compression slope", "Reduction proportion", "Dynamics strength value"], [], true),
+          q("Attack", "How quickly a dynamics processor responds after being triggered.", ["Response onset", "Trigger speed", "Compression entry time"]),
+          q("Release", "How quickly dynamics processing returns toward normal after the trigger condition ends.", ["Recovery time", "Processing exit speed", "Gain return period"]),
+          q("Makeup Gain", "Gain added after compression to compensate for reduced signal level.", ["Post-compression boost", "Level restoration gain", "Output compensation"]),
+          q("De-Esser", "A frequency-sensitive dynamics processor used primarily to reduce vocal sibilance.", ["Sibilance controller", "Vocal consonant tamer", "High-band voice compressor"], ["de esser", "deesser"], true),
+          q("Gain Reduction", "The amount by which a dynamics processor attenuates a signal.", ["Processing cut value", "Compression attenuation", "Level-control amount"]),
+          q("Mud / Muddiness", "Excess low-mid energy that makes a mix congested or indistinct.", ["Low-mid clouding", "Mix congestion", "Bass-range blur"], ["mud", "muddiness", "muddy"]),
+          q("Harshness", "Excessively aggressive or unpleasant upper-mid or high-frequency energy.", ["Upper-band bite", "Treble aggression", "High-mid strain"], ["harsh"]),
+          q("Presence", "The frequency region that contributes to clarity, immediacy, and perceived forwardness.", ["Clarity band", "Forward tone range", "Definition region"]),
+          q("Intelligibility", "The degree to which speech or lyrics can be clearly understood.", ["Vocal comprehension", "Speech clarity rating", "Lyric definition"]),
+          q("Supercardioid / Hypercardioid", "Tighter directional microphone patterns with increased side rejection and some rear pickup.", ["Narrow-front patterns", "Tight-lobe pickup", "Extended cardioid family"], ["supercardioid", "hypercardioid"], true),
+          q("Omnidirectional", "A microphone pattern that picks up sound relatively evenly from all directions.", ["All-around pickup", "Spherical response", "360-degree capture"], ["omni", "omnidirectional pattern"]),
+          q("Ribbon Microphone", "A microphone using a thin conductive ribbon as its transducer.", ["Foil-element microphone", "Velocity ribbon capsule", "Strip-transducer mic"], ["ribbon mic"]),
+          q("Proximity Effect", "The bass increase that occurs when a directional microphone is positioned very close to a source.", ["Close-mic bass rise", "Near-source low boost", "Distance bass buildup"], [], true),
+          q("Bleed", "Unwanted pickup of surrounding instruments, loudspeakers, or audience sound by a microphone.", ["Spill pickup", "Source leakage", "Ambient intrusion"], ["mic bleed", "microphone bleed"])
+        ]
+      },
+      {
+        roman: "III",
+        title: "Run the System",
+        transition: "The concert reaches its peak. Take command of timing, networks, coverage, and the complete PA.",
+        complete: "Complete system under control.",
+        items: [
+          q("dBFS", "The digital level scale where zero dBFS is the maximum representable level.", ["Digital ceiling unit", "Full-scale level reference", "Binary amplitude scale"], ["dbfs", "decibels full scale"], true),
+          q("dBu", "An analog voltage-level reference commonly used with professional audio equipment.", ["Pro voltage unit", "Analog line reference", "Equipment-level decibel"], ["dbu"], true),
+          q("Signal-to-Noise Ratio / SNR", "The difference between the desired signal and the system's background noise.", ["Clean-signal margin", "Noise separation value", "Program-to-hiss range"], ["signal to noise ratio", "snr"], true),
+          q("RMS", "A mathematical measurement commonly used to describe a signal's effective average energy.", ["Average power index", "Effective waveform value", "Program energy mean"], ["root mean square"], true),
+          q("LUFS", "Loudness Units relative to Full Scale; a measurement used for perceived program loudness.", ["Perceptual level units", "Program loudness scale", "Full-scale hearing index"], ["loudness units full scale", "loudness units relative to full scale"], true),
+          q("Impedance", "The opposition a circuit presents to alternating-current audio signals.", ["AC signal resistance", "Circuit load behavior", "Audio current opposition"], [], true),
+          q("Polarity", "The orientation of a signal's positive and negative waveform directions.", ["Waveform orientation", "Signal direction state", "Positive-negative alignment"]),
+          q("Phase", "The timing relationship between waveforms or between points within a waveform cycle.", ["Wave timing position", "Cycle relationship", "Temporal waveform angle"], [], true),
+          q("Phase Alignment", "Adjusting timing or polarity so related sound sources combine coherently.", ["Source timing correction", "Wave combination tuning", "Coherent arrival setup"], [], true),
+          q("Comb Filtering", "Repeating peaks and dips caused when similar signals arrive at slightly different times.", ["Arrival-pattern cancellation", "Toothed spectrum effect", "Delayed-source coloration"], [], true),
+          q("Latency", "Delay introduced by digital processing, conversion, networking, plugins, or wireless equipment.", ["System transit delay", "Processing wait time", "Digital path lag"], [], true),
+          q("Sample Rate", "The number of digital audio samples taken each second, such as 48 kHz.", ["Capture frequency", "Digital reading speed", "Conversion count"], [], true),
+          q("Bit Depth", "The number of bits used to represent each digital sample, affecting theoretical dynamic range.", ["Sample resolution", "Digital word size", "Amplitude precision"], [], true),
+          q("A/D–D/A Conversion", "Conversion of analog audio into digital data and digital audio back into analog.", ["Two-way signal translation", "Analog-digital transfer", "Converter round trip"], ["ad da conversion", "a d d a conversion", "analog digital conversion"], true),
+          q("Word Clock", "The timing reference used to synchronize digital audio devices.", ["Digital sync pulse", "Sample timing master", "Converter timing reference"], [], true),
+          q("Ground Loop", "Unwanted current caused by multiple ground paths, commonly producing hum or buzz.", ["Earth-path hum circuit", "Duplicate-ground current", "Shield current loop"], [], true),
+          q("Ground Lift", "Signal-ground isolation used to interrupt some ground-loop problems, commonly found on DI boxes.", ["Shield isolation switch", "Audio-earth disconnect", "Hum-break control"], [], true),
+          q("DCA / VCA", "A control group that changes assigned channel levels without combining their audio into a common bus.", ["Remote fader group", "Control-only level bank", "Non-summing channel master"], ["dca", "vca", "dca vca"], true),
+          q("Matrix", "An output mix normally built from other buses or mixes for zones, fills, recording, or broadcast.", ["Output-of-outputs mix", "Zone blend bus", "Secondary distribution mix"], [], true),
+          q("Recall Safe", "A setting that protects selected parameters from changing when console scenes are recalled.", ["Snapshot protection", "Scene lockout", "Memory exclusion guard"], [], true),
+          q("Mult", "A parallel electrical split that sends one signal to multiple destinations.", ["Parallel signal branch", "Hardwired source duplicate", "Multi-output tap"]),
+          q("Expander", "A processor that reduces lower-level material more gradually than a conventional gate.", ["Soft downward controller", "Low-level range widener", "Gentle noise reducer"], [], true),
+          q("Sidechain / Key Input", "A signal or filtered signal used to control a dynamics processor's response.", ["Detector control feed", "External trigger path", "Dynamics command signal"], ["sidechain", "key input", "side chain"], true),
+          q("Ducking", "Automatically lowering one signal when another signal becomes active.", ["Priority level reduction", "Triggered mix lowering", "Voice-over attenuation"]),
+          q("Frequency Masking", "A situation where competing sounds in similar frequency regions make each other harder to hear.", ["Spectrum competition", "Band overlap concealment", "Tonal crowding"], [], true),
+          q("On-Axis", "Positioned directly along a microphone's primary pickup direction.", ["Direct pickup alignment", "Front-center placement", "Capsule-line position"], ["on axis"]),
+          q("Off-Axis", "Sound arriving away from a microphone's primary pickup direction.", ["Angled pickup arrival", "Side-field sound", "Noncentral source position"], ["off axis"]),
+          q("Off-Axis Rejection", "The degree to which a microphone reduces sound arriving away from its intended pickup angle.", ["Side-sound attenuation", "Rear-field suppression", "Angular pickup reduction"], ["off axis rejection"], true),
+          q("Mic Technique", "How microphone distance, angle, position, and handling are used to control tone and level.", ["Capture placement practice", "Source-miking method", "Microphone handling approach"], ["microphone technique"], true),
+          q("Driver", "The individual sound-producing transducer within a loudspeaker enclosure.", ["Speaker motor element", "Cabinet transducer", "Acoustic radiator unit"]),
+          q("Line Array", "A vertically arranged loudspeaker system designed for controlled coverage over distance.", ["Column coverage system", "Vertical cabinet hang", "Long-throw speaker line"], [], true),
+          q("Point-Source Speaker", "A loudspeaker system radiating from a comparatively compact source.", ["Compact-origin cabinet", "Single-location radiator", "Unified-source enclosure"], ["point source", "point source loudspeaker"], true),
+          q("Passive Speaker", "A loudspeaker that requires an external power amplifier.", ["Unamplified cabinet", "Externally driven enclosure", "Amp-dependent speaker"]),
+          q("Power Amp / Amplifier", "The device supplying the electrical power required to drive passive loudspeakers.", ["Speaker drive unit", "Cabinet power stage", "Output current amplifier"], ["power amp", "power amplifier", "amplifier"]),
+          q("Crossover", "A filter system that divides frequency ranges between appropriate drivers or loudspeaker systems.", ["Band division network", "Driver-range separator", "Frequency routing filter"], [], true),
+          q("DSP", "Digital Signal Processing used for equalization, limiting, delay, crossover, routing, and system control.", ["System processing engine", "Digital loudspeaker controller", "Audio computation platform"], ["digital signal processing"], true),
+          q("Front Fill", "A small loudspeaker covering listeners near the stage who receive insufficient sound from the mains.", ["Stage-lip coverage speaker", "Near-audience cabinet", "First-row reinforcement"], [], true),
+          q("Sidefill", "A stage-side loudspeaker aimed inward to provide performers with broader stage monitoring.", ["Lateral stage monitor", "Cross-stage cabinet", "Performer area fill"], ["side fill"], true),
+          q("Delay Fill / Delay Speaker", "A remotely positioned speaker delayed to align acoustically with the main PA.", ["Rear-zone timed cabinet", "Distance-aligned speaker", "Remote audience fill"], ["delay fill", "delay speaker"], true),
+          q("Time Alignment", "Applying delay so sound from different loudspeakers or sources arrives coherently.", ["Arrival-time correction", "Speaker synchronization", "Acoustic timing setup"], [], true)
+        ]
+      }
+    ];
+
+    const penaltyByAct = [20, 25, 30];
+    const transitionDelay = 2200;
+    const correctDelay = 1800;
+    const wrongDelay = 3150;
+
+    let mode = "normal";
+    let shuffledActs = [];
+    let actIndex = 0;
+    let questionIndex = 0;
+    let score = 100;
+    let accepting = false;
+    let questionStartedAt = 0;
+    let questionSeconds = 15;
+    let timerHandle = null;
+    let muted = false;
+    let audioStarted = false;
+    let scenePulse = 0;
+    let currentQuestion = null;
+
+    const quizPanel = document.getElementById("quizPanel");
+    const actLabel = document.getElementById("actLabel");
+    const progressLabel = document.getElementById("progressLabel");
+    const integrityBar = document.getElementById("integrityBar");
+    const integrityValue = document.getElementById("integrityValue");
+    const definitionEl = document.getElementById("definition");
+    const timerBar = document.getElementById("timerBar");
+    const timerNumber = document.getElementById("timerNumber");
+    const answerArea = document.getElementById("answerArea");
+    const feedback = document.getElementById("feedback");
+    const startScreen = document.getElementById("startScreen");
+    const transitionScreen = document.getElementById("transitionScreen");
+    const endScreen = document.getElementById("endScreen");
+    const soundButton = document.getElementById("soundButton");
+
+    function shuffle(source) {
+      const result = source.slice();
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = result[i];
+        result[i] = result[j];
+        result[j] = temp;
+      }
+      return result;
+    }
+
+    function normalize(value) {
+      return value
+        .toLowerCase()
+        .replace(/&/g, " and ")
+        .replace(/\+/g, " plus ")
+        .replace(/[–—-]/g, " ")
+        .replace(/[\/()_.]/g, " ")
+        .replace(/[^a-z0-9 ]/g, "")
+        .replace(/\bthe\b/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function acceptedAnswers(item) {
+      const choices = [item.term].concat(item.aliases);
+      return choices.map(normalize);
+    }
+
+    function updateIntegrity() {
+      integrityValue.textContent = score + "%";
+      integrityBar.style.width = score + "%";
+      if (score <= 30) {
+        integrityBar.style.background = "linear-gradient(90deg, #ff334f, #ff8a54)";
+        integrityValue.style.color = "#ff7187";
+      } else if (score <= 60) {
+        integrityBar.style.background = "linear-gradient(90deg, #ff9d45, #ffd35e)";
+        integrityValue.style.color = "#ffc857";
+      } else {
+        integrityBar.style.background = "linear-gradient(90deg, #56e7ff, #58f2b0)";
+        integrityValue.style.color = "#58f2b0";
+      }
+    }
+
+    function timeFor(item) {
+      return item.longRead || item.definition.length > 112 ? 20 : 15;
+    }
+
+    function overallNumber() {
+      return actIndex * 40 + questionIndex + 1;
+    }
+
+    function beginGame(selectedMode) {
+      mode = selectedMode;
+      shuffledActs = acts.map(function (act) { return shuffle(act.items); });
+      actIndex = 0;
+      questionIndex = 0;
+      score = 100;
+      updateIntegrity();
+      startScreen.classList.add("hidden");
+      endScreen.classList.add("hidden");
+      initAudio();
+      showActTransition(0, true);
+    }
+
+    function showActTransition(nextAct, isFirst) {
+      clearInterval(timerHandle);
+      accepting = false;
+      quizPanel.classList.add("hidden");
+      const act = acts[nextAct];
+      document.getElementById("transitionNumber").textContent = "Act " + act.roman;
+      document.getElementById("transitionTitle").textContent = act.title;
+      document.getElementById("transitionText").textContent = act.transition;
+      transitionScreen.classList.remove("hidden");
+      setTimeout(function () {
+        transitionScreen.classList.add("hidden");
+        quizPanel.classList.remove("hidden");
+        renderQuestion();
+      }, isFirst ? 2450 : transitionDelay);
+    }
+
+    function renderQuestion() {
+      currentQuestion = shuffledActs[actIndex][questionIndex];
+      const act = acts[actIndex];
+      questionSeconds = timeFor(currentQuestion);
+      accepting = true;
+      questionStartedAt = performance.now();
+      feedback.textContent = "";
+      feedback.className = "feedback";
+      definitionEl.textContent = currentQuestion.definition;
+      actLabel.textContent = "Act " + act.roman + " · " + act.title;
+      progressLabel.textContent = overallNumber() + " / 120";
+      answerArea.innerHTML = "";
+
+      if (mode === "normal") {
+        renderChoices();
+      } else {
+        renderTypedAnswer();
+      }
+
+      startTimer();
+    }
+
+    function renderChoices() {
+      const holder = document.createElement("div");
+      holder.className = "choices";
+      const options = shuffle([currentQuestion.term].concat(currentQuestion.wrong));
+      options.forEach(function (label) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "choice";
+        button.textContent = label;
+        button.addEventListener("click", function () {
+          if (!accepting) return;
+          submitAnswer(label, button);
+        });
+        holder.appendChild(button);
+      });
+      answerArea.appendChild(holder);
+    }
+
+    function renderTypedAnswer() {
+      const form = document.createElement("form");
+      form.className = "answer-form";
+      const input = document.createElement("input");
+      input.className = "answer-input";
+      input.type = "text";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      input.placeholder = "Type the professional term";
+      input.setAttribute("aria-label", "Type the professional term");
+      const button = document.createElement("button");
+      button.className = "submit-button";
+      button.type = "submit";
+      button.textContent = "Submit";
+      form.appendChild(input);
+      form.appendChild(button);
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        if (!accepting || !input.value.trim()) return;
+        submitAnswer(input.value, null);
+      });
+      answerArea.appendChild(form);
+      setTimeout(function () { input.focus(); }, 50);
+    }
+
+    function startTimer() {
+      clearInterval(timerHandle);
+      timerBar.style.width = "100%";
+      timerBar.style.background = "#58f2b0";
+      timerNumber.style.color = "#58f2b0";
+      timerNumber.textContent = questionSeconds.toFixed(1);
+      timerHandle = setInterval(function () {
+        const elapsed = (performance.now() - questionStartedAt) / 1000;
+        const remaining = Math.max(0, questionSeconds - elapsed);
+        const fraction = remaining / questionSeconds;
+        timerBar.style.width = (fraction * 100) + "%";
+        timerNumber.textContent = remaining.toFixed(1);
+        if (fraction < .25) {
+          timerBar.style.background = "#ff5571";
+          timerNumber.style.color = "#ff7187";
+        } else if (fraction < .5) {
+          timerBar.style.background = "#ffc857";
+          timerNumber.style.color = "#ffc857";
+        }
+        if (remaining <= 0) {
+          clearInterval(timerHandle);
+          submitAnswer("", null, true);
+        }
+      }, 80);
+    }
+
+    function submitAnswer(value, clickedButton, timedOut) {
+      if (!accepting) return;
+      accepting = false;
+      clearInterval(timerHandle);
+      const elapsed = (performance.now() - questionStartedAt) / 1000;
+      const correct = !timedOut && acceptedAnswers(currentQuestion).indexOf(normalize(value)) !== -1;
+      let wait = correctDelay;
+
+      Array.prototype.forEach.call(answerArea.querySelectorAll("button, input"), function (el) {
+        el.disabled = true;
+      });
+
+      if (correct) {
+        const before = score;
+        if (elapsed <= 10) score = Math.min(100, score + 10);
+        const gained = score - before;
+        feedback.textContent = elapsed <= 10
+          ? (gained ? "Correct · Fast answer +" + gained : "Correct · Fast answer")
+          : "Correct";
+        feedback.className = "feedback good";
+        if (clickedButton) clickedButton.classList.add("correct");
+        scenePulse = 1;
+        playSuccessTone();
+      } else {
+        const penalty = penaltyByAct[actIndex];
+        score = Math.max(0, score - penalty);
+        feedback.textContent = (timedOut ? "Time · " : "Incorrect · ") + "Correct answer: " + currentQuestion.term + "  (−" + penalty + ")";
+        feedback.className = "feedback bad";
+        wait = wrongDelay;
+        scenePulse = -1;
+        playErrorTone();
+        if (clickedButton) clickedButton.classList.add("wrong");
+        Array.prototype.forEach.call(answerArea.querySelectorAll(".choice"), function (button) {
+          if (normalize(button.textContent) === normalize(currentQuestion.term)) button.classList.add("correct");
+        });
+      }
+
+      updateIntegrity();
+      setTimeout(advanceQuestion, wait);
+    }
+
+    function advanceQuestion() {
+      questionIndex += 1;
+      if (questionIndex >= 40) {
+        questionIndex = 0;
+        actIndex += 1;
+        if (actIndex >= 3) {
+          finishGame();
+          return;
+        }
+        showActTransition(actIndex, false);
+        return;
+      }
+      renderQuestion();
+    }
+
+    function finishGame() {
+      accepting = false;
+      clearInterval(timerHandle);
+      quizPanel.classList.add("hidden");
+      const title = document.getElementById("endTitle");
+      const summary = document.getElementById("endSummary");
+      document.getElementById("endScore").textContent = score + "%";
+      if (score >= 70) {
+        title.textContent = "The Show Stayed Alive";
+        summary.textContent = "Signal, mix, and system knowledge carried the concert through all three acts.";
+      } else if (score >= 35) {
+        title.textContent = "The Show Made It Through";
+        summary.textContent = "The complete run is finished. The mix survived, though several parts of the system need another pass.";
+      } else {
+        title.textContent = "Complete Run Finished";
+        summary.textContent = "You reached the end of all 120 terms. Run the show again to rebuild system stability.";
+      }
+      endScreen.classList.remove("hidden");
+    }
+
+    document.querySelectorAll("[data-mode]").forEach(function (button) {
+      button.addEventListener("click", function () { beginGame(button.dataset.mode); });
+    });
+
+    document.getElementById("restartButton").addEventListener("click", function () {
+      endScreen.classList.add("hidden");
+      startScreen.classList.remove("hidden");
+      quizPanel.classList.add("hidden");
+    });
+
+    soundButton.addEventListener("click", function () {
+      muted = !muted;
+      soundButton.textContent = muted ? "Sound: Off" : "Sound: On";
+      soundButton.setAttribute("aria-pressed", String(muted));
+      if (audioMaster) audioMaster.gain.setTargetAtTime(muted ? 0 : .032, audioContext.currentTime, .04);
+    });
+
+    let audioContext = null;
+    let audioMaster = null;
+    let beatTimer = null;
+    let beat = 0;
+
+    function initAudio() {
+      if (audioStarted) {
+        if (audioContext && audioContext.state === "suspended") audioContext.resume();
+        return;
+      }
+      audioStarted = true;
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) {
+        soundButton.textContent = "Sound unavailable";
+        soundButton.disabled = true;
+        return;
+      }
+      audioContext = new AudioCtx();
+      audioMaster = audioContext.createGain();
+      audioMaster.gain.value = muted ? 0 : .032;
+      audioMaster.connect(audioContext.destination);
+      beatTimer = setInterval(scheduleBeat, 240);
+      scheduleBeat();
+    }
+
+    function tone(frequency, duration, volume, type, glide) {
+      if (!audioContext || muted) return;
+      const now = audioContext.currentTime;
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.type = type || "sine";
+      oscillator.frequency.setValueAtTime(frequency, now);
+      if (glide) oscillator.frequency.exponentialRampToValueAtTime(glide, now + duration);
+      gainNode.gain.setValueAtTime(volume, now);
+      gainNode.gain.exponentialRampToValueAtTime(.0001, now + duration);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioMaster);
+      oscillator.start(now);
+      oscillator.stop(now + duration);
+    }
+
+    function noiseHit(duration, volume) {
+      if (!audioContext || muted) return;
+      const length = Math.floor(audioContext.sampleRate * duration);
+      const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+      const source = audioContext.createBufferSource();
+      const filter = audioContext.createBiquadFilter();
+      const gainNode = audioContext.createGain();
+      source.buffer = buffer;
+      filter.type = "highpass";
+      filter.frequency.value = 1600;
+      gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + duration);
+      source.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioMaster);
+      source.start();
+    }
+
+    function scheduleBeat() {
+      if (!audioContext) return;
+      if (beat % 4 === 0 || beat % 4 === 2) tone(72, .18, .7, "sine", 43);
+      if (beat % 4 === 1 || beat % 4 === 3) noiseHit(.12, .16);
+      noiseHit(.035, .035);
+      if (beat % 2 === 0) {
+        const notes = [55, 65.41, 49, 73.42];
+        tone(notes[Math.floor(beat / 8) % notes.length], .42, .11, "triangle");
+      }
+      beat = (beat + 1) % 32;
+    }
+
+    function playSuccessTone() {
+      if (!audioContext) return;
+      tone(523.25, .12, .12, "sine");
+      setTimeout(function () { tone(659.25, .16, .1, "sine"); }, 80);
+    }
+
+    function playErrorTone() {
+      if (!audioContext) return;
+      tone(146.83, .2, .12, "sawtooth", 110);
+    }
+
+    const canvas = document.getElementById("concert");
+    const ctx = canvas.getContext("2d");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+    let crowd = [];
+    let rafTime = 0;
+
+    function seeded(index) {
+      const x = Math.sin(index * 937.17 + 31.7) * 43758.5453;
+      return x - Math.floor(x);
+    }
+
+    function resizeCanvas() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      buildCrowd();
+    }
+
+    function buildCrowd() {
+      crowd = [];
+      const count = Math.max(54, Math.floor(width / 12));
+      for (let i = 0; i < count; i++) {
+        const depth = seeded(i + 2);
+        crowd.push({
+          x: seeded(i + 10),
+          depth: depth,
+          size: .58 + depth * .72,
+          phase: seeded(i + 40) * Math.PI * 2,
+          raised: seeded(i + 80) > .77,
+          lean: seeded(i + 120) * 2 - 1
+        });
+      }
+      crowd.sort(function (a, b) { return a.depth - b.depth; });
+    }
+
+    function glowCircle(x, y, radius, color, alpha) {
+      ctx.save();
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, color.replace("ALPHA", String(alpha)));
+      gradient.addColorStop(.22, color.replace("ALPHA", String(alpha * .55)));
+      gradient.addColorStop(1, color.replace("ALPHA", "0"));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawLightBeam(x, y, targetX, targetY, spread, color, alpha) {
+      ctx.save();
+      const gradient = ctx.createLinearGradient(x, y, targetX, targetY);
+      gradient.addColorStop(0, color.replace("ALPHA", String(alpha)));
+      gradient.addColorStop(1, color.replace("ALPHA", "0"));
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(x - 5, y);
+      ctx.lineTo(targetX - spread, targetY);
+      ctx.lineTo(targetX + spread, targetY);
+      ctx.lineTo(x + 5, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawSpeaker(x, y, scale, flip) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(flip ? -scale : scale, scale);
+      for (let i = 0; i < 6; i++) {
+        ctx.save();
+        ctx.translate(0, i * 25);
+        ctx.rotate((flip ? 1 : -1) * i * .012);
+        ctx.fillStyle = "#101019";
+        ctx.strokeStyle = "rgba(174,184,216,.22)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(-24, -11, 48, 22, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "rgba(117,129,166,.24)";
+        ctx.fillRect(-19, -7, 38, 14);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    function drawPerformer(x, y, scale, kind, time) {
+      const pulse = Math.sin(time * 2.3 + x) * .035;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.rotate(pulse);
+      ctx.fillStyle = "#08070e";
+      ctx.strokeStyle = "rgba(189,160,255,.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -48, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(-12, -38);
+      ctx.quadraticCurveTo(-18, -5, -12, 26);
+      ctx.lineTo(11, 26);
+      ctx.quadraticCurveTo(18, -5, 11, -38);
+      ctx.closePath();
+      ctx.fill();
+      if (kind === "guitar") {
+        ctx.save();
+        ctx.rotate(-.12 + Math.sin(time * 3) * .025);
+        ctx.fillStyle = "#4b214e";
+        ctx.beginPath();
+        ctx.ellipse(4, -4, 18, 13, -.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#100c15";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(13, -9);
+        ctx.lineTo(39, -28);
+        ctx.stroke();
+        ctx.restore();
+      } else if (kind === "singer") {
+        ctx.strokeStyle = "#18131e";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(12, -30);
+        ctx.lineTo(24, 28);
+        ctx.stroke();
+        ctx.fillStyle = "#41334f";
+        ctx.beginPath();
+        ctx.arc(10, -31, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "#05050a";
+      ctx.fillRect(-11, 25, 8, 30);
+      ctx.fillRect(4, 25, 8, 30);
+      ctx.restore();
+    }
+
+    function drawDrums(x, y, scale, time) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      ctx.fillStyle = "#170e20";
+      ctx.strokeStyle = "rgba(255,99,180,.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 23, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(-25, -22, 16, 7, 0, 0, Math.PI * 2);
+      ctx.ellipse(26, -17, 17, 7, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "#09070d";
+      ctx.lineWidth = 3;
+      const arm = Math.sin(time * 6) * 10;
+      ctx.beginPath();
+      ctx.moveTo(-5, -34);
+      ctx.lineTo(-24, -52 - arm);
+      ctx.moveTo(5, -34);
+      ctx.lineTo(27, -48 + arm);
+      ctx.stroke();
+      ctx.fillStyle = "#08070d";
+      ctx.beginPath();
+      ctx.arc(0, -48, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawCrowdPerson(person, time, energy) {
+      const baseY = height * (.67 + person.depth * .31);
+      const x = person.x * width * .92 + width * .01;
+      const scale = person.size * Math.max(.7, height / 800);
+      const sway = Math.sin(time * (1.5 + energy * .5) + person.phase) * (3 + energy * 3);
+      const bounce = Math.abs(Math.sin(time * (1.25 + energy * .75) + person.phase)) * (1.5 + energy * 2);
+      ctx.save();
+      ctx.translate(x + sway, baseY - bounce);
+      ctx.scale(scale, scale);
+      const shade = Math.floor(10 + person.depth * 16);
+      ctx.fillStyle = "rgb(" + shade + "," + Math.floor(shade * .74) + "," + Math.floor(shade * 1.28) + ")";
+      ctx.beginPath();
+      ctx.arc(0, -24, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, -3, 15, 24, person.lean * .08, 0, Math.PI * 2);
+      ctx.fill();
+      if (person.raised && energy > .22) {
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        const handWave = Math.sin(time * 2 + person.phase) * 5;
+        ctx.beginPath();
+        ctx.moveTo(-8, -12);
+        ctx.lineTo(-15 + handWave, -43);
+        ctx.moveTo(8, -12);
+        ctx.lineTo(17 + handWave, -48);
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = 6;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-10, -10);
+        ctx.lineTo(-18 + sway * .25, 8);
+        ctx.moveTo(10, -10);
+        ctx.lineTo(17 - sway * .25, 7);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawConsole(time) {
+      const x = width * .04;
+      const y = height * .79;
+      const w = Math.min(width * .43, 620);
+      const h = height * .19;
+      ctx.save();
+      ctx.fillStyle = "rgba(5,7,14,.96)";
+      ctx.strokeStyle = "rgba(127,150,188,.24)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + w * .09, y);
+      ctx.lineTo(x + w * .9, y);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      const cols = 18;
+      for (let i = 0; i < cols; i++) {
+        const px = x + w * .075 + (i / (cols - 1)) * w * .84;
+        const active = .3 + .7 * Math.abs(Math.sin(time * 3.2 + i * 1.71));
+        const meterHeight = active * h * .31;
+        ctx.fillStyle = i % 5 === 0 ? "rgba(255,80,170,.8)" : "rgba(64,230,255,.76)";
+        ctx.fillRect(px - 2, y + h * .19 + h * .3 - meterHeight, 3, meterHeight);
+        ctx.strokeStyle = "rgba(185,191,214,.22)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, y + h * .57);
+        ctx.lineTo(px, y + h * .88);
+        ctx.stroke();
+        ctx.fillStyle = "#c6c2cf";
+        const fy = y + h * (.66 + .13 * Math.sin(i * 2.4));
+        ctx.fillRect(px - 5, fy, 10, 3);
+      }
+      ctx.fillStyle = "rgba(38,29,65,.9)";
+      ctx.fillRect(x + w * .39, y + h * .08, w * .22, h * .28);
+      ctx.fillStyle = "rgba(87,234,255,.45)";
+      for (let i = 0; i < 24; i++) {
+        const bar = Math.abs(Math.sin(time * 2 + i * .74));
+        ctx.fillRect(x + w * .405 + i * w * .008, y + h * .31 - bar * h * .17, 2, bar * h * .17);
+      }
+      ctx.restore();
+    }
+
+    function drawEngineer(time) {
+      const x = width * .245;
+      const y = height * .86;
+      const scale = Math.max(.8, height / 850);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      const reach = Math.sin(time * .65) > .55 ? 1 : 0;
+      ctx.fillStyle = "#07070c";
+      ctx.beginPath();
+      ctx.arc(0, -74, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0, -34, 22, 39, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#08080d";
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-15, -49);
+      ctx.lineTo(-28 - reach * 20, -18 - reach * 18);
+      ctx.moveTo(15, -49);
+      ctx.lineTo(34 + reach * 30, -22 - reach * 12);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(109,225,255,.45)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, -74, 16, Math.PI * .95, Math.PI * 2.05);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawScene(now) {
+      const time = reducedMotion ? 2.5 : now / 1000;
+      rafTime = time;
+      const energy = .38 + actIndex * .26;
+      const integrity = score / 100;
+      ctx.clearRect(0, 0, width, height);
+
+      const bg = ctx.createLinearGradient(0, 0, 0, height);
+      bg.addColorStop(0, "#050513");
+      bg.addColorStop(.5, actIndex === 2 ? "#160a24" : "#10091d");
+      bg.addColorStop(1, "#030309");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+
+      glowCircle(width * .38, height * .22, width * .34, "rgba(121,49,255,ALPHA)", .13 + actIndex * .035);
+      glowCircle(width * .58, height * .26, width * .29, "rgba(255,45,143,ALPHA)", .07 + actIndex * .03);
+
+      ctx.fillStyle = "rgba(8,7,15,.95)";
+      ctx.fillRect(width * .04, height * .13, width * .73, 6);
+      for (let i = 0; i < 10; i++) {
+        const lx = width * (.07 + i * .073);
+        ctx.fillStyle = "#15131e";
+        ctx.fillRect(lx - 4, height * .12, 8, 13);
+        const swing = Math.sin(time * (.22 + i * .013) + i) * width * (.08 + actIndex * .015);
+        const colors = [
+          "rgba(108,62,255,ALPHA)",
+          "rgba(255,61,151,ALPHA)",
+          "rgba(51,222,255,ALPHA)"
+        ];
+        drawLightBeam(lx, height * .14, width * .4 + swing, height * .69, width * (.055 + actIndex * .012), colors[i % 3], .07 + actIndex * .025);
+        glowCircle(lx, height * .14, 28, colors[i % 3], .35);
+      }
+
+      ctx.fillStyle = "rgba(17,11,26,.98)";
+      ctx.fillRect(width * .035, height * .29, width * .75, height * .37);
+      const stageGlow = ctx.createLinearGradient(0, height * .31, 0, height * .68);
+      stageGlow.addColorStop(0, "rgba(71,28,111,.32)");
+      stageGlow.addColorStop(1, "rgba(3,3,8,.95)");
+      ctx.fillStyle = stageGlow;
+      ctx.fillRect(width * .045, height * .31, width * .73, height * .35);
+
+      ctx.strokeStyle = "rgba(181,145,255,.12)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i++) {
+        const x = width * (.08 + i * .08);
+        ctx.beginPath();
+        ctx.moveTo(x, height * .29);
+        ctx.lineTo(x, height * .65);
+        ctx.stroke();
+      }
+
+      drawSpeaker(width * .075, height * .22, Math.max(.72, height / 900), false);
+      drawSpeaker(width * .735, height * .22, Math.max(.72, height / 900), true);
+
+      const stageScale = Math.max(.66, height / 960);
+      drawPerformer(width * .25, height * .58, stageScale, "guitar", time);
+      drawPerformer(width * .43, height * .56, stageScale * 1.08, "singer", time);
+      drawDrums(width * .565, height * .56, stageScale, time);
+      drawPerformer(width * .67, height * .59, stageScale * .93, "guitar", time + 1);
+
+      const laserCount = 2 + actIndex * 3;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < laserCount; i++) {
+        const originX = width * (.15 + (i % 5) * .12);
+        const originY = height * (.22 + (i % 2) * .05);
+        const angle = Math.sin(time * (.31 + i * .025) + i * 1.8);
+        const endX = originX + angle * width * .43;
+        const endY = height * (.67 + (i % 3) * .06);
+        ctx.strokeStyle = i % 2 ? "rgba(73,255,218,.3)" : "rgba(222,78,255,.28)";
+        ctx.lineWidth = actIndex === 2 ? 1.4 : .8;
+        ctx.beginPath();
+        ctx.moveTo(originX, originY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      crowd.forEach(function (person) { drawCrowdPerson(person, time, energy); });
+      drawConsole(time);
+      drawEngineer(time);
+
+      if (score < 45) {
+        ctx.fillStyle = "rgba(120,0,20," + ((45 - score) / 45 * .1) + ")";
+        ctx.fillRect(0, 0, width, height);
+        if (Math.sin(time * 4) > .82) glowCircle(width * .25, height * .8, 100, "rgba(255,38,72,ALPHA)", .11);
+      }
+
+      if (scenePulse !== 0) {
+        const pulseColor = scenePulse > 0 ? "rgba(77,255,196," : "rgba(255,52,82,";
+        ctx.fillStyle = pulseColor + Math.abs(scenePulse) * .09 + ")";
+        ctx.fillRect(0, 0, width, height);
+        scenePulse *= .93;
+        if (Math.abs(scenePulse) < .01) scenePulse = 0;
+      }
+
+      requestAnimationFrame(drawScene);
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+    requestAnimationFrame(drawScene);
+  </script>
+</body>
+</html>
