@@ -1,1 +1,1093 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#042f49">
+  <meta name="description" content="THE DIVER — a calm, animated scuba-diving vocabulary game.">
+  <title>THE DIVER</title>
+  <style>
+    :root {
+      --ink: #effcff;
+      --muted: #a9d3db;
+      --cyan: #70e4df;
+      --aqua: #3bc7ca;
+      --amber: #ffc96c;
+      --danger: #ff7f75;
+      --deep: #03273f;
+      --glass: rgba(3, 28, 45, .72);
+      --line: rgba(185, 238, 242, .2);
+      --timer-angle: 360deg;
+      --timer-color: #70e4df;
+    }
 
+    * { box-sizing: border-box; }
+
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+
+    body {
+      color: var(--ink);
+      background: #032940;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    button, input { font: inherit; }
+
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .game {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      isolation: isolate;
+      background: #063452;
+      transition: filter 1.2s ease;
+    }
+
+    .ocean {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 48% -20%, rgba(151, 244, 236, .34), transparent 44%),
+        linear-gradient(180deg, #08758b 0%, #075a78 23%, #084864 53%, #052f4d 76%, #04273e 100%);
+      transition: background 2s ease, filter 1.2s ease;
+    }
+
+    .ocean::before {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      opacity: .22;
+      background: repeating-linear-gradient(105deg, transparent 0 8%, rgba(195, 255, 246, .18) 9%, transparent 14% 24%);
+      filter: blur(12px);
+      transform-origin: top center;
+      animation: rayDrift 16s ease-in-out infinite alternate;
+      pointer-events: none;
+    }
+
+    .ocean::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 35%, rgba(0, 16, 34, .36) 100%);
+      pointer-events: none;
+    }
+
+    @keyframes rayDrift {
+      from { transform: translate3d(-3%, -2%, 0) skewX(-3deg); }
+      to { transform: translate3d(4%, 1%, 0) skewX(4deg); }
+    }
+
+    .seascape {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0 16px 24px rgba(0, 10, 24, .28));
+    }
+
+    .surface-ripple {
+      animation: surfaceShift 9s ease-in-out infinite alternate;
+      transform-origin: center;
+    }
+
+    @keyframes surfaceShift {
+      from { transform: translateX(-16px) scaleX(1.015); opacity: .6; }
+      to { transform: translateX(18px) scaleX(.985); opacity: .9; }
+    }
+
+    .caustic { animation: caustic 7s ease-in-out infinite alternate; }
+    .caustic:nth-child(even) { animation-delay: -3s; }
+
+    @keyframes caustic {
+      from { opacity: .14; transform: translateX(-8px); }
+      to { opacity: .38; transform: translateX(12px); }
+    }
+
+    .sea-grass { transform-box: fill-box; transform-origin: 50% 100%; animation: grassSway 5.5s ease-in-out infinite alternate; }
+    .sea-grass:nth-child(2n) { animation-duration: 7s; animation-delay: -2s; }
+
+    @keyframes grassSway {
+      from { transform: rotate(-2.5deg) skewX(-1deg); }
+      to { transform: rotate(3.5deg) skewX(2deg); }
+    }
+
+    .coral-tip { animation: coralBreathe 7s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: bottom; }
+    @keyframes coralBreathe { to { transform: rotate(1.8deg); } }
+
+    .wreck, .safety-line, .manta, .boat-shadow {
+      opacity: 0;
+      transition: opacity 2.4s ease, transform 3s ease;
+    }
+
+    .stage-0 .boat-shadow { opacity: .32; }
+    .stage-3 .manta { opacity: .38; }
+    .stage-4 .wreck { opacity: .74; transform: translateX(0); }
+    .stage-5 .safety-line { opacity: .78; }
+
+    .wreck { transform: translateX(45px); }
+    .manta { animation: mantaGlide 17s linear infinite; }
+    @keyframes mantaGlide {
+      0% { transform: translate(-400px, 20px) scale(.72); }
+      100% { transform: translate(1750px, -70px) scale(.92); }
+    }
+
+    .fish-school { animation: fishPass 28s linear infinite; opacity: .56; }
+    .fish-school.slow { animation-duration: 39s; animation-delay: -14s; opacity: .34; }
+    @keyframes fishPass {
+      0% { transform: translateX(-380px); }
+      100% { transform: translateX(1900px); }
+    }
+
+    .fish { transform-box: fill-box; transform-origin: center; animation: fishWag .65s ease-in-out infinite alternate; }
+    @keyframes fishWag { to { transform: skewY(4deg) translateX(3px); } }
+
+    .particles, .bubbles {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .particle {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: rgba(213, 252, 245, .56);
+      box-shadow: 0 0 5px rgba(178, 245, 238, .25);
+      animation: particleFloat var(--dur) linear infinite;
+      animation-delay: var(--delay);
+    }
+
+    @keyframes particleFloat {
+      0% { transform: translate3d(0, 18vh, 0); opacity: 0; }
+      12% { opacity: var(--alpha); }
+      80% { opacity: var(--alpha); }
+      100% { transform: translate3d(var(--drift), -108vh, 0); opacity: 0; }
+    }
+
+    .diver-wrap {
+      position: absolute;
+      left: 25%;
+      top: 43%;
+      width: clamp(270px, 33vw, 560px);
+      aspect-ratio: 2.15 / 1;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 18px 22px rgba(0, 11, 26, .35));
+      animation: diverDrift 6.5s ease-in-out infinite alternate;
+      transition: left 2.4s ease, top 3s ease, transform 3s ease, opacity 1.8s ease;
+      z-index: 3;
+    }
+
+    @keyframes diverDrift {
+      from { margin-top: -7px; margin-left: -4px; }
+      to { margin-top: 9px; margin-left: 8px; }
+    }
+
+    .stage-2 .diver-wrap, .stage-3 .diver-wrap { left: 29%; top: 40%; }
+    .stage-4 .diver-wrap { left: 28%; top: 35%; }
+    .stage-5 .diver-wrap { left: 30%; top: 29%; transform: translate(-50%, -50%) rotate(-7deg); }
+    .ending-success .diver-wrap, .ending-abort .diver-wrap { top: -15%; transform: translate(-50%, -50%) rotate(-16deg) scale(.9); }
+
+    .diver-svg { width: 100%; height: 100%; overflow: visible; }
+
+    .diver-body { animation: bodyBreathe 3.8s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+    @keyframes bodyBreathe { to { transform: scaleY(1.012); } }
+
+    .rear-leg, .front-leg { transform-box: fill-box; transform-origin: 10% 24%; }
+    .rear-leg { animation: rearKick 3.3s ease-in-out infinite; }
+    .front-leg { animation: frontKick 3.3s ease-in-out infinite; }
+
+    @keyframes rearKick {
+      0%, 100% { transform: rotate(4deg); }
+      50% { transform: rotate(-8deg); }
+    }
+
+    @keyframes frontKick {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(8deg); }
+    }
+
+    .gauge-hand { transform-box: fill-box; transform-origin: 10% 10%; animation: gaugeCheck 12s ease-in-out infinite; }
+    @keyframes gaugeCheck {
+      0%, 68%, 100% { transform: rotate(0deg); }
+      74%, 90% { transform: rotate(-18deg) translate(-3px, 2px); }
+    }
+
+    .hose { stroke-dasharray: 4 2; animation: hosePulse 3.8s ease-in-out infinite alternate; }
+    @keyframes hosePulse { to { stroke-dashoffset: 3; } }
+
+    .bubble {
+      position: absolute;
+      left: calc(25% - 1vw);
+      top: 39%;
+      width: var(--size);
+      height: var(--size);
+      border: 1.5px solid rgba(216, 255, 255, .72);
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, rgba(255,255,255,.65), transparent 24%);
+      box-shadow: inset -2px -2px 5px rgba(6, 80, 111, .18);
+      animation: bubbleRise var(--dur) ease-in infinite;
+      animation-delay: var(--delay);
+      opacity: 0;
+      z-index: 4;
+    }
+
+    @keyframes bubbleRise {
+      0% { transform: translate(0, 0) scale(.45); opacity: 0; }
+      12% { opacity: .82; }
+      60% { opacity: .72; }
+      100% { transform: translate(var(--drift), -48vh) scale(1.15); opacity: 0; }
+    }
+
+    .stage-2 .bubble, .stage-3 .bubble, .stage-4 .bubble { left: 28%; top: 36%; }
+    .stage-5 .bubble { left: 29%; top: 25%; }
+
+    .hud-top {
+      position: absolute;
+      z-index: 10;
+      left: clamp(18px, 3vw, 48px);
+      top: clamp(18px, 3vw, 40px);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 13px 17px;
+      border: 1px solid rgba(205, 249, 246, .15);
+      border-radius: 13px;
+      background: rgba(3, 30, 47, .36);
+      box-shadow: 0 12px 34px rgba(0, 15, 30, .14), inset 0 1px rgba(255,255,255,.04);
+      backdrop-filter: blur(9px);
+      opacity: 0;
+      transform: translateY(-12px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+
+    .playing .hud-top { opacity: 1; transform: translateY(0); }
+
+    .depth-block { display: grid; gap: 2px; }
+    .hud-label { font-size: 9px; letter-spacing: .2em; color: #a8d0d8; font-weight: 700; }
+    .depth { font: 600 23px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -.03em; }
+    .depth small { color: #b8d9de; font-size: 11px; margin-left: 2px; }
+    .stage-name { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #d9f6f4; min-width: 94px; }
+
+    .mute {
+      position: absolute;
+      z-index: 30;
+      top: clamp(18px, 3vw, 40px);
+      right: clamp(18px, 3vw, 48px);
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(208, 250, 246, .2);
+      border-radius: 50%;
+      background: rgba(3, 30, 47, .46);
+      color: #d9f7f5;
+      cursor: pointer;
+      backdrop-filter: blur(9px);
+      transition: background .2s ease, transform .2s ease;
+    }
+
+    .mute:hover { background: rgba(8, 65, 79, .7); transform: translateY(-1px); }
+    .mute svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+
+    .quiz-panel {
+      position: absolute;
+      z-index: 20;
+      right: clamp(18px, 3vw, 48px);
+      bottom: clamp(18px, 4vh, 48px);
+      width: min(430px, calc(100vw - 36px));
+      padding: 21px 22px 20px;
+      border: 1px solid rgba(190, 240, 241, .22);
+      border-radius: 18px;
+      background:
+        linear-gradient(145deg, rgba(10, 58, 74, .38), rgba(2, 23, 41, .65)),
+        var(--glass);
+      box-shadow: 0 25px 70px rgba(0, 11, 25, .34), inset 0 1px rgba(255,255,255,.06);
+      backdrop-filter: blur(16px) saturate(115%);
+      opacity: 0;
+      transform: translateY(26px);
+      pointer-events: none;
+      transition: opacity .65s ease, transform .65s cubic-bezier(.2,.8,.2,1), border-color .3s ease;
+    }
+
+    .playing .quiz-panel { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .quiz-panel.correct { border-color: rgba(112, 228, 223, .75); }
+    .quiz-panel.wrong { border-color: rgba(255, 127, 117, .82); }
+
+    .panel-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .eyebrow { color: #9bcbd1; font-size: 10px; font-weight: 800; letter-spacing: .19em; text-transform: uppercase; }
+    .question-count { margin-top: 4px; font-size: 14px; color: #efffff; font-weight: 650; }
+
+    .timer-ring {
+      width: 59px;
+      height: 59px;
+      flex: 0 0 59px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--timer-color) var(--timer-angle), rgba(196, 244, 243, .11) 0);
+      position: relative;
+      box-shadow: 0 0 20px color-mix(in srgb, var(--timer-color) 18%, transparent);
+    }
+
+    .timer-ring::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #082d43; border: 1px solid rgba(255,255,255,.06); }
+    .timer-number { position: relative; z-index: 1; font: 700 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #f4ffff; }
+
+    .definition {
+      min-height: 104px;
+      display: flex;
+      align-items: center;
+      margin: 0 0 17px;
+      color: #f4ffff;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(18px, 1.45vw, 22px);
+      line-height: 1.42;
+      text-wrap: balance;
+      user-select: text;
+    }
+
+    .answer-row { position: relative; display: flex; gap: 9px; }
+    .answer {
+      min-width: 0;
+      width: 100%;
+      height: 49px;
+      padding: 0 14px;
+      border: 1px solid rgba(166, 225, 229, .27);
+      border-radius: 10px;
+      outline: none;
+      background: rgba(1, 20, 34, .53);
+      color: #f5ffff;
+      caret-color: var(--cyan);
+      font-size: 16px;
+      user-select: text;
+      transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+
+    .answer::placeholder { color: #789fab; }
+    .answer:focus { border-color: rgba(112, 228, 223, .72); box-shadow: 0 0 0 3px rgba(72, 202, 199, .11); background: rgba(1, 22, 38, .68); }
+    .answer:disabled { opacity: .7; }
+
+    .submit {
+      height: 49px;
+      padding: 0 16px;
+      border: 1px solid rgba(176, 242, 238, .29);
+      border-radius: 10px;
+      background: linear-gradient(180deg, #59d4d1, #2eaeb7);
+      color: #032738;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(29, 170, 177, .18);
+      transition: filter .18s ease, transform .18s ease;
+    }
+
+    .submit:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .submit:disabled { opacity: .4; cursor: default; transform: none; }
+
+    .feedback {
+      min-height: 25px;
+      margin-top: 11px;
+      color: #b8d9de;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .feedback.good { color: #8ff0e3; }
+    .feedback.bad { color: #ffb3a9; }
+    .feedback strong { color: #fff; }
+
+    .readiness { margin-top: 15px; padding-top: 14px; border-top: 1px solid rgba(189, 235, 237, .12); }
+    .meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 7px; }
+    .meter-label { color: #9bc7ce; font-size: 9px; letter-spacing: .17em; font-weight: 800; }
+    .score { font: 700 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #eaffff; }
+    .meter { height: 6px; overflow: hidden; border-radius: 99px; background: rgba(190, 236, 238, .12); }
+    .meter-fill { width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #3bbfca, #83ead7); box-shadow: 0 0 12px rgba(92, 225, 217, .35); transition: width .75s cubic-bezier(.2,.8,.2,1), background .3s; }
+
+    .warning .ocean { filter: saturate(.9) brightness(.88); }
+    .warning .meter-fill { background: linear-gradient(90deg, #e0a43c, #ffd276); }
+    .critical .ocean { filter: saturate(.75) brightness(.72); }
+    .critical .meter-fill { background: linear-gradient(90deg, #da5e59, #ff9685); }
+
+    .intro, .ending {
+      position: absolute;
+      z-index: 40;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: linear-gradient(90deg, rgba(1, 23, 39, .66), rgba(2, 30, 48, .22) 55%, rgba(1, 21, 35, .36));
+      transition: opacity .75s ease, visibility .75s;
+    }
+
+    .playing .intro { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    .intro-card, .ending-card {
+      width: min(610px, 94vw);
+      text-align: center;
+      padding: 42px 44px 39px;
+      border: 1px solid rgba(197, 242, 240, .22);
+      border-radius: 20px;
+      background: linear-gradient(145deg, rgba(8, 58, 72, .56), rgba(2, 25, 42, .76));
+      box-shadow: 0 30px 90px rgba(0, 10, 25, .37), inset 0 1px rgba(255,255,255,.07);
+      backdrop-filter: blur(18px);
+    }
+
+    .title-mark { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 16px; color: #84dbd7; font-size: 10px; font-weight: 800; letter-spacing: .28em; }
+    .title-mark::before, .title-mark::after { content: ""; width: 34px; height: 1px; background: currentColor; opacity: .48; }
+
+    h1, h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 500; }
+    h1 { font-size: clamp(46px, 7vw, 83px); line-height: .92; letter-spacing: .075em; text-shadow: 0 10px 35px rgba(0, 16, 30, .32); }
+    .subtitle { margin: 18px auto 0; color: #b6d8dc; font-size: 15px; line-height: 1.6; max-width: 470px; }
+
+    .rules {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+      margin: 27px 0 26px;
+    }
+
+    .rule { padding: 13px 9px; border: 1px solid rgba(181, 231, 232, .13); border-radius: 10px; background: rgba(1, 26, 42, .3); }
+    .rule strong { display: block; color: #efffff; font-size: 14px; margin-bottom: 4px; }
+    .rule span { color: #91b9c0; font-size: 10px; letter-spacing: .04em; }
+
+    .start, .again {
+      min-width: 174px;
+      height: 52px;
+      padding: 0 27px;
+      border: 1px solid rgba(208, 253, 248, .36);
+      border-radius: 99px;
+      color: #03293a;
+      background: linear-gradient(180deg, #8be9dc, #4bc7c9);
+      box-shadow: 0 12px 30px rgba(34, 184, 188, .22), inset 0 1px rgba(255,255,255,.48);
+      font-weight: 850;
+      letter-spacing: .04em;
+      cursor: pointer;
+      transition: transform .2s ease, filter .2s ease;
+    }
+
+    .start:hover, .again:hover { transform: translateY(-2px); filter: brightness(1.05); }
+    .start:focus-visible, .again:focus-visible, .mute:focus-visible, .submit:focus-visible { outline: 3px solid rgba(146, 238, 230, .52); outline-offset: 3px; }
+
+    .ending { opacity: 0; visibility: hidden; pointer-events: none; }
+    .ending.show { opacity: 1; visibility: visible; pointer-events: auto; }
+    .ending-card { transform: translateY(14px); transition: transform .8s cubic-bezier(.2,.8,.2,1); }
+    .ending.show .ending-card { transform: translateY(0); }
+    .ending h2 { font-size: clamp(34px, 5vw, 58px); letter-spacing: .02em; }
+    .ending p { margin: 14px auto 21px; max-width: 430px; color: #b9dade; line-height: 1.55; }
+    .result-line { display: flex; justify-content: center; gap: 23px; margin: 0 0 25px; }
+    .result-item { min-width: 90px; }
+    .result-item strong { display: block; font: 700 23px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #efffff; }
+    .result-item span { display: block; margin-top: 5px; color: #83abb3; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; }
+
+    .answer-note { margin-top: 12px; color: #78aab2; font-size: 11px; }
+
+    @media (max-width: 760px) {
+      .diver-wrap { left: 31%; top: 29%; width: clamp(235px, 58vw, 390px); }
+      .stage-2 .diver-wrap, .stage-3 .diver-wrap, .stage-4 .diver-wrap { left: 32%; top: 27%; }
+      .quiz-panel { bottom: 14px; right: 14px; width: calc(100vw - 28px); padding: 17px; }
+      .definition { min-height: 82px; font-size: 17px; }
+      .hud-top { top: 14px; left: 14px; padding: 10px 12px; }
+      .mute { top: 14px; right: 14px; }
+      .rules { gap: 6px; }
+      .intro-card, .ending-card { padding: 32px 22px 29px; }
+      .depth { font-size: 18px; }
+      .stage-name { display: none; }
+    }
+
+    @media (max-height: 670px) {
+      .quiz-panel { bottom: 12px; padding: 15px 17px 14px; }
+      .definition { min-height: 70px; margin-bottom: 11px; font-size: 17px; }
+      .panel-top { margin-bottom: 8px; }
+      .timer-ring { width: 50px; height: 50px; flex-basis: 50px; }
+      .readiness { margin-top: 9px; padding-top: 9px; }
+      .intro-card { padding-top: 27px; padding-bottom: 25px; }
+      .rules { margin: 18px 0; }
+      .subtitle { margin-top: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="game" class="game stage-0" aria-label="THE DIVER vocabulary game">
+    <div class="ocean" aria-hidden="true">
+      <svg class="seascape" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sand" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#5b806d"/>
+            <stop offset="1" stop-color="#1c4c4f"/>
+          </linearGradient>
+          <linearGradient id="rock" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#215d5f"/>
+            <stop offset="1" stop-color="#0d3947"/>
+          </linearGradient>
+          <linearGradient id="wreckMetal" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#315e62"/>
+            <stop offset="1" stop-color="#123642"/>
+          </linearGradient>
+          <filter id="blur8"><feGaussianBlur stdDeviation="8"/></filter>
+        </defs>
+
+        <g class="boat-shadow" fill="#06374d">
+          <path d="M490 34h490l-83 39H548z"/>
+          <rect x="700" y="7" width="95" height="28" rx="5"/>
+          <path d="M742 66v205" stroke="#b4d6d2" stroke-width="3" opacity=".72"/>
+          <path d="M729 259h27" stroke="#cbe8e2" stroke-width="4" opacity=".5"/>
+        </g>
+
+        <g class="surface-ripple" fill="none" stroke="#b7f7ed" stroke-linecap="round">
+          <path d="M0 40c180 23 311-21 469 0s303-19 481 2 360-14 650 4" opacity=".28" stroke-width="6"/>
+          <path d="M-40 69c213 18 310-13 499 0s314-18 504-1 356-7 704 5" opacity=".14" stroke-width="3"/>
+        </g>
+
+        <g fill="none" stroke="#d3fff5" stroke-width="8" stroke-linecap="round" opacity=".22">
+          <path class="caustic" d="M70 165c106-42 183-35 275-5"/>
+          <path class="caustic" d="M602 184c120-51 209-43 315-2"/>
+          <path class="caustic" d="M1125 153c96-28 187-18 300 16"/>
+        </g>
+
+        <g class="fish-school">
+          <g class="fish" transform="translate(90 260)" fill="#92c9c2"><path d="M0 0c21-18 52-18 78 0-26 18-57 18-78 0z"/><path d="M0 0-24-17v34z"/><circle cx="61" cy="-3" r="2.5" fill="#092e42"/></g>
+          <g class="fish" transform="translate(198 328) scale(.62)" fill="#82bab8"><path d="M0 0c21-18 52-18 78 0-26 18-57 18-78 0z"/><path d="M0 0-24-17v34z"/></g>
+          <g class="fish" transform="translate(302 245) scale(.48)" fill="#a3d2c9"><path d="M0 0c21-18 52-18 78 0-26 18-57 18-78 0z"/><path d="M0 0-24-17v34z"/></g>
+        </g>
+
+        <g class="fish-school slow">
+          <g class="fish" transform="translate(160 430) scale(.42)" fill="#75b0b2"><path d="M0 0c21-18 52-18 78 0-26 18-57 18-78 0z"/><path d="M0 0-24-17v34z"/></g>
+          <g class="fish" transform="translate(42 486) scale(.33)" fill="#8bc0bd"><path d="M0 0c21-18 52-18 78 0-26 18-57 18-78 0z"/><path d="M0 0-24-17v34z"/></g>
+        </g>
+
+        <g class="manta" fill="#15495a">
+          <path d="M0 0c61-52 151-60 221-23 32 17 61 46 104 39-37 32-80 32-115 10-49 25-109 25-156-1-28 17-62 20-94 1 25-4 38-13 40-26z"/>
+          <path d="M182 11c14 59 22 113 8 165" fill="none" stroke="#15495a" stroke-width="8" stroke-linecap="round"/>
+        </g>
+
+        <path d="M0 710c213-64 390-24 566 8 198 36 380 56 560 7 176-48 296-39 474 22v153H0z" fill="url(#sand)" opacity=".72"/>
+        <path d="M0 770c190-42 350-31 529 0 232 40 433 39 633-5 160-35 285-22 438 17v118H0z" fill="#123e49" opacity=".55"/>
+
+        <g opacity=".9">
+          <path d="M-40 776c80-120 143-139 234-82 36-79 126-110 197-44 91-61 160-13 200 90l30 160H-40z" fill="url(#rock)"/>
+          <path d="M1032 786c38-101 116-137 198-75 52-98 159-91 197 1 57-27 133 3 194 92v96h-589z" fill="url(#rock)"/>
+        </g>
+
+        <g transform="translate(74 612)">
+          <path class="sea-grass" d="M35 168c-5-73 3-119 40-158-13 60-13 107 4 158z" fill="#4f9678"/>
+          <path class="sea-grass" d="M74 170C55 98 50 46 68 0c3 62 18 112 40 170z" fill="#397f6d"/>
+          <path class="sea-grass" d="M112 173c-3-75 17-123 49-151-17 56-13 105-11 151z" fill="#559b78"/>
+          <path class="coral-tip" d="M177 174v-71m0 31-28-35m29 53 31-37m-30 18 1-53" fill="none" stroke="#b8706d" stroke-width="13" stroke-linecap="round"/>
+          <path d="M235 178c-18-52 0-88 40-102 40 23 43 61 17 102z" fill="#b79a62" opacity=".8"/>
+        </g>
+
+        <g transform="translate(1260 628)">
+          <path class="sea-grass" d="M12 184c18-87 33-122 70-171-17 74-17 121-2 171z" fill="#4e9477"/>
+          <path class="sea-grass" d="M65 183c-6-63 1-121 24-161 0 61 15 112 17 161z" fill="#347564"/>
+          <path class="coral-tip" d="M174 184v-81m0 39-34-34m36 49 37-36m-38 8 7-62" fill="none" stroke="#b77972" stroke-width="14" stroke-linecap="round"/>
+          <path d="M235 185c-25-61 3-98 50-106 37 34 34 69 10 106z" fill="#ae9360"/>
+        </g>
+
+        <g class="wreck" transform="translate(835 515) rotate(-5)">
+          <path d="M0 197h543l-70 90H92z" fill="url(#wreckMetal)" stroke="#537d76" stroke-width="4"/>
+          <path d="M122 94h260l51 105H75z" fill="#244d55" stroke="#547770" stroke-width="4"/>
+          <path d="M173 28h126l35 66H146z" fill="#1b414c" stroke="#52756e" stroke-width="4"/>
+          <rect x="189" y="45" width="38" height="27" rx="2" fill="#062f41"/><rect x="246" y="45" width="38" height="27" rx="2" fill="#062f41"/>
+          <circle cx="155" cy="144" r="27" fill="#092f3e" stroke="#64877c" stroke-width="6"/>
+          <circle cx="348" cy="144" r="27" fill="#092f3e" stroke="#64877c" stroke-width="6"/>
+          <path d="M307 29 326-22h14l-4 51" fill="#1b414c" stroke="#52756e" stroke-width="4"/>
+          <path d="m73 286-58 49m454-49 52 39" stroke="#607e72" stroke-width="8" opacity=".45"/>
+        </g>
+
+        <g class="safety-line">
+          <path d="M1080 -20v496" stroke="#c9d7b6" stroke-width="4"/>
+          <rect x="1023" y="375" width="114" height="14" rx="7" fill="#e3b04f"/>
+          <path d="M1060 385v72m40-72v72" stroke="#e3b04f" stroke-width="5"/>
+          <text x="1148" y="392" fill="#d9efe9" font-family="ui-monospace, monospace" font-size="17" letter-spacing="2">5 M STOP</text>
+        </g>
+      </svg>
+
+      <div id="particles" class="particles"></div>
+
+      <div class="diver-wrap" id="diver" aria-hidden="true">
+        <svg class="diver-svg" viewBox="0 0 600 280">
+          <defs>
+            <linearGradient id="suit" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#172d3a"/><stop offset="1" stop-color="#071a27"/></linearGradient>
+            <linearGradient id="tank" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#879c9f"/><stop offset=".5" stop-color="#d0dbd8"/><stop offset="1" stop-color="#60787e"/></linearGradient>
+            <linearGradient id="fin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#47c5c3"/><stop offset="1" stop-color="#167e8d"/></linearGradient>
+          </defs>
+
+          <g class="rear-leg" opacity=".8">
+            <path d="M282 164c-4 21 9 40 34 53l88 24 11-25-82-39-19-30z" fill="#091d2b"/>
+            <path d="m402 215 27 14 64-7c20 2 33 13 45 25-45 13-87 14-128-5z" fill="url(#fin)"/>
+            <path d="M405 217c16 8 17 18 5 25" fill="none" stroke="#a7dad5" stroke-width="2" opacity=".35"/>
+          </g>
+
+          <g class="front-leg">
+            <path d="M275 169c3 25 22 43 49 54l82 16 9-25-77-35-23-31z" fill="url(#suit)" stroke="#274554" stroke-width="2"/>
+            <path d="m403 212 30 12 61-12c24 0 40 10 53 22-43 18-88 22-137 6z" fill="url(#fin)" stroke="#66d7cf" stroke-width="2"/>
+            <path d="M407 215c15 7 17 17 3 25" fill="none" stroke="#c6eeea" stroke-width="2" opacity=".45"/>
+          </g>
+
+          <g class="diver-body">
+            <rect x="159" y="76" width="137" height="68" rx="31" fill="#0c2533" stroke="#355360" stroke-width="3"/>
+            <path d="M246 100c25-18 70-13 87 11l12 39-69 41-56-23z" fill="url(#suit)" stroke="#304c58" stroke-width="3"/>
+            <path d="M221 117h114v54H221z" fill="#122d3a" opacity=".83"/>
+            <path d="M237 93c21-14 42-15 63-5l14 23h-88z" fill="#1d4e5a"/>
+
+            <rect x="165" y="67" width="112" height="73" rx="36" fill="url(#tank)" stroke="#3c5c64" stroke-width="4"/>
+            <rect x="145" y="88" width="28" height="33" rx="7" fill="#233d45"/>
+            <path d="M250 73c18 7 27 27 23 55" fill="none" stroke="#eef7f1" stroke-width="3" opacity=".34"/>
+            <path d="M177 134c39 14 78 13 111-5" fill="none" stroke="#1c4652" stroke-width="13"/>
+
+            <path d="M330 108c29-18 48-30 72-39l15 19-57 46z" fill="url(#suit)" stroke="#304c58" stroke-width="3"/>
+            <path d="M399 68c12-7 26 1 30 15l-8 12-18-6z" fill="#c7a486"/>
+
+            <g class="gauge-hand">
+              <path d="M328 142c31 3 59 14 82 35l-13 18-68-21z" fill="url(#suit)" stroke="#304c58" stroke-width="3"/>
+              <path d="M401 177c12-4 24 3 27 14l-14 12-19-10z" fill="#c7a486"/>
+              <circle cx="432" cy="200" r="13" fill="#142e38" stroke="#b4d4cf" stroke-width="3"/>
+              <path d="m432 200 5-7" stroke="#7ee5dc" stroke-width="2"/>
+            </g>
+
+            <circle cx="354" cy="75" r="38" fill="#b48e73"/>
+            <path d="M327 57c12-28 54-29 66 3l-4 25-22-29z" fill="#101e28"/>
+            <path d="M339 64h53l9 24-49 9-21-15z" fill="#112b39" stroke="#83cac8" stroke-width="4"/>
+            <path d="M350 69h38l5 12-35 7-14-11z" fill="#66b9c2" opacity=".45"/>
+            <path d="M400 83h18" stroke="#152d36" stroke-width="9" stroke-linecap="round"/>
+            <circle cx="418" cy="83" r="8" fill="#263d43" stroke="#71878a" stroke-width="2"/>
+            <path class="hose" d="M420 82c38-24 15-56-54-42-47 10-68 38-73 68" fill="none" stroke="#111f29" stroke-width="8" stroke-linecap="round"/>
+            <path d="M298 105c0 0 10 25 9 61" fill="none" stroke="#57bfc1" stroke-width="5"/>
+            <path d="M271 167c18 24 40 29 71 18" fill="none" stroke="#102b38" stroke-width="17" stroke-linecap="round"/>
+            <rect x="277" y="156" width="58" height="15" rx="7" fill="#42606a"/>
+            <path d="M299 164v16" stroke="#b6c6c4" stroke-width="4"/>
+            <path d="M245 114h94" stroke="#d3bb57" stroke-width="4" opacity=".9"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="bubbles" id="bubbles" aria-hidden="true"></div>
+    </div>
+
+    <section class="hud-top" aria-label="Dive depth and location">
+      <div class="depth-block"><span class="hud-label">DEPTH</span><span class="depth" id="depth">4.0<small>M</small></span></div>
+      <div class="stage-name" id="stageName">Descent line</div>
+    </section>
+
+    <button class="mute" id="muteButton" type="button" aria-label="Turn ambient sound on" title="Ambient sound off">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10H4Z"/><path id="soundWaves" d="M16 9c1 1 1 5 0 6m3-8c3 3 3 7 0 10"/><path id="muteSlash" d="m5 5 14 14"/></svg>
+    </button>
+
+    <section class="quiz-panel" id="quizPanel" aria-label="Vocabulary question">
+      <div class="panel-top">
+        <div>
+          <div class="eyebrow">Identify the term</div>
+          <div class="question-count" id="questionCount">Question 1 of 30</div>
+        </div>
+        <div class="timer-ring" id="timerRing" role="timer" aria-label="15 seconds remaining">
+          <span class="timer-number" id="timerNumber">15</span>
+        </div>
+      </div>
+      <p class="definition" id="definition"></p>
+      <form id="answerForm" autocomplete="off">
+        <div class="answer-row">
+          <input class="answer" id="answerInput" type="text" placeholder="Type the scuba term" aria-label="Type the correct scuba term" autocapitalize="off" spellcheck="false">
+          <button class="submit" id="submitButton" type="submit">Enter</button>
+        </div>
+      </form>
+      <div class="feedback" id="feedback" aria-live="polite">Capitalization and punctuation are ignored.</div>
+      <div class="readiness">
+        <div class="meter-head"><span class="meter-label">DIVE READINESS</span><span class="score" id="score">100%</span></div>
+        <div class="meter" role="progressbar" aria-label="Dive readiness" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="meter-fill" id="meterFill"></div></div>
+      </div>
+    </section>
+
+    <section class="intro" id="intro">
+      <div class="intro-card">
+        <div class="title-mark">VOCABULARY BELOW THE SURFACE</div>
+        <h1>THE DIVER</h1>
+        <p class="subtitle">Read each definition, type the correct scuba term, and complete a calm reef dive from descent to safety stop.</p>
+        <div class="rules" aria-label="Game rules">
+          <div class="rule"><strong>15–20 sec</strong><span>PER DEFINITION</span></div>
+          <div class="rule"><strong>+10%</strong><span>FIRST 10 SECONDS</span></div>
+          <div class="rule"><strong>−20–30%</strong><span>INCORRECT ANSWER</span></div>
+        </div>
+        <button class="start" id="startButton" type="button">Begin Dive</button>
+        <div class="answer-note">30 distinct terms · accepted abbreviations included</div>
+      </div>
+    </section>
+
+    <section class="ending" id="ending" aria-hidden="true">
+      <div class="ending-card">
+        <div class="title-mark" id="endingMark">DIVE COMPLETE</div>
+        <h2 id="endingTitle">Back at the surface</h2>
+        <p id="endingCopy">You completed the reef route and made a controlled ascent.</p>
+        <div class="result-line">
+          <div class="result-item"><strong id="resultScore">100%</strong><span>Readiness</span></div>
+          <div class="result-item"><strong id="resultCorrect">30/30</strong><span>Correct</span></div>
+          <div class="result-item"><strong id="resultFast">0</strong><span>Fast answers</span></div>
+        </div>
+        <button class="again" id="againButton" type="button">Dive Again</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const TERMS = [
+        { term: "BCD", aliases: ["BC", "buoyancy control device", "buoyancy compensator"], definition: "Inflatable vest used to control buoyancy underwater and support a diver at the surface.", difficulty: 1 },
+        { term: "Regulator", aliases: ["reg"], definition: "Device that reduces cylinder pressure and delivers breathable gas on demand.", difficulty: 1 },
+        { term: "Octopus", aliases: ["octo", "alternate air source", "backup second stage", "alternate second stage"], definition: "Backup second-stage regulator used for emergency air sharing.", difficulty: 1 },
+        { term: "SPG", aliases: ["submersible pressure gauge", "pressure gauge"], definition: "Gauge that shows how much breathing gas remains in the cylinder.", difficulty: 1 },
+        { term: "Dive computer", aliases: ["computer"], definition: "Electronic device that tracks depth, time, ascent rate, and decompression status.", difficulty: 1 },
+        { term: "Buoyancy", aliases: [], definition: "The tendency to float, sink, or remain suspended in the water.", difficulty: 1 },
+        { term: "Neutral buoyancy", aliases: ["neutral"], definition: "Condition in which a diver neither rises nor sinks.", difficulty: 1 },
+        { term: "Equalization", aliases: ["equalize", "equalizing"], definition: "Balancing pressure in the ears and other air spaces while changing depth.", difficulty: 1 },
+        { term: "Buddy system", aliases: ["buddy diving"], definition: "Practice of diving with a partner for mutual assistance and safety.", difficulty: 1 },
+        { term: "Safety stop", aliases: [], definition: "Precautionary pause, commonly for three minutes at about 15 feet, made near the end of a dive before surfacing.", difficulty: 1 },
+        { term: "Bottom time", aliases: [], definition: "Elapsed time from beginning the descent until beginning the final ascent to the surface.", difficulty: 1 },
+        { term: "Nitrox", aliases: ["enriched air", "eanx", "enriched air nitrox"], definition: "Breathing mixture containing a higher percentage of oxygen than ordinary air.", difficulty: 1 },
+        { term: "Giant stride", aliases: ["giant stride entry"], definition: "Water-entry technique in which a fully equipped diver steps outward from a stable platform.", difficulty: 1 },
+        { term: "Trim", aliases: [], definition: "A diver's balanced, streamlined body orientation in the water, commonly horizontal.", difficulty: 1 },
+        { term: "C-card", aliases: ["c card", "certification card", "cert card"], definition: "Card or digital credential showing that a diver has completed a recognized certification course.", difficulty: 1 },
+        { term: "Ascent rate", aliases: [], definition: "Speed at which a diver rises toward the surface.", difficulty: 2 },
+        { term: "No-decompression limit", aliases: ["no decompression limit", "NDL", "no stop limit"], definition: "Maximum time at a given depth before required decompression stops would be necessary.", difficulty: 2 },
+        { term: "Decompression", aliases: ["decompression procedure"], definition: "Controlled reduction of pressure during ascent that allows accumulated inert gas to leave the body safely.", difficulty: 2 },
+        { term: "Deco", aliases: ["decompression obligation", "decompression stops"], definition: "Diver shorthand for a decompression obligation, its required stops, or decompression diving.", difficulty: 2 },
+        { term: "Narcosis", aliases: ["nitrogen narcosis", "gas narcosis"], definition: "Depth-related impairment caused primarily by the effects of nitrogen under pressure.", difficulty: 2 },
+        { term: "Narced", aliases: ["narked"], definition: "Diver slang describing someone who is experiencing nitrogen narcosis.", difficulty: 2 },
+        { term: "Thermocline", aliases: [], definition: "Boundary between layers of noticeably different water temperatures.", difficulty: 2 },
+        { term: "Current", aliases: ["water current"], definition: "Horizontal movement of water that can affect a diver's direction and effort.", difficulty: 1 },
+        { term: "Surface interval", aliases: ["SI"], definition: "Time spent at the surface between dives, during which the body continues releasing absorbed inert gas.", difficulty: 2 },
+        { term: "Off-gassing", aliases: ["off gassing", "degassing"], definition: "Process by which the body releases excess inert gas absorbed during a dive.", difficulty: 2 },
+        { term: "The bends", aliases: ["bends", "DCS", "decompression sickness"], definition: "Informal name for decompression sickness, caused when dissolved gas forms bubbles in body tissues or blood.", difficulty: 2 },
+        { term: "Squeeze", aliases: ["barotrauma"], definition: "Diver term for pain or injury caused when pressure is not equalized in an air space.", difficulty: 2 },
+        { term: "Vis", aliases: ["visibility"], definition: "Diver shorthand for the distance that can be seen clearly underwater.", difficulty: 2 },
+        { term: "SMB", aliases: ["surface marker buoy", "safety sausage", "DSMB", "delayed surface marker buoy"], definition: "Bright inflatable marker sent or carried to the surface to show where divers are located below.", difficulty: 3 },
+        { term: "SAC rate", aliases: ["SAC", "surface air consumption", "surface air consumption rate"], definition: "Surface Air Consumption rate; a measure used to estimate a diver's breathing-gas use at depth.", difficulty: 3 }
+      ];
+
+      const STAGES = [
+        { name: "Descent line", depth: "4.0" },
+        { name: "Shallow reef", depth: "9.5" },
+        { name: "Reef wall", depth: "14.0" },
+        { name: "Open blue", depth: "18.0" },
+        { name: "Wreck site", depth: "16.5" },
+        { name: "Return ascent", depth: "5.0" }
+      ];
+
+      const game = document.getElementById("game");
+      const quizPanel = document.getElementById("quizPanel");
+      const definition = document.getElementById("definition");
+      const answerForm = document.getElementById("answerForm");
+      const answerInput = document.getElementById("answerInput");
+      const submitButton = document.getElementById("submitButton");
+      const feedback = document.getElementById("feedback");
+      const questionCount = document.getElementById("questionCount");
+      const timerRing = document.getElementById("timerRing");
+      const timerNumber = document.getElementById("timerNumber");
+      const scoreText = document.getElementById("score");
+      const meterFill = document.getElementById("meterFill");
+      const meter = document.querySelector(".meter");
+      const stageName = document.getElementById("stageName");
+      const depth = document.getElementById("depth");
+      const startButton = document.getElementById("startButton");
+      const againButton = document.getElementById("againButton");
+      const ending = document.getElementById("ending");
+      const muteButton = document.getElementById("muteButton");
+      const muteSlash = document.getElementById("muteSlash");
+      const soundWaves = document.getElementById("soundWaves");
+
+      let deck = [];
+      let index = 0;
+      let score = 100;
+      let correct = 0;
+      let fastAnswers = 0;
+      let duration = 15;
+      let remaining = 15;
+      let questionStarted = 0;
+      let timerId = null;
+      let locked = true;
+      let audioOn = false;
+      let audioContext = null;
+      let oceanGain = null;
+
+      function shuffle(items) {
+        const array = items.map(item => ({ ...item, aliases: [...item.aliases] }));
+        for (let i = array.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+      }
+
+      function normalize(value) {
+        return value
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/&/g, "and")
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim()
+          .replace(/\s+/g, " ");
+      }
+
+      function accepted(item, answer) {
+        const value = normalize(answer);
+        if (!value) return false;
+        return [item.term, ...item.aliases].some(alias => normalize(alias) === value);
+      }
+
+      function buildParticles() {
+        const particleLayer = document.getElementById("particles");
+        const bubblesLayer = document.getElementById("bubbles");
+        for (let i = 0; i < 54; i++) {
+          const dot = document.createElement("i");
+          dot.className = "particle";
+          dot.style.left = `${Math.random() * 100}%`;
+          dot.style.top = `${Math.random() * 100}%`;
+          dot.style.setProperty("--dur", `${15 + Math.random() * 22}s`);
+          dot.style.setProperty("--delay", `${-Math.random() * 30}s`);
+          dot.style.setProperty("--drift", `${-45 + Math.random() * 90}px`);
+          dot.style.setProperty("--alpha", `${.18 + Math.random() * .38}`);
+          const size = .8 + Math.random() * 2.2;
+          dot.style.width = `${size}px`;
+          dot.style.height = `${size}px`;
+          particleLayer.appendChild(dot);
+        }
+
+        for (let i = 0; i < 10; i++) {
+          const bubble = document.createElement("i");
+          bubble.className = "bubble";
+          bubble.style.setProperty("--size", `${5 + Math.random() * 13}px`);
+          bubble.style.setProperty("--dur", `${5.5 + Math.random() * 4}s`);
+          bubble.style.setProperty("--delay", `${-Math.random() * 8}s`);
+          bubble.style.setProperty("--drift", `${-18 + Math.random() * 42}px`);
+          bubblesLayer.appendChild(bubble);
+        }
+      }
+
+      function playTone(type) {
+        if (!audioOn || !audioContext) return;
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(type === "correct" ? 390 : 165, now);
+        if (type === "correct") osc.frequency.exponentialRampToValueAtTime(590, now + .18);
+        else osc.frequency.exponentialRampToValueAtTime(125, now + .25);
+        gain.gain.setValueAtTime(.0001, now);
+        gain.gain.exponentialRampToValueAtTime(type === "correct" ? .035 : .026, now + .025);
+        gain.gain.exponentialRampToValueAtTime(.0001, now + .34);
+        osc.connect(gain).connect(audioContext.destination);
+        osc.start(now);
+        osc.stop(now + .36);
+      }
+
+      function startAmbient() {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const seconds = 3;
+          const buffer = audioContext.createBuffer(1, audioContext.sampleRate * seconds, audioContext.sampleRate);
+          const data = buffer.getChannelData(0);
+          let last = 0;
+          for (let i = 0; i < data.length; i++) {
+            const white = Math.random() * 2 - 1;
+            last = last * .985 + white * .015;
+            data[i] = last;
+          }
+          const source = audioContext.createBufferSource();
+          const filter = audioContext.createBiquadFilter();
+          oceanGain = audioContext.createGain();
+          source.buffer = buffer;
+          source.loop = true;
+          filter.type = "lowpass";
+          filter.frequency.value = 420;
+          filter.Q.value = .6;
+          oceanGain.gain.value = .028;
+          source.connect(filter).connect(oceanGain).connect(audioContext.destination);
+          source.start();
+        }
+        audioContext.resume();
+        if (oceanGain) oceanGain.gain.setTargetAtTime(.028, audioContext.currentTime, .25);
+      }
+
+      function setAudio(on) {
+        audioOn = on;
+        if (on) startAmbient();
+        else if (oceanGain && audioContext) oceanGain.gain.setTargetAtTime(.0001, audioContext.currentTime, .2);
+        muteSlash.style.display = on ? "none" : "block";
+        soundWaves.style.display = on ? "block" : "none";
+        muteButton.setAttribute("aria-label", on ? "Turn ambient sound off" : "Turn ambient sound on");
+        muteButton.title = on ? "Ambient sound on" : "Ambient sound off";
+      }
+
+      function difficultySettings(item) {
+        if (item.difficulty === 3) return { seconds: 20, penalty: 30 };
+        if (item.difficulty === 2) return { seconds: 17, penalty: 25 };
+        return { seconds: 15, penalty: 20 };
+      }
+
+      function updateStage() {
+        const stageIndex = Math.min(5, Math.floor(index / 5));
+        for (let i = 0; i < 6; i++) game.classList.toggle(`stage-${i}`, i === stageIndex);
+        stageName.textContent = STAGES[stageIndex].name;
+        depth.innerHTML = `${STAGES[stageIndex].depth}<small>M</small>`;
+      }
+
+      function updateScore() {
+        score = Math.max(0, Math.min(100, score));
+        scoreText.textContent = `${score}%`;
+        meterFill.style.width = `${score}%`;
+        meter.setAttribute("aria-valuenow", String(score));
+        game.classList.toggle("warning", score <= 50 && score > 25);
+        game.classList.toggle("critical", score <= 25);
+      }
+
+      function updateTimer() {
+        const ratio = Math.max(0, remaining / duration);
+        const seconds = Math.max(0, Math.ceil(remaining));
+        const color = ratio > .5 ? "#70e4df" : ratio > .25 ? "#ffc96c" : "#ff7f75";
+        timerNumber.textContent = String(seconds);
+        timerRing.style.setProperty("--timer-angle", `${ratio * 360}deg`);
+        timerRing.style.setProperty("--timer-color", color);
+        timerRing.setAttribute("aria-label", `${seconds} seconds remaining`);
+      }
+
+      function showQuestion() {
+        if (index >= deck.length) {
+          finish(true);
+          return;
+        }
+        clearInterval(timerId);
+        locked = false;
+        quizPanel.classList.remove("correct", "wrong");
+        const item = deck[index];
+        const settings = difficultySettings(item);
+        duration = settings.seconds;
+        remaining = duration;
+        questionStarted = performance.now();
+        definition.textContent = item.definition;
+        questionCount.textContent = `Question ${index + 1} of ${deck.length}`;
+        answerInput.value = "";
+        answerInput.disabled = false;
+        submitButton.disabled = false;
+        feedback.className = "feedback";
+        feedback.textContent = "Capitalization and punctuation are ignored.";
+        updateStage();
+        updateTimer();
+        requestAnimationFrame(() => answerInput.focus({ preventScroll: true }));
+
+        let last = performance.now();
+        timerId = setInterval(() => {
+          const now = performance.now();
+          remaining -= (now - last) / 1000;
+          last = now;
+          updateTimer();
+          if (remaining <= 0) resolveAnswer(null, true);
+        }, 100);
+      }
+
+      function resolveAnswer(value, timedOut = false) {
+        if (locked) return;
+        locked = true;
+        clearInterval(timerId);
+        remaining = Math.max(0, remaining);
+        updateTimer();
+        answerInput.disabled = true;
+        submitButton.disabled = true;
+
+        const item = deck[index];
+        const isCorrect = !timedOut && accepted(item, value);
+        const elapsed = (performance.now() - questionStarted) / 1000;
+        const isFast = isCorrect && elapsed <= 10;
+        let wait = 2100;
+
+        if (isCorrect) {
+          correct++;
+          quizPanel.classList.add("correct");
+          playTone("correct");
+          if (isFast) {
+            fastAnswers++;
+            const before = score;
+            score = Math.min(100, score + 10);
+            feedback.className = "feedback good";
+            feedback.textContent = before === 100 ? "Correct — fast response. Readiness is already full." : "Correct — fast response bonus: +10%.";
+          } else {
+            feedback.className = "feedback good";
+            feedback.textContent = "Correct.";
+          }
+        } else {
+          const { penalty } = difficultySettings(item);
+          score -= penalty;
+          quizPanel.classList.add("wrong");
+          playTone("wrong");
+          feedback.className = "feedback bad";
+          feedback.innerHTML = `${timedOut ? "Time expired." : "Not quite."} Correct term: <strong>${item.term}</strong> · −${penalty}%`;
+          wait = 3300;
+        }
+
+        updateScore();
+        index++;
+
+        window.setTimeout(() => {
+          if (score <= 0) finish(false);
+          else showQuestion();
+        }, wait);
+      }
+
+      function finish(completed) {
+        clearInterval(timerId);
+        locked = true;
+        game.classList.remove("playing");
+        game.classList.add(completed ? "ending-success" : "ending-abort");
+        document.getElementById("endingMark").textContent = completed ? "DIVE COMPLETE" : "CONTROLLED ABORT";
+        document.getElementById("endingTitle").textContent = completed ? "Back at the surface" : "Dive ended safely";
+        document.getElementById("endingCopy").textContent = completed
+          ? "You completed the reef route, paused at the safety-stop line, and made a controlled ascent."
+          : "Readiness reached zero, so the dive was calmly ended and a controlled ascent was made.";
+        document.getElementById("resultScore").textContent = `${score}%`;
+        document.getElementById("resultCorrect").textContent = `${correct}/${deck.length}`;
+        document.getElementById("resultFast").textContent = String(fastAnswers);
+        ending.classList.add("show");
+        ending.setAttribute("aria-hidden", "false");
+      }
+
+      function begin() {
+        deck = shuffle(TERMS);
+        index = 0;
+        score = 100;
+        correct = 0;
+        fastAnswers = 0;
+        locked = false;
+        ending.classList.remove("show");
+        ending.setAttribute("aria-hidden", "true");
+        game.className = "game stage-0 playing";
+        updateScore();
+        showQuestion();
+      }
+
+      answerForm.addEventListener("submit", event => {
+        event.preventDefault();
+        if (!locked) resolveAnswer(answerInput.value, false);
+      });
+
+      startButton.addEventListener("click", begin);
+      againButton.addEventListener("click", begin);
+      muteButton.addEventListener("click", () => setAudio(!audioOn));
+      document.addEventListener("visibilitychange", () => {
+        if (audioContext && document.hidden) audioContext.suspend();
+        else if (audioContext && audioOn) audioContext.resume();
+      });
+
+      buildParticles();
+      setAudio(false);
+    })();
+  </script>
+</body>
+</html>
