@@ -2,33 +2,36 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Elevator Schematic & Realistic Cab</title>
+    <title>High-Speed Elevator Mechanics - Pedagogy Games</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #0a192f; font-family: 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background-color: #050d1a; font-family: 'Courier New', monospace; }
         canvas { display: block; }
-        #ui-overlay { position: absolute; top: 20px; left: 20px; color: #64ffda; pointer-events: none; }
-        .label { background: rgba(10, 25, 47, 0.85); border: 1px solid #64ffda; padding: 8px; margin-top: 5px; text-transform: uppercase; font-size: 14px; }
-        .blueprint-text { color: #8892b0; font-size: 12px; margin-top: 10px; }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; color: #4facfe; pointer-events: none; width: 350px; }
+        .label { background: rgba(5, 13, 26, 0.85); border: 1px solid #4facfe; padding: 12px; margin-top: 5px; box-shadow: 0 0 10px rgba(79, 172, 254, 0.2); }
+        .part-name { font-size: 16px; font-weight: bold; text-transform: uppercase; color: #ffffff; margin-bottom: 4px; }
+        .category { font-size: 12px; color: #4facfe; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 1px solid rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="ui-overlay">
-        <h2>System: High-Rise Schematic</h2>
-        <div id="part-name" class="label">Awaiting input...</div>
-        <div class="blueprint-text">ELEVATION: SECT A-A | SCALE: 1:50</div>
+        <h2 style="margin:0 0 10px 0; font-size: 20px;">SYSTEM ARCHITECTURE</h2>
+        <div class="label">
+            <div id="part-name" class="part-name">Awaiting Input...</div>
+            <div id="part-category" class="category">Hover over components to scan</div>
+        </div>
     </div>
+    <div id="crosshair"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     
     <script>
-        // --- SCENE SETUP ---
+        // --- 1. CORE SCENE ---
         const scene = new THREE.Scene();
-        // Blueprint background fog for depth
-        scene.fog = new THREE.FogExp2(0x0a192f, 0.002);
-
-        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
-        camera.position.set(80, 60, 100);
+        scene.fog = new THREE.FogExp2(0x050d1a, 0.0015);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
+        camera.position.set(120, 300, 180);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -36,113 +39,160 @@
         document.body.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 0, 0);
+        controls.target.set(0, 300, 0);
 
-        // --- LIGHTING ---
-        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+        // --- 2. LIGHTING ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
         const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        dirLight.position.set(50, 200, 100);
+        dirLight.position.set(100, 800, 50);
         scene.add(dirLight);
 
-        // --- INTERACTION FRAMEWORK ---
+        // --- 3. MATERIALS LIBRARY ---
+        const mats = {
+            steel: new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.9, roughness: 0.4 }),
+            machinedMetal: new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.7, roughness: 0.2 }),
+            copper: new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.8, roughness: 0.3 }),
+            cable: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 }),
+            safetyRed: new THREE.MeshStandardMaterial({ color: 0xcc3333, roughness: 0.5 }),
+            glass: new THREE.MeshStandardMaterial({ color: 0x88ccff, metalness: 0.9, roughness: 0.05, transparent: true, opacity: 0.25, side: THREE.DoubleSide }),
+            blueprint: new THREE.LineBasicMaterial({ color: 0x4facfe, transparent: true, opacity: 0.15 })
+        };
+
         const interactables = [];
         const mechanicsGroup = new THREE.Group();
         scene.add(mechanicsGroup);
 
-        // --- ARCHITECTURAL SCHEMATIC (GHOSTED LINES) ---
-        const schematicGroup = new THREE.Group();
-        scene.add(schematicGroup);
-
-        const lineMat = new THREE.LineBasicMaterial({ color: 0x64ffda, transparent: true, opacity: 0.15 });
-        const boldLineMat = new THREE.LineBasicMaterial({ color: 0x64ffda, transparent: true, opacity: 0.35 });
-
-        // Generate Multiple Floors (Grid Plates)
-        const floorHeight = 40;
-        const totalFloors = 15; // Displaying a section of the 60 floors
-        
-        for (let i = -5; i < totalFloors; i++) {
-            const yPos = i * floorHeight;
-            
-            // Floor Grid
-            const grid = new THREE.GridHelper(120, 12, 0x64ffda, 0x64ffda);
-            grid.position.y = yPos;
-            grid.material.opacity = 0.1;
-            grid.material.transparent = true;
-            schematicGroup.add(grid);
-
-            // Perimeter structural beams for the floor
-            const perimeterGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(120, 0.1, 120));
-            const perimeter = new THREE.LineSegments(perimeterGeo, boldLineMat);
-            perimeter.position.y = yPos;
-            schematicGroup.add(perimeter);
-        }
-
-        // Vertical Structural Columns (Building Skeleton)
-        const columnGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(4, totalFloors * floorHeight, 4));
-        const colPositions = [
-            [-58, -58], [58, -58], [-58, 58], [58, 58], // Outer corners
-            [-30, -30], [30, -30], [-30, 30], [30, 30]  // Inner core frame
-        ];
-        
-        colPositions.forEach(pos => {
-            const col = new THREE.LineSegments(columnGeo, lineMat);
-            col.position.set(pos[0], (totalFloors * floorHeight) / 2 - (5 * floorHeight), pos[1]);
-            schematicGroup.add(col);
-        });
-
-        // The Central Elevator Shaft Wireframe
-        const shaftGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(32, totalFloors * floorHeight, 32));
-        const shaft = new THREE.LineSegments(shaftGeo, boldLineMat);
-        shaft.position.y = (totalFloors * floorHeight) / 2 - (5 * floorHeight);
-        schematicGroup.add(shaft);
-
-        // --- REALISTIC MECHANICS ---
-        const matSteel = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.9, roughness: 0.5 });
-        const matGlass = new THREE.MeshStandardMaterial({ color: 0x88ccff, metalness: 1.0, roughness: 0.1, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
-        
-        function buildPart(geometry, material, x, y, z, name) {
+        function buildPart(geometry, material, x, y, z, category, name, rx = 0, ry = 0, rz = 0) {
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.set(x, y, z);
-            mesh.userData = { partName: name };
+            mesh.rotation.set(rx, ry, rz);
+            mesh.userData = { category, name };
             mechanicsGroup.add(mesh);
             interactables.push(mesh);
             return mesh;
         }
 
-        // Cab Sling
-        buildPart(new THREE.BoxGeometry(28, 2, 6), matSteel, 0, 18, 0, "Crosshead (Upper Beam)");
-        buildPart(new THREE.BoxGeometry(28, 2, 6), matSteel, 0, -18, 0, "Safety Plank (Lower Beam)");
-        buildPart(new THREE.BoxGeometry(2, 34, 4), matSteel, -13, 0, 0, "Left Stile");
-        buildPart(new THREE.BoxGeometry(2, 34, 4), matSteel, 13, 0, 0, "Right Stile");
+        // --- 4. GHOSTED ARCHITECTURE (Scale Reference) ---
+        const topHeight = 650;
+        const shaftGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, topHeight + 50, 40));
+        const shaft = new THREE.LineSegments(shaftGeo, mats.blueprint);
+        shaft.position.y = topHeight / 2;
+        scene.add(shaft);
 
-        // Cab Glass
-        buildPart(new THREE.BoxGeometry(24, 32, 24), matGlass, 0, 0, 0, "Observation Cab Enclosure");
+        for (let i = 0; i <= topHeight; i += 40) {
+            const grid = new THREE.GridHelper(100, 10, 0x4facfe, 0x4facfe);
+            grid.position.y = i;
+            grid.material.opacity = 0.05;
+            grid.material.transparent = true;
+            scene.add(grid);
+        }
 
-        // --- RAYCASTER SETUP ---
+        // --- 5. MECHANICAL SYSTEMS ASSEMBLY ---
+        const cabY = 300;
+
+        // A. Machine Room (Top)
+        buildPart(new THREE.BoxGeometry(16, 12, 14), mats.machinedMetal, 0, topHeight + 10, -5, "Machine Room", "Regenerative Drive Inverter");
+        buildPart(new THREE.CylinderGeometry(6, 6, 18, 32), mats.copper, 0, topHeight + 5, 5, "Machine Room", "Permanent Magnet Synchronous Motor (PMSM)", 0, 0, Math.PI/2);
+        buildPart(new THREE.TorusGeometry(5, 1.5, 16, 50), mats.steel, 6, topHeight + 5, 5, "Machine Room", "Primary Traction Sheave", 0, Math.PI/2, 0);
+        buildPart(new THREE.CylinderGeometry(4, 4, 3, 32), mats.machinedMetal, -8, topHeight + 5, 5, "Machine Room", "Electromechanical Drum Brake");
+        buildPart(new THREE.TorusGeometry(3, 0.5, 16, 32), mats.safetyRed, -15, topHeight + 10, -15, "Safety Circuit", "Overspeed Governor Tripping Sheave", 0, Math.PI/2, 0);
+
+        // B. Cab Sling & Safeties
+        buildPart(new THREE.BoxGeometry(26, 2, 6), mats.steel, 0, cabY + 18, 0, "Structural Sling", "Crosshead Beam");
+        buildPart(new THREE.BoxGeometry(26, 2, 6), mats.steel, 0, cabY - 18, 0, "Structural Sling", "Safety Plank");
+        buildPart(new THREE.BoxGeometry(2, 34, 4), mats.steel, -12, cabY, 0, "Structural Sling", "Left Vertical Stile");
+        buildPart(new THREE.BoxGeometry(2, 34, 4), mats.steel, 12, cabY, 0, "Structural Sling", "Right Vertical Stile");
+        buildPart(new THREE.BoxGeometry(4, 4, 4), mats.safetyRed, -12, cabY - 17, 0, "Safety Circuit", "Progressive Wedge Safety Block (Left)");
+        buildPart(new THREE.BoxGeometry(4, 4, 4), mats.safetyRed, 12, cabY - 17, 0, "Safety Circuit", "Progressive Wedge Safety Block (Right)");
+
+        // C. Aerodynamics & Suspension
+        buildPart(new THREE.ConeGeometry(14, 12, 4), mats.machinedMetal, 0, cabY + 25, 0, "Aerodynamics", "Upper Wind Deflector Shroud", 0, Math.PI/4, 0);
+        buildPart(new THREE.ConeGeometry(14, 12, 4), mats.machinedMetal, 0, cabY - 25, 0, "Aerodynamics", "Lower Wind Deflector Shroud", Math.PI, Math.PI/4, 0);
+        buildPart(new THREE.CylinderGeometry(1, 1, 4, 16), mats.machinedMetal, 0, cabY + 20, 0, "Suspension", "Wire Rope Hitches & Shackle Springs");
+
+        // D. Cab Enclosure & Doors
+        buildPart(new THREE.BoxGeometry(22, 32, 22), mats.glass, 0, cabY, 0, "Cab Enclosure", "Passenger Observation Shell");
+        buildPart(new THREE.BoxGeometry(20, 1, 20), mats.machinedMetal, 0, cabY - 15.5, 0, "Cab Enclosure", "Load-Weighing Floor Platform");
+        buildPart(new THREE.BoxGeometry(14, 2, 3), mats.steel, 0, cabY + 15, 11, "Door Mechanics", "Linear Door Operator Motor");
+        buildPart(new THREE.BoxGeometry(6, 28, 0.5), mats.machinedMetal, -3, cabY, 11, "Door Mechanics", "Inner Left Cab Door");
+        buildPart(new THREE.BoxGeometry(6, 28, 0.5), mats.machinedMetal, 3, cabY, 11, "Door Mechanics", "Inner Right Cab Door");
+        buildPart(new THREE.BoxGeometry(1, 4, 1), mats.machinedMetal, 0, cabY + 5, 11.5, "Door Mechanics", "Door Clutch / Vane Assembly");
+
+        // E. Guide System (Rails & Active Rollers)
+        buildPart(new THREE.BoxGeometry(1.5, topHeight, 3), mats.steel, -14, topHeight/2, 0, "Guide System", "Main Car Guide Rail (Left T-Rail)");
+        buildPart(new THREE.BoxGeometry(1.5, topHeight, 3), mats.steel, 14, topHeight/2, 0, "Guide System", "Main Car Guide Rail (Right T-Rail)");
+        // Active Rollers
+        [cabY + 17, cabY - 17].forEach(yPos => {
+            buildPart(new THREE.CylinderGeometry(1.5, 1.5, 2), mats.copper, -13, yPos, 0, "Guide System", "Active Roller Guide Assembly", Math.PI/2, 0, 0);
+            buildPart(new THREE.CylinderGeometry(1.5, 1.5, 2), mats.copper, 13, yPos, 0, "Guide System", "Active Roller Guide Assembly", Math.PI/2, 0, 0);
+        });
+
+        // F. Counterweight Assembly
+        const cwY = cabY; 
+        buildPart(new THREE.BoxGeometry(10, 36, 4), mats.steel, 0, cwY, -16, "Counterweight", "Counterweight Structural Frame");
+        for(let i=0; i<8; i++) {
+            buildPart(new THREE.BoxGeometry(9, 4, 3), mats.steel, 0, cwY - 14 + (i*4), -16, "Counterweight", `Steel Filler Weight ${i+1}`);
+        }
+        buildPart(new THREE.TorusGeometry(3, 1, 16, 32), mats.steel, 0, cwY + 19, -16, "Counterweight", "Counterweight Deflector Sheave", 0, Math.PI/2, 0);
+
+        // G. Roping & Cables (Simplified lines to avoid rendering overload)
+        buildPart(new THREE.CylinderGeometry(0.5, 0.5, topHeight - cabY, 8), mats.cable, 0, cabY + ((topHeight - cabY)/2) + 20, 0, "Suspension", "Main Steel Hoist Ropes");
+        buildPart(new THREE.CylinderGeometry(1.2, 1.2, cabY, 8), mats.cable, 0, cabY/2 - 20, 0, "Suspension", "Compensation Chains (Dynamic Weight Equalization)");
+        buildPart(new THREE.CylinderGeometry(0.2, 0.2, topHeight, 8), mats.cable, -15, topHeight/2, -15, "Safety Circuit", "Governor Tension Rope");
+
+        // H. Pit Hardware (Bottom)
+        buildPart(new THREE.CylinderGeometry(3, 3, 12, 16), mats.copper, 0, 6, 0, "Pit Equipment", "Hydraulic Oil Buffer (Car)");
+        buildPart(new THREE.CylinderGeometry(2, 2, 12, 16), mats.copper, 0, 6, -16, "Pit Equipment", "Hydraulic Oil Buffer (Counterweight)");
+        buildPart(new THREE.TorusGeometry(4, 0.8, 16, 32), mats.steel, 0, 8, 0, "Pit Equipment", "Compensation Tie-Down Sheave", 0, Math.PI/2, 0);
+        buildPart(new THREE.TorusGeometry(2, 0.5, 16, 32), mats.safetyRed, -15, 6, -15, "Safety Circuit", "Governor Tension Sheave", 0, Math.PI/2, 0);
+
+        // --- 6. RAYCASTER INTERACTION LOGIC ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        const uiLabel = document.getElementById('part-name');
+        const nameLabel = document.getElementById('part-name');
+        const catLabel = document.getElementById('part-category');
+        let hoveredObject = null;
 
         window.addEventListener('mousemove', (event) => {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(interactables);
 
             if (intersects.length > 0) {
-                uiLabel.innerText = `[ DATA ] ${intersects[0].object.userData.partName}`;
-                document.body.style.cursor = 'crosshair';
+                if (hoveredObject !== intersects[0].object) {
+                    if (hoveredObject) hoveredObject.material.emissive.setHex(0x000000);
+                    hoveredObject = intersects[0].object;
+                    hoveredObject.material.emissive.setHex(0x113355); // Highlight effect
+                    
+                    nameLabel.innerText = hoveredObject.userData.name;
+                    catLabel.innerText = hoveredObject.userData.category;
+                    document.body.style.cursor = 'crosshair';
+                }
             } else {
-                uiLabel.innerText = 'Awaiting input...';
+                if (hoveredObject) {
+                    hoveredObject.material.emissive.setHex(0x000000);
+                    hoveredObject = null;
+                }
+                nameLabel.innerText = 'System Scanning...';
+                catLabel.innerText = 'Hover over components to scan';
                 document.body.style.cursor = 'default';
             }
         });
 
-        // --- ANIMATION LOOP ---
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 7. RENDER LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            // Slowly rotate the entire schematic for a dynamic viewing angle
-            scene.rotation.y += 0.001; 
+            // Gentle rotation to view the entire complex system
+            scene.rotation.y += 0.0015; 
             controls.update();
             renderer.render(scene, camera);
         }
