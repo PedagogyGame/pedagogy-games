@@ -297,6 +297,70 @@
       line-height: 1.52;
     }
 
+    .layer-focus {
+      position: absolute;
+      z-index: 11;
+      left: 28px;
+      bottom: 88px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      max-width: calc(100% - 56px);
+      padding: 8px 9px 8px 12px;
+      background: rgba(18, 17, 14, .78);
+      border: 1px solid rgba(213, 183, 119, .16);
+      border-radius: 4px;
+      box-shadow: 0 12px 42px rgba(0,0,0,.22);
+      backdrop-filter: blur(15px);
+    }
+
+    .layer-focus.visible { display: flex; }
+
+    .layer-focus-label {
+      color: #777066;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .layer-focus-buttons {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .layer-focus-buttons::-webkit-scrollbar { display: none; }
+
+    .focus-btn {
+      min-height: 30px;
+      padding: 0 10px;
+      color: #8f897f;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      font-size: 8px;
+      font-weight: 650;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: color .2s ease, border-color .2s ease, background .2s ease;
+    }
+
+    .focus-btn:hover {
+      color: #d8d1c5;
+      border-color: rgba(255,255,255,.09);
+    }
+
+    .focus-btn.active {
+      color: var(--gold-bright);
+      background: rgba(196,157,79,.11);
+      border-color: rgba(224,187,111,.30);
+    }
+
     .context-panel {
       position: absolute;
       z-index: 10;
@@ -497,7 +561,9 @@
       .topbar { top: 18px; left: 70px; right: 14px; }
       .mode-heading h2 { font-size: 22px; }
       .info-card { top: 76px; right: 14px; width: calc(100vw - 28px); }
-      .context-panel { right: 12px; left: 12px; bottom: 125px; overflow-x: auto; }
+      .context-panel { right: 12px; left: 12px; bottom: 169px; overflow-x: auto; }
+      .layer-focus { left: 12px; right: 12px; bottom: 125px; max-width: none; }
+      .layer-focus-label { display: none; }
       .controlbar { left: 10px; right: 10px; bottom: 10px; padding: 7px; }
       .ctl { min-height: 36px; padding: 0 10px; }
       .ctl.primary { min-width: 108px; }
@@ -541,7 +607,7 @@
           <h2 id="mode-title">Complete Piano</h2>
           <p id="mode-description">The assembled instrument. Rotate it, zoom deeply, or trigger one key to trace the mechanism.</p>
         </div>
-        <div class="view-help" aria-hidden="true"><span>Drag · Orbit</span><span>Wheel · Zoom</span><span>Click · Pin</span></div>
+        <div class="view-help" aria-hidden="true"><span>Drag · Orbit</span><span>Wheel · Zoom</span><span>Click · Pin</span><span>Tabs · View Locked</span></div>
       </header>
 
       <article class="info-card" id="info-card" aria-live="polite">
@@ -549,6 +615,11 @@
         <h3 id="info-name"></h3>
         <p id="info-description"></p>
       </article>
+
+      <div class="layer-focus" id="layer-focus" aria-label="Layer focus">
+        <span class="layer-focus-label">Focus</span>
+        <div class="layer-focus-buttons" id="layer-focus-buttons"></div>
+      </div>
 
       <div class="context-panel" id="action-controls" aria-label="Action demonstrations">
         <button class="ctl" id="isolate-action">Isolate Action</button>
@@ -563,7 +634,8 @@
       </div>
 
       <footer class="controlbar">
-        <button class="ctl primary" id="demo-key">Demonstrate Key</button>
+        <button class="ctl primary" id="play-music">▶ Play Piano</button>
+        <button class="ctl" id="demo-key">Demonstrate Key</button>
         <button class="ctl" id="slow">Slow Motion</button>
         <div class="divider"></div>
         <div class="slider-wrap">
@@ -572,7 +644,7 @@
         </div>
         <div class="spacer"></div>
         <button class="ctl" id="reset">Reset View</button>
-        <div class="status"><strong id="status-main">Ready</strong><span id="status-sub">Mechanisms ready</span></div>
+        <div class="status"><strong id="status-main">Ready</strong><span id="status-sub">Music stopped</span></div>
       </footer>
     </section>
 
@@ -627,6 +699,35 @@
     const systemLabel = {
       body: 'Body & Skeleton', sound: 'Sound & Strings', keyboard: 'Keyboard',
       action: 'Action & Hammers', dampers: 'Dampers & Pedals', technician: 'Technician Details'
+    };
+
+    const subLayerData = {
+      structure: [
+        { id:'combined', label:'Combined System', note:'Frame and acoustic anatomy together', camera:[-8.8,13.2,-10.2], target:[0,4.25,.8] },
+        { id:'frame', label:'Frame & Cabinet', note:'Rim, keybed, plate, pinblock, and braces', camera:[-12.2,10.8,-9.2], target:[0,4.05,.55] },
+        { id:'acoustic', label:'Acoustic Anatomy', note:'Soundboard, bridges, strings, and terminations', camera:[2.7,14.5,-8.1], target:[0,4.55,.95] },
+        { id:'interfaces', label:'Bearing Interfaces', note:'Where strings, bridges, plate, and pinblock meet', camera:[1.1,9.2,-4.5], target:[0,4.62,.8] }
+      ],
+      keyboard: [
+        { id:'combined', label:'Complete Keyboard', note:'Keys, frame, rails, pins, and contacts', camera:[-8.8,5.5,-12.2], target:[0,3.15,-2.35] },
+        { id:'keys', label:'Keys', note:'All 88 playing levers and their pivoting motion', camera:[-7.1,4.55,-11.4], target:[0,3.15,-2.65] },
+        { id:'frame', label:'Keyframe & Rails', note:'Front, balance, and back rails beneath the keys', camera:[1.5,5.65,-9.5], target:[0,3.02,-2.0] },
+        { id:'contacts', label:'Pins & Punchings', note:'Guide pins, balance pins, felt, and cloth contacts', camera:[-3.6,4.4,-6.0], target:[0,3.18,-1.8] },
+        { id:'interfaces', label:'Key-to-Action', note:'Capstan, cushion, wippen, and action-input contacts', camera:[-3.8,4.75,-4.9], target:[0,3.58,-.45] }
+      ],
+      action: [
+        { id:'combined', label:'Complete Action', note:'The complete row with regulation details in context', camera:[-7.8,6.8,-8.1], target:[0,3.9,-.6] },
+        { id:'row', label:'Action Row', note:'Wippens, jacks, repetition levers, and hammers', camera:[-9.1,6.15,-7.35], target:[0,3.98,.05] },
+        { id:'isolated', label:'Isolated Action', note:'One complete grand-action mechanism', camera:[-4.7,5.6,-5.2], target:[0,4.05,-.35] },
+        { id:'regulation', label:'Regulation Details', note:'Pivots, bushings, felts, springs, and screws', camera:[-3.35,4.95,-4.15], target:[0,4.03,-.25] },
+        { id:'interfaces', label:'Strike & Return', note:'Capstan, jack, knuckle, hammer, string, and damper contact', camera:[-3.15,5.8,-3.8], target:[0,4.35,.35] }
+      ],
+      dampers: [
+        { id:'combined', label:'Combined System', note:'Dampers, pedals, rods, and trapwork together', camera:[9.6,6.4,-10.8], target:[0,2.7,-.15] },
+        { id:'dampers', label:'Damper Mechanism', note:'Heads, felt, wires, guide rail, and lift rail', camera:[7.4,7.25,-6.8], target:[0,4.82,.95] },
+        { id:'pedals', label:'Pedals & Trapwork', note:'Lyre, pedals, pitmans, trap levers, and sostenuto rod', camera:[5.25,3.65,-7.85], target:[0,2.05,-1.85] },
+        { id:'interfaces', label:'Linkage Path', note:'Pedal joints, trap levers, connecting rods, and damper lift', camera:[4.45,4.55,-5.65], target:[0,3.1,-.75] }
+      ]
     };
 
     const scene = new THREE.Scene();
@@ -915,6 +1016,19 @@
     const bassBridge=tube([[-4.7,4.32,.15],[-3.65,4.34,1.25],[-2.45,4.34,2.22]],.12,mats.innerWood);
     add('sound',bassBridge,part('bass_bridge','Bass / Short Bridge','Short bridge carrying the bass strings to the soundboard.'),{explode:[0,.14,0]});
 
+    const bridgePinGroup=new THREE.Group();
+    for(let i=0;i<24;i++){
+      const t=i/23;
+      const x=-4.42+t*8.55;
+      const z=-.62+t*2.92+.18*Math.sin(t*Math.PI*2);
+      [-.055,.055].forEach(offset=>{
+        const pin=cyl(.018,.2,mats.steel,x+offset,4.46,z-offset*.55,7);
+        pin.rotation.z=offset>0?.12:-.12;
+        bridgePinGroup.add(pin);
+      });
+    }
+    add('sound',bridgePinGroup,part('bridge_pins','Bridge Pins','Paired pins that guide each string across the bridge and transmit its side-bearing force.'),{explode:[0,.2,0]});
+
     const stringObjects=[];
     const stringPulse=new Array(88).fill(0);
     for(let i=0;i<88;i++) {
@@ -1004,6 +1118,7 @@
 
     // ACTION & HAMMERS — a complete row plus a larger isolated mechanism.
     const actionRow = new THREE.Group(); systems.action.add(actionRow);
+    const actionInterfaces = new THREE.Group(); actionRow.add(actionInterfaces);
     const hammerRefs=[];
     const wippenRefs=[];
     for(let i=0;i<88;i++) {
@@ -1011,6 +1126,10 @@
       const cap=cyl(.045,.18,mats.brass,x,3.48,-.32,8);
       prepareObject(cap,'action',part('capstans','Capstans / Capstan Screws','Adjustable contacts transmitting key motion into the action.'),{interactive:i===45});
       actionRow.add(cap);
+
+      const cushion=cyl(.052,.035,mats.redFelt,x,3.585,-.32,8);
+      prepareObject(cushion,'action',part('wippen_cushion','Wippen Cushion','Felted contact where the key’s capstan meets and lifts the wippen.'),{interactive:i===45});
+      actionInterfaces.add(cushion);
 
       const wipPivot=new THREE.Group(); wipPivot.position.set(x,3.62,-.05);
       const wip=box(.12,.14,.58,mats.actionWood,0,0,.08); wip.rotation.x=-.09; wipPivot.add(wip);
@@ -1020,6 +1139,10 @@
       const jack=box(.052,.42,.052,mats.actionWood,x,3.93,.12); jack.rotation.x=.14;
       prepareObject(jack,'action',part('jack','Jack / Fly / Escapement Jack','Lever that accelerates the hammer and then escapes before impact.'),{interactive:i===45});
       actionRow.add(jack);
+
+      const knuckle=cyl(.052,.14,mats.leather,x,4.275,.405,8); knuckle.rotation.z=Math.PI/2;
+      prepareObject(knuckle,'action',part('hammer_knuckle_row','Hammer Knuckle / Roller','Leather-covered roller where the jack and repetition lever meet the hammer assembly.'),{interactive:i===45});
+      actionInterfaces.add(knuckle);
 
       const rep=box(.11,.065,.5,mats.actionWood,x,4.06,.1); rep.rotation.x=-.08;
       prepareObject(rep,'action',part('repetition_lever','Repetition Lever / Balancier','Grand-action lever that supports rapid repetition without a full key return.'),{interactive:i===45});
@@ -1077,6 +1200,7 @@
     isoAdd(iso.drop,part('drop_screw','Drop Screw','Grand-action adjustment that regulates the hammer’s drop after escapement.'));
 
     // DAMPERS & PEDALS
+    const damperInterfaces=new THREE.Group(); systems.dampers.add(damperInterfaces);
     const damperRefs=[];
     for(let i=0;i<70;i++) {
       const x=-4.9+i*(9.5/69), z=.4+(i/69)*1.38;
@@ -1092,6 +1216,16 @@
     add('dampers',guideRail,part('damper_guide_rail','Damper Guide Rail','Keeps the row of damper wires properly aligned.'),{explode:[0,.3,0]});
     const liftRail=box(10.4,.16,.22,mats.actionWood,0,4.59,.74);
     add('dampers',liftRail,part('damper_lift_rail','Damper Lift Rail / Rod','Raises the dampers together when the sustain pedal is depressed.'),{explode:[0,-.18,0]});
+
+    for(let i=1;i<70;i+=3){
+      const x=-4.9+i*(9.5/69), z=.4+(i/69)*1.38;
+      const lever=cylinderBetween([x,4.57,.72],[x,4.98,z],.026,mats.actionWood,8);
+      prepareObject(lever,'dampers',part('damper_underlever','Damper Underlever','Intermediate lever joining key or pedal input to the damper wire above.'),{interactive:i===34});
+      damperInterfaces.add(lever);
+      const bushing=cyl(.042,.085,mats.greenFelt,x,4.86,.92,9); bushing.rotation.z=Math.PI/2;
+      prepareObject(bushing,'dampers',part('damper_bushing','Damper Guide Bushing','Cloth-lined bearing that centers a damper wire while allowing quiet vertical travel.'),{interactive:false});
+      damperInterfaces.add(bushing);
+    }
 
     const lyre=new THREE.Group();
     const lyreTop=box(3.05,.25,.42,mats.lacquerSoft,0,2.6,-2.55);
@@ -1121,6 +1255,18 @@
     add('dampers',trapLever,part('trap_levers','Trap Levers','Levers beneath the keybed that transfer pedal motion to internal systems.'),{explode:[0,-.48,0]});
     const sostRod=box(9.5,.08,.08,mats.brass,0,4.62,.36);
     add('dampers',sostRod,part('sostenuto_rod','Sostenuto Rod','Rotating rod that captures selected damper tabs while leaving others free.'),{explode:[0,-.1,0]});
+
+    const trapConnections=new THREE.Group(); systems.dampers.add(trapConnections);
+    const sustainLink=cylinderBetween([.56,2.72,-1.08],[.56,4.5,.69],.034,mats.brass,10);
+    trapConnections.add(prepareObject(sustainLink,'dampers',part('sustain_link','Sustain Connecting Rod','Linkage carrying the right pedal’s movement from the trap lever to the damper lift system.')));
+    const sostenutoLink=cylinderBetween([0,2.72,-1.08],[0,4.57,.36],.03,mats.brass,10);
+    trapConnections.add(prepareObject(sostenutoLink,'dampers',part('sostenuto_link','Sostenuto Connecting Rod','Linkage joining the center pedal’s trapwork to the sostenuto rod.')));
+    const shiftLink=cylinderBetween([-.56,2.72,-1.08],[-3.7,3.42,-.18],.032,mats.brass,10);
+    trapConnections.add(prepareObject(shiftLink,'dampers',part('una_corda_shift_link','Una-Corda Shift Link','Lever connection that transfers soft-pedal motion into the action’s lateral shift.')));
+    [-.56,0,.56].forEach((x,i)=>{
+      const joint=cyl(.09,.16,mats.darkMetal,x,2.76,-1.03,12); joint.rotation.z=Math.PI/2;
+      trapConnections.add(prepareObject(joint,'dampers',part('trapwork_brackets','Trapwork Brackets & Pivots','Supported pivot joints where pedal rods meet the trap levers.'),{interactive:i===2}));
+    });
 
     // TECHNICIAN DETAILS cluster around the isolated central action.
     const techRoot=systems.technician;
@@ -1152,15 +1298,67 @@
     const hinge=box(2.2,.06,.12,mats.brass,-4.75,5.03,1.0);
     add('body',hinge,part('cabinet_hinges','Cabinet Hinges','Hinges permitting controlled movement of the lid and cabinet covers.'),{shell:true,explode:[0,.2,0]});
 
+    // Internal sublayers keep the main navigation simple while giving each system a carefully authored inspection hierarchy.
+    function markSubsystem(root,id){
+      root.traverse(o=>{
+        if(!o.isMesh) return;
+        const list=Array.isArray(o.material)?o.material:[o.material];
+        list.forEach(m=>m.userData.subsystem=id);
+      });
+    }
+    markSubsystem(systems.body,'structure-frame');
+    markSubsystem(systems.sound,'structure-acoustic');
+    markSubsystem(bridgePinGroup,'structure-interface');
+    markSubsystem(keyboardRoot,'keyboard-contacts');
+    keys.forEach(k=>markSubsystem(k,'keyboard-keys'));
+    markSubsystem(keyframe,'keyboard-frame');
+    markSubsystem(actionRow,'action-row');
+    markSubsystem(actionInterfaces,'action-interface');
+    markSubsystem(isolatedAction,'action-isolated');
+    markSubsystem(techRoot,'action-regulation');
+    markSubsystem(systems.dampers,'dampers-core');
+    [lyre,...pedals,...rods,trapLever,sostRod].forEach(o=>markSubsystem(o,'dampers-pedals'));
+    markSubsystem(damperInterfaces,'dampers-interface');
+    markSubsystem(trapConnections,'dampers-interface');
+
     // State, opacity, camera, and authored exploded positions.
     const visibilityByMode = {
       complete: {body:1,sound:1,keyboard:1,action:1,dampers:1,technician:.38},
       structure: {body:1,sound:1,keyboard:.035,action:.02,dampers:.07,technician:0},
-      keyboard: {body:.045,sound:.02,keyboard:1,action:.17,dampers:.025,technician:.05},
+      keyboard: {body:.045,sound:.02,keyboard:1,action:.55,dampers:.025,technician:.05},
       action: {body:.025,sound:.05,keyboard:.2,action:1,dampers:.08,technician:1},
       dampers: {body:.045,sound:.2,keyboard:.055,action:.08,dampers:1,technician:.03}
     };
+    const subLayerWeights = {
+      structure: {
+        combined: {'structure-frame':1,'structure-acoustic':1,'structure-interface':1},
+        frame: {'structure-frame':1,'structure-acoustic':.065,'structure-interface':.2},
+        acoustic: {'structure-frame':.075,'structure-acoustic':1,'structure-interface':1},
+        interfaces: {'structure-frame':.32,'structure-acoustic':.28,'structure-interface':1}
+      },
+      keyboard: {
+        combined: {'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,'action-row':.16,'action-interface':.45},
+        keys: {'keyboard-keys':1,'keyboard-frame':.16,'keyboard-contacts':.12,'action-row':.06,'action-interface':.14},
+        frame: {'keyboard-keys':.16,'keyboard-frame':1,'keyboard-contacts':.55,'action-row':.07,'action-interface':.16},
+        contacts: {'keyboard-keys':.1,'keyboard-frame':.32,'keyboard-contacts':1,'action-row':.06,'action-interface':.28},
+        interfaces: {'keyboard-keys':.15,'keyboard-frame':.12,'keyboard-contacts':.3,'action-row':.07,'action-interface':1}
+      },
+      action: {
+        combined: {'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':.58},
+        row: {'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':.16},
+        isolated: {'action-row':.055,'action-interface':.15,'action-isolated':1,'action-regulation':.22},
+        regulation: {'action-row':.035,'action-interface':.18,'action-isolated':.7,'action-regulation':1},
+        interfaces: {'action-row':.12,'action-interface':1,'action-isolated':.42,'action-regulation':.32,'structure-acoustic':5,'dampers-core':3,'dampers-interface':4}
+      },
+      dampers: {
+        combined: {'dampers-core':1,'dampers-pedals':1,'dampers-interface':1},
+        dampers: {'dampers-core':1,'dampers-pedals':.07,'dampers-interface':.72},
+        pedals: {'dampers-core':.11,'dampers-pedals':1,'dampers-interface':.55},
+        interfaces: {'dampers-core':.24,'dampers-pedals':.25,'dampers-interface':1}
+      }
+    };
     let currentMode='complete';
+    let currentSubLayer='combined';
     let explodeAmount=0;
     let shellFade=1;
     let pinnedRoot=null, hoverRoot=null, hoverTimer=0;
@@ -1202,14 +1400,55 @@
       });
     }
 
+    function moveCamera(position,target,instant=false,duration=680){
+      if(instant||reducedMotion){ camera.position.fromArray(position); controls.target.fromArray(target); controls.update(); return; }
+      cameraTween={
+        start:performance.now(),duration,
+        fromPos:camera.position.clone(),toPos:new THREE.Vector3(...position),
+        fromTarget:controls.target.clone(),toTarget:new THREE.Vector3(...target)
+      };
+    }
+
     function setCameraPreset(mode,instant=false){
       const d=modeData[mode];
-      if(instant||reducedMotion){ camera.position.fromArray(d.camera); controls.target.fromArray(d.target); controls.update(); return; }
-      cameraTween={
-        start:performance.now(),duration:680,
-        fromPos:camera.position.clone(),toPos:new THREE.Vector3(...d.camera),
-        fromTarget:controls.target.clone(),toTarget:new THREE.Vector3(...d.target)
-      };
+      moveCamera(d.camera,d.target,instant);
+    }
+
+    function activeSubLayerView(){
+      return subLayerData[currentMode]?.find(view=>view.id===currentSubLayer) || null;
+    }
+
+    function renderLayerFocus(){
+      const panel=$('#layer-focus');
+      const host=$('#layer-focus-buttons');
+      const views=subLayerData[currentMode] || [];
+      host.replaceChildren();
+      panel.classList.toggle('visible',views.length>0);
+      for(const view of views){
+        const button=document.createElement('button');
+        button.className='focus-btn'+(view.id===currentSubLayer?' active':'');
+        button.type='button';
+        button.dataset.subLayer=view.id;
+        button.textContent=view.label;
+        button.title=view.note;
+        button.setAttribute('aria-pressed',String(view.id===currentSubLayer));
+        button.addEventListener('click',()=>setSubLayer(view.id,false));
+        host.append(button);
+      }
+    }
+
+    function setSubLayer(id,move=false){
+      const view=subLayerData[currentMode]?.find(item=>item.id===id);
+      if(!view) return;
+      clearInfo(); currentSubLayer=id;
+      document.querySelectorAll('.focus-btn').forEach(button=>{
+        const active=button.dataset.subLayer===id;
+        button.classList.toggle('active',active);
+        button.setAttribute('aria-pressed',String(active));
+      });
+      if(currentMode==='action') setIsolated(id==='isolated'||id==='regulation');
+      statusSub.textContent=view.note;
+      if(move) moveCamera(view.camera,view.target,false,id==='regulation'?560:650);
     }
 
     function setIsolated(next){
@@ -1219,9 +1458,6 @@
       actionRow.visible=!next;
       $('#isolate-action').classList.toggle('active',next);
       $('#isolate-action').textContent=next?'Return to Full Action':'Isolate Action';
-      if(next) {
-        cameraTween={start:performance.now(),duration:600,fromPos:camera.position.clone(),toPos:new THREE.Vector3(-4.7,5.6,-5.2),fromTarget:controls.target.clone(),toTarget:new THREE.Vector3(0,4.05,-.35)};
-      } else if(currentMode==='action') setCameraPreset('action');
     }
 
     function switchMode(mode){
@@ -1233,11 +1469,12 @@
       $('#mode-description').textContent=modeData[mode].description;
       $('#action-controls').classList.toggle('visible',mode==='action');
       $('#pedal-controls').classList.toggle('visible',mode==='dampers');
+      currentSubLayer='combined';
+      renderLayerFocus();
       setIsolated(false);
       if(mode!=='action' && repeatTimer){ clearInterval(repeatTimer); repeatTimer=null; $('#repeat-stroke').classList.remove('active'); }
-      setCameraPreset(mode);
       statusMain.textContent=modeData[mode].title;
-      statusSub.textContent=mode==='complete'?'Labels off':'Hover to identify';
+      statusSub.textContent=mode==='complete'?'Labels off':(activeSubLayerView()?.note || 'Hover to identify');
       app.classList.remove('menu-open');
     }
 
@@ -1258,8 +1495,18 @@
     }
     function systemActiveInMode(system){
       if(currentMode==='structure') return system==='body' || system==='sound';
-      if(currentMode==='action') return system==='action' || system==='technician';
+      if(currentMode==='keyboard') return system==='keyboard' || (currentSubLayer==='interfaces' && system==='action');
+      if(currentMode==='action') return system==='action' || system==='technician' || (currentSubLayer==='interfaces' && (system==='sound' || system==='dampers'));
       return system===currentMode;
+    }
+    function subLayerFactor(subsystem){
+      if(currentMode==='complete' || !subsystem) return 1;
+      const weights=subLayerWeights[currentMode]?.[currentSubLayer];
+      return weights?.[subsystem] ?? 1;
+    }
+    function subLayerAllowsObject(object){
+      const list=Array.isArray(object.material)?object.material:[object.material];
+      return list.some(material=>subLayerFactor(material.userData.subsystem)>.24);
     }
     renderer.domElement.addEventListener('pointermove',e=>{ updatePointer(e); });
     renderer.domElement.addEventListener('pointerleave',()=>{ pointer.set(5,5); if(!pinnedRoot){ if(hoverRoot)setHighlight(hoverRoot,false); hoverRoot=null; infoCard.classList.remove('visible'); }});
@@ -1267,7 +1514,7 @@
       if(currentMode==='complete') return;
       updatePointer(e); raycaster.setFromCamera(pointer,camera);
       const hits=raycaster.intersectObjects(interactiveMeshes,false).filter(h=>
-        isShown(h.object) && systemActiveInMode(h.object.userData.system)
+        isShown(h.object) && systemActiveInMode(h.object.userData.system) && subLayerAllowsObject(h.object)
       );
       const hit=hits[0];
       if(!hit){ clearInfo(); return; }
@@ -1277,32 +1524,109 @@
     });
     addEventListener('keydown',e=>{ if(e.key==='Escape') clearInfo(); });
 
-    // Manual mechanical demonstrations replace the earlier song and audio engine.
-    let slow=false;
+    // A restrained original 16-bar piano loop shares the same note events as the visible mechanism.
+    let slow=false, audioCtx=null, musicPlaying=false, musicOffset=0, musicStarted=0, lastMusicTime=0, nextMusicEvent=0;
     const activeNotes=new Map();
     const pedalState={sustain:0,una:0,sostenuto:0};
     const sostenutoHeld=new Set();
+    const musicBeat=60/84;
+    const musicProgression=[
+      [36,48,55,60,64],[33,45,52,57,60],[41,53,57,60,65],[31,43,50,55,59],
+      [38,50,57,62,65],[35,47,54,59,62],[40,52,55,59,64],[36,48,55,60,64]
+    ];
+    const musicMelody=[72,76,79,81,84,81,79,76,74,72,69,71,72,76,74,72];
+    const musicEvents=[];
+    for(let bar=0;bar<16;bar++){
+      const chord=musicProgression[bar%musicProgression.length];
+      const t=bar*4*musicBeat;
+      musicEvents.push({t,n:chord[0],d:3.15*musicBeat,v:.65});
+      if(bar%2===0) chord.slice(1).forEach(n=>musicEvents.push({t:t+.025,n,d:2.25*musicBeat,v:.29}));
+      [1,2,3,4,3,2,1,2].forEach((index,k)=>musicEvents.push({t:t+k*.5*musicBeat,n:chord[index],d:.7*musicBeat,v:.34+(k%2)*.05}));
+      for(let k=0;k<4;k++) musicEvents.push({t:t+(k+.5)*musicBeat,n:musicMelody[(bar+k)%musicMelody.length],d:.78*musicBeat,v:.3});
+    }
+    musicEvents.sort((a,b)=>a.t-b.t);
+    const musicLoopDuration=16*4*musicBeat;
 
     function midiIndex(midi){ return Math.max(0,Math.min(87,midi-21)); }
-    function triggerMechanism(midi,duration=.7){
+    async function ensureAudio(){
+      if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      if(audioCtx.state==='suspended') await audioCtx.resume();
+    }
+    function playPianoTone(midi,duration=.7,velocity=.5){
+      if(!audioCtx) return;
+      const now=audioCtx.currentTime;
+      const frequency=440*Math.pow(2,(midi-69)/12);
+      const tail=Math.max(.72,duration*1.9);
+      const master=audioCtx.createGain();
+      const filter=audioCtx.createBiquadFilter();
+      filter.type='lowpass'; filter.frequency.value=Math.min(7200,2200+frequency*5); filter.Q.value=.7;
+      master.gain.setValueAtTime(.0001,now);
+      master.gain.exponentialRampToValueAtTime(.052*velocity,now+.012);
+      master.gain.exponentialRampToValueAtTime(.0001,now+tail);
+      master.connect(filter).connect(audioCtx.destination);
+      [[1,'triangle',1],[2,'sine',.24],[3,'sine',.08]].forEach(([multiple,type,level],index)=>{
+        const oscillator=audioCtx.createOscillator();
+        const partial=audioCtx.createGain();
+        oscillator.type=type;
+        oscillator.frequency.value=frequency*multiple;
+        oscillator.detune.value=(index-1)*1.6;
+        partial.gain.value=level;
+        oscillator.connect(partial).connect(master);
+        oscillator.start(now); oscillator.stop(now+tail+.04);
+      });
+    }
+    function triggerMechanism(midi,duration=.7,audible=false,velocity=.5){
       const i=midiIndex(midi), now=performance.now();
       activeNotes.set(i,{start:now,duration:Math.max(320,duration*1000),value:0});
       stringPulse[i]=1;
+      if(audible) playPianoTone(midi,duration,velocity);
+    }
+    function currentMusicTime(){
+      if(!audioCtx) return musicOffset;
+      return musicPlaying?((audioCtx.currentTime-musicStarted)%musicLoopDuration):musicOffset;
+    }
+    async function toggleMusic(){
+      await ensureAudio();
+      if(!musicPlaying){
+        musicPlaying=true;
+        musicStarted=audioCtx.currentTime-musicOffset;
+        $('#play-music').textContent='❚❚ Pause Piano';
+        statusSub.textContent='Music playing';
+      } else {
+        musicOffset=currentMusicTime();
+        musicPlaying=false;
+        $('#play-music').textContent='▶ Play Piano';
+        statusSub.textContent='Music paused';
+      }
+    }
+    function updateMusicTimeline(){
+      if(!musicPlaying) return;
+      const time=currentMusicTime();
+      if(time<lastMusicTime) nextMusicEvent=0;
+      while(nextMusicEvent<musicEvents.length && musicEvents[nextMusicEvent].t<=time+.018){
+        if(musicEvents[nextMusicEvent].t>=lastMusicTime-.03 || time<lastMusicTime){
+          const event=musicEvents[nextMusicEvent];
+          triggerMechanism(event.n,event.d,true,event.v);
+        }
+        nextMusicEvent++;
+      }
+      lastMusicTime=time;
     }
 
+    $('#play-music').addEventListener('click',toggleMusic);
     $('#slow').addEventListener('click',()=>{
       slow=!slow; $('#slow').classList.toggle('active',slow); $('#slow').textContent=slow?'Normal Speed':'Slow Motion';
-      statusSub.textContent=slow?'Slow demonstration':'Mechanisms ready';
+      statusSub.textContent=slow?(musicPlaying?'Music playing · slow mechanics':'Slow demonstration'):(musicPlaying?'Music playing':'Mechanisms ready');
     });
 
-    function demoStroke(){ triggerMechanism(73,slow?2.2:.82); }
+    async function demoStroke(){ await ensureAudio(); triggerMechanism(73,slow?2.2:.82,true,.72); }
     $('#demo-key').addEventListener('click',demoStroke);
     $('#play-stroke').addEventListener('click',demoStroke);
     $('#repeat-stroke').addEventListener('click',()=>{
       if(repeatTimer){ clearInterval(repeatTimer); repeatTimer=null; $('#repeat-stroke').classList.remove('active'); }
       else { demoStroke(); repeatTimer=setInterval(demoStroke,slow?2500:980); $('#repeat-stroke').classList.add('active'); }
     });
-    $('#isolate-action').addEventListener('click',()=>setIsolated(!isolated));
+    $('#isolate-action').addEventListener('click',()=>setSubLayer(isolated?'row':'isolated'));
 
     $('#sustain-demo').addEventListener('click',()=>{
       pedalState.sustain=pedalState.sustain?0:1; $('#sustain-demo').classList.toggle('active',!!pedalState.sustain);
@@ -1310,8 +1634,9 @@
     $('#una-demo').addEventListener('click',()=>{
       pedalState.una=pedalState.una?0:1; $('#una-demo').classList.toggle('active',!!pedalState.una);
     });
-    $('#sostenuto-demo').addEventListener('click',()=>{
-      [48,52,55].forEach(i=>{ triggerMechanism(21+i,2.2); sostenutoHeld.add(i); });
+    $('#sostenuto-demo').addEventListener('click',async()=>{
+      await ensureAudio();
+      [48,52,55].forEach(i=>{ triggerMechanism(21+i,2.2,true,.5); sostenutoHeld.add(i); });
       pedalState.sostenuto=1; $('#sostenuto-demo').classList.add('active');
       setTimeout(()=>{ pedalState.sostenuto=0; sostenutoHeld.clear(); $('#sostenuto-demo').classList.remove('active'); },5200);
     });
@@ -1319,7 +1644,12 @@
     $('#explode').addEventListener('input',e=>{
       explodeAmount=Number(e.target.value)/100; $('#explode-value').textContent=e.target.value+'%';
     });
-    $('#reset').addEventListener('click',()=>{ clearInfo(); setCameraPreset(currentMode); $('#explode').value=0; $('#explode-value').textContent='0%'; explodeAmount=0; });
+    $('#reset').addEventListener('click',()=>{
+      clearInfo();
+      const view=activeSubLayerView();
+      if(view) moveCamera(view.camera,view.target); else setCameraPreset(currentMode);
+      $('#explode').value=0; $('#explode-value').textContent='0%'; explodeAmount=0;
+    });
 
     let sustainValue=0, unaValue=0;
     function smoothstep01(v){ return v*v*(3-2*v); }
@@ -1378,8 +1708,8 @@
       shellFade+= (closeTarget-shellFade)*Math.min(1,dt*4.5);
       for(const m of materialsManaged){
         let target=(desired[m.userData.system]??0)*m.userData.baseOpacity;
+        target*=subLayerFactor(m.userData.subsystem);
         if(m.userData.shell) target*=shellFade;
-        if(isolated && m.userData.system==='action' && actionRow.visible===false && currentMode==='action') target*=.15;
         m.userData.currentOpacity+=(target-m.userData.currentOpacity)*Math.min(1,dt*(reducedMotion?30:5.5));
         m.opacity=m.userData.currentOpacity;
         m.depthWrite=m.opacity>.66;
@@ -1399,7 +1729,7 @@
       raycaster.setFromCamera(pointer,camera);
       const hits=raycaster.intersectObjects(interactiveMeshes,false).filter(h=>{
         const s=h.object.userData.system;
-        return isShown(h.object) && systemActiveInMode(s);
+        return isShown(h.object) && systemActiveInMode(s) && subLayerAllowsObject(h.object);
       });
       const root=hits[0]?.object.userData.semanticRoot || null;
       if(root!==hoverRoot){
@@ -1429,7 +1759,7 @@
     function animate(now){
       requestAnimationFrame(animate);
       const dt=Math.min(.05,(now-last)/1000); last=now;
-      updateCamera(now); updateMechanics(now,dt); updateOpacity(dt); updateHover(now);
+      updateCamera(now); updateMusicTimeline(); updateMechanics(now,dt); updateOpacity(dt); updateHover(now);
       controls.update(); renderer.render(scene,camera);
     }
     requestAnimationFrame(animate);
