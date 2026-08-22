@@ -679,14 +679,14 @@
         { id:'combined', label:'Complete Structure', note:'Cabinet, frame, acoustic assembly, and interfaces in one view', camera:[-8.8,11.8,-10.2], target:[0,4.0,.5] },
         { id:'frame', label:'Frame & Cabinet', note:'Rim, keybed, braces, plate, pinblock, legs, and structural hardware', camera:[-8.8,13.2,-10.2], target:[0,4.25,.8] },
         { id:'acoustic', label:'Sound & Strings', note:'Soundboard, ribs, bridges, strings, tuning pins, and agraffes', camera:[5.8,12.2,-8.6], target:[0,4.55,.8] },
-        { id:'interfaces', label:'Structural Connections', note:'Bridge pins, bearing points, fasteners, and structural handoffs', camera:[-3.8,7.8,-5.4], target:[0,4.25,.4] }
+        { id:'interfaces', label:'Structural Connections', note:'Follow the routed strings through bridge pins, bridge cap, glue joint, soundboard crown, ribs, and frame', camera:[-3.8,7.8,-5.4], target:[0,4.25,.4] }
       ],
       mechanism: [
         { id:'combined', label:'Complete Mechanism', note:'Keyboard, action, dampers, pedals, and their transfer points together', camera:[-8.8,6.4,-10.2], target:[0,3.65,-1.0] },
         { id:'keyboard', label:'Keyboard', note:'Keys, keyframe, rails, pins, punchings, and first action contacts', camera:[-8.8,5.5,-12.2], target:[0,3.15,-2.35] },
         { id:'action', label:'Action & Regulation', note:'Wippens, jacks, repetition, hammers, backchecks, and regulation', camera:[-7.8,6.8,-8.1], target:[0,3.9,-.6] },
         { id:'dampers', label:'Dampers & Pedals', note:'Damper assemblies, pedals, pitmans, trapwork, and sostenuto', camera:[9.6,6.4,-10.8], target:[0,2.7,-.15] },
-        { id:'interfaces', label:'Mechanical Connections', note:'Key-to-action, hammer-to-string, damper, and pedal linkage points', camera:[-3.8,6.8,-5.4], target:[0,4.0,-.1] }
+        { id:'junction', label:'Key-to-String Junction', note:'A fine center slice from key pivot and capstan through action, hammer crown, unison, bridge, and soundboard', camera:[-2.75,5.7,-4.25], target:[.2,4.02,.28] }
       ]
     };
 
@@ -1250,6 +1250,154 @@
       techAdd(screw,part('machine_screws','Machine Screws','Threaded fasteners securing rails, brackets, and regulated hardware.'),{interactive:i===2,explode:[0,.22+(i%2)*.12,0]});
     }
 
+    // A single, deliberately enlarged center slice makes the complete transfer chain legible:
+    // keystick -> capstan -> wippen/jack/repetition -> hammer -> string -> bridge -> soundboard.
+    const junctionKeyboard=new THREE.Group(); systems.keyboard.add(junctionKeyboard);
+    const junctionAction=new THREE.Group(); systems.action.add(junctionAction);
+    const junctionSound=new THREE.Group(); systems.sound.add(junctionSound);
+    const junctionDampers=new THREE.Group(); systems.dampers.add(junctionDampers);
+    const junctionMotion={};
+    const junctionStringObjects=[];
+    const junctionIndex=44;
+    const junctionX=notePositions[junctionIndex].x;
+    const junctionStringX=-5+(junctionIndex/87)*10.05;
+    const junctionTailX=junctionStringX*.74;
+    function junctionAdd(parent,system,root,meta,opts={}){
+      parent.add(prepareObject(root,system,meta,opts));
+      return root;
+    }
+
+    junctionMotion.key=new THREE.Group();
+    junctionMotion.key.position.set(junctionX,3.16,-1.58);
+    junctionMotion.key.add(box(.16,.075,3.42,mats.actionWood,0,-.07,.02));
+    junctionMotion.key.add(box(.14,.055,1.92,mats.ebony,0,.025,-.53));
+    junctionAdd(junctionKeyboard,'keyboard',junctionMotion.key,
+      part('junction_keystick','Central Keystick & Key Tail','A cutaway keystick shows the wooden lever beneath its playing surface and the rear tail that raises the action.'),
+      {explode:[0,.18,-.08]});
+
+    const balanceHardware=new THREE.Group();
+    balanceHardware.add(cyl(.025,.36,mats.steel,junctionX,3.16,-1.58,10));
+    balanceHardware.add(cyl(.105,.022,mats.redFelt,junctionX,3.105,-1.58,16));
+    balanceHardware.add(cyl(.082,.016,mats.greenFelt,junctionX,3.126,-1.58,16));
+    junctionAdd(junctionKeyboard,'keyboard',balanceHardware,
+      part('junction_balance','Balance Pin, Bushing & Punchings','The polished balance pin locates the key while felt and paper punchings set height, travel, and quietness.'));
+
+    const capstanDetail=new THREE.Group();
+    capstanDetail.add(cyl(.024,.27,mats.steel,junctionX,3.38,-.32,10));
+    capstanDetail.add(cyl(.07,.045,mats.brass,junctionX,3.49,-.32,14));
+    capstanDetail.add(cyl(.055,.045,mats.darkMetal,junctionX,3.31,-.32,12));
+    junctionAdd(junctionAction,'action',capstanDetail,
+      part('junction_capstan','Capstan Screw, Button & Locknut','The adjustable capstan is the first hard transfer point: the rising key tail presses its rounded button into the felted wippen heel.'));
+
+    junctionMotion.wippen=new THREE.Group();
+    junctionMotion.wippen.position.set(junctionX,3.62,-.04);
+    const wippenBody=box(.2,.16,.78,mats.actionWood,0,0,.05); wippenBody.rotation.x=-.09;
+    const wippenHeel=box(.22,.11,.25,mats.actionWood,0,-.02,-.34);
+    const heelFelt=box(.23,.045,.22,mats.redFelt,0,-.085,-.34);
+    const repLever=box(.18,.075,.64,mats.actionWood,0,.34,.16); repLever.rotation.x=-.07;
+    const jackDetail=box(.075,.48,.075,mats.actionWood,0,.25,.25); jackDetail.rotation.x=.14;
+    junctionMotion.wippen.add(wippenBody,wippenHeel,heelFelt,repLever,jackDetail);
+    junctionMotion.wippen.add(tube([
+      [.07,.1,.09],[.12,.2,.12],[.04,.29,.16],[.11,.39,.2]
+    ],.018,mats.steel));
+    junctionAdd(junctionAction,'action',junctionMotion.wippen,
+      part('junction_wippen','Wippen, Heel, Jack & Repetition Lever','The felted heel receives the capstan; the wippen carries the jack and repetition lever that accelerate and support the hammer.'));
+
+    const wippenFlange=new THREE.Group();
+    wippenFlange.add(box(.28,.24,.19,mats.actionWood,junctionX,3.61,.4));
+    const wippenPin=cyl(.035,.44,mats.steel,junctionX,3.63,.39,12); wippenPin.rotation.z=Math.PI/2;
+    wippenFlange.add(wippenPin);
+    const wippenBushL=cyl(.065,.07,mats.redFelt,junctionX-.15,3.63,.39,12); wippenBushL.rotation.z=Math.PI/2;
+    const wippenBushR=wippenBushL.clone(); wippenBushR.position.x=junctionX+.15;
+    wippenFlange.add(wippenBushL,wippenBushR);
+    junctionAdd(junctionAction,'action',wippenFlange,
+      part('junction_wippen_flange','Wippen Flange, Center Pin & Bushings','A cloth-bushed center pin forms the quiet, low-friction pivot on the wooden action rail.'));
+
+    const regulatingCluster=new THREE.Group();
+    regulatingCluster.add(box(.72,.12,.15,mats.actionWood,junctionX,4.08,.02));
+    regulatingCluster.add(cyl(.035,.34,mats.darkMetal,junctionX+.18,4.2,.09,10));
+    regulatingCluster.add(cyl(.085,.055,mats.hammerFelt,junctionX+.18,4.36,.09,14));
+    regulatingCluster.add(cyl(.032,.3,mats.darkMetal,junctionX-.18,4.22,.34,10));
+    regulatingCluster.add(cyl(.072,.05,mats.leather,junctionX-.18,4.36,.34,14));
+    junctionAdd(junctionAction,'technician',regulatingCluster,
+      part('junction_regulation','Regulating Rail, Let-Off & Drop Contacts','Fine screws and felted buttons determine escapement, drop, and the narrow clearance remaining before the hammer reaches the strings.'));
+
+    const hammerFlange=new THREE.Group();
+    hammerFlange.add(box(.3,.24,.22,mats.actionWood,junctionX,4.04,.53));
+    const hammerCenter=cyl(.035,.46,mats.steel,junctionX,4.09,.54,12); hammerCenter.rotation.z=Math.PI/2;
+    hammerFlange.add(hammerCenter);
+    const flangeBushL=cyl(.068,.065,mats.redFelt,junctionX-.15,4.09,.54,12); flangeBushL.rotation.z=Math.PI/2;
+    const flangeBushR=flangeBushL.clone(); flangeBushR.position.x=junctionX+.15;
+    hammerFlange.add(flangeBushL,flangeBushR);
+    junctionAdd(junctionAction,'action',hammerFlange,
+      part('junction_hammer_flange','Hammer Flange, Center Pin & Bushings','The hammer shank turns on another cloth-bushed center pin fixed to the main action rail.'));
+
+    junctionMotion.hammer=new THREE.Group();
+    junctionMotion.hammer.position.set(junctionX,4.02,.52);
+    junctionMotion.hammer.rotation.x=.52;
+    junctionMotion.hammer.add(cylinderBetween([0,0,0],[0,.78,.14],.032,mats.actionWood,10));
+    junctionMotion.hammer.add(cyl(.075,.2,mats.leather,0,.27,-.02,12));
+    const hammerMolding=box(.18,.26,.27,mats.actionWood,0,.82,.15); hammerMolding.rotation.x=.1;
+    const hammerUnderfelt=box(.22,.29,.3,mats.redFelt,0,.91,.17); hammerUnderfelt.rotation.x=.1;
+    const hammerOuterFelt=box(.25,.32,.33,mats.hammerFelt,0,1.0,.19); hammerOuterFelt.rotation.x=.1;
+    junctionMotion.hammer.add(hammerMolding,hammerUnderfelt,hammerOuterFelt);
+    junctionAdd(junctionAction,'action',junctionMotion.hammer,
+      part('junction_hammer','Shank, Knuckle, Molding, Underfelt & Crown','The roller accepts force from the jack; the shank swings a layered wooden-and-felt hammer whose compact crown meets the string.'));
+
+    const backcheckDetail=new THREE.Group();
+    backcheckDetail.add(box(.12,.4,.16,mats.actionWood,junctionX,3.65,.63));
+    const checkLeather=box(.18,.22,.2,mats.leather,junctionX,3.83,.68); checkLeather.rotation.x=-.25;
+    backcheckDetail.add(checkLeather);
+    junctionAdd(junctionAction,'action',backcheckDetail,
+      part('junction_backcheck','Backcheck Wood & Buckskin','The buckskin-covered backcheck catches the returning hammer so the action remains ready for repetition.'));
+
+    const unison=new THREE.Group();
+    [-.035,0,.035].forEach((dx,index)=>{
+      const string=tube([
+        [junctionStringX+dx,4.84,2.55],
+        [junctionStringX+dx,4.73,2.18],
+        [junctionStringX+dx,4.7,1.12],
+        [junctionTailX+dx*.8,4.49,.58],
+        [junctionTailX+dx*.65,4.49,-2.92]
+      ],index===1?.012:.009,mats.steel);
+      unison.add(string); junctionStringObjects.push(string);
+    });
+    junctionAdd(junctionSound,'sound',unison,
+      part('junction_unison','Three-String Unison & Speaking Length','Three closely spaced steel strings share one pitch. Their routed path now visibly meets the strike line, bridge crown, and rear anchoring course.'));
+
+    const strikeAndDamper=new THREE.Group();
+    junctionMotion.damper=strikeAndDamper;
+    const damperWire=cyl(.024,.72,mats.steel,junctionStringX,5.08,1.48,9);
+    const damperWood=box(.24,.15,.38,mats.actionWood,junctionStringX,4.83,1.48);
+    const damperFelt=box(.26,.075,.4,mats.redFelt,junctionStringX,4.735,1.48);
+    strikeAndDamper.add(damperWire,damperWood,damperFelt);
+    junctionAdd(junctionDampers,'dampers',strikeAndDamper,
+      part('junction_damper_contact','Damper Head, Felt & String Contact','A shaped felt pad rests directly on the unison and lifts just before the hammer reaches the strike point.'));
+
+    const bridgeCutaway=new THREE.Group();
+    bridgeCutaway.add(box(1.25,.1,2.15,mats.soundboard,junctionTailX,4.14,.58));
+    const ribCut=box(1.05,.13,.18,mats.ribWood,junctionTailX,4.045,.58); ribCut.rotation.y=-.24;
+    bridgeCutaway.add(ribCut);
+    bridgeCutaway.add(box(.82,.22,.44,mats.innerWood,junctionTailX,4.3,.58));
+    bridgeCutaway.add(box(.88,.055,.4,mats.actionWood,junctionTailX,4.445,.58));
+    bridgeCutaway.add(box(.86,.018,.38,mats.innerWood,junctionTailX,4.478,.58));
+    [-.11,.11].forEach((xOffset,index)=>{
+      const pin=cyl(.025,.28,mats.steel,junctionTailX+xOffset,4.58,.58+(index?-.055:.055),10);
+      pin.rotation.z=index?.13:-.13; bridgeCutaway.add(pin);
+    });
+    junctionAdd(junctionSound,'sound',bridgeCutaway,
+      part('junction_bridge','Bridge Cap, Bridge Pins, Glue Joint, Soundboard & Rib','The strings bear sideways against paired bridge pins; the capped wooden bridge is glued to the crowned soundboard, with a rib directly beneath distributing vibration.'));
+
+    const actionBracket=new THREE.Group();
+    actionBracket.add(box(.12,1.05,.15,mats.darkMetal,junctionX-.32,3.92,.36));
+    actionBracket.add(box(.12,1.05,.15,mats.darkMetal,junctionX+.32,3.92,.36));
+    actionBracket.add(box(.76,.12,.5,mats.darkMetal,junctionX,3.46,.25));
+    [junctionX-.32,junctionX+.32].forEach(x=>{
+      const screw=cyl(.045,.15,mats.steel,x,4.31,.36,10); screw.rotation.x=Math.PI/2; actionBracket.add(screw);
+    });
+    junctionAdd(junctionAction,'action',actionBracket,
+      part('junction_action_bracket','Action Bracket, Rails & Fasteners','A rigid metal bracket holds the wooden rails in fixed relationship so every center, contact, and strike remains aligned.'));
+
     // Thin decorative hinges and plate bolts complete the skeleton without branding it.
     for(let i=0;i<5;i++){
       const bolt=cyl(.075,.16,mats.darkMetal,-3.9+i*1.9,4.78,1.28+(i%2)*.65,12);
@@ -1280,56 +1428,61 @@
     [lyre,...pedals,...rods,trapLever,sostRod].forEach(o=>markSubsystem(o,'dampers-pedals'));
     markSubsystem(damperInterfaces,'dampers-interface');
     markSubsystem(trapConnections,'dampers-interface');
+    markSubsystem(junctionKeyboard,'mechanism-junction');
+    markSubsystem(junctionAction,'mechanism-junction');
+    markSubsystem(junctionSound,'mechanism-junction');
+    markSubsystem(junctionDampers,'mechanism-junction');
 
     // State, opacity, camera, and authored exploded positions.
     const visibilityByMode = {
       music: {body:1,sound:1,keyboard:1,action:1,dampers:1,technician:.38},
       structure: {body:1,sound:1,keyboard:.035,action:.02,dampers:.07,technician:0},
-      mechanism: {body:.045,sound:.18,keyboard:1,action:1,dampers:1,technician:.72}
+      mechanism: {body:.045,sound:.42,keyboard:1,action:1,dampers:1,technician:.72}
     };
 
     const subsystemIds=[
       'structure-frame','structure-acoustic','structure-interface',
       'keyboard-keys','keyboard-frame','keyboard-contacts',
       'action-row','action-interface','action-isolated','action-regulation',
-      'dampers-core','dampers-pedals','dampers-interface'
+      'dampers-core','dampers-pedals','dampers-interface','mechanism-junction'
     ];
     function focusWeights(overrides){
       return Object.assign(Object.fromEntries(subsystemIds.map(id=>[id,.025])),overrides);
     }
     const layerWeights = {
       structure: {
-        combined: focusWeights({'structure-frame':1,'structure-acoustic':1,'structure-interface':1}),
+        combined: focusWeights({'structure-frame':1,'structure-acoustic':1,'structure-interface':1,'mechanism-junction':.12}),
         frame: focusWeights({'structure-frame':1,'structure-acoustic':.07,'structure-interface':.2}),
-        acoustic: focusWeights({'structure-frame':.08,'structure-acoustic':1,'structure-interface':1}),
-        interfaces: focusWeights({'structure-frame':.3,'structure-acoustic':.3,'structure-interface':1})
+        acoustic: focusWeights({'structure-frame':.08,'structure-acoustic':1,'structure-interface':1,'mechanism-junction':.55}),
+        interfaces: focusWeights({'structure-frame':.3,'structure-acoustic':.3,'structure-interface':1,'mechanism-junction':1.25})
       },
       mechanism: {
         combined: focusWeights({
           'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,
           'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':.55,
           'dampers-core':1,'dampers-pedals':1,'dampers-interface':1,
-          'structure-acoustic':.16,'structure-interface':.28
+          'structure-acoustic':.16,'structure-interface':.28,'mechanism-junction':.18
         }),
         keyboard: focusWeights({
           'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,
-          'action-row':.14,'action-interface':.52,'dampers-core':.07
+          'action-row':.14,'action-interface':.52,'dampers-core':.07,'mechanism-junction':.45
         }),
         action: focusWeights({
           'keyboard-keys':.2,'keyboard-contacts':.38,
           'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':1,
-          'dampers-core':.15,'dampers-interface':.62,'structure-acoustic':.12
+          'dampers-core':.15,'dampers-interface':.62,'structure-acoustic':.12,'mechanism-junction':.72
         }),
         dampers: focusWeights({
           'keyboard-keys':.08,'action-row':.12,'action-interface':.2,
           'dampers-core':1,'dampers-pedals':1,'dampers-interface':1,
-          'structure-acoustic':.22,'structure-interface':.18
+          'structure-acoustic':.22,'structure-interface':.18,'mechanism-junction':.55
         }),
-        interfaces: focusWeights({
-          'structure-frame':.12,'structure-acoustic':.38,'structure-interface':.65,
-          'keyboard-keys':.16,'keyboard-frame':.08,'keyboard-contacts':.48,
-          'action-row':.2,'action-interface':1,'action-regulation':.3,
-          'dampers-core':.28,'dampers-pedals':.3,'dampers-interface':1
+        junction: focusWeights({
+          'structure-frame':.035,'structure-acoustic':.24,'structure-interface':.36,
+          'keyboard-keys':.16,'keyboard-frame':.06,'keyboard-contacts':.3,
+          'action-row':.1,'action-interface':.35,'action-regulation':.52,
+          'dampers-core':.16,'dampers-pedals':.04,'dampers-interface':.38,
+          'mechanism-junction':2.35
         })
       }
     };
@@ -1671,6 +1824,23 @@
           list.forEach(m=>{ if(m.emissive){m.emissive.setHex(stringPulse[i]>.03?0x4b2b0e:0);m.emissiveIntensity=stringPulse[i]*.7;} });
         }
       }
+
+      const junctionState=keyStates[junctionIndex].value;
+      const junctionNote=activeNotes.get(junctionIndex);
+      let junctionStrike=0;
+      if(junctionNote){
+        const phase=(now-junctionNote.start)/(slow?500:175);
+        if(phase<1) junctionStrike=Math.sin(Math.PI*Math.min(1,phase));
+      }
+      junctionMotion.key.rotation.x=-.043*junctionState;
+      junctionMotion.wippen.rotation.x=.11*junctionState;
+      junctionMotion.hammer.rotation.x=.52-.73*junctionStrike;
+      junctionMotion.damper.position.y=.28*Math.max(junctionState,sustainValue,sostenutoHeld.has(junctionIndex)?1:0);
+      junctionStringObjects.forEach(string=>{
+        string.scale.x=1+stringPulse[junctionIndex]*.1;
+        string.scale.z=1+stringPulse[junctionIndex]*.1;
+      });
+
       const central=keyStates[midiIndex(73)].value;
       iso.keyPivot.rotation.x=-.06*central;
       iso.wippenPivot.rotation.x=.17*central;
@@ -1689,8 +1859,8 @@
       const closeTarget=currentMode==='music' ? THREE.MathUtils.clamp((distance-3.8)/5.2,.12,1) : 1;
       shellFade+= (closeTarget-shellFade)*Math.min(1,dt*4.5);
       for(const m of materialsManaged){
-        let target=(desired[m.userData.system]??0)*m.userData.baseOpacity;
-        target*=subLayerFactor(m.userData.subsystem);
+        const emphasis=Math.min(1,(desired[m.userData.system]??0)*subLayerFactor(m.userData.subsystem));
+        let target=emphasis*m.userData.baseOpacity;
         if(m.userData.shell) target*=shellFade;
         m.userData.currentOpacity+=(target-m.userData.currentOpacity)*Math.min(1,dt*(reducedMotion?30:5.5));
         m.opacity=m.userData.currentOpacity;
