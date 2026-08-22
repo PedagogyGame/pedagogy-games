@@ -1,1 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#201813" />
+<title>Courtroom Etiquette</title>
+<style>
+:root{
+  --ivory:#eee4d2;
+  --paper:#d7c7ad;
+  --muted:#9f927f;
+  --gold:#c8a36a;
+  --gold2:#e5cca0;
+  --panel:rgba(23,18,15,.91);
+  --panel2:rgba(31,24,20,.84);
+  --line:rgba(230,205,163,.34);
+  --red:#8d3037;
+  --green:#79ad83;
+}
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#17110d;color:var(--ivory);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+button{font:inherit}
+#game,#scene{position:fixed;inset:0;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#vignette,#grain{position:absolute;inset:0;pointer-events:none}
+#vignette{z-index:4;background:radial-gradient(ellipse at 50% 48%,transparent 42%,rgba(6,4,3,.08) 67%,rgba(5,3,2,.48) 115%)}
+#grain{z-index:5;opacity:.035;background-image:repeating-linear-gradient(0deg,rgba(255,255,255,.08) 0,rgba(255,255,255,.08) 1px,transparent 1px,transparent 4px);mix-blend-mode:soft-light}
+#brand{position:absolute;z-index:20;left:30px;top:25px;pointer-events:none;text-shadow:0 2px 14px rgba(0,0,0,.72);transition:opacity .7s ease}
+#brand .kicker{font-size:9px;letter-spacing:.36em;text-transform:uppercase;color:#c8b89f;margin-bottom:5px}
+#brand h1{font-family:Georgia,"Times New Roman",serif;font-weight:500;font-size:clamp(26px,3vw,44px);letter-spacing:-.03em;margin:0}
+#begin{position:absolute;z-index:26;left:50%;bottom:28px;transform:translateX(-50%);padding:13px 25px 12px;border:1px solid rgba(232,205,159,.6);border-radius:5px;color:#efe3cd;background:linear-gradient(180deg,rgba(87,63,42,.94),rgba(45,31,23,.96));box-shadow:0 10px 30px rgba(0,0,0,.38),inset 0 1px rgba(255,255,255,.09);letter-spacing:.15em;text-transform:uppercase;font-size:10px;cursor:pointer;transition:transform .18s ease,border-color .18s ease,opacity .5s ease,background .18s ease}
+#begin:hover{transform:translateX(-50%) translateY(-2px);border-color:var(--gold2);background:linear-gradient(180deg,rgba(102,75,49,.97),rgba(49,34,25,.98))}
+#hotspot{position:absolute;display:none;z-index:32;width:min(330px,calc(100vw - 28px));padding:15px 17px 16px;border:1px solid rgba(222,195,148,.48);border-radius:5px;background:rgba(26,20,16,.94);box-shadow:0 15px 45px rgba(0,0,0,.46),inset 0 1px rgba(255,255,255,.05);backdrop-filter:blur(10px);pointer-events:none}
+#hotspot .term{font-family:Georgia,"Times New Roman",serif;font-size:20px;color:#efdfc4;margin-bottom:5px}
+#hotspot .def{font-size:12px;line-height:1.52;color:#c8bcaa}
+#quiz{position:absolute;inset:0;z-index:40;display:none;pointer-events:none}
+#quiz.visible{display:block}
+#juryMeter{position:absolute;top:25px;left:50%;width:min(420px,calc(100vw - 190px));transform:translateX(-50%);opacity:0;transition:opacity .65s ease}
+#juryMeter.visible{opacity:1}
+#juryMeterLabel{text-align:center;margin-bottom:7px;color:rgba(239,229,212,.72);font-size:9px;letter-spacing:.34em;text-transform:uppercase;text-shadow:0 2px 8px #000}
+#meterTrack{position:relative;height:8px;border-radius:999px;border:1px solid rgba(255,255,255,.13);background:rgba(17,13,11,.72);box-shadow:0 4px 18px rgba(0,0,0,.48),inset 0 1px 4px rgba(0,0,0,.7)}
+#meterSpectrum{position:absolute;inset:0;border-radius:inherit;background:linear-gradient(90deg,#651c25 0%,#8c2e37 12%,#9a4a48 25%,#9d7168 38%,#857c72 50%,#738675 62%,#649170 75%,#61a175 88%,#9cd6a4 100%)}
+#meterMarker{position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);border-radius:50%;background:#cfc4b0;border:2px solid rgba(44,32,25,.8);box-shadow:0 0 0 3px rgba(255,255,255,.08),0 0 16px rgba(235,219,190,.35);transition:left .6s cubic-bezier(.2,.7,.2,1),background .45s ease,box-shadow .45s ease}
+#questionPanel{position:absolute;right:28px;bottom:26px;width:min(470px,calc(100vw - 36px));pointer-events:auto;opacity:0;transform:translateY(12px);transition:opacity .48s ease,transform .48s ease}
+#questionPanel.visible{opacity:1;transform:none}
+#card{overflow:hidden;border:1px solid var(--line);border-radius:6px;background:linear-gradient(145deg,rgba(35,28,23,.95),rgba(19,16,14,.94));box-shadow:0 18px 60px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.05);backdrop-filter:blur(14px)}
+#timerRail{height:4px;background:rgba(255,255,255,.055)}
+#timerFill{height:100%;width:100%;background:linear-gradient(90deg,#86aa91,#c9ad70,#9a4a4e);transform-origin:left}
+#cardBody{padding:19px 21px 18px}
+#meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+#difficulty{font-size:9px;letter-spacing:.23em;text-transform:uppercase;color:#b4a793}
+#qnum{font-size:10px;color:#82776b;font-variant-numeric:tabular-nums}
+#definition{min-height:58px;margin-bottom:16px;color:#efe5d6;font-family:Georgia,"Times New Roman",serif;font-size:clamp(17px,1.8vw,23px);line-height:1.32}
+#answers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.answer{min-height:49px;padding:10px 12px;border:1px solid rgba(201,184,156,.2);border-radius:4px;background:rgba(255,255,255,.045);color:#d8cec0;text-align:left;font-size:12px;line-height:1.3;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.answer:hover:not(:disabled){background:rgba(205,181,139,.11);border-color:rgba(220,197,154,.48);transform:translateY(-1px)}
+.answer.correct{background:rgba(74,132,91,.23);border-color:rgba(109,181,130,.66);color:#d9f0df}
+.answer.wrong{background:rgba(146,58,60,.24);border-color:rgba(194,91,93,.66);color:#f0d5d4}
+.answer:disabled{cursor:default}
+#feedback{min-height:20px;padding-top:10px;font-size:11px;color:#b8ad9e}
+#feedback.good{color:#acd4b6}#feedback.bad{color:#d8a29f}
+#fade{position:absolute;inset:0;z-index:100;background:#050403;opacity:0;pointer-events:none;transition:opacity 1.35s ease}
+#fade.black{opacity:1}
+#end{position:absolute;inset:0;z-index:110;display:flex;flex-direction:column;justify-content:center;align-items:center;opacity:0;pointer-events:none;transition:opacity .9s ease}
+#end.visible{opacity:1;pointer-events:auto}
+#end .small{font-size:9px;letter-spacing:.32em;text-transform:uppercase;color:#7e7468;margin-bottom:10px}
+#endTitle{margin:0 0 20px;font-family:Georgia,"Times New Roman",serif;font-size:clamp(35px,6vw,68px);font-weight:400;color:#e3d6c0}
+#restart{padding:11px 18px;border:1px solid rgba(216,195,157,.42);border-radius:4px;background:rgba(255,255,255,.04);color:#bdb0a0;letter-spacing:.18em;text-transform:uppercase;font-size:9px;cursor:pointer}
+#restart:hover{border-color:rgba(216,195,157,.78);color:#eadcc5}
+@media(max-width:720px){#brand{left:16px;top:16px}#brand h1{font-size:27px}#juryMeter{top:16px;left:auto;right:16px;width:45vw;transform:none}#questionPanel{left:13px;right:13px;bottom:13px;width:auto}#answers{grid-template-columns:1fr}#cardBody{padding:15px}#definition{min-height:0;font-size:17px}#begin{bottom:17px}}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="game">
+  <div id="scene"></div>
+  <div id="vignette"></div>
+  <div id="grain"></div>
+  <div id="brand"><div class="kicker">Pedagogy Game</div><h1>Courtroom Etiquette</h1></div>
+  <button id="begin">Begin Proceedings</button>
+  <div id="hotspot"><div class="term"></div><div class="def"></div></div>
+  <div id="quiz">
+    <div id="juryMeter">
+      <div id="juryMeterLabel">Jury Persuasion</div>
+      <div id="meterTrack"><div id="meterSpectrum"></div><div id="meterMarker"></div></div>
+    </div>
+    <div id="questionPanel">
+      <div id="card">
+        <div id="timerRail"><div id="timerFill"></div></div>
+        <div id="cardBody">
+          <div id="meta"><span id="difficulty"></span><span id="qnum"></span></div>
+          <div id="definition"></div>
+          <div id="answers"></div>
+          <div id="feedback"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="fade"></div>
+  <div id="end"><div class="small">Courtroom Etiquette</div><h2 id="endTitle"></h2><button id="restart">Enter Court Again</button></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+/* =========================================================
+   SCENE
+   ========================================================= */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x887664);
+scene.fog = new THREE.FogExp2(0x887664, 0.0125);
+
+const camera = new THREE.PerspectiveCamera(47, innerWidth / innerHeight, 0.1, 120);
+camera.position.set(0.8, 5.2, 13.6);
+
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.07;
+document.querySelector('#scene').appendChild(renderer.domElement);
+
+/* =========================================================
+   EXPLORATION CAMERA
+   Fixed-seat exploration: free zoom toward cursor, limited swivel.
+   Clicking identifies objects but never moves the camera.
+   ========================================================= */
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 2.15, -2.7);
+controls.enableDamping = false;
+controls.enableZoom = true;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.zoomToCursor = true;
+controls.minDistance = 4.5;
+controls.maxDistance = 23;
+controls.minPolarAngle = THREE.MathUtils.degToRad(53);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(83);
+controls.minAzimuthAngle = THREE.MathUtils.degToRad(-36);
+controls.maxAzimuthAngle = THREE.MathUtils.degToRad(36);
+controls.rotateSpeed = 0.42;
+controls.panSpeed = 0.68;
+controls.zoomSpeed = 0.85;
+controls.addEventListener('change',()=>{
+  controls.target.x = THREE.MathUtils.clamp(controls.target.x,-4.8,4.8);
+  controls.target.y = THREE.MathUtils.clamp(controls.target.y,1.0,4.5);
+  controls.target.z = THREE.MathUtils.clamp(controls.target.z,-7.0,4.2);
+});
+
+/* =========================================================
+   MATERIALS
+   ========================================================= */
+const M = {
+  walnut:new THREE.MeshStandardMaterial({color:0x4b2e22,roughness:.43,metalness:.02}),
+  walnut2:new THREE.MeshStandardMaterial({color:0x684431,roughness:.50}),
+  darkwood:new THREE.MeshStandardMaterial({color:0x281712,roughness:.52}),
+  brass:new THREE.MeshStandardMaterial({color:0xa98548,roughness:.33,metalness:.58}),
+  carpet:new THREE.MeshStandardMaterial({color:0x514641,roughness:.96}),
+  aisle:new THREE.MeshStandardMaterial({color:0x5b504a,roughness:.96}),
+  wall:new THREE.MeshStandardMaterial({color:0xb7a58e,roughness:.9}),
+  plaster:new THREE.MeshStandardMaterial({color:0xd7cab7,roughness:.95}),
+  leather:new THREE.MeshStandardMaterial({color:0x2d2521,roughness:.72}),
+  paper:new THREE.MeshStandardMaterial({color:0xd9d1c2,roughness:.92}),
+  black:new THREE.MeshStandardMaterial({color:0x161413,roughness:.78}),
+  blueFabric:new THREE.MeshStandardMaterial({color:0x273b4b,roughness:.85}),
+  invisible:new THREE.MeshBasicMaterial({transparent:true,opacity:.001,depthWrite:false})
+};
+
+/* =========================================================
+   LIGHTING
+   ========================================================= */
+scene.add(new THREE.HemisphereLight(0xf5e5c8,0x2d241f,1.45));
+const sun = new THREE.DirectionalLight(0xffe0b3,3.1);
+sun.position.set(-7.5,11,6.5); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-12; sun.shadow.camera.right=12; sun.shadow.camera.top=13; sun.shadow.camera.bottom=-10;
+scene.add(sun);
+const benchGlow = new THREE.SpotLight(0xffd8a3,38,27,Math.PI/5.2,.68,1.15);
+benchGlow.position.set(0,7.4,-2.6); benchGlow.target.position.set(0,2.1,-8.7); scene.add(benchGlow,benchGlow.target);
+const juryGlow = new THREE.PointLight(0xffd6aa,7.5,12,1.45); juryGlow.position.set(-6.0,4.0,-2.3); scene.add(juryGlow);
+
+/* =========================================================
+   GEOMETRY HELPERS
+   ========================================================= */
+function meshBox(w,h,d,mat){ const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); m.castShadow=true; m.receiveShadow=true; return m; }
+function addBox(parent,w,h,d,mat,x=0,y=0,z=0,rx=0,ry=0,rz=0){ const m=meshBox(w,h,d,mat); m.position.set(x,y,z); m.rotation.set(rx,ry,rz); parent.add(m); return m; }
+function box(w,h,d,mat,x=0,y=0,z=0,rx=0,ry=0,rz=0){ const m=meshBox(w,h,d,mat); m.position.set(x,y,z); m.rotation.set(rx,ry,rz); scene.add(m); return m; }
+function addCylinder(parent,r,h,mat,x=0,y=0,z=0,segments=18){ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,segments),mat); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; parent.add(m); return m; }
+function woodPanel(x,y,z,w,h,ry=0){ const g=new THREE.Group(); g.position.set(x,y,z); g.rotation.y=ry; addBox(g,w,h,.09,M.walnut2); const t=.06; addBox(g,w-.12,t,.13,M.darkwood,0,h/2-.09,.04); addBox(g,w-.12,t,.13,M.darkwood,0,-h/2+.09,.04); addBox(g,t,h-.16,.13,M.darkwood,-w/2+.09,0,.04); addBox(g,t,h-.16,.13,M.darkwood,w/2-.09,0,.04); scene.add(g); return g; }
+
+/* =========================================================
+   HOTSPOTS
+   ========================================================= */
+const hotspotRoots=[];
+function hotspot(object,label,definition){ object.userData.hotspot={label,definition}; hotspotRoots.push(object); return object; }
+
+/* =========================================================
+   COURTROOM ARCHITECTURE
+   Generic U.S. trial courtroom: center bench, side jury box,
+   attorney tables in the well, public gallery behind the bar.
+   ========================================================= */
+box(18,.3,23,M.carpet,0,-.18,0);
+box(2.05,.012,22.2,M.aisle,0,.005,.3);
+box(18,8.6,.36,M.wall,0,4.08,-10.15);
+box(.36,8.6,23,M.wall,-9.08,4.08,0);
+box(.36,8.6,23,M.wall,9.08,4.08,0);
+box(18.25,.3,.45,M.plaster,0,7.82,-9.9);
+box(.45,.3,23,M.plaster,-8.83,7.82,0);
+box(.45,.3,23,M.plaster,8.83,7.82,0);
+
+for(let x=-7.8;x<=7.8;x+=2.6) woodPanel(x,1.12,-9.92,2.45,2.08);
+for(let z=-8.5;z<=9;z+=2.8){ woodPanel(-8.87,1.12,z,2.52,2.08,Math.PI/2); woodPanel(8.87,1.12,z,2.52,2.08,Math.PI/2); }
+
+/* pilasters */
+for(const x of [-6,-3,0,3,6]){ box(.22,5.1,.18,M.plaster,x,5.12,-9.88); box(.52,.18,.3,M.plaster,x,2.62,-9.84); box(.52,.18,.3,M.plaster,x,7.62,-9.84); }
+
+/* windows */
+function windowAssembly(x,z){ const g=new THREE.Group(); g.position.set(x,4.8,z); g.rotation.y=Math.PI/2; const glass=new THREE.Mesh(new THREE.PlaneGeometry(2.2,4.05),new THREE.MeshStandardMaterial({color:0xb7d2d2,transparent:true,opacity:.34,roughness:.18})); g.add(glass); addBox(g,2.45,.15,.18,M.darkwood,0,2.1,.03); addBox(g,2.45,.15,.18,M.darkwood,0,-2.1,.03); addBox(g,.15,4.3,.18,M.darkwood,-1.15,0,.03); addBox(g,.15,4.3,.18,M.darkwood,1.15,0,.03); addBox(g,.09,4.1,.14,M.darkwood,0,0,.04); addBox(g,2.25,.09,.14,M.darkwood,0,0,.04); scene.add(g); }
+windowAssembly(-8.69,-6.7); windowAssembly(-8.69,-1.7); windowAssembly(-8.69,3.3);
+
+/* rear courtroom entry / soundlock visual */
+const entry = new THREE.Group(); entry.position.set(0,0,10.05);
+addBox(entry,4.8,3.35,.18,M.darkwood,0,1.68,0);
+addBox(entry,2.12,2.9,.12,new THREE.MeshStandardMaterial({color:0x503327,roughness:.6}),-1.15,1.46,-.11);
+addBox(entry,2.12,2.9,.12,new THREE.MeshStandardMaterial({color:0x503327,roughness:.6}),1.15,1.46,-.11);
+addCylinder(entry,.06,.10,M.brass,-.3,1.4,-.22,12); addCylinder(entry,.06,.10,M.brass,.3,1.4,-.22,12);
+scene.add(entry);
+hotspot(entry,'Courtroom Entry / Soundlock','Many formal courtrooms use a vestibule or soundlock at the public entrance to reduce noise and preserve courtroom acoustics.');
+
+/* judge platform: approximately the visual relationship of a raised federal bench */
+const judgePlatform = hotspot(box(8.5,.46,3.45,M.darkwood,0,.08,-8.35),'Dais','The raised platform supporting the judge’s bench.');
+
+const judgeBench = new THREE.Group(); judgeBench.position.set(0,.45,-8.34);
+addBox(judgeBench,5.35,1.92,1.28,M.walnut,0,1.36,0);
+addBox(judgeBench,5.65,.18,1.56,M.darkwood,0,2.38,-.02);
+for(let x=-2.18;x<=2.18;x+=1.09) addBox(judgeBench,.065,1.48,.09,M.darkwood,x,1.35,.64);
+addBox(judgeBench,5.05,.09,.08,M.brass,0,.58,.665);
+scene.add(judgeBench);
+hotspot(judgeBench,'Judge’s Bench','The elevated desk from which the judge presides over the courtroom. “Approach the bench” means the attorneys come forward to speak with the judge.');
+
+/* generic court seal */
+function sealTexture(){ const c=document.createElement('canvas'); c.width=c.height=512; const ctx=c.getContext('2d'); ctx.fillStyle='#5c4328'; ctx.beginPath(); ctx.arc(256,256,220,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#c9a96d'; ctx.lineWidth=18; ctx.beginPath(); ctx.arc(256,256,202,0,Math.PI*2); ctx.stroke(); ctx.strokeStyle='#dbc398'; ctx.lineWidth=9; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(256,135);ctx.lineTo(256,340);ctx.moveTo(172,195);ctx.lineTo(340,195);ctx.moveTo(192,195);ctx.lineTo(160,260);ctx.moveTo(320,195);ctx.lineTo(352,260);ctx.stroke();ctx.beginPath();ctx.arc(160,270,48,0,Math.PI);ctx.stroke();ctx.beginPath();ctx.arc(352,270,48,0,Math.PI);ctx.stroke(); ctx.fillStyle='#e0cba4';ctx.font='bold 36px Georgia';ctx.textAlign='center';ctx.fillText('COURT',256,398); const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t; }
+const seal=new THREE.Mesh(new THREE.CircleGeometry(1.18,64),new THREE.MeshStandardMaterial({map:sealTexture(),roughness:.55})); seal.position.set(0,5.22,-9.92); scene.add(seal); hotspot(seal,'Court Seal','A court seal or jurisdictional emblem commonly appears behind or near the judge’s bench. This game uses a generic, non-jurisdictional seal.');
+
+/* flags, decorative not clickable */
+function makeFlag(x,z,colors){ const g=new THREE.Group(); g.position.set(x,0,z); addCylinder(g,.035,5.6,M.brass,0,3.0,0,12); const cloth=new THREE.Mesh(new THREE.PlaneGeometry(1.15,2.2,1,1),new THREE.MeshStandardMaterial({color:colors[0],side:THREE.DoubleSide,roughness:.8})); cloth.position.set(.57,4.7,.02); g.add(cloth); scene.add(g); }
+makeFlag(-3.65,-9.73,[0x314e73]); makeFlag(3.65,-9.73,[0x6d3a36]);
+
+/* =========================================================
+   FURNITURE
+   ========================================================= */
+function makeTable(w=3.6,d=1.35){ const g=new THREE.Group(); addBox(g,w,.14,d,M.walnut,0,1.12,0); for(const sx of [-w/2+.28,w/2-.28]) for(const sz of [-d/2+.22,d/2-.22]) addBox(g,.2,1.08,.2,M.darkwood,sx,.56,sz); addBox(g,w-.38,.09,.08,M.brass,0,1.05,d/2-.02); return g; }
+function addTableMicrophone(parent,x,z){ const stem=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,.36,10),M.black); stem.position.set(x,1.36,z); stem.rotation.z=-.32; parent.add(stem); const head=new THREE.Mesh(new THREE.SphereGeometry(.055,12,8),M.black); head.position.set(x+.055,1.52,z); parent.add(head); }
+
+/* Jury box at left, prosecution/plaintiff table placed nearer it; defense table right. */
+const plaintiffTable=makeTable(3.75,1.38); plaintiffTable.position.set(-2.25,0,-1.15); addTableMicrophone(plaintiffTable,.8,-.15); scene.add(plaintiffTable);
+hotspot(plaintiffTable,'Prosecution / Plaintiff’s Counsel Table','One of the attorney tables in the well. In a criminal case it may be used by the prosecution; in a civil case by the plaintiff’s side. Exact table assignments vary by courtroom.');
+const defenseTable=makeTable(3.75,1.38); defenseTable.position.set(2.35,0,-.25); addTableMicrophone(defenseTable,-.75,-.1); scene.add(defenseTable);
+hotspot(defenseTable,'Defense / Defendant’s Counsel Table','The attorney table used by the defendant and defense counsel. Exact placement varies by courtroom.');
+
+/* papers + case folders */
+for(const [x,z,r,c] of [[-2.6,-1.15,.1,0xd7d0c4],[-1.72,-1.0,-.12,0x8b6b45],[1.75,-.18,.08,0xd7d0c4],[2.72,-.1,-.11,0x795b3d]]) box(.65,.018,.88,new THREE.MeshStandardMaterial({color:c,roughness:.92}),x,1.205,z,0,r,0);
+
+/* lectern */
+const lectern=new THREE.Group(); lectern.position.set(-.15,0,-3.6); addBox(lectern,.76,1.18,.58,M.walnut,0,.59,0); const top=addBox(lectern,.9,.09,.68,M.darkwood,0,1.25,-.03); top.rotation.x=-.13; addBox(lectern,.06,.34,.06,M.brass,.27,1.46,-.1,0,0,-.25); scene.add(lectern);
+hotspot(lectern,'Lectern / Podium','A stand from which an attorney may address the court, jury, or a witness. Courts use both “lectern” and “podium” informally, though “lectern” is the more precise term for a speaking stand.');
+
+/* witness box on a slightly raised platform beside bench */
+const witnessPlatform=box(2.55,.17,2.2,M.darkwood,-3.75,.0,-6.7);
+const witnessStand=new THREE.Group(); witnessStand.position.set(-3.75,.16,-6.7); addBox(witnessStand,2.3,1.08,1.92,M.walnut,0,.54,0); addBox(witnessStand,2.5,.17,2.08,M.darkwood,0,1.14,0); addBox(witnessStand,2.15,.06,.08,M.brass,0,.45,.98); scene.add(witnessStand);
+hotspot(witnessStand,'Witness Stand / Witness Box','The designated place where a witness sits or stands while giving testimony under oath. “Witness stand” and “witness box” are both commonly used.');
+
+/* front-of-bench staff stations, raised slightly */
+box(5.7,.15,1.7,M.darkwood,3.25,.075,-6.35);
+const deputyStation=makeTable(2.35,1.08); deputyStation.position.set(2.35,.14,-6.5); scene.add(deputyStation);
+hotspot(deputyStation,'Courtroom Deputy Clerk Station','The courtroom deputy assists the judge during proceedings and handles in-court case administration. This role is distinct from the Clerk of Court, who oversees the clerk’s office.');
+const reporterStation=makeTable(1.7,1.02); reporterStation.position.set(4.65,.14,-5.65); reporterStation.rotation.y=-.12; scene.add(reporterStation);
+hotspot(reporterStation,'Court Reporter Station','The court reporter works here, using stenographic or digital equipment to create the official verbatim record.');
+const lawClerkStation=makeTable(1.75,1.02); lawClerkStation.position.set(4.72,.14,-7.15); lawClerkStation.rotation.y=.08; scene.add(lawClerkStation);
+hotspot(lawClerkStation,'Law Clerk Station','A law clerk assists the judge with legal research, drafting, and case preparation. Some courtroom layouts provide a dedicated station near the bench.');
+
+/* jury box: two stepped rows, rail and gate */
+const juryBox=new THREE.Group(); juryBox.position.set(-6.45,0,-3.1);
+addBox(juryBox,3.15,.16,6.6,M.darkwood,0,.92,0); addBox(juryBox,.16,1.32,6.6,M.darkwood,1.48,.66,0); addBox(juryBox,3.15,1.32,.16,M.darkwood,0,.66,3.22); addBox(juryBox,1.2,.14,.12,M.brass,.88,1.02,3.18); scene.add(juryBox);
+hotspot(juryBox,'Jury Box','The enclosed seating area reserved for jurors during a jury trial.');
+
+/* gallery benches */
+function makeGalleryBench(z){ const g=new THREE.Group(); g.position.z=z; addBox(g,12.6,.18,.76,M.walnut,0,.67,0); addBox(g,12.6,.88,.15,M.darkwood,0,1.13,.27); for(let x=-5.6;x<=5.6;x+=2.8) addBox(g,.17,.64,.17,M.darkwood,x,.32,0); scene.add(g); return g; }
+const gallery=new THREE.Group(); scene.add(gallery); for(const z of [5.15,6.72,8.29]) gallery.add(makeGalleryBench(z)); hotspot(gallery,'Gallery / Spectator Seating','The public seating area of the courtroom, typically behind the bar or courtroom rail. Press and observers may sit here.');
+
+/* bar / rail + gate */
+const bar=new THREE.Group(); bar.position.set(0,0,3.42); addBox(bar,14.5,.14,.18,M.darkwood,0,1.05,0); for(let x=-7;x<=7;x+=1.35) addBox(bar,.11,1.03,.11,M.walnut,x,.52,0); scene.add(bar); hotspot(bar,'Bar / Courtroom Rail','The physical boundary separating the public gallery from the well of the court. The term “bar” can also refer more broadly to the legal profession.');
+const barGate=new THREE.Group(); barGate.position.set(0,0,3.4); addBox(barGate,1.05,.1,.13,M.darkwood,0,1.04,.03); for(const x of [-.46,0,.46]) addBox(barGate,.09,1.0,.09,M.walnut,x,.51,.03); scene.add(barGate); hotspot(barGate,'Bar Gate','The gate in the courtroom rail through which authorized participants enter the well of the court.');
+const well=box(12.6,.02,6.45,M.invisible,0,.01,-1.9); hotspot(well,'Well of the Court','The open area inside the courtroom bar where attorneys, parties, witnesses, and court personnel conduct proceedings.');
+
+/* =========================================================
+   CHAIRS + PEOPLE
+   ========================================================= */
+function makeChair(x,z,ry=0,y=0){ const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=ry;addBox(g,.7,.13,.68,M.leather,0,.56,0);addBox(g,.72,.88,.14,M.leather,0,1.0,.28);for(const sx of [-.27,.27])for(const sz of [-.22,.22])addBox(g,.09,.56,.09,M.darkwood,sx,.28,sz);scene.add(g);return g; }
+const skinTones=[0xd1a07d,0xe0b18d,0xb77f5e,0x8d5b43,0xc58d69,0x6f4938];
+const suitColors=[0x253039,0x2d2b31,0x3a3d3b,0x303842,0x403634];
+const jurorFaces=[];
+function faceTexture(mood=0){ const c=document.createElement('canvas');c.width=c.height=128;const data={canvas:c,ctx:c.getContext('2d'),texture:new THREE.CanvasTexture(c)};data.texture.colorSpace=THREE.SRGBColorSpace;drawFace(data,mood);return data; }
+function drawFace(data,mood){ const ctx=data.ctx;ctx.clearRect(0,0,128,128);ctx.strokeStyle='#342620';ctx.lineCap='round';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(34,52);ctx.lineTo(47,52);ctx.moveTo(81,52);ctx.lineTo(94,52);ctx.stroke();ctx.lineWidth=5;ctx.beginPath();if(mood<-.1){ctx.moveTo(31,40);ctx.lineTo(49,33);ctx.moveTo(79,33);ctx.lineTo(97,40)}else if(mood>.1){ctx.moveTo(31,35);ctx.lineTo(49,32);ctx.moveTo(79,32);ctx.lineTo(97,35)}else{ctx.moveTo(31,35);ctx.lineTo(49,34);ctx.moveTo(79,34);ctx.lineTo(97,35)}ctx.stroke();ctx.lineWidth=6;ctx.beginPath();const s=Math.min(1,Math.abs(mood));if(mood>.08){ctx.arc(64,69-s*2,25,.12*Math.PI,.88*Math.PI)}else if(mood<-.08){ctx.arc(64,94+s*2,25,1.12*Math.PI,1.88*Math.PI)}else{ctx.moveTo(43,83);ctx.lineTo(85,83)}ctx.stroke();data.texture.needsUpdate=true; }
+function makePerson({x=0,z=0,y=0,rotationY=0,seated=true,bodyColor=null,skin=null,robe=false,juror=false}={}){ const p=new THREE.Group();p.position.set(x,y,z);p.rotation.y=rotationY; const bodyMat=new THREE.MeshStandardMaterial({color:bodyColor??suitColors[Math.floor(Math.random()*suitColors.length)],roughness:.8}); const skinMat=new THREE.MeshStandardMaterial({color:skin??skinTones[Math.floor(Math.random()*skinTones.length)],roughness:.74}); const hairMat=new THREE.MeshStandardMaterial({color:[0x241913,0x4c3427,0x191919,0x5a4632][Math.floor(Math.random()*4)],roughness:.88}); const bodyY=seated?1.12:1.38,headY=seated?2.0:2.35; const torso=new THREE.Mesh(new THREE.CapsuleGeometry(robe?.44:.37,seated?.72:.94,5,10),bodyMat);torso.position.y=bodyY;torso.scale.z=.76;torso.castShadow=true;p.add(torso); if(!robe){const shirt=new THREE.Mesh(new THREE.BoxGeometry(.26,.32,.05),new THREE.MeshStandardMaterial({color:0xd6d1c8,roughness:.8}));shirt.position.set(0,bodyY+.22,.32);p.add(shirt)} const head=new THREE.Mesh(new THREE.SphereGeometry(.285,22,16),skinMat);head.position.y=headY;head.castShadow=true;p.add(head); const hair=new THREE.Mesh(new THREE.SphereGeometry(.292,20,14,0,Math.PI*2,0,Math.PI*.51),hairMat);hair.position.y=headY+.055;hair.castShadow=true;p.add(hair); const leftPivot=new THREE.Group();leftPivot.position.set(-.37,bodyY+.23,0);p.add(leftPivot);const leftArm=new THREE.Mesh(new THREE.CapsuleGeometry(.095,.48,4,8),bodyMat);leftArm.position.y=-.28;leftArm.rotation.z=-.08;leftPivot.add(leftArm); const rightPivot=new THREE.Group();rightPivot.position.set(.37,bodyY+.23,0);p.add(rightPivot);const rightArm=new THREE.Mesh(new THREE.CapsuleGeometry(.095,.48,4,8),bodyMat);rightArm.position.y=-.28;rightArm.rotation.z=.08;rightPivot.add(rightArm); if(juror){const fd=faceTexture(0);const face=new THREE.Mesh(new THREE.PlaneGeometry(.43,.43),new THREE.MeshBasicMaterial({map:fd.texture,transparent:true,depthWrite:false,side:THREE.DoubleSide}));face.position.set(0,headY,.278);p.add(face);jurorFaces.push({person:p,faceData:fd,head,torso})} p.userData={...p.userData,rightArm:rightPivot,leftArm:leftPivot,head,torso};scene.add(p);return p; }
+
+/* judge */
+makeChair(0,-8.64,0,.92); const judge=makePerson({x:0,z:-8.7,y:.92,seated:true,robe:true,bodyColor:0x111111}); hotspot(judge,'Judge','The judicial officer who presides over the courtroom, rules on law and evidence, and controls the proceedings.');
+/* witness */
+makeChair(-3.75,-6.7,0,.17); const witness=makePerson({x:-3.75,z:-6.7,y:.17,seated:true,bodyColor:0x59615d}); hotspot(witness,'Witness','A person who gives testimony or other evidence in the case.');
+/* deputy clerk */
+makeChair(2.35,-6.52,.06,.15); const deputy=makePerson({x:2.35,z:-6.52,y:.15,rotationY:.06,seated:true,bodyColor:0x384049}); hotspot(deputy,'Courtroom Deputy Clerk','The in-court clerk who assists the judge, handles exhibits and scheduling details, and helps administer the proceeding.');
+/* reporter */
+makeChair(4.65,-5.68,-.12,.15); const reporter=makePerson({x:4.65,z:-5.68,y:.15,rotationY:-.12,seated:true,bodyColor:0x4c4540}); hotspot(reporter,'Court Reporter / Stenographer','The person who creates the official verbatim record of what is said during the proceeding.');
+/* law clerk */
+makeChair(4.72,-7.17,.08,.15); const lawClerk=makePerson({x:4.72,z:-7.17,y:.15,rotationY:.08,seated:true,bodyColor:0x3b3e45}); hotspot(lawClerk,'Law Clerk','An attorney or law-trained assistant who helps the judge research legal issues and prepare rulings.');
+/* bailiff */
+const bailiff=makePerson({x:5.9,z:-6.75,rotationY:-.18,seated:false,bodyColor:0x253a48}); hotspot(bailiff,'Bailiff / Court Security Officer','The officer responsible for courtroom security and order. Titles and duties vary by jurisdiction.');
+
+/* party tables */
+makeChair(-2.75,-1.0,0);makeChair(-1.55,-1.0,0);const prosecution=makePerson({x:-2.72,z:-1.02,seated:true,bodyColor:0x302e37});hotspot(prosecution,'Prosecutor / Plaintiff’s Counsel','The government’s attorney in a criminal case, or the plaintiff’s attorney in a civil case.');const plaintiffParty=makePerson({x:-1.55,z:-1.02,seated:true,bodyColor:0x46413d});hotspot(plaintiffParty,'Plaintiff / Government Representative','A civil plaintiff is the party who brings the lawsuit. In a criminal trial the opposing side is the government, represented by the prosecutor.');
+makeChair(1.7,-.1,0);makeChair(2.95,-.1,0);const defenseCounsel=makePerson({x:1.7,z:-.12,seated:true,bodyColor:0x25313c});hotspot(defenseCounsel,'Defense Counsel','The attorney representing the defendant. This is the side the quiz camera sits behind.');const defendant=makePerson({x:2.95,z:-.12,seated:true,bodyColor:0x403c39});hotspot(defendant,'Defendant','The person or entity being sued in a civil case or accused in a criminal case.');
+
+/* jury, two stepped rows, angled diagonally so faces remain readable from quiz camera */
+const jurors=[];
+const jurorSpots=[[-6.05,-5.6,.18],[-6.05,-4.55,.18],[-6.05,-3.5,.18],[-6.05,-2.45,.18],[-6.05,-1.4,.18],[-6.05,-.35,.18],[-7.12,-5.6,.34],[-7.12,-4.55,.34],[-7.12,-3.5,.34],[-7.12,-2.45,.34],[-7.12,-1.4,.34],[-7.12,-.35,.34]];
+for(const [x,z,y] of jurorSpots){ const ry=.34; makeChair(x,z,ry,y); const j=makePerson({x,z,y,rotationY:ry,seated:true,juror:true});jurors.push(j); }
+const juryClick=box(2.75,2.65,6.45,M.invisible,-6.58,1.55,-3.0); hotspot(juryClick,'Jury / Jurors','The jury is the group selected to decide disputed facts. Each individual member is a juror.');
+
+/* court reporter stenotype silhouette */
+const steno=new THREE.Group(); steno.position.set(4.6,1.42,-5.35); addBox(steno,.58,.12,.38,M.black); for(let r=0;r<3;r++)for(let c=0;c<5;c++)addBox(steno,.07,.025,.05,M.paper,-.18+c*.09,.075,-.12+r*.08); scene.add(steno);
+
+/* gavel and sound block */
+const gavel=new THREE.Group();const h=new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.72,14),M.darkwood);h.rotation.z=Math.PI/2;h.position.x=.28;gavel.add(h);const gh=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.42,16),M.walnut);gh.rotation.z=Math.PI/2;gh.position.x=.67;gavel.add(gh);gavel.scale.setScalar(.8);gavel.position.set(.02,-.53,.02);gavel.rotation.z=-.3;judge.userData.rightArm.add(gavel);const soundBlock=new THREE.Mesh(new THREE.CylinderGeometry(.25,.29,.12,24),M.darkwood);soundBlock.position.set(.95,2.97,-7.63);scene.add(soundBlock);hotspot(soundBlock,'Gavel and Sound Block','A gavel is a small ceremonial hammer used by some judges to call proceedings to order or mark a ruling. Its use varies widely by court.');
+
+/* =========================================================
+   QUIET AMBIENT MOTION
+   ========================================================= */
+const clock=new THREE.Clock();
+function animatePeople(t){ if(!quizActive||lossActive)return; defenseCounsel.userData.rightArm.rotation.x=-.05+Math.sin(t*.62)*.026; prosecution.userData.leftArm.rotation.x=-.035+Math.sin(t*.51+2)*.018; judge.userData.head.rotation.x=Math.sin(t*.31)*.007; reporter.userData.head.rotation.y=Math.sin(t*.27+1)*.01; jurors.forEach((j,i)=>{j.userData.head.rotation.y=Math.sin(t*.18+i*1.7)*.009}); }
+
+/* =========================================================
+   EXPLORATION CLICK LABELS
+   ========================================================= */
+const raycaster=new THREE.Raycaster();const pointer=new THREE.Vector2();let selectedHelper=null;let explore=true;
+const hotspotCard=document.querySelector('#hotspot'),hotspotTerm=hotspotCard.querySelector('.term'),hotspotDef=hotspotCard.querySelector('.def');
+function rootHotspot(obj){let n=obj;while(n){if(n.userData?.hotspot)return n;n=n.parent}return null}
+renderer.domElement.addEventListener('pointerup',e=>{if(!explore)return;const rect=renderer.domElement.getBoundingClientRect();pointer.x=((e.clientX-rect.left)/rect.width)*2-1;pointer.y=-((e.clientY-rect.top)/rect.height)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);let target=null;for(const hit of hits){const h=rootHotspot(hit.object);if(h){target=h;break}}if(selectedHelper){scene.remove(selectedHelper);selectedHelper.geometry?.dispose?.();selectedHelper.material?.dispose?.();selectedHelper=null}if(!target){hotspotCard.style.display='none';return}selectedHelper=new THREE.BoxHelper(target,0xe3bf79);selectedHelper.material.transparent=true;selectedHelper.material.opacity=.7;scene.add(selectedHelper);hotspotTerm.textContent=target.userData.hotspot.label;hotspotDef.textContent=target.userData.hotspot.definition;hotspotCard.style.display='block';const cw=330,m=14;let l=e.clientX+16,t=e.clientY+16;if(l+cw>innerWidth-m)l=e.clientX-cw-16;if(t+155>innerHeight)t=innerHeight-170;hotspotCard.style.left=`${Math.max(m,l)}px`;hotspotCard.style.top=`${Math.max(m,t)}px`;});
+
+/* =========================================================
+   VOCABULARY 5–70
+   ========================================================= */
+const TERMS=[
+{n:5,term:'Lawyer / Counsel',def:'An attorney representing a party in court.'},
+{n:6,term:'Plaintiff',def:'The party who brings a civil lawsuit.'},
+{n:7,term:'Prosecutor / District Attorney',def:'The government attorney who prosecutes a criminal case.'},
+{n:8,term:'Defense Attorney / Defense Counsel',def:'The attorney representing a defendant.'},
+{n:9,term:'Evidence',def:'Information used to prove or disprove facts in a case.'},
+{n:10,term:'Testimony',def:'Statements a witness gives under oath.'},
+{n:11,term:'Verdict',def:'The formal decision on issues submitted to the jury or other factfinder.'},
+{n:12,term:'Objection',def:'A formal challenge to a question, answer, evidence, or courtroom procedure.'},
+{n:13,term:'Guilty / Conviction',def:'A finding or plea establishing that a criminal defendant is guilty.'},
+{n:14,term:'Acquittal',def:'A formal finding that a criminal defendant is not guilty.'},
+{n:15,term:'Sentence / Sentencing',def:'The criminal punishment imposed, or the process of imposing it.'},
+{n:16,term:'Charge',def:'A formal allegation that someone committed a criminal offense.'},
+{n:17,term:'Appeal',def:'A request for a higher court to review a lower court’s decision.'},
+{n:18,term:'Trial',def:'A court proceeding in which disputed issues are formally decided.'},
+{n:19,term:'Civil Case',def:'A case involving private rights, injuries, property, money, or obligations rather than criminal prosecution.'},
+{n:20,term:'Criminal Case',def:'A case in which the government prosecutes someone accused of committing a crime.'},
+{n:21,term:'Opening Statement',def:'An initial explanation of what a side expects the evidence to show.'},
+{n:22,term:'Closing Argument',def:'A final argument explaining how the evidence supports a side’s position.'},
+{n:23,term:'Direct Examination',def:'Questioning of a witness by the side that called that witness.'},
+{n:24,term:'Cross-Examination',def:'Questioning of a witness by the opposing side.'},
+{n:25,term:'Exhibit',def:'A document, photograph, object, recording, or other item offered as evidence.'},
+{n:26,term:'Oath / Under Oath',def:'A formal promise to tell the truth when giving testimony.'},
+{n:27,term:'Sustained',def:'The judge agrees with an objection.'},
+{n:28,term:'Overruled',def:'The judge rejects an objection.'},
+{n:29,term:'Hearing',def:'A court proceeding addressing a particular issue or stage of a case.'},
+{n:30,term:'Motion',def:'A formal request asking the judge to make a ruling or order.'},
+{n:31,term:'Bailiff',def:'The court officer responsible for security and courtroom order.'},
+{n:32,term:'Juror',def:'An individual member of a jury.'},
+{n:33,term:'Court Reporter / Stenographer',def:'The person who creates the official record of spoken courtroom proceedings.'},
+{n:34,term:'Clerk of Court',def:'The official who manages court records, filings, exhibits, and court administration.'},
+{n:35,term:'Deliberation',def:'The jury’s private discussion before reaching its decision.'},
+{n:36,term:'Jury Instructions',def:'The judge’s explanation of the law the jury must follow.'},
+{n:37,term:'Plea',def:'A criminal defendant’s formal response to a charge, such as guilty or not guilty.'},
+{n:38,term:'Plea Bargain',def:'A negotiated agreement resolving a criminal case through a plea.'},
+{n:39,term:'Settlement',def:'An agreement resolving a dispute without requiring a final trial decision.'},
+{n:40,term:'Damages',def:'Money awarded in a civil case for injury or loss.'},
+{n:41,term:'Arraignment',def:'A proceeding where criminal charges are formally presented and the defendant normally enters a plea.'},
+{n:42,term:'Indictment',def:'A formal criminal accusation issued by a grand jury.'},
+{n:43,term:'Complaint',def:'A document that begins many civil lawsuits and states the plaintiff’s claims.'},
+{n:44,term:'Bail',def:'Money or conditions connected to a criminal defendant’s pretrial release.'},
+{n:45,term:'Subpoena',def:'A legal command requiring someone to appear, testify, or produce specified material.'},
+{n:46,term:'Discovery',def:'The pretrial exchange or disclosure of evidence and information.'},
+{n:47,term:'Continuance',def:'The postponement of a proceeding to a later date.'},
+{n:48,term:'Mistrial',def:'A trial ended without a valid final decision because it cannot properly continue or conclude.'},
+{n:49,term:'Bench Trial',def:'A trial in which the judge, rather than a jury, decides the case.'},
+{n:50,term:'Redirect Examination',def:'Follow-up questioning by the party that originally called a witness after cross-examination.'},
+{n:51,term:'Sidebar / Approach the Bench',def:'A discussion between the judge and attorneys outside the jury’s hearing.'},
+{n:52,term:'Record',def:'The official account of courtroom proceedings and materials in the case.'},
+{n:53,term:'Ruling',def:'The judge’s decision on a legal issue, motion, or objection.'},
+{n:54,term:'Judgment',def:'The court’s formal decision or order resolving a case or issue.'},
+{n:55,term:'Admitted into Evidence',def:'Formally accepted by the court so the evidence may be considered.'},
+{n:56,term:'Hearsay',def:'Generally, an out-of-court statement offered to prove the truth of what the statement asserts.'},
+{n:57,term:'Relevant / Relevance',def:'Having a meaningful connection to an issue that must be decided in the case.'},
+{n:58,term:'Leading Question',def:'A question phrased in a way that suggests the answer the questioner wants.'},
+{n:59,term:'Speculation',def:'Testimony based on guessing rather than a witness’s personal knowledge.'},
+{n:60,term:'Foundation',def:'Preliminary facts establishing that evidence is sufficiently identifiable, reliable, or admissible.'},
+{n:61,term:'Asked and Answered',def:'An objection that a question has already been asked and answered.'},
+{n:62,term:'Argumentative',def:'An objection that questioning improperly argues with a witness rather than seeking information.'},
+{n:63,term:'Strike / Stricken',def:'An order removing testimony or material from consideration.'},
+{n:64,term:'Burden of Proof',def:'The responsibility to establish a claim or accusation to the legally required standard.'},
+{n:65,term:'Beyond a Reasonable Doubt',def:'The high standard of proof the prosecution must satisfy for a criminal conviction.'},
+{n:66,term:'Preponderance of the Evidence',def:'A common civil proof standard meaning more likely true than not true.'},
+{n:67,term:'Due Process',def:'The constitutional requirement that government use legally fair and adequate procedures.'},
+{n:68,term:'Voir Dire',def:'The questioning of prospective jurors during jury selection.'},
+{n:69,term:'Contempt of Court',def:'Sanctionable disobedience of, or interference with, the authority of a court.'},
+{n:70,term:'Miranda Warning / Miranda Rights',def:'The warning concerning rights such as silence and counsel before custodial police interrogation.'}
+];
+
+/* =========================================================
+   QUIZ LOGIC
+   ========================================================= */
+const QUESTION_TIME=16000;
+let persuasion=50,deck=[],current=null,questionStart=0,answerLocked=false,questionCount=0,quizActive=false;
+const quiz=document.querySelector('#quiz'),questionPanel=document.querySelector('#questionPanel'),definitionEl=document.querySelector('#definition'),answersEl=document.querySelector('#answers'),feedbackEl=document.querySelector('#feedback'),difficultyEl=document.querySelector('#difficulty'),qnumEl=document.querySelector('#qnum'),timerFill=document.querySelector('#timerFill'),meterMarker=document.querySelector('#meterMarker'),juryMeter=document.querySelector('#juryMeter');
+function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]]}return r}
+function tier(n){if(n<=20)return'Foundational';if(n<=40)return'Trial Language';if(n<=55)return'Procedure';if(n<=63)return'Evidence';return'Advanced'}
+function refillDeck(){deck=[];for(const [a,b] of [[5,20],[21,40],[41,55],[56,63],[64,70]])deck.push(...shuffle(TERMS.filter(t=>t.n>=a&&t.n<=b)));}
+function optionsFor(correct){const sameTier=shuffle(TERMS.filter(t=>t!==correct&&tier(t.n)===tier(correct.n)));const others=shuffle(TERMS.filter(t=>t!==correct&&!sameTier.includes(t)));return shuffle([correct,...sameTier.slice(0,3),...others].slice(0,4));}
+function ask(){if(!quizActive)return;if(!deck.length)refillDeck();current=deck.shift();questionCount++;answerLocked=false;definitionEl.textContent=current.def;difficultyEl.textContent=tier(current.n);qnumEl.textContent=`QUESTION ${questionCount}`;feedbackEl.textContent='';feedbackEl.className='';answersEl.innerHTML='';for(const opt of optionsFor(current)){const b=document.createElement('button');b.className='answer';b.textContent=opt.term;b.addEventListener('click',()=>grade(opt,b));answersEl.appendChild(b)}questionStart=performance.now();timerFill.style.transform='scaleX(1)';}
+function grade(selected,button,timedOut=false){if(answerLocked||!current)return;answerLocked=true;const elapsed=performance.now()-questionStart,correct=selected===current;const buttons=[...answersEl.querySelectorAll('.answer')];buttons.forEach(b=>{b.disabled=true;if(b.textContent===current.term)b.classList.add('correct')});if(!correct&&button)button.classList.add('wrong');let delta;if(correct){const quick=elapsed<=QUESTION_TIME/2;delta=5+(quick?3:0);feedbackEl.textContent=quick?`Correct · Quick answer +${delta}`:`Correct · +${delta}`;feedbackEl.className='good'}else{delta=current.n<=20?-15:-10;feedbackEl.textContent=timedOut?`Time · ${delta} · ${current.term}`:`Incorrect · ${delta} · ${current.term}`;feedbackEl.className='bad'}setPersuasion(persuasion+delta);if(persuasion<=0){setTimeout(triggerLoss,420);return}if(persuasion>=100){setTimeout(triggerWin,520);return}setTimeout(ask,1050);}
+
+/* =========================================================
+   JURY MOOD — score is not shown numerically.
+   Mood changes in approximately 10-point bands.
+   ========================================================= */
+function scoreColor(s){if(s<20)return'#8e2832';if(s<30)return'#a44347';if(s<40)return'#a9675e';if(s<50)return'#948078';if(s<60)return'#c7bda9';if(s<70)return'#7f9680';if(s<80)return'#6f9e78';if(s<90)return'#70b17d';return'#a2d8a8'}
+function setPersuasion(v){persuasion=THREE.MathUtils.clamp(Math.round(v),0,100);meterMarker.style.left=`${persuasion}%`;const c=scoreColor(persuasion);meterMarker.style.background=c;meterMarker.style.boxShadow=`0 0 0 3px rgba(255,255,255,.08),0 0 17px ${c}`;updateJuryMood();}
+function updateJuryMood(){const band=Math.round(persuasion/10)*10;const mood=THREE.MathUtils.clamp((band-50)/50,-1,1);jurorFaces.forEach((j,i)=>{const variation=Math.sin(i*2.1)*.055;const m=THREE.MathUtils.clamp(mood+variation,-1,1);drawFace(j.faceData,m);j.head.rotation.x=-m*.018;j.torso.rotation.x=-m*.012;});}
+setPersuasion(50);
+
+/* =========================================================
+   BEGIN PROCEEDINGS — locked camera behind defense side.
+   Jury remains in the left half of frame and judge at front.
+   ========================================================= */
+const begin=document.querySelector('#begin'),brand=document.querySelector('#brand');let transition=null;
+begin.addEventListener('click',startTrial);
+function startTrial(){if(!explore)return;explore=false;if(selectedHelper){scene.remove(selectedHelper);selectedHelper=null}hotspotCard.style.display='none';begin.style.opacity='0';begin.style.pointerEvents='none';brand.style.opacity='.28';controls.enabled=false;transition={start:performance.now(),duration:1250,fromPos:camera.position.clone(),toPos:new THREE.Vector3(3.75,3.12,7.55),fromTarget:controls.target.clone(),toTarget:new THREE.Vector3(-1.7,1.92,-3.25)};quiz.classList.add('visible');setTimeout(()=>{juryMeter.classList.add('visible');questionPanel.classList.add('visible');quizActive=true;refillDeck();ask();wakeAudio();},1180);}
+function updateTransition(now){if(!transition)return;const raw=(now-transition.start)/transition.duration,t=THREE.MathUtils.clamp(raw,0,1),e=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;camera.position.lerpVectors(transition.fromPos,transition.toPos,e);const target=new THREE.Vector3().lerpVectors(transition.fromTarget,transition.toTarget,e);camera.lookAt(target);if(t>=1){transition=null;controls.enabled=false;}}
+
+/* =========================================================
+   END STATES
+   ========================================================= */
+let lossActive=false,lossStart=0;const strikes=new Set(),fade=document.querySelector('#fade'),end=document.querySelector('#end'),endTitle=document.querySelector('#endTitle');
+function triggerLoss(){if(lossActive)return;quizActive=false;answerLocked=true;lossActive=true;questionPanel.classList.remove('visible');juryMeter.classList.remove('visible');lossStart=performance.now();strikes.clear();}
+function animateLoss(now){if(!lossActive)return;const elapsed=(now-lossStart)/1000,times=[.1,.68,1.25];let rot=0;times.forEach((st,i)=>{const local=elapsed-st;if(local>=0&&local<.44){const p=local/.44;rot=p<.4?THREE.MathUtils.lerp(0,-1.42,p/.4):THREE.MathUtils.lerp(-1.42,.30,(p-.4)/.6)}if(elapsed>=st+.18&&!strikes.has(i)){playGavel();strikes.add(i)}});judge.userData.rightArm.rotation.x=rot;if(elapsed>1.85)fade.classList.add('black');if(elapsed>3.1){endTitle.textContent='Court Adjourned';end.classList.add('visible')}}
+function triggerWin(){quizActive=false;answerLocked=true;questionPanel.classList.remove('visible');setTimeout(()=>{fade.classList.add('black');setTimeout(()=>{endTitle.textContent='Jury Persuaded';end.classList.add('visible')},1100)},800);}
+let audio=null;function wakeAudio(){try{if(!audio)audio=new(window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume()}catch(e){}}
+function playGavel(){try{wakeAudio();if(!audio)return;const now=audio.currentTime,osc=audio.createOscillator(),gain=audio.createGain();osc.type='sine';osc.frequency.setValueAtTime(118,now);osc.frequency.exponentialRampToValueAtTime(55,now+.14);gain.gain.setValueAtTime(.62,now);gain.gain.exponentialRampToValueAtTime(.001,now+.25);osc.connect(gain);gain.connect(audio.destination);osc.start(now);osc.stop(now+.26);const buffer=audio.createBuffer(1,audio.sampleRate*.09,audio.sampleRate),ch=buffer.getChannelData(0);for(let i=0;i<ch.length;i++)ch[i]=(Math.random()*2-1)*Math.pow(1-i/ch.length,3);const src=audio.createBufferSource(),filter=audio.createBiquadFilter(),ng=audio.createGain();src.buffer=buffer;filter.type='bandpass';filter.frequency.value=680;filter.Q.value=.7;ng.gain.value=.25;src.connect(filter);filter.connect(ng);ng.connect(audio.destination);src.start(now)}catch(e){}}
+document.querySelector('#restart').addEventListener('click',()=>location.reload());
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+function loop(now=performance.now()){requestAnimationFrame(loop);const t=clock.getElapsedTime();if(explore)controls.update();updateTransition(now);animatePeople(t);animateLoss(now);if(quizActive&&current&&!answerLocked){const remaining=Math.max(0,1-(now-questionStart)/QUESTION_TIME);timerFill.style.transform=`scaleX(${remaining})`;if(remaining<=0)grade(null,null,true)}renderer.render(scene,camera)}
+loop();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script>
+</body>
+</html>
