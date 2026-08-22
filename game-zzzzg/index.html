@@ -64,11 +64,13 @@
         <button class="tool" id="tourBtn" aria-pressed="false">Auto tour</button>
         <button class="tool" id="indexBtn" aria-pressed="false">Term index</button>
         <button class="tool" id="resetBtn" aria-pressed="false">Reset view</button>
+        <button class="tool" id="zoomOutBtn" aria-pressed="false">Zoom −</button>
+        <button class="tool" id="zoomInBtn" aria-pressed="false">Zoom +</button>
       </div>
-      <p class="hint">Drag to pan · wheel to zoom<br>Click any marked component</p>
+      <p class="hint">Drag to pan · wheel to zoom<br><span id="zoomReadout">62%</span> · range 40–700%</p>
     </aside>
 
-    <div class="callout"><b>Expanded facility:</b> <span id="componentCount">0</span> inspectable components · concrete gravity dam · vertical Francis unit</div>
+    <div class="callout"><b>Site-wide oblique cutaway:</b> <span id="componentCount">0</span> inspectable components · separated spillway and generating bays</div>
 
     <aside class="right-panel" aria-live="polite">
       <div class="inspector-head">
@@ -133,19 +135,20 @@
 (() => {
   const canvas = document.getElementById('model');
   const ctx = canvas.getContext('2d');
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const W = 1600, H = 900;
+  const DPR = Math.min(window.devicePixelRatio || 1, 3);
+  const W = 2200, H = 1000;
+  const POWER_SHIFT = 320, SWITCH_SHIFT = 430;
   const state = {
     flow:420, spill:0, labels:true, particles:true, xray:false, tour:false,
     angle:0, time:0, surge:0, view:'whole', hover:null, selected:null,
-    cam:{x:800,y:450,z:1}, target:{x:800,y:450,z:1}, drag:false, px:0, py:0, sx:0, sy:0,
+    cam:{x:1050,y:470,z:.62}, target:{x:1050,y:470,z:.62}, drag:false, px:0, py:0, sx:0, sy:0,
     lastFlow:420, tourTimer:0
   };
 
   const views = {
-    whole:{x:800,y:450,z:0.93}, hydraulic:{x:660,y:480,z:1.35}, powerhouse:{x:945,y:535,z:1.75},
-    spillway:{x:755,y:430,z:1.55}, structure:{x:535,y:480,z:1.48}, grid:{x:1300,y:440,z:1.55},
-    services:{x:915,y:555,z:1.95}, outlet:{x:515,y:590,z:1.42}
+    whole:{x:1050,y:470,z:.62}, hydraulic:{x:790,y:485,z:1.08}, powerhouse:{x:1265,y:525,z:1.55},
+    spillway:{x:790,y:445,z:1.38}, structure:{x:535,y:480,z:1.28}, grid:{x:1740,y:440,z:1.2},
+    services:{x:1235,y:555,z:1.82}, outlet:{x:540,y:590,z:1.3}
   };
 
   const systems = {
@@ -273,6 +276,15 @@
     {x:1395,y:548,r:16,n:'Guardhouse',s:'Support facility',t:'safety',tag:'Controlled access',d:'The guardhouse and vehicle barrier control entry to the powerhouse, switchyard, and dam crest.'}
   ];
 
+  // The overview separates adjacent bays laterally. Component coordinates follow the same
+  // displacement as the generating bay and switchyard drawings so the site reads honestly.
+  const powerBaySystems = new Set(['Turbine isolation','Turbine assembly','Turbine governor','Runner assembly','Rotating assembly','Bearing system','Generator','Generator rotor','Generator stator','Generator controls','Generator auxiliaries','Discharge waterway','Downstream works','Powerhouse','Powerhouse levels','Plant control','Station electrical','Unit control','Unit auxiliaries','Plant services','Building services','Electrical generation','Transformer']);
+  const switchyardNames = new Set(['Switchyard','Transmission line','High-voltage circuit breaker','Disconnect switch','Surge arrester']);
+  components.forEach(c=>{
+    if(c.s==='Support facility'||switchyardNames.has(c.n)) c.x+=SWITCH_SHIFT;
+    else if(powerBaySystems.has(c.s)||c.n==='Step-up transformer'||c.n==='Transformer radiator'||c.n==='Station-service transformer'||c.n==='Switchgear'||c.n==='Tailwater aeration') c.x+=POWER_SHIFT;
+  });
+
   const labelsByView = {
     whole:['Reservoir','Dam body','Intake gate','Penstock','Spiral case','Francis runner','Generator stator','Draft tube','Tailrace','Radial spillway gate','Spillway chute','Step-up transformer','Switchyard'],
     hydraulic:['Trash rack','Bellmouth','Intake gate','Penstock','Surge chamber','Main inlet valve','Spiral case','Wicket gates','Francis runner','Draft tube','Tailrace'],
@@ -285,7 +297,7 @@
   };
 
   function resize(){
-    const r=canvas.getBoundingClientRect(); canvas.width=Math.round(r.width*DPR);canvas.height=Math.round(r.height*DPR);
+    const r=canvas.getBoundingClientRect(); canvas.width=Math.round(r.width*DPR);canvas.height=Math.round(r.height*DPR);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
   }
   window.addEventListener('resize',resize);resize();
 
@@ -307,17 +319,17 @@
   }
 
   function drawSky(){
-    const g=ctx.createLinearGradient(0,0,0,900);g.addColorStop(0,'#142d39');g.addColorStop(.55,'#0e222c');g.addColorStop(1,'#08141b');ctx.fillStyle=g;ctx.fillRect(-400,-200,2400,1200);
-    ctx.globalAlpha=.18;for(let i=0;i<40;i++){const x=(i*193)%1700,y=60+(i*67)%280;ctx.fillStyle=i%3?'#79a8b6':'#d4e9ed';ctx.fillRect(x,y,1.2,1.2)}ctx.globalAlpha=1;
+    const g=ctx.createLinearGradient(0,0,0,1000);g.addColorStop(0,'#142d39');g.addColorStop(.55,'#0e222c');g.addColorStop(1,'#08141b');ctx.fillStyle=g;ctx.fillRect(-500,-250,3100,1350);
+    ctx.globalAlpha=.18;for(let i=0;i<56;i++){const x=(i*193)%2350,y=60+(i*67)%280;ctx.fillStyle=i%3?'#79a8b6':'#d4e9ed';ctx.fillRect(x,y,1.2,1.2)}ctx.globalAlpha=1;
     // distant terrain
-    poly([[-100,340],[150,180],[330,330],[495,145],[700,330],[1700,350],[1700,900],[-100,900]],'#152832','#203943');
-    poly([[-100,470],[120,295],[290,420],[420,315],[540,450],[1700,410],[1700,900],[-100,900]],'#101f28','#29404b');
+    poly([[-200,340],[150,180],[330,330],[495,145],[700,330],[1120,245],[1510,350],[1900,260],[2400,350],[2400,1000],[-200,1000]],'#152832','#203943');
+    poly([[-200,470],[120,295],[290,420],[420,315],[540,450],[1100,410],[1540,445],[1900,390],[2400,430],[2400,1000],[-200,1000]],'#101f28','#29404b');
   }
 
   function drawFoundation(){
     const g=ctx.createLinearGradient(0,700,0,900);g.addColorStop(0,'#323b3e');g.addColorStop(1,'#151c1f');
-    poly([[-100,710],[250,685],[510,705],[770,725],[1030,748],[1240,760],[1700,745],[1700,1000],[-100,1000]],g,'#48565a',2);
-    ctx.save();ctx.globalAlpha=.12;for(let i=0;i<75;i++){let x=(i*89)%1750,y=735+(i*47)%180;line([[x,y],[x+20+(i%5)*9,y-8+(i%4)*6]],'#b7c2c2',1)}ctx.restore();
+    poly([[-200,710],[250,685],[510,705],[770,725],[1030,748],[1440,760],[1900,745],[2400,760],[2400,1050],[-200,1050]],g,'#48565a',2);
+    ctx.save();ctx.globalAlpha=.12;for(let i=0;i<110;i++){let x=(i*89)%2350,y=735+(i*47)%210;line([[x,y],[x+20+(i%5)*9,y-8+(i%4)*6]],'#b7c2c2',1)}ctx.restore();
   }
 
   function drawReservoir(){
@@ -366,6 +378,7 @@
   }
 
   function drawPowerhouse(){
+    ctx.save();ctx.translate(POWER_SHIFT,0);
     ctx.save();ctx.globalAlpha=state.xray?.86:1;
     // building shell and roof
     poly([[775,295],[1104,295],[1150,342],[1150,731],[782,731]],'#273943','#92a6ad',2);
@@ -393,9 +406,11 @@
     // elevator shaft and fire riser
     roundedRect(1124,375,17,196,2);ctx.fillStyle='#1b2b32';ctx.fill();ctx.strokeStyle='#778b91';ctx.stroke();
     line([[1131,570],[1131,342]],'#ef715f',4);for(let y=370;y<570;y+=42)line([[1126,y],[1137,y]],'#ff9b8d',2);
+    ctx.restore();
   }
 
   function drawPlantServices(){
+    ctx.save();ctx.translate(POWER_SHIFT,0);
     // oil system: reservoir, pump, cooler and piping
     roundedRect(790,592,42,33,5);ctx.fillStyle='#40504e';ctx.fill();ctx.strokeStyle='#88b8a9';ctx.stroke();
     ellipse(840,618,10,10,'#314b4a','#79b6a8',2);roundedRect(856,605,25,26,3);ctx.fillStyle='#2b4445';ctx.fill();ctx.strokeStyle='#7db4ab';ctx.stroke();
@@ -411,6 +426,7 @@
     // governor accumulator and HPU details
     roundedRect(802,526,51,31,4);ctx.fillStyle='#263d42';ctx.fill();ctx.strokeStyle='#c99d52';ctx.stroke();
     roundedRect(818,495,16,33,8);ctx.fillStyle='#765d3f';ctx.fill();ctx.strokeStyle='#e0b865';ctx.stroke();ellipse(826,495,8,3,'#b58b4e');
+    ctx.restore();
   }
 
   function drawIntakeAndPenstock(){
@@ -424,15 +440,15 @@
     ctx.fillStyle='#a85f49';ctx.fillRect(414,282,9,83);line([[418,281],[418,246]],'#e2c67b',3);ellipse(418,243,8,4,'#a57832');
     // downstream maintenance bulkhead and gate slots
     ctx.fillStyle='#76524b';ctx.fillRect(437,289,6,68);line([[430,276],[430,363]],'#aab7b9',2);line([[446,278],[446,360]],'#aab7b9',2);
-    // penstock outer and water core
-    ctx.save();ctx.lineCap='round';ctx.beginPath();ctx.moveTo(432,330);ctx.bezierCurveTo(535,340,660,502,842,594);ctx.strokeStyle='#26373e';ctx.lineWidth=58;ctx.stroke();ctx.strokeStyle='#7f969e';ctx.lineWidth=50;ctx.stroke();ctx.strokeStyle='#0b4259';ctx.lineWidth=40;ctx.stroke();ctx.restore();
+    // penstock outer and water core: continued beneath the separate spillway bay
+    ctx.save();ctx.lineCap='round';ctx.beginPath();ctx.moveTo(432,330);ctx.bezierCurveTo(560,340,720,500,900,558);ctx.bezierCurveTo(1010,590,1110,594,842+POWER_SHIFT,594);ctx.strokeStyle='#26373e';ctx.lineWidth=58;ctx.stroke();ctx.strokeStyle='#7f969e';ctx.lineWidth=50;ctx.stroke();ctx.strokeStyle='#0b4259';ctx.lineWidth=40;ctx.stroke();ctx.restore();
     // manway
     ellipse(610,440,12,16,'#526970','#b9c4c6',2);
     // surge chamber
     ctx.save();ctx.lineCap='round';line([[590,430],[609,250]],'#71868e',30);line([[590,430],[609,250]],'#123f52',22);ctx.restore();
     const sl=296-state.surge*22;ctx.fillStyle='#3db6de';ctx.fillRect(599,sl,20,Math.max(0,253-sl));ellipse(609,250,15,5,'#8b9ea3','#c6d3d4',1.5);
     // main inlet butterfly valve
-    ellipse(793,558,23,23,'#35474c','#d19b53',3);ctx.save();ctx.translate(793,558);ctx.rotate(-.45);ctx.fillStyle='#b8703c';ctx.fillRect(-3,-20,6,40);ctx.restore();
+    ellipse(793+POWER_SHIFT,558,23,23,'#35474c','#d19b53',3);ctx.save();ctx.translate(793+POWER_SHIFT,558);ctx.rotate(-.45);ctx.fillStyle='#b8703c';ctx.fillRect(-3,-20,6,40);ctx.restore();
     // low-level outlet
     ctx.save();ctx.lineCap='round';ctx.beginPath();ctx.moveTo(350,430);ctx.bezierCurveTo(470,490,545,650,790,720);ctx.strokeStyle='#576b72';ctx.lineWidth=30;ctx.stroke();ctx.strokeStyle='#173e4c';ctx.lineWidth=20;ctx.stroke();ctx.restore();
     ctx.fillStyle='#9d5c49';ctx.fillRect(365,420,8,40);ellipse(620,696,12,18,'#6b5149','#d38a63',2);
@@ -441,41 +457,55 @@
   }
 
   function drawTurbineGenerator(){
-    // spiral case
-    ctx.save();ctx.strokeStyle='#b87829';ctx.lineWidth=28;ctx.beginPath();ctx.ellipse(930,610,79,43,-.08,.45,Math.PI*2.18);ctx.stroke();ctx.restore();
-    // stay ring
-    ellipse(945,610,54,34,'#29363b','#c99549',5);
-    // stay vanes behind the adjustable wicket-gate ring
-    ctx.save();ctx.translate(945,610);for(let i=0;i<12;i++){ctx.rotate(Math.PI*2/12);ctx.fillStyle='#7e8e91';ctx.fillRect(49,-3,17,6)}ctx.restore();
-    // wicket gates
-    ctx.save();ctx.translate(945,610);for(let i=0;i<16;i++){ctx.rotate(Math.PI*2/16);ctx.strokeStyle='#e7c074';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(33,0);ctx.lineTo(48,7);ctx.stroke()}ctx.restore();
-    ellipse(945,586,57,10,'transparent','#d29543',4);line([[875,552],[900,584]],'#d4a75b',4);
-    // runner
-    ctx.save();ctx.translate(945,630);ctx.rotate(state.angle);ellipse(0,0,30,22,'#31515a','#ecb15b',3);for(let i=0;i<10;i++){ctx.rotate(Math.PI*2/10);ctx.fillStyle='#d79742';ctx.beginPath();ctx.moveTo(5,-2);ctx.quadraticCurveTo(20,-15,30,-5);ctx.quadraticCurveTo(17,2,5,3);ctx.fill()}ctx.restore();
-    // shaft
-    const sg=ctx.createLinearGradient(936,0,958,0);sg.addColorStop(0,'#839399');sg.addColorStop(.5,'#d7ddde');sg.addColorStop(1,'#6c7c82');ctx.fillStyle=sg;ctx.fillRect(938,421,14,196);
-    // turbine cover and bearings
-    poly([[895,579],[995,579],[982,596],[908,596]],'#6c7d82','#becacc',2);ellipse(945,552,28,10,'#987447','#e2c379',2);
-    ellipse(945,575,16,7,'#2e3d42','#d6b76c',2);
-    // generator casing
-    ellipse(945,444,84,57,'#344850','#9fb0b5',3);ellipse(945,444,67,46,'#1d2c32','#72d9a4',6);
-    // stator slots
-    ctx.save();ctx.translate(945,444);for(let i=0;i<28;i++){ctx.rotate(Math.PI*2/28);ctx.fillStyle='#d4a953';ctx.fillRect(61,-2,7,4)}ctx.restore();
-    // rotor
-    ctx.save();ctx.translate(945,444);ctx.rotate(state.angle*.84);ellipse(0,0,45,31,'#37474b','#8fe2b4',2);for(let i=0;i<10;i++){ctx.rotate(Math.PI*2/10);roundedRect(28,-5,16,10,2);ctx.fillStyle=i%2?'#dd795b':'#6fb4dc';ctx.fill()}ctx.restore();
-    // exciter
-    ellipse(945,382,34,16,'#283b42','#e2c66e',3);ctx.fillStyle='#7e8e91';ctx.fillRect(938,382,14,46);
-    // generator air coolers and brake shoes
-    for(let i=0;i<3;i++){roundedRect(856,403+i*18,25,13,3);ctx.fillStyle='#33565b';ctx.fill();ctx.strokeStyle='#76b4ac';ctx.stroke()}
-    roundedRect(878,470,25,16,3);ctx.fillStyle='#754f42';ctx.fill();ctx.strokeStyle='#d28665';ctx.stroke();
-    // thrust bearing housing
-    roundedRect(902,491,86,21,5);ctx.fillStyle='#7d6642';ctx.fill();ctx.strokeStyle='#d3b36f';ctx.lineWidth=2;ctx.stroke();
-    // governor
-    roundedRect(812,530,62,42,5);ctx.fillStyle='#243b42';ctx.fill();ctx.strokeStyle='#d39c4f';ctx.stroke();ellipse(826,542,7,7,'#d49d4f');line([[844,551],[916,603]],'#d8aa5f',3);
-    // draft tube
-    ctx.save();ctx.beginPath();ctx.moveTo(922,650);ctx.bezierCurveTo(915,690,930,723,1000,736);ctx.lineTo(1150,736);ctx.lineTo(1150,695);ctx.bezierCurveTo(1035,701,995,680,973,646);ctx.closePath();ctx.fillStyle='#164758';ctx.fill();ctx.strokeStyle='#84989f';ctx.lineWidth=7;ctx.stroke();ctx.restore();
-    // downstream draft-tube isolation gate
+    ctx.save();ctx.translate(POWER_SHIFT,0);
+    // Vertical diametral section: the generator is shown from the side, not as a face-on ring.
+    const sg=ctx.createLinearGradient(936,0,954,0);sg.addColorStop(0,'#66787e');sg.addColorStop(.48,'#d5dcde');sg.addColorStop(1,'#596a70');
+    ctx.fillStyle=sg;ctx.fillRect(937,365,16,266);
+
+    // Generator frame and upper/lower brackets
+    roundedRect(854,390,182,104,9);ctx.fillStyle='#263840';ctx.fill();ctx.strokeStyle='#8fa1a6';ctx.lineWidth=3;ctx.stroke();
+    line([[867,398],[945,382],[1023,398]],'#8fa1a6',4);line([[867,486],[945,502],[1023,486]],'#8fa1a6',4);
+    // Stator core packs at the two sides of the diametral cut
+    roundedRect(865,402,32,80,4);ctx.fillStyle='#42555a';ctx.fill();ctx.strokeStyle='#75c99c';ctx.lineWidth=3;ctx.stroke();
+    roundedRect(993,402,32,80,4);ctx.fillStyle='#42555a';ctx.fill();ctx.strokeStyle='#75c99c';ctx.lineWidth=3;ctx.stroke();
+    for(let y=408;y<479;y+=9){line([[870,y],[892,y]],'#d1a657',2);line([[998,y],[1020,y]],'#d1a657',2)}
+    // Rotor rim and field poles, separated from the stator by a narrow air gap
+    roundedRect(904,409,25,67,3);ctx.fillStyle='#33484d';ctx.fill();ctx.strokeStyle='#69b0d8';ctx.lineWidth=3;ctx.stroke();
+    roundedRect(961,409,25,67,3);ctx.fillStyle='#33484d';ctx.fill();ctx.strokeStyle='#69b0d8';ctx.lineWidth=3;ctx.stroke();
+    const polePulse=.55+.35*Math.sin(state.angle*.7);ctx.globalAlpha=polePulse;for(let y=416;y<470;y+=17){roundedRect(928,y,6,11,1);ctx.fillStyle='#df765d';ctx.fill();roundedRect(956,y,6,11,1);ctx.fillStyle='#6faed4';ctx.fill()}ctx.globalAlpha=1;
+    // Rotor spider arms join the shaft to the rim on both sides
+    line([[945,430],[918,430]],'#73868c',9);line([[945,454],[918,454]],'#73868c',9);line([[945,430],[973,430]],'#73868c',9);line([[945,454],[973,454]],'#73868c',9);
+    ellipse(945,442,15,28,'#516369','#aab7ba',2);
+    // Air coolers outside the frame
+    for(let i=0;i<3;i++){roundedRect(829,405+i*25,22,18,3);ctx.fillStyle='#33565b';ctx.fill();ctx.strokeStyle='#76b4ac';ctx.stroke();for(let y=410+i*25;y<420+i*25;y+=4)line([[833,y],[847,y]],'#79bdb4',1)}
+    // Exciter and thrust-bearing enclosure above/below the rotor
+    roundedRect(915,350,60,25,6);ctx.fillStyle='#34464b';ctx.fill();ctx.strokeStyle='#d7bd6b';ctx.lineWidth=2;ctx.stroke();
+    roundedRect(895,500,100,27,6);ctx.fillStyle='#66563e';ctx.fill();ctx.strokeStyle='#d2b56c';ctx.lineWidth=2;ctx.stroke();
+    for(let x=906;x<985;x+=13){roundedRect(x,507,9,12,3);ctx.fillStyle='#9a7b45';ctx.fill()}
+    // Generator brakes and lower guide bearing
+    roundedRect(872,474,28,16,3);ctx.fillStyle='#754f42';ctx.fill();ctx.strokeStyle='#d28665';ctx.stroke();
+    ellipse(945,548,31,12,'#6b5b42','#d5b66d',2);
+
+    // Turbine head cover and shaft seal
+    poly([[884,574],[1006,574],[992,592],[898,592]],'#64767c','#b8c5c8',2);
+    ellipse(945,575,17,7,'#293a40','#d1b266',2);
+    // Spiral case is below the generator and receives the penstock from the left
+    ctx.save();ctx.strokeStyle='#a96727';ctx.lineWidth=34;ctx.beginPath();ctx.ellipse(932,612,88,45,-.06,.2,Math.PI*2.08);ctx.stroke();ctx.restore();
+    line([[836,594],[872,598]],'#a96727',34);
+    // Stay vanes and wicket gates in diametral section
+    for(let i=0;i<5;i++){const y=594+i*9;line([[892,y],[912,y+5]],'#75868b',4);line([[978,y+5],[998,y]],'#75868b',4)}
+    for(let i=0;i<4;i++){const y=600+i*10;line([[914,y],[927,y+5]],'#e0b767',3);line([[963,y+5],[976,y]],'#e0b767',3)}
+    line([[875,552],[902,590]],'#d4a75b',4);
+    // Francis runner section: crown, curved blades and band
+    poly([[929,604],[961,604],[958,616],[952,633],[938,633],[932,616]],'#52696e','#e1a957',2);
+    for(let i=0;i<4;i++){const x=935+i*7;ctx.beginPath();ctx.moveTo(x,610);ctx.quadraticCurveTo(x-5,620,x+1,630);ctx.strokeStyle='#e4b35f';ctx.lineWidth=2;ctx.stroke()}
+    line([[936,634],[954,634]],'#d79742',5);
+    // Governor and servomotor remain on the turbine floor
+    roundedRect(812,530,62,42,5);ctx.fillStyle='#243b42';ctx.fill();ctx.strokeStyle='#d39c4f';ctx.stroke();ellipse(826,542,7,7,'#d49d4f');line([[844,551],[904,596]],'#d8aa5f',3);
+    // Draft-tube cone, elbow and downstream maintenance gate
+    ctx.beginPath();ctx.moveTo(927,635);ctx.bezierCurveTo(918,682,936,718,1000,736);ctx.lineTo(1150,736);ctx.lineTo(1150,695);ctx.bezierCurveTo(1040,703,990,680,963,635);ctx.closePath();ctx.fillStyle='#164758';ctx.fill();ctx.strokeStyle='#84989f';ctx.lineWidth=7;ctx.stroke();
     ctx.fillStyle='#8e5b4a';ctx.fillRect(1132,691,9,47);line([[1136,691],[1136,675]],'#d8bd77',2);
+    ctx.restore();
   }
 
   function drawSpillway(){
@@ -497,49 +527,50 @@
   }
 
   function drawTailwater(){
-    const g=ctx.createLinearGradient(0,700,0,820);g.addColorStop(0,'#1f7594cc');g.addColorStop(1,'#0b3346dd');poly([[990,711],[1700,698],[1700,845],[1010,835]],g,'#4fb9d9',1.5);
-    for(let i=0;i<7;i++){let y=723+i*17;ctx.globalAlpha=.12;line([[1020,y],[1650,y+Math.sin(state.time+i)*3]],'#b6e9f5',1)}ctx.globalAlpha=1;
+    const g=ctx.createLinearGradient(0,700,0,860);g.addColorStop(0,'#1f7594cc');g.addColorStop(1,'#0b3346dd');poly([[990,711],[2400,700],[2400,865],[1010,850]],g,'#4fb9d9',1.5);
+    for(let i=0;i<8;i++){let y=723+i*18;ctx.globalAlpha=.12;line([[1020,y],[2350,y+Math.sin(state.time+i)*3]],'#b6e9f5',1)}ctx.globalAlpha=1;
   }
 
   function drawElectrical(){
-    // isolated phase bus
+    // Generating-bay electrical equipment
+    ctx.save();ctx.translate(POWER_SHIFT,0);
     line([[1005,430],[1120,430],[1160,410]],'#e4c65e',8);line([[1005,442],[1120,442],[1160,422]],'#be8743',4);
-    // transformer and containment
     roundedRect(1148,360,82,94,7);ctx.fillStyle='#445457';ctx.fill();ctx.strokeStyle='#d7c66c';ctx.lineWidth=2;ctx.stroke();
     for(let i=0;i<7;i++){ctx.fillStyle='#718184';ctx.fillRect(1157+i*10,371,5,72)}
     for(let i=0;i<3;i++){line([[1170+i*20,359],[1170+i*20,336]],'#d7c66c',3);ellipse(1170+i*20,334,5,5,'#a66a45')}
     poly([[1138,456],[1240,456],[1251,470],[1129,470]],'#313b3e','#9d7047',2);
-    // generator breaker, station-service transformer and switchgear
     roundedRect(1109,418,20,34,3);ctx.fillStyle='#654a43';ctx.fill();ctx.strokeStyle='#dfbd65';ctx.stroke();
     roundedRect(1150,478,42,48,5);ctx.fillStyle='#3f5054';ctx.fill();ctx.strokeStyle='#c4b85f';ctx.stroke();for(let i=0;i<4;i++)line([[1158+i*8,485],[1158+i*8,518]],'#708286',3);
     for(let i=0;i<4;i++){roundedRect(1058+i*12,472,10,29,2);ctx.fillStyle=i%2?'#3b5661':'#273d46';ctx.fill();ctx.strokeStyle='#83999f';ctx.stroke()}
-    // switchyard gantries
+    ctx.restore();
+
+    // Switchyard is separated from the powerhouse by the transformer fire-clearance area
+    ctx.save();ctx.translate(SWITCH_SHIFT,0);
     for(let x=1280;x<=1430;x+=75){line([[x,450],[x,292]],'#74878c',5);line([[x-25,310],[x+36,310]],'#74878c',5);for(let j=0;j<3;j++){line([[x-13+j*18,310],[x-13+j*18,335]],'#d0c06c',2);ellipse(x-13+j*18,338,4,7,'#8aa4a8')}}
-    // bus bars and breakers
     line([[1255,350],[1468,350]],'#dfc45c',4);for(let x=1280;x<1450;x+=55){line([[x,350],[x,410]],'#d9bb57',2);roundedRect(x-6,382,12,20,2);ctx.fillStyle='#85584b';ctx.fill()}
-    // disconnect blades and surge arresters
     for(let x=1280;x<=1400;x+=60){line([[x-7,365],[x+8,354]],'#d7d0a0',2);for(let i=0;i<4;i++)ellipse(x-10,330+i*5,5,2,'#7c999f')}
-    // pylons and outgoing lines
     line([[1480,430],[1480,250]],'#677a80',5);line([[1438,300],[1522,300]],'#677a80',4);line([[1452,338],[1508,338]],'#677a80',4);line([[1480,250],[1438,430]],'#677a80',2);line([[1480,250],[1522,430]],'#677a80',2);
     for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(1495,300+i*19);ctx.bezierCurveTo(1580,320+i*20,1640,305+i*22,1730,318+i*20);ctx.strokeStyle='#dfc45f';ctx.lineWidth=2;ctx.stroke()}
-    // animated power pulses
-    if(state.flow>5){for(let i=0;i<5;i++){const p=(state.time*.18+i/5)%1;ellipse(1010+p*470,430-p*95,4,4,'#fff2a0')}}
+    ctx.restore();
+    if(state.flow>5){for(let i=0;i<6;i++){const p=(state.time*.16+i/6)%1;ellipse(1005+POWER_SHIFT+p*(475+SWITCH_SHIFT-POWER_SHIFT),430-p*90,3.5,3.5,'#fff2a0')}}
   }
 
   function drawFishPassage(){
     ctx.save();ctx.globalAlpha=.78;poly([[244,535],[272,526],[375,686],[345,693]],'#31464c','#79be8b',2);for(let i=0;i<8;i++)line([[260+i*13,548+i*18],[285+i*13,542+i*18]],'#95d3a3',2);ctx.restore();
     // fish-exclusion screen and tailwater aeration bubbles
     for(let x=352;x<370;x+=4)line([[x,330],[x+6,374]],'#86c594',1.4);
-    for(let i=0;i<12;i++){const x=1140+(i%4)*13,y=748-Math.sin(state.time*1.4+i)*8-(i%3)*8;ellipse(x,y,2+(i%2),2+(i%2),'transparent','#8de5ed',1)}
+    for(let i=0;i<12;i++){const x=1140+POWER_SHIFT+(i%4)*13,y=748-Math.sin(state.time*1.4+i)*8-(i%3)*8;ellipse(x,y,2+(i%2),2+(i%2),'transparent','#8de5ed',1)}
   }
 
   function drawSupportFacility(){
+    ctx.save();ctx.translate(SWITCH_SHIFT,0);
     // perimeter access road, guardhouse and maintenance shop
     poly([[1240,512],[1600,486],[1620,555],[1255,575]],'#283236','#59656a',2);line([[1270,535],[1575,510]],'#c7b568',2,[18,14]);
     roundedRect(1368,518,54,42,4);ctx.fillStyle='#3d4c51';ctx.fill();ctx.strokeStyle='#91a1a5';ctx.stroke();roundedRect(1380,528,15,12,2);ctx.fillStyle='#1b3c48';ctx.fill();
     line([[1424,540],[1460,537]],'#e1876f',4);line([[1442,538],[1442,552]],'#9da9ab',2);
     poly([[1465,485],[1560,478],[1580,506],[1572,560],[1470,566]],'#3a494f','#8c9ba0',2);poly([[1458,488],[1570,478],[1548,460],[1480,464]],'#5d6b6f','#a4b0b2',2);
     for(let x=1480;x<1555;x+=22){roundedRect(x,497,15,13,2);ctx.fillStyle='#1a3945';ctx.fill()}roundedRect(1500,531,34,32,2);ctx.fillStyle='#27383e';ctx.fill();ctx.strokeStyle='#71878d';ctx.stroke();
+    ctx.restore();
   }
 
   function bezier(p0,p1,p2,p3,t){let u=1-t;return [u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0],u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]]}
@@ -547,8 +578,11 @@
     if(!state.particles||state.flow<2)return;ctx.save();ctx.globalCompositeOperation='lighter';
     const speed=.000035*(55+state.flow);const count=Math.round(18+state.flow/13);
     for(let i=0;i<count;i++){
-      let t=(state.time*speed*1000+i/count)%1;let p=bezier([392,330],[555,330],[690,530],[930,615],t);ellipse(p[0],p[1],2.2,2.2,'#8deaff');
-      let t2=(t+.2)%1;let q=bezier([950,646],[940,710],[1040,735],[1250,730],t2);ellipse(q[0],q[1],2.1,2.1,'#78ddf5');
+      let t=(state.time*speed*1000+i/count)%1,p;
+      if(t<.56)p=bezier([392,330],[560,332],[720,510],[900,558],t/.56);
+      else p=bezier([900,558],[1010,590],[1110,595],[930+POWER_SHIFT,612],(t-.56)/.44);
+      ellipse(p[0],p[1],2.2,2.2,'#8deaff');
+      let t2=(t+.2)%1;let q=bezier([950+POWER_SHIFT,646],[940+POWER_SHIFT,710],[1040+POWER_SHIFT,735],[1250+POWER_SHIFT,730],t2);ellipse(q[0],q[1],2.1,2.1,'#78ddf5');
     }ctx.restore();
   }
 
@@ -557,15 +591,25 @@
   }
 
   function drawLabels(){
-    if(!state.labels)return;const allowed=labelsByView[state.view]||labelsByView.whole;
-    const occupied=[];
-    components.filter(c=>allowed.includes(c.n)||allowed.includes(c.s)||state.selected===c).forEach((c,idx)=>{
-      let lx=c.x+(c.x<800?-34:34),ly=c.y+(idx%2?28:-26);let w=Math.max(72,c.n.length*6.5+18),h=22;if(c.x<800)lx-=w;
-      for(const o of occupied){if(Math.abs(lx-o[0])<w*.7&&Math.abs(ly-o[1])<27)ly+=30}occupied.push([lx,ly]);
-      ctx.globalAlpha=state.hover===c||state.selected===c?1:.88;line([[c.x,c.y],[c.x<800?lx+w:lx,ly+11]],systems[c.t]+'aa',1);
-      roundedRect(lx,ly,w,h,5);ctx.fillStyle='#08141cdd';ctx.fill();ctx.strokeStyle=state.hover===c||state.selected===c?systems[c.t]:'#35505c';ctx.lineWidth=1;ctx.stroke();
-      ctx.fillStyle='#d5e3e7';ctx.font='10px ui-monospace, SFMono-Regular, Menlo, monospace';ctx.textBaseline='middle';ctx.fillText(c.n,lx+9,ly+11);ctx.globalAlpha=1;
-    });
+    if(!state.labels)return;
+    const rw=canvas.width/DPR,rh=canvas.height/DPR,allowed=labelsByView[state.view]||labelsByView.whole;
+    const screen=(c)=>({x:(c.x-state.cam.x)*state.cam.z+rw/2,y:(c.y-state.cam.y)*state.cam.z+rh/2});
+    const cr=canvas.getBoundingClientRect(),occupied=[];
+    document.querySelectorAll('.left-panel,.right-panel,.callout').forEach(el=>{const r=el.getBoundingClientRect();occupied.push({x:r.left-cr.left-5,y:r.top-cr.top-5,w:r.width+10,h:r.height+10})});
+    const collides=b=>occupied.some(o=>b.x<o.x+o.w&&b.x+b.w>o.x&&b.y<o.y+o.h&&b.y+b.h>o.y);
+    const list=components.filter(c=>allowed.includes(c.n)||state.selected===c).sort((a,b)=>(state.selected===b)-(state.selected===a));
+    ctx.save();ctx.setTransform(DPR,0,0,DPR,0,0);ctx.font='11px ui-monospace, SFMono-Regular, Menlo, monospace';ctx.textBaseline='middle';
+    list.forEach(c=>{
+      const p=screen(c);if(p.x<-30||p.x>rw+30||p.y<-30||p.y>rh+30)return;
+      const w=Math.ceil(ctx.measureText(c.n).width)+18,h=25;
+      const candidates=[[p.x+18,p.y-13],[p.x-w-18,p.y-13],[p.x-w/2,p.y-42],[p.x-w/2,p.y+17],[p.x+16,p.y-43],[p.x-w-16,p.y+18]];
+      let box=null;for(const q of candidates){const b={x:q[0],y:q[1],w,h};if(b.x>8&&b.y>8&&b.x+b.w<rw-8&&b.y+b.h<rh-8&&!collides(b)){box=b;break}}
+      if(!box&&state.selected===c)box={x:Math.max(8,Math.min(rw-w-8,p.x+18)),y:Math.max(8,Math.min(rh-h-8,p.y-13)),w,h};
+      if(!box)return;occupied.push(box);
+      const ex=Math.max(box.x,Math.min(p.x,box.x+box.w)),ey=Math.max(box.y,Math.min(p.y,box.y+box.h));ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(ex,ey);ctx.strokeStyle=systems[c.t]+'aa';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.roundRect(box.x,box.y,box.w,box.h,5);ctx.fillStyle='#08141eea';ctx.fill();ctx.strokeStyle=state.selected===c||state.hover===c?systems[c.t]:'#3b525d';ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle='#dbe7ea';ctx.fillText(c.n,box.x+9,box.y+h/2);
+    });ctx.restore();
   }
 
   function drawMarkers(){
@@ -575,9 +619,9 @@
 
   function draw(){
     const rw=canvas.width/DPR,rh=canvas.height/DPR;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,canvas.width,canvas.height);worldTransform();
-    drawSky();drawFoundation();drawReservoir();drawDam();drawFishPassage();drawIntakeAndPenstock();drawPowerhouse();drawPlantServices();drawSpillway();drawTurbineGenerator();drawTailwater();drawSupportFacility();drawElectrical();drawParticles();drawInstrumentation();drawMarkers();drawLabels();
+    drawSky();drawFoundation();drawReservoir();drawTailwater();drawDam();drawFishPassage();drawIntakeAndPenstock();drawPowerhouse();drawPlantServices();drawSpillway();drawTurbineGenerator();drawSupportFacility();drawElectrical();drawParticles();drawInstrumentation();drawMarkers();
     // viewport vignette in screen space
-    ctx.setTransform(DPR,0,0,DPR,0,0);const vg=ctx.createRadialGradient(rw/2,rh/2,Math.min(rw,rh)*.25,rw/2,rh/2,Math.max(rw,rh)*.75);vg.addColorStop(0,'transparent');vg.addColorStop(1,'#03090dc9');ctx.fillStyle=vg;ctx.fillRect(0,0,rw,rh);
+    ctx.setTransform(DPR,0,0,DPR,0,0);const vg=ctx.createRadialGradient(rw/2,rh/2,Math.min(rw,rh)*.25,rw/2,rh/2,Math.max(rw,rh)*.75);vg.addColorStop(0,'transparent');vg.addColorStop(1,'#03090da8');ctx.fillStyle=vg;ctx.fillRect(0,0,rw,rh);drawLabels();
   }
 
   function update(dt){
@@ -586,6 +630,7 @@
     if(state.tour){state.tourTimer+=dt;if(state.tourTimer>7){state.tourTimer=0;const keys=Object.keys(views);setView(keys[(keys.indexOf(state.view)+1)%keys.length])}}
     const power=1000*9.81*state.flow*84*.92/1e6;document.getElementById('powerValue').textContent=Math.round(power)+' MW';
     document.getElementById('flowValue').textContent=Math.round(state.flow)+' m³/s';document.getElementById('flowOut').textContent=Math.round(state.flow)+' m³/s';document.getElementById('spillOut').textContent=Math.round(state.spill)+'%';
+    document.getElementById('zoomReadout').textContent=Math.round(state.cam.z*100)+'%';
     const status=state.flow<3?'Unit stopped':state.flow<80?'Unit spinning up':'Unit synchronized';document.getElementById('statusText').textContent=status;document.querySelector('.status-dot').style.background=state.flow<3?'#f17b68':state.flow<80?'#e7ac54':'#65d09a';
   }
 
@@ -600,7 +645,7 @@
     document.getElementById('systemName').textContent=c.s;document.getElementById('componentName').textContent=c.n;document.getElementById('componentTag').textContent=c.tag;document.getElementById('componentText').textContent=c.d;
     document.getElementById('detailType').textContent=typeNames[c.t]||'Facility';document.getElementById('detailUnit').textContent=['turbine','generator'].includes(c.t)?'Generating unit':'Plant-wide';
     document.getElementById('detailPath').textContent=c.t==='water'?'Hydraulic':['electrical','generator'].includes(c.t)?'Electrical':['turbine','services'].includes(c.t)?'Mechanical':'Supporting';document.getElementById('detailState').textContent=state.flow<3?'Standstill':'In service';
-    if(focus)state.target={x:c.x,y:c.y,z:c.r<16?2.55:2.15};
+    if(focus)state.target={x:c.x,y:c.y,z:c.r<16?4.6:3.4};
   }
 
   const indexPanel=document.getElementById('indexPanel'),termList=document.getElementById('termList'),termSearch=document.getElementById('termSearch');
@@ -618,16 +663,17 @@
   canvas.addEventListener('pointermove',e=>{if(state.drag){const dx=e.clientX-state.px,dy=e.clientY-state.py;state.target.x-=dx/state.cam.z;state.target.y-=dy/state.cam.z;state.px=e.clientX;state.py=e.clientY}else{const p=screenToWorld(e.clientX,e.clientY);state.hover=nearest(...p);canvas.style.cursor=state.hover?'pointer':'grab'}});
   canvas.addEventListener('pointerup',e=>{if(Math.hypot(e.clientX-state.sx,e.clientY-state.sy)<5){const p=screenToWorld(e.clientX,e.clientY),c=nearest(...p);if(c)inspect(c)}state.drag=false});
   canvas.addEventListener('pointerleave',()=>{state.hover=null;state.drag=false});
-  canvas.addEventListener('wheel',e=>{e.preventDefault();const old=state.target.z,nz=Math.max(.55,Math.min(3.2,old*Math.exp(-e.deltaY*.001)));const p=screenToWorld(e.clientX,e.clientY);state.target.x=p[0]-(p[0]-state.target.x)*old/nz;state.target.y=p[1]-(p[1]-state.target.y)*old/nz;state.target.z=nz},{passive:false});
+  canvas.addEventListener('wheel',e=>{e.preventDefault();const old=state.target.z,nz=Math.max(.4,Math.min(7,old*Math.exp(-e.deltaY*.0012)));const p=screenToWorld(e.clientX,e.clientY);state.target.x=p[0]-(p[0]-state.target.x)*old/nz;state.target.y=p[1]-(p[1]-state.target.y)*old/nz;state.target.z=nz},{passive:false});
   document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
   [['labelsBtn','labels'],['flowBtn','particles'],['xrayBtn','xray'],['tourBtn','tour']].forEach(([id,key])=>document.getElementById(id).addEventListener('click',e=>{state[key]=!state[key];e.currentTarget.setAttribute('aria-pressed',String(state[key]));if(key==='tour')state.tourTimer=0}));
   document.getElementById('indexBtn').addEventListener('click',()=>indexPanel.hidden?openIndex():closeIndex());document.getElementById('indexClose').addEventListener('click',closeIndex);termSearch.addEventListener('input',()=>buildIndex(termSearch.value));
   document.getElementById('resetBtn').addEventListener('click',()=>{state.selected=null;setView('whole')});
+  document.getElementById('zoomOutBtn').addEventListener('click',()=>state.target.z=Math.max(.4,state.target.z/1.35));document.getElementById('zoomInBtn').addEventListener('click',()=>state.target.z=Math.min(7,state.target.z*1.35));
   const flowSlider=document.getElementById('flowSlider'),spillSlider=document.getElementById('spillSlider');flowSlider.addEventListener('input',()=>state.flow=+flowSlider.value);spillSlider.addEventListener('input',()=>state.spill=+spillSlider.value);
   function setPreset(name){let f=420,s=0,v='whole';if(name==='flood'){f=500;s=82;v='spillway'}if(name==='shutdown'){f=0;s=18;v='hydraulic'}flowSlider.value=f;spillSlider.value=s;state.flow=f;state.spill=s;setView(v)}
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>setPreset(b.dataset.preset)));
   document.getElementById('aboutBtn').addEventListener('click',()=>document.getElementById('aboutPanel').hidden=false);document.getElementById('aboutClose').addEventListener('click',()=>document.getElementById('aboutPanel').hidden=true);
-  document.addEventListener('keydown',e=>{if(!e.target.matches('input')&&/[1-8]/.test(e.key))setView(Object.keys(views)[+e.key-1]);if(!e.target.matches('input')&&e.key.toLowerCase()==='l')document.getElementById('labelsBtn').click();if(!e.target.matches('input')&&e.key.toLowerCase()==='f')document.getElementById('flowBtn').click();if(!e.target.matches('input')&&e.key.toLowerCase()==='i')openIndex();if(e.key==='Escape'){document.getElementById('aboutPanel').hidden=true;closeIndex();state.selected=null}if(!e.target.matches('input')&&(e.key==='+'||e.key==='='))state.target.z=Math.min(3.2,state.target.z*1.18);if(!e.target.matches('input')&&e.key==='-')state.target.z=Math.max(.55,state.target.z/1.18)});
+  document.addEventListener('keydown',e=>{if(!e.target.matches('input')&&/[1-8]/.test(e.key))setView(Object.keys(views)[+e.key-1]);if(!e.target.matches('input')&&e.key.toLowerCase()==='l')document.getElementById('labelsBtn').click();if(!e.target.matches('input')&&e.key.toLowerCase()==='f')document.getElementById('flowBtn').click();if(!e.target.matches('input')&&e.key.toLowerCase()==='i')openIndex();if(e.key==='Escape'){document.getElementById('aboutPanel').hidden=true;closeIndex();state.selected=null}if(!e.target.matches('input')&&(e.key==='+'||e.key==='='))state.target.z=Math.min(7,state.target.z*1.22);if(!e.target.matches('input')&&e.key==='-')state.target.z=Math.max(.4,state.target.z/1.22)});
 })();
 </script>
 </body>
