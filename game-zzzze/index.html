@@ -1,1 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Television Teardown — Interactive Cutaway</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#131a23; --panel:#161d27; --line:#25303d; --line2:#33404f;
+  --ink:#c9d6e2; --dim:#7c8a9a; --hot:#4fd6c0; --hot2:#ffb454;
+  --bad:#ff6b6b; --good:#7ee787;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased}
+#app{display:flex;flex-direction:column;height:100%}
 
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 14px;
+  background:var(--panel);border-bottom:1px solid var(--line);z-index:20}
+.brand{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);white-space:nowrap}
+.brand b{color:var(--ink);font-weight:600}
+.grp{display:flex;gap:6px;align-items:center}
+.sep{width:1px;height:22px;background:var(--line2)}
+button.tb{font-family:var(--mono);font-size:11px;letter-spacing:.06em;background:var(--bg2);
+  color:var(--ink);border:1px solid var(--line2);padding:6px 10px;border-radius:4px;cursor:pointer;
+  white-space:nowrap;transition:background .15s,border-color .15s,color .15s}
+button.tb:hover{background:#1d2733;border-color:#4a5b6d}
+button.tb.on{background:rgba(79,214,192,.14);border-color:var(--hot);color:var(--hot)}
+button.tb.quiz.on{background:rgba(255,180,84,.14);border-color:var(--hot2);color:var(--hot2)}
+button.tb.flip{background:rgba(200,215,235,.08);border-color:#5a6b7d}
+button.tb:focus-visible,input:focus-visible,li:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+.sideTag{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--hot);
+  border:1px solid var(--line2);padding:5px 8px;border-radius:4px;background:var(--bg2)}
+.zoomread{font-family:var(--mono);font-size:11px;color:var(--dim);min-width:60px;text-align:right}
+
+main{flex:1;display:flex;min-height:0;position:relative}
+#stage{flex:1;position:relative;min-width:0;
+  background:radial-gradient(ellipse at 50% 42%, #16202b 0%, #0d1117 70%);
+  touch-action:none;cursor:grab;overflow:hidden}
+#stage.drag{cursor:grabbing}
+#stage.busy{cursor:default}
+svg#scene{width:100%;height:100%;display:block}
+
+aside{width:330px;flex:0 0 330px;background:var(--panel);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;min-height:0}
+.sect{padding:12px 14px;border-bottom:1px solid var(--line)}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+#selName{font-size:17px;font-weight:600;line-height:1.25;margin:0 0 6px}
+#selMeta{font-family:var(--mono);font-size:10.5px;color:var(--hot);letter-spacing:.05em;margin:0 0 8px}
+#selDesc{font-size:13.5px;line-height:1.55;color:#aebbc9;margin:0}
+#selHint{font-size:12.5px;line-height:1.5;color:var(--dim);margin:0}
+#search{width:100%;font-family:var(--mono);font-size:12px;padding:7px 9px;border-radius:4px;
+  background:var(--bg2);border:1px solid var(--line2);color:var(--ink)}
+#search::placeholder{color:#5d6b7a}
+#list{flex:1;overflow-y:auto;margin:0;padding:4px 0 20px;list-style:none;min-height:0}
+#list li{font-family:var(--mono);font-size:11.5px;padding:5px 14px;cursor:pointer;color:#9fb0c0;
+  display:flex;gap:8px;align-items:baseline;border-left:2px solid transparent}
+#list li:hover{background:#1b2531;color:#e2ecf5}
+#list li.sel{background:rgba(79,214,192,.1);border-left-color:var(--hot);color:var(--hot)}
+#list li .num{color:#5d6b7a;font-size:10px;min-width:20px;text-align:right;flex:0 0 auto}
+#list li .side{color:#4a5766;font-size:9.5px;margin-left:auto;flex:0 0 auto;letter-spacing:.08em}
+#list::-webkit-scrollbar{width:8px}
+#list::-webkit-scrollbar-thumb{background:#2b3745;border-radius:4px}
+
+#quizBox{display:none;padding:12px 14px;border-bottom:1px solid var(--line);background:rgba(255,180,84,.05)}
+#quizBox.show{display:block}
+#qPrompt{font-size:15px;font-weight:600;margin:0 0 4px;line-height:1.3}
+#qTarget{color:var(--hot2)}
+#qFeed{font-family:var(--mono);font-size:11.5px;margin:8px 0 0;min-height:16px}
+#qFeed.ok{color:var(--good)} #qFeed.no{color:var(--bad)}
+.qrow{display:flex;gap:6px;margin-top:9px;align-items:center;flex-wrap:wrap}
+.score{font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:auto}
+
+#tip{position:fixed;pointer-events:none;z-index:60;opacity:0;transition:opacity .1s;
+  background:#0a0e13;border:1px solid var(--line2);border-radius:4px;padding:5px 8px;
+  font-family:var(--mono);font-size:11px;color:#e2ecf5;max-width:250px;box-shadow:0 6px 18px rgba(0,0,0,.5)}
+#tip.show{opacity:1}
+
+.hit{cursor:pointer}
+.hit .body{transition:filter .12s}
+.hit:hover .body{filter:brightness(1.5)}
+.lbl{pointer-events:none;font-family:var(--mono);fill:#dbe6f0;user-select:none}
+.sel-ring{fill:none;stroke:var(--hot);stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+.quiz-ring{stroke:var(--hot2)}
+.deco{pointer-events:none}
+.labels-off .lbl{display:none}
+
+#gCover,#gBezel{transition:transform .85s cubic-bezier(.16,.84,.3,1),opacity .85s ease;
+  transform-box:fill-box;transform-origin:center}
+#gCover.off{transform:translate(560px,-1180px) rotate(-13deg);opacity:.2}
+#gBezel.off{transform:translate(-1420px,560px) rotate(-9deg);opacity:.2}
+.stackLayer{transition:transform .8s cubic-bezier(.16,.84,.3,1)}
+#gInside,#gBezelIn{transition:opacity .6s}
+
+@media (prefers-reduced-motion: reduce){#gCover,#gBezel,.stackLayer,#gInside,#gBezelIn{transition:none}}
+@media (max-width:940px){
+  aside{position:absolute;right:0;top:0;bottom:0;width:290px;flex:none;z-index:30;
+    transform:translateX(100%);transition:transform .25s;box-shadow:-8px 0 24px rgba(0,0,0,.5)}
+  aside.open{transform:none}
+  .brand{display:none}
+}
+#panelToggle{display:none}
+@media (max-width:940px){#panelToggle{display:inline-block}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<header>
+  <div class="brand"><b>TELEVISION</b> / CUTAWAY</div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="tb flip" id="btnFlip">Flip to front ⟳</button>
+    <span class="sideTag" id="sideTag">BACK</span>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="tb" id="btnCover">Back cover</button>
+    <button class="tb" id="btnBezel">Front bezel</button>
+    <button class="tb" id="btnStack">Explode stack</button>
+  </div>
+  <div class="sep"></div>
+  <div class="grp">
+    <button class="tb" id="btnOut" title="Zoom out (−)">−</button>
+    <span class="zoomread" id="zoomRead">1.00×</span>
+    <button class="tb" id="btnIn" title="Zoom in (+)">+</button>
+    <button class="tb" id="btnFit" title="Fit all (R)">Fit</button>
+    <button class="tb on" id="btnLabels">Labels</button>
+  </div>
+  <div class="sep"></div>
+  <button class="tb quiz" id="btnQuiz">Locate test</button>
+  <button class="tb" id="panelToggle">Info</button>
+</header>
+
+<main>
+  <div id="stage"><svg id="scene" xmlns="http://www.w3.org/2000/svg"></svg></div>
+
+  <aside id="aside">
+    <div id="quizBox">
+      <p class="eyebrow">Locate test</p>
+      <p id="qPrompt">Locate: <span id="qTarget">—</span></p>
+      <p id="qFeed"></p>
+      <div class="qrow">
+        <button class="tb" id="qSkip">Skip</button>
+        <button class="tb" id="qNext">Next</button>
+        <button class="tb" id="qReset">Restart</button>
+        <span class="score" id="qScore">0 / 0</span>
+      </div>
+    </div>
+
+    <div class="sect">
+      <p class="eyebrow">Selected part</p>
+      <h2 id="selName">Nothing selected</h2>
+      <p id="selMeta"></p>
+      <p id="selDesc"></p>
+      <p id="selHint">Flip the set to work the other side. Scroll or pinch to zoom, drag to pan, click a part to identify it, double-click to fly to it.</p>
+    </div>
+
+    <div class="sect">
+      <p class="eyebrow">Index — <span id="count">0</span> terms</p>
+      <input id="search" type="text" placeholder="filter terms…" autocomplete="off" spellcheck="false">
+    </div>
+    <ul id="list"></ul>
+  </aside>
+</main>
+</div>
+<div id="tip"></div>
+
+<script>
+/* ============================================================
+   PART DATA — 79 terms
+   layer codes
+     'in' inside chassis   → BACK side,  back cover removed
+     'bz' behind bezel     → FRONT side, bezel removed
+     'fr' front surface    → FRONT side, always
+     'st' panel stack      → always (cross-section sits beside the set)
+   alts: extra hotspots for the same term elsewhere in the scene
+   ============================================================ */
+const P = [
+
+/* ---------- POWER SUPPLY BOARD (back) ---------- */
+{id:'psu', n:'Power Supply Unit (PSU)', layer:'in', kind:'board', x:250,y:630,w:910,h:565, tier:1,
+ d:'The switch-mode converter board that turns AC mains into every DC rail the set needs. Primary side (hot, mains-referenced) and secondary side (cold, chassis-referenced) are separated by the transformer and an isolation slot cut through the PCB.'},
+{id:'acin', n:'AC Inlet & Fuse', layer:'in', kind:'port', x:260,y:686,w:216,h:100, tier:2,
+ d:'Mains entry point: IEC socket or captive cord, a slow-blow fuse, an X/Y capacitor and common-mode choke EMI filter, and often an NTC inrush limiter. The fuse is a symptom, not a cause — a blown one usually means a shorted MOSFET or rectifier downstream.'},
+{id:'bridge', n:'Bridge Rectifier', layer:'in', kind:'ic', x:484,y:686,w:216,h:100, tier:2,
+ d:'Four diodes in a single package converting the AC sine into pulsating DC, feeding roughly 160 VDC (120 V mains) or 325 VDC (230 V mains) onto the bulk rail.'},
+{id:'pfc', n:'Power Factor Correction (PFC) Circuit', layer:'in', kind:'region', x:708,y:686,w:216,h:100, tier:2,
+ d:'A boost converter that forces input current to track the mains voltage waveform, raising power factor toward unity and lifting the bulk rail to a regulated ~380–400 VDC. Required on most sets above ~75 W.'},
+{id:'bulk', n:'Bulk Filter Capacitors', layer:'in', kind:'cap', x:932,y:686,w:216,h:100, tier:2,
+ d:'Large high-voltage electrolytics that store energy between mains half-cycles and hold the primary rail steady under load. Bulging tops, vented X-scores or ESR drift here are the classic cause of a set that clicks but will not start.'},
+{id:'smps', n:'Switching Regulator (SMPS)', layer:'in', kind:'ic', x:260,y:794,w:291,h:100, tier:2,
+ d:'The PWM/PFM controller chopping the high-voltage rail at tens to hundreds of kilohertz. It reads output feedback through an optocoupler and adjusts duty cycle to hold regulation across the isolation barrier.'},
+{id:'mosfet', n:'MOSFET Switches', layer:'in', kind:'ic', x:559,y:794,w:291,h:100, tier:2,
+ d:'The primary-side power transistors that actually do the chopping, usually in a half-bridge or LLC resonant pair on a shared heatsink. They fail short far more often than open, taking the fuse with them.'},
+{id:'trafo', n:'Transformer', layer:'in', kind:'trafo', x:858,y:794,w:291,h:100, tier:2,
+ d:'The main switching transformer: steps the chopped high-voltage down and provides the galvanic isolation that keeps user-accessible metal off the mains. Multiple secondaries feed the separate output rails.'},
+{id:'standby', n:'Standby Power / Standby Transformer', layer:'in', kind:'trafo', x:260,y:902,w:291,h:100, tier:2,
+ d:'A small always-on auxiliary supply (typically 3.3 V or 5 VSB) that keeps the IR receiver, the CPU\'s wake logic and the network wake circuit alive while the main rails are shut down.'},
+{id:'vreg', n:'Voltage Regulator / DC-DC Converter', layer:'in', kind:'ic', x:559,y:902,w:291,h:100, tier:2,
+ d:'Point-of-load buck, boost or LDO stages that derive local voltages — 5 V, 3.3 V, 1.8 V, 1.1 V core — from the incoming rails, close to the load they feed.'},
+{id:'cap', n:'Capacitor / Filter Capacitors', layer:'in', kind:'cap', x:858,y:902,w:291,h:100, tier:2,
+ d:'Secondary-side bulk and decoupling capacitance that smooths rectified switching pulses into clean DC and supplies transient current the converter cannot deliver fast enough.'},
+{id:'rails', n:'Secondary Rails', layer:'in', kind:'conn', x:260,y:1010,w:291,h:100, tier:2,
+ d:'The regulated outputs leaving the PSU on the main harness — commonly 12 V (audio and system), 5 V (standby and USB), 3.3 V (logic) and a separate high-current LED rail. Measure these at the connector first when diagnosing a dead set.'},
+{id:'pgood', n:'Power-Good Signal', layer:'in', kind:'concept', x:559,y:1010,w:291,h:100, tier:3,
+ d:'A logic-level handshake asserted by the PSU once all rails are inside tolerance, releasing the main SoC from reset. Without it the board stays held down even though voltage is present.'},
+{id:'pson', n:'PS_ON / Power-On Signal', layer:'in', kind:'concept', x:858,y:1010,w:291,h:100, tier:3,
+ d:'The command line running the other direction: the main board pulls PS_ON active to tell the PSU to start the main rails. If PS_ON never asserts, the fault is upstream on the main board, not in the supply.'},
+{id:'ledrv', n:'Inverter Board / LED Driver', layer:'in', kind:'region', x:260,y:1118,w:291,h:77, tier:2,
+ d:'A boost converter driving the backlight strings at 50–200 V constant current, with per-string current sinks and PWM dimming. On CCFL-era sets this was a true high-voltage inverter; on LED sets the name survives as a habit.'},
+{id:'gnd', n:'Ground', layer:'in', kind:'concept', x:559,y:1118,w:291,h:77, tier:3,
+ d:'The common 0 V return for a circuit domain. A TV has several that are deliberately kept separate — primary hot ground, secondary signal ground, and chassis — bonded only at designed points.'},
+{id:'cgnd', n:'Chassis Ground', layer:'in', kind:'concept', x:858,y:1118,w:291,h:77, tier:3,
+ d:'The metal frame itself, used as a low-impedance reference and shield return, tied to boards through screw bosses and star washers. A loose or corroded chassis screw shows up as buzz, hum bars, or intermittent shutdown.'},
+
+/* ---------- MAIN BOARD (back) ---------- */
+{id:'main', n:'Main Board / Motherboard', layer:'in', kind:'board', x:1230,y:630,w:1005,h:565, tier:1,
+ d:'The system board carrying the SoC, memory, storage, tuner, network radios and every external port. Everything the set does that is not power conversion or pixel driving happens here.'},
+{id:'cpu', n:'CPU (Central Processing Unit)', layer:'in', kind:'ic', x:1240,y:686,w:157,h:100, tier:2,
+ d:'The application-processor cores inside the SoC, running the operating system, apps, HDMI negotiation and user interface. Usually a multi-core ARM cluster, not a discrete chip you can separate from the GPU.'},
+{id:'gpu', n:'GPU / Video Processor', layer:'in', kind:'ic', x:1405,y:686,w:157,h:100, tier:2,
+ d:'The graphics and video engine: UI compositing, hardware decode of H.264/HEVC/AV1, motion estimation, noise reduction and HDR tone mapping before the image reaches the scaler.'},
+{id:'scaler', n:'Scaler Chip / Video Processor', layer:'in', kind:'ic', x:1570,y:686,w:157,h:100, tier:2,
+ d:'Converts whatever resolution and frame rate arrives at the input into the panel\'s fixed native format — resampling, deinterlacing, frame-rate conversion and color-space conversion. On modern sets it is a block inside the SoC rather than a separate part.'},
+{id:'ram', n:'RAM (DDR/LPDDR)', layer:'in', kind:'ic', x:1735,y:686,w:157,h:100, tier:2,
+ d:'Volatile working memory for the OS, apps and video frame buffers, typically 2–8 GB of DDR4 or LPDDR4/5 in one or two packages routed as tightly length-matched fly-by or point-to-point channels.'},
+{id:'flash', n:'EEPROM / Flash Memory / eMMC', layer:'in', kind:'ic', x:1900,y:686,w:157,h:100, tier:2,
+ d:'Non-volatile storage: a small serial EEPROM for panel and factory parameters, plus eMMC or NAND holding the operating system, apps and user settings. Worn eMMC is a common cause of boot loops on older smart sets.'},
+{id:'fw', n:'Firmware', layer:'in', kind:'concept', x:2065,y:686,w:157,h:100, tier:3,
+ d:'The stored software image — bootloader, kernel, drivers, panel calibration tables and application layer — that defines the set\'s behavior. Updated over network or USB; a failed write during update bricks the board.'},
+{id:'hdmirx', n:'HDMI Controller / Receiver IC', layer:'in', kind:'ic', x:1240,y:794,w:157,h:100, tier:2,
+ d:'Terminates the TMDS or FRL lanes from each HDMI input, recovers the clock, deserializes, decrypts and hands parallel video to the processor. Also manages hot-plug detect and the DDC bus.'},
+{id:'arc', n:'ARC / eARC Audio Return Channel', layer:'in', kind:'concept', x:1405,y:794,w:157,h:100, tier:3,
+ d:'Sends the TV\'s own audio back upstream over HDMI to a soundbar or receiver. ARC borrows the utility pins for compressed 5.1; eARC uses a dedicated high-bandwidth link for uncompressed multichannel and Atmos.'},
+{id:'cec', n:'CEC (Consumer Electronics Control)', layer:'in', kind:'concept', x:1570,y:794,w:157,h:100, tier:3,
+ d:'A single-wire, low-speed control bus on HDMI pin 13 letting devices power each other on, switch inputs and share volume commands. Every brand markets it under its own name.'},
+{id:'hdcp', n:'HDCP', layer:'in', kind:'concept', x:1735,y:794,w:157,h:100, tier:3,
+ d:'High-bandwidth Digital Content Protection: the link encryption and key exchange between source and display. A failed handshake is the usual reason for a black screen with working audio on a protected stream.'},
+{id:'edid', n:'EDID', layer:'in', kind:'concept', x:1900,y:794,w:157,h:100, tier:3,
+ d:'Extended Display Identification Data — a small table in EEPROM, read by the source over the DDC I²C lines, declaring supported resolutions, refresh rates, color formats and audio capabilities. Corrupt EDID makes a source pick the wrong mode or refuse to output.'},
+{id:'lvlshift', n:'Level Shifter IC', layer:'in', kind:'ic', x:2065,y:794,w:157,h:100, tier:3,
+ d:'Translates logic between voltage domains — 1.8 V SoC I/O to 3.3 V peripherals, for example — so buses can cross domains without over-driving inputs.'},
+{id:'wifi', n:'Wi-Fi / Bluetooth Module', layer:'in', kind:'shield', x:1240,y:902,w:157,h:100, tier:2,
+ d:'A shielded combo radio card carrying the wireless MAC/PHY, RF front end and antenna connectors, mounted as a module so one board can be certified across regions.'},
+{id:'btrf', n:'Bluetooth / RF Remote Module', layer:'in', kind:'shield', x:1405,y:902,w:157,h:100, tier:2,
+ d:'The 2.4 GHz link for BLE or proprietary RF remotes, game controllers and voice mics. Unlike IR it needs no line of sight and carries the microphone audio stream back from the remote.'},
+{id:'tuner', n:'Tuner (ATSC/QAM/Demodulator)', layer:'in', kind:'shield', x:1570,y:902,w:157,h:100, tier:2,
+ d:'A shielded silicon tuner that selects one 6 MHz RF channel from the antenna or cable feed and downconverts it to baseband or a low IF for the demodulator.'},
+{id:'demod', n:'Demodulator', layer:'in', kind:'ic', x:1735,y:902,w:157,h:100, tier:2,
+ d:'Recovers the transport stream from the modulated carrier — 8VSB for ATSC 1.0 broadcast, OFDM for ATSC 3.0, QAM for unencrypted cable — including equalization and forward error correction.'},
+{id:'ampic', n:'Audio Amplifier IC / Class-D Audio Amplifier', layer:'in', kind:'ic', x:1900,y:902,w:157,h:100, tier:2,
+ d:'A switching output stage that drives the speakers by PWM-ing the supply rail and filtering it back to audio. High efficiency and little heat, which is why the heatsink here is small or absent.'},
+{id:'dac', n:'Audio DAC and amplifier', layer:'in', kind:'ic', x:2065,y:902,w:157,h:100, tier:2,
+ d:'Converts the digital audio stream to analog and sets line level ahead of the power stage. Also feeds the headphone or line-out jack, where it is the last analog stage before the connector.'},
+{id:'xtal', n:'Crystal Oscillator & Clock Generator', layer:'in', kind:'ic', x:1240,y:1010,w:157,h:100, tier:3,
+ d:'A quartz reference — commonly 27 MHz or 24 MHz — multiplied by on-chip PLLs into the pixel clock, memory clock and CPU clock. Everything timing-related in the set derives from it.'},
+{id:'emi', n:'EMI Shielding & Ground Planes', layer:'in', kind:'shield', x:1405,y:1010,w:157,h:100, tier:2,
+ d:'Soldered or clipped metal cans over noisy sections plus continuous copper pours in the stack-up, giving return currents a tight path and keeping switching harmonics out of the tuner and out of the neighbor\'s radio.'},
+{id:'therm', n:'Thermal Management (Heatsinks & Thermal Pads)', layer:'in', kind:'heatsink', x:1570,y:1010,w:157,h:100, tier:2,
+ d:'Extruded or stamped heatsinks, gap-filler pads and the chassis itself moving heat away from the SoC and power stages. Dried-out pads and blocked vents drive the thermal shutdowns that look like random power-offs.'},
+{id:'ctrlz', n:'Controlled-Impedance Traces', layer:'in', kind:'concept', x:1735,y:1010,w:157,h:100, tier:3,
+ d:'High-speed differential pairs routed to a specific characteristic impedance — typically 100 Ω differential — by fixing trace width, spacing and dielectric height. Length-matched so both halves of a pair arrive together.'},
+{id:'esd', n:'Electrostatic Discharge (ESD)', layer:'in', kind:'concept', x:1900,y:1010,w:157,h:100, tier:3,
+ d:'The transient a charged body dumps into an exposed pin. TVs defend with TVS diode arrays and spark gaps at every connector; service technicians defend with wrist straps, because CMOS gate oxide fails long before you feel a shock.'},
+{id:'fps', n:'Frame Rate', layer:'in', kind:'concept', x:2065,y:1010,w:157,h:100, tier:3,
+ d:'How many complete images per second the source delivers — 24, 30, 60, 120. Distinct from refresh rate: the scaler must reconcile the two, which is where judder and interpolation artifacts come from.'},
+{id:'ci', n:'CI+ / Smart Card Slot', layer:'in', kind:'port', x:1240,y:1118,w:133,h:77, tier:3,
+ d:'A PCMCIA-form Common Interface slot taking a CAM module and operator smart card to descramble pay-TV. Mostly a European fitment; North American sets substitute a CableCARD slot or omit it entirely.'},
+{id:'usb', n:'USB Controller Hub / USB Host Controller', layer:'in', kind:'port', x:1381,y:1118,w:133,h:77, tier:3,
+ d:'Enumerates and powers attached devices — media drives, keyboards, dongles, sometimes a DVR recording disk. The 5 V bus power comes from the standby rail, which is why ports often stay live with the screen off.'},
+{id:'nic', n:'Network Interface Card (NIC) / Ethernet PHY', layer:'in', kind:'port', x:1522,y:1118,w:133,h:77, tier:3,
+ d:'The wired 10/100 or gigabit interface: MAC in the SoC, PHY and magnetics at the RJ45. Link and activity LEDs on the jack are the fastest way to confirm the port is alive.'},
+{id:'toslink', n:'Optical Audio (Toslink) Output', layer:'in', kind:'port', x:1663,y:1118,w:133,h:77, tier:3,
+ d:'S/PDIF over plastic fiber with an LED transmitter, galvanically isolating the TV from the audio system. Carries stereo PCM or compressed 5.1 bitstreams, but not enough bandwidth for uncompressed multichannel or Atmos.'},
+{id:'analog', n:'Legacy Analog Breakouts', layer:'in', kind:'port', x:1804,y:1118,w:133,h:77, tier:3,
+ d:'Composite, component and analog audio, usually collapsed onto shared 3.5 mm jacks with a supplied dongle to save rear-panel depth. Increasingly deleted altogether on new models.'},
+{id:'lvds', n:'LVDS Interface / eDP', layer:'in', kind:'conn', x:1945,y:1118,w:133,h:77, tier:3,
+ d:'The main-board-to-T-Con video link. LVDS carries parallel differential pairs plus a clock; eDP carries packetized data with an embedded clock and an AUX channel. The connector usually also carries panel power and the backlight enable.'},
+{id:'vbyone', n:'V-by-One HS Protocol', layer:'in', kind:'concept', x:2086,y:1118,w:133,h:77, tier:3,
+ d:'A high-speed serial link that replaced LVDS on 4K and 8K panels — clock embedded in the data, far fewer pairs, with a lane-training handshake at startup. Its training sequence failing is a common cause of intermittent no-image.'},
+
+/* ---------- T-CON + DRIVERS (back) ---------- */
+{id:'tcon', n:'T-Con (Timing Controller) Board', layer:'in', kind:'board', x:880,y:225,w:700,h:160, tier:1,
+ d:'Takes the serial video link from the main board and produces the exact drive waveforms the panel needs: pixel data to the source drivers, scan sequencing to the gate drivers, plus the reference and common voltages.'},
+{id:'gamma', n:'Gamma Correction Circuit', layer:'in', kind:'ic', x:890,y:275,w:221,h:100, tier:2,
+ d:'A programmable resistor ladder or gamma-buffer IC generating the reference voltage taps that map digital code values to transmittance, linearizing the panel\'s non-linear response. Wrong gamma reference shows as crushed blacks or a color-tinted grayscale.'},
+{id:'latch', n:'Data Latches', layer:'in', kind:'ic', x:1119,y:275,w:221,h:100, tier:2,
+ d:'Registers inside the source drivers that hold a full row of pixel values while it is being shifted in, then release the whole line simultaneously on the load strobe so the row updates as one.'},
+{id:'refresh', n:'Refresh Rate', layer:'in', kind:'concept', x:1348,y:275,w:221,h:100, tier:3,
+ d:'How many times per second the panel is re-scanned, in hertz — the panel\'s own cadence, independent of source frame rate. Variable refresh rate lets the panel wait for the source instead of repeating or dropping frames.'},
+{id:'source', n:'Source Drivers (Column Drivers)', layer:'in', kind:'cof', x:700,y:175,w:470,h:44, tier:2,
+ d:'Digital-to-analog converters, one per column, that place the correct analog voltage on every data line for the row currently being addressed. A dead source driver shows as a vertical band or a stuck column.'},
+{id:'cof', n:'Chip-on-Film (COF) / COF Packages', layer:'in', kind:'cof', x:1190,y:175,w:470,h:44, tier:2,
+ d:'Driver silicon bonded directly onto a flexible polyimide carrier, which is then bonded to the glass at one end and the PCB at the other. Cracked COF bonds produce the classic vertical line down the screen — and they are effectively not field-repairable.'},
+{id:'gate', n:'Gate Drivers (Row Drivers) / Gate Driver ICs', layer:'in', kind:'cof', x:170,y:410,w:55,h:330, tier:2, rot:true,
+ d:'Shift-register drivers that switch on one row of thin-film transistors at a time, walking down the panel so each row can accept its data. A failed gate driver shows as a horizontal band or a dead block of rows.'},
+{id:'fpc', n:'Flexible Printed Circuit (FPC) Cables', layer:'in', kind:'cof', x:170,y:750,w:55,h:330, tier:2, rot:true,
+ d:'Thin flat flex carrying signals between T-Con, driver strips and the panel edge, secured in ZIF connectors. Contamination or a partially seated latch here mimics a dead panel; reseating is always the first move.'},
+{id:'spk', n:'Speakers', layer:'in', kind:'speaker', x:300,y:1215,w:1600,h:88, tier:1,
+ d:'Down-firing or rear-firing drivers in a shallow sealed cavity, typically 10–20 W per channel. The enclosure volume is the real limit on bass — no amount of processing recovers what the cabinet cannot move.'},
+
+/* ---------- BEHIND FRONT BEZEL (front side, chin) ---------- */
+{id:'ir', n:'IR Receiver (Infrared Sensor)', layer:'bz', kind:'sensor', x:190,y:1150,w:243,h:150, tier:2,
+ d:'A photodiode with an integrated 38 kHz band-pass demodulator behind an IR-transparent window. Carrier filtering is what keeps sunlight and fluorescent flicker from registering as button presses.'},
+{id:'als', n:'Ambient Light Sensor', layer:'bz', kind:'sensor', x:443,y:1150,w:243,h:150, tier:2,
+ d:'A photodiode with a photopic response curve that reports room brightness so the set can scale backlight output. Covering it is the first check when auto-dimming behaves oddly.'},
+{id:'statled', n:'Status LED Indicator', layer:'bz', kind:'sensor', x:696,y:1150,w:243,h:150, tier:2,
+ d:'The front-panel light, driven straight from the standby micro. Its blink pattern is a diagnostic code on nearly every brand — count the flashes before opening anything.'},
+{id:'mic', n:'Microphone Array', layer:'bz', kind:'sensor', x:949,y:1150,w:243,h:150, tier:2,
+ d:'Two or more MEMS microphones spaced a known distance apart, letting beamforming and echo cancellation pull a voice command out of the set\'s own audio output. A hardware mute switch normally cuts them physically.'},
+{id:'keyctl', n:'Keypad Controller', layer:'bz', kind:'ic', x:1202,y:1150,w:243,h:150, tier:2,
+ d:'Scans the button matrix, debounces the result and reports key events to the main SoC over I²C or a simple serial line, so the processor is not tied up polling switches.'},
+{id:'matrix', n:'Button Matrix', layer:'bz', kind:'sensor', x:1455,y:1150,w:243,h:150, tier:2,
+ d:'Buttons wired at row/column intersections so N keys need far fewer than N pins. Some sets skip the matrix entirely and use a resistor ladder read by a single ADC input.'},
+{id:'tact', n:'Tact Switch / Tactile Push Buttons', layer:'bz', kind:'sensor', x:1708,y:1150,w:243,h:150, tier:2,
+ d:'Momentary dome switches giving a defined click and a positive make. The metal dome collapses to bridge two contacts; when it fatigues you get double-presses and dead keys.'},
+{id:'debounce', n:'Debouncing', layer:'bz', kind:'concept', x:1961,y:1150,w:243,h:150, tier:3,
+ d:'Filtering out the milliseconds of mechanical chatter as a contact closes, in hardware with an RC network or in firmware by requiring a stable reading across several samples. Without it one press registers as several.'},
+
+/* ---------- PANEL STACK (always) ---------- */
+{id:'blu', n:'Backlight Unit (BLU)', layer:'st', kind:'bar', x:2440,y:252,w:330,h:44, tier:1,
+ d:'The whole illumination assembly behind the LC glass — emitters, light guide or diffuser plate, and the optical films that turn point sources into even, forward-directed white light. An LCD makes no light of its own; everything you see is this, modulated.'},
+{id:'panel', n:'Display Panel', layer:'st', kind:'bar', x:2790,y:252,w:420,h:44, tier:1,
+ alts:[{x:175,y:180,w:2050,h:940,layer:'fr',ghost:true}],
+ d:'The bonded glass sandwich itself: TFT backplane, liquid crystal, color filter glass, and a polarizer on each face. Sold as a sealed unit — panel faults are replaced, not repaired.'},
+{id:'lcd', n:'LCD (Liquid-Crystal Display)', layer:'st', kind:'bar', x:2440,y:1200,w:770,h:44, tier:1,
+ d:'The whole display technology: a backlight plus a per-pixel light valve. Liquid crystal does not emit — it rotates polarization so a crossed polarizer pair passes or blocks light, which is why LCD black is grey where OLED is off.'},
+{id:'minild', n:'Local Dimming Zones / Mini-LED Array', layer:'st', kind:'layer', x:2440,y:310,w:80,h:880, tier:2, rot:true, slab:'minild',
+ d:'A grid of independently driven LED groups behind the panel, dimmed zone by zone to deepen blacks and raise peak highlights. Mini-LED shrinks the emitters so hundreds or thousands of zones fit — fewer zones means visible halos around bright objects.'},
+{id:'lgp', n:'Light Guide Plate (LGP)', layer:'st', kind:'layer', x:2530,y:310,w:80,h:880, tier:2, rot:true, slab:'lgp',
+ d:'A clear acrylic slab used in edge-lit sets: LEDs fire into the edge, total internal reflection carries light across, and a printed or etched dot pattern of increasing density kicks it forward evenly. Direct-lit sets replace it with a diffuser plate and an air gap.'},
+{id:'diff', n:'Diffuser and Prism Sheets', layer:'st', kind:'layer', x:2620,y:310,w:70,h:880, tier:2, rot:true, slab:'diff',
+ d:'A stack of loose films: a diffuser to hide the individual emitters, then crossed prismatic brightness-enhancement films that refract off-axis light back toward the viewer, and often a reflective polarizer to recycle the rest.'},
+{id:'qdef', n:'Quantum Dot Enhancement Film (QDEF)', layer:'st', kind:'layer', x:2700,y:310,w:70,h:880, tier:2, rot:true, slab:'qdef',
+ d:'A film of size-tuned nanocrystals that absorb blue LED light and re-emit narrow-band red and green. The narrow emission peaks are what let quantum-dot sets cover DCI-P3 and Rec.2020 far better than white-LED backlights.'},
+{id:'pol', n:'Polarizer Filters (Horizontal/Vertical)', layer:'st', kind:'layer', x:2790,y:310,w:60,h:880, tier:2, rot:true, slab:'pol',
+ alts:[{x:3150,y:310,w:60,h:880,layer:'st',slab:'pol_alt',rot:true}],
+ d:'Two absorptive films with transmission axes crossed at 90°, bonded to the outer faces of the glass. The rear one polarizes the backlight, the front one only passes light whose polarization the liquid crystal has rotated — no rotation, no light.'},
+{id:'tft', n:'TFT (Thin-Film Transistor) Array Substrate / Backplane', layer:'st', kind:'layer', x:2860,y:310,w:90,h:880, tier:2, rot:true, slab:'tft',
+ d:'Glass carrying a transistor and storage capacitor at every subpixel, plus the row and column bus lines. The transistor holds each subpixel\'s voltage steady for the whole frame after its row is addressed. Amorphous silicon on most panels, oxide (IGZO) or LTPS on faster ones.'},
+{id:'lclayer', n:'Liquid Crystal (LC) Layer', layer:'st', kind:'layer', x:2960,y:310,w:80,h:880, tier:2, rot:true, slab:'lclayer',
+ d:'A few microns of rod-shaped molecules held between alignment layers and spacer beads. Applied voltage tilts them, changing how much they rotate polarization — the actual light valve. The alignment scheme (IPS, VA, TN) sets viewing angle, contrast and response time.'},
+{id:'cfilter', n:'Color Filters (RGB Subpixels)', layer:'st', kind:'layer', x:3050,y:310,w:90,h:880, tier:2, rot:true, slab:'cfilter',
+ d:'Patterned red, green and blue dye stripes on the front glass, separated by an opaque black matrix that stops crosstalk between neighbors. The filter is subtractive — it discards roughly two-thirds of the light that reaches it.'},
+{id:'pixel', n:'Pixel', layer:'st', kind:'pixel', x:3300,y:640,w:140,h:140, tier:3,
+ alts:[{x:1706,y:426,w:24,h:24,layer:'fr'}],
+ d:'One addressable picture element: the full RGB triad acting together. Its physical size is fixed by the panel, so 4K on a 55-inch set gives about 0.315 mm pitch — the number that decides how close you can sit before structure becomes visible.'},
+{id:'subpixel', n:'Subpixel', layer:'st', kind:'sub', x:3325,y:675,w:30,h:70, tier:4,
+ alts:[{x:1714,y:430,w:7,h:16,layer:'fr'}],
+ d:'A single color channel within a pixel — one filter stripe, one transistor, one storage capacitor. Driven independently, typically to 8 or 10 bits, and the reason a dead pixel often shows as a colored dot rather than a black one. Keep zooming.'}
+];
+
+/* build unified hotspot boxes */
+P.forEach(p=>{
+  p.boxes=[{x:p.x,y:p.y,w:p.w,h:p.h,layer:p.layer,slab:p.slab,rot:p.rot}];
+  (p.alts||[]).forEach(a=>p.boxes.push(Object.assign({layer:p.layer},a)));
+});
+
+/* ============ constants ============ */
+const W0=60,H0=60,W1=3560,H1=1470;
+const BODY_CX=1200;
+const KIND_FILL={board:'#12331f',ic:'#1d2027',cap:'#2b3a4a',conn:'#e8e4d8',port:'#8b96a3',
+  trafo:'#2a2118',region:'#173a4a',concept:'none',shield:'#98a3b0',heatsink:'#7f8a96',
+  cof:'#c9a227',sensor:'#1f2a36',speaker:'#1a1f26',layer:'#1d2a36',bar:'#173a4a',
+  pixel:'#0a0d12',sub:'#0a0d12'};
+const TIER_FONT={1:30,2:19,3:13.5,4:7};
+const LAYER_NAME={in:'Back — inside chassis',bz:'Front — behind bezel',fr:'Front — screen face',st:'Panel stack'};
+const LAYER_TAG={in:'BACK',bz:'FRONT',fr:'FRONT',st:'STACK'};
+const KIND_NAME={board:'PCB assembly',ic:'Integrated circuit',cap:'Capacitor',conn:'Connector',
+  port:'Connector / port',trafo:'Magnetics',region:'Circuit block',concept:'Signal / concept',
+  shield:'Shielded module',heatsink:'Thermal part',cof:'Driver / flex',sensor:'Sensor / input',
+  speaker:'Transducer',layer:'Optical layer',bar:'Assembly',pixel:'Panel structure',sub:'Panel structure'};
+
+/* ============ svg scaffold ============ */
+const NS='http://www.w3.org/2000/svg';
+const svg=document.getElementById('scene');
+function E(t,a={}){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
+
+const defs=E('defs');
+defs.innerHTML=`
+<linearGradient id="gCase" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a333f"/><stop offset="1" stop-color="#1a212a"/></linearGradient>
+<linearGradient id="gBack" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#19212b"/><stop offset="1" stop-color="#0f151d"/></linearGradient>
+<linearGradient id="gLite" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3b4a5c"/><stop offset="1" stop-color="#222d3a"/></linearGradient>
+<radialGradient id="gScreen" cx=".5" cy=".42" r=".78">
+  <stop offset="0" stop-color="#1a2836"/><stop offset="1" stop-color="#0b1119"/></radialGradient>
+<pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+  <line x1="0" y1="0" x2="0" y2="10" stroke="#4a5766" stroke-width="3"/></pattern>
+<pattern id="rgbstripe" width="18" height="18" patternUnits="userSpaceOnUse">
+  <rect width="6" height="18" x="0" fill="#c0392b"/><rect width="6" height="18" x="6" fill="#27ae60"/>
+  <rect width="6" height="18" x="12" fill="#2980b9"/></pattern>
+<pattern id="rgbmicro" width="24" height="24" patternUnits="userSpaceOnUse">
+  <rect width="24" height="24" fill="#05080c"/>
+  <rect x="1" y="1" width="6" height="22" fill="#c0392b" opacity=".85"/>
+  <rect x="9" y="1" width="6" height="22" fill="#27ae60" opacity=".85"/>
+  <rect x="17" y="1" width="6" height="22" fill="#2980b9" opacity=".85"/></pattern>
+<pattern id="ledgrid" width="60" height="60" patternUnits="userSpaceOnUse">
+  <circle cx="30" cy="30" r="9" fill="#dfe9f5" opacity=".55"/>
+  <rect width="60" height="60" fill="none" stroke="#2a3a4a" stroke-width="1"/></pattern>`;
+svg.appendChild(defs);
+
+const world=E('g',{id:'world'});svg.appendChild(world);
+const gRear   = E('g',{id:'gRear'});
+const gFront  = E('g',{id:'gFront'});
+const gStack  = E('g',{id:'gStack'});
+const gCommon = E('g',{id:'gCommon',class:'deco'});
+const gSel    = E('g',{id:'gSel',class:'deco'});
+world.append(gRear,gFront,gStack,gCommon,gSel);
+
+const gRearDeco = E('g',{class:'deco'});
+const gInside   = E('g',{id:'gInside'});
+const gCover    = E('g',{id:'gCover'});
+gRear.append(gRearDeco,gInside,gCover);
+
+const gFrontDeco= E('g',{class:'deco'});
+const gFrontFace= E('g',{id:'gFrontFace'});
+const gBezelIn  = E('g',{id:'gBezelIn'});
+const gBezel    = E('g',{id:'gBezel'});
+gFront.append(gFrontDeco,gFrontFace,gBezelIn,gBezel);
+
+function label(g,txt,x,y,size,fill,anchor){
+  const t=E('text',{x,y,'font-size':size,fill,'font-family':'ui-monospace,monospace','letter-spacing':1.5});
+  if(anchor)t.setAttribute('text-anchor',anchor);
+  t.textContent=txt;g.appendChild(t);return t;
+}
+
+/* ---------- shared decoration ---------- */
+function decoCommon(){
+  const g=gCommon;
+  label(g,'PANEL STACK — CROSS SECTION (edge-on, greatly magnified)',2440,120,26,'#5d7288');
+  g.appendChild(E('path',{d:'M2300 700 L2410 700',stroke:'#3f5468','stroke-width':3,'stroke-dasharray':'12 8'}));
+  g.appendChild(E('path',{d:'M2400 690 l22 10 l-22 10 z',fill:'#3f5468'}));
+  g.appendChild(E('path',{d:'M2440 1268 L3210 1268',stroke:'#3f5468','stroke-width':2}));
+  label(g,'◀ backlight side',2445,1296,20,'#6c8296');
+  label(g,'viewer side ▶',3205,1296,20,'#6c8296','end');
+  g.appendChild(E('path',{d:'M3140 700 L3300 700',stroke:'#3f5468','stroke-width':2,'stroke-dasharray':'8 6'}));
+}
+
+/* ---------- BACK side ---------- */
+function decoRear(){
+  const g=gRearDeco;
+  g.appendChild(E('rect',{x:120,y:140,width:2160,height:1215,rx:18,fill:'url(#gBack)',stroke:'#2c3846','stroke-width':4}));
+  g.appendChild(E('rect',{x:165,y:185,width:2070,height:1125,rx:8,fill:'#111821',stroke:'#243040','stroke-width':2}));
+  g.appendChild(E('rect',{x:700,y:405,width:960,height:200,rx:4,fill:'url(#ledgrid)',stroke:'#3a4c5e','stroke-width':2}));
+  label(g,'REAR OF PANEL — backlight cavity',710,398,20,'#6c8296');
+  g.appendChild(E('path',{d:'M1160 900 C1195 900 1195 860 1230 860',fill:'none',stroke:'#c9a227','stroke-width':10,opacity:.8}));
+  g.appendChild(E('path',{d:'M1300 630 C1300 500 1500 470 1500 390',fill:'none',stroke:'#8ea6bd','stroke-width':9,opacity:.75}));
+  g.appendChild(E('path',{d:'M405 1118 C405 1000 300 950 240 900',fill:'none',stroke:'#c9a227','stroke-width':8,opacity:.7}));
+  g.appendChild(E('path',{d:'M880 305 L230 305 L230 410',fill:'none',stroke:'#8ea6bd','stroke-width':7,opacity:.6}));
+  label(g,'BACK — REAR HOUSING REMOVED',150,120,26,'#5d7288');
+}
+function coverArt(){
+  const g=gCover;
+  g.appendChild(E('rect',{x:110,y:130,width:2180,height:1235,rx:20,fill:'url(#gCase)',stroke:'#3c4a5a','stroke-width':5}));
+  for(let r=0;r<7;r++)for(let c=0;c<14;c++)
+    g.appendChild(E('rect',{x:1240+c*70,y:230+r*46,width:46,height:12,rx:6,fill:'#0f151d',opacity:.75}));
+  g.appendChild(E('rect',{x:900,y:560,width:520,height:420,rx:8,fill:'none',stroke:'#4b5b6c','stroke-width':4,'stroke-dasharray':'14 10'}));
+  [[900,560],[1420,560],[900,980],[1420,980]].forEach(([x,y])=>
+    g.appendChild(E('circle',{cx:x,cy:y,r:22,fill:'#0d1117',stroke:'#5a6b7d','stroke-width':4})));
+  label(g,'VESA 400×300',905,545,24,'#5f7286');
+  g.appendChild(E('rect',{x:1226,y:1075,width:1010,height:130,rx:8,fill:'#0a0e13',stroke:'#4b5b6c','stroke-width':4}));
+  label(g,'I/O CUTOUT',1236,1060,22,'#5f7286');
+  for(const [x,y] of [[170,190],[2230,190],[170,1305],[2230,1305],[1200,190],[1200,1305]])
+    g.appendChild(E('path',{d:`M${x-14} ${y} h28 M${x} ${y-14} v28`,stroke:'#63748a','stroke-width':6,'stroke-linecap':'round'}));
+  label(g,'REAR HOUSING / BACK COVER  —  press “Back cover” to remove',150,1408,30,'#7d8fa3');
+}
+
+/* ---------- FRONT side ---------- */
+function decoFront(){
+  const g=gFrontDeco;
+  g.appendChild(E('rect',{x:120,y:140,width:2160,height:1215,rx:18,fill:'#0c1219',stroke:'#2c3846','stroke-width':4}));
+  // feet
+  g.appendChild(E('path',{d:'M470 1355 L410 1425 H700 L640 1355 Z',fill:'#1c242e',stroke:'#33404f','stroke-width':3}));
+  g.appendChild(E('path',{d:'M1760 1355 L1700 1425 H1990 L1930 1355 Z',fill:'#1c242e',stroke:'#33404f','stroke-width':3}));
+  label(g,'FRONT — BEZEL REMOVED',150,120,26,'#5d7288');
+}
+function frontFaceArt(){
+  const g=gFrontFace;
+  // screen substrate behind the ghost hotspot
+  g.appendChild(E('rect',{x:175,y:180,width:2050,height:940,rx:4,fill:'url(#gScreen)',stroke:'#243040','stroke-width':2,class:'deco'}));
+  for(let i=0;i<20;i++)
+    g.appendChild(E('path',{d:`M180 ${200+i*47} H2220`,stroke:'#16222e','stroke-width':1.5,opacity:.5,class:'deco'}));
+  // chin PCB revealed under the bezel
+  gBezelIn.appendChild(E('rect',{x:175,y:1130,width:2050,height:185,rx:6,fill:'#12331f',stroke:'#1f5433','stroke-width':3}));
+  for(let i=0;i<17;i++)
+    gBezelIn.appendChild(E('path',{d:`M190 ${1140+i*10} H2210`,stroke:'#1a4a2c','stroke-width':1.5,opacity:.55}));
+  gBezelIn.appendChild(E('path',{d:'M175 1130 H2225',stroke:'#2c5a3c','stroke-width':4}));
+}
+function pixelPatchArt(){
+  const g=gFrontFace;
+  // magnified-in-place patch of screen surface; only the labelled cell is clickable
+  g.appendChild(E('rect',{x:1650,y:370,width:136,height:136,fill:'url(#rgbmicro)',opacity:.9,class:'deco'}));
+  g.appendChild(E('rect',{x:1650,y:370,width:136,height:136,fill:'none',stroke:'#4fd6c0','stroke-width':2,opacity:.6,class:'deco'}));
+  label(g,'SCREEN SURFACE — keep zooming',1650,362,15,'#6c8296').classList.add('deco');
+}
+function bezelArt(){
+  const g=gBezel;
+  const fr=(x,y,w,h)=>g.appendChild(E('rect',{x,y,width:w,height:h,fill:'url(#gCase)',stroke:'#3c4a5a','stroke-width':3}));
+  fr(120,140,2160,50);           // top trim
+  fr(120,140,55,1215);           // left trim
+  fr(2225,140,55,1215);          // right trim
+  fr(120,1120,2160,235);         // chin faceplate
+  g.appendChild(E('rect',{x:120,y:140,width:2160,height:1215,rx:18,fill:'none',stroke:'#46586c','stroke-width':5}));
+  g.appendChild(E('rect',{x:250,y:1195,width:180,height:70,rx:8,fill:'#0a0e13',stroke:'#2b3745','stroke-width':3}));
+  label(g,'IR WINDOW',254,1183,20,'#5f7286');
+  g.appendChild(E('circle',{cx:800,cy:1230,r:16,fill:'#4fd6c0',opacity:.65}));
+  label(g,'LED',830,1237,20,'#5f7286');
+  for(let i=0;i<6;i++) g.appendChild(E('circle',{cx:1030+i*26,cy:1230,r:6,fill:'#0a0e13'}));
+  label(g,'MIC PORTS',1030,1205,20,'#5f7286');
+  label(g,'BRAND',2020,1245,44,'#4a5766');
+  label(g,'FRONT BEZEL / TRIM  —  press “Front bezel” to remove',150,1408,30,'#7d8fa3');
+}
+
+/* ---------- part rendering ---------- */
+function wrapText(txt,maxW,fs){
+  const cw=fs*0.56,max=Math.max(1,Math.floor(maxW/cw));
+  const words=txt.split(/\s+/),lines=[];let cur='';
+  for(const w of words){
+    if(!cur){cur=w;continue;}
+    if((cur+' '+w).length<=max)cur+=' '+w;else{lines.push(cur);cur=w;}
+  }
+  if(cur)lines.push(cur);
+  return lines.slice(0,4);
+}
+const slabGroups={};
+function stackLayerGroup(id){
+  if(!slabGroups[id]){const g=E('g',{class:'stackLayer','data-slab':id});slabGroups[id]=g;gStack.appendChild(g);}
+  return slabGroups[id];
+}
+function parentFor(box,p){
+  if(box.layer==='in')return gInside;
+  if(box.layer==='bz')return gBezelIn;
+  if(box.layer==='fr')return gFrontFace;
+  return box.slab?stackLayerGroup(box.slab):gStack;
+}
+function drawPart(p,box,bi){
+  const {x,y,w,h}=box, parent=parentFor(box,p);
+  const g=E('g',{class:'hit','data-id':p.id,'data-layer':box.layer,'data-bi':bi});
+  const ghost=!!box.ghost;
+  const fill=KIND_FILL[p.kind]||'#1d2027';
+  g.appendChild(E('rect',{x,y,width:w,height:h,rx:p.kind==='cap'?Math.min(w,h)/2:5,
+    fill:ghost?'rgba(79,214,192,.04)':(fill==='none'?'rgba(23,58,74,.25)':fill),
+    stroke:ghost?'#2f6f68':(p.kind==='concept'?'#4fd6c0':'#46586c'),
+    'stroke-width':ghost?2:(p.kind==='concept'?2.5:2),
+    'stroke-dasharray':(ghost||p.kind==='concept')?'10 7':'none',class:'body'}));
+
+  const dec=E('g',{class:'deco'});
+  if(!ghost){
+    if(p.kind==='ic'){
+      const n=Math.max(3,Math.floor(w/26));
+      for(let i=0;i<n;i++){
+        dec.appendChild(E('rect',{x:x+8+i*(w-16)/n,y:y-4,width:(w-16)/n-5,height:6,fill:'#8e9aa8'}));
+        dec.appendChild(E('rect',{x:x+8+i*(w-16)/n,y:y+h-2,width:(w-16)/n-5,height:6,fill:'#8e9aa8'}));
+      }
+      dec.appendChild(E('circle',{cx:x+13,cy:y+13,r:4,fill:'#6b7686'}));
+    } else if(p.kind==='cap'){
+      dec.appendChild(E('ellipse',{cx:x+w/2,cy:y+14,rx:w/2-6,ry:9,fill:'#4a5c6e'}));
+      dec.appendChild(E('path',{d:`M${x+w/2-14} ${y+10} h28 M${x+w/2} ${y+4} v12`,stroke:'#8fa2b4','stroke-width':3}));
+    } else if(p.kind==='trafo'){
+      for(let i=0;i<5;i++) dec.appendChild(E('path',{d:`M${x+6} ${y+16+i*(h-32)/4} H${x+w-6}`,stroke:'#6a5a3e','stroke-width':4}));
+    } else if(p.kind==='conn'||p.kind==='port'){
+      const n=Math.max(4,Math.floor(w/16));
+      for(let i=0;i<n;i++) dec.appendChild(E('rect',{x:x+6+i*(w-12)/n,y:y+h-16,width:(w-12)/n-4,height:10,fill:'#3a4553'}));
+    } else if(p.kind==='shield'||p.kind==='heatsink'){
+      dec.appendChild(E('rect',{x:x+4,y:y+4,width:w-8,height:h-8,fill:'url(#hatch)',opacity:.5}));
+    } else if(p.kind==='cof'){
+      const vert=h>w,n=vert?Math.floor(h/34):Math.floor(w/34);
+      for(let i=0;i<n;i++){
+        if(vert) dec.appendChild(E('rect',{x:x+7,y:y+8+i*34,width:w-14,height:22,rx:2,fill:'#1d2027'}));
+        else dec.appendChild(E('rect',{x:x+8+i*34,y:y+7,width:22,height:h-14,rx:2,fill:'#1d2027'}));
+      }
+    } else if(p.kind==='speaker'){
+      for(let i=0;i<2;i++){
+        const cx=x+(i?w-90:90),cy=y+h/2;
+        dec.appendChild(E('circle',{cx,cy,r:34,fill:'#0e131a',stroke:'#3c4a5a','stroke-width':3}));
+        dec.appendChild(E('circle',{cx,cy,r:13,fill:'#39485a'}));
+      }
+    } else if(p.kind==='sensor'){
+      dec.appendChild(E('circle',{cx:x+30,cy:y+h/2,r:15,fill:'#3d4c5d',stroke:'#66788c','stroke-width':3}));
+    } else if(p.kind==='layer'){
+      dec.appendChild(E('rect',{x:x+3,y:y+3,width:w-6,height:h-6,fill:'url(#gLite)',opacity:.35}));
+      if(p.id==='minild') for(let r=0;r<11;r++) dec.appendChild(E('circle',{cx:x+w/2,cy:y+40+r*80,r:14,fill:'#e8f1ff',opacity:.8}));
+      if(p.id==='cfilter') dec.appendChild(E('rect',{x:x+4,y:y+4,width:w-8,height:h-8,fill:'url(#rgbstripe)',opacity:.85}));
+      if(p.id==='lclayer') for(let r=0;r<26;r++) dec.appendChild(E('path',{d:`M${x+16} ${y+18+r*34} l${w-34} 12`,stroke:'#7fd4e8','stroke-width':3,opacity:.6}));
+      if(p.id==='tft') for(let r=0;r<22;r++) dec.appendChild(E('path',{d:`M${x+5} ${y+22+r*40} H${x+w-5}`,stroke:'#4c6b86','stroke-width':2,opacity:.7}));
+    } else if(p.kind==='pixel'){
+      dec.appendChild(E('rect',{x:x+w*.07,y:y+h*.07,width:w*.86,height:h*.86,fill:'#05080c'}));
+      for(let i=0;i<3;i++)
+        dec.appendChild(E('rect',{x:x+w*.1+i*(w*.8/3),y:y+h*.1,width:w*.8/3-w*.03,height:h*.8,
+          fill:['#c0392b','#27ae60','#2980b9'][i],opacity:.9}));
+    } else if(p.kind==='sub'){
+      dec.appendChild(E('rect',{x:x+w*.06,y:y+h*.06,width:w*.88,height:h*.88,fill:'#27ae60',opacity:.95}));
+      dec.appendChild(E('rect',{x:x+w*.1,y:y+h-h*.24,width:w*.28,height:h*.16,fill:'#0a0d12'}));
+      dec.appendChild(E('rect',{x:x+w*.5,y:y+h-h*.24,width:w*.28,height:h*.16,fill:'#0a0d12',opacity:.6}));
+    } else if(p.kind==='board'){
+      for(let i=0;i<Math.floor(h/26);i++)
+        dec.appendChild(E('path',{d:`M${x+10} ${y+16+i*26} H${x+w-10}`,stroke:'#1a4a2c','stroke-width':1.6,opacity:.5}));
+    }
+  }
+  g.appendChild(dec);
+
+  if(w>=44&&h>=26){
+    const fs=TIER_FONT[p.tier];
+    const rot=box.rot&&h>w;
+    const lines=wrapText(p.n,(rot?h:w)-16,fs);
+    const t=E('text',{'font-size':fs,'text-anchor':'middle',
+      fill:(p.kind==='conn'||p.kind==='port'||p.kind==='shield'||p.kind==='heatsink')&&!ghost?'#0d1117':'#dbe6f0'});
+    lines.forEach((ln,i)=>{const ts=E('tspan',{x:0,dy:i?fs*1.18:0});ts.textContent=ln;t.appendChild(ts);});
+    const cx=x+w/2,cy=y+h/2-(lines.length-1)*fs*0.59+fs*0.35;
+    const lg=E('g',{class:'lbl',transform:rot?`translate(${cx},${cy}) rotate(-90)`:`translate(${cx},${cy})`});
+    lg.appendChild(t);g.appendChild(lg);
+  }
+  parent.appendChild(g);
+}
+function buildParts(){
+  const order=p=>(p.kind==='board'||p.kind==='bar')?0:(p.kind==='region'?1:(p.kind==='concept'?3:2));
+  [...P].sort((a,b)=>order(a)-order(b)).forEach(p=>p.boxes.forEach((b,i)=>drawPart(p,b,i)));
+}
+
+decoCommon();decoRear();coverArt();decoFront();frontFaceArt();pixelPatchArt();buildParts();bezelArt();
+
+/* ============ view transform ============ */
+let k=1,tx=0,ty=0;
+const stage=document.getElementById('stage');
+function apply(){
+  world.setAttribute('transform',`translate(${tx},${ty}) scale(${k})`);
+  document.getElementById('zoomRead').textContent=k.toFixed(2)+'×';
+}
+function fit(animate){
+  const r=stage.getBoundingClientRect(),pad=40;
+  const kk=Math.min((r.width-pad*2)/(W1-W0),(r.height-pad*2)/(H1-H0));
+  const t={k:kk,tx:(r.width-(W1-W0)*kk)/2-W0*kk,ty:(r.height-(H1-H0)*kk)/2-H0*kk};
+  animate?flyTo(t):(k=t.k,tx=t.tx,ty=t.ty,apply());
+}
+function fitBox(b,padFrac=0.34){
+  const r=stage.getBoundingClientRect();
+  const kk=Math.min(r.width/(b.w*(1+padFrac*2)),r.height/(b.h*(1+padFrac*2)),60);
+  return {k:kk,tx:r.width/2-(b.x+b.w/2)*kk,ty:r.height/2-(b.y+b.h/2)*kk};
+}
+const REDUCE=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let anim=null;
+function flyTo(t,ms=620){
+  const s={k,tx,ty},t0=performance.now();
+  if(anim)cancelAnimationFrame(anim);
+  if(REDUCE){k=t.k;tx=t.tx;ty=t.ty;apply();return;}
+  (function step(now){
+    const u=Math.min(1,(now-t0)/ms),e=u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
+    k=s.k+(t.k-s.k)*e;tx=s.tx+(t.tx-s.tx)*e;ty=s.ty+(t.ty-s.ty)*e;apply();
+    if(u<1)anim=requestAnimationFrame(step);
+  })(t0);
+}
+function zoomAt(px,py,f){
+  const nk=Math.min(60,Math.max(.22,k*f));
+  tx=px-(px-tx)*(nk/k);ty=py-(py-ty)*(nk/k);k=nk;apply();
+}
+
+/* ============ side / flip ============ */
+const state={side:'back',cover:true,bezel:true,exploded:false};
+let flipping=false;
+function sideXform(g,sx){
+  g.setAttribute('transform',`translate(${BODY_CX},0) scale(${sx},1) translate(${-BODY_CX},0)`);
+}
+function applySide(){
+  const back=state.side==='back';
+  gRear.style.display=back?'':'none';
+  gFront.style.display=back?'none':'';
+  sideXform(gRear,1);sideXform(gFront,1);
+  document.getElementById('sideTag').textContent=back?'BACK':'FRONT';
+  document.getElementById('btnFlip').textContent=back?'Flip to front ⟳':'Flip to back ⟳';
+  syncLayers();
+}
+function flipTo(target,then){
+  if(state.side===target){then&&then();return;}
+  if(flipping)return;
+  if(REDUCE){state.side=target;applySide();then&&then();return;}
+  flipping=true;stage.classList.add('busy');
+  const from=state.side===('back')?gRear:gFront;
+  const to=target==='back'?gRear:gFront;
+  to.style.display='none';from.style.display='';
+  const t0=performance.now(),ms=760;
+  (function step(now){
+    const u=Math.min(1,(now-t0)/ms);
+    const c=Math.cos(u*Math.PI);
+    if(u<0.5){
+      from.style.display='';to.style.display='none';
+      sideXform(from,Math.max(.001,c));
+      from.style.filter=`brightness(${0.55+0.45*c})`;
+    } else {
+      from.style.display='none';to.style.display='';
+      sideXform(to,Math.max(.001,-c));
+      to.style.filter=`brightness(${0.55+0.45*(-c)})`;
+    }
+    if(u<1)requestAnimationFrame(step);
+    else{
+      from.style.filter='';to.style.filter='';
+      state.side=target;flipping=false;stage.classList.remove('busy');
+      applySide();then&&then();
+    }
+  })(t0);
+}
+
+/* ============ layers ============ */
+function layerVisible(l){
+  if(flipping)return false;
+  if(l==='in')return state.side==='back'&&!state.cover;
+  if(l==='bz')return state.side==='front'&&!state.bezel;
+  if(l==='fr')return state.side==='front';
+  return true;
+}
+function syncLayers(){
+  gCover.classList.toggle('off',!state.cover);
+  gBezel.classList.toggle('off',!state.bezel);
+  gCover.style.pointerEvents=state.cover?'auto':'none';
+  gBezel.style.pointerEvents=state.bezel?'auto':'none';
+  gInside.style.opacity=state.cover?0.12:1;
+  gBezelIn.style.opacity=state.bezel?0.12:1;
+  gInside.style.pointerEvents=state.cover?'none':'auto';
+  gBezelIn.style.pointerEvents=state.bezel?'none':'auto';
+  slabOrder.forEach((id,i)=>{
+    const g=slabGroups[id];if(!g)return;
+    g.style.transform=state.exploded?`translateX(${i*46}px)`:'translateX(0px)';
+  });
+  const bc=document.getElementById('btnCover'),bb=document.getElementById('btnBezel');
+  bc.classList.toggle('on',!state.cover);
+  bb.classList.toggle('on',!state.bezel);
+  bc.textContent=state.cover?'Back cover':'Back cover off';
+  bb.textContent=state.bezel?'Front bezel':'Front bezel off';
+  document.getElementById('btnStack').classList.toggle('on',state.exploded);
+  renderList();
+  if(selId)drawRings();
+}
+const slabOrder=['minild','lgp','diff','qdef','pol','tft','lclayer','cfilter','pol_alt'];
+
+document.getElementById('btnFlip').onclick=()=>flipTo(state.side==='back'?'front':'back');
+document.getElementById('btnCover').onclick=()=>flipTo('back',()=>{state.cover=!state.cover;syncLayers();});
+document.getElementById('btnBezel').onclick=()=>flipTo('front',()=>{state.bezel=!state.bezel;syncLayers();});
+document.getElementById('btnStack').onclick=()=>{state.exploded=!state.exploded;syncLayers();setTimeout(()=>{if(selId)drawRings();},820);};
+document.getElementById('btnIn').onclick=()=>{const r=stage.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1.5);};
+document.getElementById('btnOut').onclick=()=>{const r=stage.getBoundingClientRect();zoomAt(r.width/2,r.height/2,1/1.5);};
+document.getElementById('btnFit').onclick=()=>fit(true);
+const btnLabels=document.getElementById('btnLabels');
+btnLabels.onclick=()=>{const off=svg.classList.toggle('labels-off');btnLabels.classList.toggle('on',!off);};
+
+/* ============ pointer ============ */
+const pts=new Map();let last=null,moved=0,pinch=null;
+stage.addEventListener('pointerdown',e=>{
+  stage.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===1){last={x:e.clientX,y:e.clientY};moved=0;stage.classList.add('drag');}
+  else if(pts.size===2){const[a,b]=[...pts.values()];pinch=Math.hypot(a.x-b.x,a.y-b.y);}
+});
+stage.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId))return;
+  pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pts.size===2&&pinch){
+    const[a,b]=[...pts.values()],d=Math.hypot(a.x-b.x,a.y-b.y),r=stage.getBoundingClientRect();
+    zoomAt((a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top,d/pinch);pinch=d;return;
+  }
+  if(pts.size===1&&last){
+    const dx=e.clientX-last.x,dy=e.clientY-last.y;
+    moved+=Math.abs(dx)+Math.abs(dy);tx+=dx;ty+=dy;last={x:e.clientX,y:e.clientY};apply();
+  }
+});
+stage.addEventListener('pointerup',e=>{
+  if(pts.size===1&&moved<6)clickAt(e);
+  pts.delete(e.pointerId);if(pts.size<2)pinch=null;
+  if(pts.size===0){last=null;stage.classList.remove('drag');}
+});
+stage.addEventListener('pointercancel',e=>{pts.delete(e.pointerId);last=null;pinch=null;stage.classList.remove('drag');});
+stage.addEventListener('wheel',e=>{
+  e.preventDefault();const r=stage.getBoundingClientRect();
+  zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.0016));
+},{passive:false});
+stage.addEventListener('dblclick',e=>{
+  const hit=hitAt(e.clientX,e.clientY);
+  if(hit)flyTo(fitBox(liveBox(hit.box)));
+});
+function hitAt(cx,cy){
+  const el=document.elementFromPoint(cx,cy);
+  const g=el&&el.closest?el.closest('.hit'):null;
+  if(!g)return null;
+  const p=P.find(q=>q.id===g.dataset.id);
+  if(!p||!layerVisible(g.dataset.layer))return null;
+  const box=p.boxes[+g.dataset.bi]||p.boxes[0];
+  return {p,box};
+}
+function clickAt(e){
+  const hit=hitAt(e.clientX,e.clientY);
+  if(hit){select(hit.p.id);if(quizOn)checkAnswer(hit.p.id);}
+  else if(!quizOn)select(null);
+}
+
+/* ============ selection ============ */
+let selId=null;
+function byId(id){return P.find(p=>p.id===id);}
+const SLAB_GAP=46;
+function liveBox(b){
+  const dx=(b.slab&&state.exploded)?slabOrder.indexOf(b.slab)*SLAB_GAP:0;
+  return dx?{x:b.x+dx,y:b.y,w:b.w,h:b.h}:b;
+}
+function drawRings(){
+  gSel.innerHTML='';
+  if(!selId)return;
+  const p=byId(selId);
+  p.boxes.filter(b=>layerVisible(b.layer)).forEach(raw=>{
+    const b=liveBox(raw),pad=6/k;
+    gSel.appendChild(E('rect',{x:b.x-pad,y:b.y-pad,width:b.w+pad*2,height:b.h+pad*2,rx:6,
+      class:'sel-ring'+(quizOn?' quiz-ring':'')}));
+  });
+}
+function select(id,fly){
+  selId=id;
+  const nameEl=document.getElementById('selName'),metaEl=document.getElementById('selMeta'),
+        descEl=document.getElementById('selDesc'),hintEl=document.getElementById('selHint');
+  if(!id){
+    gSel.innerHTML='';nameEl.textContent='Nothing selected';metaEl.textContent='';descEl.textContent='';
+    hintEl.style.display='block';renderList();return;
+  }
+  const p=byId(id);
+  hintEl.style.display='none';
+  nameEl.textContent=p.n;
+  const where=[...new Set(p.boxes.map(b=>LAYER_NAME[b.layer]))].join(' + ');
+  metaEl.textContent=`#${P.indexOf(p)+1} · ${where} · ${KIND_NAME[p.kind]||p.kind}`;
+  descEl.textContent=p.d;
+  drawRings();
+  if(fly){
+    const b=p.boxes.find(b=>layerVisible(b.layer))||p.boxes[0];
+    flyTo(fitBox(liveBox(b)));
+  }
+  renderList();
+  document.getElementById('list').querySelector('li.sel')?.scrollIntoView({block:'nearest'});
+}
+
+/* which box to travel to, and what must be opened to see it */
+function planFor(p){
+  const vis=p.boxes.find(b=>layerVisible(b.layer));
+  if(vis)return {box:vis,side:state.side,open:null};
+  const sameSide=p.boxes.find(b=>
+    (b.layer==='in'&&state.side==='back')||((b.layer==='bz'||b.layer==='fr')&&state.side==='front'));
+  const b=sameSide||p.boxes[0];
+  if(b.layer==='in')return {box:b,side:'back',open:'cover'};
+  if(b.layer==='bz')return {box:b,side:'front',open:'bezel'};
+  if(b.layer==='fr')return {box:b,side:'front',open:null};
+  return {box:b,side:state.side,open:null};
+}
+function revealAndGo(p,fly){
+  const plan=planFor(p);
+  const finish=()=>{
+    if(plan.open==='cover'&&state.cover){state.cover=false;syncLayers();}
+    if(plan.open==='bezel'&&state.bezel){state.bezel=false;syncLayers();}
+    select(p.id,false);
+    if(fly)flyTo(fitBox(liveBox(plan.box)));
+  };
+  flipTo(plan.side,finish);
+}
+
+/* ============ index ============ */
+const listEl=document.getElementById('list'),searchEl=document.getElementById('search');
+document.getElementById('count').textContent=P.length;
+function renderList(){
+  const q=searchEl.value.trim().toLowerCase();
+  listEl.innerHTML='';
+  P.forEach((p,i)=>{
+    if(q&&!p.n.toLowerCase().includes(q))return;
+    const li=document.createElement('li');
+    li.tabIndex=0;li.className=p.id===selId?'sel':'';
+    const tag=[...new Set(p.boxes.map(b=>LAYER_TAG[b.layer]))].join('/');
+    li.innerHTML=`<span class="num">${i+1}</span><span>${p.n}</span><span class="side">${tag}</span>`;
+    const go=()=>revealAndGo(p,true);
+    li.onclick=go;
+    li.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go();}};
+    listEl.appendChild(li);
+  });
+}
+searchEl.oninput=renderList;
+
+/* ============ tooltip ============ */
+const tip=document.getElementById('tip');
+function hover(e){
+  const hit=hitAt(e.clientX,e.clientY);
+  if(hit){
+    tip.textContent=hit.p.n;tip.classList.add('show');
+    tip.style.left=Math.min(window.innerWidth-260,e.clientX+14)+'px';
+    tip.style.top=(e.clientY+18)+'px';
+  } else tip.classList.remove('show');
+}
+stage.addEventListener('pointermove',e=>{if(pts.size)return;hover(e);});
+stage.addEventListener('pointerleave',()=>tip.classList.remove('show'));
+
+/* ============ locate test ============ */
+let quizOn=false,queue=[],cur=null,right=0,asked=0;
+const quizBox=document.getElementById('quizBox'),qTarget=document.getElementById('qTarget'),
+      qFeed=document.getElementById('qFeed'),qScore=document.getElementById('qScore');
+document.getElementById('btnQuiz').onclick=()=>{
+  quizOn=!quizOn;
+  document.getElementById('btnQuiz').classList.toggle('on',quizOn);
+  quizBox.classList.toggle('show',quizOn);
+  if(quizOn)resetQuiz();else{selId=null;select(null);}
+};
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]];}return a;}
+function resetQuiz(){queue=shuffle(P.map(p=>p.id));right=0;asked=0;nextQ();}
+function nextQ(){
+  gSel.innerHTML='';selId=null;renderList();
+  if(!queue.length){qTarget.textContent='— all 79 covered —';qFeed.className='ok';
+    qFeed.textContent=`Final: ${right} of ${asked} on the first try.`;cur=null;return;}
+  cur=queue.shift();asked++;
+  const p=byId(cur),plan=planFor(p);
+  qTarget.textContent=p.n;qFeed.textContent='';qFeed.className='';
+  qScore.textContent=`${right} / ${asked}`;
+  // put the answer's side and shell in reach without pointing at it
+  flipTo(plan.side,()=>{
+    if(plan.open==='cover'&&state.cover){state.cover=false;syncLayers();}
+    if(plan.open==='bezel'&&state.bezel){state.bezel=false;syncLayers();}
+  });
+}
+function checkAnswer(id){
+  if(!cur)return;
+  if(id===cur){
+    if(!qFeed.classList.contains('no'))right++;
+    qFeed.className='ok';qFeed.textContent='Correct.';
+    qScore.textContent=`${right} / ${asked}`;
+    setTimeout(()=>{if(quizOn)nextQ();},900);
+  } else {
+    qFeed.className='no';qFeed.textContent=`That is ${byId(id).n}. Try again.`;
+  }
+}
+document.getElementById('qSkip').onclick=()=>{
+  if(!cur)return;
+  const p=byId(cur);
+  revealAndGo(p,true);
+  qFeed.className='no';qFeed.textContent=`Answer shown: ${p.n}`;
+  setTimeout(()=>{if(quizOn)nextQ();},1600);
+};
+document.getElementById('qNext').onclick=()=>nextQ();
+document.getElementById('qReset').onclick=()=>resetQuiz();
+
+/* ============ keyboard ============ */
+addEventListener('keydown',e=>{
+  if(document.activeElement===searchEl)return;
+  const r=stage.getBoundingClientRect();
+  const key=e.key.toLowerCase();
+  if(e.key==='+'||e.key==='=')zoomAt(r.width/2,r.height/2,1.4);
+  else if(e.key==='-'||e.key==='_')zoomAt(r.width/2,r.height/2,1/1.4);
+  else if(key==='r')fit(true);
+  else if(key==='f')flipTo(state.side==='back'?'front':'back');
+  else if(e.key==='1')flipTo('back',()=>{state.cover=!state.cover;syncLayers();});
+  else if(e.key==='2')flipTo('front',()=>{state.bezel=!state.bezel;syncLayers();});
+  else if(e.key==='3'){state.exploded=!state.exploded;syncLayers();setTimeout(()=>{if(selId)drawRings();},820);}
+  else if(e.key==='ArrowLeft'){tx+=60;apply();}
+  else if(e.key==='ArrowRight'){tx-=60;apply();}
+  else if(e.key==='ArrowUp'){ty+=60;apply();}
+  else if(e.key==='ArrowDown'){ty-=60;apply();}
+});
+document.getElementById('panelToggle').onclick=()=>document.getElementById('aside').classList.toggle('open');
+
+applySide();renderList();fit(false);
+</script>
+</body>
+</html>
