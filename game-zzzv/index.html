@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Glass Washer — Cutaway Service Trainer</title>
+<style>
+  :root{
+    --ink:#080F14;
+    --ink2:#132029;
+    --steel:#A8BAC4;
+    --chrome:#E8F1F5;
+    --water:#2E9BD6;
+    --amber:#FFB347;
+    --copper:#C0703F;
+    --alert:#E0523F;
+    --good:#69D28C;
+    --hair:rgba(168,186,196,.22);
+    --panel:rgba(10,20,26,.72);
+    --disp:"Arial Narrow","Helvetica Neue Condensed",ّ,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--ink);color:var(--chrome);
+    font-family:var(--mono);}
+  canvas{display:block;touch-action:none}
+  #stage{position:fixed;inset:0;background:
+    radial-gradient(120% 90% at 50% 18%, #1B2C36 0%, #0C161C 55%, #060D11 100%);}
+
+  /* ---------- shared panel styling ---------- */
+  .panel{
+    position:fixed;background:var(--panel);border:1px solid var(--hair);
+    backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+    border-radius:2px;
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:9px;letter-spacing:.22em;text-transform:uppercase;
+    color:rgba(168,186,196,.62);
+  }
+  .nameplate{
+    font-family:var(--disp);text-transform:uppercase;letter-spacing:.3em;
+    font-size:15px;font-weight:700;color:var(--chrome);
+  }
+
+  /* ---------- top-left plate ---------- */
+  #plate{top:14px;left:14px;padding:10px 14px 11px;max-width:52vw}
+  #plate .nameplate{line-height:1}
+  #plate .sub{margin-top:5px;font-size:9.5px;letter-spacing:.13em;color:rgba(168,186,196,.55)}
+  #plate .rule{height:1px;background:var(--hair);margin:9px 0 8px}
+  #modeRow{display:flex;gap:6px}
+  .tab{
+    font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    padding:6px 10px;border:1px solid var(--hair);color:rgba(232,241,245,.72);
+    background:transparent;cursor:pointer;border-radius:1px;transition:.18s;
+  }
+  .tab:hover{border-color:rgba(255,179,71,.5);color:#fff}
+  .tab[aria-pressed="true"]{background:var(--amber);color:#0A1116;border-color:var(--amber);font-weight:700}
+
+  /* ---------- right control rack ---------- */
+  #rack{top:14px;right:14px;padding:11px 13px 13px;width:186px}
+  .ctl{margin-top:11px}
+  .ctl:first-child{margin-top:0}
+  .ctl label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .ctl .val{font-size:9.5px;color:var(--amber);letter-spacing:.08em}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(168,186,196,.3)}
+  input[type=range]::-moz-range-track{height:2px;background:rgba(168,186,196,.3)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:11px;height:11px;margin-top:-4.5px;border-radius:50%;
+    background:var(--amber);box-shadow:0 0 0 3px rgba(255,179,71,.16)}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border:0;border-radius:50%;background:var(--amber)}
+  .btnrow{display:flex;gap:6px;margin-top:12px}
+  .btn{
+    flex:1;font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+    padding:8px 6px;border:1px solid var(--hair);background:rgba(232,241,245,.04);
+    color:var(--chrome);cursor:pointer;border-radius:1px;transition:.18s}
+  .btn:hover{border-color:var(--amber);color:var(--amber)}
+  .btn.primary{background:var(--amber);color:#0A1116;border-color:var(--amber);font-weight:700}
+  .btn.primary:hover{color:#0A1116;filter:brightness(1.08)}
+
+  /* ---------- cycle stage strip (bottom) ---------- */
+  #strip{
+    left:50%;transform:translateX(-50%);bottom:14px;display:flex;gap:0;padding:0;overflow:hidden;
+  }
+  .stage{
+    padding:9px 16px 8px;font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+    color:rgba(168,186,196,.42);border-right:1px solid var(--hair);position:relative;white-space:nowrap;
+  }
+  .stage:last-child{border-right:0}
+  .stage.on{color:#0A1116;background:var(--amber);font-weight:700}
+  .stage .lamp{
+    position:absolute;left:16px;top:3px;width:3px;height:3px;border-radius:50%;background:transparent}
+
+  /* ---------- hover readout ---------- */
+  #readout{
+    position:fixed;pointer-events:none;padding:5px 9px;border:1px solid rgba(255,179,71,.55);
+    background:rgba(8,15,20,.9);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--amber);opacity:0;transition:opacity .12s;border-radius:1px;white-space:nowrap;z-index:20}
+
+  /* ---------- game HUD ---------- */
+  #hud{
+    left:50%;transform:translateX(-50%);top:14px;width:min(560px,calc(100vw - 28px));
+    padding:12px 15px 13px;display:none}
+  #hud.show{display:block}
+  #hudTop{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  #ticks{display:flex;gap:3px}
+  .tick{width:13px;height:3px;background:rgba(168,186,196,.22)}
+  .tick.hit{background:var(--good)}
+  .tick.miss{background:var(--alert)}
+  .tick.now{background:var(--amber)}
+  #score{font-size:11px;letter-spacing:.1em;color:var(--amber)}
+  #clue{
+    margin-top:9px;font-family:var(--disp);font-size:clamp(17px,4.4vw,23px);line-height:1.24;
+    letter-spacing:.005em;color:var(--chrome)}
+  #hint{margin-top:7px;font-size:10px;letter-spacing:.09em;color:rgba(168,186,196,.62);min-height:13px}
+  #hint b{color:var(--alert);font-weight:400}
+  #hint i{color:var(--good);font-style:normal}
+
+  /* ---------- fact card ---------- */
+  #fact{
+    left:50%;transform:translateX(-50%);bottom:58px;width:min(520px,calc(100vw - 28px));
+    padding:12px 15px;display:none;border-left:2px solid var(--amber)}
+  #fact.show{display:block}
+  #fact .nm{font-family:var(--disp);text-transform:uppercase;letter-spacing:.2em;font-size:13px;font-weight:700}
+  #fact .tx{margin-top:6px;font-size:11.5px;line-height:1.5;color:rgba(232,241,245,.82);font-family:var(--mono)}
+
+  /* ---------- results ---------- */
+  #done{
+    inset:0;position:fixed;display:none;place-items:center;background:rgba(6,13,17,.86);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:40}
+  #done.show{display:grid}
+  #doneCard{width:min(420px,calc(100vw - 40px));padding:26px 26px 22px;border:1px solid var(--hair);
+    background:rgba(10,20,26,.9)}
+  #rank{font-family:var(--disp);text-transform:uppercase;letter-spacing:.24em;font-size:22px;font-weight:700;
+    color:var(--amber);margin:8px 0 14px}
+  .stat{display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--hair);font-size:11px;
+    letter-spacing:.1em}
+  .stat span:last-child{color:var(--chrome)}
+
+  #loading{position:fixed;inset:0;display:grid;place-items:center;font-size:10px;letter-spacing:.3em;
+    text-transform:uppercase;color:rgba(168,186,196,.6);z-index:60;background:var(--ink)}
+
+  @media (max-width:640px){
+    #rack{width:150px;padding:9px 10px 11px;top:auto;bottom:52px;right:10px}
+    #plate{max-width:60vw;padding:8px 11px 9px}
+    #plate .nameplate{font-size:13px}
+    .stage{padding:8px 10px 7px;font-size:8px;letter-spacing:.14em}
+    #fact{bottom:auto;top:auto;bottom:52px;left:10px;transform:none;width:calc(100vw - 176px)}
+    #hud{top:auto;bottom:118px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="loading">assembling machine</div>
+
+<div class="panel" id="plate">
+  <div class="nameplate">The Glass Washer</div>
+  <div class="sub">Front-load cutaway · 19 serviceable parts</div>
+  <div class="rule"></div>
+  <div id="modeRow">
+    <button class="tab" id="tabExplore" aria-pressed="true">Inspect</button>
+    <button class="tab" id="tabGame" aria-pressed="false">Name the part</button>
+  </div>
+</div>
+
+<div class="panel" id="rack">
+  <div class="ctl">
+    <label><span class="eyebrow">Exploded view</span><span class="val" id="expVal">0%</span></label>
+    <input type="range" id="exp" min="0" max="100" value="0">
+  </div>
+  <div class="ctl">
+    <label><span class="eyebrow">Cabinet opacity</span><span class="val" id="shellVal">18%</span></label>
+    <input type="range" id="shell" min="0" max="60" value="18">
+  </div>
+  <div class="ctl">
+    <label><span class="eyebrow">Damper condition</span><span class="val" id="dampVal">Good</span></label>
+    <input type="range" id="damping" min="0" max="100" value="100">
+  </div>
+  <div class="btnrow">
+    <button class="btn primary" id="runBtn">Run cycle</button>
+  </div>
+  <div class="btnrow">
+    <button class="btn" id="resetBtn">Reset view</button>
+  </div>
+</div>
+
+<div class="panel" id="strip">
+  <div class="stage" data-st="idle">Standby</div>
+  <div class="stage" data-st="fill">Fill</div>
+  <div class="stage" data-st="wash">Wash</div>
+  <div class="stage" data-st="drain">Drain</div>
+  <div class="stage" data-st="spin">Spin</div>
+  <div class="stage" data-st="done">Done</div>
+</div>
+
+<div class="panel" id="hud">
+  <div id="hudTop">
+    <div id="ticks"></div>
+    <div id="score">0 pts</div>
+  </div>
+  <div id="clue">—</div>
+  <div id="hint"></div>
+</div>
+
+<div class="panel" id="fact">
+  <div class="nm" id="factName"></div>
+  <div class="tx" id="factText"></div>
+</div>
+
+<div id="readout"></div>
+
+<div id="done"><div id="doneCard">
+  <div class="eyebrow">Service assessment</div>
+  <div id="rank">—</div>
+  <div class="stat"><span>Score</span><span id="rScore">0</span></div>
+  <div class="stat"><span>First-click accuracy</span><span id="rAcc">0%</span></div>
+  <div class="stat"><span>Longest streak</span><span id="rStreak">0</span></div>
+  <div class="stat"><span>Parts missed</span><span id="rMiss">none</span></div>
+  <div class="btnrow" style="margin-top:16px">
+    <button class="btn primary" id="againBtn">Run it again</button>
+    <button class="btn" id="backBtn">Back to inspect</button>
+  </div>
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   THE GLASS WASHER
+   A transparent front-load washing machine you can take apart,
+   run, and be quizzed on. Single file. No build step.
+   ============================================================ */
+
+const PARTS = [
+/* tier 1 — visible from across the room */
+{id:'drum',  tier:1, name:'Inner drum',            clue:'The perforated stainless basket the load rides in.',
+ fact:'Spins inside the outer tub. The holes let wash water in and centrifuged water out. Lifters (baffles) on the wall pick clothes up and drop them — that fall is the actual washing action.'},
+{id:'door',  tier:1, name:'Door glass',            clue:'The tempered porthole you load through.',
+ fact:'Curved inward so the load is pushed back off the seal at speed. Tempered glass, so a chip means replace the whole assembly.'},
+{id:'motor', tier:1, name:'Drive motor',           clue:'Turns electricity into the torque that moves the load.',
+ fact:'On a belt machine this is usually a universal motor with carbon brushes and a tacho coil on the rear bearing so the board can read RPM. Brushes are a wear item.'},
+{id:'belt',  tier:1, name:'Drive belt',            clue:'The ribbed loop carrying torque from motor to drum.',
+ fact:'A poly-V belt. The ribs must sit in the pulley grooves — a belt riding one groove off will shred inside a week. A slipping belt smells hot and gives you a full tub that will not spin.'},
+{id:'disp',  tier:1, name:'Detergent dispenser',   clue:'The drawer with compartments for prewash, wash and softener.',
+ fact:'Water from the inlet valve is routed through the chosen compartment and flushed into the tub. Softener sits behind a siphon so it releases only at rinse.'},
+{id:'baffle',tier:1, name:'Baffles (lifters)',     clue:'The three fins standing proud of the drum wall.',
+ fact:'The wash action itself. They carry the load up the rising side of the drum and let it fall — front-loaders clean by dropping clothes, not by dragging them past an agitator. Drum speed is chosen so the load releases near the top rather than pinning to the wall.'},
+{id:'dhose', tier:1, name:'Drain hose',            clue:'The ribbed hose carrying spent water out to the standpipe.',
+ fact:'Needs a high loop above the tub water line, or the machine siphons itself empty mid-cycle and fills forever.'},
+{id:'filter',tier:1, name:'Debris filter',         clue:'The screw-out cartridge behind the small front flap.',
+ fact:'The only part of a washer the owner is expected to service. It catches coins, hairpins and lint before they reach the impeller. Neglected, it silts up and gives you slow drain, then a drain fault, then a burnt pump.'},
+/* tier 2 — you have to open the back */
+{id:'pulley',tier:2, name:'Drum pulley',           clue:'The big wheel on the back of the drum shaft.',
+ fact:'Its diameter against the motor pulley is the entire gear reduction — better than eight to one here, which is how a small high-RPM motor produces tumbling torque. Watch the amber stripe on the motor pulley during a cycle to see the ratio.'},
+{id:'pump',  tier:2, name:'Drain pump',            clue:'The impeller and lint trap that empty the sump.',
+ fact:'First thing to check on a no-drain call. Coins, hairpins and screws all end up in the trap; the impeller jams and the board throws a drain fault.'},
+{id:'tub',   tier:2, name:'Outer tub',             clue:'The sealed vessel that actually holds the water.',
+ fact:'The drum spins inside it. Usually moulded polypropylene in two half-shells, and on many machines it is sealed shut — a failed tub bearing means a whole tub assembly.'},
+{id:'valve', tier:2, name:'Inlet valve',           clue:'The solenoid that opens to admit water from the house supply.',
+ fact:'Normally closed: no power, no water. A valve weeping past its seat will slowly overfill a machine that is switched off.'},
+{id:'board', tier:2, name:'Control board',         clue:'Reads the sensors and sequences the whole cycle.',
+ fact:'It knows water level from the pressure switch, temperature from the thermistor and drum speed from the tacho, and it will refuse to unlock the door until all three agree.'},
+{id:'supply',tier:2, name:'Supply hoses',          clue:'The two braided lines feeding the valve from the house.',
+ fact:'Colour-banded red for hot and blue for cold. They sit under mains pressure every hour the machine is plugged in, which is why a burst supply hose floods a room and why they are the one hose with a replacement interval.'},
+{id:'feet',  tier:2, name:'Levelling feet',        clue:'Adjustable threaded supports at the four corners.',
+ fact:'Out of level, an out-of-balance spin walks the machine across the floor. Level first, diagnose second — half of all "vibration" calls end here.'},
+/* tier 3 — the parts that separate techs from owners */
+{id:'boot',  tier:3, name:'Door bellows',          clue:'The flexible rubber boot sealing the door opening to the tub.',
+ fact:'Also called the boot or gasket. Its lower fold traps water, lint and socks, and it is where mildew smell starts. Tearing at the drain holes is the usual failure.'},
+{id:'cwt',   tier:3, name:'Counterweight',         clue:'The concrete slab bolted to the tub.',
+ fact:'Pure mass — it raises the inertia of the tub assembly so an off-balance load moves it less. Loose counterweight bolts sound exactly like a failing bearing.'},
+{id:'spring',tier:3, name:'Suspension springs',    clue:'These hang the tub from the cabinet top so it can move.',
+ fact:'The tub floats. Springs carry the static weight and let the assembly travel; they set the resting height of the whole tub. Watch them during spin — one side stretches as the other closes up, once per revolution.'},
+{id:'damp',  tier:3, name:'Shock absorbers',       clue:'Friction cylinders under the tub that kill the bounce.',
+ fact:'Springs store energy, dampers dissipate it. Worn dampers show up only at spin-up, when the tub passes through resonance and slams the cabinet. Drop the damper condition slider and run a cycle: the resonance peak grows, but the machine settles to the same travel once it is spinning above it.'},
+{id:'spider',tier:3, name:'Spider arm',            clue:'The cast three-arm casting bolted to the back of the drum.',
+ fact:'It transmits every bit of torque from the shaft into the drum. Cast aluminium sitting in warm detergent, so it corrodes at the arm bosses — and when it finally cracks you hear it as a knock on spin that owners always mistake for a bearing.'},
+{id:'bearing',tier:3,name:'Tub bearing and seal',  clue:'The races in the tub rear the drum shaft turns in.',
+ fact:'A pair of ball races behind a shaft seal. The seal always fails first; water reaches the bearings and they roar on spin. On a sealed tub this is not a bearing job, it is a whole tub assembly — which is why the repair is often quoted against the price of a new machine.'},
+{id:'therm', tier:3, name:'Thermistor',            clue:'The temperature probe in the tub wall beside the element.',
+ fact:'An NTC probe: resistance drops as it warms. The board watches it to cut the element at target temperature, and treats an open circuit as a fault rather than as cold water — a dead thermistor gives you a cycle that will not heat at all.'},
+{id:'press', tier:3, name:'Pressure switch',       clue:'Senses water level through an air column trapped in a small hose.',
+ fact:'Rising water compresses air in the sump hose against a diaphragm. Kink or block that hose and the machine either overfills or refuses to heat.'},
+{id:'heat',  tier:3, name:'Heating element',       clue:'The sheathed element sitting in the bottom of the tub.',
+ fact:'Raises wash water to setpoint under the drum. It must stay submerged, which is why the board will not energise it until the pressure switch confirms level.'},
+{id:'lock',  tier:3, name:'Door interlock',        clue:'Keeps the door shut until the drum has stopped.',
+ fact:'Usually a PTC-heated bimetal latch, so it stays locked for a minute or two after the cycle ends while the element cools. Not a fault — just physics.'},
+];
+const PART = {}; PARTS.forEach(p=>PART[p.id]=p);
+
+/* ============================================================
+   SCENE
+   ============================================================ */
+let renderer, scene, camera, raycaster, pmrem;
+const pickables = [];
+const partMeshes = {};      // id -> [mesh]
+const partGroups = {};      // id -> group (for explode)
+const clock = new THREE.Clock();
+
+const V = THREE.Vector3;
+const mouse = new THREE.Vector2(-9,-9);
+let hovered = null, dragging = false, moved = 0;
+
+/* camera orbit state */
+const cam = {theta:Math.PI*1.18, phi:1.30, dist:5.6, tTheta:Math.PI*1.18, tPhi:1.30, tDist:5.6,
+             target:new V(0,0.05,0)};
+const HOME = {theta:Math.PI*1.18, phi:1.30, dist:5.6};
+
+/* animation state */
+const sim = {state:'idle', t:0, level:-0.72, drumAngle:0, drumSpeed:0, wobble:0, running:false, damping:1};
+const LEVEL_EMPTY = -0.72, LEVEL_FULL = -0.26;
+
+/* materials -------------------------------------------------- */
+const M = {};
+function buildMaterials(env){
+  const std = (o)=>new THREE.MeshStandardMaterial(Object.assign({envMap:env,envMapIntensity:.9},o));
+  M.shell   = new THREE.MeshPhysicalMaterial({color:0xdff0f7,metalness:0,roughness:.06,transparent:true,
+              opacity:.18,side:THREE.DoubleSide,depthWrite:false,envMap:env,envMapIntensity:1.1,clearcoat:1});
+  M.glass   = new THREE.MeshPhysicalMaterial({color:0xd8ecf5,metalness:0,roughness:.03,transparent:true,
+              opacity:.3,side:THREE.DoubleSide,depthWrite:false,envMap:env,envMapIntensity:1.4,clearcoat:1});
+  M.steel   = std({color:0xcfd9de,metalness:.95,roughness:.24});
+  M.steelD  = std({color:0x9aa7ae,metalness:.9,roughness:.42});
+  M.chrome  = std({color:0xe9f2f6,metalness:1,roughness:.1});
+  M.rubber  = std({color:0x2b3238,metalness:0,roughness:.85});
+  M.boot    = std({color:0x555f66,metalness:0,roughness:.9});
+  M.plastic = std({color:0xb9c6cd,metalness:.05,roughness:.45});
+  M.tubMat  = new THREE.MeshPhysicalMaterial({color:0xe2eef4,metalness:0,roughness:.15,transparent:true,
+              opacity:.26,side:THREE.DoubleSide,depthWrite:false,envMap:env,envMapIntensity:1});
+  M.copper  = std({color:0xc0703f,metalness:1,roughness:.32});
+  M.pcb     = std({color:0x1f6b4a,metalness:.1,roughness:.6});
+  M.chip    = std({color:0x14181c,metalness:.3,roughness:.5});
+  M.concrete= std({color:0xb0aca4,metalness:0,roughness:.95});
+  M.hose    = std({color:0x8b8479,metalness:0,roughness:.8});
+  M.blue    = std({color:0x3aa7dd,metalness:.05,roughness:.5});
+  M.water   = new THREE.MeshPhysicalMaterial({color:0x2f9ad6,metalness:0,roughness:.08,transparent:true,
+              opacity:.55,side:THREE.DoubleSide,depthWrite:false,envMap:env,envMapIntensity:1.2});
+  M.cloth1  = std({color:0x6f9cc9,metalness:0,roughness:.95});
+  M.cloth2  = std({color:0xb5453c,metalness:0,roughness:.95});
+  M.cloth3  = std({color:0xd8d4c8,metalness:0,roughness:.95});
+  M.wire    = std({color:0x6d5a3a,metalness:.2,roughness:.7});
+  M.pick    = new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});
+}
+
+/* helpers ---------------------------------------------------- */
+/* Materials are shared instances, but highlighting writes to .emissive — so
+   without this every steel part in the machine lit up whenever one did.
+   One clone per (material, part) keeps the glow on the part you picked. */
+const _matCache = new Map();
+function ownMaterial(mesh, id){
+  const m = mesh.material;
+  if(!m || !m.emissive) return;
+  const key = m.uuid + '|' + id;
+  let c = _matCache.get(key);
+  if(!c){ c = m.clone(); _matCache.set(key, c); }
+  mesh.material = c;
+}
+function reg(mesh, id, group){
+  mesh.userData.part = id;
+  ownMaterial(mesh, id);
+  pickables.push(mesh);
+  (partMeshes[id] = partMeshes[id] || []).push(mesh);
+  if(group) partGroups[id] = group;
+  return mesh;
+}
+function mk(geo, mat, x,y,z, parent){
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x||0,y||0,z||0);
+  (parent||scene).add(m);
+  return m;
+}
+function grp(parent, dir){
+  const g = new THREE.Group();
+  g.userData.home = new V(0,0,0);
+  g.userData.dir = dir || new V(0,0,0);
+  (parent||scene).add(g);
+  return g;
+}
+function edges(mesh, color, op){
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 25),
+    new THREE.LineBasicMaterial({color:color||0xbcd3de, transparent:true, opacity:op===undefined?.35:op}));
+  e.position.copy(mesh.position); e.rotation.copy(mesh.rotation); e.scale.copy(mesh.scale);
+  mesh.parent.add(e);
+  return e;
+}
+
+/* perforation texture for the drum */
+function perfTexture(){
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height);
+  x.fillStyle = '#000';
+  const cols = 96, rows = 26;
+  for(let j=0;j<rows;j++){
+    for(let i=0;i<cols;i++){
+      const ox = (j%2)? (c.width/cols)/2 : 0;
+      x.beginPath();
+      x.arc(i*(c.width/cols)+ox+4, j*(c.height/rows)+5, 2.4, 0, 6.3);
+      x.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+/* environment from a painted canvas */
+function makeEnv(){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0,0,0,256);
+  g.addColorStop(0,'#dfe9ef'); g.addColorStop(.48,'#8fa3ae');
+  g.addColorStop(.52,'#3b4a53'); g.addColorStop(1,'#10181d');
+  x.fillStyle = g; x.fillRect(0,0,512,256);
+  x.fillStyle = 'rgba(255,255,255,.85)';
+  x.fillRect(60,26,150,26); x.fillRect(300,40,110,18);
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  try{
+    pmrem = new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader();
+    return pmrem.fromEquirectangular(tex).texture;
+  }catch(e){ return null; }
+}
+
+/* ============================================================
+   GEOMETRY: the machine
+   ============================================================ */
+const TUB = {r:0.82, len:1.28, y:0.16, z:-0.06};
+const DRUM = {r:0.70, len:1.14};
+const BELT_Z = -0.86;
+const DRIVE_RATIO = 0.42/0.050;    /* drum pulley : motor pulley */
+let drumGroup, tubGroup, waterMesh, sudsPts, clipPlane, dispFlow, valveGlow, pumpRotor;
+let suspension = null, motorPulleyRef = null, beltTexRef = null;
+
+/* a repeating rib pattern painted along the belt, so its travel is visible */
+function ribTexture(){
+  const c = document.createElement('canvas'); c.width = 16; c.height = 8;
+  const g = c.getContext('2d');
+  g.fillStyle = '#39424a'; g.fillRect(0,0,16,8);
+  g.fillStyle = '#1d2429'; g.fillRect(0,0,7,8);
+  g.fillStyle = '#4a555e'; g.fillRect(13,0,2,8);
+  const t = new THREE.CanvasTexture(c);
+  t.magFilter = THREE.LinearFilter;
+  return t;
+}
+
+/* Re-aim and re-stretch every suspension part from the tub's live position.
+   Springs extend, dampers telescope — exactly what you watch for at spin-up. */
+const _up = new V(0,1,0), _d = new V(), _q = new THREE.Quaternion();
+function updateSuspension(){
+  if(!suspension) return;
+  const off = tubGroup ? tubGroup.position : new V(0,0,0);
+  for(const s of suspension.springs){
+    const lug = s.lug.clone().add(off);
+    _d.copy(lug).sub(s.anchor);
+    const len = _d.length();
+    _q.setFromUnitVectors(_up, _d.clone().normalize());
+    const k = len / s.restLen;
+    s.mesh.position.copy(s.anchor); s.mesh.quaternion.copy(_q); s.mesh.scale.set(1,k,1);
+    s.hit.position.copy(s.anchor);  s.hit.quaternion.copy(_q);  s.hit.scale.set(1,k,1);
+  }
+  for(const d of suspension.dampers){
+    const lug = d.lug.clone().add(off);
+    _d.copy(lug).sub(d.base);
+    const len = _d.length();
+    _q.setFromUnitVectors(_up, _d.clone().normalize());
+    d.bar.position.copy(d.base); d.bar.quaternion.copy(_q);
+    const k = len / d.restLen;
+    d.rod.position.copy(d.base); d.rod.quaternion.copy(_q); d.rod.scale.set(1,k,1);
+    d.hit.position.copy(d.base); d.hit.quaternion.copy(_q); d.hit.scale.set(1,k,1);
+  }
+}
+
+function buildMachine(){
+  /* ---- cabinet ---------------------------------------------- */
+  const cab = grp(scene, new V(0,0,0));
+  const W=2.06,H=2.46,D=1.98, y0=0.02;
+  const box = new THREE.BoxGeometry(W,H,D);
+  const cabinet = mk(box, M.shell, 0, y0, 0, cab);
+  cabinet.renderOrder = 4;
+  edges(cabinet, 0xcfe4ee, .5);
+  /* control fascia strip on the front top */
+  const fascia = mk(new THREE.BoxGeometry(W*.98,.2,.03), M.plastic, 0, 1.06, D/2+.005, cab);
+  fascia.material = M.plastic;
+  /* a couple of interior braces so the shell reads as sheet metal */
+  [-1,1].forEach(s=>{
+    const b = mk(new THREE.BoxGeometry(.05,H*.98,.05), M.steelD, s*(W/2-.06), y0, -D/2+.06, cab);
+    edges(b,0x9fb4c0,.25);
+  });
+
+  /* ---- outer tub -------------------------------------------- */
+  tubGroup = grp(scene, new V(0,0,0));
+  const tubG = new THREE.CylinderGeometry(TUB.r,TUB.r,TUB.len,54,1,true);
+  const tub = mk(tubG, M.tubMat, 0, TUB.y, TUB.z, tubGroup);
+  tub.rotation.x = Math.PI/2; tub.renderOrder = 3;
+  reg(tub,'tub',tubGroup);
+  const tubBack = mk(new THREE.CircleGeometry(TUB.r,54), M.tubMat, 0, TUB.y, TUB.z-TUB.len/2, tubGroup);
+  tubBack.rotation.y = Math.PI; tubBack.renderOrder = 3; reg(tubBack,'tub');
+  /* tub front ring (opening) */
+  const ring = mk(new THREE.RingGeometry(0.60,TUB.r,54), M.tubMat, 0, TUB.y, TUB.z+TUB.len/2, tubGroup);
+  ring.renderOrder = 3; reg(ring,'tub');
+  edges(mk(new THREE.TorusGeometry(TUB.r,.02,8,54), M.plastic, 0, TUB.y, TUB.z+TUB.len/2, tubGroup),0xc6d6de,.3);
+  mk(new THREE.TorusGeometry(TUB.r,.022,8,54), M.plastic, 0, TUB.y, TUB.z-TUB.len/2, tubGroup);
+
+  /* ---- inner drum ------------------------------------------- */
+  drumGroup = new THREE.Group();
+  drumGroup.position.set(0, TUB.y, TUB.z+0.02);
+  tubGroup.add(drumGroup);
+  const perf = perfTexture(); perf.repeat.set(1,1);
+  const drumMat = new THREE.MeshStandardMaterial({
+    color:0xd6dfe4, metalness:.96, roughness:.22, side:THREE.DoubleSide,
+    alphaMap:perf, transparent:true, envMap:M.steel.envMap, envMapIntensity:1.1});
+  const drum = mk(new THREE.CylinderGeometry(DRUM.r,DRUM.r,DRUM.len,64,1,true), drumMat, 0,0,0, drumGroup);
+  drum.rotation.x = Math.PI/2;
+  reg(drum,'drum',drumGroup);
+  /* drum back plate — dished, with spiral swirl */
+  const back = mk(new THREE.CylinderGeometry(DRUM.r,DRUM.r*.55,.16,48,1,true), M.steel, 0,0,-DRUM.len/2-.06, drumGroup);
+  back.rotation.x = Math.PI/2; reg(back,'drum');
+  mk(new THREE.CircleGeometry(DRUM.r*.55,40), M.steel, 0,0,-DRUM.len/2-.14, drumGroup).rotation.y=Math.PI;
+  /* front rim */
+  mk(new THREE.TorusGeometry(DRUM.r,.02,8,54), M.chrome, 0,0,DRUM.len/2, drumGroup);
+  /* lifters */
+  for(let i=0;i<3;i++){
+    const lift = new THREE.Mesh(new THREE.BoxGeometry(.16,.12,DRUM.len*.9), M.steel);
+    const a = i*Math.PI*2/3;
+    lift.position.set(Math.cos(a)*(DRUM.r-.06), Math.sin(a)*(DRUM.r-.06), 0);
+    lift.rotation.z = a - Math.PI/2;
+    drumGroup.add(lift); reg(lift,'baffle',drumGroup);
+  }
+  /* clothes ride with the drum */
+  [[0.30,-0.34,0.10,M.cloth1,.30],[-0.26,-0.40,-0.16,M.cloth2,.24],[0.05,-0.46,0.28,M.cloth3,.20]]
+  .forEach(([x,y,z,mat,s])=>{
+    const g = new THREE.IcosahedronGeometry(s,1);
+    const pos = g.attributes.position;
+    for(let i=0;i<pos.count;i++){
+      const f = 1 + (Math.sin(i*12.9898)*0.5+0.5)*0.45;
+      pos.setXYZ(i,pos.getX(i)*f,pos.getY(i)*f*.7,pos.getZ(i)*f);
+    }
+    g.computeVertexNormals();
+    const c = mk(g, mat, x,y,z, drumGroup);
+    c.userData.spin = Math.random()*3;
+  });
+
+  /* ---- door bellows + door ---------------------------------- */
+  const zTubFace = TUB.z+TUB.len/2;
+  const bootPts = [];
+  for(let i=0;i<=14;i++){
+    const t=i/14;
+    const r = 0.72 + Math.sin(t*Math.PI)*0.09 - t*0.16;
+    bootPts.push(new THREE.Vector2(r, t*0.36));
+  }
+  const bootGroup = grp(scene, new V(0,0,.9));
+  const boot = mk(new THREE.LatheGeometry(bootPts,48), M.boot, 0, TUB.y, zTubFace, bootGroup);
+  boot.rotation.x = -Math.PI/2; boot.material.side = THREE.DoubleSide;
+  reg(boot,'boot',bootGroup);
+
+  const doorGroup = grp(scene, new V(0,0,1.3));
+  const doorZ = 1.02;
+  const dg = new THREE.SphereGeometry(.9,40,24,0,Math.PI*2,0,0.56);
+  const glass = mk(dg, M.glass, 0, TUB.y, doorZ+0.78, doorGroup);
+  glass.rotation.x = Math.PI/2; glass.renderOrder = 5;
+  reg(glass,'door',doorGroup);
+  const dring = mk(new THREE.TorusGeometry(.5,.055,12,48), M.plastic, 0, TUB.y, doorZ, doorGroup);
+  reg(dring,'door');
+  mk(new THREE.TorusGeometry(.44,.02,8,48), M.chrome, 0, TUB.y, doorZ+.01, doorGroup);
+  /* hinge + interlock */
+  const hinge = mk(new THREE.BoxGeometry(.07,.3,.1), M.steelD, -.55, TUB.y, doorZ-.03, doorGroup);
+  const lockGroup = grp(scene, new V(.9,0,.6));
+  const lock = mk(new THREE.BoxGeometry(.15,.2,.13), M.plastic, .60, TUB.y, doorZ-.10, lockGroup);
+  reg(lock,'lock',lockGroup);
+  mk(new THREE.BoxGeometry(.05,.05,.09), M.chrome, .52, TUB.y, doorZ-.10, lockGroup);
+  const lockWire = tube([[.62,TUB.y,-.16],[.86,-.1,-.35],[.9,.1,-.55]], .012, M.wire);
+  lockGroup.add(lockWire);
+
+  /* ---- spider, shaft and tub bearing --------------------------
+     The cast arm bolted to the back of the drum, the shaft it rides
+     on, and the bearings in the tub rear that carry the whole load. */
+  const SPI_Z = -DRUM.len/2 - 0.10;
+  for(let i=0;i<3;i++){
+    const a = i*Math.PI*2/3 + Math.PI/6;
+    const arm = mk(new THREE.BoxGeometry(.085, DRUM.r*1.02, .05), M.steelD,
+                   Math.cos(a)*DRUM.r*.48, Math.sin(a)*DRUM.r*.48, SPI_Z, drumGroup);
+    arm.rotation.z = a - Math.PI/2; reg(arm,'spider',drumGroup);
+    /* the boss where the arm bolts through the drum back — where they corrode */
+    const boss = mk(new THREE.CylinderGeometry(.055,.055,.07,12), M.steelD,
+                    Math.cos(a)*DRUM.r*.86, Math.sin(a)*DRUM.r*.86, SPI_Z, drumGroup);
+    boss.rotation.x = Math.PI/2; reg(boss,'spider');
+  }
+  const spiHub = mk(new THREE.CylinderGeometry(.155,.185,.13,20), M.steelD, 0,0,SPI_Z-.03, drumGroup);
+  spiHub.rotation.x = Math.PI/2; reg(spiHub,'spider'); edges(spiHub,0xb6c7d0,.35);
+  /* shaft: drum hub through the tub rear to the pulley */
+  const shaftD = mk(new THREE.CylinderGeometry(.062,.062, Math.abs(BELT_Z-SPI_Z)+.10, 16), M.chrome,
+                    0,0,(SPI_Z+BELT_Z)/2, drumGroup);
+  shaftD.rotation.x = Math.PI/2; reg(shaftD,'spider');
+
+  /* bearing housing — fixed to the tub, so it lives in tubGroup */
+  const bearZ = TUB.z - TUB.len/2 - .06;
+  const housing = mk(new THREE.CylinderGeometry(.20,.24,.20,24), M.plastic, 0,TUB.y,bearZ, tubGroup);
+  housing.rotation.x = Math.PI/2; reg(housing,'bearing',tubGroup); edges(housing,0xc6d6de,.35);
+  for(const dz of [-.055,.055]){        /* the pair of ball races */
+    const race = mk(new THREE.TorusGeometry(.105,.030,10,26), M.chrome, 0,TUB.y,bearZ+dz, tubGroup);
+    reg(race,'bearing');
+  }
+  /* the shaft seal that fails first and lets water into the bearings */
+  const seal = mk(new THREE.TorusGeometry(.098,.020,8,24), M.rubber, 0,TUB.y,bearZ+.11, tubGroup);
+  reg(seal,'bearing');
+  for(let i=0;i<6;i++){                 /* housing bolts */
+    const a=i*Math.PI*2/6;
+    const b = mk(new THREE.CylinderGeometry(.017,.017,.05,8), M.chrome,
+                 Math.cos(a)*.215, TUB.y+Math.sin(a)*.215, bearZ-.11, tubGroup);
+    b.rotation.x = Math.PI/2; reg(b,'bearing');
+  }
+  const bearHit = mk(new THREE.CylinderGeometry(.26,.26,.26,12), M.pick, 0,TUB.y,bearZ, tubGroup);
+  bearHit.rotation.x = Math.PI/2; reg(bearHit,'bearing');
+
+  /* ---- thermistor ---------------------------------------------
+     An NTC probe in the tub wall by the element. The board reads it
+     to decide whether to heat, and refuses to heat if it goes open. */
+  const thermGroup = grp(scene, new V(-.9,-.6,.2));
+  const thBoss = mk(new THREE.CylinderGeometry(.055,.055,.09,14), M.plastic, -.34,-.56,-.16, thermGroup);
+  thBoss.rotation.z = Math.PI/2; reg(thBoss,'therm',thermGroup);
+  const thProbe = mk(new THREE.CylinderGeometry(.022,.018,.16,12), M.chrome, -.26,-.56,-.16, thermGroup);
+  thProbe.rotation.z = Math.PI/2; reg(thProbe,'therm');
+  const thTip = mk(new THREE.SphereGeometry(.026,12,10), M.chip, -.185,-.56,-.16, thermGroup);
+  reg(thTip,'therm');
+  const thWire = tube([[-.39,-.56,-.16],[-.60,-.42,-.30],[-.72,.10,-.46],[-.68,.62,-.58]], .017, M.wire);
+  thermGroup.add(thWire); reg(thWire,'therm');
+  const thHit = mk(new THREE.SphereGeometry(.10,10,8), M.pick, -.27,-.56,-.16, thermGroup);
+  reg(thHit,'therm');
+
+  /* ---- supply hoses and inlet manifold -------------------------
+     Hot and cold from the house, into the back of the inlet valve. */
+  const supGroup = grp(scene, new V(.4,1.0,-1.2));
+  const manifold = mk(new THREE.BoxGeometry(.30,.11,.13), M.plastic, .62,1.06,-1.00, supGroup);
+  reg(manifold,'supply',supGroup); edges(manifold,0xc6d6de,.4);
+  const supCols = [0xb44b3f, 0x3a7fbf];        /* hot, cold */
+  [-1,1].forEach((s,i)=>{
+    const col = supCols[i];
+    const mat = new THREE.MeshStandardMaterial({color:0x6f7a80, metalness:.25, roughness:.62,
+                  envMap:M.steel.envMap, envMapIntensity:.6});
+    const h = tube([[.62+s*.11,1.06,-1.02],[.62+s*.13,1.10,-1.20],
+                    [.62+s*.16,0.86,-1.40],[.62+s*.18,0.50,-1.52]], .046, mat);
+    supGroup.add(h); reg(h,'supply');
+    /* the collar band that tells you which line is which */
+    const band = mk(new THREE.TorusGeometry(.050,.017,8,18),
+                    new THREE.MeshStandardMaterial({color:col, roughness:.5}),
+                    .62+s*.125, 1.04, -1.16, supGroup);
+    band.rotation.x = Math.PI/2.6; reg(band,'supply');
+    /* screw coupling at the valve end */
+    const nut = mk(new THREE.CylinderGeometry(.058,.058,.06,6), M.chrome, .62+s*.11,1.06,-1.045, supGroup);
+    nut.rotation.x = Math.PI/2; reg(nut,'supply');
+  });
+
+  /* ---- pulley + poly-V belt + motor -------------------------- */
+  const driveGroup = grp(scene, new V(0,-.2,-1.0));
+
+  /* the drum pulley: wide grooved rim, five lightening holes, hub */
+  const pulleyGroup = new THREE.Group();
+  pulleyGroup.position.set(0, TUB.y, BELT_Z);
+  driveGroup.add(pulleyGroup);
+  const P1 = 0.42, PW = 0.135;          /* radius, face width */
+  const rim = mk(new THREE.CylinderGeometry(P1,P1,PW,48,1,true), M.steelD, 0,0,0, pulleyGroup);
+  rim.rotation.x = Math.PI/2; reg(rim,'pulley',driveGroup);
+  /* poly-V grooves: shallow rings machined into the rim face */
+  for(let i=0;i<5;i++){
+    const zz = -PW/2 + PW*(i+0.5)/5;
+    const gv = mk(new THREE.CylinderGeometry(P1*.975,P1*.975,PW/9,48,1,true), M.rubber, 0,0,zz, pulleyGroup);
+    gv.rotation.x = Math.PI/2;
+    gv.material = new THREE.MeshStandardMaterial({color:0x7c8a92,metalness:.85,roughness:.55});
+    reg(gv,'pulley');
+  }
+  const web = mk(new THREE.CylinderGeometry(P1*.99,P1*.99,.022,48), M.steelD, 0,0,-PW/2+.011, pulleyGroup);
+  web.rotation.x = Math.PI/2; reg(web,'pulley');
+  for(let i=0;i<5;i++){                       /* lightening holes */
+    const a=i*Math.PI*2/5;
+    const h = mk(new THREE.CylinderGeometry(.10,.10,.09,20), M.rubber,
+                 Math.cos(a)*.24, Math.sin(a)*.24, -PW/2+.011, pulleyGroup);
+    h.rotation.x = Math.PI/2; h.material = new THREE.MeshBasicMaterial({color:0x0d1519});
+  }
+  /* five cast spokes so the wheel reads as a real drum pulley */
+  for(let i=0;i<5;i++){
+    const a=i*Math.PI*2/5 + Math.PI/5;
+    const sp = mk(new THREE.BoxGeometry(.055,P1*.86,.03), M.steelD,
+                  Math.cos(a)*P1*.45, Math.sin(a)*P1*.45, -PW/2+.011, pulleyGroup);
+    sp.rotation.z = a - Math.PI/2; reg(sp,'pulley');
+  }
+  mk(new THREE.CylinderGeometry(.095,.095,PW+.06,20), M.chrome, 0,0,0, pulleyGroup).rotation.x=Math.PI/2;
+  /* three hub bolts — a visible index mark when the wheel turns */
+  for(let i=0;i<3;i++){
+    const a=i*Math.PI*2/3;
+    const b = mk(new THREE.CylinderGeometry(.022,.022,.05,8), M.chrome,
+                 Math.cos(a)*.135, Math.sin(a)*.135, -PW/2-.02, pulleyGroup);
+    b.rotation.x = Math.PI/2;
+  }
+  pulleyGroup.userData.isPulley = true;
+
+  /* the motor: offset to the left and forward, as it sits on a real chassis */
+  const MOT = {x:-0.30, y:-0.84, z:-0.44, r:0.17, len:0.52};
+  const motorGroup = new THREE.Group(); driveGroup.add(motorGroup);
+  const body = mk(new THREE.CylinderGeometry(MOT.r,MOT.r,MOT.len,28,1,true), M.steelD, MOT.x,MOT.y,MOT.z, motorGroup);
+  body.rotation.x = Math.PI/2; reg(body,'motor',driveGroup);
+  for(const s of [-1,1]){
+    const cap = mk(new THREE.CylinderGeometry(MOT.r*.9,MOT.r*.72,.09,28), M.chrome,
+                   MOT.x,MOT.y,MOT.z+s*(MOT.len/2+.04), motorGroup);
+    cap.rotation.x = Math.PI/2; reg(cap,'motor');
+  }
+  for(const dz of [-.13,.13]){                /* stator windings */
+    const w = mk(new THREE.TorusGeometry(MOT.r*.72,.055,10,28), M.copper, MOT.x,MOT.y,MOT.z+dz, motorGroup);
+    reg(w,'motor');
+  }
+  /* brush holders — the wear item on a universal motor */
+  for(const s of [-1,1]){
+    const bh = mk(new THREE.BoxGeometry(.07,.09,.07), M.chip,
+                  MOT.x+s*MOT.r*.92, MOT.y, MOT.z+.16, motorGroup);
+    reg(bh,'motor');
+  }
+  const shaft = mk(new THREE.CylinderGeometry(.035,.035,.62,14), M.chrome, MOT.x,MOT.y,MOT.z-.40, motorGroup);
+  shaft.rotation.x = Math.PI/2;
+
+  /* motor pulley lives in its own group so it can spin at the true ratio */
+  const P2 = 0.050, MW = 0.115;
+  const motorPulley = new THREE.Group();
+  motorPulley.position.set(MOT.x, MOT.y, BELT_Z);
+  motorGroup.add(motorPulley);
+  const mp = mk(new THREE.CylinderGeometry(P2,P2,MW,26,1,true), M.steel, 0,0,0, motorPulley);
+  mp.rotation.x = Math.PI/2; reg(mp,'motor');
+  for(let i=0;i<5;i++){
+    const zz = -MW/2 + MW*(i+0.5)/5;
+    const gv = mk(new THREE.CylinderGeometry(P2*.94,P2*.94,MW/9,26,1,true), M.steelD, 0,0,zz, motorPulley);
+    gv.rotation.x = Math.PI/2; reg(gv,'motor');
+  }
+  /* a painted timing stripe so the ratio is readable by eye */
+  const stripe = mk(new THREE.BoxGeometry(.012,P2*1.9,MW*.9), M.chrome, 0,0,0, motorPulley);
+  stripe.material = new THREE.MeshBasicMaterial({color:0xffb347});
+  motorPulley.userData.isMotorPulley = true;
+  motorPulleyRef = motorPulley;
+  /* mount rail + rubber isolators */
+  const rail = mk(new THREE.BoxGeometry(.62,.05,.42), M.steelD, MOT.x,MOT.y-MOT.r-.07,MOT.z, motorGroup);
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    mk(new THREE.CylinderGeometry(.045,.045,.07,12), M.rubber,
+       MOT.x+sx*.24, MOT.y-MOT.r-.12, MOT.z+sz*.15, motorGroup);
+  }
+
+  /* ---- the belt: true external tangents, four poly-V ribs ----- */
+  const c1 = new THREE.Vector2(0, TUB.y), c2 = new THREE.Vector2(MOT.x, MOT.y);
+  const dPul = c1.distanceTo(c2);
+  const gma = Math.acos((P1-P2)/dPul);
+  const aAng = Math.atan2(c2.y-c1.y, c2.x-c1.x);
+  /* a belt has a taut side and a slack side; the slack side bows outward */
+  function beltPath(sag){
+    const pts = [];
+    const N1=56, N2=26, NS=14;
+    for(let i=0;i<=N1;i++){
+      const th = aAng+gma + (2*Math.PI-2*gma)*(i/N1);
+      pts.push(new V(c1.x+Math.cos(th)*P1, c1.y+Math.sin(th)*P1, 0));
+    }
+    const s1 = new V(c1.x+Math.cos(aAng-gma)*P1, c1.y+Math.sin(aAng-gma)*P1, 0);
+    const e1 = new V(c2.x+Math.cos(aAng-gma)*P2, c2.y+Math.sin(aAng-gma)*P2, 0);
+    const n1 = new V(Math.cos(aAng-gma), Math.sin(aAng-gma), 0);
+    for(let i=1;i<NS;i++){
+      const t=i/NS, bow = Math.sin(t*Math.PI)*sag;
+      pts.push(s1.clone().lerp(e1,t).addScaledVector(n1, bow));
+    }
+    for(let i=0;i<=N2;i++){
+      const th = aAng-gma + (2*gma)*(i/N2);
+      pts.push(new V(c2.x+Math.cos(th)*P2, c2.y+Math.sin(th)*P2, 0));
+    }
+    const s2 = new V(c2.x+Math.cos(aAng+gma)*P2, c2.y+Math.sin(aAng+gma)*P2, 0);
+    const e2 = new V(c1.x+Math.cos(aAng+gma)*P1, c1.y+Math.sin(aAng+gma)*P1, 0);
+    const n2 = new V(Math.cos(aAng+gma), Math.sin(aAng+gma), 0);
+    for(let i=1;i<NS;i++){
+      const t=i/NS, bow = Math.sin(t*Math.PI)*sag*0.25;
+      pts.push(s2.clone().lerp(e2,t).addScaledVector(n2, bow));
+    }
+    return new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.0);
+  }
+  const beltCurve = beltPath(0.030);
+  /* ribbed material: a repeating tick texture whose offset is driven by drum speed */
+  const beltTex = ribTexture();
+  beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
+  beltTex.repeat.set(150,1);
+  const beltMat = new THREE.MeshStandardMaterial({color:0x2b3238, metalness:0, roughness:.82,
+                    map:beltTex, envMap:M.rubber.envMap, envMapIntensity:.5});
+  beltTexRef = beltTex;
+  const ribZ = [-.048,-.016,.016,.048];
+  for(const rz of ribZ){
+    const rib = mk(new THREE.TubeGeometry(beltCurve, 240, .0155, 6, true), beltMat, 0,0,BELT_Z+rz, driveGroup);
+    reg(rib,'belt');
+  }
+  /* backing strap tying the ribs into one belt */
+  const beltBack = mk(new THREE.TubeGeometry(beltCurve, 200, .009, 4, true), M.rubber, 0,0,BELT_Z-.058, driveGroup);
+  reg(beltBack,'belt');
+  const beltHit = mk(new THREE.TubeGeometry(beltCurve, 120, .085, 5, true), M.pick, 0,0,BELT_Z, driveGroup);
+  reg(beltHit,'belt');
+
+  /* ---- drain pump + sump + hoses ----------------------------- */
+  const pumpGroup = grp(scene, new V(1.0,-.4,0));
+  const pumpPos = new V(.58,-.92,-.14);
+  const pbody = mk(new THREE.CylinderGeometry(.17,.17,.20,26,1,true), M.plastic, pumpPos.x,pumpPos.y,pumpPos.z, pumpGroup);
+  pbody.rotation.x = Math.PI/2; reg(pbody,'pump',pumpGroup);
+  const motorCan = mk(new THREE.CylinderGeometry(.14,.14,.2,24), M.chip, pumpPos.x,pumpPos.y,pumpPos.z-.20, pumpGroup);
+  motorCan.rotation.x = Math.PI/2; reg(motorCan,'pump');
+  const trap = mk(new THREE.CylinderGeometry(.155,.155,.11,26), M.plastic, pumpPos.x,pumpPos.y,pumpPos.z+.15, pumpGroup);
+  trap.rotation.x = Math.PI/2; reg(trap,'filter',pumpGroup);
+  edges(trap,0xbcd3de,.4);
+  /* the screw-out cartridge and its access flap in the cabinet front */
+  const cart = mk(new THREE.CylinderGeometry(.10,.10,.16,20), M.chip, pumpPos.x,pumpPos.y,pumpPos.z+.24, pumpGroup);
+  cart.rotation.x = Math.PI/2; reg(cart,'filter');
+  for(let i=0;i<8;i++){                 /* the grip ribs you turn it by */
+    const a=i*Math.PI*2/8;
+    const rb = mk(new THREE.BoxGeometry(.02,.05,.16), M.plastic,
+                  pumpPos.x+Math.cos(a)*.10, pumpPos.y+Math.sin(a)*.10, pumpPos.z+.24, pumpGroup);
+    rb.rotation.z = a; reg(rb,'filter');
+  }
+  const flap = mk(new THREE.BoxGeometry(.34,.30,.03), M.plastic, pumpPos.x,pumpPos.y,0.99, pumpGroup);
+  reg(flap,'filter'); edges(flap,0xcfe4ee,.45);
+  const filtHit = mk(new THREE.CylinderGeometry(.20,.20,.30,12), M.pick, pumpPos.x,pumpPos.y,pumpPos.z+.20, pumpGroup);
+  filtHit.rotation.x = Math.PI/2; reg(filtHit,'filter');
+  pumpRotor = new THREE.Group(); pumpRotor.position.copy(pumpPos); pumpGroup.add(pumpRotor);
+  for(let i=0;i<6;i++){
+    const v = mk(new THREE.BoxGeometry(.02,.13,.11), M.steel, 0,0,0, pumpRotor);
+    v.rotation.z = i*Math.PI/3; v.position.set(Math.cos(i*Math.PI/3)*.07, Math.sin(i*Math.PI/3)*.07, 0);
+  }
+  /* sump hose: tub bottom to pump */
+  const sump = tube([[0,-.62,TUB.z],[.16,-.80,-.10],[.42,-.90,-.14],[pumpPos.x-.15,pumpPos.y,pumpPos.z]], .07, M.hose);
+  pumpGroup.add(sump);
+  reg(sump,'pump');
+  /* drain hose out the back */
+  const dhGroup = grp(scene, new V(1.2,.3,-.4));
+  const dh = tube([[pumpPos.x+.05,pumpPos.y+.10,pumpPos.z-.05],[.86,-.55,-.42],[.92,.30,-.70],
+                   [.86,.95,-.82],[.55,1.16,-.86],[.20,1.02,-.92]], .075, M.hose, true);
+  dhGroup.add(dh); reg(dh,'dhose',dhGroup);
+
+  /* ---- dispenser -------------------------------------------- */
+  const dispGroup = grp(scene, new V(-1.1,.5,.5));
+  const drawer = mk(new THREE.BoxGeometry(.66,.19,.46), M.plastic, -.52,1.02,.52, dispGroup);
+  reg(drawer,'disp',dispGroup); edges(drawer,0xcfe4ee,.45);
+  const face = mk(new THREE.BoxGeometry(.68,.21,.04), M.chrome, -.52,1.02,.76, dispGroup);
+  reg(face,'disp');
+  for(const dx of [-.2,0,.2]){                 /* compartment dividers */
+    mk(new THREE.BoxGeometry(.01,.17,.44), M.plastic, -.52+dx,1.02,.52, dispGroup);
+  }
+  const soap = mk(new THREE.BoxGeometry(.2,.06,.4), M.blue, -.66,1.0,.52, dispGroup);
+  soap.material = new THREE.MeshPhysicalMaterial({color:0x2f7fd0,transparent:true,opacity:.75,roughness:.2});
+  /* feed hose from dispenser into the tub */
+  dispFlow = tube([[-.52,.95,.42],[-.62,.72,.2],[-.55,.55,-.05]], .05, M.hose);
+  dispGroup.add(dispFlow);
+
+  /* ---- inlet valve ------------------------------------------- */
+  const valveGroup = grp(scene, new V(.6,.9,-.9));
+  const vb = mk(new THREE.BoxGeometry(.2,.16,.2), M.chip, .62,1.06,-.74, valveGroup);
+  reg(vb,'valve',valveGroup);
+  const vs = mk(new THREE.CylinderGeometry(.07,.07,.22,20), M.chip, .62,1.06,-.60, valveGroup);
+  vs.rotation.x = Math.PI/2; reg(vs,'valve');
+  const inlet = mk(new THREE.CylinderGeometry(.055,.055,.24,18), M.chrome, .62,1.06,-.92, valveGroup);
+  inlet.rotation.x = Math.PI/2; reg(inlet,'valve');
+  valveGlow = mk(new THREE.SphereGeometry(.035,12,10), M.chip, .62,1.16,-.70, valveGroup);
+  const feed = tube([[.5,1.06,-.66],[.1,1.12,-.4],[-.3,1.08,.2],[-.52,1.05,.40]], .045, M.blue);
+  valveGroup.add(feed);
+
+  /* ---- control board ---------------------------------------- */
+  const boardGroup = grp(scene, new V(1.3,.2,0));
+  const pcb = mk(new THREE.BoxGeometry(.03,.46,.62), M.pcb, .90,.28,-.30, boardGroup);
+  reg(pcb,'board',boardGroup); edges(pcb,0x7fe0b0,.3);
+  const rnd = (s)=> (Math.sin(s*127.1)*43758.5453)%1;
+  for(let i=0;i<16;i++){
+    const w=.03+Math.abs(rnd(i))*.09, h=.03+Math.abs(rnd(i+9))*.10;
+    const c = mk(new THREE.BoxGeometry(.03,w,h), M.chip, .93,
+                 .28+(Math.abs(rnd(i+3))-.5)*.7*.6, -.30+(Math.abs(rnd(i+5))-.5)*.9*.6, boardGroup);
+    reg(c,'board');
+  }
+  for(let i=0;i<3;i++){
+    const cap = mk(new THREE.CylinderGeometry(.03,.03,.08,12), M.steel, .95,.36-i*.09,-.52, boardGroup);
+    cap.rotation.z = Math.PI/2; reg(cap,'board');
+  }
+
+  /* ---- pressure switch + air trap hose ----------------------- */
+  const pressGroup = grp(scene, new V(.9,.8,-.4));
+  const pdisc = mk(new THREE.CylinderGeometry(.13,.13,.07,24), M.plastic, .72,1.06,-.28, pressGroup);
+  reg(pdisc,'press',pressGroup); edges(pdisc,0xcfe4ee,.4);
+  const airhose = tube([[.72,1.0,-.28],[.80,.55,-.20],[.62,-.10,-.10],[.30,-.52,-.06],[.06,-.62,-.06]], .028, M.plastic);
+  pressGroup.add(airhose); reg(airhose,'press');
+  const trapCham = mk(new THREE.CylinderGeometry(.06,.06,.12,16), M.plastic, .06,-.66,-.06, pressGroup);
+  reg(trapCham,'press');
+
+  /* ---- counterweight ----------------------------------------- */
+  const cwtGroup = grp(scene, new V(0,1.1,.2));
+  const cw = mk(new THREE.BoxGeometry(1.0,.26,.42), M.concrete, 0,.90,.34, cwtGroup);
+  reg(cw,'cwt',cwtGroup); edges(cw,0x8c8880,.4);
+  const cw2 = mk(new THREE.BoxGeometry(.9,.22,.3), M.concrete, 0,.86,-.42, cwtGroup);
+  reg(cw2,'cwt');
+  for(const s of [-1,1]) mk(new THREE.CylinderGeometry(.03,.03,.34,10), M.chrome, s*.36,.90,.34, cwtGroup);
+
+  /* ---- suspension: springs above, dampers below ---------------
+     Both are built once as unit parts along +Y, then re-aimed and
+     re-stretched every frame from the tub's live position, so the
+     whole assembly actually behaves like a floating tub.          */
+  const TC = new V(0, TUB.y, TUB.z);          /* tub centre */
+  function onTub(deg, z, out){                /* a lug on the tub shell */
+    const th = deg*Math.PI/180, r = TUB.r + (out||.04);
+    return new V(TC.x + Math.sin(th)*r, TC.y + Math.cos(th)*r, TC.z + z);
+  }
+
+  const springGroup = grp(scene, new V(0,1.2,0));
+  const dampGroup   = grp(scene, new V(0,-1.1,0));
+  suspension = {springs:[], dampers:[]};
+
+  for(const s of [-1,1]){
+    /* ---- spring: cabinet top corner down to a lug high on the tub */
+    const anchor = new V(s*.86, 1.16, -0.22);          /* fixed to cabinet */
+    const lug    = onTub(s*52, -0.22, .05);            /* moves with tub  */
+    /* mounting lug rides with the tub */
+    const lugMesh = mk(new THREE.BoxGeometry(.10,.09,.11), M.plastic, lug.x,lug.y,lug.z, tubGroup);
+    lugMesh.rotation.z = -s*52*Math.PI/180; reg(lugMesh,'spring');
+    /* cabinet-side bracket stays put */
+    const brk = mk(new THREE.BoxGeometry(.13,.06,.13), M.steelD, anchor.x,anchor.y+.03,anchor.z, springGroup);
+    reg(brk,'spring',springGroup);
+
+    /* helix built at true rest length along +Y, then stretched each frame */
+    const restLen = anchor.distanceTo(lug);
+    const sp = helix(new V(0,0,0), new V(0,restLen,0), .078, 11, .019, M.chrome);
+    springGroup.add(sp); reg(sp,'spring');
+    const hit = new THREE.Mesh(new THREE.CylinderGeometry(.14,.14,restLen,8), M.pick);
+    hit.geometry.translate(0,restLen/2,0);     /* pivot at the anchor end */
+    springGroup.add(hit); reg(hit,'spring');
+    suspension.springs.push({anchor, lug, mesh:sp, hit, restLen});
+
+    /* ---- damper: base rail out at the bottom, up to a low tub lug */
+    const base = new V(s*.80, -1.14, 0.18);            /* fixed to chassis */
+    const dlug = onTub(s*138, 0.18, .05);              /* moves with tub  */
+    const dlugMesh = mk(new THREE.BoxGeometry(.09,.09,.10), M.plastic, dlug.x,dlug.y,dlug.z, tubGroup);
+    reg(dlugMesh,'damp');
+    const foot = mk(new THREE.BoxGeometry(.12,.05,.12), M.steelD, base.x,base.y-.02,base.z, dampGroup);
+    reg(foot,'damp',dampGroup);
+
+    /* barrel: fixed length, pinned at the base end, aimed at the lug */
+    const barLen = 0.34;
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(.062,.058,barLen,18), M.steelD);
+    bar.geometry.translate(0, barLen/2, 0);    /* pivot at the base end */
+    dampGroup.add(bar); reg(bar,'damp');
+    /* rod: unit length, scaled so it telescopes in and out of the barrel */
+    const dRest = base.distanceTo(dlug);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(.026,.026,dRest,12), M.chrome);
+    rod.geometry.translate(0,dRest/2,0);
+    dampGroup.add(rod); reg(rod,'damp');
+    const eyeA = mk(new THREE.TorusGeometry(.048,.019,8,16), M.steelD, base.x,base.y,base.z, dampGroup);
+    eyeA.rotation.y = Math.PI/2; reg(eyeA,'damp');
+    const dhit = new THREE.Mesh(new THREE.CylinderGeometry(.11,.11,dRest,8), M.pick);
+    dhit.geometry.translate(0,dRest/2,0);
+    dampGroup.add(dhit); reg(dhit,'damp');
+    suspension.dampers.push({base, lug:dlug, bar, rod, hit:dhit, barLen, restLen:dRest});
+  }
+  updateSuspension();
+
+  /* ---- heating element ---------------------------------------- */
+  const heatGroup = grp(scene, new V(0,-1.0,.4));
+  const hp = [[-.24,-.60,-.42],[-.24,-.62,.34],[-.10,-.66,.44],[.06,-.66,.36],[.06,-.63,-.42]];
+  const heat = tube(hp, .028, M.chrome);
+  heatGroup.add(heat); reg(heat,'heat',heatGroup);
+  const flange = mk(new THREE.BoxGeometry(.24,.10,.06), M.plastic, -.09,-.60,-.50, heatGroup);
+  reg(heat,'heat');
+  const hitHeat = tube(hp, .07, M.pick); heatGroup.add(hitHeat); reg(hitHeat,'heat');
+
+  /* ---- levelling feet ----------------------------------------- */
+  const feetGroup = grp(scene, new V(0,-1.3,0));
+  for(const sx of [-1,1]) for(const sz of [-1,1]){
+    const f = mk(new THREE.CylinderGeometry(.11,.13,.11), M.rubber, sx*.86,-1.22,sz*.80, feetGroup);
+    reg(f,'feet',feetGroup);
+    const th = mk(new THREE.CylinderGeometry(.04,.04,.14,12), M.chrome, sx*.86,-1.14,sz*.80, feetGroup);
+    reg(th,'feet');
+  }
+
+  /* ---- water + suds ------------------------------------------- */
+  clipPlane = new THREE.Plane(new V(0,-1,0), sim.level);
+  M.water.clippingPlanes = [clipPlane];
+  const wg = new THREE.CylinderGeometry(TUB.r-.02, TUB.r-.02, TUB.len-.04, 48);
+  waterMesh = mk(wg, M.water, 0, TUB.y, TUB.z, tubGroup);
+  waterMesh.rotation.x = Math.PI/2; waterMesh.renderOrder = 2;
+
+  const sudGeo = new THREE.BufferGeometry();
+  const SN = 260, sp = new Float32Array(SN*3);
+  for(let i=0;i<SN;i++){
+    const a = Math.random()*Math.PI*2, r = Math.sqrt(Math.random())*(TUB.r-.08);
+    sp[i*3] = Math.cos(a)*r; sp[i*3+1] = 0; sp[i*3+2] = (Math.random()-.5)*(TUB.len-.1);
+  }
+  sudGeo.setAttribute('position', new THREE.BufferAttribute(sp,3));
+  sudsPts = new THREE.Points(sudGeo, new THREE.PointsMaterial({
+    color:0xffffff, size:.055, transparent:true, opacity:0, depthWrite:false, map:sudTex()}));
+  sudsPts.position.set(0, TUB.y, TUB.z); tubGroup.add(sudsPts);
+}
+
+function sudTex(){
+  const c = document.createElement('canvas'); c.width=c.height=64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.55,'rgba(255,255,255,.55)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g; x.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+
+/* corrugated / smooth tube along a polyline */
+function tube(points, r, mat, corrugated){
+  const v = points.map(p=>new V(p[0],p[1],p[2]));
+  const curve = new THREE.CatmullRomCurve3(v);
+  const g = new THREE.Group();
+  const t = new THREE.Mesh(new THREE.TubeGeometry(curve, 90, r, 14, false), mat);
+  g.add(t);
+  if(corrugated){
+    const n = 22;
+    for(let i=0;i<=n;i++){
+      const p = curve.getPointAt(i/n), tg = curve.getTangentAt(i/n);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r*1.06,r*.22,6,16), mat);
+      ring.position.copy(p);
+      ring.quaternion.setFromUnitVectors(new V(0,0,1), tg);
+      g.add(ring);
+    }
+  }
+  /* merge-free: return a group but give it a geometry proxy for raycasting */
+  g.traverse(o=>{ if(o.isMesh) o.userData.proxyOf = g; });
+  const wrapper = t; // primary mesh used for picking/highlight
+  g.userData.primary = t;
+  return Object.assign(g, {isMesh:false});
+}
+
+function helix(a,b,radius,turns,thick,mat){
+  const dir = b.clone().sub(a), len = dir.length();
+  const up = new V(0,1,0);
+  const q = new THREE.Quaternion().setFromUnitVectors(up, dir.clone().normalize());
+  const pts = [];
+  const N = turns*18;
+  for(let i=0;i<=N;i++){
+    const t=i/N, ang=t*turns*Math.PI*2;
+    const p = new V(Math.cos(ang)*radius, t*len, Math.sin(ang)*radius);
+    p.applyQuaternion(q).add(a);
+    pts.push(p);
+  }
+  const curve = new THREE.CatmullRomCurve3(pts);
+  return new THREE.Mesh(new THREE.TubeGeometry(curve, N*2, thick, 7, false), mat);
+}
+
+/* groups returned by tube() are Groups, not Meshes — register every child */
+const _reg = reg;
+reg = function(obj, id, group){
+  if(obj && obj.isGroup){
+    obj.traverse(o=>{ if(o.isMesh) _reg(o,id,group); });
+    return obj;
+  }
+  return _reg(obj,id,group);
+};
+
+/* ============================================================
+   INIT
+   ============================================================ */
+function init(){
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.localClippingEnabled = true;
+  document.getElementById('stage').appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(38, innerWidth/innerHeight, .1, 100);
+  raycaster = new THREE.Raycaster();
+
+  const env = makeEnv();
+  scene.environment = env;
+  buildMaterials(env);
+
+  scene.add(new THREE.HemisphereLight(0xdff0ff, 0x0a1216, .55));
+  const key = new THREE.DirectionalLight(0xffffff, 1.15); key.position.set(3,5,4); scene.add(key);
+  const fill = new THREE.DirectionalLight(0x9fd0ff, .5); fill.position.set(-4,2,-3); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffc98a, .55); rim.position.set(0,-2,-5); scene.add(rim);
+
+  /* floor */
+  const floorMat = new THREE.MeshStandardMaterial({color:0x121d23, metalness:.25, roughness:.55});
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(9,64), floorMat);
+  floor.rotation.x = -Math.PI/2; floor.position.y = -1.30; scene.add(floor);
+  const gridGeo = new THREE.RingGeometry(1.9,1.92,64);
+  const halo = new THREE.Mesh(gridGeo, new THREE.MeshBasicMaterial({color:0x2b4652}));
+  halo.rotation.x = -Math.PI/2; halo.position.y = -1.295; scene.add(halo);
+
+  buildMachine();
+  bindUI();
+  addEventListener('resize', onResize);
+  document.getElementById('loading').style.display = 'none';
+  animate();
+}
+
+function onResize(){
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+
+/* ============================================================
+   CAMERA + PICKING
+   ============================================================ */
+function updateCamera(dt){
+  cam.theta += (cam.tTheta-cam.theta)*Math.min(1,dt*8);
+  cam.phi   += (cam.tPhi-cam.phi)*Math.min(1,dt*8);
+  cam.dist  += (cam.tDist-cam.dist)*Math.min(1,dt*8);
+  const r = cam.dist;
+  camera.position.set(
+    cam.target.x + r*Math.sin(cam.phi)*Math.cos(cam.theta),
+    cam.target.y + r*Math.cos(cam.phi),
+    cam.target.z + r*Math.sin(cam.phi)*Math.sin(cam.theta));
+  camera.lookAt(cam.target);
+}
+
+const readout = document.getElementById('readout');
+function setHover(id, x, y){
+  if(hovered === id) { if(id){ readout.style.left=(x+14)+'px'; readout.style.top=(y-10)+'px'; } return; }
+  hovered = id;
+  if(id && !game.on){
+    readout.textContent = PART[id].name;
+    readout.style.opacity = 1;
+    readout.style.left = (x+14)+'px'; readout.style.top = (y-10)+'px';
+  } else {
+    readout.style.opacity = 0;
+  }
+  document.body.style.cursor = id ? 'pointer' : (dragging?'grabbing':'grab');
+}
+
+function pick(cx, cy){
+  mouse.x = (cx/innerWidth)*2-1;
+  mouse.y = -(cy/innerHeight)*2+1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(pickables, false);
+  return hits.length ? hits[0] : null;
+}
+
+/* highlight bookkeeping */
+const flash = {};   // id -> {color, t}
+function applyHighlight(){
+  const now = performance.now()/1000;
+  for(const id in partMeshes){
+    let col = null, amt = 0;
+    if(flash[id]){
+      const k = 1 - (now - flash[id].t)/flash[id].dur;
+      if(k<=0){ delete flash[id]; }
+      else { col = flash[id].color; amt = Math.min(1,k*1.4); }
+    }
+    if(!col && hovered===id){ col = 0xffb347; amt = .45; }
+    partMeshes[id].forEach(m=>{
+      if(!m.material || !m.material.emissive) return;
+      if(col){ m.material.emissive.setHex(col); m.material.emissiveIntensity = amt; }
+      else { m.material.emissive.setHex(0x000000); m.material.emissiveIntensity = 0; }
+    });
+  }
+}
+function flashPart(id, color, dur){ flash[id] = {color, t:performance.now()/1000, dur:dur||1.6}; }
+
+/* ============================================================
+   CYCLE SIMULATION
+   ============================================================ */
+const STAGES = ['idle','fill','wash','drain','spin','done'];
+function setStage(s){
+  sim.state = s; sim.t = 0;
+  document.querySelectorAll('.stage').forEach(el=>el.classList.toggle('on', el.dataset.st===s));
+}
+function runCycle(){
+  if(sim.running){ sim.running=false; setStage('idle'); sim.drumSpeed=0; document.getElementById('runBtn').textContent='Run cycle'; return; }
+  sim.running = true; sim.level = LEVEL_EMPTY;
+  setStage('fill');
+  document.getElementById('runBtn').textContent = 'Stop';
+}
+function stepSim(dt){
+  sim.t += dt;
+  const S = sim.state;
+  if(!sim.running){ sim.drumSpeed *= (1-dt*1.6); }
+  else if(S==='fill'){
+    sim.level += dt*(LEVEL_FULL-LEVEL_EMPTY)/4.2;
+    sim.drumSpeed = Math.sin(sim.t*1.2)*.6;
+    if(sim.level>=LEVEL_FULL){ sim.level=LEVEL_FULL; setStage('wash'); }
+  }
+  else if(S==='wash'){
+    const phase = Math.floor(sim.t/2.6)%2;
+    const target = phase? -2.4 : 2.4;
+    sim.drumSpeed += (target-sim.drumSpeed)*dt*2.2;
+    if(sim.t>13) setStage('drain');
+  }
+  else if(S==='drain'){
+    sim.level -= dt*(LEVEL_FULL-LEVEL_EMPTY)/3.4;
+    sim.drumSpeed += (1.2-sim.drumSpeed)*dt*2;
+    if(sim.level<=LEVEL_EMPTY){ sim.level=LEVEL_EMPTY; setStage('spin'); }
+  }
+  else if(S==='spin'){
+    sim.drumSpeed += (26-sim.drumSpeed)*dt*.24;   /* slow enough to watch it pass through resonance */
+    if(sim.t>14){ setStage('done'); }
+  }
+  else if(S==='done'){
+    sim.drumSpeed *= (1-dt*1.1);
+    if(sim.t>3.5){ sim.running=false; setStage('idle');
+      document.getElementById('runBtn').textContent='Run cycle'; }
+  }
+
+  /* water */
+  clipPlane.constant = sim.level;
+  waterMesh.visible = sim.level > LEVEL_EMPTY+0.005;
+  /* suds ride the surface */
+  const sudOn = (S==='wash'||S==='drain') && sim.running;
+  const sm = sudsPts.material;
+  sm.opacity += ((sudOn?.85:0)-sm.opacity)*dt*2;
+  sudsPts.position.y = sim.level + 0.02;
+  const pos = sudsPts.geometry.attributes.position;
+  const tt = performance.now()/900;
+  for(let i=0;i<pos.count;i+=1){
+    pos.setY(i, Math.sin(tt*2 + i*.7)*.02 + Math.abs(sim.drumSpeed)*.012*Math.sin(i*3.1+tt*3));
+  }
+  pos.needsUpdate = true;
+
+  /* drum + pulley + belt + pump */
+  sim.drumAngle += sim.drumSpeed*dt;
+  drumGroup.rotation.z = sim.drumAngle;
+  scene.traverse(o=>{ if(o.userData && o.userData.isPulley) o.rotation.z = sim.drumAngle; });
+  /* the motor pulley turns at the true reduction ratio, ~4.2 : 1 */
+  if(motorPulleyRef) motorPulleyRef.rotation.z = sim.drumAngle * DRIVE_RATIO;
+  /* belt travel: surface speed of the big pulley, drawn as texture crawl */
+  if(beltTexRef) beltTexRef.offset.x = (beltTexRef.offset.x - sim.drumSpeed*dt*0.42) % 1;
+  if(pumpRotor) pumpRotor.rotation.z += dt*(S==='drain'&&sim.running?34:0);
+
+  /* Out-of-balance response. A tub on springs is a classic rotating-unbalance
+     system: barely moves at low rpm, swings hardest passing through resonance
+     on the way up, then settles once it is spinning above it. That pass is
+     the moment a technician listens for tired dampers.                      */
+  const spd = Math.abs(sim.drumSpeed);
+  const WN = 9.0, ZETA = 0.07 + 0.21*sim.damping;   /* worn dampers → less zeta */
+  const rr = spd/WN, rr2 = rr*rr;
+  const resp = rr2 / Math.sqrt((1-rr2)*(1-rr2) + (2*ZETA*rr)*(2*ZETA*rr));
+  const load = (S==='spin') ? 1 : (S==='wash' ? 0.30 : 0.12);
+  sim.wobble = Math.min(1, resp/2.2) * load;
+  const w = resp * load * 0.0150;
+  tubGroup.position.x = Math.cos(sim.drumAngle)*w;
+  tubGroup.position.y = Math.sin(sim.drumAngle)*w;
+  tubGroup.rotation.z = Math.cos(sim.drumAngle)*w*0.10;
+  updateSuspension();
+
+  /* dispenser + valve tell-tales */
+  const filling = (S==='fill'&&sim.running);
+  if(valveGlow) valveGlow.material = filling ? new THREE.MeshBasicMaterial({color:0xffb347}) : M.chip;
+}
+
+/* ============================================================
+   GAME
+   ============================================================ */
+const game = {on:false, queue:[], i:0, score:0, streak:0, best:0, wrong:0, firstTry:0, missed:[], asked:0, t0:0};
+const hud = document.getElementById('hud'), clueEl = document.getElementById('clue'),
+      hintEl = document.getElementById('hint'), scoreEl = document.getElementById('score'),
+      ticksEl = document.getElementById('ticks'), factEl = document.getElementById('fact');
+
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+function startGame(){
+  game.on = true; game.i = 0; game.score = 0; game.streak = 0; game.best = 0;
+  game.wrong = 0; game.firstTry = 0; game.missed = []; game.asked = 0;
+  const t1 = shuffle(PARTS.filter(p=>p.tier===1)).slice(0,5);
+  const t2 = shuffle(PARTS.filter(p=>p.tier===2)).slice(0,5);
+  const t3 = shuffle(PARTS.filter(p=>p.tier===3)).slice(0,5);
+  game.queue = [...t1,...t2,...t3];
+  hud.classList.add('show');
+  factEl.classList.remove('show');
+  document.getElementById('done').classList.remove('show');
+  buildTicks();
+  askNext();
+}
+function endGame(){
+  game.on = false; hud.classList.remove('show'); factEl.classList.remove('show');
+}
+function buildTicks(){
+  ticksEl.innerHTML = '';
+  game.queue.forEach((_,i)=>{
+    const d = document.createElement('div'); d.className = 'tick'; ticksEl.appendChild(d);
+  });
+  markTicks();
+}
+function markTicks(){
+  [...ticksEl.children].forEach((d,i)=>{
+    d.className = 'tick' + (i<game.i? (game.results&&game.results[i]==='hit'?' hit':' miss') : (i===game.i?' now':''));
+  });
+}
+game.results = [];
+
+function askNext(){
+  if(game.i >= game.queue.length){ finish(); return; }
+  game.tries = 0; game.t0 = performance.now();
+  const p = game.queue[game.i];
+  clueEl.textContent = p.clue;
+  hintEl.innerHTML = 'Click it on the machine · <span style="opacity:.6">drag to rotate</span>';
+  factEl.classList.remove('show');
+  markTicks();
+}
+function answer(id){
+  const p = game.queue[game.i];
+  if(id === p.id){
+    const secs = (performance.now()-game.t0)/1000;
+    const speed = Math.max(0, 1 - secs/16);
+    let pts = 0;
+    if(game.tries===0){ pts = 100 + Math.round(speed*60) + game.streak*15; game.firstTry++; game.streak++; }
+    else if(game.tries===1){ pts = 45; game.streak = 0; }
+    else { pts = 15; game.streak = 0; }
+    game.best = Math.max(game.best, game.streak);
+    game.score += pts;
+    game.results[game.i] = game.tries===0 ? 'hit' : 'miss';
+    if(game.tries>0) game.missed.push(p.name);
+    scoreEl.textContent = game.score + ' pts';
+    flashPart(id, 0x2f9d5b, 1.8);
+    showFact(p, '+'+pts+' pts');
+    hintEl.innerHTML = '<i>Correct — '+p.name+'</i>';
+    game.i++;
+    setTimeout(()=>{ if(game.on) askNext(); }, 2600);
+  } else {
+    game.tries++; game.wrong++; game.streak = 0;
+    flashPart(id, 0xc23a2c, 1.0);
+    if(game.tries>=3){
+      game.results[game.i] = 'miss'; game.missed.push(p.name);
+      flashPart(p.id, 0xffb347, 2.2);
+      showFact(p, 'shown');
+      hintEl.innerHTML = '<b>That was the '+p.name+'.</b>';
+      game.i++;
+      setTimeout(()=>{ if(game.on) askNext(); }, 3000);
+    } else {
+      hintEl.innerHTML = '<b>That is the '+PART[id].name+'.</b> Try again — '+(3-game.tries)+' left';
+    }
+  }
+}
+function showFact(p, tag){
+  document.getElementById('factName').textContent = p.name + (tag? '  ·  '+tag : '');
+  document.getElementById('factText').textContent = p.fact;
+  factEl.classList.add('show');
+}
+function finish(){
+  const acc = Math.round(100*game.firstTry/game.queue.length);
+  let rank = 'Owner';
+  if(acc>=95) rank = 'Master technician';
+  else if(acc>=80) rank = 'Service tech';
+  else if(acc>=60) rank = 'Apprentice';
+  else if(acc>=40) rank = 'Handy neighbour';
+  document.getElementById('rank').textContent = rank;
+  document.getElementById('rScore').textContent = game.score + ' pts';
+  document.getElementById('rAcc').textContent = acc + '%';
+  document.getElementById('rStreak').textContent = game.best;
+  document.getElementById('rMiss').textContent = game.missed.length? [...new Set(game.missed)].join(', ') : 'none';
+  document.getElementById('done').classList.add('show');
+  hud.classList.remove('show'); factEl.classList.remove('show');
+}
+
+/* ============================================================
+   UI WIRING
+   ============================================================ */
+function bindUI(){
+  const el = renderer.domElement;
+  let lastX=0,lastY=0,pinch=0;
+
+  el.addEventListener('pointerdown', e=>{
+    dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+    el.setPointerCapture(e.pointerId);
+    document.body.style.cursor='grabbing';
+  });
+  el.addEventListener('pointermove', e=>{
+    if(dragging){
+      const dx = e.clientX-lastX, dy = e.clientY-lastY;
+      moved += Math.abs(dx)+Math.abs(dy);
+      cam.tTheta -= dx*0.0068;
+      cam.tPhi = Math.max(0.30, Math.min(2.55, cam.tPhi - dy*0.0058));
+      lastX = e.clientX; lastY = e.clientY;
+    } else {
+      const h = pick(e.clientX, e.clientY);
+      setHover(h? h.object.userData.part : null, e.clientX, e.clientY);
+    }
+  });
+  el.addEventListener('pointerup', e=>{
+    dragging = false; document.body.style.cursor = hovered?'pointer':'grab';
+    if(moved < 7){
+      const h = pick(e.clientX, e.clientY);
+      if(h){
+        const id = h.object.userData.part;
+        if(game.on) answer(id);
+        else { flashPart(id, 0xffb347, 1.2); showFact(PART[id],''); }
+      } else if(!game.on){ factEl.classList.remove('show'); }
+    }
+  });
+  el.addEventListener('wheel', e=>{
+    e.preventDefault();
+    cam.tDist = Math.max(2.6, Math.min(11, cam.tDist + e.deltaY*0.0035));
+  }, {passive:false});
+
+  /* pinch */
+  const touches = {};
+  el.addEventListener('touchstart', e=>{ if(e.touches.length===2){
+    pinch = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+  }},{passive:true});
+  el.addEventListener('touchmove', e=>{ if(e.touches.length===2){
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    cam.tDist = Math.max(2.6, Math.min(11, cam.tDist * (pinch/d)));
+    pinch = d; dragging = false;
+  }},{passive:true});
+
+  const exp = document.getElementById('exp'), expVal = document.getElementById('expVal');
+  exp.addEventListener('input', ()=>{ expVal.textContent = exp.value+'%'; });
+  const shell = document.getElementById('shell'), shellVal = document.getElementById('shellVal');
+  shell.addEventListener('input', ()=>{
+    const v = shell.value/100;
+    shellVal.textContent = shell.value+'%';
+    M.shell.opacity = v; M.tubMat.opacity = Math.max(.1, v*1.3);
+  });
+  const dmp = document.getElementById('damping'), dmpVal = document.getElementById('dampVal');
+  dmp.addEventListener('input', ()=>{
+    const v = dmp.value/100;
+    sim.damping = v;
+    dmpVal.textContent = v>.82 ? 'Good' : v>.55 ? 'Fair' : v>.28 ? 'Worn' : 'Shot';
+    dmpVal.style.color = v>.55 ? '' : '#ff8a6b';
+  });
+
+  document.getElementById('runBtn').onclick = runCycle;
+  document.getElementById('resetBtn').onclick = ()=>{
+    cam.tTheta = HOME.theta; cam.tPhi = HOME.phi; cam.tDist = HOME.dist;
+    exp.value = 0; expVal.textContent = '0%';
+  };
+  const tE = document.getElementById('tabExplore'), tG = document.getElementById('tabGame');
+  tE.onclick = ()=>{ tE.setAttribute('aria-pressed','true'); tG.setAttribute('aria-pressed','false');
+    endGame(); document.getElementById('done').classList.remove('show'); };
+  tG.onclick = ()=>{ tG.setAttribute('aria-pressed','true'); tE.setAttribute('aria-pressed','false');
+    readout.style.opacity=0; startGame(); };
+  document.getElementById('againBtn').onclick = ()=>startGame();
+  document.getElementById('backBtn').onclick = ()=>{ tE.click(); };
+
+  addEventListener('keydown', e=>{
+    if(e.key==='r'||e.key==='R') document.getElementById('resetBtn').click();
+    if(e.key===' '){ e.preventDefault(); runCycle(); }
+  });
+}
+
+/* explode */
+function applyExplode(dt){
+  const k = document.getElementById('exp').value/100;
+  for(const id in partGroups){
+    const g = partGroups[id];
+    if(!g.userData.dir) continue;
+    const want = g.userData.dir.clone().multiplyScalar(k*0.55);
+    g.position.lerp(want, Math.min(1, dt*6));
+  }
+}
+
+/* ============================================================
+   LOOP
+   ============================================================ */
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(.05, clock.getDelta());
+  updateCamera(dt);
+  stepSim(dt);
+  applyExplode(dt);
+  applyHighlight();
+  renderer.render(scene, camera);
+}
+
+init();
+</script>
+</body>
+</html>
