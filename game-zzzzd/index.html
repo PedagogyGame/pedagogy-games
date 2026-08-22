@@ -1,1 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Refrigerator — Sectioned Anatomy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0b1016;
+    --steel:#131b24;
+    --steel-2:#1a242f;
+    --line:#2b3a47;
+    --frost:#e8eef3;
+    --mute:#8fa3b3;
+    --copper:#d98a4e;
+    --air:#6fc7dd;
+    --heat:#e0645f;
+    --shellc:#b9c2cc;
+    --store:#8fd39a;
+    --water:#7f9ff2;
+    --ctrl:#c99be0;
+    --panel-w: 336px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--ink);color:var(--frost);
+    font-family:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  body{display:flex;flex-direction:row}
+  button,input{font:inherit;color:inherit}
 
+  /* ---------- stage ---------- */
+  #stage{position:relative;flex:1;min-width:0;min-height:0;background:radial-gradient(120% 90% at 60% 20%,#1b2733 0%,#0d141b 55%,#070b0f 100%)}
+  canvas{display:block;width:100%;height:100%;touch-action:none}
+  #overlay{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  #leaders{position:absolute;inset:0;width:100%;height:100%}
+
+  .pin{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;
+    background:var(--cat,#fff);box-shadow:0 0 0 2px rgba(8,12,16,.85),0 0 14px 2px var(--cat,#fff);transition:opacity .18s}
+  .chip{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+    font-family:"Barlow Condensed",ui-sans-serif,sans-serif;font-weight:500;font-size:14px;letter-spacing:.09em;
+    text-transform:uppercase;padding:3px 9px 2px;border-radius:2px;
+    background:rgba(10,15,20,.86);border:1px solid var(--cat,#fff);color:var(--frost);
+    backdrop-filter:blur(6px);pointer-events:auto;cursor:pointer}
+  .chip .n{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--cat,#fff);margin-right:6px;letter-spacing:0}
+  .chip.sel{background:var(--cat,#fff);color:#0b1016;border-color:var(--cat)}
+  .chip.sel .n{color:rgba(11,16,22,.7)}
+
+  #stagehead{position:absolute;top:0;left:0;right:0;padding:14px 16px;display:flex;gap:12px;
+    align-items:flex-start;justify-content:space-between;pointer-events:none}
+  #hint{font-size:11.5px;color:var(--mute);letter-spacing:.02em;max-width:44ch;line-height:1.5}
+  #hint b{color:var(--frost);font-weight:500}
+  .viewbtns{display:flex;gap:6px;pointer-events:auto}
+  .vb{background:rgba(14,20,27,.72);border:1px solid var(--line);color:var(--mute);
+    border-radius:2px;padding:6px 10px;cursor:pointer;font-family:"Barlow Condensed",sans-serif;
+    font-size:13px;letter-spacing:.1em;text-transform:uppercase;backdrop-filter:blur(6px)}
+  .vb:hover{color:var(--frost);border-color:#3d5162}
+  .vb.on{color:var(--ink);background:var(--frost);border-color:var(--frost)}
+  .vb:focus-visible{outline:2px solid var(--air);outline-offset:2px}
+
+  /* ---------- panel ---------- */
+  #panel{width:var(--panel-w);flex:0 0 var(--panel-w);background:linear-gradient(180deg,#141d26 0%,#0e161e 100%);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .phead{padding:18px 18px 12px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.22em;color:var(--copper);text-transform:uppercase}
+  h1{font-family:"Barlow Condensed",sans-serif;font-weight:600;letter-spacing:.02em;
+    font-size:29px;line-height:1;margin:8px 0 6px;text-transform:uppercase}
+  h1 span{color:var(--mute);font-weight:400}
+  .sub{font-size:11.5px;color:var(--mute);line-height:1.5}
+
+  .tools{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:11px}
+  .slider{display:flex;flex-direction:column;gap:5px}
+  .slabel{display:flex;justify-content:space-between;align-items:baseline;
+    font-family:"Barlow Condensed",sans-serif;font-size:13px;letter-spacing:.13em;text-transform:uppercase;color:var(--mute)}
+  .slabel b{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:400;color:var(--frost)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:16px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line)}
+  input[type=range]::-moz-range-track{height:2px;background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;margin-top:-5.5px;
+    border-radius:50%;background:var(--frost);border:none}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--frost);border:none}
+  input[type=range]:focus-visible{outline:2px solid var(--air);outline-offset:3px}
+  .toggles{display:flex;flex-wrap:wrap;gap:6px}
+
+  .filters{padding:12px 18px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:5px}
+  .cf{border:1px solid var(--line);background:transparent;border-radius:2px;padding:4px 8px;cursor:pointer;
+    font-family:"Barlow Condensed",sans-serif;font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mute);
+    display:flex;align-items:center;gap:6px}
+  .cf i{width:7px;height:7px;border-radius:50%;background:var(--c);display:block}
+  .cf.on{color:#0b1016;background:var(--c);border-color:var(--c)}
+  .cf:focus-visible{outline:2px solid var(--air);outline-offset:2px}
+
+  #detail{padding:0 18px;max-height:0;overflow:hidden;transition:max-height .3s ease;border-bottom:1px solid transparent}
+  #detail.open{max-height:340px;padding:14px 18px;border-bottom:1px solid var(--line);background:#101922}
+  .dnum{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;color:var(--cat)}
+  .dname{font-family:"Barlow Condensed",sans-serif;font-size:25px;text-transform:uppercase;letter-spacing:.03em;margin:3px 0 8px}
+  .ddesc{font-size:13px;line-height:1.62;color:#c3d1dc}
+  .dsys{margin-top:10px;font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--mute)}
+
+  .search{padding:12px 18px 8px}
+  .search input{width:100%;background:#0a1118;border:1px solid var(--line);border-radius:2px;
+    padding:8px 10px;font-size:13px;outline:none}
+  .search input:focus{border-color:var(--air)}
+  .search input::placeholder{color:#5d7284}
+
+  #list{flex:1;overflow-y:auto;padding:4px 10px 26px;min-height:0}
+  .grp{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--mute);padding:14px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px;
+    display:flex;justify-content:space-between}
+  .row{display:flex;gap:9px;align-items:baseline;width:100%;text-align:left;background:none;border:0;
+    padding:5px 8px;border-radius:2px;cursor:pointer;color:var(--frost)}
+  .row:hover{background:#18232e}
+  .row.on{background:var(--cat);color:#0b1016}
+  .row .idx{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--mute);min-width:20px}
+  .row.on .idx{color:rgba(11,16,22,.65)}
+  .row .nm{font-size:13.5px;letter-spacing:.01em}
+  .row .opt{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--mute);letter-spacing:.1em}
+  .row.on .opt{color:rgba(11,16,22,.6)}
+  .row:focus-visible{outline:2px solid var(--air);outline-offset:-2px}
+
+  #loader{position:absolute;inset:0;display:grid;place-content:center;gap:10px;justify-items:center;
+    background:var(--ink);z-index:20;transition:opacity .5s}
+  #loader.gone{opacity:0;pointer-events:none}
+  .lbar{width:150px;height:2px;background:var(--line);overflow:hidden}
+  .lbar i{display:block;height:100%;width:40%;background:var(--copper);animation:sweep 1.1s infinite ease-in-out}
+  @keyframes sweep{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+  #loader p{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.2em;color:var(--mute);text-transform:uppercase}
+
+  @media (max-width:860px){
+    body{flex-direction:column}
+    #stage{flex:0 0 52vh;height:52vh}
+    #panel{width:100%;flex:1 1 auto;border-right:0;border-top:1px solid var(--line)}
+    h1{font-size:24px}
+    .phead{padding:12px 14px 10px}
+    .tools,.filters,.search{padding-left:14px;padding-right:14px}
+    #detail.open{padding:12px 14px}
+    #hint{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<aside id="panel">
+  <div class="phead">
+    <div class="kicker">Sealed system · cabinet · cold chain</div>
+    <h1>Refrigerator <span>/ sectioned</span></h1>
+    <div class="sub">Sixty-five named parts on a top-freezer cabinet, cut open along the right wall. Tap any part in the model or the list.</div>
+  </div>
+
+  <div class="tools">
+    <div class="slider">
+      <div class="slabel"><span>Section cut</span><b id="vCut">55%</b></div>
+      <input id="sCut" type="range" min="0" max="100" value="55">
+    </div>
+    <div class="slider">
+      <div class="slabel"><span>Exploded view</span><b id="vExp">0%</b></div>
+      <input id="sExp" type="range" min="0" max="100" value="0">
+    </div>
+    <div class="toggles">
+      <button class="vb" id="tDoor">Open doors</button>
+      <button class="vb on" id="tPower">Power on</button>
+      <button class="vb" id="tXray">X-ray shell</button>
+      <button class="vb" id="tLab">All labels</button>
+      <button class="vb" id="tTour">Guided tour</button>
+    </div>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <div id="detail"></div>
+
+  <div class="search"><input id="q" type="search" placeholder="Search parts, e.g. damper, drier, auger" autocomplete="off"></div>
+  <div id="list"></div>
+</aside>
+
+<main id="stage">
+  <canvas id="cv"></canvas>
+  <div id="overlay">
+    <svg id="leaders"></svg>
+  </div>
+  <div id="stagehead">
+    <div id="hint"><b>Drag</b> to orbit · <b>scroll / pinch</b> to zoom · <b>tap a part</b> to identify it. Copper particles trace the refrigerant loop; pale blue traces cabinet airflow.</div>
+    <div class="viewbtns">
+      <button class="vb" id="tSpin">Auto-orbit</button>
+      <button class="vb" id="tReset">Reset view</button>
+    </div>
+  </div>
+  <div id="loader"><div class="lbar"><i></i></div><p>Assembling cabinet</p></div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+if(!window.THREE){document.getElementById('loader').innerHTML='<p style="color:#e0645f">Could not load the 3D library. Check the connection and reload.</p>';return;}
+const V3=THREE.Vector3;
+
+/* ============================== categories ============================== */
+const CATS={
+  refrigeration:{label:"Refrigeration",color:"#d98a4e"},
+  airflow:{label:"Airflow",color:"#6fc7dd"},
+  defrost:{label:"Defrost & drainage",color:"#e0645f"},
+  cabinet:{label:"Cabinet & doors",color:"#b9c2cc"},
+  storage:{label:"Storage",color:"#8fd39a"},
+  water:{label:"Water & ice",color:"#7f9ff2"},
+  controls:{label:"Controls",color:"#c99be0"}
+};
+
+/* ============================== renderer ============================== */
+const canvas=document.getElementById('cv'), stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.02;
+renderer.localClippingEnabled=true;
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(38,1,0.05,60);
+
+/* environment (canvas gradient -> PMREM) for believable metal */
+(function env(){
+  try{
+    const c=document.createElement('canvas');c.width=32;c.height=128;
+    const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);
+    gr.addColorStop(0,'#dfe9f2');gr.addColorStop(.45,'#8ea3b5');gr.addColorStop(.55,'#3a4753');gr.addColorStop(1,'#10161c');
+    g.fillStyle=gr;g.fillRect(0,0,32,128);
+    const t=new THREE.CanvasTexture(c);t.mapping=THREE.EquirectangularReflectionMapping;
+    const p=new THREE.PMREMGenerator(renderer);p.compileEquirectangularShader();
+    scene.environment=p.fromEquirectangular(t).texture;t.dispose();p.dispose();
+  }catch(e){}
+})();
+
+scene.add(new THREE.HemisphereLight(0xdbe8f4,0x1b232b,0.55));
+const key=new THREE.DirectionalLight(0xffffff,1.35);key.position.set(3.2,4.4,3.0);scene.add(key);
+const fill=new THREE.DirectionalLight(0xbcd4e6,0.42);fill.position.set(-3.4,1.8,-2.4);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xffd9b0,0.30);rim.position.set(-1.2,2.2,-3.6);scene.add(rim);
+const lampFF=new THREE.PointLight(0xfff0d8,0.55,1.6,2);lampFF.position.set(0,1.10,0.10);scene.add(lampFF);
+const lampFZ=new THREE.PointLight(0xeaf4ff,0.45,1.2,2);lampFZ.position.set(0,1.74,0.05);scene.add(lampFZ);
+
+/* floor + contact shadow */
+(function floor(){
+  const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');
+  const r=g.createRadialGradient(128,128,10,128,128,124);
+  r.addColorStop(0,'rgba(0,0,0,.62)');r.addColorStop(.55,'rgba(0,0,0,.22)');r.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=r;g.fillRect(0,0,256,256);
+  const t=new THREE.CanvasTexture(c);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(2.6,2.2),
+    new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false}));
+  m.rotation.x=-Math.PI/2;m.position.set(0,0.004,-0.02);scene.add(m);
+  const disc=new THREE.Mesh(new THREE.CircleGeometry(3.2,64),
+    new THREE.MeshStandardMaterial({color:0x0e151c,roughness:.62,metalness:.1}));
+  disc.rotation.x=-Math.PI/2;scene.add(disc);
+})();
+
+/* ============================== materials ============================== */
+const clip=new THREE.Plane(new V3(-1,0,0),0.62);
+function M(o){const m=new THREE.MeshStandardMaterial(o);m.clippingPlanes=[clip];return m;}
+const MAT={
+  steel:   M({color:0xb7bfc7,metalness:.88,roughness:.30,side:THREE.DoubleSide}),
+  steelD:  M({color:0x9aa4ad,metalness:.85,roughness:.38,side:THREE.DoubleSide}),
+  liner:   M({color:0xf1f2ee,metalness:.02,roughness:.72,side:THREE.DoubleSide}),
+  linerG:  M({color:0xd9dee1,metalness:.02,roughness:.78,side:THREE.DoubleSide}),
+  foam:    M({color:0xe8d7a2,metalness:0,roughness:.98,side:THREE.DoubleSide}),
+  copper:  M({color:0xc0783f,metalness:.92,roughness:.26}),
+  copperD: M({color:0x8d5730,metalness:.9,roughness:.34}),
+  alum:    M({color:0xcfd6db,metalness:.72,roughness:.34,side:THREE.DoubleSide}),
+  black:   M({color:0x22262b,metalness:.35,roughness:.62}),
+  rubber:  M({color:0x191c20,metalness:.05,roughness:.95,side:THREE.DoubleSide}),
+  plastic: M({color:0x2e343b,metalness:.1,roughness:.55}),
+  white:   M({color:0xe6e9ea,metalness:.05,roughness:.5}),
+  glass:   M({color:0xbfe6ef,metalness:0,roughness:.06,transparent:true,opacity:.26,side:THREE.DoubleSide}),
+  clearp:  M({color:0xcfe6ee,metalness:0,roughness:.18,transparent:true,opacity:.34,side:THREE.DoubleSide}),
+  ice:     M({color:0xdcefff,metalness:0,roughness:.14,transparent:true,opacity:.7}),
+  water:   M({color:0x5f86c8,metalness:.2,roughness:.12,transparent:true,opacity:.8,side:THREE.DoubleSide}),
+  heat:    M({color:0x6a4a3a,emissive:0x000000,metalness:.4,roughness:.4}),
+  wire:    M({color:0x14171a,metalness:.2,roughness:.85}),
+  board:   M({color:0x1d4a3a,metalness:.2,roughness:.6,side:THREE.DoubleSide}),
+  gasket:  M({color:0x23272c,metalness:.02,roughness:.92,side:THREE.DoubleSide})
+};
+
+/* ============================== helpers ============================== */
+function at(m,x,y,z){m.position.set(x,y,z);return m;}
+function box(w,h,d,x,y,z,mat){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);return m;}
+function cyl(r1,r2,h,x,y,z,mat,axis,seg){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,seg||20),mat);
+  if(axis==='x')m.rotation.z=Math.PI/2; if(axis==='z')m.rotation.x=Math.PI/2;
+  m.position.set(x,y,z);return m;}
+function tube(pts,r,mat,closed,seg){
+  const cv=new THREE.CatmullRomCurve3(pts,!!closed,'catmullrom',0.08);
+  return new THREE.Mesh(new THREE.TubeGeometry(cv,seg||Math.max(24,pts.length*8),r,10,!!closed),mat);}
+function serp(x0,x1,ys,z){const p=[];ys.forEach((y,i)=>{const a=i%2?x1:x0,b=i%2?x0:x1;p.push(new V3(a,y,z));p.push(new V3(b,y,z));});return p;}
+function helix(rad,turns,len,axis,cx,cy,cz,n){
+  const p=[];n=n||turns*24;
+  for(let i=0;i<=n;i++){const t=i/n,a=t*Math.PI*2*turns,o=(t-.5)*len;
+    if(axis==='z')p.push(new V3(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad,cz+o));
+    else if(axis==='x')p.push(new V3(cx+o,cy+Math.sin(a)*rad,cz+Math.cos(a)*rad));
+    else p.push(new V3(cx+Math.cos(a)*rad,cy+o,cz+Math.sin(a)*rad));}
+  return p;}
+function fanBlade(r,n,mat,axis){
+  const g=new THREE.Group();
+  g.add(cyl(r*0.22,r*0.22,r*0.30,0,0,0,mat,axis,16));
+  for(let i=0;i<n;i++){
+    const b=new THREE.Mesh(new THREE.BoxGeometry(r*0.92,r*0.028,r*0.46),mat);
+    b.position.set(r*0.5,0,0);b.rotation.x=0.45;
+    const w=new THREE.Group();w.add(b);w.rotation.y=i*Math.PI*2/n;g.add(w);}
+  if(axis==='z')g.rotation.x=Math.PI/2; if(axis==='x')g.rotation.z=Math.PI/2;
+  return g;}
+
+/* pivoting door rig: meshes authored in world coords, group rotates about hinge */
+function pivot(px,py,pz){
+  const outer=new THREE.Group();outer.position.set(px,py,pz);
+  const inner=new THREE.Group();inner.position.set(-px,-py,-pz);outer.add(inner);
+  return {outer,inner};}
+
+/* ============================== part registry ============================== */
+const PARTS=[];const byId={};const spinners=[];
+const fridge=new THREE.Group();scene.add(fridge);
+const dFZ=pivot(-0.45,0,0.34), dFF=pivot(-0.45,0,0.34);
+fridge.add(dFZ.outer,dFF.outer);
+
+function addPart(spec,build){
+  const g=new THREE.Group();
+  (spec.parent||fridge).add(g);
+  build(g);
+  const meshes=[];
+  g.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.userData.baseOp=o.material.opacity;
+    o.userData.baseTr=o.material.transparent; o.userData.baseEm=o.material.emissive?o.material.emissive.getHex():0;
+    o.userData.pid=spec.id; meshes.push(o);} });
+  const p={...spec,group:g,meshes,label:spec.label,explode:spec.explode||new V3(0,0,0),
+    color:CATS[spec.cat].color, col:new THREE.Color(CATS[spec.cat].color), curOp:1,tgtOp:1,curEm:0,tgtEm:0};
+  g.userData.part=p;PARTS.push(p);byId[spec.id]=p;return p;}
+
+/* ============================== geometry: cabinet ============================== */
+const X=0.45, ZF=0.34, ZB=-0.375, TOP=1.85;
+
+addPart({id:'cabinet',n:26,name:'Cabinet',cat:'cabinet',shell:true,explode:new V3(0,0,-0.16),
+  label:new V3(0.45,1.02,-0.10),
+  desc:'The steel outer shell. It carries the structural load, holds the foam in place and forms the moisture barrier around the whole box.'},g=>{
+  g.add(box(0.014,TOP,0.715,-X+0.007,TOP/2,-0.0175,MAT.steel));      // left skin
+  g.add(box(0.014,TOP,0.715, X-0.007,TOP/2,-0.0175,MAT.steel));      // right skin
+  g.add(box(0.90,TOP,0.014,0,TOP/2,ZB+0.007,MAT.steelD));            // back
+  g.add(box(0.90,0.014,0.715,0,TOP-0.007,-0.0175,MAT.steel));        // top
+  // front face flange
+  g.add(box(0.06,TOP,0.012,-X+0.03,TOP/2,ZF-0.006,MAT.steel));
+  g.add(box(0.06,TOP,0.012, X-0.03,TOP/2,ZF-0.006,MAT.steel));
+  g.add(box(0.90,0.06,0.012,0,TOP-0.03,ZF-0.006,MAT.steel));
+});
+
+addPart({id:'insulation',n:28,name:'Insulation',cat:'cabinet',shell:true,explode:new V3(0,0,-0.10),
+  label:new V3(0.42,0.62,-0.18),
+  desc:'Polyurethane foam injected between shell and liner. It is the cabinet\u2019s thermal barrier and, once cured, most of its rigidity.'},g=>{
+  g.add(box(0.046,1.79,0.66,-0.417,0.895,-0.045,MAT.foam));
+  g.add(box(0.046,1.79,0.66, 0.417,0.895,-0.045,MAT.foam));
+  g.add(box(0.83,1.79,0.046,0,0.895,-0.343,MAT.foam));
+  g.add(box(0.83,0.046,0.66,0,1.813,-0.045,MAT.foam));
+  g.add(box(0.83,0.06,0.66,0,0.33,-0.045,MAT.foam));      // floor over machine bay
+  g.add(box(0.83,0.058,0.66,0,1.199,-0.045,MAT.foam));    // divider between compartments
+});
+
+addPart({id:'liner',n:27,name:'Liner',cat:'cabinet',explode:new V3(0,0,0.02),
+  label:new V3(-0.39,0.80,-0.10),
+  desc:'The vacuum-formed plastic inner box. It shapes the food compartments, carries the shelf ladders and seals the foam from the inside.'},g=>{
+  // fresh food cavity: y .36 - 1.16
+  g.add(box(0.012,0.80,0.655,-0.394,0.76,-0.0125,MAT.liner));
+  g.add(box(0.012,0.80,0.655, 0.394,0.76,-0.0125,MAT.liner));
+  g.add(box(0.79,0.80,0.012,0,0.76,-0.309,MAT.liner));
+  g.add(box(0.79,0.012,0.655,0,0.366,-0.0125,MAT.liner));
+  g.add(box(0.79,0.012,0.655,0,1.164,-0.0125,MAT.liner));
+  // freezer cavity: y 1.24 - 1.79
+  g.add(box(0.012,0.55,0.655,-0.394,1.515,-0.0125,MAT.liner));
+  g.add(box(0.012,0.55,0.655, 0.394,1.515,-0.0125,MAT.liner));
+  g.add(box(0.79,0.012,0.655,0,1.244,-0.0125,MAT.liner));
+  g.add(box(0.79,0.012,0.655,0,1.786,-0.0125,MAT.liner));
+  g.add(box(0.79,0.55,0.012,0,1.515,-0.175,MAT.linerG)); // freezer false back / evaporator cover
+});
+
+addPart({id:'mullion',n:29,name:'Mullion',cat:'cabinet',explode:new V3(0,0,0.14),
+  label:new V3(0.20,1.20,0.36),
+  desc:'The divider between the two door openings. It carries the gasket landing and usually a low-watt heater that keeps the face from sweating.'},g=>{
+  g.add(box(0.90,0.08,0.026,0,1.20,ZF-0.013,MAT.steel));
+  g.add(box(0.86,0.028,0.02,0,1.20,ZF-0.030,MAT.copperD));
+});
+
+addPart({id:'chassis',n:30,name:'Chassis',cat:'cabinet',explode:new V3(0,-0.12,0),
+  label:new V3(0.34,0.03,0.12),
+  desc:'The base frame. It ties the shell together and carries the compressor, the legs and the whole load of a full cabinet.'},g=>{
+  g.add(box(0.05,0.03,0.70,-0.38,0.022,-0.02,MAT.steelD));
+  g.add(box(0.05,0.03,0.70, 0.38,0.022,-0.02,MAT.steelD));
+  g.add(box(0.82,0.028,0.05,0,0.022,-0.34,MAT.steelD));
+  g.add(box(0.82,0.028,0.05,0,0.022, 0.28,MAT.steelD));
+});
+
+addPart({id:'kickplate',n:31,name:'Kickplate',cat:'cabinet',explode:new V3(0,0,0.26),
+  label:new V3(0.10,0.09,0.36),
+  desc:'The removable lower front panel. Pull it and the machine compartment is open for cleaning the condenser.'},g=>{
+  g.add(box(0.90,0.145,0.016,0,0.093,ZF-0.008,MAT.steelD));
+});
+
+addPart({id:'grille',name:'Grille',cat:'cabinet',opt:true,explode:new V3(0,0,0.30),
+  label:new V3(-0.20,0.09,0.37),
+  desc:'The louvered face that lets room air into the machine compartment and out again after it has crossed the condenser.'},g=>{
+  for(let i=0;i<7;i++){const b=box(0.80,0.008,0.012,0,0.045+i*0.016,ZF+0.004,MAT.black);b.rotation.x=-0.5;g.add(b);}
+});
+
+addPart({id:'leg',n:36,name:'Leg',cat:'cabinet',explode:new V3(0,-0.16,0),
+  label:new V3(0.36,0.03,0.26),
+  desc:'Threaded leveling foot. Turning it sets cabinet height, squares the doors and tips the box back so they self-close.'},g=>{
+  [-0.36,0.36].forEach(x=>{g.add(cyl(0.016,0.016,0.055,x,0.028,0.26,MAT.steelD,'y',14));
+    g.add(cyl(0.032,0.032,0.012,x,0.052,0.26,MAT.steelD,'y',14));});
+});
+addPart({id:'foot',name:'Foot',cat:'cabinet',opt:true,explode:new V3(0,-0.22,0),
+  label:new V3(-0.36,0.008,0.26),
+  desc:'The non-marring pad at the bottom of the leveling leg, sized to spread the load on soft flooring.'},g=>{
+  [-0.36,0.36].forEach(x=>g.add(cyl(0.028,0.032,0.014,x,0.008,0.26,MAT.rubber,'y',16)));
+});
+addPart({id:'roller',name:'Roller',cat:'cabinet',opt:true,explode:new V3(0,-0.16,0),
+  label:new V3(0.36,0.03,-0.28),
+  desc:'The rear wheel that lets the cabinet roll straight out for service without dragging on the floor.'},g=>{
+  [-0.35,0.35].forEach(x=>{g.add(cyl(0.030,0.030,0.022,x,0.032,-0.28,MAT.black,'x',18));
+    g.add(box(0.02,0.05,0.05,x+(x>0?0.02:-0.02),0.045,-0.28,MAT.steelD));});
+});
+
+addPart({id:'hinge',n:34,name:'Hinge',cat:'cabinet',explode:new V3(-0.16,0,0.06),
+  label:new V3(-0.45,1.86,0.28),
+  desc:'Bracket and pin set on the strike side. It carries the door\u2019s weight, sets the swing and, at the top, hides the wiring pass-through.'},g=>{
+  [[TOP+0.012,0.055],[1.185,0.05],[0.148,0.05]].forEach(([y,d])=>{
+    g.add(box(0.14,0.014,0.13,-0.40,y,0.28,MAT.steelD));
+    g.add(cyl(0.010,0.010,0.05,-0.44,y+(y>1.5?-0.02:0.02),0.30,MAT.steelD,'y',12));});
+});
+
+/* ---------- doors ---------- */
+function doorSlab(g,y0,y1,mat){
+  const h=y1-y0,yc=(y0+y1)/2;
+  g.add(box(0.90,h,0.014,0,yc,0.434,mat));                 // outer skin
+  g.add(box(0.86,h-0.04,0.06,0,yc,0.392,MAT.foam));        // foam core
+  g.add(box(0.88,h-0.02,0.012,0,yc,0.352,MAT.liner));      // door liner
+  g.add(box(0.90,0.014,0.10,0,y0+0.007,0.39,mat));
+  g.add(box(0.90,0.014,0.10,0,y1-0.007,0.39,mat));
+  g.add(box(0.014,h,0.10,-0.443,yc,0.39,mat));
+  g.add(box(0.014,h,0.10, 0.443,yc,0.39,mat));
+}
+addPart({id:'door',n:32,name:'Door',cat:'cabinet',shell:true,parent:dFF.inner,explode:new V3(0,0,0.10),
+  label:new V3(0.10,0.70,0.45),
+  desc:'An insulated slab in its own right \u2014 skin, foam, liner, bins and gasket \u2014 hung so it seals against the cabinet face.'},g=>{
+  doorSlab(g,0.16,1.16,MAT.steel);
+});
+addPart({id:'doorfz',name:'Door (freezer)',cat:'cabinet',shell:true,hidden:true,parent:dFZ.inner,
+  label:new V3(0.10,1.50,0.45),desc:'Freezer door slab.'},g=>{
+  doorSlab(g,1.24,TOP,MAT.steel);
+  // dispenser recess
+  g.add(box(0.22,0.30,0.012,-0.22,1.48,0.372,MAT.plastic));
+  g.add(box(0.22,0.014,0.07,-0.22,1.335,0.408,MAT.plastic));
+  g.add(box(0.22,0.014,0.07,-0.22,1.625,0.408,MAT.plastic));
+  g.add(box(0.014,0.30,0.07,-0.33,1.48,0.408,MAT.plastic));
+  g.add(box(0.014,0.30,0.07,-0.11,1.48,0.408,MAT.plastic));
+});
+
+addPart({id:'gasket',n:33,name:'Gasket',cat:'cabinet',parent:dFF.inner,explode:new V3(0,0,0.06),
+  label:new V3(-0.30,0.30,0.35),
+  desc:'A magnetic vinyl seal set into the door liner. The magnet pulls the door tight; the bellows absorbs cabinet twist and blocks infiltration.'},g=>{
+  const z=0.344,mt=MAT.gasket;
+  g.add(box(0.86,0.028,0.018,0,0.185,z,mt));g.add(box(0.86,0.028,0.018,0,1.135,z,mt));
+  g.add(box(0.028,0.98,0.018,-0.416,0.66,z,mt));g.add(box(0.028,0.98,0.018,0.416,0.66,z,mt));
+});
+addPart({id:'gasketfz',name:'Gasket (freezer)',cat:'cabinet',hidden:true,parent:dFZ.inner,
+  label:new V3(-0.30,1.30,0.35),desc:'Freezer door gasket.'},g=>{
+  const z=0.344,mt=MAT.gasket;
+  g.add(box(0.86,0.028,0.018,0,1.265,z,mt));g.add(box(0.86,0.028,0.018,0,1.825,z,mt));
+  g.add(box(0.028,0.58,0.018,-0.416,1.545,z,mt));g.add(box(0.028,0.58,0.018,0.416,1.545,z,mt));
+});
+
+addPart({id:'handle',n:35,name:'Handle',cat:'cabinet',parent:dFF.inner,explode:new V3(0,0,0.14),
+  label:new V3(0.36,0.90,0.49),
+  desc:'The grip bar. Its only real job is leverage \u2014 enough to break a magnetic seal without racking the door.'},g=>{
+  g.add(cyl(0.014,0.014,0.72,0.36,0.68,0.478,MAT.steel,'y',16));
+  g.add(box(0.03,0.05,0.05,0.36,1.04,0.456,MAT.steel));g.add(box(0.03,0.05,0.05,0.36,0.32,0.456,MAT.steel));
+});
+addPart({id:'handlefz',name:'Handle (freezer)',cat:'cabinet',hidden:true,parent:dFZ.inner,
+  label:new V3(0.36,1.55,0.49),desc:'Freezer handle.'},g=>{
+  g.add(cyl(0.014,0.014,0.42,0.36,1.55,0.478,MAT.steel,'y',16));
+  g.add(box(0.03,0.05,0.05,0.36,1.73,0.456,MAT.steel));g.add(box(0.03,0.05,0.05,0.36,1.37,0.456,MAT.steel));
+});
+
+addPart({id:'bin',n:40,name:'Bin',cat:'storage',parent:dFF.inner,explode:new V3(0,0,0.18),
+  label:new V3(-0.10,0.92,0.36),
+  desc:'Door-mounted retainer for bottles and jars \u2014 the warmest storage in the box, and the reason condiments live there and milk should not.'},g=>{
+  [0.36,0.62,0.92].forEach(y=>{
+    g.add(box(0.80,0.012,0.09,0,y,0.31,MAT.clearp));
+    g.add(box(0.80,0.10,0.012,0,y+0.05,0.268,MAT.clearp));
+    g.add(box(0.012,0.10,0.09,-0.40,y+0.05,0.31,MAT.clearp));
+    g.add(box(0.012,0.10,0.09, 0.40,y+0.05,0.31,MAT.clearp));});
+});
+
+/* ---------- machine compartment ---------- */
+addPart({id:'compressor',n:1,name:'Compressor',cat:'refrigeration',explode:new V3(-0.20,-0.05,-0.14),
+  label:new V3(-0.20,0.22,-0.14),
+  desc:'The sealed pump and the only thing in the box that moves refrigerant. It draws cool low-pressure vapour from the evaporator and discharges it hot and high-pressure to the condenser.'},g=>{
+  g.add(cyl(0.115,0.115,0.15,-0.20,0.115,-0.22,MAT.black,'y',28));
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.115,28,14,0,Math.PI*2,0,Math.PI/2),MAT.black),-0.20,0.19,-0.22));
+  g.add(cyl(0.115,0.115,0.02,-0.20,0.045,-0.22,MAT.steelD,'y',28));
+  [[-0.28,0.03,-0.30],[-0.12,0.03,-0.30],[-0.28,0.03,-0.14],[-0.12,0.03,-0.14]].forEach(p=>
+    g.add(cyl(0.012,0.012,0.05,p[0],p[1],p[2],MAT.rubber,'y',10)));
+});
+addPart({id:'overload',name:'Overload',cat:'controls',opt:true,explode:new V3(-0.30,0,0.06),
+  label:new V3(-0.09,0.14,-0.15),
+  desc:'A bimetal protector clamped to the compressor shell. It opens power on excess current or shell temperature and resets when things cool.'},g=>{
+  g.add(box(0.05,0.05,0.03,-0.093,0.14,-0.17,MAT.black));
+});
+addPart({id:'relay',name:'Relay',cat:'controls',opt:true,explode:new V3(-0.32,0.02,0.10),
+  label:new V3(-0.09,0.09,-0.15),
+  desc:'The start device. It energises the compressor\u2019s start winding for the first fraction of a second, then drops out.'},g=>{
+  g.add(box(0.05,0.05,0.04,-0.093,0.085,-0.17,MAT.plastic));
+});
+addPart({id:'capacitor',name:'Capacitor',cat:'controls',opt:true,explode:new V3(-0.34,0.06,0.12),
+  label:new V3(-0.09,0.20,-0.15),
+  desc:'Stores charge to boost start torque, or on a run capacitor to shift phase and trim running current.'},g=>{
+  g.add(cyl(0.024,0.024,0.06,-0.093,0.20,-0.17,MAT.alum,'y',16));
+});
+addPart({id:'inverter',name:'Inverter',cat:'controls',opt:true,explode:new V3(-0.24,0.18,-0.20),
+  label:new V3(-0.32,0.24,-0.30),
+  desc:'A variable-frequency drive that changes compressor speed instead of cycling it. It runs the box slower for longer, which is quieter and more efficient.'},g=>{
+  g.add(box(0.16,0.09,0.05,-0.32,0.24,-0.32,MAT.plastic));
+  g.add(box(0.13,0.06,0.008,-0.32,0.24,-0.292,MAT.board));
+});
+
+addPart({id:'condenser',n:2,name:'Condenser',cat:'refrigeration',explode:new V3(0.24,0,-0.12),
+  label:new V3(0.24,0.30,-0.20),
+  desc:'Where the work shows up as heat. High-pressure vapour gives up its heat to room air across this coil and condenses into warm liquid.'},g=>{
+  g.add(tube(serp(0.05,0.40,[0.06,0.10,0.14,0.18,0.22,0.26],-0.20),0.007,MAT.copper));
+  g.add(box(0.40,0.005,0.20,0.225,0.285,-0.20,MAT.steelD));
+  g.add(box(0.40,0.005,0.20,0.225,0.035,-0.20,MAT.steelD));
+});
+addPart({id:'fins',n:9,name:'Fins',cat:'refrigeration',explode:new V3(0.14,0.10,-0.10),
+  label:new V3(0.36,0.16,-0.30),
+  desc:'Thin aluminium plates pressed onto the coils. They multiply heat-transfer area many times over \u2014 which is exactly why dust on them costs efficiency.'},g=>{
+  for(let i=0;i<12;i++) g.add(box(0.0025,0.21,0.19,0.06+i*0.031,0.16,-0.20,MAT.alum));   // condenser fins
+  for(let i=0;i<16;i++) g.add(box(0.0025,0.30,0.12,-0.28+i*0.037,1.46,-0.245,MAT.alum)); // evaporator fins
+});
+addPart({id:'drier',n:6,name:'Drier',cat:'refrigeration',explode:new V3(0.30,-0.02,-0.10),
+  label:new V3(0.42,0.14,-0.33),
+  desc:'A desiccant-filled canister on the liquid line. It traps the last moisture and any debris before they can freeze or plug the capillary.'},g=>{
+  g.add(cyl(0.020,0.020,0.12,0.42,0.14,-0.31,MAT.alum,'y',18));
+  g.add(cyl(0.016,0.020,0.02,0.42,0.21,-0.31,MAT.alum,'y',18));
+});
+addPart({id:'pan',n:25,name:'Pan',cat:'defrost',explode:new V3(-0.14,0.16,-0.10),
+  label:new V3(-0.20,0.24,-0.30),
+  desc:'A shallow tray sitting in the compressor\u2019s waste heat. Defrost water lands here and evaporates, so the cabinet never needs a drain line.'},g=>{
+  g.add(box(0.34,0.016,0.26,-0.20,0.222,-0.22,MAT.plastic));
+  g.add(box(0.34,0.03,0.012,-0.20,0.244,-0.35,MAT.plastic));
+  g.add(box(0.34,0.03,0.012,-0.20,0.244,-0.09,MAT.plastic));
+  g.add(box(0.012,0.03,0.26,-0.37,0.244,-0.22,MAT.plastic));
+  g.add(box(0.30,0.004,0.22,-0.20,0.233,-0.22,MAT.water));
+});
+addPart({id:'duckbill',name:'Duckbill',cat:'defrost',opt:true,explode:new V3(0,0.22,0.10),
+  label:new V3(-0.06,0.30,-0.28),
+  desc:'A rubber one-way valve at the drain outlet. Water pushes it open; warm room air cannot push back through it.'},g=>{
+  const m=new THREE.Mesh(new THREE.ConeGeometry(0.016,0.045,12),MAT.rubber);
+  m.position.set(-0.06,0.285,-0.29);m.rotation.x=Math.PI;g.add(m);
+});
+addPart({id:'valve',n:41,name:'Valve',cat:'water',explode:new V3(0.26,0.06,-0.14),
+  label:new V3(0.34,0.24,-0.33),
+  desc:'A solenoid water valve, usually dual: one coil opens for the icemaker fill, the other for the dispenser.'},g=>{
+  g.add(box(0.07,0.07,0.05,0.32,0.245,-0.33,MAT.plastic));
+  g.add(cyl(0.020,0.020,0.045,0.30,0.30,-0.33,MAT.black,'y',14));
+  g.add(cyl(0.020,0.020,0.045,0.345,0.30,-0.33,MAT.black,'y',14));
+  g.add(cyl(0.010,0.010,0.06,0.32,0.245,-0.375,MAT.steelD,'z',12));
+});
+
+/* ---------- evaporator zone ---------- */
+addPart({id:'evaporator',n:3,name:'Evaporator',cat:'refrigeration',explode:new V3(0,0.10,-0.24),
+  label:new V3(0,1.62,-0.26),
+  desc:'The cold end. Liquid refrigerant boils inside these tubes at low pressure, and the heat it takes to boil is pulled straight out of cabinet air.'},g=>{
+  g.add(tube(serp(-0.28,0.28,[1.34,1.40,1.46,1.52,1.58],-0.245),0.008,MAT.alum));
+});
+addPart({id:'accumulator',name:'Accumulator',cat:'refrigeration',opt:true,explode:new V3(0.22,0.10,-0.18),
+  label:new V3(0.31,1.46,-0.26),
+  desc:'A small suction-line vessel that holds back any liquid that did not boil off, so only vapour reaches the compressor.'},g=>{
+  g.add(cyl(0.028,0.028,0.11,0.31,1.46,-0.27,MAT.alum,'y',18));
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.028,16,10),MAT.alum),0.31,1.515,-0.27));
+});
+addPart({id:'heater',n:18,name:'Heater',cat:'defrost',explode:new V3(0,-0.06,-0.22),
+  label:new V3(-0.10,1.30,-0.26),
+  desc:'A sheathed or glass-tube element under the coil. Several times a day it runs long enough to melt the frost blanket off the fins, then shuts off.'},g=>{
+  g.add(cyl(0.011,0.011,0.60,0,1.305,-0.245,MAT.heat,'x',14));
+  g.add(cyl(0.008,0.008,0.05,-0.30,1.325,-0.245,MAT.wire,'y',10));
+  g.add(cyl(0.008,0.008,0.05, 0.30,1.325,-0.245,MAT.wire,'y',10));
+});
+addPart({id:'trough',n:24,name:'Trough',cat:'defrost',explode:new V3(0,-0.14,-0.20),
+  label:new V3(0.18,1.27,-0.24),
+  desc:'The sloped channel beneath the evaporator that catches defrost water and walks it to a single low point.'},g=>{
+  const t=box(0.62,0.010,0.14,0,1.268,-0.245,MAT.plastic);t.rotation.z=0.03;g.add(t);
+  g.add(box(0.62,0.03,0.008,0,1.28,-0.312,MAT.plastic));
+  g.add(box(0.62,0.03,0.008,0,1.28,-0.178,MAT.plastic));
+});
+addPart({id:'drain',n:23,name:'Drain',cat:'defrost',explode:new V3(0,0,-0.26),
+  label:new V3(-0.06,0.80,-0.34),
+  desc:'The tube that carries melt water from the trough down through the foam to the pan. Plug it and the water reappears under the crisper.'},g=>{
+  g.add(tube([new V3(0,1.262,-0.245),new V3(-0.02,1.20,-0.30),new V3(-0.03,0.90,-0.345),
+    new V3(-0.03,0.50,-0.345),new V3(-0.05,0.33,-0.32),new V3(-0.06,0.30,-0.29)],0.011,MAT.plastic));
+});
+addPart({id:'thermistor',n:20,name:'Thermistor',cat:'defrost',explode:new V3(-0.20,0.14,-0.16),
+  label:new V3(-0.30,1.575,-0.22),
+  desc:'A resistance bead clipped to the coil. The board reads its resistance as a temperature and decides when to defrost and when to stop.'},g=>{
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.011,12,8),MAT.black),-0.30,1.575,-0.235));
+  g.add(tube([new V3(-0.30,1.575,-0.235),new V3(-0.34,1.62,-0.29),new V3(-0.36,1.70,-0.32)],0.004,MAT.wire));
+});
+addPart({id:'fuse',n:22,name:'Fuse',cat:'defrost',explode:new V3(0.18,0.16,-0.16),
+  label:new V3(0.24,1.63,-0.22),
+  desc:'A one-shot thermal cutout on the coil. If the defrost heater ever overruns its safe temperature, this opens and stays open.'},g=>{
+  g.add(cyl(0.010,0.010,0.038,0.24,1.63,-0.235,MAT.alum,'x',12));
+});
+addPart({id:'fan',n:10,name:'Fan',cat:'airflow',explode:new V3(0,0.22,-0.10),
+  label:new V3(0,1.70,-0.20),
+  desc:'Bladed impellers. The evaporator fan pushes cabinet air across the cold coil; the condenser fan pulls room air over the hot one and the compressor.'},g=>{
+  const f1=fanBlade(0.075,4,MAT.white,'z');f1.position.set(0,1.70,-0.235);g.add(f1);spinners.push({o:f1,ax:'z',sp:9});
+  const f2=fanBlade(0.075,5,MAT.plastic,'x');f2.position.set(-0.03,0.155,-0.20);g.add(f2);spinners.push({o:f2,ax:'x',sp:7});
+});
+addPart({id:'motor',n:11,name:'Motor',cat:'airflow',explode:new V3(0,0.26,-0.20),
+  label:new V3(0.09,1.70,-0.30),
+  desc:'The small shaded-pole or brushless motor behind each fan hub. On newer boxes it is speed-controlled rather than simply on or off.'},g=>{
+  g.add(cyl(0.028,0.028,0.05,0,1.70,-0.285,MAT.black,'z',18));
+  g.add(cyl(0.026,0.026,0.05,-0.10,0.155,-0.20,MAT.black,'x',18));
+});
+addPart({id:'shroud',n:12,name:'Shroud',cat:'airflow',explode:new V3(0,0.30,-0.06),
+  label:new V3(-0.10,1.72,-0.20),
+  desc:'The moulded housing that seals fan to coil. Without it air simply loops around the blade instead of being forced through the fins.'},g=>{
+  const r=new THREE.Mesh(new THREE.TorusGeometry(0.088,0.014,10,26),MAT.plastic);
+  r.position.set(0,1.70,-0.235);g.add(r);
+  g.add(box(0.34,0.10,0.010,0,1.745,-0.235,MAT.plastic));
+  g.add(box(0.010,0.16,0.11,-0.17,1.70,-0.235,MAT.plastic));
+  g.add(box(0.010,0.16,0.11, 0.17,1.70,-0.235,MAT.plastic));
+});
+addPart({id:'baffle',n:17,name:'Baffle',cat:'airflow',explode:new V3(0,-0.02,-0.14),
+  label:new V3(-0.22,1.30,-0.18),
+  desc:'A fixed plate that steers return air across the full face of the coil instead of letting it short-circuit past one corner.'},g=>{
+  const b=box(0.60,0.14,0.008,0,1.29,-0.205,MAT.plastic);b.rotation.x=0.6;g.add(b);
+});
+addPart({id:'duct',n:13,name:'Duct',cat:'airflow',explode:new V3(0,-0.04,-0.06),
+  label:new V3(0,0.80,-0.245),
+  desc:'The insulated passage that carries freezer air down the rear liner into the fresh-food section \u2014 the reason a top-freezer box only needs one cold coil.'},g=>{
+  g.add(box(0.20,0.72,0.012,0,0.80,-0.248,MAT.linerG));
+  g.add(box(0.012,0.72,0.06,-0.10,0.80,-0.278,MAT.linerG));
+  g.add(box(0.012,0.72,0.06, 0.10,0.80,-0.278,MAT.linerG));
+  g.add(box(0.20,0.012,0.06,0,0.445,-0.278,MAT.linerG));
+});
+addPart({id:'vent',n:14,name:'Vent',cat:'airflow',explode:new V3(0,0,0.16),
+  label:new V3(-0.09,0.62,-0.23),
+  desc:'The louvered outlets where duct air is released into the compartment. Their spacing is what makes one shelf colder than another.'},g=>{
+  [0.62,0.86,1.06].forEach(y=>{for(let i=0;i<3;i++){
+    const s=box(0.16,0.008,0.014,0,y+i*0.018,-0.241,MAT.plastic);s.rotation.x=-0.5;g.add(s);}});
+});
+addPart({id:'diffuser',n:15,name:'Diffuser',cat:'airflow',explode:new V3(0,0.04,0.06),
+  label:new V3(0.10,1.13,-0.26),
+  desc:'The housing at the top of the duct where freezer air enters. It spreads the jet so the top shelf is not simply blasted with the coldest air in the box.'},g=>{
+  g.add(box(0.22,0.10,0.07,0,1.13,-0.272,MAT.linerG));
+  g.add(box(0.20,0.012,0.05,0,1.082,-0.272,MAT.plastic));
+});
+addPart({id:'damper',n:16,name:'Damper',cat:'airflow',explode:new V3(-0.06,0.08,0.12),
+  label:new V3(-0.06,1.13,-0.24),
+  desc:'The flap that meters how much freezer air the fresh-food side gets. Move it and you change the split between the two compartments \u2014 that is what the fresh-food dial actually does.'},g=>{
+  const f=new THREE.Group();
+  f.add(box(0.16,0.075,0.006,0,-0.037,0,MAT.plastic));
+  f.position.set(0,1.155,-0.272);g.add(f);
+  g.userData.damper=f;
+});
+addPart({id:'actuator',name:'Actuator',cat:'controls',opt:true,explode:new V3(0.10,0.10,0.06),
+  label:new V3(0.14,1.13,-0.27),
+  desc:'The small motor and linkage that positions the damper on command from the board, in place of the old bimetal-and-cable arrangement.'},g=>{
+  g.add(box(0.05,0.05,0.045,0.135,1.13,-0.272,MAT.plastic));
+  g.add(cyl(0.008,0.008,0.03,0.10,1.13,-0.272,MAT.steelD,'x',10));
+});
+
+/* ---------- sealed-system plumbing ---------- */
+const capPath=[new V3(0.42,0.20,-0.31),new V3(0.40,0.30,-0.33),new V3(0.395,0.60,-0.345)]
+  .concat(helix(0.022,4,0.30,'y',0.395,0.95,-0.345,80))
+  .concat([new V3(0.395,1.20,-0.345),new V3(0.36,1.32,-0.32),new V3(0.30,1.335,-0.27),new V3(0.28,1.34,-0.245)]);
+addPart({id:'capillary',n:5,name:'Capillary',cat:'refrigeration',explode:new V3(0.18,0,-0.16),
+  label:new V3(0.395,0.95,-0.36),
+  desc:'A fixed-bore metering tube, no moving parts at all. Its length and inside diameter alone set the pressure drop that feeds the evaporator.'},g=>{
+  g.add(tube(capPath,0.0035,MAT.copper,false,220));
+});
+const sucPath=[new V3(0.31,1.40,-0.27),new V3(0.34,1.24,-0.32),new V3(0.37,1.00,-0.345),
+  new V3(0.37,0.60,-0.345),new V3(0.30,0.34,-0.34),new V3(0.05,0.26,-0.31),new V3(-0.10,0.20,-0.26)];
+addPart({id:'tubing',n:8,name:'Tubing',cat:'refrigeration',explode:new V3(0.10,0,-0.20),
+  label:new V3(0.37,0.72,-0.345),
+  desc:'The discharge, liquid, suction and process lines that make the loop a sealed system. Everything is brazed; nothing is meant to be opened.'},g=>{
+  g.add(tube(sucPath,0.009,MAT.copperD,false,120));                                   // suction
+  g.add(tube([new V3(-0.13,0.24,-0.24),new V3(-0.05,0.30,-0.26),new V3(0.05,0.28,-0.20)],0.007,MAT.copper)); // discharge
+  g.add(tube([new V3(0.40,0.06,-0.20),new V3(0.43,0.08,-0.26),new V3(0.42,0.09,-0.31)],0.007,MAT.copper));  // cond out to drier
+  g.add(cyl(0.008,0.008,0.05,-0.26,0.22,-0.22,MAT.copper,'y',10));                    // process stub
+});
+addPart({id:'exchanger',n:7,name:'Exchanger',cat:'refrigeration',explode:new V3(0.22,0,-0.22),
+  label:new V3(0.37,0.48,-0.345),
+  desc:'Suction line and capillary run soldered together for a stretch. Cold vapour going home subcools the liquid feed \u2014 free capacity, no moving parts.'},g=>{
+  for(let i=0;i<14;i++){
+    const t=new THREE.Mesh(new THREE.TorusGeometry(0.016,0.0026,6,16),MAT.alum);
+    t.position.set(0.382,0.44+i*0.021,-0.345);t.rotation.y=Math.PI/2;t.rotation.x=0.2;g.add(t);}
+});
+
+/* ---------- refrigerant loop (animated) ---------- */
+const loop=[new V3(-0.13,0.24,-0.24),new V3(-0.02,0.30,-0.24),new V3(0.05,0.28,-0.20)]
+  .concat(serp(0.05,0.40,[0.26,0.22,0.18,0.14,0.10],-0.20))
+  .concat([new V3(0.43,0.08,-0.26)]).concat(capPath)
+  .concat(serp(0.28,-0.28,[1.34,1.40,1.46,1.52],-0.245))
+  .concat([new V3(0.31,1.55,-0.27)]).concat(sucPath);
+const loopCurve=new THREE.CatmullRomCurve3(loop,true,'catmullrom',0.05);
+const refGroup=new THREE.Group();fridge.add(refGroup);
+const beads=[];
+const HOT=new THREE.Color(0xff7a45),WARM=new THREE.Color(0xd9a05a),COLD=new THREE.Color(0x7fd4ea);
+for(let i=0;i<34;i++){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(0.0125,10,7),
+    new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.92}));
+  m.material.clippingPlanes=[clip];refGroup.add(m);beads.push(m);}
+addPart({id:'refrigerant',n:4,name:'Refrigerant',cat:'refrigeration',
+  label:new V3(-0.02,0.32,-0.22),
+  desc:'The working fluid \u2014 on a modern domestic box, isobutane. It carries heat by changing phase: boiling cold inside the cabinet, condensing hot outside it.'},g=>{
+  g.add(tube(loop,0.0045,new THREE.MeshBasicMaterial({color:0x2a3a44,transparent:true,opacity:.0}),true,300));
+});
+
+/* ---------- storage ---------- */
+addPart({id:'shelf',n:37,name:'Shelf',cat:'storage',explode:new V3(0,0,0.22),
+  label:new V3(0.18,0.98,0.05),
+  desc:'Tempered glass on moulded ladders. Glass rather than wire because a spill should stay on one shelf instead of finding the crisper.'},g=>{
+  [0.78,0.98].forEach(y=>{g.add(box(0.76,0.010,0.58,0,y,0.02,MAT.glass));
+    g.add(box(0.76,0.014,0.014,0,y,0.31,MAT.steelD));});
+  g.add(box(0.76,0.008,0.40,0,1.50,0.07,MAT.steelD)); // freezer wire shelf
+  for(let i=0;i<9;i++)g.add(box(0.74,0.004,0.006,0,1.503,-0.11+i*0.045,MAT.steelD));
+});
+addPart({id:'crisper',n:38,name:'Crisper',cat:'storage',explode:new V3(0,-0.04,0.34),
+  label:new V3(-0.19,0.46,0.30),
+  desc:'A near-sealed high-humidity drawer. It slows moisture loss from produce; the slide on the front simply leaks a little of that humidity away.'},g=>{
+  [-0.19,0.19].forEach(x=>{
+    g.add(box(0.36,0.012,0.50,x,0.386,0.03,MAT.clearp));
+    g.add(box(0.36,0.16,0.012,x,0.46,0.28,MAT.clearp));
+    g.add(box(0.36,0.16,0.012,x,0.46,-0.22,MAT.clearp));
+    g.add(box(0.012,0.16,0.50,x-0.18,0.46,0.03,MAT.clearp));
+    g.add(box(0.012,0.16,0.50,x+0.18,0.46,0.03,MAT.clearp));});
+  g.add(box(0.76,0.010,0.56,0,0.552,0.03,MAT.glass)); // crisper cover
+});
+addPart({id:'glide',name:'Glide',cat:'storage',opt:true,explode:new V3(0,0,0.30),
+  label:new V3(0.38,0.55,0.10),
+  desc:'The rail and bearing set the drawers ride on, cantilevered so a loaded crisper still pulls out with one hand.'},g=>{
+  [-0.385,0.385].forEach(x=>g.add(box(0.014,0.020,0.54,x,0.545,0.03,MAT.steelD)));
+  g.add(box(0.76,0.014,0.014,0,0.545,-0.23,MAT.steelD));
+});
+addPart({id:'drawer',n:39,name:'Drawer',cat:'storage',explode:new V3(0,0.02,0.30),
+  label:new V3(0.10,0.64,0.30),
+  desc:'The deli or meat pan. On many boxes it gets its own small air feed, which is what makes it the coldest storage outside the freezer.'},g=>{
+  g.add(box(0.74,0.012,0.50,0,0.596,0.03,MAT.clearp));
+  g.add(box(0.74,0.10,0.012,0,0.646,0.28,MAT.clearp));
+  g.add(box(0.74,0.10,0.012,0,0.646,-0.22,MAT.clearp));
+  g.add(box(0.012,0.10,0.50,-0.37,0.646,0.03,MAT.clearp));
+  g.add(box(0.012,0.10,0.50, 0.37,0.646,0.03,MAT.clearp));
+});
+
+/* ---------- water & ice ---------- */
+addPart({id:'filter',n:42,name:'Filter',cat:'water',explode:new V3(0.14,0.10,0.10),
+  label:new V3(0.22,1.12,0.06),
+  desc:'A carbon cartridge in the supply line. It reduces chlorine taste and particulate; it does not soften water and it does not last forever.'},g=>{
+  g.add(cyl(0.028,0.028,0.22,0.20,1.115,0.02,MAT.white,'z',20));
+  g.add(cyl(0.034,0.034,0.05,0.20,1.115,0.15,MAT.plastic,'z',20));
+  g.add(tube([new V3(0.20,1.115,-0.09),new V3(0.24,1.10,-0.22),new V3(0.30,0.90,-0.30),
+    new V3(0.32,0.55,-0.32)],0.006,MAT.white));
+});
+addPart({id:'reservoir',n:43,name:'Reservoir',cat:'water',explode:new V3(0.12,-0.06,-0.10),
+  label:new V3(0.22,0.47,-0.24),
+  desc:'A coiled tank tucked inside the cold compartment. It holds roughly a glassful pre-chilled, so the first pour is cold instead of tap-warm.'},g=>{
+  g.add(tube(helix(0.062,5,0.10,'z',0.20,0.47,-0.22,120),0.010,MAT.white));
+  g.add(box(0.20,0.012,0.16,0.20,0.398,-0.22,MAT.plastic));
+});
+addPart({id:'icemaker',n:44,name:'Icemaker',cat:'water',explode:new V3(-0.14,0.24,0.06),
+  label:new V3(-0.22,1.74,-0.02),
+  desc:'The module that runs the whole ice cycle: fill by timed valve pulse, freeze until the thermistor says so, harvest, then count the bucket level.'},g=>{
+  g.add(box(0.08,0.11,0.26,-0.345,1.71,-0.02,MAT.white));
+  g.add(box(0.24,0.012,0.26,-0.20,1.775,-0.02,MAT.white));
+  g.add(box(0.012,0.05,0.20,-0.08,1.70,0.06,MAT.white)); // level arm mount
+});
+addPart({id:'mold',n:45,name:'Mold',cat:'water',explode:new V3(-0.10,0.20,0.14),
+  label:new V3(-0.20,1.665,0.10),
+  desc:'The cavitied tray where cubes freeze, with a small heater bonded underneath that releases them without melting them.'},g=>{
+  g.add(box(0.24,0.030,0.26,-0.20,1.678,-0.02,MAT.white));
+  for(let i=0;i<4;i++)for(let j=0;j<2;j++){
+    const c=box(0.048,0.026,0.048,-0.29+j*0.10,1.681,-0.11+i*0.062,MAT.ice);g.add(c);}
+  g.add(cyl(0.006,0.006,0.24,-0.20,1.660,-0.02,MAT.heat,'x',10));
+});
+addPart({id:'ejector',n:46,name:'Ejector',cat:'water',explode:new V3(-0.06,0.16,0.20),
+  label:new V3(-0.20,1.72,-0.10),
+  desc:'The motor-driven arm whose fingers sweep harvested cubes out of the mold and over the lip into the bucket.'},g=>{
+  const e=new THREE.Group();
+  e.add(cyl(0.007,0.007,0.24,0,0,0,MAT.steelD,'x',10));
+  for(let i=0;i<4;i++){const f=box(0.008,0.052,0.008,-0.09+i*0.062,0.026,0,MAT.steelD);e.add(f);}
+  e.position.set(-0.20,1.700,-0.02);g.add(e);spinners.push({o:e,ax:'x',sp:0.9});
+});
+addPart({id:'auger',n:47,name:'Auger',cat:'water',explode:new V3(-0.10,0,0.24),
+  label:new V3(-0.22,1.42,0.06),
+  desc:'A helical screw in the bucket floor. Hold the paddle and it turns, walking cubes forward to the chute one at a time.'},g=>{
+  const a=new THREE.Group();
+  a.add(tube(helix(0.055,4,0.26,'z',0,0,0,90),0.007,MAT.white));
+  a.add(cyl(0.012,0.012,0.28,0,0,0,MAT.white,'z',12));
+  a.position.set(-0.22,1.42,0.02);g.add(a);spinners.push({o:a,ax:'z',sp:2.2});
+  g.add(box(0.30,0.24,0.012,-0.22,1.42,-0.12,MAT.clearp));   // bucket
+  g.add(box(0.012,0.24,0.28,-0.37,1.42,0.02,MAT.clearp));
+  g.add(box(0.012,0.24,0.28,-0.07,1.42,0.02,MAT.clearp));
+  g.add(box(0.30,0.012,0.28,-0.22,1.30,0.02,MAT.clearp));
+});
+addPart({id:'chute',n:48,name:'Chute',cat:'water',parent:dFZ.inner,explode:new V3(0,0,0.10),
+  label:new V3(-0.22,1.56,0.40),
+  desc:'The insulated passage through the door. Every cube that reaches the glass \u2014 and every draught of warm air that does not \u2014 goes through here.'},g=>{
+  g.add(cyl(0.048,0.048,0.10,-0.22,1.58,0.392,MAT.plastic,'z',18));
+  const s=cyl(0.044,0.044,0.16,-0.22,1.52,0.392,MAT.plastic,'y',18);s.rotation.x=0.35;g.add(s);
+});
+addPart({id:'flapper',name:'Flapper',cat:'water',opt:true,parent:dFZ.inner,explode:new V3(0,-0.10,0.16),
+  label:new V3(-0.22,1.60,0.36),
+  desc:'A spring-loaded door sealing the chute. It is the only thing between the ice bucket and room air when the dispenser is idle.'},g=>{
+  const f=box(0.09,0.09,0.008,-0.22,1.62,0.36,MAT.rubber);f.rotation.x=0.25;g.add(f);
+});
+addPart({id:'funnel',name:'Funnel',cat:'water',opt:true,parent:dFZ.inner,explode:new V3(0,-0.14,0.20),
+  label:new V3(-0.22,1.44,0.40),
+  desc:'The moulded guide below the chute that steers cubes into the glass instead of onto the floor.'},g=>{
+  const c=new THREE.Mesh(new THREE.CylinderGeometry(0.052,0.026,0.06,18,1,true),MAT.plastic);
+  c.position.set(-0.22,1.44,0.392);g.add(c);
+});
+addPart({id:'nozzle',name:'Nozzle',cat:'water',opt:true,parent:dFZ.inner,explode:new V3(0,-0.16,0.24),
+  label:new V3(-0.26,1.40,0.42),
+  desc:'The water outlet in the dispenser recess, set back far enough that a tall glass clears it.'},g=>{
+  g.add(cyl(0.008,0.008,0.05,-0.26,1.415,0.392,MAT.steelD,'y',12));
+});
+
+/* ---------- controls ---------- */
+addPart({id:'control',n:50,name:'Control',cat:'controls',explode:new V3(0,0.26,-0.10),
+  label:new V3(0,1.84,-0.28),
+  desc:'The board and its user interface. It reads the sensors and decides everything: compressor run time, fan speed, defrost interval, damper position, dispensing.'},g=>{
+  g.add(box(0.24,0.06,0.14,0,1.815,-0.28,MAT.plastic));
+  g.add(box(0.20,0.008,0.11,0,1.788,-0.28,MAT.board));
+  for(let i=0;i<5;i++)g.add(box(0.012,0.012,0.012,-0.07+i*0.035,1.792,-0.28,MAT.steelD));
+});
+addPart({id:'controlui',name:'Control panel',cat:'controls',hidden:true,parent:dFZ.inner,
+  label:new V3(-0.22,1.66,0.45),desc:'Dispenser user interface.'},g=>{
+  g.add(box(0.20,0.06,0.006,-0.22,1.665,0.442,MAT.black));
+  for(let i=0;i<3;i++)g.add(box(0.032,0.020,0.004,-0.28+i*0.06,1.665,0.446,MAT.plastic));
+});
+addPart({id:'thermostat',n:19,name:'Thermostat',cat:'controls',explode:new V3(0.16,0.06,0.12),
+  label:new V3(0.30,1.10,-0.12),
+  desc:'The temperature control that cycles the compressor. On an older box it is a capillary-bulb cold control; on a newer one the board plays this role.'},g=>{
+  g.add(box(0.09,0.06,0.07,0.28,1.105,-0.12,MAT.white));
+  g.add(cyl(0.020,0.020,0.03,0.28,1.075,-0.09,MAT.plastic,'y',14));
+  g.add(tube([new V3(0.28,1.105,-0.155),new V3(0.32,1.10,-0.24),new V3(0.34,1.30,-0.28)],0.004,MAT.copper));
+});
+addPart({id:'sensor',n:21,name:'Sensor',cat:'defrost',explode:new V3(-0.14,0.04,0.16),
+  label:new V3(-0.30,1.10,-0.14),
+  desc:'The other inputs the board watches \u2014 compartment air, door position, ice level, humidity. Each one exists to keep the compressor from running blind.'},g=>{
+  g.add(box(0.05,0.03,0.05,-0.30,1.105,-0.14,MAT.white));
+  g.add(at(new THREE.Mesh(new THREE.SphereGeometry(0.008,10,7),MAT.black),-0.30,1.09,-0.115));
+});
+addPart({id:'switch',n:49,name:'Switch',cat:'controls',explode:new V3(0,0,0.20),
+  label:new V3(-0.36,1.14,0.30),
+  desc:'Contact devices: the door switch that kills the fan and lights the lamp, the dispenser paddle, the ice-level arm. Simple parts that gate expensive behaviour.'},g=>{
+  g.add(cyl(0.011,0.011,0.022,-0.36,1.145,0.30,MAT.plastic,'y',12));
+  g.add(cyl(0.011,0.011,0.022,-0.36,1.775,0.30,MAT.plastic,'y',12));
+});
+addPart({id:'harness',name:'Harness',cat:'controls',opt:true,explode:new V3(-0.06,0,-0.24),
+  label:new V3(-0.40,0.90,-0.34),
+  desc:'The bundled, connectorised wiring that ties board to sensors, motors, heaters and valve. Routed in the foam, so a repair means opening the cabinet.'},g=>{
+  g.add(tube([new V3(-0.10,1.80,-0.30),new V3(-0.30,1.70,-0.34),new V3(-0.38,1.30,-0.35),
+    new V3(-0.40,0.90,-0.35),new V3(-0.40,0.45,-0.35),new V3(-0.34,0.26,-0.34),new V3(-0.24,0.22,-0.30)],0.010,MAT.wire));
+});
+
+/* ============================== airflow particles ============================== */
+const airGroup=new THREE.Group();fridge.add(airGroup);
+const airCurves=[
+  new THREE.CatmullRomCurve3([new V3(0,1.70,-0.20),new V3(0,1.74,0.02),new V3(0,1.60,0.18),
+    new V3(0,1.36,0.10),new V3(0.10,1.28,-0.10),new V3(0.24,1.30,-0.22),new V3(0.18,1.42,-0.245),
+    new V3(-0.10,1.50,-0.245),new V3(-0.05,1.64,-0.24)],true,'catmullrom',0.1),
+  new THREE.CatmullRomCurve3([new V3(0,1.62,-0.27),new V3(0,1.30,-0.28),new V3(0,1.10,-0.27),
+    new V3(0,0.86,-0.235),new V3(0.10,0.70,0.02),new V3(0.20,0.50,0.14),new V3(0.30,0.60,-0.10),
+    new V3(0.34,1.05,-0.22),new V3(0.20,1.24,-0.26),new V3(0.05,1.40,-0.27)],true,'catmullrom',0.1)
+];
+const air=[];
+for(let i=0;i<52;i++){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(0.007,7,5),
+    new THREE.MeshBasicMaterial({color:0x9fe6f7,transparent:true,opacity:.55,depthWrite:false}));
+  m.material.clippingPlanes=[clip];
+  air.push({m,c:airCurves[i%2],t:Math.random()});airGroup.add(m);}
+
+/* ============================== part data completeness ============================== */
+/* hidden helper parts mirror a primary part for selection */
+const MIRROR={doorfz:'door',gasketfz:'gasket',handlefz:'handle',controlui:'control'};
+
+/* ============================== camera / orbit ============================== */
+const target=new V3(0,0.95,0);
+let sph={r:3.15,th:0.72,ph:1.16}, tgt={...sph}, tTarget=target.clone();
+let autoSpin=false;
+function updCam(){
+  sph.r+=(tgt.r-sph.r)*0.12; sph.th+=(tgt.th-sph.th)*0.12; sph.ph+=(tgt.ph-sph.ph)*0.12;
+  target.lerp(tTarget,0.10);
+  camera.position.set(
+    target.x+sph.r*Math.sin(sph.ph)*Math.sin(sph.th),
+    target.y+sph.r*Math.cos(sph.ph),
+    target.z+sph.r*Math.sin(sph.ph)*Math.cos(sph.th));
+  camera.lookAt(target);
+}
+let drag=null,moved=0;
+function pt(e){const t=e.touches?e.touches[0]:e;return{x:t.clientX,y:t.clientY};}
+canvas.addEventListener('pointerdown',e=>{drag=pt(e);moved=0;canvas.setPointerCapture(e.pointerId);});
+canvas.addEventListener('pointermove',e=>{
+  const p=pt(e);
+  if(drag){const dx=p.x-drag.x,dy=p.y-drag.y;moved+=Math.abs(dx)+Math.abs(dy);
+    tgt.th-=dx*0.006; tgt.ph=Math.max(0.22,Math.min(1.72,tgt.ph-dy*0.005)); drag=p; autoSpin=false; syncSpin();}
+  else hoverAt(p);
+});
+window.addEventListener('pointerup',e=>{
+  if(drag&&moved<7)clickAt(pt(e));
+  drag=null;});
+canvas.addEventListener('wheel',e=>{e.preventDefault();
+  tgt.r=Math.max(0.75,Math.min(6.2,tgt.r*(1+Math.sign(e.deltaY)*0.09)));},{passive:false});
+let pinch=0;
+canvas.addEventListener('touchmove',e=>{
+  if(e.touches.length===2){e.preventDefault();
+    const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    if(pinch)tgt.r=Math.max(0.75,Math.min(6.2,tgt.r*(pinch/d)));pinch=d;drag=null;}},{passive:false});
+canvas.addEventListener('touchend',()=>{pinch=0;});
+
+/* ============================== picking ============================== */
+const ray=new THREE.Raycaster();const nd=new THREE.Vector2();
+function pick(p){
+  const r=canvas.getBoundingClientRect();
+  nd.x=((p.x-r.left)/r.width)*2-1; nd.y=-((p.y-r.top)/r.height)*2+1;
+  ray.setFromCamera(nd,camera);
+  const hits=ray.intersectObjects(fridge.children,true);
+  for(const h of hits){
+    if(h.object.material&&h.object.material.opacity<0.16)continue;
+    if(clip.distanceToPoint(h.point)<0)continue;
+    let id=h.object.userData.pid;
+    if(id){id=MIRROR[id]||id; const pp=byId[id]; if(pp&&pp.tgtOp>0.15)return id;}
+  }
+  return null;
+}
+let hovered=null,selected=null;
+function hoverAt(p){const id=pick(p);if(id!==hovered){hovered=id;canvas.style.cursor=id?'pointer':'default';}}
+function clickAt(p){const id=pick(p);select(id);}
+
+/* ============================== UI ============================== */
+const listEl=document.getElementById('list'),detEl=document.getElementById('detail'),
+      filtEl=document.getElementById('filters'),qEl=document.getElementById('q');
+let activeCat=null,query='';
+
+Object.keys(CATS).forEach(k=>{
+  const b=document.createElement('button');b.className='cf';b.style.setProperty('--c',CATS[k].color);
+  b.innerHTML='<i></i>'+CATS[k].label;b.onclick=()=>{activeCat=activeCat===k?null:k;renderFilters();renderList();};
+  b.dataset.k=k;filtEl.appendChild(b);
+});
+function renderFilters(){[...filtEl.children].forEach(b=>b.classList.toggle('on',b.dataset.k===activeCat));}
+
+function visibleParts(){
+  return PARTS.filter(p=>!p.hidden)
+   .filter(p=>!activeCat||p.cat===activeCat)
+   .filter(p=>!query||p.name.toLowerCase().includes(query)||p.desc.toLowerCase().includes(query));
+}
+function renderList(){
+  const sc=listEl.scrollTop;
+  listEl.innerHTML='';
+  const vis=visibleParts();
+  if(!vis.length){listEl.innerHTML='<div class="grp">No part matches that. Try a shorter word.</div>';applyState();return;}
+  Object.keys(CATS).forEach(k=>{
+    const set=vis.filter(p=>p.cat===k);if(!set.length)return;
+    const h=document.createElement('div');h.className='grp';
+    h.innerHTML='<span>'+CATS[k].label+'</span><span>'+set.length+'</span>';listEl.appendChild(h);
+    set.sort((a,b)=>(a.n||99)-(b.n||99)).forEach(p=>{
+      const r=document.createElement('button');r.className='row'+(selected===p.id?' on':'');
+      r.style.setProperty('--cat',p.color);
+      r.innerHTML='<span class="idx">'+(p.n?String(p.n).padStart(2,'0'):'\u2014')+'</span><span class="nm">'+p.name+'</span>'
+        +(p.opt?'<span class="opt">extra</span>':'');
+      r.onclick=()=>select(p.id);listEl.appendChild(r);});
+  });
+  listEl.scrollTop=sc;
+  applyState();
+}
+qEl.addEventListener('input',()=>{query=qEl.value.trim().toLowerCase();renderList();});
+
+function renderDetail(){
+  const p=selected?byId[selected]:null;
+  if(!p){detEl.classList.remove('open');detEl.innerHTML='';return;}
+  detEl.style.setProperty('--cat',p.color);
+  detEl.innerHTML='<div class="dnum">'+(p.n?'No. '+String(p.n).padStart(2,'0'):'Supporting part')+'</div>'
+    +'<div class="dname">'+p.name+'</div><div class="ddesc">'+p.desc+'</div>'
+    +'<div class="dsys">'+CATS[p.cat].label+'</div>';
+  detEl.classList.add('open');
+}
+function select(id,noFrame){
+  selected=id?(MIRROR[id]||id):null;
+  renderDetail();
+  [...listEl.querySelectorAll('.row')].forEach(r=>r.classList.remove('on'));
+  renderList();
+  if(selected&&!noFrame)frame(byId[selected]);
+}
+function frame(p){
+  const bb=new THREE.Box3();
+  p.meshes.forEach(m=>{m.updateWorldMatrix(true,false);bb.expandByObject(m);});
+  if(bb.isEmpty())return;
+  const c=bb.getCenter(new V3()),s=bb.getSize(new V3()).length();
+  tTarget.copy(c); tgt.r=Math.max(0.85,Math.min(3.4,s*2.6+0.55));
+}
+
+/* toggles */
+const state={cut:0.55,exp:0,doors:false,power:true,xray:false,labels:false};
+const sCut=document.getElementById('sCut'),sExp=document.getElementById('sExp'),
+      vCut=document.getElementById('vCut'),vExp=document.getElementById('vExp');
+sCut.oninput=()=>{state.cut=sCut.value/100;vCut.textContent=sCut.value+'%';};
+sExp.oninput=()=>{state.exp=sExp.value/100;vExp.textContent=sExp.value+'%';};
+function tog(id,key,after){const b=document.getElementById(id);
+  b.onclick=()=>{state[key]=!state[key];b.classList.toggle('on',state[key]);after&&after();};
+  b.classList.toggle('on',state[key]);}
+tog('tDoor','doors');tog('tPower','power');tog('tXray','xray',applyState);tog('tLab','labels');
+const spinBtn=document.getElementById('tSpin');
+spinBtn.onclick=()=>{autoSpin=!autoSpin;syncSpin();};
+function syncSpin(){spinBtn.classList.toggle('on',autoSpin);}
+document.getElementById('tReset').onclick=()=>{tgt={r:3.15,th:0.72,ph:1.16};tTarget.set(0,0.95,0);select(null);};
+
+/* guided tour */
+let tour=null;
+const tourBtn=document.getElementById('tTour');
+tourBtn.onclick=()=>{
+  if(tour){clearInterval(tour);tour=null;tourBtn.classList.remove('on');return;}
+  tourBtn.classList.add('on');
+  const seq=PARTS.filter(p=>!p.hidden&&p.n).sort((a,b)=>a.n-b.n);
+  let i=0;select(seq[0].id);
+  tour=setInterval(()=>{i++;if(i>=seq.length){clearInterval(tour);tour=null;tourBtn.classList.remove('on');return;}
+    select(seq[i].id);},3400);
+};
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')select(null);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    const vis=visibleParts();if(!vis.length)return;
+    let i=vis.findIndex(p=>p.id===selected);
+    i=(i+(e.key==='ArrowDown'?1:-1)+vis.length)%vis.length;
+    select(vis[i].id);e.preventDefault();}
+});
+
+/* ============================== visual state ============================== */
+function applyState(){
+  const vis=new Set(visibleParts().map(p=>p.id));
+  PARTS.forEach(p=>{
+    const mirroredIn=MIRROR[p.id]?vis.has(MIRROR[p.id]):false;
+    const shown=vis.has(p.id)||mirroredIn;
+    let op=shown?1:0.045;
+    if(shown&&state.xray&&p.shell)op=0.10;
+    p.tgtOp=op;
+  });
+}
+renderFilters();renderList();applyState();
+
+/* ============================== labels ============================== */
+const overlay=document.getElementById('overlay'),svg=document.getElementById('leaders');
+const nodes={};
+function labelSet(){
+  const s=new Set();
+  if(selected)s.add(selected);
+  if(hovered)s.add(hovered);
+  if(state.labels)visibleParts().slice(0,26).forEach(p=>s.add(p.id));
+  else if(activeCat||query)visibleParts().slice(0,16).forEach(p=>s.add(p.id));
+  return s;
+}
+function updateLabels(){
+  const want=labelSet(),r=canvas.getBoundingClientRect();
+  let lines='';
+  Object.keys(nodes).forEach(id=>{if(!want.has(id)){nodes[id].pin.remove();nodes[id].chip.remove();delete nodes[id];}});
+  want.forEach(id=>{
+    const p=byId[id];if(!p||p.tgtOp<0.2)return;
+    if(!nodes[id]){
+      const pin=document.createElement('div');pin.className='pin';pin.style.setProperty('--cat',p.color);
+      const chip=document.createElement('div');chip.className='chip';chip.style.setProperty('--cat',p.color);
+      chip.innerHTML='<span class="n">'+(p.n?String(p.n).padStart(2,'0'):'+')+'</span>'+p.name;
+      chip.onclick=()=>select(id);
+      overlay.appendChild(pin);overlay.appendChild(chip);nodes[id]={pin,chip};}
+    const n=nodes[id];
+    const w=p.group.localToWorld(p.label.clone());
+    const v=w.clone().project(camera);
+    if(v.z>1){n.pin.style.opacity=0;n.chip.style.opacity=0;return;}
+    const x=(v.x*0.5+0.5)*r.width, y=(-v.y*0.5+0.5)*r.height;
+    const cx=r.width/2,cy=r.height*0.46;
+    let dx=x-cx,dy=y-cy;const L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;
+    const ox=x+dx*46+ (dx>0?18:-18), oy=y+dy*34;
+    const ox2=Math.max(58,Math.min(r.width-58,ox)), oy2=Math.max(18,Math.min(r.height-18,oy));
+    n.pin.style.opacity=1;n.chip.style.opacity=1;
+    n.pin.style.left=x+'px';n.pin.style.top=y+'px';
+    n.chip.style.left=ox2+'px';n.chip.style.top=oy2+'px';
+    n.chip.classList.toggle('sel',id===selected);
+    lines+='<line x1="'+x.toFixed(1)+'" y1="'+y.toFixed(1)+'" x2="'+ox2.toFixed(1)+'" y2="'+oy2.toFixed(1)+
+      '" stroke="'+p.color+'" stroke-width="1" opacity="'+(id===selected?0.9:0.42)+'"/>';
+  });
+  svg.innerHTML=lines;
+}
+
+/* ============================== loop ============================== */
+let cut=0.55,exp=0,doorA=0,dampA=0,clock=new THREE.Clock();
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+  svg.setAttribute('viewBox','0 0 '+w+' '+h);
+}
+window.addEventListener('resize',resize);resize();
+
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),0.05),t=clock.elapsedTime;
+  if(autoSpin)tgt.th+=dt*0.22;
+  updCam();
+
+  cut+=(state.cut-cut)*0.12; exp+=(state.exp-exp)*0.12;
+  clip.constant=0.62-cut*0.66;
+  PARTS.forEach(p=>{p.group.position.set(p.explode.x*exp,p.explode.y*exp,p.explode.z*exp);});
+  refGroup.position.set(0,0,0);
+
+  const da=state.doors?-1.05:0; doorA+=(da-doorA)*0.10;
+  dFF.outer.rotation.y=doorA; dFZ.outer.rotation.y=doorA*0.92;
+
+  /* opacity + highlight */
+  PARTS.forEach(p=>{
+    p.curOp+=(p.tgtOp-p.curOp)*0.16;
+    const hot=(p.id===selected||p.id===hovered||MIRROR[hovered]===p.id||MIRROR[selected]===p.id);
+    p.tgtEm=hot?(p.id===selected?0.85:0.45):0;
+    p.curEm+=(p.tgtEm-p.curEm)*0.18;
+    const c=p.col;
+    p.meshes.forEach(m=>{
+      const mat=m.material;
+      const base=m.userData.baseOp===undefined?1:m.userData.baseOp;
+      const o=base*p.curOp;
+      mat.opacity=o; mat.transparent=(o<0.995)||m.userData.baseTr; mat.depthWrite=o>0.6;
+      if(mat.emissive){mat.emissive.copy(c).multiplyScalar(p.curEm*0.8);mat.emissiveIntensity=1;}
+      m.visible=o>0.02;
+    });
+  });
+
+  /* animation when powered */
+  const P=state.power?1:0;
+  spinners.forEach(s=>{s.o.rotation[s.ax]+=dt*s.sp*P;});
+  const dg=byId['damper'].group.userData.damper;
+  if(dg){const want=state.power?(0.5+0.5*Math.sin(t*0.35))*0.9:0;dampA+=(want-dampA)*0.05;dg.rotation.x=dampA;}
+  const hm=byId['heater'].meshes[0];
+  if(hm&&hm.material.emissive){const glow=state.power?Math.max(0,Math.sin(t*0.18))*0.9:0;
+    hm.material.emissive.setRGB(glow,glow*0.32,0.02);}
+
+  beads.forEach((b,i)=>{
+    const tt=((t*0.045*P)+i/beads.length)%1;
+    loopCurve.getPointAt(tt,b.position);
+    const col=tt<0.10?HOT:(tt<0.30?WARM:(tt<0.62?new THREE.Color(0x9fc0d8):COLD));
+    b.material.color.copy(col);
+    b.material.opacity=0.35+0.55*cut;
+    b.visible=cut>0.05;
+  });
+  air.forEach(a=>{
+    a.t=(a.t+dt*0.055*P)%1;a.c.getPointAt(a.t,a.m.position);
+    a.m.material.opacity=(0.18+0.42*cut)*(state.power?1:0.25);
+  });
+
+  updateLabels();
+  renderer.render(scene,camera);
+}
+tick();
+setTimeout(()=>document.getElementById('loader').classList.add('gone'),420);
+select('compressor',true);
+})();
+</script>
+</body>
+</html>
