@@ -1,1 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bay Area Slang Quiz</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
 
+        /* 73% Background Area */
+        #bg-container {
+            flex: 0 0 73%;
+            background-color: #2c3e50; 
+            background-size: cover;
+            background-position: center;
+            transition: background-image 0.5s ease-in-out;
+        }
+
+        /* 27% Quiz Sidebar */
+        #quiz-sidebar {
+            flex: 0 0 27%;
+            background-color: #ffffff;
+            box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            padding: 30px 25px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            color: #333;
+            margin-top: 0;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #7f8c8d;
+            font-size: 1rem;
+        }
+        
+        .high-score {
+            color: #e67e22;
+        }
+
+        #timer-display {
+            font-weight: bold;
+            color: #e74c3c;
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+        }
+
+        #question-text {
+            font-size: 1.2rem;
+            line-height: 1.5;
+            color: #2c3e50;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }
+
+        .option-btn {
+            display: block;
+            width: 100%;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover:not(:disabled) {
+            background-color: #e2e6ea;
+            border-color: #dae0e5;
+        }
+
+        .option-btn.correct {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .option-btn.wrong {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        #next-btn {
+            margin-top: auto;
+            padding: 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: none; 
+        }
+
+        #next-btn:hover {
+            background-color: #2980b9;
+        }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            #bg-container { flex: 0 0 40%; }
+            #quiz-sidebar { flex: 0 0 60%; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bg-container"></div>
+    
+    <div id="quiz-sidebar">
+        <h1>Bay Area Lingo</h1>
+        
+        <div class="stats-container">
+            <span id="score-display">Score: 0</span>
+            <span class="high-score" id="highscore-display">High Score: 0</span>
+        </div>
+        
+        <div id="timer-display">Time: 30s</div>
+        <div id="question-text">Loading question...</div>
+        
+        <div id="options-container">
+            <!-- Buttons injected by JS -->
+        </div>
+
+        <button id="next-btn" onclick="nextQuestion()">Next Question</button>
+    </div>
+
+    <script>
+        // Utilizing the exact provided filenames for the backgrounds
+        const backgroundImages = [
+            'url("AdobeStock_329384306.jpeg")',
+            'url("AdobeStock_132565203.jpeg")',
+            'url("AdobeStock_225368627.jpeg")',
+            'url("AdobeStock_399237120.jpeg")',
+            'url("AdobeStock_571054637.jpeg")'
+        ];
+
+        const dictionary = [
+            { term: "The City", def: "San Francisco itself, particularly when speaking within the Bay Area." },
+            { term: "SF", def: "Standard, widely accepted abbreviation for San Francisco." },
+            { term: "San Fran", def: "Common shorthand outside the region, but often avoided or disliked by locals." },
+            { term: "Frisco", def: "Historically rooted but contested nickname; embraced by some working-class and cultural communities and disliked by others." },
+            { term: "The Bay / The Yay", def: "The broader San Francisco Bay Area. 'Yay Area' is a playful, hip-hop-influenced variation." },
+            { term: "The East Bay", def: "Oakland, Berkeley, and surrounding communities east of San Francisco Bay." },
+            { term: "The Peninsula", def: "Communities extending south from San Francisco toward Silicon Valley." },
+            { term: "South Bay", def: "San Jose and neighboring Silicon Valley communities." },
+            { term: "The Town / Oaktown", def: "Oakland. Commonly contrasted with San Francisco as 'The City.'" },
+            { term: "415", def: "San Francisco, referenced through its best-known area code." },
+            { term: "San Jo", def: "Informal abbreviation for San Jose." },
+            { term: "B-Town", def: "Context-dependent nickname sometimes used for Berkeley or another nearby place beginning with B." },
+            { term: "The Mission", def: "San Francisco’s Mission District." },
+            { term: "The Richmond", def: "San Francisco’s Richmond District, not the separate city of Richmond." },
+            { term: "The Sunset", def: "San Francisco’s Sunset District." },
+            { term: "SoMa", def: "South of Market, a large district south of Market Street." },
+            { term: "FiDi", def: "San Francisco’s Financial District." },
+            { term: "North Beach", def: "Historic Italian-American neighborhood; primarily an urban neighborhood rather than a beach destination." },
+            { term: "The Tenderloin / TL", def: "Central San Francisco neighborhood; 'TL' is common shorthand." },
+            { term: "The Avenues", def: "The numbered avenues running through the Richmond and Sunset districts." },
+            { term: "Bridge and tunnel", def: "Sometimes dismissive description of people who commute into San Francisco from outside the city." },
+            { term: "Karl / Karl the Fog", def: "Personified nickname for San Francisco’s fog." },
+            { term: "June Gloom", def: "Persistent coastal clouds and overcast during late spring and early summer." },
+            { term: "Microclimate", def: "A small area with noticeably different weather from nearby areas—a constant feature of Bay Area life." },
+            { term: "Muni", def: "San Francisco’s municipal transit system, including buses, light rail, streetcars, and cable cars." },
+            { term: "BART", def: "Bay Area Rapid Transit, the regional rail network." },
+            { term: "Caltrain", def: "Commuter and regional rail connecting San Francisco with the Peninsula, San Jose, and the South Bay." },
+            { term: "Clipper", def: "The regional fare-payment system used across multiple Bay Area transit agencies." },
+            { term: "No 'the' before freeways", def: "Saying 'take 101' or 'get on 880,' unlike the Southern California pattern of 'the 101.'" },
+            { term: "Hella", def: "Very, extremely, or a large amount: 'It’s hella cold'." },
+            { term: "Yee / Yeee", def: "Energetic expression of yes, agreement, approval, or excitement." },
+            { term: "Tryna", def: "'Trying to'; it can also introduce an invitation: 'Tryna eat?'" },
+            { term: "Finna", def: "About to or preparing to do something." },
+            { term: "Fasho / Fa sho", def: "'For sure'; agreement, confirmation, or assurance." },
+            { term: "Yadadamean", def: "'You know what I mean?'" },
+            { term: "Dip", def: "To leave or depart, often quickly." },
+            { term: "Swoop", def: "To pick someone up, usually in a car." },
+            { term: "Smackin’ / Smacks", def: "Extremely tasty, especially when describing food." },
+            { term: "Bootsie / Bootsy", def: "Lame, undesirable, low-quality, or unimpressive." },
+            { term: "Hyphy", def: "High-energy Bay Area hip-hop movement and cultural style; also describes acting extremely energetic or wild." },
+            { term: "Slap / Slaps", def: "Something excellent, particularly a song, beat, or piece of music." },
+            { term: "Function", def: "A party, gathering, or social event." },
+            { term: "Whip", def: "A car or other personal vehicle." },
+            { term: "Scraper", def: "Customized older American car, frequently featuring oversized rims, prominent paint, and a loud system." },
+            { term: "Sideshow", def: "Unauthorized street gathering where drivers perform doughnuts, burnouts, and other vehicle stunts." },
+            { term: "Dubs", def: "The Golden State Warriors; depending on context, it can also mean twenty-inch wheels." }
+        ];
+
+        let currentQuestionObj = null;
+        let score = 0;
+        let bgIndex = 0;
+        let timerInterval;
+        let timeLeft = 30;
+        
+        // Initialize high score from local storage
+        let highScore = localStorage.getItem('sf_slang_highscore') || 0;
+        document.getElementById('highscore-display').innerText = `High Score: ${highScore}`;
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function changeBackground() {
+            const bgContainer = document.getElementById('bg-container');
+            bgContainer.style.backgroundImage = backgroundImages[bgIndex % backgroundImages.length];
+            bgIndex++;
+        }
+        
+        function startTimer() {
+            timeLeft = 30;
+            document.getElementById('timer-display').innerText = `Time: ${timeLeft}s`;
+            clearInterval(timerInterval);
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer-display').innerText = `Time: ${timeLeft}s`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    handleTimeout();
+                }
+            }, 1000);
+        }
+
+        function handleTimeout() {
+            const allBtns = document.querySelectorAll('.option-btn');
+            allBtns.forEach(btn => {
+                btn.disabled = true;
+                if (btn.innerText === currentQuestionObj.term) {
+                    btn.classList.add('correct');
+                }
+            });
+            score = 0; // Reset score on timeout
+            updateScores();
+            document.getElementById('next-btn').style.display = 'block';
+        }
+
+        function loadQuestion() {
+            const correctIndex = Math.floor(Math.random() * dictionary.length);
+            currentQuestionObj = dictionary[correctIndex];
+
+            let options = [currentQuestionObj.term];
+            while (options.length < 4) {
+                let randomTerm = dictionary[Math.floor(Math.random() * dictionary.length)].term;
+                if (!options.includes(randomTerm)) {
+                    options.push(randomTerm);
+                }
+            }
+            
+            shuffleArray(options);
+
+            document.getElementById('question-text').innerText = currentQuestionObj.def;
+            document.getElementById('next-btn').style.display = 'none';
+            
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = ''; 
+
+            options.forEach(optionText => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = optionText;
+                btn.onclick = () => checkAnswer(btn, optionText === currentQuestionObj.term);
+                optionsContainer.appendChild(btn);
+            });
+
+            changeBackground();
+            startTimer();
+        }
+
+        function checkAnswer(selectedBtn, isCorrect) {
+            clearInterval(timerInterval); // Stop timer on answer
+            
+            const allBtns = document.querySelectorAll('.option-btn');
+            allBtns.forEach(btn => {
+                btn.disabled = true;
+                if (btn.innerText === currentQuestionObj.term) {
+                    btn.classList.add('correct');
+                }
+            });
+
+            if (isCorrect) {
+                score++;
+            } else {
+                selectedBtn.classList.add('wrong');
+                score = 0; // Reset consecutive score on wrong answer
+            }
+
+            updateScores();
+            document.getElementById('next-btn').style.display = 'block';
+        }
+        
+        function updateScores() {
+            document.getElementById('score-display').innerText = `Score: ${score}`;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('sf_slang_highscore', highScore);
+                document.getElementById('highscore-display').innerText = `High Score: ${highScore}`;
+            }
+        }
+
+        function nextQuestion() {
+            loadQuestion();
+        }
+
+        // Initialize game
+        loadQuestion();
+    </script>
+</body>
+</html>
