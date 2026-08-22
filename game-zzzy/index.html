@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="A deep dive into how an FM radio station gets on the air: every stage of the signal chain and every physical part of the tower site, with the AM contrast.">
+<meta name="description" content="How an FM radio station gets on the air: the full signal chain and tower anatomy, plus a working model of a hilltop transmitter site at night and a 1973 air studio.">
 <title>From Microphone to Mast</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -263,6 +263,13 @@ ul.parts li em{font-style:italic;}
     <div><dt>FCC class</dt><dd>C</dd></div>
   </dl>
 </header>
+
+<nav class="viewswitch" role="tablist" aria-label="Page views">
+  <button id="tab-manual" role="tab" aria-selected="true" aria-controls="view-manual" type="button">The manual</button>
+  <button id="tab-model" role="tab" aria-selected="false" aria-controls="view-model" type="button">Working model</button>
+</nav>
+
+<div id="view-manual" class="view" role="tabpanel" aria-labelledby="tab-manual">
 
 <section>
   <div class="rail"><div class="mark"></div></div>
@@ -1228,7 +1235,933 @@ VSWR 2.00  →  11.1% reflected            <span class="cmt">transmitter shuts d
   </div>
 </section>
 
+
 </div>
+
+<style>
+/* ============ WORKING MODEL LAYER ============ */
+.viewswitch{
+  display:flex;gap:0;margin:0;padding:22px 0 0;
+  border-bottom:1px solid var(--rule);
+}
+.viewswitch button{
+  appearance:none;background:none;border:0;border-bottom:2px solid transparent;
+  font-family:"Saira Condensed","Arial Narrow",Helvetica,sans-serif;
+  font-size:16px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);padding:10px 20px 12px;cursor:pointer;margin-bottom:-1px;
+}
+.viewswitch button:hover{color:var(--ink);}
+.viewswitch button[aria-selected="true"]{color:var(--orange);border-bottom-color:var(--orange);}
+.viewswitch button:focus-visible{outline:2px solid var(--rf);outline-offset:-2px;}
+.view[hidden]{display:none;}
+
+#view-model{
+  --n-sky:#0A1220; --n-ink:#DCE6F0; --n-dim:#7E93AA; --n-line:#2B3D52;
+  --n-panel:#171C1F; --n-face:#C9C3B2; --n-lamp:#F2453A; --n-amber:#FFB454;
+  --n-green:#5FD08A; --n-rf:#57C6E8; --n-warm:#F2C979;
+  padding:34px 0 10px;
+}
+#view-model p{color:var(--ink-2);}
+.mhead{margin-bottom:22px;}
+.mhead h2{margin-bottom:8px;}
+
+.screen{
+  background:var(--n-sky);border:1px solid var(--n-line);
+  padding:0;overflow-x:auto;position:relative;
+}
+.screen svg{display:block;width:100%;height:auto;}
+#plan{min-width:660px;}
+
+.mpanel{
+  background:#101416;border:1px solid #2A3235;padding:14px;overflow-x:auto;
+}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin:14px 0;}
+.mgrid svg{display:block;width:100%;height:auto;min-width:470px;}
+
+.ctrlbar{
+  display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;
+  background:#101416;border:1px solid #2A3235;padding:12px 14px;margin:14px 0;
+}
+.ctrl{display:flex;align-items:center;gap:8px;}
+.ctrl label{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:#8FA2B4;
+}
+.ctrl input[type=range]{width:130px;accent-color:#E0761F;}
+.tbtn{
+  appearance:none;font-family:"Saira Condensed",sans-serif;font-size:14px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;
+  background:#1C2226;color:#B9C6D2;border:1px solid #35424B;
+  padding:7px 14px;cursor:pointer;border-radius:2px;
+}
+.tbtn:hover{background:#242C32;color:#EAF1F7;}
+.tbtn[aria-pressed="true"]{background:#7A1F16;border-color:#C2372A;color:#FFE9E4;}
+.tbtn.go[aria-pressed="true"]{background:#1B5334;border-color:#3E9B63;color:#DFF6E7;}
+.tbtn:focus-visible{outline:2px solid var(--n-rf);outline-offset:2px;}
+
+.readouts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));
+  gap:1px;background:#2A3235;border:1px solid #2A3235;margin:14px 0;
+}
+.readouts div{background:#0C1012;padding:9px 12px 11px;}
+.readouts dt{
+  font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:#7A8C9C;margin:0 0 3px;
+}
+.readouts dd{
+  margin:0;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:19px;
+  color:var(--n-amber);font-variant-numeric:tabular-nums;letter-spacing:.02em;
+}
+.readouts dd small{font-size:11px;color:#8B7A5C;margin-left:3px;font-weight:400;}
+.readouts dd.warn{color:var(--n-lamp);}
+.readouts dd.ok{color:var(--n-green);}
+
+.planwrap{display:grid;grid-template-columns:minmax(0,1.95fr) minmax(206px,.78fr);gap:14px;margin:14px 0;}
+.keylist{list-style:none;margin:0;padding:0;background:#101416;border:1px solid #2A3235;
+  max-height:620px;overflow-y:auto;}
+.keylist li{border-bottom:1px solid #1E262B;}
+.keylist button{
+  display:grid;grid-template-columns:22px 1fr;gap:9px;width:100%;text-align:left;
+  background:none;border:0;padding:9px 12px;cursor:pointer;color:#A9B8C6;
+  font-family:"Source Serif 4",Georgia,serif;font-size:13.5px;line-height:1.4;
+}
+.keylist button:hover{background:#171E23;color:#E6EEF5;}
+.keylist button[aria-pressed="true"]{background:#20282E;color:#FFF;}
+.keylist .kn{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:#E0761F;
+  font-weight:600;padding-top:1px;
+}
+.keylist b{display:block;font-family:"Saira Condensed",sans-serif;font-size:14px;
+  letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:#DCE6F0;}
+.keylist button:focus-visible{outline:2px solid var(--n-rf);outline-offset:-2px;}
+
+.mcap{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);margin:0 0 8px;
+}
+.mnote{font-size:14px;color:var(--ink-2);max-width:74ch;margin:10px 0 0;}
+
+@media (max-width:760px){
+  .planwrap{grid-template-columns:1fr;}
+  .keylist{max-height:320px;}
+}
+@media (prefers-reduced-motion: reduce){
+  .blink,.twinkle,.rfarc,.carmove{animation:none !important;}
+}
+</style>
+
+<div id="view-model" class="view" role="tabpanel" aria-labelledby="tab-model" hidden>
+
+  <div class="mhead">
+    <p class="sechead">Layer two</p>
+    <h2>The site at 3&nbsp;a.m., and the room it listens to</h2>
+    <p>The same station as the manual — 98.7&nbsp;MHz, Class&nbsp;C, six bays on a guyed mast — drawn as it would actually look on a hill at night, with a working board from about 1973 downtown. Turn channels on, ride the gain, and watch the deviation, the forward power and the coverage follow.</p>
+  </div>
+
+  <p class="mcap">Transmitter site · 0314 local · exterior</p>
+  <div class="screen">
+    <svg id="scene" viewBox="0 0 1200 640" role="img" aria-label="Night view of a hilltop transmitter site: a guyed lattice mast with a flashing red beacon and six antenna bays, a low transmitter building with lit windows, a generator shed and propane tank, guy anchors, a chain-link fence and a gravel drive, with rolling hills and a distant town glow beyond.">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#050912"></stop>
+          <stop offset="45%" stop-color="#0C1526"></stop>
+          <stop offset="78%" stop-color="#182741"></stop>
+          <stop offset="100%" stop-color="#2A3E5C"></stop>
+        </linearGradient>
+        <radialGradient id="moonglow">
+          <stop offset="0%" stop-color="#CFE0F2" stop-opacity=".55"></stop>
+          <stop offset="100%" stop-color="#CFE0F2" stop-opacity="0"></stop>
+        </radialGradient>
+        <radialGradient id="townglow">
+          <stop offset="0%" stop-color="#F3B75E" stop-opacity=".40"></stop>
+          <stop offset="100%" stop-color="#F3B75E" stop-opacity="0"></stop>
+        </radialGradient>
+        <radialGradient id="beaconglow">
+          <stop offset="0%" stop-color="#FF4438" stop-opacity=".85"></stop>
+          <stop offset="100%" stop-color="#FF4438" stop-opacity="0"></stop>
+        </radialGradient>
+        <radialGradient id="winglow">
+          <stop offset="0%" stop-color="#F2C979" stop-opacity=".5"></stop>
+          <stop offset="100%" stop-color="#F2C979" stop-opacity="0"></stop>
+        </radialGradient>
+        <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="7"></feGaussianBlur>
+        </filter>
+      </defs>
+
+      <rect x="0" y="0" width="1200" height="640" fill="url(#sky)"></rect>
+      <g id="stars"></g>
+
+      <circle cx="1010" cy="98" r="72" fill="url(#moonglow)"></circle>
+      <circle cx="1010" cy="98" r="23" fill="#E9F0F8"></circle>
+      <circle cx="1002" cy="92" r="4" fill="#D3DEEA"></circle>
+      <circle cx="1017" cy="106" r="3" fill="#D3DEEA"></circle>
+      <circle cx="1014" cy="88" r="2" fill="#D3DEEA"></circle>
+
+      <!-- thin cloud bands -->
+      <g fill="#1B2A44" opacity=".55" filter="url(#soft)">
+        <ellipse cx="320" cy="150" rx="180" ry="9"></ellipse>
+        <ellipse cx="880" cy="212" rx="230" ry="7"></ellipse>
+      </g>
+
+      <!-- distant town -->
+      <ellipse cx="190" cy="424" rx="190" ry="46" fill="url(#townglow)"></ellipse>
+
+      <!-- hills, far to near -->
+      <path d="M0 428 C120 396 240 412 360 400 C520 380 640 420 780 406 C900 394 1030 414 1200 400 L1200 640 L0 640 Z" fill="#16203A"></path>
+      <g fill="#F2C979" opacity=".75">
+        <rect x="96" y="416" width="3" height="4"></rect><rect x="108" y="418" width="2" height="3"></rect>
+        <rect x="124" y="414" width="3" height="5"></rect><rect x="140" y="417" width="2" height="4"></rect>
+        <rect x="158" y="413" width="3" height="4"></rect><rect x="176" y="416" width="2" height="4"></rect>
+        <rect x="194" y="412" width="3" height="5"></rect><rect x="214" y="415" width="2" height="4"></rect>
+        <rect x="232" y="414" width="3" height="4"></rect><rect x="252" y="417" width="2" height="3"></rect>
+        <rect x="272" y="413" width="3" height="4"></rect>
+      </g>
+      <path d="M0 476 C150 450 260 468 400 456 C560 442 700 476 860 460 C980 448 1090 470 1200 456 L1200 640 L0 640 Z" fill="#111A2C"></path>
+      <path d="M0 548 C120 528 220 514 340 506 L1080 506 C1140 508 1170 514 1200 510 L1200 640 L0 640 Z" fill="#0D1522"></path>
+
+      <!-- valley mist -->
+      <ellipse cx="420" cy="536" rx="260" ry="12" fill="#8FB0D0" opacity=".10" filter="url(#soft)"></ellipse>
+
+      <!-- ===== the site ===== -->
+      <!-- guys (drawn first so the building occludes them) -->
+      <g stroke="#4E667F" stroke-width="1.1" opacity=".9">
+        <line x1="812" y1="420" x2="570" y2="506"></line>
+        <line x1="812" y1="300" x2="500" y2="506"></line>
+        <line x1="812" y1="180" x2="430" y2="506"></line>
+        <line x1="828" y1="420" x2="1070" y2="506"></line>
+        <line x1="828" y1="300" x2="1140" y2="506"></line>
+        <line x1="828" y1="180" x2="1185" y2="506"></line>
+      </g>
+      <g fill="#233448">
+        <rect x="424" y="502" width="13" height="7"></rect><rect x="494" y="502" width="13" height="7"></rect>
+        <rect x="564" y="502" width="13" height="7"></rect><rect x="1064" y="502" width="13" height="7"></rect>
+        <rect x="1134" y="502" width="13" height="7"></rect><rect x="1179" y="502" width="13" height="7"></rect>
+      </g>
+
+      <!-- mast -->
+      <g stroke="#7392AF" stroke-width="1.7" fill="none">
+        <line x1="812" y1="120" x2="812" y2="506"></line>
+        <line x1="828" y1="120" x2="828" y2="506"></line>
+      </g>
+      <path d="M812 120 L828 142 L812 164 L828 186 L812 208 L828 230 L812 252 L828 274 L812 296 L828 318 L812 340 L828 362 L812 384 L828 406 L812 428 L828 450 L812 472 L828 494 L812 506" fill="none" stroke="#55738F" stroke-width="1"></path>
+
+      <!-- antenna bays -->
+      <g stroke="#7E97AE" stroke-width="1">
+        <line x1="812" y1="132" x2="804" y2="132"></line><line x1="812" y1="150" x2="804" y2="150"></line>
+        <line x1="812" y1="168" x2="804" y2="168"></line><line x1="812" y1="186" x2="804" y2="186"></line>
+        <line x1="812" y1="204" x2="804" y2="204"></line><line x1="812" y1="222" x2="804" y2="222"></line>
+      </g>
+      <g fill="none" stroke="#93AEC6" stroke-width="1.6">
+        <circle cx="798" cy="132" r="5.5"></circle><circle cx="798" cy="150" r="5.5"></circle>
+        <circle cx="798" cy="168" r="5.5"></circle><circle cx="798" cy="186" r="5.5"></circle>
+        <circle cx="798" cy="204" r="5.5"></circle><circle cx="798" cy="222" r="5.5"></circle>
+      </g>
+      <!-- feedline -->
+      <line x1="806" y1="236" x2="806" y2="492" stroke="#54718D" stroke-width="2.4"></line>
+      <line x1="806" y1="492" x2="792" y2="492" stroke="#54718D" stroke-width="2.4"></line>
+
+      <!-- RF wavefronts -->
+      <g id="rf" opacity="0">
+        <circle class="rfarc" cx="798" cy="178" r="30" fill="none" stroke="#57C6E8" stroke-width="1.4" stroke-opacity=".8"></circle>
+        <circle class="rfarc" cx="798" cy="178" r="30" fill="none" stroke="#57C6E8" stroke-width="1.4" stroke-opacity=".8" style="animation-delay:1.1s"></circle>
+        <circle class="rfarc" cx="798" cy="178" r="30" fill="none" stroke="#57C6E8" stroke-width="1.4" stroke-opacity=".8" style="animation-delay:2.2s"></circle>
+      </g>
+
+      <!-- beacon + side lights -->
+      <line x1="820" y1="120" x2="820" y2="104" stroke="#7E97AE" stroke-width="1.6"></line>
+      <circle id="beaconGlow" cx="820" cy="112" r="26" fill="url(#beaconglow)" opacity="0"></circle>
+      <circle id="beaconLamp" cx="820" cy="112" r="5" fill="#5A2622"></circle>
+      <g id="sideLamps" fill="#4A2320">
+        <circle cx="810" cy="300" r="2.6"></circle><circle cx="830" cy="300" r="2.6"></circle>
+        <circle cx="810" cy="420" r="2.6"></circle><circle cx="830" cy="420" r="2.6"></circle>
+      </g>
+
+      <!-- ice bridge -->
+      <g stroke="#3F5872" stroke-width="1.6">
+        <line x1="700" y1="490" x2="794" y2="490"></line>
+        <line x1="726" y1="490" x2="726" y2="506"></line>
+        <line x1="762" y1="490" x2="762" y2="506"></line>
+      </g>
+
+      <!-- transmitter building -->
+      <ellipse id="winGlowA" cx="720" cy="474" rx="34" ry="22" fill="url(#winglow)" opacity="0"></ellipse>
+      <ellipse id="winGlowB" cx="756" cy="474" rx="34" ry="22" fill="url(#winglow)" opacity="0"></ellipse>
+      <rect x="680" y="452" width="110" height="54" fill="#0E1A24" stroke="#3B586F" stroke-width="1.3"></rect>
+      <rect x="674" y="446" width="122" height="8" fill="#132330" stroke="#3B586F" stroke-width="1.1"></rect>
+      <rect x="700" y="436" width="24" height="10" fill="#132330" stroke="#3B586F" stroke-width="1"></rect>
+      <g id="winA"><rect x="710" y="466" width="20" height="14" fill="#2A2418"></rect></g>
+      <g id="winB"><rect x="746" y="466" width="20" height="14" fill="#2A2418"></rect></g>
+      <rect x="686" y="478" width="13" height="28" fill="#0A141C" stroke="#3B586F" stroke-width="1"></rect>
+      <circle id="porch" cx="692" cy="472" r="2.2" fill="#3A3018"></circle>
+      <!-- STL dish on the roof -->
+      <path d="M772 442 a9 9 0 0 0 0 -14" fill="none" stroke="#6D89A3" stroke-width="1.6"></path>
+      <line x1="772" y1="435" x2="782" y2="435" stroke="#6D89A3" stroke-width="1"></line>
+      <line x1="777" y1="446" x2="777" y2="428" stroke="#3B586F" stroke-width="1"></line>
+
+      <!-- generator shed + propane -->
+      <rect x="600" y="474" width="54" height="32" fill="#0E1A24" stroke="#3B586F" stroke-width="1.2"></rect>
+      <rect x="596" y="470" width="62" height="6" fill="#132330" stroke="#3B586F" stroke-width="1"></rect>
+      <circle id="genLamp" cx="648" cy="480" r="2.2" fill="#1E3A2A"></circle>
+      <rect x="658" y="488" width="16" height="12" rx="6" fill="#12202B" stroke="#3B586F" stroke-width="1"></rect>
+
+      <!-- fence + gate -->
+      <g stroke="#2E4459" stroke-width="1">
+        <line x1="392" y1="506" x2="392" y2="492"></line><line x1="452" y1="506" x2="452" y2="492"></line>
+        <line x1="512" y1="506" x2="512" y2="492"></line><line x1="572" y1="506" x2="572" y2="492"></line>
+        <line x1="880" y1="506" x2="880" y2="492"></line><line x1="940" y1="506" x2="940" y2="492"></line>
+        <line x1="1000" y1="506" x2="1000" y2="492"></line><line x1="1060" y1="506" x2="1060" y2="492"></line>
+        <line x1="392" y1="494" x2="572" y2="494"></line><line x1="880" y1="494" x2="1060" y2="494"></line>
+      </g>
+
+      <!-- utility pole -->
+      <g stroke="#3B586F" stroke-width="1.4">
+        <line x1="336" y1="506" x2="336" y2="430"></line>
+        <line x1="320" y1="440" x2="352" y2="440"></line>
+        <line x1="0" y1="452" x2="336" y2="438"></line>
+        <line x1="336" y1="442" x2="680" y2="470"></line>
+      </g>
+
+      <!-- gravel drive -->
+      <path d="M0 604 C180 588 340 556 520 528 C600 516 640 508 690 506" fill="none" stroke="#233448" stroke-width="7" stroke-linecap="round"></path>
+
+      <!-- foreground hill -->
+      <path d="M0 596 C200 572 380 590 560 580 C760 568 940 592 1200 576 L1200 640 L0 640 Z" fill="#070D16"></path>
+      <!-- fence posts / grass tufts foreground -->
+      <g stroke="#0F1926" stroke-width="2" stroke-linecap="round">
+        <line x1="120" y1="622" x2="120" y2="600"></line><line x1="260" y1="618" x2="260" y2="598"></line>
+        <line x1="410" y1="626" x2="410" y2="606"></line><line x1="980" y1="620" x2="980" y2="600"></line>
+        <line x1="1110" y1="626" x2="1110" y2="606"></line>
+      </g>
+      <!-- car on the road below -->
+      <g class="carmove">
+        <ellipse cx="0" cy="600" rx="26" ry="4" fill="#F2C979" opacity=".22"></ellipse>
+        <circle cx="8" cy="599" r="1.8" fill="#FFE7B0"></circle>
+      </g>
+    </svg>
+  </div>
+  <p class="mnote">The beacon flashes at roughly 30 per minute, the side lights burn steady, and the two lit windows are the transmitter room and the equipment rack alcove. Everything on this hill is unattended — the only person here tonight is on the phone.</p>
+
+  <div class="ctrlbar">
+    <div class="ctrl"><button class="tbtn go" id="btnPower" aria-pressed="false">Plate on</button></div>
+    <div class="ctrl"><label for="gain">Master gain</label><input type="range" id="gain" min="0" max="100" value="72"></div>
+    <div class="ctrl"><label for="tpo">TPO kW</label><input type="range" id="tpo" min="2" max="20" step="0.5" value="19"></div>
+    <div class="ctrl"><button class="tbtn" id="btnVswr" aria-pressed="false">Inject VSWR fault</button></div>
+    <div class="ctrl"><button class="tbtn" id="btnLights" aria-pressed="false">Beacon fail</button></div>
+    <div class="ctrl"><button class="tbtn" id="btnGen" aria-pressed="false">Utility outage</button></div>
+  </div>
+
+  <dl class="readouts">
+    <div><dt>Modulation</dt><dd id="roMod">0<small>%</small></dd></div>
+    <div><dt>Deviation</dt><dd id="roDev">0.0<small>kHz</small></dd></div>
+    <div><dt>Forward power</dt><dd id="roFwd">0.0<small>kW</small></dd></div>
+    <div><dt>Reflected</dt><dd id="roRef">0<small>W</small></dd></div>
+    <div><dt>VSWR</dt><dd id="roVswr">1.00</dd></div>
+    <div><dt>ERP</dt><dd id="roErp">0.0<small>kW</small></dd></div>
+    <div><dt>Service radius</dt><dd id="roCov">0<small>km</small></dd></div>
+    <div><dt>Site status</dt><dd id="roState" class="warn">OFF AIR</dd></div>
+  </dl>
+
+  <div class="mgrid">
+    <div class="mpanel">
+      <p class="mcap">Air studio · control board</p>
+      <svg id="console" viewBox="0 0 620 430" role="img" aria-label="A broadcast control board: an ON AIR lamp, two VU meters, and eight channel strips labelled microphone, turntable one, turntable two, three cart machines, reel-to-reel and network, each with a fader and a lighted on button."></svg>
+    </div>
+    <div class="mpanel">
+      <p class="mcap">Transmitter site · remote control</p>
+      <svg id="rack" viewBox="0 0 620 430" role="img" aria-label="A transmitter remote control panel: forward and reflected power meters, a modulation meter, plate voltage and current, digital readouts for effective radiated power and standing wave ratio, and status lamps for the beacon, side lights, generator and alarms."></svg>
+    </div>
+  </div>
+  <p class="mnote">The board is the working part. Turn a channel on, ride the master gain, and the VU needles drive the deviation meter, which drives the modulation percentage — the transmitter's forward power stays flat the whole time, because FM's envelope is constant no matter how loud the programme gets. Only the VSWR fault moves it, by folding the power back.</p>
+
+  <p class="mcap" style="margin-top:30px">Air studio no. 1 · plan · circa 1973</p>
+  <div class="planwrap">
+    <div class="screen">
+      <svg id="plan" viewBox="0 0 1180 620" role="img" aria-label="Top-down plan of an early-1970s radio air studio showing the control board on a U-shaped counter, two turntables on the counter wings, three cart machines, a rack of reel-to-reel decks and monitoring gear, a cart wall, a record library, a soundproofed teletype closet, monitor speakers, the announcer position and the studio window."></svg>
+    </div>
+    <ul class="keylist" id="keylist"></ul>
+  </div>
+
+  <p class="mnote">A board of this era is rotary or early-slider, with a lighted <em>on</em> button per channel and a mechanical interlock: opening the microphone kills the monitor speakers so the room cannot feed back. Everything the announcer touches is within one seated arm's reach — that constraint, not taste, is what produced this layout.</p>
+
+</div>
+
+</div>
+
+<style>
+@keyframes tw{0%,100%{opacity:.18}50%{opacity:.95}}
+.twinkle{animation:tw 4s ease-in-out infinite}
+@keyframes rfout{0%{r:26px;opacity:.65}100%{r:210px;opacity:0}}
+.rfarc{animation:rfout 3.3s linear infinite}
+@keyframes drive{0%{transform:translateX(-60px)}100%{transform:translateX(1270px)}}
+.carmove{animation:drive 26s linear infinite}
+</style>
+<script>
+(function(){
+"use strict";
+var SVGNS="http://www.w3.org/2000/svg";
+var $=function(s,r){return (r||document).querySelector(s)};
+
+/* ---------------------------------------------------------------- view switch */
+var tabM=$("#tab-manual"), tabW=$("#tab-model"),
+    vM=$("#view-manual"), vW=$("#view-model");
+function setView(v){
+  var model = v==="model";
+  vM.hidden=model; vW.hidden=!model;
+  tabM.setAttribute("aria-selected", String(!model));
+  tabW.setAttribute("aria-selected", String(model));
+  try{localStorage.setItem("rt-view", v)}catch(e){}
+  window.scrollTo({top:0,behavior:"instant"});
+}
+tabM.addEventListener("click",function(){setView("manual")});
+tabW.addEventListener("click",function(){setView("model")});
+try{ if(localStorage.getItem("rt-view")==="model") setView("model"); }catch(e){}
+
+/* ---------------------------------------------------------------- stars */
+(function(){
+  var g=$("#stars"); if(!g) return;
+  var seed=20260822, rnd=function(){seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff};
+  var frag=document.createDocumentFragment();
+  for(var i=0;i<170;i++){
+    var x=rnd()*1200, y=rnd()*430, r=0.5+rnd()*1.3;
+    var c=document.createElementNS(SVGNS,"circle");
+    c.setAttribute("cx",x.toFixed(1)); c.setAttribute("cy",y.toFixed(1));
+    c.setAttribute("r",r.toFixed(2));
+    c.setAttribute("fill", r>1.4 ? "#EAF2FB" : "#BFD2E6");
+    c.setAttribute("opacity",(0.25+rnd()*0.6).toFixed(2));
+    if(rnd()>0.55){ c.setAttribute("class","twinkle");
+      c.style.animationDelay=(rnd()*4).toFixed(2)+"s";
+      c.style.animationDuration=(3+rnd()*4).toFixed(2)+"s"; }
+    frag.appendChild(c);
+  }
+  g.appendChild(frag);
+})();
+
+/* ---------------------------------------------------------------- svg helpers */
+function el(tag,attrs,txt){
+  var n=document.createElementNS(SVGNS,tag);
+  for(var k in attrs) n.setAttribute(k,attrs[k]);
+  if(txt!=null) n.textContent=txt;
+  return n;
+}
+var SAIRA="'Saira Condensed','Arial Narrow',Helvetica,sans-serif";
+var PLEX="'IBM Plex Mono',ui-monospace,monospace";
+function label(x,y,t,size,fill,anchor,fam,ls){
+  return el("text",{x:x,y:y,"font-size":size||10,"font-family":fam||PLEX,
+    "text-anchor":anchor||"start","letter-spacing":ls||"0.1em",fill:fill||"#8FA2B4"},t);
+}
+function polar(cx,cy,r,deg){var a=(deg-90)*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+var SWING=44;
+
+/* Analog meter. scale = [[fracPos, labelText], ...] */
+function meter(parent,id,x,y,w,h,title,scale,redFrom){
+  var g=el("g",{});
+  g.appendChild(el("rect",{x:x,y:y,width:w,height:h,rx:2,fill:"#0A0D0F",stroke:"#39434A","stroke-width":1}));
+  var fx=x+7,fy=y+7,fw=w-14,fh=h-22;
+  g.appendChild(el("rect",{x:fx,y:fy,width:fw,height:fh,rx:1,fill:"#DED8C4"}));
+  var cx=fx+fw/2, cy=fy+fh+16, R=fh*0.90, Ra=fh*0.80;
+  var i,p,a;
+  // red overload band
+  if(redFrom!=null){
+    var a1=-SWING+2*SWING*redFrom, a2=SWING;
+    var s=polar(cx,cy,Ra+3,a1), e=polar(cx,cy,Ra+3,a2);
+    g.appendChild(el("path",{d:"M"+s[0].toFixed(1)+" "+s[1].toFixed(1)+" A "+(Ra+3).toFixed(1)+" "+(Ra+3).toFixed(1)+" 0 0 1 "+e[0].toFixed(1)+" "+e[1].toFixed(1),
+      fill:"none",stroke:"#B32017","stroke-width":3.2}));
+  }
+  // arc
+  var as=polar(cx,cy,Ra,-SWING), ae=polar(cx,cy,Ra,SWING);
+  g.appendChild(el("path",{d:"M"+as[0].toFixed(1)+" "+as[1].toFixed(1)+" A "+Ra.toFixed(1)+" "+Ra.toFixed(1)+" 0 0 1 "+ae[0].toFixed(1)+" "+ae[1].toFixed(1),
+    fill:"none",stroke:"#2A2A26","stroke-width":1}));
+  for(i=0;i<scale.length;i++){
+    a=-SWING+2*SWING*scale[i][0];
+    var t1=polar(cx,cy,Ra,a), t2=polar(cx,cy,Ra-7,a), tl=polar(cx,cy,Ra-17,a);
+    g.appendChild(el("line",{x1:t1[0].toFixed(1),y1:t1[1].toFixed(1),x2:t2[0].toFixed(1),y2:t2[1].toFixed(1),
+      stroke: scale[i][0]>=(redFrom==null?2:redFrom) ? "#B32017" : "#2A2A26","stroke-width":1.2}));
+    if(scale[i][1]!==""){
+      g.appendChild(el("text",{x:tl[0].toFixed(1),y:(tl[1]+3).toFixed(1),"font-size":7.5,"font-family":PLEX,
+        "text-anchor":"middle",fill: scale[i][0]>=(redFrom==null?2:redFrom)?"#B32017":"#2A2A26"},scale[i][1]));
+    }
+  }
+  g.appendChild(el("text",{x:cx,y:fy+fh-6,"font-size":8.5,"font-family":SAIRA,"text-anchor":"middle",
+    "letter-spacing":"0.16em",fill:"#5A5648"},title));
+  var nd=el("line",{id:id,x1:cx,y1:cy,x2:cx,y2:(cy-R).toFixed(1),stroke:"#181713","stroke-width":1.7,
+    "stroke-linecap":"round"});
+  g.appendChild(nd);
+  g.appendChild(el("circle",{cx:cx,cy:cy,r:4,fill:"#181713"}));
+  g.setAttribute("data-cx",cx); g.setAttribute("data-cy",cy);
+  parent.appendChild(g);
+  return {needle:nd,cx:cx,cy:cy,R:R};
+}
+function setNeedle(m,frac){
+  frac=Math.max(0,Math.min(1,frac));
+  var a=-SWING+2*SWING*frac, p=polar(m.cx,m.cy,m.R,a);
+  m.needle.setAttribute("x2",p[0].toFixed(1));
+  m.needle.setAttribute("y2",p[1].toFixed(1));
+}
+function ledWindow(parent,x,y,w,h,cap,id,unit){
+  parent.appendChild(el("rect",{x:x,y:y,width:w,height:h,rx:2,fill:"#07090A",stroke:"#39434A","stroke-width":1}));
+  parent.appendChild(el("text",{x:x+9,y:y+15,"font-size":8.5,"font-family":PLEX,"letter-spacing":"0.16em",fill:"#5D6E7C"},cap));
+  var t=el("text",{id:id,x:x+9,y:y+h-11,"font-size":21,"font-family":PLEX,"font-weight":600,fill:"#FFB454","letter-spacing":"0.04em"},"—");
+  parent.appendChild(t);
+  if(unit) parent.appendChild(el("text",{x:x+w-9,y:y+h-11,"font-size":9,"font-family":PLEX,"text-anchor":"end",fill:"#7A6844"},unit));
+  return t;
+}
+function lamp(parent,x,y,text,id){
+  var c=el("circle",{id:id,cx:x,cy:y,r:5,fill:"#241B18",stroke:"#3C464D","stroke-width":1});
+  parent.appendChild(c);
+  parent.appendChild(el("text",{x:x+11,y:y+3.5,"font-size":8.5,"font-family":PLEX,"letter-spacing":"0.13em",fill:"#8FA2B4"},text));
+  return c;
+}
+
+/* ---------------------------------------------------------------- sources + board */
+var SOURCES=[
+  {id:"MIC", name:"MIC",    kind:"speech", desc:"announcer"},
+  {id:"TT1", name:"TT-1",   kind:"music",  desc:"turntable"},
+  {id:"TT2", name:"TT-2",   kind:"music",  desc:"turntable"},
+  {id:"CT1", name:"CART 1", kind:"spot",   desc:"spot"},
+  {id:"CT2", name:"CART 2", kind:"spot",   desc:"spot"},
+  {id:"CT3", name:"CART 3", kind:"spot",   desc:"jingle"},
+  {id:"RTR", name:"REEL",   kind:"music",  desc:"tape"},
+  {id:"NET", name:"NET",    kind:"speech", desc:"network"}
+];
+var state={
+  plate:true, gain:0.936, tpo:19, vswrFault:false, beaconFail:false, outage:false,
+  on:{}, vu:0, level:0, t0:performance.now()/1000
+};
+SOURCES.forEach(function(s,i){ state.on[s.id] = (s.id==="TT1"); });
+
+var cons=$("#console");
+var VUSCALE=[[0,"-20"],[0.24,"-10"],[0.35,"-7"],[0.44,"-5"],[0.55,"-3"],[0.62,""],[0.70,"-1"],[0.79,"0"],[0.87,"+1"],[0.94,""],[1,"+3"]];
+var vuL,vuR,stripEls={};
+(function buildConsole(){
+  cons.appendChild(el("rect",{x:0,y:0,width:620,height:430,fill:"#191E21"}));
+  cons.appendChild(el("rect",{x:6,y:6,width:608,height:418,rx:3,fill:"none",stroke:"#2E373D","stroke-width":1}));
+  // ON AIR lens
+  cons.appendChild(el("rect",{id:"onairBox",x:18,y:16,width:152,height:44,rx:3,fill:"#2A1512",stroke:"#5A2A22","stroke-width":1.4}));
+  cons.appendChild(el("text",{id:"onairTxt",x:94,y:46,"font-size":24,"font-family":SAIRA,"font-weight":700,
+    "text-anchor":"middle","letter-spacing":"0.22em",fill:"#5E3129"},"ON AIR"));
+  cons.appendChild(label(18,80,"PROGRAM BUS · 8 CHANNEL",8.5,"#5D6E7C"));
+  cons.appendChild(label(18,96,"MONITOR MUTES ON MIC",8.5,"#5D6E7C"));
+  vuL=meter(cons,"vuL",190,16,200,118,"VU  ·  PROGRAM LEFT",VUSCALE,0.79);
+  vuR=meter(cons,"vuR",402,16,200,118,"VU  ·  PROGRAM RIGHT",VUSCALE,0.79);
+
+  var x0=22,w=68,gap=4.5;
+  SOURCES.forEach(function(s,i){
+    var x=x0+i*(w+gap), g=el("g",{});
+    g.appendChild(el("rect",{x:x,y:158,width:w,height:262,rx:2,fill:"#12171A",stroke:"#2E373D","stroke-width":1}));
+    g.appendChild(el("rect",{x:x+5,y:164,width:w-10,height:18,rx:1,fill:"#C9C3B2"}));
+    g.appendChild(el("text",{x:x+w/2,y:177,"font-size":11,"font-family":SAIRA,"font-weight":600,
+      "text-anchor":"middle","letter-spacing":"0.08em",fill:"#22262A"},s.name));
+    g.appendChild(el("text",{x:x+w/2,y:194,"font-size":7.5,"font-family":PLEX,"text-anchor":"middle",
+      "letter-spacing":"0.1em",fill:"#5D6E7C"},s.desc));
+    // fader
+    g.appendChild(el("rect",{x:x+w/2-3,y:204,width:6,height:150,rx:3,fill:"#0A0D0F",stroke:"#333C42","stroke-width":1}));
+    for(var k=0;k<6;k++){
+      g.appendChild(el("line",{x1:x+w/2+8,y1:210+k*28,x2:x+w/2+13,y2:210+k*28,stroke:"#3A444B","stroke-width":1}));
+    }
+    var cap=el("rect",{x:x+w/2-17,y:300,width:34,height:13,rx:2,fill:"#3B4249",stroke:"#697681","stroke-width":1});
+    g.appendChild(cap);
+    var btn=el("rect",{x:x+w/2-19,y:366,width:38,height:22,rx:2,fill:"#241B18",stroke:"#3C464D","stroke-width":1.2,
+      style:"cursor:pointer"});
+    var btxt=el("text",{x:x+w/2,y:381,"font-size":10,"font-family":SAIRA,"font-weight":600,"text-anchor":"middle",
+      "letter-spacing":"0.14em",fill:"#6E7C87",style:"cursor:pointer;pointer-events:none"},"ON");
+    g.appendChild(btn); g.appendChild(btxt);
+    var hit=el("rect",{x:x+w/2-19,y:366,width:38,height:22,fill:"transparent",style:"cursor:pointer"});
+    hit.setAttribute("role","button");
+    hit.setAttribute("tabindex","0");
+    hit.setAttribute("aria-label","Channel "+s.name+" on air");
+    function tog(){ state.on[s.id]=!state.on[s.id]; log(s.name+(state.on[s.id]?" ON":" OFF")); }
+    hit.addEventListener("click",tog);
+    hit.addEventListener("keydown",function(e){ if(e.key===" "||e.key==="Enter"){e.preventDefault();tog();} });
+    g.appendChild(hit);
+    cons.appendChild(g);
+    stripEls[s.id]={btn:btn,txt:btxt,cap:cap,baseY:300};
+  });
+})();
+
+/* ---------------------------------------------------------------- transmitter rack */
+var rack=$("#rack");
+var mFwd,mRef,mMod,mVolt,mAmp,roERP,roSWR,roDEV,lampBeacon,lampSide,lampUtil,lampGen,lampAlarm,lampDoor,covDisc,covTxt,logLines=[];
+(function buildRack(){
+  rack.appendChild(el("rect",{x:0,y:0,width:620,height:430,fill:"#191E21"}));
+  rack.appendChild(el("rect",{x:6,y:6,width:608,height:418,rx:3,fill:"none",stroke:"#2E373D","stroke-width":1}));
+  var lin=function(n){var a=[],i;for(i=0;i<=n;i++)a.push([i/n, (i%2===0)?String(i):""]);return a;};
+  mFwd=meter(rack,"mFwd",18,16,186,112,"FORWARD kW  0–25",
+    [[0,"0"],[0.2,"5"],[0.4,"10"],[0.6,"15"],[0.8,"20"],[1,"25"]],null);
+  mRef=meter(rack,"mRef",214,16,140,112,"REFLECTED W  0–800",
+    [[0,"0"],[0.25,"200"],[0.5,"400"],[0.75,""],[1,"800"]],0.5);
+  mMod=meter(rack,"mMod",364,16,238,112,"MODULATION %  0–150",
+    [[0,"0"],[0.2,"30"],[0.4,"60"],[0.533,"80"],[0.667,"100"],[0.8,"120"],[1,"150"]],0.667);
+  roERP=ledWindow(rack,18,140,186,52,"EFFECTIVE RADIATED PWR","roERPv","kW");
+  roSWR=ledWindow(rack,214,140,140,52,"VSWR","roSWRv",":1");
+  roDEV=ledWindow(rack,364,140,238,52,"PEAK DEVIATION","roDEVv","kHz");
+  mVolt=meter(rack,"mVolt",18,204,140,100,"PA VOLTS  0–60",[[0,"0"],[0.5,"30"],[0.833,"50"],[1,"60"]],null);
+  mAmp =meter(rack,"mAmp",168,204,140,100,"PA AMPS  0–700",[[0,"0"],[0.36,"250"],[0.71,"500"],[1,"700"]],null);
+
+  rack.appendChild(el("rect",{x:322,y:204,width:280,height:100,rx:2,fill:"#12171A",stroke:"#2E373D","stroke-width":1}));
+  rack.appendChild(label(334,222,"STATUS",8.5,"#5D6E7C"));
+  lampBeacon=lamp(rack,342,244,"BEACON","lampBeacon");
+  lampSide  =lamp(rack,342,268,"SIDE LTS","lampSide");
+  lampAlarm =lamp(rack,342,292,"VSWR ALM","lampAlarm");
+  lampUtil  =lamp(rack,470,244,"UTILITY","lampUtil");
+  lampGen   =lamp(rack,470,268,"GEN RUN","lampGen");
+  lampDoor  =lamp(rack,470,292,"DOOR SEC","lampDoor");
+
+  // coverage plan
+  rack.appendChild(el("rect",{x:18,y:316,width:290,height:100,rx:2,fill:"#0A0F13",stroke:"#2E373D","stroke-width":1}));
+  rack.appendChild(label(30,334,"SERVICE CONTOUR · 60 dBµV/m",8,"#5D6E7C"));
+  var ccx=76,ccy=372;
+  rack.appendChild(el("circle",{cx:ccx,cy:ccy,r:38,fill:"none",stroke:"#243038","stroke-width":1}));
+  rack.appendChild(el("circle",{cx:ccx,cy:ccy,r:24,fill:"none",stroke:"#243038","stroke-width":1}));
+  rack.appendChild(el("circle",{cx:ccx,cy:ccy,r:12,fill:"none",stroke:"#243038","stroke-width":1}));
+  covDisc=el("circle",{id:"covDisc",cx:ccx,cy:ccy,r:0,fill:"#57C6E8","fill-opacity":".18",stroke:"#57C6E8","stroke-width":1.4});
+  rack.appendChild(covDisc);
+  rack.appendChild(el("circle",{cx:ccx,cy:ccy,r:2,fill:"#E0761F"}));
+  covTxt=el("text",{id:"covTxt",x:128,y:368,"font-size":17,"font-family":PLEX,"font-weight":600,fill:"#FFB454"},"— km");
+  rack.appendChild(covTxt);
+  rack.appendChild(label(128,384,"radius, flat terrain",8,"#5D6E7C"));
+  rack.appendChild(label(128,398,"HAAT 599 m · CLASS C",8,"#5D6E7C"));
+
+  // site log
+  rack.appendChild(el("rect",{x:322,y:316,width:280,height:100,rx:2,fill:"#07090A",stroke:"#2E373D","stroke-width":1}));
+  rack.appendChild(label(334,334,"SITE LOG",8,"#5D6E7C"));
+  for(var i=0;i<5;i++){
+    var t=el("text",{id:"log"+i,x:334,y:352+i*14,"font-size":8.5,"font-family":PLEX,fill:"#5FD08A","letter-spacing":"0.04em"},"");
+    rack.appendChild(t);
+  }
+})();
+
+var clock=0;
+function stamp(){
+  var mins=194+Math.floor(clock/6);
+  var h=Math.floor(mins/60)%24, m=mins%60;
+  return (h<10?"0":"")+h+(m<10?"0":"")+m;
+}
+function log(msg){
+  logLines.unshift(stamp()+"  "+msg);
+  if(logLines.length>5) logLines.pop();
+  for(var i=0;i<5;i++){
+    var n=document.getElementById("log"+i);
+    if(n){ n.textContent=logLines[i]||""; n.setAttribute("fill", i===0?"#7FE3A8":"#3E7B57"); }
+  }
+}
+log("site unattended · remote ok");
+
+/* ---------------------------------------------------------------- controls */
+function bindToggle(id,key,onMsg,offMsg){
+  var b=document.getElementById(id);
+  b.addEventListener("click",function(){
+    state[key]=!state[key];
+    b.setAttribute("aria-pressed",String(state[key]));
+    log(state[key]?onMsg:offMsg);
+  });
+}
+$("#btnPower").addEventListener("click",function(){
+  state.plate=!state.plate;
+  this.setAttribute("aria-pressed",String(state.plate));
+  this.textContent = state.plate ? "Carrier on" : "Carrier off";
+  log(state.plate?"PLATE ON · carrier up":"PLATE OFF · carrier down");
+});
+bindToggle("btnVswr","vswrFault","VSWR ALARM · power foldback","VSWR normal · power restored");
+bindToggle("btnLights","beaconFail","BEACON FAIL · notify FAA","beacon restored");
+bindToggle("btnGen","outage","UTILITY FAIL · generator start","utility restored · gen cooldown");
+(function(){var b=$("#btnPower");b.setAttribute("aria-pressed",String(state.plate));
+  b.textContent=state.plate?"Carrier on":"Carrier off";})();
+$("#gain").addEventListener("input",function(){ state.gain=this.value/100*1.3; });
+$("#tpo").addEventListener("input",function(){ state.tpo=parseFloat(this.value); });
+
+/* ---------------------------------------------------------------- programme simulator */
+var ph=[]; SOURCES.forEach(function(s,i){ ph.push(i*1.7+0.4); });
+function srcLevel(kind,t,p){
+  var v;
+  if(kind==="speech"){
+    var env=Math.sin(t*2.3+p);
+    v=env>0 ? Math.pow(env,0.55)*0.86 : 0.02;
+    v*= (Math.sin(t*0.31+p)>-0.75) ? 1 : 0.06;      // breath / pause
+    v+=0.05*Math.sin(t*13.7+p);
+  } else if(kind==="spot"){
+    v=0.90+0.045*Math.sin(t*11+p)+0.03*Math.sin(t*3.3+p);
+  } else {
+    v=0.60+0.24*Math.sin(t*1.6+p)+0.10*Math.sin(t*4.7+p*2)+0.06*Math.sin(t*9.1+p);
+    v*= 0.9+0.14*Math.sin(t*0.23+p);
+  }
+  return Math.max(0,v);
+}
+
+var roMod=$("#roMod"),roDevR=$("#roDev"),roFwd=$("#roFwd"),roRef=$("#roRef"),
+    roVswr=$("#roVswr"),roErp=$("#roErp"),roCov=$("#roCov"),roState=$("#roState");
+var beaconLamp=$("#beaconLamp"),beaconGlow=$("#beaconGlow"),sideLamps=$("#sideLamps"),
+    rfG=$("#rf"),winA=$("#winA rect"),winB=$("#winB rect"),
+    wgA=$("#winGlowA"),wgB=$("#winGlowB"),porch=$("#porch"),genLamp=$("#genLamp");
+var LINE_EFF=0.881, ANT_GAIN=6.026;
+var last=performance.now();
+
+function frame(now){
+  var dt=Math.min(0.06,(now-last)/1000); last=now; clock+=dt;
+  var t=clock;
+
+  /* audio */
+  var sum=0,n=0;
+  SOURCES.forEach(function(s,i){
+    if(state.on[s.id]){ sum+=srcLevel(s.kind,t,ph[i]); n++; }
+  });
+  var prog = n ? (sum/Math.sqrt(n))*state.gain : 0;
+  prog=Math.max(0,Math.min(1.45,prog));
+  state.vu += (prog-state.vu)*Math.min(1,dt/0.30);      // VU ballistics, 300 ms
+  state.level=prog;
+
+  /* meters: VU */
+  var db=20*Math.log10(Math.max(state.vu,0.008));
+  var frac=vuFrac(Math.max(-20,Math.min(3,db)));
+  setNeedle(vuL,frac);
+  setNeedle(vuR,Math.max(0,Math.min(1,frac-0.02+0.02*Math.sin(t*3.1))));
+
+  /* RF chain */
+  var fold = state.vswrFault?0.70:1;
+  var fwd = state.plate ? state.tpo*fold : 0;
+  var swr = state.plate ? (state.vswrFault ? 1.82 : 1.06+0.015*Math.sin(t*0.7)) : 1.00;
+  var gam = (swr-1)/(swr+1);
+  var refl = fwd*gam*gam*1000;
+  var erp = fwd*LINE_EFF*ANT_GAIN;
+  var cov = erp>0 ? 90*Math.pow(erp/100,0.25) : 0;
+  var devK = state.plate ? Math.min(prog,1.45)*75 : 0;
+  var modP = state.plate ? Math.min(prog,1.45)*100 : 0;
+
+  setNeedle(mFwd, fwd/25);
+  setNeedle(mRef, refl/800);
+  setNeedle(mMod, modP/150);
+  setNeedle(mVolt, state.plate?(50+1.5*Math.sin(t*2))/60:0);
+  setNeedle(mAmp , state.plate?(fwd/0.72/50)/700:0);
+
+  roERP.textContent = erp>0 ? erp.toFixed(1) : "—";
+  roSWR.textContent = swr.toFixed(2);
+  roSWR.setAttribute("fill", swr>1.4?"#F2453A":"#FFB454");
+  roDEV.textContent = devK.toFixed(1);
+  roDEV.setAttribute("fill", modP>100?"#F2453A":"#FFB454");
+  covDisc.setAttribute("r",(cov/110*38).toFixed(1));
+  covTxt.textContent = cov>0 ? cov.toFixed(0)+" km" : "— km";
+
+  roMod.innerHTML = modP.toFixed(0)+"<small>%</small>";
+  roMod.className = modP>100?"warn":"";
+  roDevR.innerHTML = devK.toFixed(1)+"<small>kHz</small>";
+  roFwd.innerHTML = fwd.toFixed(1)+"<small>kW</small>";
+  roRef.innerHTML = refl.toFixed(0)+"<small>W</small>";
+  roVswr.textContent = swr.toFixed(2);
+  roVswr.className = swr>1.4?"warn":"";
+  roErp.innerHTML = erp.toFixed(1)+"<small>kW</small>";
+  roCov.innerHTML = cov.toFixed(0)+"<small>km</small>";
+
+  var st = !state.plate ? ["OFF AIR","warn"]
+         : state.vswrFault ? ["VSWR FOLDBACK","warn"]
+         : state.outage ? ["ON GENERATOR","ok"]
+         : ["ON AIR","ok"];
+  roState.textContent=st[0]; roState.className=st[1];
+
+  /* console lamps + faders */
+  SOURCES.forEach(function(s){
+    var e=stripEls[s.id], on=state.on[s.id];
+    e.btn.setAttribute("fill", on?"#C4372A":"#241B18");
+    e.btn.setAttribute("stroke", on?"#FF7A66":"#3C464D");
+    e.txt.setAttribute("fill", on?"#FFE7E1":"#6E7C87");
+    var target = on ? 300-Math.round(state.gain/1.3*84) : 300;
+    e.cap.setAttribute("y", target);
+    e.cap.setAttribute("fill", on?"#5C6873":"#3B4249");
+  });
+  var live=state.plate && n>0;
+  $("#onairBox").setAttribute("fill", live?"#B32017":"#2A1512");
+  $("#onairBox").setAttribute("stroke", live?"#FF6A55":"#5A2A22");
+  $("#onairTxt").setAttribute("fill", live?"#FFEDE9":"#5E3129");
+
+  /* scene */
+  var beaconOn = !state.beaconFail && (t % 2 < 0.55);
+  beaconLamp.setAttribute("fill", beaconOn?"#FF5347":"#5A2622");
+  beaconGlow.setAttribute("opacity", beaconOn?"1":"0");
+  sideLamps.setAttribute("fill", state.beaconFail?"#4A2320":"#D8352A");
+  rfG.setAttribute("opacity", state.plate?"1":"0");
+
+  var flick = state.outage ? (0.55+0.45*Math.sin(t*37)) : 1;
+  winA.setAttribute("fill", state.plate?"#F2C979":"#6B5A34");
+  winB.setAttribute("fill", state.plate?"#E8BE6E":"#63552F");
+  wgA.setAttribute("opacity",(state.plate?0.9:0.35)*flick);
+  wgB.setAttribute("opacity",(state.plate?0.75:0.3)*flick);
+  porch.setAttribute("fill","#F2C979");
+  genLamp.setAttribute("fill", state.outage?"#5FD08A":"#1E3A2A");
+
+  lampBeacon.setAttribute("fill", state.beaconFail?"#F2453A":(beaconOn?"#E86A2A":"#3A2A1A"));
+  lampSide.setAttribute("fill", state.beaconFail?"#3A2A1A":"#E86A2A");
+  lampAlarm.setAttribute("fill", state.vswrFault?"#F2453A":"#241B18");
+  lampUtil.setAttribute("fill", state.outage?"#241B18":"#5FD08A");
+  lampGen.setAttribute("fill", state.outage?"#5FD08A":"#241B18");
+  lampDoor.setAttribute("fill","#5FD08A");
+
+  requestAnimationFrame(frame);
+}
+function vuFrac(db){
+  var pts=[[-20,0],[-10,0.24],[-7,0.35],[-5,0.44],[-3,0.55],[-2,0.62],[-1,0.70],[0,0.79],[1,0.87],[2,0.94],[3,1]];
+  for(var i=1;i<pts.length;i++){
+    if(db<=pts[i][0]){
+      var a=pts[i-1],b=pts[i],k=(db-a[0])/(b[0]-a[0]);
+      return a[1]+k*(b[1]-a[1]);
+    }
+  }
+  return 1;
+}
+requestAnimationFrame(frame);
+
+/* ---------------------------------------------------------------- studio plan */
+var PARTS=[
+ {n:1,name:"Control board",hl:[470,160,214,80],mx:700,my:176,
+  d:"Eight to twelve channels, rotary attenuators or early slide faders, each with a lighted ON button. Two VU meters, a cue amplifier, and a monitor mute relay wired to the microphone channel."},
+ {n:2,name:"Announcer position",hl:[540,330,110,72],mx:590,my:412,
+  d:"A rolling chair at the open side of the U. Everything on this plan is reachable from it without standing — that constraint produced the layout."},
+ {n:3,name:"Turntable, left",hl:[306,150,96,96],mx:352,my:258,
+  d:"16-inch broadcast transcription table with a viscous-damped tonearm, slip-cued by hand against the platter and released on the button."},
+ {n:4,name:"Turntable, right",hl:[782,150,96,96],mx:828,my:258,
+  d:"The second table is what makes back-to-back play possible: one plays while the other is cued to the first groove of the next record."},
+ {n:5,name:"Cart machines",hl:[924,144,162,96],mx:1096,my:190,
+  d:"Endless-loop tape cartridges for spots, jingles and IDs. A 1 kHz cue tone recorded on the third track stops the cart at its own start point, so it is always ready to fire."},
+ {n:6,name:"Equipment rack",hl:[924,250,162,196],mx:902,my:348,
+  d:"Two reel-to-reel decks, the EBS receiver and decoder, a modulation monitor fed from an off-air receiver, the telephone hybrid, and a patch bay tying it all together."},
+ {n:7,name:"Cart wall",hl:[86,144,122,272],mx:70,my:280,
+  d:"Racked slots holding several hundred carts, filed by category. The morning show's carts sit at eye level; the overnight rotation sits low."},
+ {n:8,name:"Record library",hl:[314,464,552,78],mx:590,my:556,
+  d:"Current rotation in the studio, the deep catalogue next door. Singles filed by number, albums by artist, and the log tells the announcer which is next."},
+ {n:9,name:"Teletype closet",hl:[86,434,200,108],mx:70,my:490,
+  d:"The wire-service printer, in an insulated cabinet because it is loud enough to be heard on an open microphone. Its bell rings for bulletins."},
+ {n:10,name:"Studio window",hl:[394,54,372,26],mx:390,my:44,
+  d:"Double-glazed with the panes non-parallel, so reflections do not stand between them. Looks through to the production room and the news booth."},
+ {n:11,name:"Microphone and boom",hl:[560,124,90,42],mx:520,my:132,
+  d:"A large-diaphragm dynamic on a counterweighted arm, swung in over the board. Opening its channel mutes every speaker in the room."},
+ {n:12,name:"Monitor speakers",hl:[276,76,68,34],mx:262,my:96,
+  d:"Wall-mounted above the window and muted by relay whenever the microphone is live — the only thing standing between this room and a feedback howl."},
+ {n:13,name:"On-air sign and door",hl:[1006,392,112,154],mx:1146,my:412,
+  d:"Fed from the same relay as the board's ON AIR lamp. The door is heavy, gasketed and opens outward."},
+ {n:14,name:"Wall clock",hl:[566,72,50,50],mx:640,my:96,
+  d:"Master clock, corrected on the hour from the network line. Everything in the log — spots, IDs, the news feed — is timed against it."}
+];
+var plan=$("#plan"), keylist=$("#keylist"), selected=null, hlRect=null;
+(function buildPlan(){
+  var P=plan;
+  P.appendChild(el("rect",{x:0,y:0,width:1180,height:620,fill:"#0A1220"}));
+  // walls
+  P.appendChild(el("rect",{x:60,y:54,width:1060,height:504,fill:"#0E1826",stroke:"#3E5C78","stroke-width":2}));
+  P.appendChild(el("rect",{x:74,y:68,width:1032,height:476,fill:"#0B1420",stroke:"#2C4459","stroke-width":1}));
+  // acoustic tile hatch on walls
+  var i,g=el("g",{stroke:"#1D3245","stroke-width":1});
+  for(i=0;i<52;i++){ g.appendChild(el("line",{x1:74+i*20,y1:54,x2:64+i*20,y2:68})); }
+  for(i=0;i<24;i++){ g.appendChild(el("line",{x1:74+i*20,y1:544,x2:64+i*20,y2:558})); }
+  P.appendChild(g);
+
+  // window
+  P.appendChild(el("rect",{x:400,y:54,width:360,height:8,fill:"#57C6E8","fill-opacity":".35"}));
+  P.appendChild(el("rect",{x:404,y:64,width:352,height:5,fill:"#57C6E8","fill-opacity":".22"}));
+  P.appendChild(label(766,66,"to production room",8.5,"#5D7F99"));
+
+  // counter (U)
+  P.appendChild(el("path",{d:"M280 150 H900 V236 C860 300 720 320 590 320 C460 320 320 300 280 236 Z",
+    fill:"#152233",stroke:"#456A88","stroke-width":1.6}));
+  // board
+  P.appendChild(el("rect",{x:490,y:168,width:200,height:64,rx:2,fill:"#1D2C3E",stroke:"#6E93B0","stroke-width":1.4}));
+  for(i=0;i<10;i++) P.appendChild(el("rect",{x:500+i*19,y:198,width:7,height:26,rx:1,fill:"#2E4459"}));
+  P.appendChild(el("rect",{x:500,y:176,width:38,height:16,rx:1,fill:"#C9C3B2"}));
+  P.appendChild(el("rect",{x:544,y:176,width:38,height:16,rx:1,fill:"#C9C3B2"}));
+  // turntables
+  [[352],[828]].forEach(function(a){
+    P.appendChild(el("circle",{cx:a[0],cy:198,r:42,fill:"#152233",stroke:"#6E93B0","stroke-width":1.4}));
+    P.appendChild(el("circle",{cx:a[0],cy:198,r:14,fill:"none",stroke:"#456A88","stroke-width":1}));
+    P.appendChild(el("circle",{cx:a[0],cy:198,r:3,fill:"#E0761F"}));
+    P.appendChild(el("line",{x1:a[0]+38,y1:166,x2:a[0]+6,y2:196,stroke:"#9CB8CE","stroke-width":2.4,"stroke-linecap":"round"}));
+  });
+  // mic + boom
+  P.appendChild(el("path",{d:"M898 128 C820 112 700 122 606 146",fill:"none",stroke:"#7E9DB6","stroke-width":2.2}));
+  P.appendChild(el("rect",{x:586,y:138,width:16,height:20,rx:6,fill:"#1D2C3E",stroke:"#9CB8CE","stroke-width":1.6}));
+  // cart machines
+  for(i=0;i<3;i++) P.appendChild(el("rect",{x:930,y:150+i*32,width:150,height:26,rx:2,fill:"#152233",stroke:"#6E93B0","stroke-width":1.2}));
+  // rack
+  P.appendChild(el("rect",{x:930,y:256,width:150,height:184,rx:2,fill:"#101C29",stroke:"#456A88","stroke-width":1.4}));
+  var rn=["REEL A","REEL B","EBS","MOD MON","HYBRID","PATCH"];
+  for(i=0;i<6;i++){
+    P.appendChild(el("rect",{x:936,y:262+i*29,width:138,height:23,rx:1,fill:"#152233",stroke:"#2C4459","stroke-width":1}));
+    P.appendChild(el("text",{x:944,y:278+i*29,"font-size":8,"font-family":PLEX,fill:"#6F91AB","letter-spacing":"0.1em"},rn[i]));
+  }
+  // cart wall
+  P.appendChild(el("rect",{x:92,y:150,width:110,height:260,rx:2,fill:"#101C29",stroke:"#456A88","stroke-width":1.4}));
+  for(i=0;i<10;i++) for(var j=0;j<3;j++)
+    P.appendChild(el("rect",{x:99+j*35,y:157+i*25,width:29,height:19,rx:1,fill:"#182839"}));
+  // record library
+  P.appendChild(el("rect",{x:320,y:470,width:540,height:66,rx:2,fill:"#101C29",stroke:"#456A88","stroke-width":1.4}));
+  for(i=0;i<44;i++) P.appendChild(el("line",{x1:328+i*12,y1:476,x2:328+i*12,y2:530,stroke:"#25384B","stroke-width":2}));
+  // teletype closet
+  P.appendChild(el("rect",{x:92,y:440,width:190,height:96,rx:2,fill:"#101C29",stroke:"#456A88","stroke-width":1.4}));
+  var hg=el("g",{stroke:"#22384B","stroke-width":1});
+  for(i=0;i<20;i++) hg.appendChild(el("line",{x1:92+i*12,y1:536,x2:92+i*12+22,y2:440}));
+  P.appendChild(hg);
+  P.appendChild(el("rect",{x:140,y:468,width:88,height:44,rx:2,fill:"#1D2C3E",stroke:"#6E93B0","stroke-width":1.2}));
+  // speakers
+  [[276],[836]].forEach(function(a){
+    P.appendChild(el("path",{d:"M"+a[0]+" 76 h60 l-10 30 h-40 z",fill:"#152233",stroke:"#6E93B0","stroke-width":1.3}));
+  });
+  // door + sign
+  P.appendChild(el("rect",{x:1106,y:430,width:14,height:96,fill:"#0A1220"}));
+  P.appendChild(el("path",{d:"M1106 430 A 96 96 0 0 0 1010 526",fill:"none",stroke:"#456A88","stroke-width":1,"stroke-dasharray":"4 4"}));
+  P.appendChild(el("line",{x1:1106,y1:430,x2:1010,y2:430,stroke:"#9CB8CE","stroke-width":3}));
+  P.appendChild(el("rect",{x:1014,y:398,width:96,height:24,rx:2,fill:"#3A1512",stroke:"#B32017","stroke-width":1.4}));
+  P.appendChild(el("text",{x:1062,y:415,"font-size":12,"font-family":SAIRA,"font-weight":700,"text-anchor":"middle",
+    "letter-spacing":"0.18em",fill:"#FF6A55"},"ON AIR"));
+  // clock
+  P.appendChild(el("circle",{cx:590,cy:96,r:20,fill:"#152233",stroke:"#9CB8CE","stroke-width":1.4}));
+  P.appendChild(el("line",{x1:590,y1:96,x2:590,y2:84,stroke:"#DCE6F0","stroke-width":1.6}));
+  P.appendChild(el("line",{x1:590,y1:96,x2:599,y2:101,stroke:"#DCE6F0","stroke-width":1.4}));
+  // chair
+  P.appendChild(el("circle",{cx:590,cy:366,r:26,fill:"#152233",stroke:"#6E93B0","stroke-width":1.3}));
+  P.appendChild(el("path",{d:"M566 380 A 26 26 0 0 0 614 380",fill:"none",stroke:"#6E93B0","stroke-width":3}));
+  // carpet note
+  P.appendChild(label(880,556,"carpet · acoustic tile · no parallel surfaces",8.5,"#3E5C78"));
+
+  // highlight rect (on top, below markers)
+  hlRect=el("rect",{x:0,y:0,width:0,height:0,rx:4,fill:"#E0761F","fill-opacity":".10",
+    stroke:"#F0913F","stroke-width":2,opacity:"0"});
+  P.appendChild(hlRect);
+
+  // markers
+  PARTS.forEach(function(p){
+    var g=el("g",{style:"cursor:pointer"});
+    g.setAttribute("role","button"); g.setAttribute("tabindex","0");
+    g.setAttribute("aria-label",p.n+". "+p.name);
+    g.appendChild(el("circle",{cx:p.mx,cy:p.my,r:11.5,fill:"#0A1220",stroke:"#E0761F","stroke-width":1.5}));
+    g.appendChild(el("text",{x:p.mx,y:p.my+4,"font-size":10.5,"font-family":PLEX,"font-weight":600,
+      "text-anchor":"middle",fill:"#F0913F",style:"pointer-events:none"},String(p.n)));
+    g.addEventListener("click",function(){select(p.n)});
+    g.addEventListener("keydown",function(e){if(e.key===" "||e.key==="Enter"){e.preventDefault();select(p.n);}});
+    P.appendChild(g);
+  });
+
+  // key list
+  PARTS.forEach(function(p){
+    var li=document.createElement("li");
+    var b=document.createElement("button");
+    b.type="button"; b.setAttribute("aria-pressed","false"); b.dataset.n=p.n;
+    b.innerHTML='<span class="kn">'+p.n+'</span><span><b></b><span class="kd"></span></span>';
+    b.querySelector("b").textContent=p.name;
+    b.querySelector(".kd").textContent=p.d;
+    b.addEventListener("click",function(){select(p.n)});
+    li.appendChild(b); keylist.appendChild(li);
+  });
+})();
+function select(n){
+  selected = (selected===n) ? null : n;
+  var p=PARTS.filter(function(q){return q.n===selected})[0];
+  if(p){
+    hlRect.setAttribute("x",p.hl[0]); hlRect.setAttribute("y",p.hl[1]);
+    hlRect.setAttribute("width",p.hl[2]); hlRect.setAttribute("height",p.hl[3]);
+    hlRect.setAttribute("opacity","1");
+  } else hlRect.setAttribute("opacity","0");
+  Array.prototype.forEach.call(keylist.querySelectorAll("button"),function(b){
+    b.setAttribute("aria-pressed", String(Number(b.dataset.n)===selected));
+  });
+}
+})();
+</script>
 
 </body>
 </html>
