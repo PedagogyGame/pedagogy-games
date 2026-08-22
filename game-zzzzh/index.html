@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Elevator Schematic & Realistic Cab</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #0a192f; font-family: 'Courier New', monospace; }
+        canvas { display: block; }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; color: #64ffda; pointer-events: none; }
+        .label { background: rgba(10, 25, 47, 0.85); border: 1px solid #64ffda; padding: 8px; margin-top: 5px; text-transform: uppercase; font-size: 14px; }
+        .blueprint-text { color: #8892b0; font-size: 12px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="ui-overlay">
+        <h2>System: High-Rise Schematic</h2>
+        <div id="part-name" class="label">Awaiting input...</div>
+        <div class="blueprint-text">ELEVATION: SECT A-A | SCALE: 1:50</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        // --- SCENE SETUP ---
+        const scene = new THREE.Scene();
+        // Blueprint background fog for depth
+        scene.fog = new THREE.FogExp2(0x0a192f, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(80, 60, 100);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, 0);
+
+        // --- LIGHTING ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        dirLight.position.set(50, 200, 100);
+        scene.add(dirLight);
+
+        // --- INTERACTION FRAMEWORK ---
+        const interactables = [];
+        const mechanicsGroup = new THREE.Group();
+        scene.add(mechanicsGroup);
+
+        // --- ARCHITECTURAL SCHEMATIC (GHOSTED LINES) ---
+        const schematicGroup = new THREE.Group();
+        scene.add(schematicGroup);
+
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x64ffda, transparent: true, opacity: 0.15 });
+        const boldLineMat = new THREE.LineBasicMaterial({ color: 0x64ffda, transparent: true, opacity: 0.35 });
+
+        // Generate Multiple Floors (Grid Plates)
+        const floorHeight = 40;
+        const totalFloors = 15; // Displaying a section of the 60 floors
+        
+        for (let i = -5; i < totalFloors; i++) {
+            const yPos = i * floorHeight;
+            
+            // Floor Grid
+            const grid = new THREE.GridHelper(120, 12, 0x64ffda, 0x64ffda);
+            grid.position.y = yPos;
+            grid.material.opacity = 0.1;
+            grid.material.transparent = true;
+            schematicGroup.add(grid);
+
+            // Perimeter structural beams for the floor
+            const perimeterGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(120, 0.1, 120));
+            const perimeter = new THREE.LineSegments(perimeterGeo, boldLineMat);
+            perimeter.position.y = yPos;
+            schematicGroup.add(perimeter);
+        }
+
+        // Vertical Structural Columns (Building Skeleton)
+        const columnGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(4, totalFloors * floorHeight, 4));
+        const colPositions = [
+            [-58, -58], [58, -58], [-58, 58], [58, 58], // Outer corners
+            [-30, -30], [30, -30], [-30, 30], [30, 30]  // Inner core frame
+        ];
+        
+        colPositions.forEach(pos => {
+            const col = new THREE.LineSegments(columnGeo, lineMat);
+            col.position.set(pos[0], (totalFloors * floorHeight) / 2 - (5 * floorHeight), pos[1]);
+            schematicGroup.add(col);
+        });
+
+        // The Central Elevator Shaft Wireframe
+        const shaftGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(32, totalFloors * floorHeight, 32));
+        const shaft = new THREE.LineSegments(shaftGeo, boldLineMat);
+        shaft.position.y = (totalFloors * floorHeight) / 2 - (5 * floorHeight);
+        schematicGroup.add(shaft);
+
+        // --- REALISTIC MECHANICS ---
+        const matSteel = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.9, roughness: 0.5 });
+        const matGlass = new THREE.MeshStandardMaterial({ color: 0x88ccff, metalness: 1.0, roughness: 0.1, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+        
+        function buildPart(geometry, material, x, y, z, name) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.userData = { partName: name };
+            mechanicsGroup.add(mesh);
+            interactables.push(mesh);
+            return mesh;
+        }
+
+        // Cab Sling
+        buildPart(new THREE.BoxGeometry(28, 2, 6), matSteel, 0, 18, 0, "Crosshead (Upper Beam)");
+        buildPart(new THREE.BoxGeometry(28, 2, 6), matSteel, 0, -18, 0, "Safety Plank (Lower Beam)");
+        buildPart(new THREE.BoxGeometry(2, 34, 4), matSteel, -13, 0, 0, "Left Stile");
+        buildPart(new THREE.BoxGeometry(2, 34, 4), matSteel, 13, 0, 0, "Right Stile");
+
+        // Cab Glass
+        buildPart(new THREE.BoxGeometry(24, 32, 24), matGlass, 0, 0, 0, "Observation Cab Enclosure");
+
+        // --- RAYCASTER SETUP ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const uiLabel = document.getElementById('part-name');
+
+        window.addEventListener('mousemove', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactables);
+
+            if (intersects.length > 0) {
+                uiLabel.innerText = `[ DATA ] ${intersects[0].object.userData.partName}`;
+                document.body.style.cursor = 'crosshair';
+            } else {
+                uiLabel.innerText = 'Awaiting input...';
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // --- ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+            // Slowly rotate the entire schematic for a dynamic viewing angle
+            scene.rotation.y += 0.001; 
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
