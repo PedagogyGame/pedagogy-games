@@ -710,8 +710,11 @@
     controls.enableDamping = true;
     controls.dampingFactor = .065;
     controls.target.fromArray(modeData.music.target);
-    controls.minDistance = 2.1;
+    controls.minDistance = 1.25;
     controls.maxDistance = 34;
+    controls.zoomSpeed = .72;
+    controls.rotateSpeed = .55;
+    controls.zoomToCursor = true;
     controls.minPolarAngle = .2;
     controls.maxPolarAngle = Math.PI * .84;
     controls.enablePan = false;
@@ -769,11 +772,12 @@
       brass: new THREE.MeshStandardMaterial({ color: 0xb48a3b, roughness: .25, metalness: .82 }),
       copper: new THREE.MeshStandardMaterial({ color: 0xb65b2e, roughness: .3, metalness: .78 }),
       steel: new THREE.MeshStandardMaterial({ color: 0xb8bdba, roughness: .25, metalness: .9 }),
+      damperWire: new THREE.MeshStandardMaterial({ color: 0xe1e2dc, roughness: .17, metalness: .88 }),
       ivory: new THREE.MeshPhysicalMaterial({ color: 0xede8d8, roughness: .36, clearcoat: .38, clearcoatRoughness: .25 }),
       ebony: new THREE.MeshPhysicalMaterial({ color: 0x060606, roughness: .2, clearcoat: .65, clearcoatRoughness: .2 }),
       actionWood: new THREE.MeshStandardMaterial({ color: 0xb38655, roughness: .58 }),
       hammerFelt: new THREE.MeshStandardMaterial({ color: 0xe3d8be, roughness: .9 }),
-      redFelt: new THREE.MeshStandardMaterial({ color: 0x7c1f1a, roughness: .92 }),
+      redFelt: new THREE.MeshStandardMaterial({ color: 0x65231f, roughness: .92 }),
       greenFelt: new THREE.MeshStandardMaterial({ color: 0x344b3a, roughness: .94 }),
       leather: new THREE.MeshStandardMaterial({ color: 0x5c321f, roughness: .82 }),
       darkMetal: new THREE.MeshStandardMaterial({ color: 0x282a29, roughness: .31, metalness: .76 })
@@ -971,16 +975,16 @@
       const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
       return new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),material);
     }
-    const trebleBridge=tube([[-4.5,4.31,-.7],[-1.5,4.34,.1],[1.8,4.35,.7],[4.25,4.34,2.35]],.105,mats.innerWood);
+    const trebleBridge=tube([[-4.5,4.31,-1.05],[-1.5,4.34,-.55],[1.8,4.35,-.05],[4.25,4.34,.28]],.105,mats.innerWood);
     add('sound',trebleBridge,part('treble_bridge','Treble / Long Bridge','Long bridge transferring most tenor and treble string vibration into the soundboard.'),{explode:[0,.12,0]});
-    const bassBridge=tube([[-4.7,4.32,.15],[-3.65,4.34,1.25],[-2.45,4.34,2.22]],.12,mats.innerWood);
+    const bassBridge=tube([[-4.7,4.32,-1.16],[-3.65,4.34,-.82],[-2.45,4.34,-.52]],.12,mats.innerWood);
     add('sound',bassBridge,part('bass_bridge','Bass / Short Bridge','Short bridge carrying the bass strings to the soundboard.'),{explode:[0,.14,0]});
 
     const bridgePinGroup=new THREE.Group();
     for(let i=0;i<24;i++){
       const t=i/23;
       const x=-4.42+t*8.55;
-      const z=-.62+t*2.92+.18*Math.sin(t*Math.PI*2);
+      const z=-1.05+t*1.33+.05*Math.sin(t*Math.PI*2);
       [-.055,.055].forEach(offset=>{
         const pin=cyl(.018,.2,mats.steel,x+offset,4.46,z-offset*.55,7);
         pin.rotation.z=offset>0?.12:-.12;
@@ -989,6 +993,18 @@
     }
     add('sound',bridgePinGroup,part('bridge_pins','Bridge Pins','Paired pins that guide each string across the bridge and transmit its side-bearing force.'),{explode:[0,.2,0]});
 
+    const whiteWidth=11.55/52;
+    let whiteIndex=0;
+    const notePositions=[];
+    for(let midi=21;midi<=108;midi++) {
+      const pc=midi%12;
+      const black=[1,3,6,8,10].includes(pc);
+      let x;
+      if(!black){ x=-5.775+whiteIndex*whiteWidth+whiteWidth/2; whiteIndex++; }
+      else x=-5.775+whiteIndex*whiteWidth-.012;
+      notePositions.push({midi,black,x});
+    }
+
     const stringObjects=[];
     const stringPulse=new Array(88).fill(0);
     for(let i=0;i<88;i++) {
@@ -996,14 +1012,25 @@
       const x=-5.0+t*10.05;
       const bass=i<20;
       const startZ=2.55;
-      const endZ=bass ? 4.55-(i*.065) : -1.1-(t*3.55);
+      const endZ=bass ? -4.55+(i*.065) : -1.1-(t*3.55);
       const x2=bass ? -4.55+i*.26 : x*.74;
       const radius=bass ? .022-(i*.00035) : .0085;
-      const str=cylinderBetween([x,4.87,startZ],[x2,4.87,endZ],radius,bass?mats.copper:mats.steel,bass?10:7);
+      const strikeX=notePositions[i].x;
+      const bridgeZ=-1.1+1.35*t;
+      const str=new THREE.Group();
+      const stringPoints=[
+        [x,4.84,startZ],
+        [strikeX,4.75,1.12],
+        [x2,4.49,bridgeZ],
+        [x2,4.49,endZ]
+      ];
+      for(let segment=0;segment<stringPoints.length-1;segment++){
+        str.add(cylinderBetween(stringPoints[segment],stringPoints[segment+1],radius,bass?mats.copper:mats.steel,bass?9:7));
+      }
       const meta=bass
         ? part('bass_strings','Copper-Wound Bass Strings','Steel-core bass strings wrapped with copper to add mass without excessive length.')
         : part('treble_strings','Plain Steel / Treble Strings','Unwound high-tensile music wire used through the tenor and treble registers.');
-      add('sound',str,meta,{interactive:i===8||i===48,explode:[0,.34,0]});
+      add('sound',str,meta,{interactive:i===8||i===48,explode:[0,.34,0],castShadow:false,receiveShadow:false});
       stringObjects.push(str);
     }
 
@@ -1031,17 +1058,6 @@
     const keys=[];
     const keyMidi=[];
     const keyStates=[];
-    const whiteWidth=11.55/52;
-    let whiteIndex=0;
-    const notePositions=[];
-    for(let midi=21;midi<=108;midi++) {
-      const pc=midi%12;
-      const black=[1,3,6,8,10].includes(pc);
-      let x;
-      if(!black){ x=-5.775+whiteIndex*whiteWidth+whiteWidth/2; whiteIndex++; }
-      else x=-5.775+whiteIndex*whiteWidth-.012;
-      notePositions.push({midi,black,x});
-    }
     notePositions.forEach((n,index)=>{
       const pivot=new THREE.Group();
       pivot.position.set(n.x,3.16,-1.58);
@@ -1108,10 +1124,11 @@
       prepareObject(rep,'action',part('repetition_lever','Repetition Lever / Balancier','Grand-action lever that supports rapid repetition without a full key return.'),{interactive:i===45});
       actionRow.add(rep);
 
-      const hammerPivot=new THREE.Group(); hammerPivot.position.set(x,4.02,.52); hammerPivot.rotation.x=.52;
+      const hammerPivot=new THREE.Group(); hammerPivot.position.set(x,4.02,.52); hammerPivot.rotation.x=.84;
       const shank=cylinderBetween([0,0,0],[0,.78,.14],.025,mats.actionWood,7);
-      const molding=box(.15,.28,.29,mats.actionWood,0,.83,.16); molding.rotation.x=.1;
-      const felt=box(.18,.31,.31,mats.hammerFelt,0,.99,.18); felt.rotation.x=.1;
+      const molding=box(.12,.2,.21,mats.actionWood,0,.82,.15); molding.rotation.x=.1;
+      const felt=new THREE.Mesh(new THREE.CapsuleGeometry(.09,.16,4,10),mats.hammerFelt);
+      felt.position.set(0,.98,.18); felt.rotation.x=.1; felt.scale.set(.7,1,1.12);
       hammerPivot.add(shank,molding,felt);
       prepareObject(hammerPivot,'action',part('hammer_assembly','Hammer Head, Shank & Flange','Felt-covered striking head carried by a wooden shank and pivot flange.'),{interactive:i===45});
       actionRow.add(hammerPivot); hammerRefs.push(hammerPivot);
@@ -1163,26 +1180,27 @@
     const damperInterfaces=new THREE.Group(); systems.dampers.add(damperInterfaces);
     const damperRefs=[];
     for(let i=0;i<70;i++) {
-      const x=-4.9+i*(9.5/69), z=.4+(i/69)*1.38;
-      const g=new THREE.Group(); g.position.set(x,5.02,z);
-      const wire=cyl(.018,.68,mats.steel,0,.19,0,7);
-      const head=box(.16,.13,.35,mats.actionWood,0,.54,0);
-      const felt=box(.18,.09,.38,mats.redFelt,0,.62,0);
+      const x=notePositions[i].x, z=1.28+(i/69)*.22;
+      const contactY=4.76;
+      const g=new THREE.Group(); g.position.set(x,contactY,z);
+      const wire=cyl(.009,.62,mats.damperWire,0,.4,0,8);
+      const head=box(.13,.12,.27,mats.actionWood,0,.085,0);
+      const felt=box(.145,.055,.3,mats.redFelt,0,.015,0);
       g.add(wire,head,felt);
       add('dampers',g,part('damper_assembly','Damper Head, Felt & Wire','Felt-tipped assembly that contacts a string to stop its vibration.'),{interactive:i===34,explode:[0,.72,0]});
       damperRefs.push(g); g.userData.baseY=g.position.y;
     }
-    const guideRail=box(10.3,.18,.22,mats.actionWood,0,4.87,.93);
+    const guideRail=box(10.3,.14,.2,mats.actionWood,0,4.52,.93);
     add('dampers',guideRail,part('damper_guide_rail','Damper Guide Rail','Keeps the row of damper wires properly aligned.'),{explode:[0,.3,0]});
-    const liftRail=box(10.4,.16,.22,mats.actionWood,0,4.59,.74);
+    const liftRail=box(10.4,.14,.2,mats.actionWood,0,4.28,.74);
     add('dampers',liftRail,part('damper_lift_rail','Damper Lift Rail / Rod','Raises the dampers together when the sustain pedal is depressed.'),{explode:[0,-.18,0]});
 
     for(let i=1;i<70;i+=3){
-      const x=-4.9+i*(9.5/69), z=.4+(i/69)*1.38;
-      const lever=cylinderBetween([x,4.57,.72],[x,4.98,z],.026,mats.actionWood,8);
+      const x=notePositions[i].x, z=1.28+(i/69)*.22;
+      const lever=cylinderBetween([x,4.27,.72],[x,4.55,z],.022,mats.actionWood,8);
       prepareObject(lever,'dampers',part('damper_underlever','Damper Underlever','Intermediate lever joining key or pedal input to the damper wire above.'),{interactive:i===34});
       damperInterfaces.add(lever);
-      const bushing=cyl(.042,.085,mats.greenFelt,x,4.86,.92,9); bushing.rotation.z=Math.PI/2;
+      const bushing=cyl(.036,.075,mats.greenFelt,x,4.52,.92,9); bushing.rotation.z=Math.PI/2;
       prepareObject(bushing,'dampers',part('damper_bushing','Damper Guide Bushing','Cloth-lined bearing that centers a damper wire while allowing quiet vertical travel.'),{interactive:false});
       damperInterfaces.add(bushing);
     }
@@ -1257,7 +1275,6 @@
     const junctionSound=new THREE.Group(); systems.sound.add(junctionSound);
     const junctionDampers=new THREE.Group(); systems.dampers.add(junctionDampers);
     const junctionMotion={};
-    const junctionStringObjects=[];
     const junctionIndex=44;
     const junctionX=notePositions[junctionIndex].x;
     const junctionStringX=-5+(junctionIndex/87)*10.05;
@@ -1334,7 +1351,7 @@
 
     junctionMotion.hammer=new THREE.Group();
     junctionMotion.hammer.position.set(junctionX,4.02,.52);
-    junctionMotion.hammer.rotation.x=.52;
+    junctionMotion.hammer.rotation.x=.84;
     junctionMotion.hammer.add(cylinderBetween([0,0,0],[0,.78,.14],.032,mats.actionWood,10));
     junctionMotion.hammer.add(cyl(.075,.2,mats.leather,0,.27,-.02,12));
     const hammerMolding=box(.18,.26,.27,mats.actionWood,0,.82,.15); hammerMolding.rotation.x=.1;
@@ -1360,7 +1377,7 @@
         [junctionTailX+dx*.8,4.49,.58],
         [junctionTailX+dx*.65,4.49,-2.92]
       ],index===1?.012:.009,mats.steel);
-      unison.add(string); junctionStringObjects.push(string);
+      unison.add(string);
     });
     junctionAdd(junctionSound,'sound',unison,
       part('junction_unison','Three-String Unison & Speaking Length','Three closely spaced steel strings share one pitch. Their routed path now visibly meets the strike line, bridge crown, and rear anchoring course.'));
@@ -1626,6 +1643,9 @@
       return false;
     }
     function subLayerFactor(subsystem){
+      if(subsystem==='mechanism-junction'){
+        return currentMode==='mechanism' && currentLayer==='junction' ? 2.35 : 0;
+      }
       if(currentMode==='music' || !subsystem) return 1;
       if(subsystem==='action-isolated') return isolated?1:0;
       const weights=layerWeights[currentMode]?.[currentLayer];
@@ -1812,16 +1832,18 @@
         keyStates[i].value+=(target-keyStates[i].value)*Math.min(1,dt*(slow?7:18));
         keys[i].rotation.x=-.043*keyStates[i].value;
         wippenRefs[i].rotation.x=.11*keyStates[i].value;
-        hammerRefs[i].rotation.x=.52-.73*hammer;
+        hammerRefs[i].rotation.x=.84-.32*hammer;
         if(i<damperRefs.length){
           const damperUp=Math.max(target,sustainValue,sostenutoHeld.has(i)?1:0);
           damperRefs[i].position.y=damperRefs[i].userData.baseY+.28*damperUp;
         }
         if(stringPulse[i]>0){
           stringPulse[i]=Math.max(0,stringPulse[i]-dt*1.45);
-          const s=stringObjects[i]; s.scale.x=1+stringPulse[i]*.22; s.scale.z=1+stringPulse[i]*.22;
-          const list=Array.isArray(s.material)?s.material:[s.material];
-          list.forEach(m=>{ if(m.emissive){m.emissive.setHex(stringPulse[i]>.03?0x4b2b0e:0);m.emissiveIntensity=stringPulse[i]*.7;} });
+          stringObjects[i].traverse(segment=>{
+            if(!segment.isMesh) return;
+            const list=Array.isArray(segment.material)?segment.material:[segment.material];
+            list.forEach(m=>{ if(m.emissive){m.emissive.setHex(stringPulse[i]>.03?0x4b2b0e:0);m.emissiveIntensity=stringPulse[i]*.7;} });
+          });
         }
       }
 
@@ -1834,12 +1856,8 @@
       }
       junctionMotion.key.rotation.x=-.043*junctionState;
       junctionMotion.wippen.rotation.x=.11*junctionState;
-      junctionMotion.hammer.rotation.x=.52-.73*junctionStrike;
+      junctionMotion.hammer.rotation.x=.84-.32*junctionStrike;
       junctionMotion.damper.position.y=.28*Math.max(junctionState,sustainValue,sostenutoHeld.has(junctionIndex)?1:0);
-      junctionStringObjects.forEach(string=>{
-        string.scale.x=1+stringPulse[junctionIndex]*.1;
-        string.scale.z=1+stringPulse[junctionIndex]*.1;
-      });
 
       const central=keyStates[midiIndex(73)].value;
       iso.keyPivot.rotation.x=-.06*central;
