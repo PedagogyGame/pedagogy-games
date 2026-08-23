@@ -174,6 +174,16 @@
       let nodes=[];
       let currentMode='complete';
       let hiddenIds=new Set();
+      let keyActors=[];
+      let keyPreparationStarted=false;
+      let keyPerformanceFrame=0;
+      let lastKeyStep=-1;
+      let keyTravel=.62;
+
+      const keyNamePattern=/(^|[\s_.-])(piano[\s_.-]?)?(white[\s_.-]?key|black[\s_.-]?key|key)([\s_.-]?(?:[a-g]#?|\d+))?($|[\s_.-])/i;
+      const keyNameExclusions=/keyboard|key[\s_.-]?bed|key[\s_.-]?frame|key[\s_.-]?slip|key[\s_.-]?block|key[\s_.-]?cover|key[\s_.-]?rail|key[\s_.-]?pin|fallboard|nameboard|pedal/i;
+      const bachFigure=[0,4,7,12,16,7,12,16,0,4,7,12,16,7,12,16];
+      const bachRoots=[0,2,-1,0,0,-2,-1,-1,-3,2,-5,-5,0,-4,-2,-7];
 
       function matchesAny(name,list){return list.some(rx=>rx.test(name));}
       function nodeName(node){return String(node.name||'').trim();}
@@ -182,6 +192,133 @@
         if(!name||mode==='complete') return false;
         if(mode==='core'&&matchesAny(name,soundboardMatchers)) return true;
         return matchesAny(name,shellMatchers);
+      }
+
+      function numericKeyOrder(name){
+        const values=String(name||'').match(/\d+/g);
+        return values?Number(values[values.length-1]):Number.MAX_SAFE_INTEGER;
+      }
+      function isDirectKeyNode(node){
+        const name=nodeName(node);
+        return name&&!keyNameExclusions.test(name)&&keyNamePattern.test(name);
+      }
+      function keyNodesFromSceneGraph(root){
+        const found=[];
+        function walk(node,insideKeyGroup){
+          if(!node)return;
+          const name=nodeName(node);
+          const children=Array.isArray(node.children)?node.children:[];
+          const namedKey=isDirectKeyNode(node);
+          const entersKeyboard=/^(?:piano[\s_.-]?)?(?:keyboard|keys)$/i.test(name)||/(?:^|[\s_.-])keyboard(?:$|[\s_.-])/i.test(name);
+          const keyGroup=insideKeyGroup||namedKey||entersKeyboard;
+          const transform=/transform|matrix/i.test(String(node.type||''));
+          const ownsGeometry=children.some(child=>/geometry/i.test(String(child.type||'')));
+          if(Number.isFinite(node.instanceID)&&((namedKey&&transform)||(keyGroup&&transform&&ownsGeometry))) found.push(node);
+          children.forEach(child=>walk(child,keyGroup));
+        }
+        walk(root,false);
+        return found;
+      }
+      function hydrateKeyActors(candidates,mayFallback){
+        const unique=[...new Map(candidates.map(node=>[node.instanceID,node])).values()].slice(0,180);
+        Promise.all(unique.map(node=>new Promise(resolve=>{
+          api.getMatrix(node.instanceID,(error,matrix)=>{
+            if(error||!matrix||matrix.length!==16){resolve(null);return;}
+            resolve({id:node.instanceID,name:nodeName(node),base:Array.from(matrix),stroke:0});
+          });
+        }))).then(actors=>{
+          keyActors=actors.filter(Boolean).sort((a,b)=>numericKeyOrder(a.name)-numericKeyOrder(b.name)||a.id-b.id);
+          if(keyActors.length>96) keyActors=keyActors.slice(0,96);
+          if(keyActors.length<4){
+            keyActors=[];
+            if(mayFallback&&api.getSceneGraph){
+              api.getSceneGraph((error,graph)=>{
+                const fromGraph=!error&&graph?keyNodesFromSceneGraph(graph):[];
+                if(fromGraph.length>=4)hydrateKeyActors(fromGraph,false);
+              });
+            }
+            return;
+          }
+          if(keyActors.length){
+            const nearest=keyActors.map((actor,index)=>{
+              let distance=Infinity;
+              keyActors.forEach((other,otherIndex)=>{
+                if(index===otherIndex)return;
+                const dx=actor.base[12]-other.base[12];
+                const dy=actor.base[13]-other.base[13];
+                const dz=actor.base[14]-other.base[14];
+                const candidate=Math.hypot(dx,dy,dz);
+                if(candidate>.0001&&candidate<distance)distance=candidate;
+              });
+              return distance;
+            }).filter(Number.isFinite).sort((a,b)=>a-b);
+            if(nearest.length)keyTravel=Math.max(.004,nearest[Math.floor(nearest.length/2)]*.36);
+          }
+          app.classList.toggle('main-keys-ready',keyActors.length>0);
+          if(playing&&keyActors.length)runMainKeyPerformance();
+        });
+      }
+      function prepareMainKeys(){
+        if(keyPreparationStarted||!api)return;
+        keyPreparationStarted=true;
+        const direct=nodes.filter(isDirectKeyNode);
+        if(direct.length>=4){hydrateKeyActors(direct,true);return;}
+        if(api.getSceneGraph){
+          api.getSceneGraph((error,graph)=>{
+            if(!error&&graph){
+              const fromGraph=keyNodesFromSceneGraph(graph);
+              if(fromGraph.length>=4){hydrateKeyActors(fromGraph,false);return;}
+            }
+            keyActors=[];
+          });
+        }
+      }
+      function strokeMainKey(index,strength){
+        if(!api||!keyActors.length)return;
+        const actor=keyActors[Math.max(0,Math.min(keyActors.length-1,index))];
+        const stroke=++actor.stroke;
+        const start=performance.now();
+        const travel=keyTravel*Math.max(.72,Math.min(1.15,strength||1));
+        function animate(now){
+          if(actor.stroke!==stroke)return;
+          const elapsed=now-start;
+          const phase=Math.min(1,elapsed/230);
+          const down=phase<.32?phase/.32:(1-phase)/.68;
+          const eased=Math.sin(Math.max(0,down)*Math.PI/2);
+          const matrix=actor.base.slice();
+          matrix[14]-=travel*eased;
+          api.setMatrix(actor.id,matrix);
+          if(phase<1) requestAnimationFrame(animate);
+          else api.setMatrix(actor.id,actor.base);
+        }
+        requestAnimationFrame(animate);
+      }
+      function stopMainKeyPerformance(){
+        cancelAnimationFrame(keyPerformanceFrame);
+        keyPerformanceFrame=0;
+        lastKeyStep=-1;
+        keyActors.forEach(actor=>{actor.stroke++;if(api)api.setMatrix(actor.id,actor.base);});
+      }
+      function runMainKeyPerformance(){
+        cancelAnimationFrame(keyPerformanceFrame);
+        function sync(){
+          if(!playing)return;
+          if(keyActors.length&&Number.isFinite(bachAudio.currentTime)){
+            const duration=Number.isFinite(bachAudio.duration)&&bachAudio.duration>60?bachAudio.duration:163;
+            const interval=Math.max(.24,(duration-1.2)/(35*16));
+            const step=Math.max(0,Math.floor((bachAudio.currentTime-.18)/interval));
+            if(step!==lastKeyStep){
+              lastKeyStep=step;
+              const bar=Math.floor(step/16);
+              const pitch=bachRoots[bar%bachRoots.length]+bachFigure[step%16];
+              const index=Math.round((.32+.36*((pitch+7)/30))*(keyActors.length-1));
+              strokeMainKey(index,step%16===0?1.12:1);
+              if(step%16===0) strokeMainKey(Math.max(0,index-Math.round(keyActors.length*.16)),.82);
+            }
+          }
+          keyPerformanceFrame=requestAnimationFrame(sync);
+        }
+        keyPerformanceFrame=requestAnimationFrame(sync);
       }
       function setNodeVisibility(mode){
         if(!api||!nodes.length) return;
@@ -244,7 +381,10 @@
             api.start();
             api.addEventListener('viewerready',()=>{
               api.getNodeMap((error,map)=>{
-                if(!error&&map) nodes=Object.values(map).filter(node=>Number.isFinite(node.instanceID));
+                if(!error&&map){
+                  nodes=Object.values(map).filter(node=>Number.isFinite(node.instanceID));
+                  prepareMainKeys();
+                }
                 setNodeVisibility(currentMode);
               });
               loading.classList.add('done');
@@ -297,6 +437,7 @@
           app.classList.add('playing');
           playButton.textContent='❚❚ Pause Bach';
           stateSub.textContent='Bach · Prelude in C major, BWV 846 · Kimiko Ishizaka';
+          runMainKeyPerformance();
           if(actionReady) actionApi.play();
         }catch(error){
           playing=false;
@@ -308,6 +449,7 @@
       function pauseMusic(){
         bachAudio.pause();
         playing=false;
+        stopMainKeyPerformance();
         app.classList.remove('playing');
         playButton.textContent='▶ Play Bach';
         stateSub.textContent=modes[currentMode].status;
@@ -318,6 +460,7 @@
         if(playing) pauseMusic();
         stateSub.textContent='Bach recording could not load · internet connection required';
       });
+      bachAudio.addEventListener('seeked',()=>{lastKeyStep=-1;});
     })();
   </script>
 </body>
