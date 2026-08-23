@@ -2,179 +2,89 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dynamic Elevator Mechanics</title>
+    <title>High-Fidelity Elevator Terminal</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050d1a; font-family: 'Courier New', monospace; }
         canvas { display: block; }
-        #ui-overlay { position: absolute; top: 20px; left: 20px; color: #4facfe; pointer-events: none; width: 380px; }
-        .label { background: rgba(5, 13, 26, 0.9); border: 1px solid #4facfe; padding: 12px; margin-top: 5px; box-shadow: 0 0 10px rgba(79, 172, 254, 0.2); }
-        .part-name { font-size: 16px; font-weight: bold; text-transform: uppercase; color: #ffffff; margin-bottom: 4px; }
-        .category { font-size: 12px; color: #4facfe; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; background: rgba(255,255,255,0.8); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        .controls { margin-top: 15px; pointer-events: auto; }
-        button { background: #4facfe; color: #050d1a; border: none; padding: 10px 15px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
-        button:hover { background: #ffffff; }
+        #ui-overlay { position: absolute; top: 20px; left: 20px; color: #4facfe; pointer-events: none; }
+        .label { background: rgba(5, 13, 26, 0.9); border: 1px solid #4facfe; padding: 12px; }
+        .part-name { font-size: 16px; font-weight: bold; color: #ffffff; }
     </style>
 </head>
 <body>
     <div id="ui-overlay">
-        <h2 style="margin:0 0 10px 0; font-size: 20px;">SYSTEM ARCHITECTURE</h2>
         <div class="label">
-            <div id="part-name" class="part-name">Awaiting Input...</div>
-            <div id="part-category" class="category">Hover over components to scan</div>
-        </div>
-        <div class="controls">
-            <button id="motion-btn">Toggle System Motion</button>
+            <div id="part-name" class="part-name">Loading 3D Model...</div>
         </div>
     </div>
-    <div id="crosshair"></div>
 
+    <!-- Three.js, OrbitControls, and GLTFLoader -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     
     <script>
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050d1a, 0.002);
-        
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 4000);
-        camera.position.set(100, 310, 150);
+        camera.position.set(100, 200, 300);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.target.set(0, 300, 0);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        dirLight.position.set(100, 500, 200);
+        // Lighting for a realistic model
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(200, 500, 300);
         scene.add(dirLight);
 
-        const mats = {
-            steel: new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.5 }),
-            brushedMetal: new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.9, roughness: 0.2 }),
-            copper: new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.8, roughness: 0.3 }),
-            plasticBlack: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 }),
-            glass: new THREE.MeshStandardMaterial({ color: 0xaaccff, metalness: 0.9, roughness: 0.1, transparent: true, opacity: 0.2, side: THREE.DoubleSide }),
-            blueprint: new THREE.LineBasicMaterial({ color: 0x4facfe, transparent: true, opacity: 0.1 })
-        };
+        let interactables = [];
+        const loader = new THREE.GLTFLoader();
 
-        const interactables = [];
-        
-        // Dynamic Groups for Motion
-        const cabAssembly = new THREE.Group();
-        const cwAssembly = new THREE.Group();
-        const staticGroup = new THREE.Group();
-        scene.add(cabAssembly);
-        scene.add(cwAssembly);
-        scene.add(staticGroup);
-
-        function buildPart(parent, geo, mat, x, y, z, category, name, rot = [0,0,0]) {
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x, y, z);
-            mesh.rotation.set(...rot);
-            mesh.userData = { category, name, originalEmissive: mat.emissive ? mat.emissive.clone() : new THREE.Color(0x000000) };
-            parent.add(mesh);
-            interactables.push(mesh);
-            return mesh;
-        }
-
-        // --- STATIC SHAFT & MACHINE ROOM ---
-        const shaftHeight = 600;
-        const shaftGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(40, shaftHeight, 40));
-        const shaft = new THREE.LineSegments(shaftGeo, mats.blueprint);
-        shaft.position.y = shaftHeight / 2;
-        staticGroup.add(shaft);
-
-        buildPart(staticGroup, new THREE.BoxGeometry(1.5, shaftHeight, 2.5), mats.steel, -14, shaftHeight/2, 0, "Infrastructure", "Main Guide Rail (Left)");
-        buildPart(staticGroup, new THREE.BoxGeometry(1.5, shaftHeight, 2.5), mats.steel, 14, shaftHeight/2, 0, "Infrastructure", "Main Guide Rail (Right)");
-        buildPart(staticGroup, new THREE.BoxGeometry(1.5, shaftHeight, 2.5), mats.steel, 0, shaftHeight/2, -18, "Infrastructure", "Counterweight Guide Rail");
-
-        const topY = shaftHeight + 10;
-        const motor = buildPart(staticGroup, new THREE.CylinderGeometry(4, 4, 12, 32), mats.copper, 0, topY, 4, "Machine Room", "Traction Motor", [0, 0, Math.PI/2]);
-        const mainSheave = buildPart(staticGroup, new THREE.TorusGeometry(6, 1.5, 16, 50), mats.steel, 5, topY, 4, "Machine Room", "Primary Traction Sheave", [0, Math.PI/2, 0]);
-
-        // --- CAB ASSEMBLY ---
-        const startY = 300;
-        cabAssembly.position.y = startY;
-
-        buildPart(cabAssembly, new THREE.BoxGeometry(26, 1.5, 6), mats.steel, 0, 16, 0, "Car Sling", "Crosshead Beam");
-        buildPart(cabAssembly, new THREE.BoxGeometry(26, 1.5, 6), mats.steel, 0, -16, 0, "Car Sling", "Safety Plank");
-        buildPart(cabAssembly, new THREE.BoxGeometry(1.5, 32, 4), mats.steel, -12, 0, 0, "Car Sling", "Vertical Stile (Left)");
-        buildPart(cabAssembly, new THREE.BoxGeometry(1.5, 32, 4), mats.steel, 12, 0, 0, "Car Sling", "Vertical Stile (Right)");
-        
-        buildPart(cabAssembly, new THREE.BoxGeometry(22, 0.5, 20), mats.plasticBlack, 0, -14, 0, "Cab Interior", "Sub-floor Platform");
-        buildPart(cabAssembly, new THREE.BoxGeometry(22, 0.5, 20), mats.brushedMetal, 0, 14, 0, "Cab Interior", "Drop Ceiling");
-        buildPart(cabAssembly, new THREE.PlaneGeometry(22, 28), mats.glass, 0, 0, -10, "Cab Interior", "Rear Glass Wall");
-        
-        // --- COUNTERWEIGHT ASSEMBLY ---
-        cwAssembly.position.y = startY;
-        buildPart(cwAssembly, new THREE.BoxGeometry(12, 40, 4), mats.steel, 0, 0, -16, "Counterweight", "Structural Frame");
-        for(let i=0; i<8; i++) {
-            buildPart(cwAssembly, new THREE.BoxGeometry(11, 4, 3), mats.brushedMetal, 0, -15 + (i*4.2), -16, "Counterweight", `Filler Weight ${i+1}`);
-        }
-
-        // --- INTERACTION & MOTION LOGIC ---
-        let isMoving = false;
-        let motionTime = 0;
-        
-        document.getElementById('motion-btn').addEventListener('click', () => {
-            isMoving = !isMoving;
+        // THIS IS WHERE YOU LOAD YOUR REALISTIC EXTERNALLY BUILT MODEL
+        loader.load('path_to_your_highly_detailed_elevator.glb', function (gltf) {
+            const elevatorModel = gltf.scene;
+            scene.add(elevatorModel);
+            
+            // Auto-populate interactables from your model's named meshes
+            elevatorModel.traverse((child) => {
+                if (child.isMesh) {
+                    interactables.push(child);
+                }
+            });
+            
+            document.getElementById('part-name').innerText = "System Ready. Hover to scan.";
+        }, undefined, function (error) {
+            console.error('Error loading the model:', error);
+            document.getElementById('part-name').innerText = "Model Load Failed.";
         });
 
+        // Raycaster for your labels
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         const nameLabel = document.getElementById('part-name');
-        const catLabel = document.getElementById('part-category');
-        let hoveredObject = null;
 
         window.addEventListener('mousemove', (event) => {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-        });
-
-        const clock = new THREE.Clock();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-
-            if (isMoving) {
-                motionTime += delta * 0.5; // Adjust speed here
-                const offset = Math.sin(motionTime) * 200; // Move +/- 200 units
-                
-                cabAssembly.position.y = startY + offset;
-                cwAssembly.position.y = startY - offset;
-                
-                // Rotate hoisting machinery relative to movement
-                const rotationSpeed = Math.cos(motionTime) * 1.5 * delta;
-                mainSheave.rotation.x += rotationSpeed; 
-                motor.rotation.x += rotationSpeed;
-            }
-
+            
             raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(interactables);
 
             if (intersects.length > 0) {
-                if (hoveredObject !== intersects[0].object) {
-                    if (hoveredObject) hoveredObject.material.emissive.copy(hoveredObject.userData.originalEmissive);
-                    hoveredObject = intersects[0].object;
-                    hoveredObject.material.emissive.setHex(0x114466); 
-                    
-                    nameLabel.innerText = hoveredObject.userData.name;
-                    catLabel.innerText = hoveredObject.userData.category;
-                    document.body.style.cursor = 'crosshair';
-                }
+                // Pulls the name you gave the part in Blender/CAD
+                nameLabel.innerText = intersects[0].object.name || "Unnamed Component"; 
+                document.body.style.cursor = 'crosshair';
             } else {
-                if (hoveredObject) {
-                    hoveredObject.material.emissive.copy(hoveredObject.userData.originalEmissive);
-                    hoveredObject = null;
-                }
+                nameLabel.innerText = 'Scanning System...';
                 document.body.style.cursor = 'default';
             }
+        });
 
+        function animate() {
+            requestAnimationFrame(animate);
             controls.update();
             renderer.render(scene, camera);
         }
