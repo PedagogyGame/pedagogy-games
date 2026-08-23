@@ -3,2009 +3,271 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#161513" />
-  <meta name="description" content="An interactive 3D anatomy atlas of a professional grand piano." />
-  <title>Piano Anatomy Atlas — Grand Piano</title>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-      }
-    }
-  </script>
+  <meta name="theme-color" content="#11100f" />
+  <meta name="description" content="A realistic, inspectable concert grand piano with three non-exploded cutaway states and Bach playback." />
+  <title>Concert Grand — Piano Anatomy Atlas</title>
   <style>
     :root {
-      color-scheme: dark;
-      --ink: #f0ece3;
-      --muted: #a8a197;
-      --dim: #756f66;
-      --gold: #c5a25b;
-      --gold-bright: #e2c477;
-      --panel: rgba(22, 20, 17, 0.88);
-      --panel-soft: rgba(28, 26, 22, 0.72);
-      --line: rgba(218, 194, 139, 0.18);
-      --sidebar: 242px;
-      --controls-h: 66px;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg:#11100f;
+      --panel:rgba(17,16,15,.92);
+      --panel-soft:rgba(20,19,17,.76);
+      --ink:#f2eee6;
+      --muted:#aaa39a;
+      --dim:#777169;
+      --gold:#cfaa5c;
+      --line:rgba(221,190,125,.22);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     }
-
-    * { box-sizing: border-box; }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-      background: #161513;
-      color: var(--ink);
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink)}
+    button{font:inherit;color:inherit}
+    .app{position:relative;width:100%;height:100%;min-height:560px;background:#11100f}
+    .viewer{position:absolute;inset:0;background:radial-gradient(circle at 64% 42%,#302c26 0,#171512 45%,#0f0e0d 100%)}
+    .viewer iframe{display:block;width:100%;height:100%;border:0;background:transparent}
+    .viewer::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(12,11,10,.8) 0,transparent 24%),linear-gradient(0deg,rgba(10,9,8,.42),transparent 25%)}
+    .sidebar{position:absolute;z-index:10;inset:0 auto 0 0;width:252px;padding:28px 18px 110px;background:linear-gradient(90deg,rgba(13,12,11,.98),rgba(17,16,14,.91));border-right:1px solid var(--line);box-shadow:24px 0 70px rgba(0,0,0,.3)}
+    .brand{margin:0 9px 30px;padding:0 0 23px;border-bottom:1px solid var(--line)}
+    .brand small{display:block;color:var(--gold);font-size:9px;letter-spacing:.24em;text-transform:uppercase}
+    .brand h1{margin:8px 0 4px;font:500 22px/1.06 Georgia,"Times New Roman",serif;letter-spacing:.02em}
+    .brand p{margin:0;color:var(--muted);font-size:10px;letter-spacing:.12em;text-transform:uppercase}
+    .modes{display:grid;gap:8px}
+    .mode{display:grid;grid-template-columns:31px 1fr;gap:10px;align-items:center;width:100%;min-height:58px;padding:9px 10px;border:1px solid transparent;border-radius:4px;background:transparent;text-align:left;cursor:pointer;transition:.2s ease}
+    .mode:hover{background:rgba(255,255,255,.025);color:#fff}
+    .mode[aria-selected="true"]{background:linear-gradient(90deg,rgba(207,170,92,.15),rgba(207,170,92,.025));border-color:rgba(218,182,105,.35);box-shadow:inset 2px 0 var(--gold)}
+    .roman{display:grid;place-items:center;width:25px;height:25px;border:1px solid currentColor;border-radius:3px;color:var(--dim);font:500 10px Georgia,serif}
+    .mode[aria-selected="true"] .roman{color:#e6c574}
+    .mode-label{font-size:10px;font-weight:500;line-height:1.35;letter-spacing:.1em;text-transform:uppercase}
+    .sidebar-note{position:absolute;left:27px;right:27px;bottom:27px;color:#716a61;font-size:9px;line-height:1.6;letter-spacing:.09em;text-transform:uppercase}
+    .heading{position:absolute;z-index:5;top:42px;left:292px;max-width:min(650px,calc(100vw - 650px));pointer-events:none;text-shadow:0 2px 16px rgba(0,0,0,.72)}
+    .eyebrow{color:var(--gold);font-size:10px;letter-spacing:.25em;text-transform:uppercase}
+    .heading h2{margin:9px 0 8px;font:500 clamp(30px,3.2vw,51px)/.98 Georgia,"Times New Roman",serif}
+    .heading p{max-width:590px;margin:0;color:#bbb4aa;font-size:13px;line-height:1.55}
+    .help{position:absolute;z-index:5;top:42px;right:28px;display:flex;gap:8px;pointer-events:none}
+    .help span{padding:9px 11px;border:1px solid rgba(224,203,158,.17);background:rgba(14,13,12,.55);color:#8d867d;font-size:8px;letter-spacing:.12em;text-transform:uppercase}
+    .loading{position:absolute;z-index:8;inset:0 0 0 252px;display:grid;place-items:center;background:#11100f;transition:opacity .55s ease,visibility .55s}
+    .loading.done{opacity:0;visibility:hidden}
+    .loading-box{text-align:center;color:#a69e92;font:500 12px Georgia,serif;letter-spacing:.12em;text-transform:uppercase}
+    .loading-ring{width:44px;height:44px;margin:0 auto 18px;border:1px solid rgba(207,170,92,.22);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .notice{position:absolute;z-index:7;left:50%;top:50%;display:none;width:min(520px,calc(100vw - 50px));padding:20px;transform:translate(-50%,-50%);border:1px solid var(--line);background:var(--panel);color:var(--muted);text-align:center;font-size:13px;line-height:1.6}
+    .notice.visible{display:block}
+    .controlbar{position:absolute;z-index:10;left:278px;right:24px;bottom:20px;display:flex;align-items:center;gap:9px;min-height:58px;padding:9px 11px;border:1px solid var(--line);border-radius:5px;background:linear-gradient(180deg,rgba(21,19,17,.9),rgba(13,12,11,.95));box-shadow:0 14px 42px rgba(0,0,0,.3);backdrop-filter:blur(15px)}
+    .ctl{min-height:38px;padding:0 14px;border:1px solid rgba(215,186,127,.2);border-radius:3px;background:rgba(255,255,255,.025);color:#b3aca1;font-size:9px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+    .ctl:hover{color:#fff;border-color:rgba(226,194,127,.42)}
+    .ctl.primary{min-width:132px;background:linear-gradient(180deg,#b48d47,#8c672d);border-color:#d2ad64;color:#fff8eb}
+    .spacer{flex:1}
+    .state{min-width:230px;text-align:right}
+    .state strong,.state span{display:block}
+    .state strong{color:#cec6ba;font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+    .state span{margin-top:3px;color:#777168;font-size:8px;letter-spacing:.07em;text-transform:uppercase}
+    .credit{position:absolute;z-index:4;right:30px;bottom:92px;color:#68635d;font-size:8px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none}
+    .credit:hover{color:#aaa39a}
+    .mobile-menu{display:none;position:absolute;z-index:15;top:16px;left:16px;width:42px;height:42px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink)}
+    @media(max-width:980px){
+      .sidebar{width:76px;padding:24px 9px 100px}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:none}.brand{margin:0 4px 19px}.mode{grid-template-columns:1fr;place-items:center;padding:8px}.heading{left:108px;max-width:calc(100vw - 330px)}.loading{left:76px}.controlbar{left:98px}.state{display:none}
     }
-
-    button, input { font: inherit; }
-
-    button {
-      color: inherit;
-      border: 0;
+    @media(max-width:700px){
+      .sidebar{width:250px;transform:translateX(-100%);transition:transform .25s ease}.app.menu-open .sidebar{transform:none}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:block}.mode{grid-template-columns:31px 1fr;place-items:initial}.mobile-menu{display:block}.heading{top:20px;left:72px;right:12px;max-width:none}.heading h2{font-size:27px}.heading p,.help{display:none}.loading{left:0}.controlbar{left:12px;right:12px;bottom:10px;flex-wrap:wrap}.credit{right:16px;bottom:82px}.viewer::after{background:linear-gradient(0deg,rgba(10,9,8,.45),transparent 27%)}
     }
-
-    .app {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      min-height: 560px;
-      background:
-        radial-gradient(circle at 68% 37%, rgba(103, 82, 52, 0.16), transparent 38%),
-        linear-gradient(140deg, #1c1b18 0%, #121210 72%);
-    }
-
-    .sidebar {
-      position: absolute;
-      inset: 0 auto 0 0;
-      z-index: 20;
-      width: var(--sidebar);
-      padding: 28px 16px 98px;
-      background: linear-gradient(90deg, rgba(15, 14, 12, 0.98), rgba(21, 19, 16, 0.93));
-      border-right: 1px solid var(--line);
-      box-shadow: 22px 0 60px rgba(0, 0, 0, 0.18);
-      transition: transform .32s ease, width .32s ease;
-    }
-
-    .brand {
-      margin: 0 10px 29px;
-      padding-bottom: 22px;
-      border-bottom: 1px solid var(--line);
-    }
-
-    .eyebrow {
-      color: var(--gold);
-      font-size: 9px;
-      letter-spacing: .24em;
-      text-transform: uppercase;
-    }
-
-    .brand h1 {
-      margin: 8px 0 2px;
-      max-width: 180px;
-      font: 500 21px/1.08 Georgia, "Times New Roman", serif;
-      letter-spacing: .025em;
-    }
-
-    .brand p {
-      margin: 7px 0 0;
-      color: var(--muted);
-      font-size: 11px;
-      letter-spacing: .11em;
-      text-transform: uppercase;
-    }
-
-    .nav {
-      display: grid;
-      gap: 5px;
-    }
-
-    .nav-btn {
-      position: relative;
-      display: grid;
-      grid-template-columns: 30px 1fr;
-      align-items: center;
-      min-height: 48px;
-      width: 100%;
-      padding: 7px 10px;
-      color: #aaa49a;
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 3px;
-      text-align: left;
-      cursor: pointer;
-      transition: color .22s ease, background .22s ease, border-color .22s ease;
-    }
-
-    .nav-btn:hover {
-      color: #ddd7cc;
-      background: rgba(255,255,255,.025);
-    }
-
-    .nav-btn[aria-current="true"] {
-      color: #f6f0e4;
-      background: linear-gradient(90deg, rgba(196, 159, 85, .12), rgba(196,159,85,.025));
-      border-color: rgba(214, 179, 106, .30);
-      box-shadow: inset 2px 0 0 var(--gold);
-    }
-
-    .nav-icon {
-      width: 18px;
-      height: 18px;
-      display: grid;
-      place-items: center;
-      border: 1px solid currentColor;
-      border-radius: 2px;
-      color: #777168;
-      font-size: 9px;
-      transition: color .22s ease, box-shadow .22s ease;
-    }
-
-    .nav-btn[aria-current="true"] .nav-icon {
-      color: var(--gold-bright);
-      box-shadow: 0 0 12px rgba(211, 173, 93, .16);
-    }
-
-    .nav-label {
-      font-size: 10px;
-      font-weight: 650;
-      letter-spacing: .105em;
-      line-height: 1.28;
-      text-transform: uppercase;
-    }
-
-    .sidebar-foot {
-      position: absolute;
-      left: 26px;
-      right: 26px;
-      bottom: 24px;
-      color: #6d675e;
-      font-size: 9px;
-      letter-spacing: .09em;
-      line-height: 1.6;
-      text-transform: uppercase;
-    }
-
-    .viewport {
-      position: absolute;
-      inset: 0 0 0 var(--sidebar);
-      overflow: hidden;
-      transition: left .32s ease;
-      touch-action: none;
-    }
-
-    #canvas-wrap, #canvas-wrap canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    .topbar {
-      position: absolute;
-      z-index: 8;
-      top: 24px;
-      left: 28px;
-      right: 28px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      pointer-events: none;
-    }
-
-    .mode-heading {
-      max-width: 410px;
-      text-shadow: 0 2px 18px rgba(0,0,0,.75);
-    }
-
-    .mode-heading h2 {
-      margin: 6px 0 6px;
-      font: 500 clamp(23px, 2.3vw, 34px)/1 Georgia, "Times New Roman", serif;
-      letter-spacing: .018em;
-    }
-
-    .mode-heading p {
-      margin: 0;
-      max-width: 380px;
-      color: rgba(225, 219, 208, .66);
-      font-size: 11px;
-      line-height: 1.55;
-    }
-
-    .mode-number {
-      color: var(--gold);
-      font-size: 9px;
-      letter-spacing: .2em;
-      text-transform: uppercase;
-    }
-
-    .view-help {
-      display: flex;
-      gap: 7px;
-      align-items: center;
-      margin-top: 2px;
-      color: rgba(224,218,207,.48);
-      font-size: 9px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-
-    .view-help span {
-      padding: 7px 9px;
-      border: 1px solid rgba(255,255,255,.09);
-      background: rgba(13,12,10,.28);
-      backdrop-filter: blur(8px);
-    }
-
-    .info-card {
-      position: absolute;
-      z-index: 12;
-      top: 104px;
-      right: 28px;
-      width: min(322px, calc(100vw - var(--sidebar) - 56px));
-      padding: 17px 18px 18px;
-      background: linear-gradient(145deg, rgba(26,24,20,.94), rgba(17,16,14,.88));
-      border: 1px solid rgba(208, 171, 96, .35);
-      border-left: 2px solid var(--gold);
-      border-radius: 3px;
-      box-shadow: 0 18px 55px rgba(0,0,0,.32);
-      backdrop-filter: blur(18px);
-      opacity: 0;
-      transform: translateY(7px);
-      pointer-events: none;
-      transition: opacity .2s ease, transform .2s ease;
-    }
-
-    .info-card.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .info-card.pinned::after {
-      content: "PINNED";
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      color: var(--gold);
-      font-size: 8px;
-      letter-spacing: .16em;
-    }
-
-    .info-system {
-      margin-bottom: 8px;
-      color: var(--gold);
-      font-size: 8px;
-      letter-spacing: .18em;
-      text-transform: uppercase;
-    }
-
-    .info-card h3 {
-      margin: 0 48px 7px 0;
-      color: #f4eee3;
-      font-size: 13px;
-      letter-spacing: .08em;
-      line-height: 1.25;
-      text-transform: uppercase;
-    }
-
-    .info-card p {
-      margin: 0;
-      color: #beb7ac;
-      font-size: 11px;
-      line-height: 1.52;
-    }
-
-    .layer-focus {
-      position: absolute;
-      z-index: 11;
-      left: 28px;
-      bottom: 88px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-      max-width: calc(100% - 56px);
-      padding: 8px 9px 8px 12px;
-      background: rgba(18, 17, 14, .78);
-      border: 1px solid rgba(213, 183, 119, .16);
-      border-radius: 4px;
-      box-shadow: 0 12px 42px rgba(0,0,0,.22);
-      backdrop-filter: blur(15px);
-    }
-
-    .layer-focus.visible { display: flex; }
-
-    .layer-focus-label {
-      color: #777066;
-      font-size: 8px;
-      font-weight: 700;
-      letter-spacing: .17em;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .anatomy-select {
-      min-width: 210px;
-      height: 32px;
-      padding: 0 34px 0 11px;
-      color: #ddd5c7;
-      background: #201e1a;
-      border: 1px solid rgba(224,187,111,.25);
-      border-radius: 2px;
-      outline: 0;
-      font-size: 9px;
-      font-weight: 650;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      cursor: pointer;
-    }
-
-    .anatomy-select:focus {
-      border-color: rgba(224,187,111,.58);
-      box-shadow: 0 0 0 2px rgba(196,157,79,.08);
-    }
-
-    .context-panel {
-      position: absolute;
-      z-index: 10;
-      right: 28px;
-      bottom: 86px;
-      display: none;
-      max-width: 540px;
-      padding: 8px;
-      gap: 7px;
-      background: rgba(18,17,14,.72);
-      border: 1px solid rgba(213,183,119,.16);
-      border-radius: 4px;
-      backdrop-filter: blur(15px);
-      box-shadow: 0 12px 42px rgba(0,0,0,.25);
-    }
-
-    .context-panel.visible { display: flex; }
-
-    .controlbar {
-      position: absolute;
-      z-index: 15;
-      left: 20px;
-      right: 20px;
-      bottom: 18px;
-      min-height: var(--controls-h);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 10px;
-      background: rgba(17,16,14,.88);
-      border: 1px solid rgba(211,184,126,.18);
-      border-radius: 5px;
-      box-shadow: 0 20px 70px rgba(0,0,0,.38);
-      backdrop-filter: blur(18px);
-    }
-
-    .ctl {
-      min-height: 40px;
-      padding: 0 14px;
-      color: #aaa49a;
-      background: rgba(255,255,255,.025);
-      border: 1px solid rgba(255,255,255,.08);
-      border-radius: 3px;
-      font-size: 9px;
-      font-weight: 650;
-      letter-spacing: .105em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: color .2s ease, background .2s ease, border-color .2s ease;
-      white-space: nowrap;
-    }
-
-    .ctl:hover, .ctl:focus-visible {
-      color: #eee7da;
-      border-color: rgba(218,183,111,.32);
-      outline: 0;
-    }
-
-    .ctl.primary {
-      color: #15130f;
-      background: linear-gradient(180deg, #d3b064, #ab8542);
-      border-color: #e3c47e;
-      min-width: 124px;
-    }
-
-    .ctl.active {
-      color: var(--gold-bright);
-      background: rgba(196, 157, 79, .13);
-      border-color: rgba(224,187,111,.42);
-    }
-
-    .divider {
-      width: 1px;
-      height: 34px;
-      margin: 0 2px;
-      background: rgba(255,255,255,.09);
-    }
-
-    .slider-wrap {
-      min-width: 188px;
-      flex: 1 1 260px;
-      max-width: 360px;
-      padding: 0 10px;
-    }
-
-    .slider-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 5px;
-      color: #8f887e;
-      font-size: 8px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-    }
-
-    input[type="range"] {
-      width: 100%;
-      height: 3px;
-      margin: 0;
-      accent-color: var(--gold);
-      cursor: pointer;
-    }
-
-    .spacer { flex: 1 1 auto; }
-
-    .status {
-      display: grid;
-      gap: 3px;
-      min-width: 88px;
-      padding-right: 8px;
-      text-align: right;
-    }
-
-    .status strong {
-      color: #c8c1b6;
-      font-size: 9px;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-    }
-
-    .status span {
-      color: #706a62;
-      font-size: 8px;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-
-    .mobile-menu {
-      position: absolute;
-      z-index: 30;
-      top: 16px;
-      left: 16px;
-      display: none;
-      width: 42px;
-      height: 42px;
-      background: rgba(17,16,14,.9);
-      border: 1px solid rgba(211,184,126,.22);
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .loading {
-      position: absolute;
-      inset: 0;
-      z-index: 100;
-      display: grid;
-      place-items: center;
-      background: #151412;
-      transition: opacity .7s ease, visibility .7s;
-    }
-
-    .loading.done { opacity: 0; visibility: hidden; }
-
-    .loading-inner { text-align: center; }
-
-    .loading-mark {
-      width: 48px;
-      height: 48px;
-      margin: 0 auto 18px;
-      border: 1px solid rgba(205,169,95,.25);
-      box-shadow: inset 0 0 0 10px #151412, inset 0 0 0 11px rgba(205,169,95,.12);
-      transform: rotate(45deg);
-      animation: breathe 1.8s ease-in-out infinite;
-    }
-
-    .loading p {
-      margin: 0;
-      color: #9d9588;
-      font: 500 11px/1.4 Georgia, "Times New Roman", serif;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-    }
-
-    @keyframes breathe { 50% { opacity: .45; transform: rotate(45deg) scale(.92); } }
-
-    @media (max-width: 980px) {
-      :root { --sidebar: 74px; }
-      .sidebar { padding: 22px 9px 90px; }
-      .brand { margin: 0 4px 18px; text-align: center; }
-      .brand h1, .brand p, .eyebrow, .nav-label, .sidebar-foot { display: none; }
-      .nav-btn { grid-template-columns: 1fr; place-items: center; padding: 7px; }
-      .nav-icon { width: 23px; height: 23px; }
-      .mode-heading p, .view-help { display: none; }
-      .controlbar { flex-wrap: wrap; }
-      .status { display: none; }
-    }
-
-    @media (max-width: 700px) {
-      :root { --sidebar: 0px; }
-      .app { min-height: 480px; }
-      .sidebar { width: 232px; transform: translateX(-100%); padding: 70px 16px 86px; }
-      .app.menu-open .sidebar { transform: translateX(0); }
-      .sidebar .brand { margin: 0 10px 22px; text-align: left; }
-      .sidebar .brand h1, .sidebar .brand p, .sidebar .eyebrow, .sidebar .nav-label, .sidebar .sidebar-foot { display: block; }
-      .nav-btn { grid-template-columns: 30px 1fr; place-items: initial; }
-      .mobile-menu { display: block; }
-      .topbar { top: 18px; left: 70px; right: 14px; }
-      .mode-heading h2 { font-size: 22px; }
-      .info-card { top: 76px; right: 14px; width: calc(100vw - 28px); }
-      .context-panel { right: 12px; left: 12px; bottom: 169px; overflow-x: auto; }
-      .layer-focus { left: 12px; right: 12px; bottom: 125px; max-width: none; }
-      .layer-focus-label { display: none; }
-      .controlbar { left: 10px; right: 10px; bottom: 10px; padding: 7px; }
-      .ctl { min-height: 36px; padding: 0 10px; }
-      .ctl.primary { min-width: 108px; }
-      .slider-wrap { order: 5; flex-basis: 100%; max-width: none; }
-      .divider { display: none; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-    }
+    @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
   </style>
 </head>
 <body>
   <main class="app" id="app">
-    <button class="mobile-menu" id="mobile-menu" aria-label="Open anatomy navigation">☰</button>
+    <div class="viewer" aria-label="Interactive 3D concert grand piano">
+      <iframe id="api-frame" title="Interactive realistic concert grand piano model" src="https://sketchfab.com/models/5cb4706191e4467aaa8635c3ac4464b4/embed?autostart=1&amp;preload=1&amp;ui_controls=0&amp;ui_infos=0&amp;ui_hint=0&amp;ui_stop=0&amp;ui_settings=0&amp;ui_help=0&amp;ui_vr=0&amp;ui_ar=0" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+    </div>
 
-    <aside class="sidebar" aria-label="Anatomy layers">
+    <button class="mobile-menu" id="mobile-menu" aria-label="Open view menu">☰</button>
+
+    <aside class="sidebar" aria-label="Piano cutaway views">
       <header class="brand">
-        <div class="eyebrow">Interactive Collection</div>
+        <small>Interactive Collection</small>
         <h1>Piano Anatomy Atlas</h1>
-        <p>Grand Piano</p>
+        <p>Concert Grand</p>
       </header>
-
-      <nav class="nav" id="nav">
-        <button class="nav-btn" data-mode="music" aria-current="true"><span class="nav-icon">Ⅰ</span><span class="nav-label">Complete Piano</span></button>
-        <button class="nav-btn" data-mode="structure" aria-current="false"><span class="nav-icon">Ⅱ</span><span class="nav-label">Piano Without Its Outer Shell</span></button>
-        <button class="nav-btn" data-mode="mechanism" aria-current="false"><span class="nav-icon">Ⅲ</span><span class="nav-label">Piano Without Its Outer Shell or Soundboard</span></button>
+      <nav class="modes" role="tablist" aria-label="Physical piano states">
+        <button class="mode" role="tab" data-mode="complete" aria-selected="true"><span class="roman">I</span><span class="mode-label">Complete Piano</span></button>
+        <button class="mode" role="tab" data-mode="interior" aria-selected="false"><span class="roman">II</span><span class="mode-label">Piano Without Its Outer Shell</span></button>
+        <button class="mode" role="tab" data-mode="core" aria-selected="false"><span class="roman">III</span><span class="mode-label">Piano Without Its Outer Shell or Soundboard</span></button>
       </nav>
-
-      <div class="sidebar-foot">One concert grand · Three physical states<br />Camera position preserved between views</div>
+      <div class="sidebar-note">One scale-accurate Model D reference<br />No exploding or displaced parts</div>
     </aside>
 
-    <section class="viewport" id="viewport" aria-label="Interactive 3D grand piano">
-      <div id="canvas-wrap"></div>
+    <header class="heading">
+      <div class="eyebrow" id="mode-number">Mode I · Complete Instrument</div>
+      <h2 id="mode-title">Complete Piano</h2>
+      <p id="mode-copy">A professionally modeled concert grand in its complete physical state. Orbit freely and zoom into the cabinet, keyboard, lid, pedals, string bed, and action.</p>
+    </header>
 
-      <header class="topbar">
-        <div class="mode-heading">
-          <div class="mode-number" id="mode-number">Mode I · Complete Instrument</div>
-          <h2 id="mode-title">Complete Piano</h2>
-          <p id="mode-description">Inspect a complete concert grand while Bach’s Prelude in C major drives the keys, action, hammers, strings, and dampers together.</p>
-        </div>
-        <div class="view-help" aria-hidden="true"><span>Drag · Orbit</span><span>Wheel · Zoom</span><span>Click · Pin</span><span>Tabs · View Locked</span></div>
-      </header>
+    <div class="help" aria-hidden="true"><span>Drag · Orbit</span><span>Wheel · Zoom</span><span>Tabs · Camera Locked</span></div>
 
-      <article class="info-card" id="info-card" aria-live="polite">
-        <div class="info-system" id="info-system"></div>
-        <h3 id="info-name"></h3>
-        <p id="info-description"></p>
-      </article>
+    <div class="loading" id="loading" role="status"><div class="loading-box"><div class="loading-ring"></div>Loading concert grand</div></div>
+    <div class="notice" id="notice">The external 3D reference could not load. Check the internet connection and reopen this file.</div>
 
-      <div class="layer-focus" id="layer-panel" aria-label="Layer focus selector">
-        <label class="layer-focus-label" for="layer-select">Layer focus</label>
-        <select class="anatomy-select" id="layer-select"></select>
-      </div>
+    <a class="credit" href="https://sketchfab.com/3d-models/grand-piano-5cb4706191e4467aaa8635c3ac4464b4" target="_blank" rel="noreferrer">Scale-accurate Model D reference · AlexPo / Sketchfab</a>
 
-      <div class="context-panel" id="action-controls" aria-label="Action demonstrations">
-        <button class="ctl" id="isolate-action">Isolate Action</button>
-        <button class="ctl" id="play-stroke">Demonstrate Stroke</button>
-        <button class="ctl" id="repeat-stroke">Repeat</button>
-      </div>
-
-      <div class="context-panel" id="pedal-controls" aria-label="Pedal demonstrations">
-        <button class="ctl" id="sustain-demo">Hold Sustain</button>
-        <button class="ctl" id="una-demo">Hold Una Corda</button>
-        <button class="ctl" id="sostenuto-demo">Sostenuto Demo</button>
-      </div>
-
-      <footer class="controlbar">
-        <button class="ctl primary" id="play-music">▶ Play Bach</button>
-        <button class="ctl" id="demo-key">Demonstrate Key</button>
-        <button class="ctl" id="slow">Slow Motion</button>
-        <div class="divider"></div>
-        <div class="slider-wrap">
-          <div class="slider-label"><span>Exploded view</span><output id="explode-value">0%</output></div>
-          <input id="explode" type="range" min="0" max="100" value="0" aria-label="Exploded view separation" />
-        </div>
-        <div class="spacer"></div>
-        <button class="ctl" id="reset">Reset View</button>
-        <div class="status"><strong id="status-main">Ready</strong><span id="status-sub">Music stopped</span></div>
-      </footer>
-    </section>
-
-    <div class="loading" id="loading" role="status">
-      <div class="loading-inner"><div class="loading-mark"></div><p>Assembling instrument</p></div>
-    </div>
+    <footer class="controlbar">
+      <button class="ctl primary" id="play-music">▶ Play Bach</button>
+      <div class="spacer"></div>
+      <button class="ctl" id="reset">Reset View</button>
+      <div class="state"><strong id="state-main">Complete Piano</strong><span id="state-sub">Model loading</span></div>
+    </footer>
   </main>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
-    const $ = (q) => document.querySelector(q);
-    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const app = $('#app');
-    const wrap = $('#canvas-wrap');
-    const infoCard = $('#info-card');
-    const infoName = $('#info-name');
-    const infoSystem = $('#info-system');
-    const infoDescription = $('#info-description');
-    const statusMain = $('#status-main');
-    const statusSub = $('#status-sub');
-
-    const modeData = {
-      music: {
-        number: 'Mode I · Complete Instrument', title: 'Complete Piano',
-        description: 'Inspect a complete concert grand while Bach’s Prelude in C major drives the keys, action, hammers, strings, and dampers together.',
-        camera: [-13.8, 9.2, -14.8], target: [0, 3.2, 0.35]
-      },
-      structure: {
-        number: 'Mode II · Outer Shell Removed', title: 'Piano Without Its Outer Shell',
-        description: 'The lacquered case, lid, music rack, key cover, and legs are removed while the real inner frame, soundboard, string bed, keyboard, action, and dampers remain aligned.',
-        camera: [-8.8, 13.2, -10.2], target: [0, 4.25, .8]
-      },
-      mechanism: {
-        number: 'Mode III · Shell & Soundboard Removed', title: 'Piano Without Its Outer Shell or Soundboard',
-        description: 'A mechanically complete core: keys lift the wooden action, hammers meet the strings, and dampers lift in the same synchronized view—without cabinet panels or the soundboard masking the junction.',
-        camera: [-10.4, 7.4, -11.8], target: [0, 3.95, -.15]
-      }
-    };
-
-    const systemLabel = {
-      body: 'Body & Skeleton', sound: 'Sound & Strings', keyboard: 'Keyboard',
-      action: 'Action & Hammers', dampers: 'Dampers & Pedals', technician: 'Technician Details'
-    };
-
-    const layerViewData = {
-      structure: [
-        { id:'combined', label:'Entire Interior · Outer Shell Removed', note:'Plate, soundboard, bridges, strings, keyboard, action, and dampers remain in their true working positions', camera:[-8.8,11.8,-10.2], target:[0,4.0,.5] },
-        { id:'frame', label:'Plate & Inner Frame', note:'Cast-iron plate, pinblock, inner bracing, keybed, and structural hardware', camera:[-8.8,13.2,-10.2], target:[0,4.25,.8] },
-        { id:'acoustic', label:'Sound & Strings', note:'Soundboard, ribs, bridges, strings, tuning pins, and agraffes', camera:[5.8,12.2,-8.6], target:[0,4.55,.8] },
-        { id:'interfaces', label:'Action-to-String Connections', note:'Follow the keys, wooden action, hammer crowns, dampers, routed strings, bridge pins, soundboard, and frame together', camera:[-3.8,7.8,-5.4], target:[0,4.25,.4] }
-      ],
-      mechanism: [
-        { id:'combined', label:'Complete Core · No Shell or Soundboard', note:'Keys, wooden action, hammers, dampers, plate, anchored strings, and regulation remain together with both visual masks removed', camera:[-10.4,7.4,-11.8], target:[0,3.95,-.15] },
-        { id:'keyboard', label:'Keyboard', note:'Keys, keyframe, rails, pins, punchings, and first action contacts', camera:[-8.8,5.5,-12.2], target:[0,3.15,-2.35] },
-        { id:'action', label:'Action & Regulation', note:'Wippens, jacks, repetition, hammers, backchecks, and regulation', camera:[-7.8,6.8,-8.1], target:[0,3.9,-.6] },
-        { id:'dampers', label:'Dampers & Pedals', note:'Damper assemblies, pedals, pitmans, trapwork, and sostenuto', camera:[9.6,6.4,-10.8], target:[0,2.7,-.15] },
-        { id:'junction', label:'Key-to-String Junction', note:'A fine center slice from key pivot and capstan through wippen, jack, repetition, hammer crown, damper, and the anchored three-string unison', camera:[-2.75,5.7,-4.25], target:[.2,4.02,.28] }
-      ]
-    };
-
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x171614);
-    scene.fog = new THREE.FogExp2(0x171614, 0.016);
-
-    const camera = new THREE.PerspectiveCamera(36, 1, .08, 90);
-    camera.position.fromArray(modeData.music.camera);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.26;
-    wrap.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = .065;
-    controls.target.fromArray(modeData.music.target);
-    controls.minDistance = 1.25;
-    controls.maxDistance = 34;
-    controls.zoomSpeed = .72;
-    controls.rotateSpeed = .55;
-    controls.zoomToCursor = true;
-    controls.minPolarAngle = .2;
-    controls.maxPolarAngle = Math.PI * .84;
-    controls.enablePan = false;
-
-    scene.add(new THREE.HemisphereLight(0xf2ede3, 0x211b13, 1.38));
-    const keyLight = new THREE.DirectionalLight(0xffefd2, 3.55);
-    keyLight.position.set(-9, 15, -8);
-    keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(2048, 2048);
-    keyLight.shadow.camera.left = -15; keyLight.shadow.camera.right = 15;
-    keyLight.shadow.camera.top = 15; keyLight.shadow.camera.bottom = -15;
-    scene.add(keyLight);
-    const interiorLight = new THREE.PointLight(0xe3b878, 11.5, 24, 2);
-    interiorLight.position.set(1, 8.6, 1.2);
-    scene.add(interiorLight);
-    const actionFill = new THREE.PointLight(0xf4eee4, 10, 18, 2);
-    actionFill.position.set(-4.5, 7.4, -5.6);
-    scene.add(actionFill);
-    const rimLight = new THREE.DirectionalLight(0xcbd5d2, 1.65);
-    rimLight.position.set(11, 9, 8);
-    scene.add(rimLight);
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(56, 56),
-      new THREE.MeshStandardMaterial({ color: 0x171613, roughness: .91, metalness: .02 })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
-
-    const contact = new THREE.Mesh(
-      new THREE.CircleGeometry(9.8, 96),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .25, depthWrite: false })
-    );
-    contact.rotation.x = -Math.PI / 2;
-    contact.position.y = .006;
-    contact.scale.set(1.35, .72, 1);
-    scene.add(contact);
-
-    const piano = new THREE.Group();
-    piano.rotation.y = -.08;
-    scene.add(piano);
-
-    const systems = {};
-    ['body','sound','keyboard','action','dampers','technician'].forEach(id => {
-      systems[id] = new THREE.Group();
-      systems[id].name = id;
-      piano.add(systems[id]);
-    });
-
-    const mats = {
-      lacquer: new THREE.MeshPhysicalMaterial({ color: 0x080909, roughness: .16, metalness: .08, clearcoat: 1, clearcoatRoughness: .12 }),
-      lacquerSoft: new THREE.MeshPhysicalMaterial({ color: 0x151412, roughness: .24, metalness: .04, clearcoat: .75, clearcoatRoughness: .18 }),
-      innerWood: new THREE.MeshStandardMaterial({ color: 0x60381f, roughness: .44, metalness: 0 }),
-      soundboard: new THREE.MeshStandardMaterial({ color: 0xd2a96f, roughness: .68, metalness: 0 }),
-      ribWood: new THREE.MeshStandardMaterial({ color: 0x96673b, roughness: .72 }),
-      plate: new THREE.MeshStandardMaterial({ color: 0x9d742e, roughness: .29, metalness: .72 }),
-      brass: new THREE.MeshStandardMaterial({ color: 0xb48a3b, roughness: .25, metalness: .82 }),
-      copper: new THREE.MeshStandardMaterial({ color: 0xb65b2e, roughness: .3, metalness: .78 }),
-      steel: new THREE.MeshStandardMaterial({ color: 0xb8bdba, roughness: .25, metalness: .9 }),
-      damperWire: new THREE.MeshStandardMaterial({ color: 0xe1e2dc, roughness: .17, metalness: .88 }),
-      ivory: new THREE.MeshPhysicalMaterial({ color: 0xede8d8, roughness: .36, clearcoat: .38, clearcoatRoughness: .25 }),
-      ebony: new THREE.MeshPhysicalMaterial({ color: 0x060606, roughness: .2, clearcoat: .65, clearcoatRoughness: .2 }),
-      actionWood: new THREE.MeshStandardMaterial({ color: 0xb38655, roughness: .58 }),
-      hammerFelt: new THREE.MeshStandardMaterial({ color: 0xe3d8be, roughness: .9 }),
-      redFelt: new THREE.MeshStandardMaterial({ color: 0x65231f, roughness: .92 }),
-      greenFelt: new THREE.MeshStandardMaterial({ color: 0x344b3a, roughness: .94 }),
-      leather: new THREE.MeshStandardMaterial({ color: 0x5c321f, roughness: .82 }),
-      darkMetal: new THREE.MeshStandardMaterial({ color: 0x282a29, roughness: .31, metalness: .76 })
-    };
-
-    const materialsManaged = [];
-    const interactiveMeshes = [];
-    const shellMeshes = new Set();
-    const explodeObjects = [];
-    const part = (id, name, description) => ({ id, name, description });
-
-    function prepareObject(root, system, meta, opts = {}) {
-      root.traverse(o => {
-        if (!o.isMesh) return;
-        if (Array.isArray(o.material)) o.material = o.material.map(m => m.clone());
-        else o.material = o.material.clone();
-        const list = Array.isArray(o.material) ? o.material : [o.material];
-        for (const m of list) {
-          m.transparent = true;
-          m.userData.baseOpacity = m.opacity;
-          m.userData.currentOpacity = m.opacity;
-          m.userData.system = system;
-          m.userData.shell = !!opts.shell;
-          m.userData.soundboardComponent = !!opts.soundboardComponent;
-          materialsManaged.push(m);
-        }
-        o.userData.part = meta;
-        o.userData.system = system;
-        o.userData.semanticRoot = root;
-        o.castShadow = opts.castShadow !== false;
-        o.receiveShadow = opts.receiveShadow !== false;
-        if (opts.interactive !== false) interactiveMeshes.push(o);
-        if (opts.shell) shellMeshes.add(o);
-      });
-      if (opts.explode) {
-        root.userData.basePosition = root.position.clone();
-        root.userData.explode = new THREE.Vector3(...opts.explode);
-        explodeObjects.push(root);
-      }
-      return root;
-    }
-
-    function add(system, root, meta, opts) {
-      systems[system].add(prepareObject(root, system, meta, opts));
-      return root;
-    }
-
-    function box(w,h,d, material, x=0,y=0,z=0, radius=0) {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w,h,d, radius ? 2 : 1, radius ? 2 : 1, radius ? 2 : 1), material);
-      mesh.position.set(x,y,z);
-      return mesh;
-    }
-
-    function cyl(radius, height, material, x=0,y=0,z=0, segments=16) {
-      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, segments), material);
-      mesh.position.set(x,y,z);
-      return mesh;
-    }
-
-    function cylinderBetween(a, b, radius, material, segments=8) {
-      const start = new THREE.Vector3(...a), end = new THREE.Vector3(...b);
-      const delta = end.clone().sub(start);
-      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, delta.length(), segments), material);
-      mesh.position.copy(start).add(end).multiplyScalar(.5);
-      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), delta.normalize());
-      return mesh;
-    }
-
-    function beamBetweenXZ(a, b, width, height, material) {
-      const dx=b[0]-a[0], dz=b[2]-a[2];
-      const beam=box(Math.hypot(dx,dz),height,width,material,(a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);
-      beam.rotation.y=-Math.atan2(dz,dx);
-      return beam;
-    }
-
-    function horizontalExtrude(shape, depth, material, y, bevel=.04) {
-      const geometry = new THREE.ExtrudeGeometry(shape, {
-        depth, bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel,
-        bevelSegments: 2, curveSegments: 32, steps: 1
-      });
-      geometry.rotateX(-Math.PI/2);
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.y = y;
-      return mesh;
-    }
-
-    function grandShape(scale=1, inset=0) {
-      const s = new THREE.Shape();
-      s.moveTo((-6+inset)*scale, (4.05-inset)*scale);
-      s.lineTo((6-inset)*scale, (4.05-inset)*scale);
-      s.bezierCurveTo((6.18-inset)*scale, (1.6)*scale, (5.55-inset)*scale, (-2.35)*scale, (2.45)*scale, (-5.45+inset)*scale);
-      s.bezierCurveTo((1.35)*scale, (-5.92+inset)*scale, (-.6)*scale, (-5.82+inset)*scale, (-2.25)*scale, (-5.45+inset)*scale);
-      s.lineTo((-5.95+inset)*scale, (-4.02+inset)*scale);
-      s.lineTo((-6+inset)*scale, (4.05-inset)*scale);
-      return s;
-    }
-
-    // BODY & SKELETON
-    const baseCase = horizontalExtrude(grandShape(1,0), .42, mats.lacquer, 3.56, .08);
-    add('body', baseCase, part('case','Case / Cabinet / Body','Outer wooden enclosure of the grand piano.'), { shell:true, explode:[0,-.22,0] });
-
-    const rimShape = grandShape(1,0);
-    const rimHole = new THREE.Path();
-    rimHole.moveTo(-5.25,3.34); rimHole.lineTo(5.15,3.34);
-    rimHole.bezierCurveTo(5.18,1.25,4.7,-1.9,2.05,-4.72);
-    rimHole.bezierCurveTo(.8,-5.18,-.65,-5.02,-1.95,-4.72);
-    rimHole.lineTo(-5.2,-3.55); rimHole.lineTo(-5.25,3.34);
-    rimShape.holes.push(rimHole);
-    const outerRim = horizontalExtrude(rimShape,.62,mats.lacquer,3.93,.07);
-    add('body', outerRim, part('outer_rim','Outer Rim','Visible laminated outer wall that forms the grand piano’s body.'), { shell:true, explode:[0,.04,0] });
-
-    const innerRimShape = grandShape(.94,.17);
-    const innerHole = new THREE.Path();
-    innerHole.moveTo(-4.85,3.0); innerHole.lineTo(4.7,3.0);
-    innerHole.bezierCurveTo(4.72,1.2,4.18,-1.75,1.82,-4.28);
-    innerHole.bezierCurveTo(.65,-4.65,-.6,-4.55,-1.72,-4.28);
-    innerHole.lineTo(-4.78,-3.18); innerHole.lineTo(-4.85,3.0);
-    innerRimShape.holes.push(innerHole);
-    const innerRim = horizontalExtrude(innerRimShape,.38,mats.innerWood,4.12,.045);
-    add('body', innerRim, part('inner_rim','Inner Rim','Inner structural rim supporting the soundboard and cast-iron plate.'), { explode:[0,.12,0] });
-
-    const keybed = box(12.3,.34,3.95,mats.lacquerSoft,0,2.86,-2.72);
-    add('body',keybed,part('keybed','Keybed','Heavy wooden foundation supporting the keyboard and action.'),{explode:[0,-.35,-.15]});
-    const pinblock = box(10.25,.28,.74,mats.innerWood,0,4.52,2.78);
-    pinblock.rotation.x = -.04;
-    add('body',pinblock,part('pinblock','Pinblock / Wrest Plank','Laminated hardwood block that tightly grips the tuning pins.'),{explode:[0,.5,.1]});
-
-    const plateShape = grandShape(.78,.15);
-    [[-2.25,-.8,1.05,.72],[.25,-1.6,1.1,.82],[2.45,-.25,.85,.62]].forEach(([x,y,rx,ry]) => {
-      const h = new THREE.Path(); h.absellipse(x,y,rx,ry,0,Math.PI*2,false,0); plateShape.holes.push(h);
-    });
-    const plate = horizontalExtrude(plateShape,.19,mats.plate,4.55,.035);
-    add('body',plate,part('plate','Cast-Iron Plate / Frame / Harp','Heavy iron structure that carries the strings’ combined tension.'),{explode:[0,.58,.08]});
-    const plateWeb=new THREE.Group();
-    [
-      [[-4.7,4.77,2.32],[-3.7,4.77,-3.68],.26],
-      [[-2.9,4.77,2.42],[-1.85,4.77,-4.18],.24],
-      [[-1.05,4.77,2.48],[.25,4.77,-4.34],.22],
-      [[.8,4.77,2.48],[2.1,4.77,-3.8],.2],
-      [[2.65,4.77,2.38],[4.4,4.77,-2.25],.19]
-    ].forEach(([a,b,w])=>plateWeb.add(beamBetweenXZ(a,b,w,.13,mats.plate)));
-    plateWeb.add(beamBetweenXZ([-4.9,4.78,2.5],[4.95,4.78,2.5],.28,.15,mats.plate));
-    add('body',plateWeb,part('plate_web','Plate Webbing & Struts','Broad cast-iron struts distribute string tension through the plate without obstructing the speaking lengths.'),{interactive:true,explode:[0,.6,.08]});
-
-    const bellyRail = box(10.8,.34,.34,mats.innerWood,0,3.78,1.58);
-    bellyRail.rotation.y = -.02;
-    add('body',bellyRail,part('belly_rail','Belly Rail','Structural support surrounding the grand piano’s soundboard area.'),{explode:[0,-.18,.1]});
-    [-4.8,-2.25,0,2.25,4.75].forEach((x,i) => {
-      const brace = box(.22,.2,5.5,mats.innerWood,x,3.58,.35);
-      brace.rotation.y = (i-2)*.055;
-      add('body',brace,part('structural_braces','Structural Braces / Stays','Reinforcing wooden members that stiffen the piano body.'),{interactive:i===2,explode:[0,-.45,0]});
-    });
-
-    function makeLeg(x,z,tail=false) {
-      const g = new THREE.Group();
-      const shaft = cyl(.34,2.42,mats.lacquerSoft,0,1.35,0,24);
-      const collar = cyl(.45,.2,mats.lacquer,0,2.48,0,24);
-      const foot = cyl(.43,.18,mats.lacquer,0,.18,0,24);
-      const caster = cyl(.16,.15,mats.brass,0,.03,tail?.12:.2,18); caster.rotation.z=Math.PI/2;
-      g.add(shaft,collar,foot,caster); g.position.set(x,0,z); return g;
-    }
-    [[-5.15,-2.9,false],[5.15,-2.9,false],[-1.6,4.55,true]].forEach(([x,z,t],i)=>{
-      const leg=makeLeg(x,z,t);
-      add('body',leg,part('grand_legs','Grand Legs','Primary supports beneath the grand piano body.'),{shell:true,interactive:i===0,explode:[0,0,0]});
-    });
-
-    const casterMeta=part('casters','Casters','Wheels beneath the piano that permit careful repositioning.');
-    // Semantic caster geometry is represented within the legs; one separate rear caster is exposed for close inspection.
-    const rearCaster = cyl(.17,.18,mats.brass,-1.6,.05,4.68,18); rearCaster.rotation.z=Math.PI/2;
-    add('body',rearCaster,casterMeta,{explode:[0,0,.08]});
-
-    const fallboard = box(12.05,.42,.46,mats.lacquer,0,3.58,-4.24);
-    fallboard.rotation.x = -.11;
-    add('body',fallboard,part('fallboard','Fallboard / Key Cover','Hinged cover that protects the keyboard when the piano is closed.'),{shell:true,explode:[0,.5,-.25]});
-    const nameboard = box(11.95,.72,.18,mats.lacquerSoft,0,3.78,-1.43);
-    nameboard.rotation.x = -.07;
-    add('body',nameboard,part('nameboard','Nameboard','Board above the keyboard traditionally carrying the maker’s name.'),{shell:true,explode:[0,.2,0]});
-    const keyslip = box(12.15,.28,.22,mats.lacquer,0,3.02,-4.53);
-    add('body',keyslip,part('keyslip','Keyslip / Fallstrip','Narrow strip directly in front of the keys.'),{shell:true,explode:[0,0,-.28]});
-
-    [-6.03,6.03].forEach((x,i)=>{
-      const kb=box(.42,.58,3.15,mats.lacquer,x,3.36,-2.92);
-      add('body',kb,part('keyblocks','Keyblocks / Cheekblocks','Blocks flanking and positioning the keyboard.'),{shell:true,interactive:i===0,explode:[i?-0.25:.25,0,0]});
-    });
-
-    const desk = new THREE.Group();
-    const deskRack = new THREE.Group();
-    deskRack.rotation.x=-1.04; deskRack.position.y=.65;
-    deskRack.add(box(7.02,.1,.13,mats.lacquerSoft,0,0,1.02));
-    deskRack.add(box(6.8,.1,.14,mats.lacquerSoft,0,0,-1.02));
-    [-3.43,3.43].forEach(x=>deskRack.add(box(.13,.1,2.02,mats.lacquerSoft,x,0,0)));
-    [-2.55,-1.7,-.85,0,.85,1.7,2.55].forEach(x=>{
-      const slat=box(.105,.085,1.86,mats.lacquerSoft,x,0,0);
-      slat.rotation.y=x*.018;
-      deskRack.add(slat);
-    });
-    deskRack.add(box(5.9,.08,.1,mats.lacquerSoft,0,.01,.08));
-    const shelf = box(7.4,.18,.42,mats.lacquer,0,-.28,-.89);
-    desk.add(deskRack,shelf); desk.position.set(0,5.2,-1.02);
-    add('body',desk,part('music_desk','Music Desk / Music Rack','Adjustable stand that supports sheet music.'),{shell:true,explode:[0,.8,-.35]});
-
-    const lidPivot = new THREE.Group(); lidPivot.position.set(-6.12,4.78,0);
-    const lidMesh = horizontalExtrude(grandShape(1.006,0),.22,mats.lacquer,0,.055);
-    lidMesh.position.x=6.12;
-    lidPivot.add(lidMesh); lidPivot.rotation.z=.48;
-    add('body',lidPivot,part('grand_lid','Grand Lid / Top Lid','Large hinged upper cover that reflects sound into the room.'),{shell:true,explode:[0,.42,0]});
-    const prop = cylinderBetween([3.75,4.55,.15],[3.18,7.08,.15],.065,mats.innerWood,12);
-    add('body',prop,part('lid_prop','Lid Prop / Prop Stick','Supports the grand lid securely in its raised position.'),{shell:true,explode:[.12,0,0]});
-
-    // SOUND & STRINGS
-    const soundboard = horizontalExtrude(grandShape(.79,.1),.17,mats.soundboard,4.02,.025);
-    add('sound',soundboard,part('soundboard','Soundboard / Sounding Board','Resonant wooden diaphragm that projects vibration received from the bridges.'),{soundboardComponent:true,explode:[0,-.52,0]});
-    for(let i=0;i<11;i++) {
-      const z=-1.8+i*.55;
-      const rib=box(8.8-i*.22,.11,.13,mats.ribWood,-.35,3.92,z);
-      rib.rotation.y=-.27;
-      add('sound',rib,part('soundboard_ribs','Soundboard Ribs','Wooden bars beneath the soundboard that reinforce and shape its response.'),{soundboardComponent:true,interactive:i===4,explode:[0,-.88,0]});
-    }
-
-    function tube(points,radius,material) {
-      const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
-      return new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),material);
-    }
-    const trebleBridge=tube([[-4.5,4.31,-1.05],[-1.5,4.34,-.55],[1.8,4.35,-.05],[4.25,4.34,.28]],.105,mats.innerWood);
-    add('sound',trebleBridge,part('treble_bridge','Treble / Long Bridge','Long bridge transferring most tenor and treble string vibration into the soundboard.'),{soundboardComponent:true,explode:[0,.12,0]});
-    const bassBridge=tube([[-4.7,4.32,-1.16],[-3.65,4.34,-.82],[-2.45,4.34,-.52]],.12,mats.innerWood);
-    add('sound',bassBridge,part('bass_bridge','Bass / Short Bridge','Short bridge carrying the bass strings to the soundboard.'),{soundboardComponent:true,explode:[0,.14,0]});
-
-    const bridgePinGroup=new THREE.Group();
-    for(let i=0;i<24;i++){
-      const t=i/23;
-      const x=-4.42+t*8.55;
-      const z=-1.05+t*1.33+.05*Math.sin(t*Math.PI*2);
-      [-.055,.055].forEach(offset=>{
-        const pin=cyl(.018,.2,mats.steel,x+offset,4.46,z-offset*.55,7);
-        pin.rotation.z=offset>0?.12:-.12;
-        bridgePinGroup.add(pin);
-      });
-    }
-    add('sound',bridgePinGroup,part('bridge_pins','Bridge Pins','Paired pins that guide each string across the bridge and transmit its side-bearing force.'),{soundboardComponent:true,explode:[0,.2,0]});
-
-    const whiteWidth=11.55/52;
-    let whiteIndex=0;
-    const notePositions=[];
-    for(let midi=21;midi<=108;midi++) {
-      const pc=midi%12;
-      const black=[1,3,6,8,10].includes(pc);
-      let x;
-      if(!black){ x=-5.775+whiteIndex*whiteWidth+whiteWidth/2; whiteIndex++; }
-      else x=-5.775+whiteIndex*whiteWidth-.012;
-      notePositions.push({midi,black,x});
-    }
-
-    const stringObjects=[];
-    const stringEndpoints=[];
-    const stringPulse=new Array(88).fill(0);
-    for(let i=0;i<88;i++) {
-      const t=i/87;
-      const x=-5.0+t*10.05;
-      const bass=i<20;
-      const startZ=2.56+(i%3)*.075;
-      const endZ=bass ? -3.82+(i*.028) : -1.12-(t*2.64);
-      const x2=bass ? -4.55+i*.26 : x*.74;
-      const radius=bass ? .022-(i*.00035) : .0085;
-      const strikeX=notePositions[i].x;
-      const bridgeZ=-1.1+1.35*t;
-      const str=new THREE.Group();
-      const stringPoints=[
-        [x,4.84,startZ],
-        [x,4.79,2.24],
-        [strikeX,4.72,1.12],
-        [x2,4.49,bridgeZ],
-        [x2,4.49,endZ]
-      ];
-      for(let segment=0;segment<stringPoints.length-1;segment++){
-        str.add(cylinderBetween(stringPoints[segment],stringPoints[segment+1],radius,bass?mats.copper:mats.steel,bass?9:7));
-      }
-      const meta=bass
-        ? part('bass_strings','Copper-Wound Bass Strings','Steel-core bass strings wrapped with copper to add mass without excessive length.')
-        : part('treble_strings','Plain Steel / Treble Strings','Unwound high-tensile music wire used through the tenor and treble registers.');
-      add('sound',str,meta,{interactive:i===8||i===48,explode:[0,.34,0],castShadow:false,receiveShadow:false});
-      stringObjects.push(str);
-      stringEndpoints.push({start:stringPoints[0],end:stringPoints[stringPoints.length-1]});
-    }
-
-    const tuningPinGroup=new THREE.Group();
-    const hitchPinGroup=new THREE.Group();
-    stringEndpoints.forEach(({start,end},i)=>{
-      const tuningPin=cyl(.026,.23,mats.steel,start[0],4.79,start[2],9);
-      tuningPin.rotation.x=.035;
-      tuningPinGroup.add(tuningPin);
-      const hitchPin=cyl(.024,.18,mats.steel,end[0],4.5,end[2],8);
-      hitchPinGroup.add(hitchPin);
-      if(i%12===0){
-        tuningPinGroup.add(cyl(.045,.035,mats.darkMetal,start[0],4.91,start[2],10));
-        hitchPinGroup.add(cyl(.036,.025,mats.darkMetal,end[0],4.6,end[2],9));
-      }
-    });
-    add('sound',tuningPinGroup,part('tuning_pins','Tuning Pins / Wrest Pins','Compact steel pins aligned exactly with the front end of every modeled string course.'),{interactive:true,explode:[0,.5,.08]});
-    add('sound',hitchPinGroup,part('hitch_pins','Hitch Pins','Rear anchor pins positioned at the exact end of every modeled string course.'),{interactive:true,explode:[0,.22,0]});
-    for(let i=0;i<18;i++) {
-      const x=-4.65+i*.48;
-      const ag=new THREE.Group();
-      ag.add(cyl(.032,.105,mats.brass,x,4.79,2.28,10));
-      ag.add(box(.11,.055,.085,mats.brass,x,4.845,2.28));
-      add('sound',ag,part('agraffes','Agraffes','Compact brass fittings that guide the lower string courses and define the speaking length.'),{interactive:i===9,explode:[0,.38,0]});
-    }
-    const capo=box(4.65,.17,.14,mats.plate,2.65,4.78,2.17); capo.rotation.y=-.03;
-    add('sound',capo,part('capo_bar','Capo Bar / Capo d’Astro Bar','Hard front bearing that terminates upper-register strings.'),{explode:[0,.42,0]});
-    const pressure=box(4.15,.13,.12,mats.brass,-2.75,4.85,2.1);
-    add('sound',pressure,part('pressure_bar','Pressure / Bearing Bar','Forces strings against a precisely defined bearing point.'),{explode:[0,.46,0]});
-
-    // KEYBOARD
-    const keyboardRoot = systems.keyboard;
-    const keys=[];
-    const keyMidi=[];
-    const keyStates=[];
-    notePositions.forEach((n,index)=>{
-      const pivot=new THREE.Group();
-      pivot.position.set(n.x,3.16,-1.58);
-      const mesh=box(n.black?.126:whiteWidth*.91,n.black?.16:.12,n.black?2.02:3.34,n.black?mats.ebony:mats.ivory,0,n.black?.17:0,n.black?.47:-.05);
-      pivot.add(mesh);
-      prepareObject(pivot,'keyboard',n.black
-        ? part('black_keys','Black Keys / Sharps','Raised chromatic keys and the wooden levers beneath them.')
-        : part('white_keys','White Keys / Naturals','Natural-note wooden levers with light-colored playing surfaces.'),
-        {interactive:index===39||index===40||index===41,explode:[(n.x/6)*.12,.33,0]});
-      keyboardRoot.add(pivot); keys.push(pivot); keyMidi.push(n.midi); keyStates.push({value:0,target:0});
-    });
-
-    const keyframe=new THREE.Group();
-    const frontRail=box(12,.16,.28,mats.actionWood,0,3.0,-3.65);
-    const balanceRail=box(12,.2,.3,mats.actionWood,0,3.02,-1.55);
-    const backRail=box(12,.2,.31,mats.actionWood,0,3.02,-.02);
-    keyframe.add(frontRail,balanceRail,backRail);
-    add('keyboard',keyframe,part('keyframe','Keyframe','Wooden frame carrying the keys and their three principal rails.'),{explode:[0,-.58,0]});
-    prepareObject(frontRail,'keyboard',part('front_rail','Front Rail','Keyframe rail carrying the front guide pins.'),{interactive:true});
-    prepareObject(balanceRail,'keyboard',part('balance_rail','Balance Rail','Rail supporting each key at its pivot point.'),{interactive:true});
-    prepareObject(backRail,'keyboard',part('back_rail','Back Rail','Rear support rail beneath the backs of the keys.'),{interactive:true});
-
-    for(let i=0;i<52;i+=3){
-      const x=-5.65+i*whiteWidth;
-      const frontPin=cyl(.016,.28,mats.steel,x,3.16,-3.64,7);
-      add('keyboard',frontPin,part('front_rail_pins','Front-Rail Pins / Guide Pins','Pins that keep the fronts of keys properly aligned.'),{interactive:i===24,explode:[0,.18,0]});
-      const balPin=cyl(.017,.31,mats.steel,x,3.17,-1.56,7);
-      add('keyboard',balPin,part('balance_pins','Balance-Rail Pins / Balance Pins','Pivot pins around which individual keys rock.'),{interactive:i===24,explode:[0,.2,0]});
-      const punching=cyl(.062,.018,mats.redFelt,x,3.12,-1.56,12);
-      add('keyboard',punching,part('balance_punchings','Balance-Rail Punchings','Felt and paper washers used to level keys and regulate their travel.'),{interactive:i===24,explode:[0,.24,0]});
-    }
-    const backCloth=box(11.8,.055,.36,mats.greenFelt,0,3.14,-.13);
-    add('keyboard',backCloth,part('back_rail_cloth','Back-Rail Cloth','Felt that cushions the returning backs of the keys.'),{explode:[0,-.12,0]});
-
-    // ACTION & HAMMERS — a complete row plus a larger isolated mechanism.
-    const actionRow = new THREE.Group(); systems.action.add(actionRow);
-    const actionInterfaces = new THREE.Group(); actionRow.add(actionInterfaces);
-    const hammerRefs=[];
-    const wippenRefs=[];
-    const capstanRefs=[];
-    const jackRefs=[];
-    const repetitionRefs=[];
-    const backcheckRefs=[];
-    for(let i=0;i<88;i++) {
-      const x=notePositions[i].x;
-      const cap=cyl(.045,.18,mats.brass,x,3.48,-.32,8);
-      prepareObject(cap,'action',part('capstans','Capstans / Capstan Screws','Adjustable contacts transmitting key motion into the action.'),{interactive:i===45});
-      cap.userData.baseY=cap.position.y; actionRow.add(cap); capstanRefs.push(cap);
-
-      const cushion=cyl(.052,.035,mats.redFelt,x,3.585,-.32,8);
-      prepareObject(cushion,'action',part('wippen_cushion','Wippen Cushion','Felted contact where the key’s capstan meets and lifts the wippen.'),{interactive:i===45});
-      actionInterfaces.add(cushion);
-
-      const wipPivot=new THREE.Group(); wipPivot.position.set(x,3.62,-.05);
-      const wip=box(.12,.14,.58,mats.actionWood,0,0,.08); wip.rotation.x=-.09; wipPivot.add(wip);
-      prepareObject(wipPivot,'action',part('wippen','Wippen / Whippen Body','Main intermediate lever between the key and hammer mechanism.'),{interactive:i===45});
-      actionRow.add(wipPivot); wippenRefs.push(wipPivot);
-
-      const jack=box(.052,.42,.052,mats.actionWood,x,3.93,.12); jack.rotation.x=.14;
-      prepareObject(jack,'action',part('jack','Jack / Fly / Escapement Jack','Lever that accelerates the hammer and then escapes before impact.'),{interactive:i===45});
-      actionRow.add(jack); jackRefs.push(jack);
-
-      const knuckle=cyl(.052,.14,mats.leather,x,4.275,.405,8); knuckle.rotation.z=Math.PI/2;
-      prepareObject(knuckle,'action',part('hammer_knuckle_row','Hammer Knuckle / Roller','Leather-covered roller where the jack and repetition lever meet the hammer assembly.'),{interactive:i===45});
-      actionInterfaces.add(knuckle);
-
-      const rep=box(.11,.065,.5,mats.actionWood,x,4.06,.1); rep.rotation.x=-.08;
-      prepareObject(rep,'action',part('repetition_lever','Repetition Lever / Balancier','Grand-action lever that supports rapid repetition without a full key return.'),{interactive:i===45});
-      actionRow.add(rep); repetitionRefs.push(rep);
-
-      const hammerPivot=new THREE.Group(); hammerPivot.position.set(x,4.02,.52); hammerPivot.rotation.x=.84;
-      const shank=cylinderBetween([0,0,0],[0,.78,.14],.025,mats.actionWood,7);
-      const molding=box(.12,.2,.21,mats.actionWood,0,.82,.15); molding.rotation.x=.1;
-      const felt=new THREE.Mesh(new THREE.CapsuleGeometry(.09,.16,4,10),mats.hammerFelt);
-      felt.position.set(0,.98,.18); felt.rotation.x=.1; felt.scale.set(.7,1,1.12);
-      hammerPivot.add(shank,molding,felt);
-      prepareObject(hammerPivot,'action',part('hammer_assembly','Hammer Head, Shank & Flange','Felt-covered striking head carried by a wooden shank and pivot flange.'),{interactive:i===45});
-      actionRow.add(hammerPivot); hammerRefs.push(hammerPivot);
-
-      const back=box(.09,.3,.11,mats.leather,x,3.73,.62); back.rotation.x=-.25;
-      prepareObject(back,'action',part('backcheck','Backcheck','Catches the rebounding hammer and holds it ready for repetition.'),{interactive:i===45});
-      actionRow.add(back); backcheckRefs.push(back);
-    }
-    const mainRail=box(11.9,.26,.26,mats.actionWood,0,3.58,.47);
-    prepareObject(mainRail,'action',part('main_action_rail','Main Action Rail','Major structural rail carrying the grand-action mechanisms.'),{interactive:true});
-    actionRow.add(mainRail);
-    const wipRail=box(11.9,.18,.2,mats.actionWood,0,3.55,-.16);
-    prepareObject(wipRail,'action',part('wippen_rail','Wippen Rail','Rail supporting the row of wippen assemblies.'),{interactive:true});
-    actionRow.add(wipRail);
-    actionRow.userData.basePosition=actionRow.position.clone();
-    actionRow.userData.explode=new THREE.Vector3(0,.72,.22);
-    explodeObjects.push(actionRow);
-
-    const isolatedAction = new THREE.Group(); isolatedAction.visible=false; isolatedAction.position.set(0,.05,-.25); systems.action.add(isolatedAction);
-    const iso = {};
-    function isoAdd(root,meta,opts={}) { isolatedAction.add(prepareObject(root,'action',meta,opts)); return root; }
-    iso.keyPivot=new THREE.Group(); iso.keyPivot.position.set(0,3.24,-1.6);
-    iso.keyPivot.add(box(.68,.18,3.85,mats.ivory,0,0,.2));
-    isoAdd(iso.keyPivot,part('key','Key / Keystick','Wooden playing lever that pivots around the balance rail.'));
-    iso.capstan=cyl(.11,.34,mats.brass,0,3.61,-.17,14);
-    isoAdd(iso.capstan,part('capstan','Capstan Screw','Adjustable contact where the rear of the key engages the action.'));
-    iso.wippenPivot=new THREE.Group(); iso.wippenPivot.position.set(0,3.8,.1);
-    iso.wippenPivot.add(box(.39,.22,.95,mats.actionWood,0,0,.12));
-    isoAdd(iso.wippenPivot,part('wippen_detail','Wippen','Intermediate lever carrying the jack and repetition mechanism.'));
-    iso.jackPivot=new THREE.Group(); iso.jackPivot.position.set(0,3.97,.3);
-    iso.jackPivot.add(box(.14,.8,.13,mats.actionWood,0,.34,0));
-    isoAdd(iso.jackPivot,part('jack_detail','Jack / Escapement Jack','Throws the hammer, then moves out of its path before the strike.'));
-    iso.repetition=box(.4,.12,.88,mats.actionWood,0,4.24,.36); iso.repetition.rotation.x=-.08;
-    isoAdd(iso.repetition,part('repetition_detail','Repetition Lever / Balancier','Supports the hammer near playing position for rapid repetition.'));
-    iso.knuckle=cyl(.15,.42,mats.leather,0,4.56,.58,16); iso.knuckle.rotation.z=Math.PI/2;
-    isoAdd(iso.knuckle,part('hammer_knuckle','Hammer Knuckle / Roller','Rounded leather contact surface engaged by the jack and repetition lever.'));
-    iso.hammerPivot=new THREE.Group(); iso.hammerPivot.position.set(0,4.31,.73); iso.hammerPivot.rotation.x=.55;
-    iso.hammerPivot.add(cylinderBetween([0,0,0],[0,1.35,.28],.055,mats.actionWood,12));
-    iso.hammerPivot.add(box(.42,.55,.48,mats.hammerFelt,0,1.55,.33));
-    isoAdd(iso.hammerPivot,part('hammer_detail','Hammer Head & Shank','Dense wool hammer head carried toward the strings by a wooden shank.'));
-    iso.backcheck=box(.27,.63,.31,mats.leather,0,3.62,.84); iso.backcheck.rotation.x=-.28;
-    isoAdd(iso.backcheck,part('backcheck_detail','Backcheck','Receives the rebounding hammer after the key has descended.'));
-    iso.letOff=cyl(.07,.5,mats.darkMetal,.27,4.24,.12,10);
-    isoAdd(iso.letOff,part('let_off_screw','Let-Off Screw & Button','Regulating contact that determines where the jack escapes.'));
-    iso.drop=cyl(.065,.38,mats.darkMetal,-.28,4.32,.43,10);
-    isoAdd(iso.drop,part('drop_screw','Drop Screw','Grand-action adjustment that regulates the hammer’s drop after escapement.'));
-
-    // DAMPERS & PEDALS
-    const damperInterfaces=new THREE.Group(); systems.dampers.add(damperInterfaces);
-    const damperRefs=[];
-    for(let i=0;i<70;i++) {
-      const x=notePositions[i].x, z=1.28+(i/69)*.22;
-      const contactY=4.76;
-      const g=new THREE.Group(); g.position.set(x,contactY,z);
-      const wire=cyl(.009,.62,mats.damperWire,0,.4,0,8);
-      const head=box(.13,.12,.27,mats.actionWood,0,.085,0);
-      const felt=box(.145,.055,.3,mats.redFelt,0,.015,0);
-      g.add(wire,head,felt);
-      add('dampers',g,part('damper_assembly','Damper Head, Felt & Wire','Felt-tipped assembly that contacts a string to stop its vibration.'),{interactive:i===34,explode:[0,.72,0]});
-      damperRefs.push(g); g.userData.baseY=g.position.y;
-    }
-    const guideRail=box(10.3,.14,.2,mats.actionWood,0,4.52,.93);
-    add('dampers',guideRail,part('damper_guide_rail','Damper Guide Rail','Keeps the row of damper wires properly aligned.'),{explode:[0,.3,0]});
-    const liftRail=box(10.4,.14,.2,mats.actionWood,0,4.28,.74);
-    add('dampers',liftRail,part('damper_lift_rail','Damper Lift Rail / Rod','Raises the dampers together when the sustain pedal is depressed.'),{explode:[0,-.18,0]});
-
-    for(let i=1;i<70;i+=3){
-      const x=notePositions[i].x, z=1.28+(i/69)*.22;
-      const lever=cylinderBetween([x,4.27,.72],[x,4.55,z],.022,mats.actionWood,8);
-      prepareObject(lever,'dampers',part('damper_underlever','Damper Underlever','Intermediate lever joining key or pedal input to the damper wire above.'),{interactive:i===34});
-      damperInterfaces.add(lever);
-      const bushing=cyl(.036,.075,mats.greenFelt,x,4.52,.92,9); bushing.rotation.z=Math.PI/2;
-      prepareObject(bushing,'dampers',part('damper_bushing','Damper Guide Bushing','Cloth-lined bearing that centers a damper wire while allowing quiet vertical travel.'),{interactive:false});
-      damperInterfaces.add(bushing);
-    }
-
-    const lyre=new THREE.Group();
-    const lyreTop=box(3.05,.25,.42,mats.lacquerSoft,0,2.6,-2.55);
-    const postL=cylinderBetween([-1.05,2.55,-2.55],[-.68,.65,-3.0],.1,mats.lacquerSoft,16);
-    const postR=cylinderBetween([1.05,2.55,-2.55],[.68,.65,-3.0],.1,mats.lacquerSoft,16);
-    const lyreBase=box(1.75,.21,.36,mats.lacquerSoft,0,.62,-3.0);
-    lyre.add(lyreTop,postL,postR,lyreBase);
-    add('dampers',lyre,part('pedal_lyre','Pedal Lyre','Grand-piano framework carrying the three pedals.'),{explode:[0,-.42,-.12]});
-
-    const pedals=[];
-    [-.56,0,.56].forEach((x,i)=>{
-      const pivot=new THREE.Group(); pivot.position.set(x,.64,-3.05);
-      const pedal=box(.34,.12,1.2,mats.brass,0,0,-.5); pedal.rotation.x=-.05; pivot.add(pedal);
-      const metas=[
-        part('una_corda','Una Corda / Soft Pedal','Shifts the grand action laterally so hammers strike fewer strings or a different felt surface.'),
-        part('sostenuto','Sostenuto Pedal','Selectively sustains notes already held when the pedal is engaged.'),
-        part('sustain','Sustain / Damper Pedal','Raises all dampers so strings can continue vibrating after keys are released.')
-      ];
-      add('dampers',pivot,metas[i],{explode:[(i-1)*.18,-.15,-.42]}); pedals.push(pivot);
-    });
-    const rods=[];
-    [-.56,0,.56].forEach((x,i)=>{
-      const rod=cylinderBetween([x,.86,-2.8],[x,2.72,-1.08],.035,mats.brass,9);
-      add('dampers',rod,part('pedal_rods','Pedal Rods / Pitmans','Rods transmitting pedal movement upward into the piano’s trapwork.'),{interactive:i===2,explode:[(i-1)*.12,-.22,0]}); rods.push(rod);
-    });
-    const trapLever=box(4.2,.12,.18,mats.actionWood,0,2.82,-.98); trapLever.rotation.z=.03;
-    add('dampers',trapLever,part('trap_levers','Trap Levers','Levers beneath the keybed that transfer pedal motion to internal systems.'),{explode:[0,-.48,0]});
-    const sostRod=box(9.5,.08,.08,mats.brass,0,4.62,.36);
-    add('dampers',sostRod,part('sostenuto_rod','Sostenuto Rod','Rotating rod that captures selected damper tabs while leaving others free.'),{explode:[0,-.1,0]});
-
-    const trapConnections=new THREE.Group(); systems.dampers.add(trapConnections);
-    const sustainLink=cylinderBetween([.56,2.72,-1.08],[.56,4.5,.69],.034,mats.brass,10);
-    trapConnections.add(prepareObject(sustainLink,'dampers',part('sustain_link','Sustain Connecting Rod','Linkage carrying the right pedal’s movement from the trap lever to the damper lift system.')));
-    const sostenutoLink=cylinderBetween([0,2.72,-1.08],[0,4.57,.36],.03,mats.brass,10);
-    trapConnections.add(prepareObject(sostenutoLink,'dampers',part('sostenuto_link','Sostenuto Connecting Rod','Linkage joining the center pedal’s trapwork to the sostenuto rod.')));
-    const shiftLink=cylinderBetween([-.56,2.72,-1.08],[-3.7,3.42,-.18],.032,mats.brass,10);
-    trapConnections.add(prepareObject(shiftLink,'dampers',part('una_corda_shift_link','Una-Corda Shift Link','Lever connection that transfers soft-pedal motion into the action’s lateral shift.')));
-    [-.56,0,.56].forEach((x,i)=>{
-      const joint=cyl(.09,.16,mats.darkMetal,x,2.76,-1.03,12); joint.rotation.z=Math.PI/2;
-      trapConnections.add(prepareObject(joint,'dampers',part('trapwork_brackets','Trapwork Brackets & Pivots','Supported pivot joints where pedal rods meet the trap levers.'),{interactive:i===2}));
-    });
-
-    // TECHNICIAN DETAILS cluster around the isolated central action.
-    const techRoot=systems.technician;
-    function techAdd(root,meta,opts={}) { techRoot.add(prepareObject(root,'technician',meta,opts)); return root; }
-    const pivotPin=cyl(.055,.7,mats.steel,0,4.3,.72,14); pivotPin.rotation.z=Math.PI/2;
-    techAdd(pivotPin,part('center_pins','Center Pins / Pivot Pins','Small metal axles forming the action’s precise pivot points.'),{explode:[.5,0,0]});
-    const bushingL=cyl(.105,.12,mats.redFelt,-.36,4.3,.72,14); bushingL.rotation.z=Math.PI/2;
-    const bushingR=bushingL.clone(); bushingR.position.x=.36;
-    techAdd(bushingL,part('action_bushings','Action Center Bushings','Cloth bearings surrounding center pins for quiet, controlled movement.'),{explode:[-.35,0,0]});
-    techAdd(bushingR,part('bushing_cloth','Bushing Cloth','Densely woven cloth used as a low-friction bearing material.'),{explode:[.35,0,0]});
-    const repSpring=tube([[.2,4.04,.24],[.35,4.15,.26],[.17,4.24,.3],[.34,4.34,.34]],.026,mats.steel);
-    techAdd(repSpring,part('repetition_spring','Repetition Spring','Spring that supports and resets the repetition lever.'),{explode:[.4,.3,0]});
-    const punching=cyl(.2,.045,mats.greenFelt,0,3.26,-1.58,18);
-    techAdd(punching,part('punching_felt','Punching Felt','Felt washer used to cushion and regulate keyboard travel.'),{explode:[0,-.22,0]});
-    const leatherPad=box(.3,.08,.27,mats.leather,0,3.92,.49);
-    techAdd(leatherPad,part('buckskin','Leather / Buckskin','Durable, low-friction covering used at repeated action contacts.'),{explode:[0,.18,.22]});
-    const serialPlate=box(1.05,.04,.34,mats.brass,-2.65,4.83,1.7);
-    techAdd(serialPlate,part('serial_plate','Serial-Number / Identification Plate','Metal plate carrying the instrument’s identifying production number.'),{explode:[0,.25,0]});
-    for(let i=0;i<6;i++){
-      const screw=cyl(.055,.19,mats.darkMetal,-.8+i*.32,3.54,.47,10);
-      techAdd(screw,part('machine_screws','Machine Screws','Threaded fasteners securing rails, brackets, and regulated hardware.'),{interactive:i===2,explode:[0,.22+(i%2)*.12,0]});
-    }
-
-    // A single, deliberately enlarged center slice makes the complete transfer chain legible:
-    // keystick -> capstan -> wippen/jack/repetition -> hammer -> string -> bridge -> soundboard.
-    const junctionKeyboard=new THREE.Group(); systems.keyboard.add(junctionKeyboard);
-    const junctionAction=new THREE.Group(); systems.action.add(junctionAction);
-    const junctionSound=new THREE.Group(); systems.sound.add(junctionSound);
-    const junctionDampers=new THREE.Group(); systems.dampers.add(junctionDampers);
-    const junctionMotion={};
-    const junctionIndex=44;
-    const junctionX=notePositions[junctionIndex].x;
-    const junctionStringX=-5+(junctionIndex/87)*10.05;
-    const junctionTailX=junctionStringX*.74;
-    function junctionAdd(parent,system,root,meta,opts={}){
-      parent.add(prepareObject(root,system,meta,opts));
-      return root;
-    }
-
-    junctionMotion.key=new THREE.Group();
-    junctionMotion.key.position.set(junctionX,3.16,-1.58);
-    junctionMotion.key.add(box(.16,.075,3.42,mats.actionWood,0,-.07,.02));
-    junctionMotion.key.add(box(.14,.055,1.92,mats.ebony,0,.025,-.53));
-    junctionAdd(junctionKeyboard,'keyboard',junctionMotion.key,
-      part('junction_keystick','Central Keystick & Key Tail','A cutaway keystick shows the wooden lever beneath its playing surface and the rear tail that raises the action.'),
-      {explode:[0,.18,-.08]});
-
-    const balanceHardware=new THREE.Group();
-    balanceHardware.add(cyl(.025,.36,mats.steel,junctionX,3.16,-1.58,10));
-    balanceHardware.add(cyl(.105,.022,mats.redFelt,junctionX,3.105,-1.58,16));
-    balanceHardware.add(cyl(.082,.016,mats.greenFelt,junctionX,3.126,-1.58,16));
-    junctionAdd(junctionKeyboard,'keyboard',balanceHardware,
-      part('junction_balance','Balance Pin, Bushing & Punchings','The polished balance pin locates the key while felt and paper punchings set height, travel, and quietness.'));
-
-    const capstanDetail=new THREE.Group();
-    capstanDetail.add(cyl(.024,.27,mats.steel,junctionX,3.38,-.32,10));
-    capstanDetail.add(cyl(.07,.045,mats.brass,junctionX,3.49,-.32,14));
-    capstanDetail.add(cyl(.055,.045,mats.darkMetal,junctionX,3.31,-.32,12));
-    junctionAdd(junctionAction,'action',capstanDetail,
-      part('junction_capstan','Capstan Screw, Button & Locknut','The adjustable capstan is the first hard transfer point: the rising key tail presses its rounded button into the felted wippen heel.'));
-
-    junctionMotion.wippen=new THREE.Group();
-    junctionMotion.wippen.position.set(junctionX,3.62,-.04);
-    const wippenBody=box(.2,.16,.78,mats.actionWood,0,0,.05); wippenBody.rotation.x=-.09;
-    const wippenHeel=box(.22,.11,.25,mats.actionWood,0,-.02,-.34);
-    const heelFelt=box(.23,.045,.22,mats.redFelt,0,-.085,-.34);
-    const repLever=box(.18,.075,.64,mats.actionWood,0,.34,.16); repLever.rotation.x=-.07;
-    const jackDetail=box(.075,.48,.075,mats.actionWood,0,.25,.25); jackDetail.rotation.x=.14;
-    junctionMotion.wippen.add(wippenBody,wippenHeel,heelFelt,repLever,jackDetail);
-    junctionMotion.wippen.add(tube([
-      [.07,.1,.09],[.12,.2,.12],[.04,.29,.16],[.11,.39,.2]
-    ],.018,mats.steel));
-    junctionAdd(junctionAction,'action',junctionMotion.wippen,
-      part('junction_wippen','Wippen, Heel, Jack & Repetition Lever','The felted heel receives the capstan; the wippen carries the jack and repetition lever that accelerate and support the hammer.'));
-
-    const wippenFlange=new THREE.Group();
-    wippenFlange.add(box(.28,.24,.19,mats.actionWood,junctionX,3.61,.4));
-    const wippenPin=cyl(.035,.44,mats.steel,junctionX,3.63,.39,12); wippenPin.rotation.z=Math.PI/2;
-    wippenFlange.add(wippenPin);
-    const wippenBushL=cyl(.065,.07,mats.redFelt,junctionX-.15,3.63,.39,12); wippenBushL.rotation.z=Math.PI/2;
-    const wippenBushR=wippenBushL.clone(); wippenBushR.position.x=junctionX+.15;
-    wippenFlange.add(wippenBushL,wippenBushR);
-    junctionAdd(junctionAction,'action',wippenFlange,
-      part('junction_wippen_flange','Wippen Flange, Center Pin & Bushings','A cloth-bushed center pin forms the quiet, low-friction pivot on the wooden action rail.'));
-
-    const regulatingCluster=new THREE.Group();
-    regulatingCluster.add(box(.72,.12,.15,mats.actionWood,junctionX,4.08,.02));
-    regulatingCluster.add(cyl(.035,.34,mats.darkMetal,junctionX+.18,4.2,.09,10));
-    regulatingCluster.add(cyl(.085,.055,mats.hammerFelt,junctionX+.18,4.36,.09,14));
-    regulatingCluster.add(cyl(.032,.3,mats.darkMetal,junctionX-.18,4.22,.34,10));
-    regulatingCluster.add(cyl(.072,.05,mats.leather,junctionX-.18,4.36,.34,14));
-    junctionAdd(junctionAction,'technician',regulatingCluster,
-      part('junction_regulation','Regulating Rail, Let-Off & Drop Contacts','Fine screws and felted buttons determine escapement, drop, and the narrow clearance remaining before the hammer reaches the strings.'));
-
-    const hammerFlange=new THREE.Group();
-    hammerFlange.add(box(.3,.24,.22,mats.actionWood,junctionX,4.04,.53));
-    const hammerCenter=cyl(.035,.46,mats.steel,junctionX,4.09,.54,12); hammerCenter.rotation.z=Math.PI/2;
-    hammerFlange.add(hammerCenter);
-    const flangeBushL=cyl(.068,.065,mats.redFelt,junctionX-.15,4.09,.54,12); flangeBushL.rotation.z=Math.PI/2;
-    const flangeBushR=flangeBushL.clone(); flangeBushR.position.x=junctionX+.15;
-    hammerFlange.add(flangeBushL,flangeBushR);
-    junctionAdd(junctionAction,'action',hammerFlange,
-      part('junction_hammer_flange','Hammer Flange, Center Pin & Bushings','The hammer shank turns on another cloth-bushed center pin fixed to the main action rail.'));
-
-    junctionMotion.hammer=new THREE.Group();
-    junctionMotion.hammer.position.set(junctionX,4.02,.52);
-    junctionMotion.hammer.rotation.x=.84;
-    junctionMotion.hammer.add(cylinderBetween([0,0,0],[0,.78,.14],.032,mats.actionWood,10));
-    junctionMotion.hammer.add(cyl(.075,.2,mats.leather,0,.27,-.02,12));
-    const hammerMolding=box(.18,.26,.27,mats.actionWood,0,.82,.15); hammerMolding.rotation.x=.1;
-    const hammerUnderfelt=box(.22,.29,.3,mats.redFelt,0,.91,.17); hammerUnderfelt.rotation.x=.1;
-    const hammerOuterFelt=box(.25,.32,.33,mats.hammerFelt,0,1.0,.19); hammerOuterFelt.rotation.x=.1;
-    junctionMotion.hammer.add(hammerMolding,hammerUnderfelt,hammerOuterFelt);
-    junctionAdd(junctionAction,'action',junctionMotion.hammer,
-      part('junction_hammer','Shank, Knuckle, Molding, Underfelt & Crown','The roller accepts force from the jack; the shank swings a layered wooden-and-felt hammer whose compact crown meets the string.'));
-
-    const backcheckDetail=new THREE.Group();
-    backcheckDetail.add(box(.12,.4,.16,mats.actionWood,junctionX,3.65,.63));
-    const checkLeather=box(.18,.22,.2,mats.leather,junctionX,3.83,.68); checkLeather.rotation.x=-.25;
-    backcheckDetail.add(checkLeather);
-    junctionAdd(junctionAction,'action',backcheckDetail,
-      part('junction_backcheck','Backcheck Wood & Buckskin','The buckskin-covered backcheck catches the returning hammer so the action remains ready for repetition.'));
-
-    const unison=new THREE.Group();
-    [-.035,0,.035].forEach((dx,index)=>{
-      const string=tube([
-        [junctionStringX+dx,4.84,2.55],
-        [junctionStringX+dx,4.73,2.18],
-        [junctionStringX+dx,4.7,1.12],
-        [junctionTailX+dx*.8,4.49,.58],
-        [junctionTailX+dx*.65,4.49,-2.92]
-      ],index===1?.012:.009,mats.steel);
-      unison.add(string);
-    });
-    junctionAdd(junctionSound,'sound',unison,
-      part('junction_unison','Three-String Unison & Speaking Length','Three closely spaced steel strings share one pitch. Their routed path now visibly meets the strike line, bridge crown, and rear anchoring course.'));
-
-    const strikeAndDamper=new THREE.Group();
-    junctionMotion.damper=strikeAndDamper;
-    const damperWire=cyl(.024,.72,mats.steel,junctionStringX,5.08,1.48,9);
-    const damperWood=box(.24,.15,.38,mats.actionWood,junctionStringX,4.83,1.48);
-    const damperFelt=box(.26,.075,.4,mats.redFelt,junctionStringX,4.735,1.48);
-    strikeAndDamper.add(damperWire,damperWood,damperFelt);
-    junctionAdd(junctionDampers,'dampers',strikeAndDamper,
-      part('junction_damper_contact','Damper Head, Felt & String Contact','A shaped felt pad rests directly on the unison and lifts just before the hammer reaches the strike point.'));
-
-    const stringAnchors=new THREE.Group();
-    stringAnchors.add(box(.78,.15,.58,mats.plate,junctionStringX,4.56,2.55));
-    stringAnchors.add(box(.82,.15,.62,mats.plate,junctionTailX,4.39,-2.92));
-    [-.035,0,.035].forEach(dx=>{
-      stringAnchors.add(cyl(.027,.23,mats.steel,junctionStringX+dx,4.78,2.55,10));
-      stringAnchors.add(cyl(.025,.2,mats.steel,junctionTailX+dx*.65,4.5,-2.92,9));
-    });
-    stringAnchors.add(box(1.02,.12,6.08,mats.plate,(junctionStringX+junctionTailX)/2,4.34,-.18));
-    junctionAdd(junctionSound,'sound',stringAnchors,
-      part('junction_string_anchors','Tuning Pins, Plate Strut & Hitch Pins','The enlarged unison begins at compact tuning pins, crosses the strike and damper line, and terminates visibly around rear hitch pins supported by the cast-iron plate.'));
-
-    const actionBracket=new THREE.Group();
-    actionBracket.add(box(.12,1.05,.15,mats.darkMetal,junctionX-.32,3.92,.36));
-    actionBracket.add(box(.12,1.05,.15,mats.darkMetal,junctionX+.32,3.92,.36));
-    actionBracket.add(box(.76,.12,.5,mats.darkMetal,junctionX,3.46,.25));
-    [junctionX-.32,junctionX+.32].forEach(x=>{
-      const screw=cyl(.045,.15,mats.steel,x,4.31,.36,10); screw.rotation.x=Math.PI/2; actionBracket.add(screw);
-    });
-    junctionAdd(junctionAction,'action',actionBracket,
-      part('junction_action_bracket','Action Bracket, Rails & Fasteners','A rigid metal bracket holds the wooden rails in fixed relationship so every center, contact, and strike remains aligned.'));
-
-    // Thin decorative hinges and plate bolts complete the skeleton without branding it.
-    for(let i=0;i<5;i++){
-      const bolt=cyl(.075,.16,mats.darkMetal,-3.9+i*1.9,4.78,1.28+(i%2)*.65,12);
-      add('body',bolt,part('plate_bolts','Plate Bolts / Screws','Heavy fasteners securing the cast-iron plate to the wooden structure.'),{interactive:i===2,explode:[0,.25,0]});
-    }
-    const hinge=box(2.2,.06,.12,mats.brass,-4.75,5.03,1.0);
-    add('body',hinge,part('cabinet_hinges','Cabinet Hinges','Hinges permitting controlled movement of the lid and cabinet covers.'),{shell:true,explode:[0,.2,0]});
-
-    // Internal sublayers keep the main navigation simple while giving each system a carefully authored inspection hierarchy.
-    function markSubsystem(root,id){
-      root.traverse(o=>{
-        if(!o.isMesh) return;
-        const list=Array.isArray(o.material)?o.material:[o.material];
-        list.forEach(m=>m.userData.subsystem=id);
-      });
-    }
-    markSubsystem(systems.body,'structure-frame');
-    markSubsystem(systems.sound,'structure-acoustic');
-    markSubsystem(bridgePinGroup,'structure-interface');
-    markSubsystem(keyboardRoot,'keyboard-contacts');
-    keys.forEach(k=>markSubsystem(k,'keyboard-keys'));
-    markSubsystem(keyframe,'keyboard-frame');
-    markSubsystem(actionRow,'action-row');
-    markSubsystem(actionInterfaces,'action-interface');
-    markSubsystem(isolatedAction,'action-isolated');
-    markSubsystem(techRoot,'action-regulation');
-    markSubsystem(systems.dampers,'dampers-core');
-    [lyre,...pedals,...rods,trapLever,sostRod].forEach(o=>markSubsystem(o,'dampers-pedals'));
-    markSubsystem(damperInterfaces,'dampers-interface');
-    markSubsystem(trapConnections,'dampers-interface');
-    markSubsystem(junctionKeyboard,'mechanism-junction');
-    markSubsystem(junctionAction,'mechanism-junction');
-    markSubsystem(junctionSound,'mechanism-junction');
-    markSubsystem(junctionDampers,'mechanism-junction');
-
-    // State, opacity, camera, and authored exploded positions.
-    const visibilityByMode = {
-      music: {body:1,sound:1,keyboard:1,action:1,dampers:1,technician:.38},
-      structure: {body:1,sound:1,keyboard:1,action:1,dampers:1,technician:.28},
-      mechanism: {body:.9,sound:1,keyboard:1,action:1,dampers:1,technician:.68}
-    };
-
-    const subsystemIds=[
-      'structure-frame','structure-acoustic','structure-interface',
-      'keyboard-keys','keyboard-frame','keyboard-contacts',
-      'action-row','action-interface','action-isolated','action-regulation',
-      'dampers-core','dampers-pedals','dampers-interface','mechanism-junction'
-    ];
-    function focusWeights(overrides){
-      return Object.assign(Object.fromEntries(subsystemIds.map(id=>[id,0])),overrides);
-    }
-    const layerWeights = {
-      structure: {
-        combined: focusWeights({
-          'structure-frame':1,'structure-acoustic':1,'structure-interface':1,
-          'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,
-          'action-row':1,'action-interface':1,'action-regulation':.28,
-          'dampers-core':1,'dampers-pedals':.26,'dampers-interface':1
-        }),
-        frame: focusWeights({'structure-frame':1,'structure-acoustic':.09,'structure-interface':.24,'keyboard-frame':.18}),
-        acoustic: focusWeights({'structure-frame':.13,'structure-acoustic':1,'structure-interface':1,'action-row':.16,'dampers-core':.44,'dampers-interface':.38}),
-        interfaces: focusWeights({
-          'structure-frame':.42,'structure-acoustic':1,'structure-interface':1,
-          'keyboard-keys':.2,'keyboard-contacts':.45,
-          'action-row':1,'action-interface':1,'dampers-core':.72,'dampers-interface':1
-        })
-      },
-      mechanism: {
-        combined: focusWeights({
-          'structure-frame':.82,'structure-acoustic':1,'structure-interface':0,
-          'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,
-          'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':.68,
-          'dampers-core':1,'dampers-pedals':.28,'dampers-interface':1,
-          'mechanism-junction':0
-        }),
-        keyboard: focusWeights({
-          'keyboard-keys':1,'keyboard-frame':1,'keyboard-contacts':1,
-          'structure-frame':.12,'action-row':.18,'action-interface':.55,'dampers-core':.08
-        }),
-        action: focusWeights({
-          'structure-frame':.15,'structure-acoustic':.36,
-          'keyboard-keys':.22,'keyboard-contacts':.42,
-          'action-row':1,'action-interface':1,'action-isolated':0,'action-regulation':1,
-          'dampers-core':.18,'dampers-interface':.68
-        }),
-        dampers: focusWeights({
-          'structure-frame':.12,'structure-acoustic':.62,
-          'keyboard-keys':.1,'action-row':.16,'action-interface':.24,
-          'dampers-core':1,'dampers-pedals':1,'dampers-interface':1,
-          'structure-interface':0
-        }),
-        junction: focusWeights({
-          'structure-frame':.08,
-          'mechanism-junction':1
-        })
-      }
-    };
-    let currentMode='music';
-    let currentLayer='combined';
-    let explodeAmount=0;
-    let shellFade=1;
-    let pinnedRoot=null, hoverRoot=null, hoverTimer=0;
-    let cameraTween=null;
-    let isolated=false;
-    let repeatTimer=null;
-
-    function clearInfo(){
-      if(pinnedRoot) setHighlight(pinnedRoot,false);
-      if(hoverRoot) setHighlight(hoverRoot,false);
-      pinnedRoot=null; hoverRoot=null;
-      infoCard.classList.remove('visible','pinned');
-    }
-
-    function showInfo(root,pinned=false){
-      const leaf=root.children?.find(o=>o.userData.part) || root;
-      const meta=leaf.userData.part || root.userData.part;
-      const system=leaf.userData.system || root.userData.system;
-      if(!meta) return;
-      infoSystem.textContent=systemLabel[system] || 'Grand Piano';
-      infoName.textContent=meta.name;
-      infoDescription.textContent=meta.description;
-      infoCard.classList.toggle('pinned',pinned);
-      infoCard.classList.add('visible');
-    }
-
-    function setHighlight(root,on){
-      if(!root) return;
-      root.traverse(o=>{
-        if(!o.isMesh) return;
-        const list=Array.isArray(o.material)?o.material:[o.material];
-        list.forEach(m=>{
-          if(m.emissive){
-            if(m.userData.originalEmissive===undefined) m.userData.originalEmissive=m.emissive.getHex();
-            m.emissive.setHex(on?0x7a5220:m.userData.originalEmissive);
-            m.emissiveIntensity=on?.65:1;
-          }
-        });
-      });
-    }
-
-    function moveCamera(position,target,instant=false,duration=680){
-      if(instant||reducedMotion){ camera.position.fromArray(position); controls.target.fromArray(target); controls.update(); return; }
-      cameraTween={
-        start:performance.now(),duration,
-        fromPos:camera.position.clone(),toPos:new THREE.Vector3(...position),
-        fromTarget:controls.target.clone(),toTarget:new THREE.Vector3(...target)
+  <script src="https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js"></script>
+  <script>
+    (()=>{
+      'use strict';
+      const MODEL_UID='5cb4706191e4467aaa8635c3ac4464b4';
+      const app=document.getElementById('app');
+      const frame=document.getElementById('api-frame');
+      const loading=document.getElementById('loading');
+      const notice=document.getElementById('notice');
+      const stateMain=document.getElementById('state-main');
+      const stateSub=document.getElementById('state-sub');
+      const title=document.getElementById('mode-title');
+      const number=document.getElementById('mode-number');
+      const copy=document.getElementById('mode-copy');
+      const playButton=document.getElementById('play-music');
+
+      const modes={
+        complete:{number:'Mode I · Complete Instrument',title:'Complete Piano',copy:'A professionally modeled concert grand in its complete physical state. Orbit freely and zoom into the cabinet, keyboard, lid, pedals, string bed, and action.',status:'All original model components visible'},
+        interior:{number:'Mode II · Outer Shell Removed',title:'Piano Without Its Outer Shell',copy:'The cabinet skin, lid, music rack, fallboard, and legs are removed in place. The plate, soundboard, bridges, strings, keyboard, hammers, dampers, and action remain aligned.',status:'Outer shell hidden · components remain aligned'},
+        core:{number:'Mode III · Shell & Soundboard Removed',title:'Piano Without Its Outer Shell or Soundboard',copy:'The shell and soundboard are removed without moving anything else, exposing the continuous key–action–hammer–string mechanism and its plate-supported string scale.',status:'Shell and soundboard hidden · working core retained'}
       };
-    }
 
-    function setCameraPreset(mode,instant=false){
-      const d=modeData[mode];
-      moveCamera(d.camera,d.target,instant);
-    }
+      const shellMatchers=[
+        /\blid\b/i,/top.?lid/i,/cover/i,/fallboard/i,/fall.?board/i,/music.?rack/i,/music.?desk/i,
+        /prop.?stick/i,/outer.?rim/i,/key.?slip/i,/cheek.?block/i,/key.?block/i,/cabinet/i,
+        /\bleg[ _.\d-]*$/i,/caster/i,/bench/i,/stool/i
+      ];
+      const soundboardMatchers=[/sound.?board/i,/sounding.?board/i,/soundboard.?rib/i];
+      let api=null;
+      let nodes=[];
+      let currentMode='complete';
+      let hiddenIds=new Set();
 
-    function activeLayerView(){
-      return layerViewData[currentMode]?.find(view=>view.id===currentLayer) || null;
-    }
-
-    function renderLayerSelector(){
-      const views=layerViewData[currentMode] || [];
-      const select=$('#layer-select');
-      select.replaceChildren(...views.map(view=>{
-        const option=document.createElement('option');
-        option.value=view.id;
-        option.textContent=view.label;
-        return option;
-      }));
-      select.value=currentLayer;
-      $('#layer-panel').classList.toggle('visible',views.length>0);
-    }
-
-    function setLayerView(id){
-      const view=layerViewData[currentMode]?.find(item=>item.id===id);
-      if(!view) return;
-      cameraTween=null;
-      clearInfo();
-      currentLayer=id;
-      $('#layer-select').value=id;
-      setIsolated(false);
-      $('#action-controls').classList.toggle('visible',currentMode==='mechanism' && id==='action');
-      $('#pedal-controls').classList.toggle('visible',currentMode==='mechanism' && id==='dampers');
-      statusSub.textContent=view.note;
-    }
-
-    function setIsolated(next){
-      isolated=next;
-      isolatedAction.visible=next;
-      techRoot.visible=currentMode==='mechanism' || currentMode==='music';
-      actionRow.visible=!next;
-      $('#isolate-action').classList.toggle('active',next);
-      $('#isolate-action').textContent=next?'Return to Full Action':'Isolate Action';
-    }
-
-    function switchMode(mode){
-      if(mode===currentMode) return;
-      cameraTween=null;
-      clearInfo();
-      currentMode=mode;
-      document.querySelectorAll('.nav-btn').forEach(b=>b.setAttribute('aria-current',String(b.dataset.mode===mode)));
-      $('#mode-number').textContent=modeData[mode].number;
-      $('#mode-title').textContent=modeData[mode].title;
-      $('#mode-description').textContent=modeData[mode].description;
-      currentLayer='combined';
-      renderLayerSelector();
-      setIsolated(false);
-      $('#action-controls').classList.remove('visible');
-      $('#pedal-controls').classList.remove('visible');
-      if(repeatTimer){ clearInterval(repeatTimer); repeatTimer=null; $('#repeat-stroke').classList.remove('active'); }
-      statusMain.textContent=modeData[mode].title;
-      statusSub.textContent=musicPlaying?'Bach playing · mechanism synchronized':(mode==='music'?'Select Play Bach':(activeLayerView()?.note || 'Hover to identify'));
-      if((mode==='music'||mode==='mechanism') && !musicPlaying) void startMusic();
-      app.classList.remove('menu-open');
-    }
-
-    document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>switchMode(b.dataset.mode)));
-    $('#layer-select').addEventListener('change',e=>setLayerView(e.target.value));
-    $('#mobile-menu').addEventListener('click',()=>app.classList.toggle('menu-open'));
-
-    const raycaster=new THREE.Raycaster();
-    const pointer=new THREE.Vector2(5,5);
-    function updatePointer(e){
-      const r=renderer.domElement.getBoundingClientRect();
-      pointer.x=((e.clientX-r.left)/r.width)*2-1;
-      pointer.y=-((e.clientY-r.top)/r.height)*2+1;
-    }
-    function isShown(object){
-      if(object.isMesh){
-        const list=Array.isArray(object.material)?object.material:[object.material];
-        if(list.every(material=>material.visible===false || material.opacity<=.008)) return false;
+      function matchesAny(name,list){return list.some(rx=>rx.test(name));}
+      function nodeName(node){return String(node.name||'').trim();}
+      function shouldHide(node,mode){
+        const name=nodeName(node);
+        if(!name||mode==='complete') return false;
+        if(mode==='core'&&matchesAny(name,soundboardMatchers)) return true;
+        return matchesAny(name,shellMatchers);
       }
-      let node=object;
-      while(node){ if(node.visible===false) return false; node=node.parent; }
-      return true;
-    }
-    function systemActiveInMode(system){
-      if(currentMode==='structure') return ['body','sound','keyboard','action','dampers'].includes(system);
-      if(currentMode==='mechanism') return ['body','sound','keyboard','action','dampers','technician'].includes(system);
-      return false;
-    }
-    function subLayerFactor(subsystem){
-      if(subsystem==='mechanism-junction'){
-        return currentMode==='mechanism' && currentLayer==='junction' ? 2.35 : 0;
+      function setNodeVisibility(mode){
+        if(!api||!nodes.length) return;
+        const nextHidden=new Set(nodes.filter(node=>shouldHide(node,mode)).map(node=>node.instanceID));
+        hiddenIds.forEach(id=>{if(!nextHidden.has(id)) api.show(id);});
+        nextHidden.forEach(id=>{if(!hiddenIds.has(id)) api.hide(id);});
+        hiddenIds=nextHidden;
+        stateSub.textContent=nextHidden.size?modes[mode].status:modes[mode].status+' · model hierarchy preserved';
       }
-      if(currentMode==='music' || !subsystem) return 1;
-      if(subsystem==='action-isolated') return isolated?1:0;
-      const weights=layerWeights[currentMode]?.[currentLayer];
-      return weights?.[subsystem] ?? 0;
-    }
-    function subLayerAllowsObject(object){
-      const list=Array.isArray(object.material)?object.material:[object.material];
-      return list.some(material=>subLayerFactor(material.userData.subsystem)>.24);
-    }
-    renderer.domElement.addEventListener('pointermove',e=>{ updatePointer(e); });
-    renderer.domElement.addEventListener('pointerleave',()=>{ pointer.set(5,5); if(!pinnedRoot){ if(hoverRoot)setHighlight(hoverRoot,false); hoverRoot=null; infoCard.classList.remove('visible'); }});
-    renderer.domElement.addEventListener('click',e=>{
-      if(currentMode==='music') return;
-      updatePointer(e); raycaster.setFromCamera(pointer,camera);
-      const hits=raycaster.intersectObjects(interactiveMeshes,false).filter(h=>
-        isShown(h.object) && systemActiveInMode(h.object.userData.system) && subLayerAllowsObject(h.object)
-      );
-      const hit=hits[0];
-      if(!hit){ clearInfo(); return; }
-      const root=hit.object.userData.semanticRoot;
-      if(pinnedRoot && pinnedRoot!==root) setHighlight(pinnedRoot,false);
-      pinnedRoot=root; hoverRoot=root; setHighlight(root,true); showInfo(root,true);
-    });
-    addEventListener('keydown',e=>{ if(e.key==='Escape') clearInfo(); });
+      function switchMode(mode){
+        currentMode=mode;
+        document.querySelectorAll('.mode').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.mode===mode)));
+        const data=modes[mode];
+        number.textContent=data.number;
+        title.textContent=data.title;
+        copy.textContent=data.copy;
+        stateMain.textContent=data.title;
+        stateSub.textContent=data.status;
+        setNodeVisibility(mode);
+        app.classList.remove('menu-open');
+      }
 
-    // The opening twelve measures of Bach's Prelude in C major, BWV 846,
-    // drive the same 88-key event stream used by the visible mechanism.
-    let slow=false, audioCtx=null, musicPlaying=false, musicOffset=0, musicStarted=0, lastMusicTime=0, nextMusicEvent=0;
-    const activeNotes=new Map();
-    const pedalState={sustain:0,una:0,sostenuto:0};
-    const sostenutoHeld=new Set();
-    const musicBeat=60/76;
-    const bachVoicings=[
-      [48,52,55,60,64],
-      [48,50,57,62,65],
-      [47,50,55,62,65],
-      [48,52,55,60,64],
-      [48,52,57,64,69],
-      [48,50,54,57,62],
-      [47,50,55,62,67],
-      [47,48,52,55,60],
-      [45,48,52,55,60],
-      [50,54,57,60,64],
-      [43,47,50,55,59],
-      [43,45,52,57,60]
-    ];
-    const bachFigure=[0,1,2,3,4,2,3,4,0,1,2,3,4,2,3,4];
-    const musicEvents=[];
-    bachVoicings.forEach((voicing,bar)=>{
-      const t=bar*4*musicBeat;
-      bachFigure.forEach((voiceIndex,k)=>{
-        const opening=k%8===0;
-        const lowVoice=voiceIndex<2;
-        musicEvents.push({
-          t:t+k*(musicBeat/4),
-          n:voicing[voiceIndex],
-          d:(opening?1.28:.92)*musicBeat,
-          v:opening ? .58 : (lowVoice ? .45 : .34)
+      document.querySelectorAll('.mode').forEach(button=>button.addEventListener('click',()=>switchMode(button.dataset.mode)));
+      document.getElementById('mobile-menu').addEventListener('click',()=>app.classList.toggle('menu-open'));
+      document.getElementById('reset').addEventListener('click',()=>{if(api&&api.recenterCamera)api.recenterCamera();});
+
+      function viewerFailure(){
+        loading.classList.add('done');
+        notice.classList.add('visible');
+        stateSub.textContent='Unable to load 3D reference';
+      }
+      function initializeViewer(){
+        if(typeof window.Sketchfab!=='function'){viewerFailure();return;}
+        const client=new window.Sketchfab('1.12.1',frame);
+        client.init(MODEL_UID,{
+          autostart:1,transparent:0,preload:1,ui_controls:0,ui_infos:0,ui_inspector:0,ui_watermark:1,
+          ui_hint:0,ui_stop:0,ui_fullscreen:1,ui_settings:0,ui_vr:0,ui_ar:0,ui_help:0,
+          success(instance){
+            api=instance;
+            api.start();
+            api.addEventListener('viewerready',()=>{
+              api.getNodeMap((error,map)=>{
+                if(!error&&map) nodes=Object.values(map).filter(node=>Number.isFinite(node.instanceID));
+                setNodeVisibility(currentMode);
+              });
+              loading.classList.add('done');
+              stateSub.textContent=modes[currentMode].status;
+            });
+          },
+          error:viewerFailure
         });
-      });
-    });
-    musicEvents.sort((a,b)=>a.t-b.t);
-    const musicLoopDuration=bachVoicings.length*4*musicBeat;
+      }
+      initializeViewer();
+      setTimeout(()=>{if(!api) viewerFailure();},20000);
 
-    function midiIndex(midi){ return Math.max(0,Math.min(87,midi-21)); }
-    async function ensureAudio(){
-      if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-      if(audioCtx.state==='suspended') await audioCtx.resume();
-    }
-    function playPianoTone(midi,duration=.7,velocity=.5){
-      if(!audioCtx) return;
-      const now=audioCtx.currentTime;
-      const frequency=440*Math.pow(2,(midi-69)/12);
-      const tail=Math.max(.72,duration*1.9);
-      const master=audioCtx.createGain();
-      const filter=audioCtx.createBiquadFilter();
-      filter.type='lowpass'; filter.frequency.value=Math.min(7200,2200+frequency*5); filter.Q.value=.7;
-      master.gain.setValueAtTime(.0001,now);
-      master.gain.exponentialRampToValueAtTime(.052*velocity,now+.012);
-      master.gain.exponentialRampToValueAtTime(.0001,now+tail);
-      master.connect(filter).connect(audioCtx.destination);
-      [[1,'triangle',1],[2,'sine',.24],[3,'sine',.08]].forEach(([multiple,type,level],index)=>{
-        const oscillator=audioCtx.createOscillator();
-        const partial=audioCtx.createGain();
-        oscillator.type=type;
-        oscillator.frequency.value=frequency*multiple;
-        oscillator.detune.value=(index-1)*1.6;
-        partial.gain.value=level;
-        oscillator.connect(partial).connect(master);
-        oscillator.start(now); oscillator.stop(now+tail+.04);
-      });
-    }
-    function triggerMechanism(midi,duration=.7,audible=false,velocity=.5){
-      const i=midiIndex(midi), now=performance.now();
-      activeNotes.set(i,{start:now,duration:Math.max(320,duration*1000),value:0});
-      stringPulse[i]=1;
-      if(audible) playPianoTone(midi,duration,velocity);
-    }
-    function currentMusicTime(){
-      if(!audioCtx) return musicOffset;
-      return musicPlaying?((audioCtx.currentTime-musicStarted)%musicLoopDuration):musicOffset;
-    }
-    async function startMusic(){
-      if(musicPlaying) return;
-      await ensureAudio();
-      musicPlaying=true;
-      musicStarted=audioCtx.currentTime-musicOffset;
-      $('#play-music').textContent='❚❚ Pause Bach';
-      statusSub.textContent='Bach · Prelude in C major, BWV 846';
-    }
-    function pauseMusic(){
-      if(!musicPlaying) return;
-      musicOffset=currentMusicTime();
-      musicPlaying=false;
-      $('#play-music').textContent='▶ Play Bach';
-      statusSub.textContent=currentMode==='music'?'Bach paused':(activeLayerView()?.note || 'Hover to identify');
-    }
-    async function toggleMusic(){
-      if(musicPlaying) pauseMusic();
-      else await startMusic();
-    }
-    function updateMusicTimeline(){
-      if(!musicPlaying) return;
-      const time=currentMusicTime();
-      if(time<lastMusicTime) nextMusicEvent=0;
-      while(nextMusicEvent<musicEvents.length && musicEvents[nextMusicEvent].t<=time+.018){
-        if(musicEvents[nextMusicEvent].t>=lastMusicTime-.03 || time<lastMusicTime){
-          const event=musicEvents[nextMusicEvent];
-          triggerMechanism(event.n,event.d,true,event.v);
+      let audioContext=null;
+      let playing=false;
+      let offset=0;
+      let startedAt=0;
+      let nextEvent=0;
+      let lastTime=0;
+      const beat=60/76;
+      const voicings=[
+        [48,52,55,60,64],[48,50,57,62,65],[47,50,55,62,65],[48,52,55,60,64],
+        [48,52,57,64,69],[48,50,54,57,62],[47,50,55,62,67],[47,48,52,55,60],
+        [45,48,52,55,60],[50,54,57,60,64],[43,47,50,55,59],[43,45,52,57,60]
+      ];
+      const figure=[0,1,2,3,4,2,3,4,0,1,2,3,4,2,3,4];
+      const events=[];
+      voicings.forEach((chord,bar)=>figure.forEach((index,step)=>events.push({
+        time:bar*4*beat+step*beat/4,note:chord[index],duration:(step%8===0?1.25:.9)*beat,velocity:step%8===0 ? .58 : (index<2 ? .43 : .33)
+      })));
+      const loopDuration=voicings.length*4*beat;
+
+      async function ensureAudio(){
+        if(!audioContext)audioContext=new(window.AudioContext||window.webkitAudioContext)();
+        if(audioContext.state==='suspended')await audioContext.resume();
+      }
+      function tone(midi,duration,velocity){
+        if(!audioContext)return;
+        const now=audioContext.currentTime;
+        const frequency=440*Math.pow(2,(midi-69)/12);
+        const tail=Math.max(.8,duration*2.1);
+        const master=audioContext.createGain();
+        const filter=audioContext.createBiquadFilter();
+        filter.type='lowpass';filter.frequency.setValueAtTime(Math.min(6800,2100+frequency*5),now);filter.Q.value=.65;
+        master.gain.setValueAtTime(.0001,now);master.gain.exponentialRampToValueAtTime(.045*velocity,now+.012);master.gain.exponentialRampToValueAtTime(.0001,now+tail);
+        master.connect(filter).connect(audioContext.destination);
+        [[1,'triangle',1],[2,'sine',.22],[3,'sine',.07]].forEach(([multiple,type,level],i)=>{
+          const osc=audioContext.createOscillator();const gain=audioContext.createGain();
+          osc.type=type;osc.frequency.value=frequency*multiple;osc.detune.value=(i-1)*1.4;gain.gain.value=level;
+          osc.connect(gain).connect(master);osc.start(now);osc.stop(now+tail+.05);
+        });
+      }
+      function musicTime(){return playing?((audioContext.currentTime-startedAt)%loopDuration):offset;}
+      async function startMusic(){
+        await ensureAudio();playing=true;startedAt=audioContext.currentTime-offset;playButton.textContent='❚❚ Pause Bach';stateSub.textContent='Bach · Prelude in C major, BWV 846';requestAnimationFrame(tick);
+      }
+      function pauseMusic(){
+        offset=musicTime();playing=false;playButton.textContent='▶ Play Bach';stateSub.textContent=modes[currentMode].status;
+      }
+      function tick(){
+        if(!playing)return;
+        const time=musicTime();
+        if(time<lastTime){nextEvent=0;}
+        while(nextEvent<events.length&&events[nextEvent].time<=time+.02){
+          if(events[nextEvent].time>=lastTime-.03||time<lastTime){const e=events[nextEvent];tone(e.note,e.duration,e.velocity);}
+          nextEvent++;
         }
-        nextMusicEvent++;
+        lastTime=time;requestAnimationFrame(tick);
       }
-      lastMusicTime=time;
-    }
-
-    $('#play-music').addEventListener('click',()=>void toggleMusic());
-    $('#slow').addEventListener('click',()=>{
-      slow=!slow; $('#slow').classList.toggle('active',slow); $('#slow').textContent=slow?'Normal Speed':'Slow Motion';
-      statusSub.textContent=slow?(musicPlaying?'Bach playing · slow mechanics':'Slow demonstration'):(musicPlaying?'Bach playing · mechanism synchronized':'Mechanisms ready');
-    });
-
-    async function demoStroke(){ await ensureAudio(); triggerMechanism(73,slow?2.2:.82,true,.72); }
-    $('#demo-key').addEventListener('click',demoStroke);
-    $('#play-stroke').addEventListener('click',demoStroke);
-    $('#repeat-stroke').addEventListener('click',()=>{
-      if(repeatTimer){ clearInterval(repeatTimer); repeatTimer=null; $('#repeat-stroke').classList.remove('active'); }
-      else { demoStroke(); repeatTimer=setInterval(demoStroke,slow?2500:980); $('#repeat-stroke').classList.add('active'); }
-    });
-    $('#isolate-action').addEventListener('click',()=>setIsolated(!isolated));
-
-    $('#sustain-demo').addEventListener('click',()=>{
-      pedalState.sustain=pedalState.sustain?0:1; $('#sustain-demo').classList.toggle('active',!!pedalState.sustain);
-    });
-    $('#una-demo').addEventListener('click',()=>{
-      pedalState.una=pedalState.una?0:1; $('#una-demo').classList.toggle('active',!!pedalState.una);
-    });
-    $('#sostenuto-demo').addEventListener('click',async()=>{
-      await ensureAudio();
-      [48,52,55].forEach(i=>{ triggerMechanism(21+i,2.2,true,.5); sostenutoHeld.add(i); });
-      pedalState.sostenuto=1; $('#sostenuto-demo').classList.add('active');
-      setTimeout(()=>{ pedalState.sostenuto=0; sostenutoHeld.clear(); $('#sostenuto-demo').classList.remove('active'); },5200);
-    });
-
-    $('#explode').addEventListener('input',e=>{
-      explodeAmount=Number(e.target.value)/100; $('#explode-value').textContent=e.target.value+'%';
-    });
-    $('#reset').addEventListener('click',()=>{
-      clearInfo();
-      const view=activeLayerView();
-      if(view) moveCamera(view.camera,view.target); else setCameraPreset(currentMode);
-      $('#explode').value=0; $('#explode-value').textContent='0%'; explodeAmount=0;
-    });
-
-    let sustainValue=0, unaValue=0;
-    function smoothstep01(v){ return v*v*(3-2*v); }
-    function updateMechanics(now,dt){
-      sustainValue+=((pedalState.sustain?1:0)-sustainValue)*Math.min(1,dt*8);
-      unaValue+=((pedalState.una?1:0)-unaValue)*Math.min(1,dt*8);
-      pedals[2].rotation.x=.13*sustainValue;
-      pedals[0].rotation.x=.13*unaValue;
-      pedals[1].rotation.x=.13*pedalState.sostenuto;
-      actionRow.position.x=.105*unaValue;
-      if(!isolated) keyboardRoot.position.x=.105*unaValue; else keyboardRoot.position.x=0;
-
-      for(let i=0;i<88;i++){
-        const st=activeNotes.get(i);
-        let target=0, hammer=0;
-        if(st){
-          const elapsed=now-st.start, dur=st.duration*(slow?2.5:1);
-          if(elapsed<dur || pedalState.sustain || sostenutoHeld.has(i)) {
-            const attack=Math.min(1,elapsed/(slow?120:46));
-            const release=(pedalState.sustain||sostenutoHeld.has(i))?1:Math.min(1,Math.max(0,(dur-elapsed)/(slow?340:145)));
-            target=smoothstep01(Math.min(attack,release));
-            const hp=elapsed/(slow?500:175); hammer=hp<1?Math.sin(Math.PI*Math.min(1,hp)):0;
-          } else activeNotes.delete(i);
-        }
-        keyStates[i].value+=(target-keyStates[i].value)*Math.min(1,dt*(slow?7:18));
-        const actionValue=keyStates[i].value;
-        keys[i].rotation.x=-.043*actionValue;
-        capstanRefs[i].position.y=capstanRefs[i].userData.baseY+.045*actionValue;
-        wippenRefs[i].rotation.x=.11*actionValue;
-        jackRefs[i].rotation.x=.14-.1*actionValue;
-        repetitionRefs[i].rotation.x=-.08+.07*actionValue;
-        hammerRefs[i].rotation.x=.84-.32*hammer;
-        backcheckRefs[i].rotation.x=-.25-.08*actionValue;
-        if(i<damperRefs.length){
-          const damperUp=Math.max(target,sustainValue,sostenutoHeld.has(i)?1:0);
-          damperRefs[i].position.y=damperRefs[i].userData.baseY+.28*damperUp;
-        }
-        if(stringPulse[i]>0){
-          stringPulse[i]=Math.max(0,stringPulse[i]-dt*1.45);
-          stringObjects[i].traverse(segment=>{
-            if(!segment.isMesh) return;
-            const list=Array.isArray(segment.material)?segment.material:[segment.material];
-            list.forEach(m=>{ if(m.emissive){m.emissive.setHex(stringPulse[i]>.03?0x4b2b0e:0);m.emissiveIntensity=stringPulse[i]*.7;} });
-          });
-        }
-      }
-
-      const junctionState=keyStates[junctionIndex].value;
-      const junctionNote=activeNotes.get(junctionIndex);
-      let junctionStrike=0;
-      if(junctionNote){
-        const phase=(now-junctionNote.start)/(slow?500:175);
-        if(phase<1) junctionStrike=Math.sin(Math.PI*Math.min(1,phase));
-      }
-      junctionMotion.key.rotation.x=-.043*junctionState;
-      junctionMotion.wippen.rotation.x=.11*junctionState;
-      junctionMotion.hammer.rotation.x=.84-.32*junctionStrike;
-      junctionMotion.damper.position.y=.28*Math.max(junctionState,sustainValue,sostenutoHeld.has(junctionIndex)?1:0);
-
-      const central=keyStates[midiIndex(73)].value;
-      iso.keyPivot.rotation.x=-.06*central;
-      iso.wippenPivot.rotation.x=.17*central;
-      iso.jackPivot.rotation.x=-.16*central;
-      iso.repetition.rotation.x=-.08+.09*central;
-      const centralNote=activeNotes.get(midiIndex(73));
-      let strike=0;
-      if(centralNote){ const ep=(now-centralNote.start)/(slow?520:180); if(ep<1) strike=Math.sin(Math.PI*ep); }
-      iso.hammerPivot.rotation.x=.55-.82*strike;
-      iso.backcheck.rotation.x=-.28-.12*central;
-    }
-
-    function updateOpacity(dt){
-      const desired=visibilityByMode[currentMode];
-      const distance=camera.position.distanceTo(controls.target);
-      const closeTarget=currentMode==='music' ? THREE.MathUtils.clamp((distance-3.8)/5.2,.12,1) : 1;
-      shellFade+= (closeTarget-shellFade)*Math.min(1,dt*4.5);
-      for(const m of materialsManaged){
-        const emphasis=Math.min(1,(desired[m.userData.system]??0)*subLayerFactor(m.userData.subsystem));
-        let target=emphasis*m.userData.baseOpacity;
-        if(m.userData.shell) target=currentMode==='music'?target*shellFade:0;
-        if(m.userData.soundboardComponent && currentMode==='mechanism') target=0;
-        m.userData.currentOpacity+=(target-m.userData.currentOpacity)*Math.min(1,dt*(reducedMotion?30:5.5));
-        m.opacity=m.userData.currentOpacity;
-        m.depthWrite=m.opacity>.66;
-        m.visible=m.opacity>.008;
-      }
-      for(const o of explodeObjects){
-        const base=o.userData.basePosition, ex=o.userData.explode;
-        o.position.set(base.x+ex.x*explodeAmount,base.y+ex.y*explodeAmount,base.z+ex.z*explodeAmount);
-      }
-    }
-
-    function updateHover(now){
-      if(currentMode==='music' || pinnedRoot){
-        if(currentMode==='music' && hoverRoot){setHighlight(hoverRoot,false);hoverRoot=null;infoCard.classList.remove('visible');}
-        return;
-      }
-      raycaster.setFromCamera(pointer,camera);
-      const hits=raycaster.intersectObjects(interactiveMeshes,false).filter(h=>{
-        const s=h.object.userData.system;
-        return isShown(h.object) && systemActiveInMode(s) && subLayerAllowsObject(h.object);
-      });
-      const root=hits[0]?.object.userData.semanticRoot || null;
-      if(root!==hoverRoot){
-        if(hoverRoot)setHighlight(hoverRoot,false);
-        hoverRoot=root; hoverTimer=now;
-        infoCard.classList.remove('visible');
-      }
-      if(root && now-hoverTimer>180){ setHighlight(root,true); showInfo(root,false); }
-    }
-
-    function updateCamera(now){
-      if(!cameraTween) return;
-      const t=Math.min(1,(now-cameraTween.start)/cameraTween.duration), e=1-Math.pow(1-t,3);
-      camera.position.lerpVectors(cameraTween.fromPos,cameraTween.toPos,e);
-      controls.target.lerpVectors(cameraTween.fromTarget,cameraTween.toTarget,e);
-      if(t>=1) cameraTween=null;
-    }
-
-    function resize(){
-      const r=wrap.getBoundingClientRect();
-      renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);
-      camera.aspect=r.width/r.height; camera.updateProjectionMatrix();
-    }
-    new ResizeObserver(resize).observe(wrap); resize();
-
-    let last=performance.now();
-    function animate(now){
-      requestAnimationFrame(animate);
-      const dt=Math.min(.05,(now-last)/1000); last=now;
-      updateCamera(now); updateMusicTimeline(); updateMechanics(now,dt); updateOpacity(dt); updateHover(now);
-      controls.update(); renderer.render(scene,camera);
-    }
-    requestAnimationFrame(animate);
-    requestAnimationFrame(()=>setTimeout(()=>$('#loading').classList.add('done'),reducedMotion?40:650));
+      playButton.addEventListener('click',()=>{if(playing)pauseMusic();else startMusic();});
+    })();
   </script>
 </body>
 </html>
