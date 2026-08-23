@@ -28,7 +28,7 @@
     .main-view{z-index:1;opacity:1}
     .action-view{z-index:2;opacity:0;pointer-events:none}
     .app[data-mode="core"] .main-view{opacity:0;pointer-events:none}
-    .app[data-mode="core"] .action-view{opacity:1;pointer-events:auto}
+    .app[data-mode="core"] .action-view{left:252px;opacity:1;pointer-events:auto}
     .app.playing:not([data-mode="core"]) .action-view{inset:auto 24px 91px auto;width:min(430px,34vw);height:min(255px,31vh);opacity:1;pointer-events:auto;border:1px solid rgba(218,182,105,.42);border-radius:5px;box-shadow:0 18px 60px rgba(0,0,0,.58)}
     .mechanism-tag{position:absolute;z-index:3;left:12px;bottom:11px;padding:7px 9px;border:1px solid rgba(220,190,125,.26);background:rgba(12,11,10,.82);color:#c7b283;font-size:8px;letter-spacing:.13em;text-transform:uppercase;pointer-events:none}
     .viewer::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(12,11,10,.8) 0,transparent 24%),linear-gradient(0deg,rgba(10,9,8,.42),transparent 25%)}
@@ -72,10 +72,10 @@
     .credits a:hover{color:#aaa39a}
     .mobile-menu{display:none;position:absolute;z-index:15;top:16px;left:16px;width:42px;height:42px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--ink)}
     @media(max-width:980px){
-      .sidebar{width:76px;padding:24px 9px 100px}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:none}.brand{margin:0 4px 19px}.mode{grid-template-columns:1fr;place-items:center;padding:8px}.heading{left:108px;max-width:calc(100vw - 330px)}.loading{left:76px}.controlbar{left:98px}.state{display:none}
+      .sidebar{width:76px;padding:24px 9px 100px}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:none}.brand{margin:0 4px 19px}.mode{grid-template-columns:1fr;place-items:center;padding:8px}.heading{left:108px;max-width:calc(100vw - 330px)}.loading{left:76px}.controlbar{left:98px}.state{display:none}.app[data-mode="core"] .action-view{left:76px}
     }
     @media(max-width:700px){
-      .sidebar{width:250px;transform:translateX(-100%);transition:transform .25s ease}.app.menu-open .sidebar{transform:none}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:block}.mode{grid-template-columns:31px 1fr;place-items:initial}.mobile-menu{display:block}.heading{top:20px;left:72px;right:12px;max-width:none}.heading h2{font-size:27px}.heading p,.help{display:none}.loading{left:0}.controlbar{left:12px;right:12px;bottom:10px;flex-wrap:wrap}.credits{right:16px;bottom:82px}.credits a:last-child{display:none}.viewer::after{background:linear-gradient(0deg,rgba(10,9,8,.45),transparent 27%)}.app.playing:not([data-mode="core"]) .action-view{inset:auto 12px 108px 12px;width:auto;height:190px}
+      .sidebar{width:250px;transform:translateX(-100%);transition:transform .25s ease}.app.menu-open .sidebar{transform:none}.brand h1,.brand p,.brand small,.mode-label,.sidebar-note{display:block}.mode{grid-template-columns:31px 1fr;place-items:initial}.mobile-menu{display:block}.heading{top:20px;left:72px;right:12px;max-width:none}.heading h2{font-size:27px}.heading p,.help{display:none}.loading{left:0}.controlbar{left:12px;right:12px;bottom:10px;flex-wrap:wrap}.credits{right:16px;bottom:82px}.credits a:last-child{display:none}.viewer::after{background:linear-gradient(0deg,rgba(10,9,8,.45),transparent 27%)}.app[data-mode="core"] .action-view{left:0}.app.playing:not([data-mode="core"]) .action-view{inset:auto 12px 108px 12px;width:auto;height:190px}
     }
     @media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
   </style>
@@ -88,7 +88,7 @@
       </div>
       <div class="viewer-layer action-view" id="action-view" aria-label="Animated grand-piano key and action mechanism">
         <iframe id="action-frame" title="Animated grand piano key, action, hammer and damper mechanism" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
-        <div class="mechanism-tag">Live mechanism · key → action → hammer</div>
+        <div class="mechanism-tag">Automatic key stroke · key → action → hammer</div>
       </div>
     </div>
 
@@ -158,7 +158,7 @@
       const modes={
         complete:{number:'Mode I · Complete Instrument',title:'Complete Piano',copy:'A professionally modeled concert grand in its complete physical state. Orbit freely and zoom into the cabinet, keyboard, lid, pedals, string bed, and action.',status:'All original model components visible'},
         interior:{number:'Mode II · Outer Shell Removed',title:'Piano Without Its Outer Shell',copy:'The cabinet skin, lid, music rack, fallboard, and legs are removed in place. The plate, soundboard, bridges, strings, keyboard, hammers, dampers, and action remain aligned.',status:'Outer shell hidden · components remain aligned'},
-        core:{number:'Mode III · Working Core',title:'Key–Action Mechanism in Motion',copy:'A dedicated grand-action section removes the surrounding case and soundboard entirely. Play Bach to watch the key, capstan, wippen, jack, repetition lever, hammer and damper work as one continuous mechanism.',status:'Shell removed · animated working core visible'}
+        core:{number:'Mode III · Working Core',title:'Key–Action Mechanism in Motion',copy:'The camera opens tightly on the playable end of the key and follows its downstroke through the capstan, wippen, jack, repetition lever, hammer and damper. The stroke loops automatically for close inspection.',status:'Automatic key stroke · working core visible'}
       };
 
       const shellMatchers=[
@@ -170,6 +170,7 @@
       let api=null;
       let actionApi=null;
       let actionReady=false;
+      let actionFocusApplied=false;
       let nodes=[];
       let currentMode='complete';
       let hiddenIds=new Set();
@@ -202,7 +203,8 @@
         stateSub.textContent=playing?'Bach · Prelude in C major, BWV 846':(mode==='core'&&!actionReady?'Loading animated mechanism':data.status);
         if(mode!=='core') setNodeVisibility(mode);
         if(actionReady){
-          if(playing) actionApi.play();
+          if(mode==='core'&&!actionFocusApplied) focusAction(1.15);
+          if(mode==='core'||playing) actionApi.play();
           else actionApi.pause();
         }
         app.classList.remove('menu-open');
@@ -212,8 +214,19 @@
       document.getElementById('mobile-menu').addEventListener('click',()=>app.classList.toggle('menu-open'));
       document.getElementById('reset').addEventListener('click',()=>{
         const active=currentMode==='core'?actionApi:api;
-        if(active&&active.recenterCamera) active.recenterCamera();
+        if(currentMode==='core'&&actionReady) focusAction(.85);
+        else if(active&&active.recenterCamera) active.recenterCamera();
       });
+
+      const actionFocus={
+        position:[5.52718012,-4.42836482,1.04538518],
+        target:[1.320733468,3.2748719259,-1.664398135]
+      };
+      function focusAction(duration){
+        if(!actionReady||!actionApi.setCameraLookAt) return;
+        actionApi.setCameraLookAt(actionFocus.position,actionFocus.target,duration||0);
+        actionFocusApplied=true;
+      }
 
       function viewerFailure(){
         loading.classList.add('done');
@@ -249,7 +262,7 @@
         const client=new window.Sketchfab('1.12.1',actionFrame);
         client.init(ACTION_UID,{
           autostart:1,preload:1,transparent:0,animation_autoplay:0,ui_controls:0,ui_infos:0,
-          ui_inspector:0,ui_watermark:1,ui_hint:0,ui_stop:0,ui_fullscreen:1,ui_settings:0,
+          ui_inspector:0,ui_annotations:0,annotations_visible:0,ui_watermark:1,ui_hint:0,ui_stop:0,ui_fullscreen:1,ui_settings:0,
           ui_vr:0,ui_ar:0,ui_help:0,
           success(instance){
             actionApi=instance;
@@ -261,9 +274,10 @@
                   const action=animations.find(item=>/action/i.test(item.name))||animations[0];
                   actionApi.setCurrentAnimationByUID(action[0]||action.uid);
                   actionApi.setCycleMode('one');
-                  if(playing) actionApi.play();
+                  if(currentMode==='core'||playing) actionApi.play();
                 }
               });
+              if(currentMode==='core') focusAction(.9);
               if(currentMode==='core') stateSub.textContent=playing?'Bach playing · action moving':modes.core.status;
             });
           },
@@ -297,7 +311,7 @@
         app.classList.remove('playing');
         playButton.textContent='▶ Play Bach';
         stateSub.textContent=modes[currentMode].status;
-        if(actionReady) actionApi.pause();
+        if(actionReady&&currentMode!=='core') actionApi.pause();
       }
       playButton.addEventListener('click',()=>{if(playing)pauseMusic();else startMusic();});
       bachAudio.addEventListener('error',()=>{
