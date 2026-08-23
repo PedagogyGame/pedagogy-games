@@ -128,9 +128,10 @@
 
 const canvas=document.getElementById("sky"),ctx=canvas.getContext("2d",{alpha:false});
 const ruler=document.getElementById("rulerCanvas"),rctx=ruler.getContext("2d");
-const DPR=Math.min(devicePixelRatio||1,2), WORLD={w:2400,h:7600,surfaceY:6100,maxAlt:6200,minAlt:-100/5280};
+const DPR=Math.min(devicePixelRatio||1,2), WORLD={w:9800,h:7600,surfaceY:6100,maxAlt:6200,minAlt:-100/5280};
 let vw=innerWidth,vh=innerHeight, labelsOn=true, hovered=null, selected=null, last=performance.now(), flash=0;
-const view={x:1200,y:5500,scale:.62,targetX:1200,targetY:5500,targetScale:.62};
+const POS={center:4900,storm:5200,cirrus:1750,alto:2050,stratus:1200,cumulus:8050,aurora:1650,meteor:6950,craft:8150,balloon:2600,city:7600,station:3500};
+const view={x:POS.storm,y:5500,scale:.62,targetX:POS.storm,targetY:5500,targetScale:.62};
 const ui={
  activeAlt:document.getElementById("activeAlt"),activeLayer:document.getElementById("activeLayer"),activeTemp:document.getElementById("activeTemp"),activeDensity:document.getElementById("activeDensity"),activeWind:document.getElementById("activeWind"),
  target:document.getElementById("targetName"),hint:document.getElementById("hint"),feedback:document.getElementById("feedback"),feedbackText:document.getElementById("feedbackText"),next:document.getElementById("nextBtn"),progress:document.getElementById("progress"),tooltip:document.getElementById("tooltip")
@@ -147,12 +148,11 @@ function yToAlt(y){
   for(let i=0;i<knots.length-1;i++){let p=knots[i],q=knots[i+1];if(y>=p.y&&y<=q.y){let t=(y-p.y)/(q.y-p.y);return p.a+t*(q.a-p.a)}}return WORLD.maxAlt;
 }
 function layerAt(a){if(a<0)return a>-0.02?"Subsurface":"Earth interior";if(a<10.5)return"Troposphere";if(a<31)return"Stratosphere";if(a<53)return"Mesosphere";if(a<375)return"Thermosphere";return"Exosphere"}
-// The atmosphere is extraordinarily tall. A responsive horizontal atlas projection keeps
-// the full overview broad and legible, then relaxes toward natural proportions as we zoom in.
-function atlasStretch(scale=view.scale){return 1+3.2/(1+Math.pow(scale/.34,2))}
-function screenToWorld(sx,sy){let xs=view.scale*atlasStretch();return{x:(sx-vw/2)/xs+view.x,y:(sy-vh/2)/view.scale+view.y}}
-function worldToScreen(x,y){return{x:(x-view.x)*view.scale*atlasStretch()+vw/2,y:(y-view.y)*view.scale+vh/2}}
-function clampView(){view.targetScale=Math.max(.105,Math.min(3.6,view.targetScale));let pad=vh/(2*view.targetScale);view.targetY=Math.max(-100+pad,Math.min(WORLD.h+100-pad,view.targetY));let xPad=Math.min(WORLD.w/2,Math.min(900,vw/(2*view.targetScale*atlasStretch(view.targetScale))));view.targetX=Math.max(xPad,Math.min(WORLD.w-xPad,view.targetX))}
+// One uniform scale is used in both directions. The world itself is wide, so the overview
+// fills a landscape screen without distorting the proportions of a single object.
+function screenToWorld(sx,sy){return{x:(sx-vw/2)/view.scale+view.x,y:(sy-vh/2)/view.scale+view.y}}
+function worldToScreen(x,y){return{x:(x-view.x)*view.scale+vw/2,y:(y-view.y)*view.scale+vh/2}}
+function clampView(){view.targetScale=Math.max(.105,Math.min(3.6,view.targetScale));let yPad=vh/(2*view.targetScale),xPad=Math.min(WORLD.w/2,vw/(2*view.targetScale));view.targetY=Math.max(-100+yPad,Math.min(WORLD.h+100-yPad,view.targetY));view.targetX=Math.max(xPad,Math.min(WORLD.w-xPad,view.targetX))}
 function resize(){vw=innerWidth;vh=innerHeight;for(const c of [canvas,ruler]){c.width=Math.round(c.clientWidth*DPR);c.height=Math.round(c.clientHeight*DPR)}ctx.setTransform(DPR,0,0,DPR,0,0);rctx.setTransform(DPR,0,0,DPR,0,0)}
 addEventListener("resize",resize);resize();
 
@@ -175,16 +175,16 @@ const regions=[];
 function region(o){regions.push(o);return o}
 layers.forEach(l=>region({id:l.id,name:l.name,type:"band",a0:l.a0,a1:l.a1,desc:l.desc}));
 region({id:"ozone",name:"Ozone layer",type:"band",a0:12,a1:22,desc:"A stratospheric zone of elevated ozone that absorbs much ultraviolet radiation."});
-region({id:"jet",name:"Subtropical jet stream",type:"ellipse",x:1450,y:altToY(8.6),rx:720,ry:95,desc:"A fast, narrow current near the upper troposphere."});
-region({id:"aurora",name:"Aurora",type:"rect",x:410,y:altToY(95),w:720,h:440,desc:"Light emitted when energetic particles excite upper-atmosphere gases."});
-region({id:"meteor",name:"Meteor ablation zone",type:"rect",x:1410,y:altToY(48),w:650,h:520,desc:"The mesosphere is where many meteoroids heat, ablate, and become visible meteors."});
-region({id:"cumulonimbus",name:"Cumulonimbus cloud",type:"ellipse",x:1280,y:altToY(4.8),rx:410,ry:930,desc:"A towering thunderstorm cloud with vigorous updrafts and a spreading anvil."});
-region({id:"anvil",name:"Anvil top",type:"rect",x:1050,y:altToY(9.2),w:840,h:300,desc:"Ice-rich cloud spreading laterally near the stable tropopause."});
-region({id:"lightning",name:"Lightning channel",type:"poly",pts:[[1285,altToY(5.1)],[1218,altToY(3.2)],[1255,altToY(2.1)],[1175,altToY(.25)]],radius:70,desc:"A branching electrical discharge connecting charged regions and the ground."});
-region({id:"cirrus",name:"Cirrus cloud",type:"ellipse",x:585,y:altToY(7.8),rx:430,ry:120,desc:"High, wispy clouds composed chiefly of ice crystals."});
-region({id:"altocumulus",name:"Altocumulus cloud",type:"ellipse",x:505,y:altToY(2.8),rx:370,ry:175,desc:"Patchy mid-level heaps or rolls of water droplets, sometimes mixed with ice."});
-region({id:"stratus",name:"Stratus cloud",type:"rect",x:255,y:altToY(.7),w:590,h:170,desc:"A low, widespread gray cloud sheet with a relatively uniform base."});
-region({id:"cumulus",name:"Cumulus cloud",type:"ellipse",x:1940,y:altToY(1.35),rx:260,ry:250,desc:"A detached, puffy cloud produced by localized convection."});
+region({id:"jet",name:"Subtropical jet stream",type:"ellipse",x:POS.center,y:altToY(8.6),rx:4250,ry:95,desc:"A fast, narrow current near the upper troposphere."});
+region({id:"aurora",name:"Aurora",type:"rect",x:750,y:altToY(95),w:1900,h:440,desc:"Light emitted when energetic particles excite upper-atmosphere gases."});
+region({id:"meteor",name:"Meteor ablation zone",type:"rect",x:6100,y:altToY(48),w:2200,h:520,desc:"The mesosphere is where many meteoroids heat, ablate, and become visible meteors."});
+region({id:"cumulonimbus",name:"Cumulonimbus cloud",type:"ellipse",x:POS.storm,y:altToY(4.8),rx:560,ry:930,desc:"A towering thunderstorm cloud with vigorous updrafts and a spreading anvil."});
+region({id:"anvil",name:"Anvil top",type:"rect",x:4450,y:altToY(9.2),w:1600,h:300,desc:"Ice-rich cloud spreading laterally near the stable tropopause."});
+region({id:"lightning",name:"Lightning channel",type:"poly",pts:[[POS.storm,altToY(5.1)],[POS.storm-75,altToY(3.2)],[POS.storm-30,altToY(2.1)],[POS.storm-125,altToY(.25)]],radius:70,desc:"A branching electrical discharge connecting charged regions and the ground."});
+region({id:"cirrus",name:"Cirrus cloud",type:"ellipse",x:POS.cirrus,y:altToY(7.8),rx:760,ry:150,desc:"High, wispy clouds composed chiefly of ice crystals."});
+region({id:"altocumulus",name:"Altocumulus cloud",type:"ellipse",x:POS.alto,y:altToY(2.8),rx:770,ry:175,desc:"Patchy mid-level heaps or rolls of water droplets, sometimes mixed with ice."});
+region({id:"stratus",name:"Stratus cloud",type:"rect",x:420,y:altToY(.7),w:1700,h:170,desc:"A low, widespread gray cloud sheet with a relatively uniform base."});
+region({id:"cumulus",name:"Cumulus cloud",type:"ellipse",x:POS.cumulus,y:altToY(1.35),rx:390,ry:300,desc:"A detached, puffy cloud produced by localized convection."});
 region({id:"tropopause",name:"Tropopause",type:"band",a0:10.2,a1:10.8,desc:"The boundary region capping the troposphere and limiting most weather."});
 region({id:"karman",name:"Kármán line",type:"band",a0:61.8,a1:62.4,desc:"A conventional 100-kilometer boundary often used to mark the beginning of space."});
 region({id:"surface",name:"Earth's surface",type:"band",a0:-.019,a1:.08,desc:"The reference altitude from which this atlas measures upward."});
@@ -207,7 +207,7 @@ function hitRegion(p){
   } return null;
 }
 
-function beginPathWorld(){let xs=view.scale*atlasStretch();ctx.setTransform(DPR*xs,0,0,DPR*view.scale,DPR*(vw/2-view.x*xs),DPR*(vh/2-view.y*view.scale))}
+function beginPathWorld(){ctx.setTransform(DPR*view.scale,0,0,DPR*view.scale,DPR*(vw/2-view.x*view.scale),DPR*(vh/2-view.y*view.scale))}
 
 function drawBackground(){
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle="#030811";ctx.fillRect(0,0,vw,vh);beginPathWorld();
@@ -221,15 +221,15 @@ function drawEarth(){
   // distant curvature and surface silhouette
   ctx.save();ctx.beginPath();ctx.moveTo(0,sy+25);ctx.quadraticCurveTo(WORLD.w/2,sy-55,WORLD.w,sy+25);ctx.lineTo(WORLD.w,WORLD.h);ctx.lineTo(0,WORLD.h);ctx.closePath();ctx.clip();
   let crust=ctx.createLinearGradient(0,sy,0,sy+165);crust.addColorStop(0,"#173729");crust.addColorStop(.18,"#27462d");crust.addColorStop(.2,"#755536");crust.addColorStop(1,"#473425");ctx.fillStyle=crust;ctx.fillRect(0,sy-60,WORLD.w,220);
-  let mantle=ctx.createRadialGradient(1200,8000,30,1200,8000,2600);mantle.addColorStop(0,"#ffd273");mantle.addColorStop(.35,"#d16634");mantle.addColorStop(.72,"#6f2b28");mantle.addColorStop(1,"#311a20");ctx.fillStyle=mantle;ctx.fillRect(0,sy+150,WORLD.w,WORLD.h-sy);
-  ctx.fillStyle="rgba(255,169,77,.18)";for(let i=0;i<8;i++){ctx.beginPath();ctx.ellipse(300+i*310,6740+(i%3)*170,180,55,-.2,0,Math.PI*2);ctx.fill()}
-  ctx.fillStyle="#d67d46";ctx.beginPath();ctx.arc(1200,8250,1000,Math.PI,Math.PI*2);ctx.fill();ctx.fillStyle="#f1b55f";ctx.beginPath();ctx.arc(1200,8250,570,Math.PI,Math.PI*2);ctx.fill();ctx.restore();
+  let mantle=ctx.createRadialGradient(POS.center,8300,60,POS.center,8300,5800);mantle.addColorStop(0,"#ffd273");mantle.addColorStop(.35,"#d16634");mantle.addColorStop(.72,"#6f2b28");mantle.addColorStop(1,"#311a20");ctx.fillStyle=mantle;ctx.fillRect(0,sy+150,WORLD.w,WORLD.h-sy);
+  ctx.fillStyle="rgba(255,169,77,.18)";for(let i=0;i<24;i++){ctx.beginPath();ctx.ellipse(260+i*410,6740+(i%3)*170,180,55,-.2,0,Math.PI*2);ctx.fill()}
+  ctx.fillStyle="#d67d46";ctx.beginPath();ctx.arc(POS.center,9000,2700,Math.PI,Math.PI*2);ctx.fill();ctx.fillStyle="#f1b55f";ctx.beginPath();ctx.arc(POS.center,9000,1450,Math.PI,Math.PI*2);ctx.fill();ctx.restore();
   // terrain and ocean at surface
-  ctx.fillStyle="#244a35";ctx.beginPath();ctx.moveTo(0,sy+15);ctx.quadraticCurveTo(480,sy-12,860,sy+8);ctx.quadraticCurveTo(1200,sy-58,1510,sy+8);ctx.quadraticCurveTo(1900,sy-8,WORLD.w,sy+18);ctx.lineTo(WORLD.w,sy+60);ctx.lineTo(0,sy+60);ctx.closePath();ctx.fill();
-  ctx.fillStyle="rgba(80,154,175,.7)";ctx.beginPath();ctx.moveTo(0,sy+2);ctx.quadraticCurveTo(310,sy-10,640,sy+5);ctx.lineTo(640,sy+45);ctx.lineTo(0,sy+45);ctx.fill();
+  ctx.fillStyle="#244a35";ctx.beginPath();ctx.moveTo(0,sy+15);ctx.quadraticCurveTo(1600,sy-12,3000,sy+8);ctx.quadraticCurveTo(POS.center,sy-58,6500,sy+8);ctx.quadraticCurveTo(8200,sy-8,WORLD.w,sy+18);ctx.lineTo(WORLD.w,sy+60);ctx.lineTo(0,sy+60);ctx.closePath();ctx.fill();
+  ctx.fillStyle="rgba(80,154,175,.7)";ctx.beginPath();ctx.moveTo(0,sy+2);ctx.quadraticCurveTo(1050,sy-10,2600,sy+5);ctx.lineTo(2600,sy+45);ctx.lineTo(0,sy+45);ctx.fill();
   // small city and weather station
-  ctx.fillStyle="#27353a";for(let i=0;i<9;i++){let x=1660+i*54,h=35+(i%4)*22;ctx.fillRect(x,sy-h,42,h)}
-  ctx.strokeStyle="#bfc8c2";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(975,sy);ctx.lineTo(975,sy-82);ctx.moveTo(940,sy-58);ctx.lineTo(1012,sy-58);ctx.stroke();
+  ctx.fillStyle="#27353a";for(let i=0;i<11;i++){let x=POS.city+i*62,h=35+(i%4)*22;ctx.fillRect(x,sy-h,48,h)}
+  ctx.strokeStyle="#bfc8c2";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(POS.station,sy);ctx.lineTo(POS.station,sy-82);ctx.moveTo(POS.station-35,sy-58);ctx.lineTo(POS.station+37,sy-58);ctx.stroke();
 }
 
 function cloudBlob(x,y,rx,ry,stops,seed=1){
@@ -238,54 +238,51 @@ function cloudBlob(x,y,rx,ry,stops,seed=1){
 }
 function drawClouds(t){
   // stratus shelf
-  ctx.fillStyle="rgba(206,221,223,.67)";ctx.beginPath();ctx.moveTo(230,altToY(.55));ctx.bezierCurveTo(350,altToY(.78),640,altToY(.8),850,altToY(.55));ctx.bezierCurveTo(700,altToY(.38),390,altToY(.38),230,altToY(.55));ctx.fill();
+  ctx.fillStyle="rgba(206,221,223,.67)";ctx.beginPath();ctx.moveTo(420,altToY(.55));ctx.bezierCurveTo(760,altToY(.78),1580,altToY(.8),2120,altToY(.55));ctx.bezierCurveTo(1740,altToY(.38),790,altToY(.38),420,altToY(.55));ctx.fill();
   // altocumulus cells
-  for(let i=0;i<7;i++)cloudBlob(270+i*88,altToY(2.8)+(i%2)*35,74,42,[[0,"rgba(240,244,239,.82)"],[1,"rgba(163,184,192,.42)"]],31+i);
+  for(let i=0;i<9;i++)cloudBlob(1330+i*180,altToY(2.8)+(i%2)*35,115,52,[[0,"rgba(240,244,239,.82)"],[1,"rgba(163,184,192,.42)"]],31+i);
   // cirrus swept filaments
-  ctx.strokeStyle="rgba(235,247,246,.68)";ctx.lineCap="round";for(let i=0;i<8;i++){ctx.lineWidth=10+i%3*5;ctx.beginPath();ctx.moveTo(270+i*45,altToY(7.45)-i*6);ctx.bezierCurveTo(470,altToY(8.25)-i*9,650,altToY(7.55)+i*7,920,altToY(7.95)+i*3);ctx.stroke()}
+  ctx.strokeStyle="rgba(235,247,246,.68)";ctx.lineCap="round";for(let i=0;i<9;i++){ctx.lineWidth=10+i%3*5;ctx.beginPath();ctx.moveTo(850+i*82,altToY(7.45)-i*6);ctx.bezierCurveTo(1400,altToY(8.25)-i*9,2050,altToY(7.55)+i*7,2850,altToY(7.95)+i*3);ctx.stroke()}
   // fair-weather cumulus
-  cloudBlob(1940,altToY(1.2),250,165,[[0,"rgba(255,255,247,.95)"],[.6,"rgba(218,231,229,.88)"],[1,"rgba(110,144,158,.48)"]],91);
-  for(const [dx,dy,rx,ry] of [[-125,-80,130,115],[30,-135,175,145],[150,-55,125,105]])cloudBlob(1940+dx,altToY(1.2)+dy,rx,ry,[[0,"rgba(255,255,250,.94)"],[1,"rgba(176,204,209,.52)"]],110+dx);
+  cloudBlob(POS.cumulus,altToY(1.2),340,205,[[0,"rgba(255,255,247,.95)"],[.6,"rgba(218,231,229,.88)"],[1,"rgba(110,144,158,.48)"]],91);
+  for(const [dx,dy,rx,ry] of [[-180,-90,175,140],[30,-170,215,175],[205,-65,165,130]])cloudBlob(POS.cumulus+dx,altToY(1.2)+dy,rx,ry,[[0,"rgba(255,255,250,.94)"],[1,"rgba(176,204,209,.52)"]],110+dx);
   // great cumulonimbus: dark base, stacked towers, illuminated anvil
-  const cy=altToY(4.4);cloudBlob(1285,cy+430,350,600,[[0,"rgba(164,183,187,.96)"],[.42,"rgba(96,120,132,.94)"],[1,"rgba(32,48,65,.9)"]],211);
-  const towers=[[-145,240,180,250],[-15,0,245,370],[155,125,220,300],[-110,-330,210,250],[95,-430,230,285]];
-  towers.forEach((q,i)=>cloudBlob(1285+q[0],cy+q[1],q[2],q[3],[[0,"rgba(244,244,232,.93)"],[.48,"rgba(178,196,198,.9)"],[1,"rgba(69,91,109,.72)"]],350+i));
-  let ay=altToY(9.15);ctx.fillStyle="rgba(222,231,226,.91)";ctx.beginPath();ctx.moveTo(880,ay+65);ctx.bezierCurveTo(1060,ay-95,1370,ay-115,1550,ay-50);ctx.bezierCurveTo(1715,ay-18,1855,ay+20,1930,ay+78);ctx.bezierCurveTo(1620,ay+130,1180,ay+145,880,ay+65);ctx.fill();
+  const cy=altToY(4.4);cloudBlob(POS.storm,cy+430,480,600,[[0,"rgba(164,183,187,.96)"],[.42,"rgba(96,120,132,.94)"],[1,"rgba(32,48,65,.9)"]],211);
+  const towers=[[-210,240,240,250],[-20,0,325,370],[225,125,290,300],[-160,-330,280,250],[135,-430,310,285]];
+  towers.forEach((q,i)=>cloudBlob(POS.storm+q[0],cy+q[1],q[2],q[3],[[0,"rgba(244,244,232,.93)"],[.48,"rgba(178,196,198,.9)"],[1,"rgba(69,91,109,.72)"]],350+i));
+  let ay=altToY(9.15);ctx.fillStyle="rgba(222,231,226,.91)";ctx.beginPath();ctx.moveTo(4400,ay+65);ctx.bezierCurveTo(4700,ay-95,5180,ay-115,5480,ay-50);ctx.bezierCurveTo(5770,ay-18,6040,ay+20,6210,ay+78);ctx.bezierCurveTo(5750,ay+130,4930,ay+145,4400,ay+65);ctx.fill();
   // subtle precipitation curtains
-  ctx.strokeStyle="rgba(82,139,161,.2)";ctx.lineWidth=9;for(let i=0;i<21;i++){let x=1010+i*27;ctx.beginPath();ctx.moveTo(x,cy+730);ctx.lineTo(x-60,altToY(.2));ctx.stroke()}
+  ctx.strokeStyle="rgba(82,139,161,.2)";ctx.lineWidth=9;for(let i=0;i<28;i++){let x=4780+i*31;ctx.beginPath();ctx.moveTo(x,cy+730);ctx.lineTo(x-60,altToY(.2));ctx.stroke()}
 }
 
 function drawJet(){
-  let y=altToY(8.6);ctx.save();ctx.strokeStyle="rgba(213,245,255,.55)";ctx.lineWidth=22;ctx.setLineDash([50,35]);ctx.beginPath();ctx.moveTo(160,y);ctx.bezierCurveTo(700,y-90,1180,y+70,2240,y-35);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(222,249,255,.75)";for(let x=340;x<2200;x+=320){ctx.beginPath();ctx.moveTo(x+45,y-8);ctx.lineTo(x,y-35);ctx.lineTo(x+6,y+8);ctx.fill()}ctx.restore();
+  let y=altToY(8.6);ctx.save();ctx.strokeStyle="rgba(213,245,255,.55)";ctx.lineWidth=22;ctx.setLineDash([50,35]);ctx.beginPath();ctx.moveTo(500,y);ctx.bezierCurveTo(2700,y-90,5700,y+70,9300,y-35);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(222,249,255,.75)";for(let x=900;x<9200;x+=720){ctx.beginPath();ctx.moveTo(x+45,y-8);ctx.lineTo(x,y-35);ctx.lineTo(x+6,y+8);ctx.fill()}ctx.restore();
 }
 function drawOzone(){let y0=altToY(22),y1=altToY(12),g=ctx.createLinearGradient(0,y0,0,y1);g.addColorStop(0,"rgba(86,195,220,0)");g.addColorStop(.5,"rgba(100,220,231,.17)");g.addColorStop(1,"rgba(86,195,220,0)");ctx.fillStyle=g;ctx.fillRect(0,y0,WORLD.w,y1-y0)}
 function drawUpper(t){
   // aurora curtains
-  ctx.save();ctx.globalCompositeOperation="screen";for(let i=0;i<7;i++){let x=390+i*95,g=ctx.createLinearGradient(x,altToY(150),x,altToY(75));g.addColorStop(0,"rgba(73,255,199,0)");g.addColorStop(.35,i%2?"rgba(80,255,211,.22)":"rgba(175,93,255,.18)");g.addColorStop(1,"rgba(82,255,207,0)");ctx.strokeStyle=g;ctx.lineWidth=55;ctx.beginPath();ctx.moveTo(x,altToY(150));ctx.bezierCurveTo(x+80*Math.sin(t*.0002+i),altToY(125),x-90,altToY(100),x+30*Math.cos(t*.0003+i),altToY(75));ctx.stroke()}ctx.restore();
+  ctx.save();ctx.globalCompositeOperation="screen";for(let i=0;i<10;i++){let x=750+i*190,g=ctx.createLinearGradient(x,altToY(150),x,altToY(75));g.addColorStop(0,"rgba(73,255,199,0)");g.addColorStop(.35,i%2?"rgba(80,255,211,.22)":"rgba(175,93,255,.18)");g.addColorStop(1,"rgba(82,255,207,0)");ctx.strokeStyle=g;ctx.lineWidth=78;ctx.beginPath();ctx.moveTo(x,altToY(150));ctx.bezierCurveTo(x+80*Math.sin(t*.0002+i),altToY(125),x-90,altToY(100),x+30*Math.cos(t*.0003+i),altToY(75));ctx.stroke()}ctx.restore();
   // meteors
-  for(let i=0;i<4;i++){let x=1500+i*170,y=altToY(49)+i*80;let g=ctx.createLinearGradient(x-240,y-180,x,y);g.addColorStop(0,"rgba(255,197,104,0)");g.addColorStop(1,"rgba(255,239,192,.95)");ctx.strokeStyle=g;ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x-260,y-210);ctx.lineTo(x,y);ctx.stroke();ctx.fillStyle="#fff5d8";ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fill()}
+  for(let i=0;i<5;i++){let x=6300+i*430,y=altToY(49)+i*70;let g=ctx.createLinearGradient(x-240,y-180,x,y);g.addColorStop(0,"rgba(255,197,104,0)");g.addColorStop(1,"rgba(255,239,192,.95)");ctx.strokeStyle=g;ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(x-260,y-210);ctx.lineTo(x,y);ctx.stroke();ctx.fillStyle="#fff5d8";ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);ctx.fill()}
   // spacecraft and balloon
-  ctx.fillStyle="#c8d5da";ctx.fillRect(1680,altToY(250),155,22);ctx.fillStyle="#527ca3";ctx.fillRect(1595,altToY(250)-12,82,46);ctx.fillRect(1838,altToY(250)-12,82,46);ctx.strokeStyle="#dbe5e8";ctx.lineWidth=5;ctx.strokeRect(1718,altToY(250)-22,76,64);
-  ctx.fillStyle="rgba(239,232,208,.9)";ctx.beginPath();ctx.ellipse(420,altToY(21),52,72,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#cad3d3";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(390,altToY(20.6));ctx.lineTo(420,altToY(20.1));ctx.lineTo(450,altToY(20.6));ctx.stroke();
+  ctx.fillStyle="#c8d5da";ctx.fillRect(POS.craft-78,altToY(250),155,22);ctx.fillStyle="#527ca3";ctx.fillRect(POS.craft-163,altToY(250)-12,82,46);ctx.fillRect(POS.craft+80,altToY(250)-12,82,46);ctx.strokeStyle="#dbe5e8";ctx.lineWidth=5;ctx.strokeRect(POS.craft-40,altToY(250)-22,76,64);
+  ctx.fillStyle="rgba(239,232,208,.9)";ctx.beginPath();ctx.ellipse(POS.balloon,altToY(21),52,72,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#cad3d3";ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(POS.balloon-30,altToY(20.6));ctx.lineTo(POS.balloon,altToY(20.1));ctx.lineTo(POS.balloon+30,altToY(20.6));ctx.stroke();
 }
 
 function drawLightning(t){
   const pts=regions.find(r=>r.id==="lightning").pts;ctx.save();ctx.lineCap="round";ctx.lineJoin="round";ctx.globalCompositeOperation="screen";
   const pulse=.78+.22*Math.sin(t*.013);for(const [w,a,c] of [[70,.05,"#66caff"],[31,.12,"#99dcff"],[12,.45,"#c8ecff"],[4,1,"#fff"]]){ctx.strokeStyle=c;ctx.globalAlpha=a*pulse;ctx.lineWidth=w;ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke()}
-  const branches=[[[1230,altToY(3.55)],[1080,altToY(3.0)],[1030,altToY(2.65)]],[[1240,altToY(2.55)],[1380,altToY(2.1)],[1410,altToY(1.65)]],[[1204,altToY(1.4)],[1080,altToY(1.0)]]];ctx.strokeStyle="#dff5ff";ctx.globalAlpha=.75*pulse;ctx.lineWidth=4;branches.forEach(b=>{ctx.beginPath();b.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke()});ctx.restore();
-  if(flash>0){ctx.save();ctx.globalCompositeOperation="screen";ctx.fillStyle=`rgba(194,232,255,${flash*.12})`;ctx.fillRect(780,altToY(10),1020,altToY(0)-altToY(10));ctx.restore();flash*=.91}
+  const branches=[[[POS.storm-55,altToY(3.55)],[POS.storm-205,altToY(3.0)],[POS.storm-255,altToY(2.65)]],[[POS.storm-45,altToY(2.55)],[POS.storm+95,altToY(2.1)],[POS.storm+125,altToY(1.65)]],[[POS.storm-80,altToY(1.4)],[POS.storm-205,altToY(1.0)]]];ctx.strokeStyle="#dff5ff";ctx.globalAlpha=.75*pulse;ctx.lineWidth=4;branches.forEach(b=>{ctx.beginPath();b.forEach((p,i)=>i?ctx.lineTo(...p):ctx.moveTo(...p));ctx.stroke()});ctx.restore();
+  if(flash>0){ctx.save();ctx.globalCompositeOperation="screen";ctx.fillStyle=`rgba(194,232,255,${flash*.12})`;ctx.fillRect(POS.storm-900,altToY(10),1800,altToY(0)-altToY(10));ctx.restore();flash*=.91}
   // distant strikes
-  ctx.strokeStyle="rgba(210,238,255,.26)";ctx.lineWidth=4;for(const x of [880,1775]){ctx.beginPath();ctx.moveTo(x,altToY(3.8));ctx.lineTo(x-25,altToY(2.2));ctx.lineTo(x+5,altToY(.4));ctx.stroke()}
+  ctx.strokeStyle="rgba(210,238,255,.26)";ctx.lineWidth=4;for(const x of [3650,6900]){ctx.beginPath();ctx.moveTo(x,altToY(3.8));ctx.lineTo(x-25,altToY(2.2));ctx.lineTo(x+5,altToY(.4));ctx.stroke()}
 }
 
 function drawLabels(){if(!labelsOn)return;ctx.save();ctx.textBaseline="middle";
-  // Counter-scale the lettering horizontally so the wide atlas projection expands the
-  // meteorology, not the glyphs. Font sizes remain readable in the complete overview.
-  const stretch=atlasStretch(),X=x=>x*stretch;ctx.scale(1/stretch,1);
   const layerFont=clamp(15/view.scale,28,116),detailFont=clamp(10/view.scale,17,75),tagFont=clamp(10.5/view.scale,18,78);
-  const layerLabels=[...layers].reverse();layerLabels.forEach(l=>{let y=(altToY(l.a0)+altToY(l.a1))/2;ctx.fillStyle="rgba(236,247,251,.78)";ctx.font=`700 ${layerFont}px Inter, sans-serif`;ctx.fillText(l.name.toUpperCase(),X(55),y);ctx.font=`500 ${detailFont}px Inter, sans-serif`;ctx.fillStyle="rgba(218,232,239,.58)";ctx.fillText(`${l.a0===0?"Surface":fmtAlt(l.a0)} — ${fmtAlt(l.a1)}`,X(58),y+detailFont*1.8)});
-  const tags=[{x:540,y:altToY(7.8),t:"CIRRUS"},{x:390,y:altToY(2.45),t:"ALTOCUMULUS"},{x:300,y:altToY(.42),t:"STRATUS"},{x:1900,y:altToY(.7),t:"CUMULUS"},{x:1430,y:altToY(6.6),t:"CUMULONIMBUS"},{x:1470,y:altToY(8.95),t:"ANVIL"},{x:1210,y:altToY(.15),t:"PRIMARY LIGHTNING CHANNEL"},{x:380,y:altToY(21),t:"WEATHER BALLOON"},{x:1640,y:altToY(250),t:"LOW EARTH ORBIT"},{x:1470,y:altToY(47),t:"METEOR ABLATION"}];ctx.font=`750 ${tagFont}px Inter,sans-serif`;ctx.fillStyle="rgba(244,250,251,.82)";tags.forEach(d=>{ctx.strokeStyle="rgba(255,255,255,.38)";ctx.lineWidth=1.5/view.scale;ctx.beginPath();ctx.moveTo(X(d.x),d.y);ctx.lineTo(X(d.x+30),d.y-tagFont*1.3);ctx.lineTo(X(d.x+230),d.y-tagFont*1.3);ctx.stroke();ctx.fillText(d.t,X(d.x+38),d.y-tagFont*2.05)});
-  for(const [a,t] of [[10.5,"TROPOPAUSE"],[31,"STRATOPAUSE"],[53,"MESOPAUSE"],[62.1,"KÁRMÁN LINE"]]){let y=altToY(a);ctx.strokeStyle="rgba(255,255,255,.28)";ctx.setLineDash([12/view.scale,13/view.scale]);ctx.beginPath();ctx.moveTo(X(0),y);ctx.lineTo(X(WORLD.w),y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(243,247,249,.68)";ctx.font=`700 ${tagFont}px Inter,sans-serif`;ctx.fillText(t,X(2040),y-tagFont*1.35)}ctx.restore()}
+  const layerLabels=[...layers].reverse();layerLabels.forEach(l=>{let y=(altToY(l.a0)+altToY(l.a1))/2;ctx.fillStyle="rgba(236,247,251,.78)";ctx.font=`700 ${layerFont}px Inter, sans-serif`;ctx.fillText(l.name.toUpperCase(),220,y);ctx.font=`500 ${detailFont}px Inter, sans-serif`;ctx.fillStyle="rgba(218,232,239,.58)";ctx.fillText(`${l.a0===0?"Surface":fmtAlt(l.a0)} — ${fmtAlt(l.a1)}`,225,y+detailFont*1.8)});
+  const tags=[{x:POS.cirrus+80,y:altToY(7.8),t:"CIRRUS"},{x:POS.alto-120,y:altToY(2.45),t:"ALTOCUMULUS"},{x:POS.stratus,y:altToY(.42),t:"STRATUS"},{x:POS.cumulus,y:altToY(.7),t:"CUMULUS"},{x:POS.storm+260,y:altToY(6.6),t:"CUMULONIMBUS"},{x:POS.storm+360,y:altToY(8.95),t:"ANVIL"},{x:POS.storm-70,y:altToY(.15),t:"PRIMARY LIGHTNING CHANNEL"},{x:POS.balloon-40,y:altToY(21),t:"WEATHER BALLOON"},{x:POS.craft-120,y:altToY(250),t:"LOW EARTH ORBIT"},{x:POS.meteor-120,y:altToY(47),t:"METEOR ABLATION"}];ctx.font=`750 ${tagFont}px Inter,sans-serif`;ctx.fillStyle="rgba(244,250,251,.82)";tags.forEach(d=>{ctx.strokeStyle="rgba(255,255,255,.38)";ctx.lineWidth=1.5/view.scale;ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x+30,d.y-tagFont*1.3);ctx.lineTo(d.x+230,d.y-tagFont*1.3);ctx.stroke();ctx.fillText(d.t,d.x+38,d.y-tagFont*2.05)});
+  for(const [a,t,x] of [[10.5,"TROPOPAUSE",8650],[31,"STRATOPAUSE",8650],[53,"MESOPAUSE",8250],[62.1,"KÁRMÁN LINE",8950]]){let y=altToY(a);ctx.strokeStyle="rgba(255,255,255,.28)";ctx.setLineDash([12/view.scale,13/view.scale]);ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WORLD.w,y);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle="rgba(243,247,249,.68)";ctx.font=`700 ${tagFont}px Inter,sans-serif`;ctx.fillText(t,x,y-tagFont*1.35)}ctx.restore()}
 
 function drawSelection(){let r=selected||hovered;if(!r)return;ctx.save();ctx.strokeStyle=selected?"rgba(255,255,255,.95)":"rgba(255,255,255,.48)";ctx.fillStyle=selected?"rgba(255,255,255,.055)":"rgba(255,255,255,.018)";ctx.lineWidth=(selected?5:3)/view.scale;ctx.setLineDash(selected?[]:[10/view.scale,8/view.scale]);
   if(r.type==="band"){let y0=altToY(r.a1),y1=altToY(r.a0);ctx.fillRect(0,y0,WORLD.w,y1-y0);ctx.strokeRect(5,y0+3,WORLD.w-10,y1-y0-6)}
@@ -314,18 +311,18 @@ requestAnimationFrame(draw);setInterval(()=>{if(Math.random()<.38)flash=1},3200)
 
 let pointer={down:false,x:0,y:0,startX:0,startY:0,moved:false};
 canvas.addEventListener("pointerdown",e=>{pointer={down:true,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,moved:false};canvas.setPointerCapture(e.pointerId);canvas.classList.add("dragging")});
-canvas.addEventListener("pointermove",e=>{ui.tooltip.style.left=e.clientX+"px";ui.tooltip.style.top=e.clientY+"px";if(pointer.down){let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;view.targetX-=dx/(view.targetScale*atlasStretch(view.targetScale));view.targetY-=dy/view.targetScale;pointer.x=e.clientX;pointer.y=e.clientY;pointer.moved ||= Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)>6;clampView()}else{let p=screenToWorld(e.clientX,e.clientY);hovered=hitRegion(p);if(hovered){ui.tooltip.textContent=hovered.name;ui.tooltip.classList.add("show")}else ui.tooltip.classList.remove("show")}});
+canvas.addEventListener("pointermove",e=>{ui.tooltip.style.left=e.clientX+"px";ui.tooltip.style.top=e.clientY+"px";if(pointer.down){let dx=e.clientX-pointer.x,dy=e.clientY-pointer.y;view.targetX-=dx/view.targetScale;view.targetY-=dy/view.targetScale;pointer.x=e.clientX;pointer.y=e.clientY;pointer.moved ||= Math.hypot(e.clientX-pointer.startX,e.clientY-pointer.startY)>6;clampView()}else{let p=screenToWorld(e.clientX,e.clientY);hovered=hitRegion(p);if(hovered){ui.tooltip.textContent=hovered.name;ui.tooltip.classList.add("show")}else ui.tooltip.classList.remove("show")}});
 canvas.addEventListener("pointerup",e=>{canvas.classList.remove("dragging");if(!pointer.moved)answer(hitRegion(screenToWorld(e.clientX,e.clientY)));pointer.down=false});
 canvas.addEventListener("pointerleave",()=>{hovered=null;ui.tooltip.classList.remove("show")});
-canvas.addEventListener("wheel",e=>{e.preventDefault();let before=screenToWorld(e.clientX,e.clientY),factor=Math.exp(-e.deltaY*.0011);view.targetScale*=factor;clampView();let ns=view.targetScale,nx=ns*atlasStretch(ns);view.targetX=before.x-(e.clientX-vw/2)/nx;view.targetY=before.y-(e.clientY-vh/2)/ns;clampView()},{passive:false});
+canvas.addEventListener("wheel",e=>{e.preventDefault();let before=screenToWorld(e.clientX,e.clientY),factor=Math.exp(-e.deltaY*.0011);view.targetScale*=factor;clampView();let ns=view.targetScale;view.targetX=before.x-(e.clientX-vw/2)/ns;view.targetY=before.y-(e.clientY-vh/2)/ns;clampView()},{passive:false});
 function zoom(f){view.targetScale*=f;clampView()}
 function go(x,y,s){view.targetX=x;view.targetY=y;view.targetScale=s;clampView()}
 document.getElementById("zoomIn").onclick=()=>zoom(1.35);document.getElementById("zoomOut").onclick=()=>zoom(.74);
-document.getElementById("overview").onclick=()=>go(1200,3800,Math.min((vw-80)/(WORLD.w*3.65),(vh-26)/WORLD.h));
-document.getElementById("surface").onclick=()=>go(1260,altToY(4.3),.72);
+document.getElementById("overview").onclick=()=>go(POS.center,3800,Math.min((vw-40)/WORLD.w,(vh-26)/WORLD.h));
+document.getElementById("surface").onclick=()=>go(POS.storm,altToY(4.3),.72);
 document.getElementById("labels").onclick=()=>{labelsOn=!labelsOn;document.getElementById("labels").style.opacity=labelsOn?1:.45};
 document.getElementById("skipBtn").onclick=()=>setMission(missionIndex+1);ui.next.onclick=()=>setMission(missionIndex+1);
-document.getElementById("beginBtn").onclick=()=>{document.getElementById("intro").classList.add("hide");go(1260,altToY(4.4),.72)};
+document.getElementById("beginBtn").onclick=()=>{document.getElementById("intro").classList.add("hide");go(POS.storm,altToY(4.4),.72)};
 canvas.addEventListener("keydown",e=>{if(e.key==="+"||e.key==="=")zoom(1.25);if(e.key==="-")zoom(.8);if(e.key==="ArrowUp")view.targetY-=120/view.targetScale;if(e.key==="ArrowDown")view.targetY+=120/view.targetScale;if(e.key==="ArrowLeft")view.targetX-=120/view.targetScale;if(e.key==="ArrowRight")view.targetX+=120/view.targetScale;clampView()});
 </script>
 </body>
