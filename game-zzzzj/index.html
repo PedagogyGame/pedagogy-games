@@ -1,1658 +1,442 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pneumatic Despatch — a working model, c. 1925</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Ghost Helicopter — 3D Mechanical Explorer</title>
+<meta name="theme-color" content="#071015" />
 <style>
-:root{
-  --soot:#14181b; --panel:#1c2226; --panel2:#232b30; --rule:#39444a;
-  --paper:#e9e3d4; --paper-dim:#a8a293;
-  --patina:#4e9c8c;          /* oxidised copper — the coolers */
-  --brass:#c7a24a;
-  --druck:#b8402f;           /* Druckluft — compressed air */
-  --saug:#3e7ea6;            /* Saugluft — rarefied air */
-  --font-d:"Iowan Old Style",Georgia,"Times New Roman",serif;
-  --font-u:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
-  --font-b:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-}
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--soot);color:var(--paper);
-  font-family:var(--font-b);overflow:hidden;-webkit-font-smoothing:antialiased}
-canvas{display:block}
-#stage{position:fixed;inset:0}
-
-/* ---------- loading ---------- */
-#boot{position:fixed;inset:0;background:var(--soot);z-index:90;display:flex;
-  flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .6s}
-#boot h1{font-family:var(--font-d);font-weight:400;font-size:clamp(22px,3.4vw,38px);
-  letter-spacing:.02em;margin:0;text-align:center}
-#boot .sub{font-family:var(--font-u);font-size:11px;letter-spacing:.22em;
-  text-transform:uppercase;color:var(--patina)}
-#gauge{width:190px;height:190px;border-radius:50%;border:2px solid var(--rule);
-  position:relative;display:grid;place-items:center;background:
-  radial-gradient(circle at 50% 40%,#232b30,#161b1e)}
-#gauge .needle{position:absolute;width:2px;height:74px;background:var(--druck);
-  bottom:50%;transform-origin:50% 100%;transform:rotate(-130deg);
-  transition:transform .25s cubic-bezier(.4,1.6,.5,1)}
-#gauge .hub{width:12px;height:12px;border-radius:50%;background:var(--brass);position:absolute}
-#gauge .rd{position:absolute;bottom:34px;font-family:var(--font-u);font-size:11px;
-  color:var(--paper-dim);letter-spacing:.1em}
-#gauge .tick{position:absolute;width:1px;height:9px;background:var(--rule);
-  top:8px;left:50%;transform-origin:50% 87px}
-
-/* ---------- left rail: the parts schedule ---------- */
-#rail{position:fixed;left:0;top:0;bottom:0;width:326px;background:var(--panel);
-  border-right:1px solid var(--rule);display:flex;flex-direction:column;z-index:20;
-  transition:transform .3s ease}
-#rail.closed{transform:translateX(-326px)}
-#rail header{padding:16px 18px 12px;border-bottom:1px solid var(--rule)}
-#rail h1{font-family:var(--font-d);font-weight:400;font-size:19px;margin:0 0 3px;line-height:1.2}
-#rail .tag{font-family:var(--font-u);font-size:10px;letter-spacing:.18em;
-  text-transform:uppercase;color:var(--patina)}
-.section{padding:12px 18px;border-bottom:1px solid var(--rule)}
-.section h2{font-family:var(--font-u);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
-  color:var(--paper-dim);margin:0 0 9px;font-weight:400}
-.row{display:flex;flex-wrap:wrap;gap:6px}
-button{font-family:var(--font-b);font-size:12px;color:var(--paper);background:var(--panel2);
-  border:1px solid var(--rule);padding:6px 10px;border-radius:2px;cursor:pointer;
-  transition:background .15s,border-color .15s,color .15s}
-button:hover{background:#2c353b;border-color:var(--brass)}
-button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-button.on{background:#31403f;border-color:var(--patina);color:#cdece4}
-button.wide{flex:1 1 auto}
-#search{width:100%;background:#12171a;border:1px solid var(--rule);color:var(--paper);
-  padding:8px 10px;font-size:13px;border-radius:2px;font-family:var(--font-b)}
-#search::placeholder{color:#6d7378}
-#index{flex:1;overflow-y:auto;padding:6px 0 40px}
-#index::-webkit-scrollbar{width:9px}
-#index::-webkit-scrollbar-thumb{background:#333d43;border-radius:9px}
-.cat{font-family:var(--font-u);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
-  color:var(--patina);padding:14px 18px 6px;position:sticky;top:0;background:var(--panel)}
-.item{display:grid;grid-template-columns:34px 1fr;gap:8px;padding:5px 18px;cursor:pointer;
-  font-size:13px;line-height:1.35;border-left:2px solid transparent}
-.item:hover{background:#242c31;border-left-color:var(--brass)}
-.item.sel{background:#2a3439;border-left-color:var(--patina)}
-.item .no{font-family:var(--font-u);font-size:10.5px;color:#6f7a80;padding-top:2px}
-.item .de{display:block;font-size:11.5px;color:var(--paper-dim);font-style:italic}
-
-/* ---------- info plate ---------- */
-#plate{position:fixed;right:16px;top:16px;width:330px;max-height:calc(100% - 32px);
-  overflow-y:auto;background:var(--panel);border:1px solid var(--rule);border-radius:2px;
-  z-index:20;padding:0 0 14px;box-shadow:0 18px 44px rgba(0,0,0,.55)}
-#plate .bar{height:4px;background:var(--rule)}
-#plate .body{padding:14px 16px 0}
-#plate .no{font-family:var(--font-u);font-size:10px;letter-spacing:.16em;color:var(--brass)}
-#plate h3{font-family:var(--font-d);font-weight:400;font-size:20px;margin:5px 0 2px;line-height:1.15}
-#plate .de{font-family:var(--font-d);font-style:italic;font-size:14px;color:var(--patina);margin:0 0 10px}
-#plate p{font-size:13.4px;line-height:1.58;color:#cfcabb;margin:0 0 10px}
-#plate .meta{font-family:var(--font-u);font-size:10.5px;color:var(--paper-dim);
-  border-top:1px solid var(--rule);padding-top:9px;margin-top:4px;letter-spacing:.04em}
-#plate .close{position:absolute;right:8px;top:10px;background:none;border:none;color:#767f85;
-  font-size:17px;padding:2px 7px}
-#plate .close:hover{color:var(--paper);background:none}
-.pill{display:inline-block;font-family:var(--font-u);font-size:9.5px;letter-spacing:.14em;
-  text-transform:uppercase;padding:3px 7px;border-radius:2px;margin:0 5px 8px 0}
-.pill.d{background:rgba(184,64,47,.18);color:#e4a094;border:1px solid rgba(184,64,47,.5)}
-.pill.s{background:rgba(62,126,166,.18);color:#9cc6de;border:1px solid rgba(62,126,166,.5)}
-.pill.n{background:#2a3237;color:var(--paper-dim);border:1px solid var(--rule)}
-
-/* ---------- hover tag ---------- */
-#tag{position:fixed;pointer-events:none;z-index:30;background:rgba(20,24,27,.94);
-  border:1px solid var(--brass);border-left-width:3px;padding:5px 9px;border-radius:2px;
-  font-size:12.5px;display:none;max-width:250px;line-height:1.3}
-#tag .de{font-family:var(--font-d);font-style:italic;font-size:11.5px;color:var(--patina)}
-
-/* ---------- tour ---------- */
-#tour{position:fixed;left:calc(50% + 163px);transform:translateX(-50%);bottom:16px;z-index:25;
-  background:var(--panel);border:1px solid var(--rule);border-radius:2px;
-  padding:11px 14px;display:none;width:min(620px,calc(100% - 380px));
-  box-shadow:0 14px 34px rgba(0,0,0,.5)}
-#rail.closed ~ #tour{width:min(620px,calc(100% - 60px));left:50%}
-#tour .hd{display:flex;align-items:baseline;gap:10px;margin-bottom:5px}
-#tour .step{font-family:var(--font-u);font-size:10px;letter-spacing:.16em;color:var(--brass)}
-#tour .ti{font-family:var(--font-d);font-size:16px}
-#tour p{margin:0 0 9px;font-size:13px;line-height:1.5;color:#cfcabb}
-#tour .nav{display:flex;gap:7px;align-items:center}
-
-/* ---------- hints ---------- */
-#hint{position:fixed;bottom:14px;left:346px;z-index:15;font-family:var(--font-u);
-  font-size:10.5px;color:#6f7a80;letter-spacing:.05em;transition:left .3s,opacity .3s}
-#hint.hide{opacity:0}
-#rail.closed ~ #hint{left:60px}
-#railtog{position:fixed;left:336px;top:16px;z-index:22;transition:left .3s;
-  font-family:var(--font-u);font-size:11px;letter-spacing:.1em}
-#rail.closed ~ #railtog{left:12px}
-#scalebar{position:fixed;bottom:44px;left:346px;z-index:15;transition:left .3s}
-#rail.closed ~ #scalebar{left:60px}
-#scalebar .ln{width:120px;height:1px;background:#6f7a80;position:relative}
-#scalebar .ln:before,#scalebar .ln:after{content:"";position:absolute;width:1px;height:6px;
-  background:#6f7a80;bottom:0}
-#scalebar .ln:after{right:0}
-#scalebar span{font-family:var(--font-u);font-size:10px;color:#6f7a80}
-
-@media (max-width:900px){
-  #rail{width:290px}#rail.closed{transform:translateX(-290px)}
-  #railtog{left:300px}#hint{display:none}#scalebar{left:310px}
-  #plate{width:calc(100% - 32px);max-height:44%;top:auto;bottom:12px;right:16px}
-  #tour{width:calc(100% - 32px);bottom:12px;left:50%}
-}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  :root{
+    --bg:#071015;--panel:rgba(8,18,24,.88);--panel2:rgba(12,25,32,.94);--line:rgba(185,216,226,.16);
+    --text:#ecf4f6;--muted:#9eb0b8;--accent:#87b7cb;--accent2:#d5b569;--good:#82b68d;--warn:#d5b569;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+  button,input,select{font:inherit}
+  button{color:inherit}
+  #app{position:fixed;inset:0;background:radial-gradient(circle at 65% 25%,#203844 0,#0b171d 42%,#071015 78%);overflow:hidden}
+  #scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;outline:none}
+  .topbar{position:absolute;left:14px;top:14px;display:flex;gap:8px;z-index:5;flex-wrap:wrap;max-width:calc(100% - 28px)}
+  .topbar button,.view-menu button,.drawer button,.info button,.quiz button{min-height:42px;border:1px solid var(--line);background:rgba(7,15,20,.78);backdrop-filter:blur(12px);border-radius:10px;padding:0 13px;font-weight:760;letter-spacing:.01em;cursor:pointer}
+  .topbar button:hover,.view-menu button:hover,.drawer button:hover,.info button:hover,.quiz button:hover{background:rgba(21,42,51,.92)}
+  .topbar button.active{background:rgba(47,82,97,.86);border-color:rgba(132,189,212,.55)}
+  .topbar button:focus-visible,.view-menu button:focus-visible,.drawer button:focus-visible,.info button:focus-visible,.quiz button:focus-visible,input:focus-visible{outline:3px solid rgba(145,203,225,.72);outline-offset:2px}
+  .brand{position:absolute;left:16px;bottom:16px;z-index:4;background:rgba(5,12,16,.74);border:1px solid var(--line);border-radius:11px;padding:10px 12px;max-width:min(310px,calc(100% - 32px));backdrop-filter:blur(10px);pointer-events:none}
+  .brand b{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase}.brand span{font-size:11px;color:var(--muted);line-height:1.4}
+  .view-menu{position:absolute;left:14px;top:66px;z-index:7;display:none;gap:6px;padding:7px;background:rgba(5,12,16,.9);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(14px)}
+  .view-menu.open{display:grid;grid-template-columns:1fr 1fr}
+  .view-menu button{min-width:110px;font-size:12px}
+  .reticle{position:absolute;left:50%;top:50%;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);border:1px solid rgba(218,236,242,.22);pointer-events:none;opacity:.45}
+  .hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:4;display:flex;gap:12px;align-items:center;background:rgba(5,12,16,.7);border:1px solid var(--line);border-radius:11px;padding:8px 11px;font-size:10px;color:#b7c5ca;backdrop-filter:blur(10px);white-space:nowrap;pointer-events:none}
+  .hint kbd{border:1px solid rgba(255,255,255,.18);border-bottom-color:rgba(255,255,255,.28);background:rgba(255,255,255,.05);border-radius:5px;padding:2px 5px;color:#eaf1f3;font:inherit}
+  .info{position:absolute;right:14px;bottom:14px;z-index:6;width:min(330px,calc(100% - 28px));background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:15px;box-shadow:0 14px 50px rgba(0,0,0,.22);display:none;backdrop-filter:blur(16px)}
+  .info.open{display:block}
+  .info .eyebrow,.drawer .eyebrow,.quiz .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:850}
+  .info h2{font-size:18px;margin:6px 0 4px;line-height:1.15}.info .system{font-size:11px;color:#b8c8ce;margin-bottom:11px}.info p{font-size:12px;line-height:1.55;color:#c5d0d4;margin:0 0 12px}
+  .info .actions{display:flex;gap:7px;flex-wrap:wrap}.info button{font-size:11px;min-height:38px}
+  .close{position:absolute;right:9px;top:8px;width:34px;height:34px;min-height:34px!important;padding:0!important;border-radius:50%!important}
+  .drawer{position:absolute;right:14px;top:14px;bottom:14px;z-index:8;width:min(360px,calc(100% - 28px));background:var(--panel2);border:1px solid var(--line);border-radius:14px;display:none;overflow:hidden;backdrop-filter:blur(16px)}
+  .drawer.open{display:flex;flex-direction:column}
+  .drawer-head{padding:14px;border-bottom:1px solid var(--line)}.drawer h2{font-size:17px;margin:6px 0 10px}.drawer input{width:100%;min-height:42px;border-radius:9px;border:1px solid var(--line);background:#0c181e;color:var(--text);padding:0 11px;font-size:16px}
+  .parts{padding:8px;overflow:auto;-webkit-overflow-scrolling:touch}.group{border-bottom:1px solid rgba(255,255,255,.07);padding:4px 0 8px}.group-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#94a7ae;padding:8px 8px 5px;font-weight:850}.part-row{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0!important;background:transparent!important;border-radius:9px!important;min-height:38px!important;padding:7px 8px!important;font-size:11px!important;font-weight:650!important}.part-row:hover{background:rgba(255,255,255,.05)!important}.part-row .num{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.06);color:#c6d6db;font-size:10px;flex:0 0 auto}.part-row .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .quiz{position:absolute;right:14px;top:14px;z-index:8;width:min(340px,calc(100% - 28px));background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:15px;display:none;backdrop-filter:blur(16px)}
+  .quiz.open{display:block}.quiz h2{font-size:17px;margin:6px 0 4px}.quiz p{font-size:12px;line-height:1.45;color:#bdc9cd}.quiz .choices{display:grid;gap:7px}.quiz .choices button{text-align:left;min-height:44px;font-size:12px}.quiz .score{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:10px}.quiz .feedback{min-height:20px;font-size:11px;margin-top:9px;color:#d8e5e8}
+  .marker{position:absolute;z-index:3;pointer-events:none;transform:translate(-50%,-50%);display:none}.marker.show{display:block}.marker .pin{width:18px;height:18px;border-radius:50%;background:rgba(14,25,31,.92);border:1px solid rgba(211,232,239,.7);display:grid;place-items:center;font-size:11px;font-weight:900;box-shadow:0 0 0 5px rgba(111,174,200,.12)}.marker .label{position:absolute;left:23px;top:50%;transform:translateY(-50%);font-size:10px;white-space:nowrap;background:rgba(8,17,22,.82);border:1px solid var(--line);border-radius:7px;padding:5px 7px;color:#e7f0f3}
+  .toast{position:absolute;left:50%;top:78px;transform:translateX(-50%);z-index:10;background:rgba(7,16,21,.86);border:1px solid var(--line);border-radius:9px;padding:8px 11px;font-size:11px;opacity:0;transition:.2s;pointer-events:none}.toast.show{opacity:1}
+  .settings{position:absolute;left:14px;top:116px;z-index:6;width:min(360px,calc(100% - 28px));background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px;backdrop-filter:blur(16px);box-shadow:0 14px 50px rgba(0,0,0,.18)}
+  .settings h2{font-size:16px;margin:6px 0 6px}.settings .eyebrow{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:850}
+  .setting{margin-top:12px}.setting label{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;font-weight:760;margin-bottom:5px}
+  .setting small,.level-copy{display:block;color:#b8c6cc;font-size:11px;line-height:1.45}.level-copy{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+  .setting input[type=range]{width:100%;accent-color:#87b7cb}
+  .readout{font-size:11px;color:#dce8eb;font-weight:760}
+  .loading{position:absolute;inset:0;z-index:20;display:grid;place-items:center;background:#071015;text-align:center;padding:28px}.loading.hidden{display:none}.loading strong{display:block;font-size:15px;margin-bottom:5px}.loading span{font-size:12px;color:var(--muted)}
+  @media(max-width:720px){
+    .hint{display:none}.brand{bottom:10px;left:10px;max-width:220px}.brand span{display:none}.topbar{left:10px;top:10px;gap:6px}.topbar button{padding:0 10px;min-height:40px;font-size:12px}.view-menu{left:10px;top:58px}.info{right:10px;bottom:10px}.drawer,.quiz{right:10px;top:10px;bottom:10px;width:calc(100% - 20px)}.settings{left:10px;top:108px;width:min(300px,calc(100% - 20px))}
+  }
+  @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.toast{transition:none}}
 </style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+</script>
 </head>
 <body>
-<div id="stage"></div>
-
-<div id="boot">
-  <div id="gauge"><div class="needle" id="bootNeedle"></div><div class="hub"></div>
-    <div class="rd" id="bootRd">0 lb</div></div>
-  <h1>Pneumatic Despatch</h1>
-  <div class="sub" id="bootMsg">raising pressure&hellip;</div>
-</div>
-
-<aside id="rail">
-  <header>
-    <h1>Pneumatic Despatch</h1>
-    <div class="tag">City installation &middot; c. 1925</div>
-  </header>
-
-  <div class="section">
-    <h2>View</h2>
-    <div class="row">
-      <button class="wide" data-view="whole">Whole system</button>
-      <button class="wide" data-view="machine">Machine station</button>
-      <button class="wide" data-view="street">Street section</button>
-      <button class="wide" data-view="district">District office</button>
-      <button class="wide" data-view="rail">Mail terminal</button>
-      <button class="wide" data-view="store">Store cash system</button>
+<div id="app">
+  <canvas id="scene" tabindex="0" aria-label="Interactive 3D translucent helicopter mechanical explorer on a rooftop helipad"></canvas>
+  <div class="topbar">
+    <button id="inspectBtn" class="active" type="button">Inspect</button>
+    <button id="partsBtn" type="button">Parts</button>
+    <button id="motionBtn" class="active" type="button">Motion</button>
+    <button id="viewBtn" type="button">Views</button>
+    <button id="quizBtn" type="button">Study</button>
+  </div>
+  <div class="view-menu" id="viewMenu">
+    <button type="button" data-view="left">Left ¾</button>
+    <button type="button" data-view="right">Right ¾</button>
+    <button type="button" data-view="front">Front</button>
+    <button type="button" data-view="rear">Rear</button>
+    <button type="button" data-view="top">Top</button>
+    <button type="button" data-view="reset">Reset</button>
+  </div>
+  <div class="reticle"></div>
+  <div class="brand"><b>Ghost Helicopter</b><span>Drag to orbit · wheel/pinch to zoom · right-drag to pan · click machinery to inspect</span></div>
+  <div class="hint"><span><kbd>Drag</kbd> orbit</span><span><kbd>Wheel</kbd> zoom</span><span><kbd>Right drag</kbd> pan</span><span><kbd>Click</kbd> inspect</span></div>
+  <section class="settings" id="settingsPanel" aria-label="Model settings">
+    <div class="eyebrow">Model controls</div>
+    <h2>Complexity & shell</h2>
+    <div class="setting">
+      <label for="complexitySlider"><span>Breakdown level</span><span class="readout" id="complexityValue">5 / 8</span></label>
+      <input id="complexitySlider" type="range" min="1" max="8" step="1" value="5" />
+      <small id="complexityName">Rotor, transmission, controls, engine internals, and tail system.</small>
     </div>
-  </div>
-
-  <div class="section">
-    <h2>Show</h2>
-    <div class="row">
-      <button class="on wide" data-layer="walls">Building walls</button>
-      <button class="on wide" data-layer="soil">Soil</button>
-      <button class="on wide" data-layer="air">Air current</button>
-      <button class="on wide" data-layer="carriers">Carriers</button>
-      <button class="on wide" data-layer="labels">Station names</button>
-      <button class="wide" id="tourBtn">Guided tour</button>
+    <div class="setting">
+      <label for="shellSlider"><span>Shell solidity</span><span class="readout" id="shellValue">18%</span></label>
+      <input id="shellSlider" type="range" min="0" max="100" step="1" value="18" />
+      <small>Lower values make the body more ghostlike; higher values make the shell and frame more present.</small>
     </div>
-  </div>
-
-  <div class="section">
-    <h2>Find a part</h2>
-    <input id="search" placeholder="felt, sluice, Fahrrohr, oakum&hellip;" autocomplete="off">
-  </div>
-
-  <div id="index"></div>
-</aside>
-
-<button id="railtog">&#9776; INDEX</button>
-
-<div id="plate" style="display:none">
-  <div class="bar" id="plateBar"></div>
-  <button class="close" id="plateClose">&times;</button>
-  <div class="body">
-    <div class="no" id="plateNo"></div>
-    <h3 id="plateName"></h3>
-    <div class="de" id="plateDe"></div>
-    <div id="platePills"></div>
-    <div id="plateDesc"></div>
-    <div class="meta" id="plateMeta"></div>
-  </div>
+    <div class="setting">
+      <label for="rotorSpeedSlider"><span>Propeller speed</span><span class="readout" id="rotorValue">38%</span></label>
+      <input id="rotorSpeedSlider" type="range" min="0" max="100" step="1" value="38" />
+      <small>Controls the main rotor and tail rotor animation speed without forcing the camera to move.</small>
+    </div>
+    <div class="level-copy" id="levelCopy">Level 5 reveals the key mechanical pathways plus a fuller internal breakdown of the helicopter.</div>
+  </section>
+  <div class="marker" id="marker"><div class="pin">+</div><div class="label" id="markerLabel"></div></div>
+  <section class="info" id="info" aria-live="polite">
+    <button class="close" id="infoClose" type="button" aria-label="Close part information">×</button>
+    <div class="eyebrow">Selected component</div>
+    <h2 id="partName">Main rotor head</h2>
+    <div class="system" id="partSystem">Main rotor & rotor head</div>
+    <p id="partDesc"></p>
+    <div class="actions"><button id="focusBtn" type="button">Focus view</button><button id="relatedBtn" type="button">Show related</button></div>
+  </section>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head"><button class="close" id="drawerClose" type="button" aria-label="Close parts browser">×</button><div class="eyebrow">Inspectable glossary</div><h2>72 helicopter components</h2><input id="search" placeholder="Search parts…" autocomplete="off" /></div>
+    <div class="parts" id="partsList"></div>
+  </aside>
+  <section class="quiz" id="quiz">
+    <button class="close" id="quizClose" type="button" aria-label="Close study mode">×</button><div class="eyebrow">Study mode</div><h2>Identify the highlighted part</h2><div class="score"><span id="quizProgress">1 / 10</span><span id="quizScore">Score 0</span></div><p id="quizPrompt">Choose the correct name for the highlighted component.</p><div class="choices" id="quizChoices"></div><div class="feedback" id="quizFeedback"></div>
+  </section>
+  <div class="toast" id="toast"></div>
+  <div class="loading" id="loading"><div><strong>Building helicopter systems…</strong><span>Loading the 3D inspection model.</span></div></div>
 </div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-<div id="tag"><div id="tagName"></div><div class="de" id="tagDe"></div></div>
+const app=document.getElementById('app');
+const canvas=document.getElementById('scene');
+const loading=document.getElementById('loading');
+const info=document.getElementById('info');
+const drawer=document.getElementById('drawer');
+const quiz=document.getElementById('quiz');
+const marker=document.getElementById('marker');
+const markerLabel=document.getElementById('markerLabel');
+const toast=document.getElementById('toast');
+const complexitySlider=document.getElementById('complexitySlider');
+const shellSlider=document.getElementById('shellSlider');
+const rotorSpeedSlider=document.getElementById('rotorSpeedSlider');
+const complexityValue=document.getElementById('complexityValue');
+const shellValue=document.getElementById('shellValue');
+const rotorValue=document.getElementById('rotorValue');
+const complexityName=document.getElementById('complexityName');
+const levelCopy=document.getElementById('levelCopy');
+const prefersReduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-<div id="tour">
-  <div class="hd"><span class="step" id="tourStep"></span><span class="ti" id="tourTitle"></span></div>
-  <p id="tourText"></p>
-  <div class="nav">
-    <button id="tourPrev">&larr; Back</button>
-    <button id="tourNext">Next &rarr;</button>
-    <button id="tourEnd">Leave tour</button>
-  </div>
-</div>
-
-<div id="hint">DRAG orbit &middot; RIGHT-DRAG or SHIFT-DRAG pan &middot; SCROLL zoom &middot; W A S D move &middot; HOVER any part &middot; CLICK to pin</div>
-<div id="scalebar"><div class="ln"></div><span id="scaleTxt">20 m</span></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-/* =====================================================================
-   PNEUMATIC DESPATCH — pedagogical model, c. 1925
-   1 unit = 1 metre.  Ground (street) level = y 0.
-   ===================================================================== */
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0f1316);
-scene.fog = new THREE.Fog(0x0f1316, 210, 540);
-
-const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 900);
-const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-document.getElementById('stage').appendChild(renderer.domElement);
-
-/* ---------------- lighting: low winter sun + boiler-room glow ------- */
-scene.add(new THREE.HemisphereLight(0x9fb6c4, 0x2b2620, 0.55));
-const sun = new THREE.DirectionalLight(0xffe6c0, 1.15);
-sun.position.set(-70, 95, 60);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048,2048);
-const sc = sun.shadow.camera;
-sc.left=-110; sc.right=110; sc.top=110; sc.bottom=-110; sc.near=10; sc.far=280;
-sun.shadow.bias = -0.0007;
-sc.updateProjectionMatrix();
-scene.add(sun);
-const fill = new THREE.DirectionalLight(0x7f9ab0, 0.35);
-fill.position.set(60, 40, -80); scene.add(fill);
-/* furnace glow in the machine room */
-const furnace = new THREE.PointLight(0xff7326, 2.2, 26, 2);
-furnace.position.set(-52, -4.2, 26); scene.add(furnace);
-
-/* ---------------- orbit / fly controls ----------------------------- */
-class Controls{
-  constructor(cam, dom){
-    this.cam=cam; this.dom=dom;
-    this.target=new THREE.Vector3(0,0,0);
-    this.tgtD=this.target.clone();
-    this.sph=new THREE.Spherical(150, 1.02, 0.72);
-    this.sphD=this.sph.clone();
-    this.min=3; this.max=380;
-    this.keys={}; this.drag=null; this.px=0; this.py=0; this.enabled=true;
-    dom.addEventListener('contextmenu', e=>e.preventDefault());
-    dom.addEventListener('pointerdown', e=>{
-      dom.setPointerCapture(e.pointerId);
-      this.drag = (e.button===2 || e.shiftKey) ? 'pan' : 'orbit';
-      this.px=e.clientX; this.py=e.clientY;
-    });
-    dom.addEventListener('pointermove', e=>{
-      if(!this.drag) return;
-      const dx=e.clientX-this.px, dy=e.clientY-this.py;
-      this.px=e.clientX; this.py=e.clientY;
-      if(this.drag==='orbit'){
-        this.sphD.theta -= dx*0.0042;
-        this.sphD.phi   -= dy*0.0042;
-        this.sphD.phi = Math.max(0.04, Math.min(Math.PI-0.04, this.sphD.phi));
-      }else{
-        this.pan(-dx, dy);
-      }
-    });
-    const stop=e=>{ this.drag=null; };
-    dom.addEventListener('pointerup', stop);
-    dom.addEventListener('pointercancel', stop);
-    dom.addEventListener('wheel', e=>{
-      e.preventDefault();
-      const k = Math.exp(e.deltaY*0.0011);
-      this.sphD.radius = Math.max(this.min, Math.min(this.max, this.sphD.radius*k));
-    }, {passive:false});
-    addEventListener('keydown', e=>{
-      if(e.target.tagName==='INPUT') return;
-      this.keys[e.code]=true;
-    });
-    addEventListener('keyup', e=>{ this.keys[e.code]=false; });
-  }
-  pan(dx, dy){
-    const s = this.sphD.radius*0.0016;
-    const right = new THREE.Vector3(), up = new THREE.Vector3();
-    this.cam.matrix.extractBasis(right, up, new THREE.Vector3());
-    this.tgtD.addScaledVector(right, dx*s).addScaledVector(up, dy*s);
-  }
-  frame(pos, radius){
-    this.tgtD.copy(pos);
-    this.sphD.radius = Math.max(this.min, Math.min(this.max, radius));
-  }
-  update(dt){
-    const k = this.keys, sp = this.sphD.radius*1.1*dt;
-    if(k.KeyW||k.ArrowUp)   this.forward(sp);
-    if(k.KeyS||k.ArrowDown) this.forward(-sp);
-    if(k.KeyA||k.ArrowLeft) this.strafe(-sp);
-    if(k.KeyD||k.ArrowRight)this.strafe(sp);
-    if(k.KeyQ) this.tgtD.y -= sp*0.7;
-    if(k.KeyE) this.tgtD.y += sp*0.7;
-    const e = 1-Math.pow(0.0008, dt);
-    this.target.lerp(this.tgtD, e);
-    this.sph.radius += (this.sphD.radius-this.sph.radius)*e;
-    this.sph.theta  += (this.sphD.theta -this.sph.theta )*e;
-    this.sph.phi    += (this.sphD.phi   -this.sph.phi   )*e;
-    const p = new THREE.Vector3().setFromSpherical(this.sph).add(this.target);
-    this.cam.position.copy(p);
-    this.cam.lookAt(this.target);
-  }
-  forward(d){
-    const f = new THREE.Vector3().subVectors(this.target, this.cam.position);
-    f.y=0; f.normalize(); this.tgtD.addScaledVector(f, d);
-  }
-  strafe(d){
-    const r = new THREE.Vector3();
-    this.cam.matrix.extractBasis(r, new THREE.Vector3(), new THREE.Vector3());
-    r.y=0; r.normalize(); this.tgtD.addScaledVector(r, d);
-  }
-}
-const controls = new Controls(camera, renderer.domElement);
-
-/* ---------------- materials ---------------------------------------- */
-const M = (c,o={}) => new THREE.MeshStandardMaterial(Object.assign({color:c},o));
-const mat = {
-  castIron : M(0x4d5155,{roughness:.82,metalness:.45}),
-  ironDark : M(0x33383c,{roughness:.85,metalness:.4}),
-  steel    : M(0x8d959c,{roughness:.42,metalness:.85}),
-  brass    : M(0xb98f3f,{roughness:.3,metalness:.95}),
-  copper   : M(0x9c5a2c,{roughness:.35,metalness:.9}),
-  patina   : M(0x4e9c8c,{roughness:.66,metalness:.35}),
-  lead     : M(0x8b9097,{roughness:.6,metalness:.6}),
-  felt     : M(0x8a5334,{roughness:.98,metalness:0}),
-  leather  : M(0x54301f,{roughness:.9,metalness:.02}),
-  gutta    : M(0x2c2724,{roughness:.75,metalness:.05}),
-  alum     : M(0xc3c8cc,{roughness:.35,metalness:.8}),
-  wood     : M(0x6b4a2c,{roughness:.85,metalness:0}),
-  brick    : M(0x8a5b46,{roughness:.95,metalness:0}),
-  brickDk  : M(0x6d4535,{roughness:.95,metalness:0}),
-  stone    : M(0xb5aa97,{roughness:.9,metalness:0}),
-  stoneDk  : M(0x958b79,{roughness:.9,metalness:0}),
-  concrete : M(0x9b978d,{roughness:.95,metalness:0}),
-  paving   : M(0x585d60,{roughness:.98,metalness:0}),
-  soil     : M(0x4a3d30,{roughness:1,metalness:0}),
-  soilTop  : M(0x5c4c3b,{roughness:1,metalness:0}),
-  glass    : M(0xa9cbdb,{roughness:.12,metalness:.1,transparent:true,opacity:.3}),
-  druck    : M(0xb8402f,{roughness:.55,metalness:.5}),
-  saug     : M(0x3e7ea6,{roughness:.55,metalness:.5}),
-  enamel   : M(0xe0dccd,{roughness:.5,metalness:.05}),
-  red      : M(0x912e22,{roughness:.7,metalness:.2}),
-  green    : M(0x2f4f42,{roughness:.8,metalness:.15}),
-  cloth    : M(0x3d4a52,{roughness:1,metalness:0}),
-  oakum    : M(0x6e6046,{roughness:1,metalness:0}),
-  fibre    : M(0x9a8358,{roughness:.95,metalness:0}),
-  rubber   : M(0x24262a,{roughness:.95,metalness:0}),
-  water    : M(0x2b4450,{roughness:.25,metalness:.2,transparent:true,opacity:.75})
-};
-
-/* ---------------- registry & groups -------------------------------- */
-const parts = [];            // {no,name,de,cat,desc,meta,mode,mesh}
-const pickables = [];
-const G = {};
-['buildings','walls','machine','stations','tubes','under','soil','carriers','air','store','street','labels']
-  .forEach(k=>{ G[k]=new THREE.Group(); G[k].name=k; scene.add(G[k]); });
-
-let partNo = 0;
-/**
- * Register a mesh as an identifiable part of the model.
- * o = {name, de, cat, desc, meta, mode:'druck'|'saug'|null}
- */
-function P(mesh, o){
-  partNo++;
-  const rec = Object.assign({no:String(partNo).padStart(3,'0'), mesh}, o);
-  mesh.userData.rec = rec;
-  if(mesh.material && mesh.material.isMaterial){
-    mesh.material = mesh.material.clone();
-    rec.baseEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : null;
-  }
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  parts.push(rec); pickables.push(mesh);
-  return mesh;
-}
-/* child meshes that share a part's identity (no separate index entry) */
-function alias(mesh, host){
-  mesh.userData.rec = host.userData.rec;
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  pickables.push(mesh); return mesh;
-}
-
-/* ---------------- geometry helpers --------------------------------- */
-function box(w,h,d,m,x,y,z,parent){
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m);
-  b.position.set(x,y,z); (parent||scene).add(b); return b;
-}
-function cyl(rt,rb,h,m,x,y,z,parent,seg){
-  const c = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||20), m);
-  c.position.set(x,y,z); (parent||scene).add(c); return c;
-}
-function sph(r,m,x,y,z,parent){
-  const s = new THREE.Mesh(new THREE.SphereGeometry(r,18,14), m);
-  s.position.set(x,y,z); (parent||scene).add(s); return s;
-}
-function torus(r,t,m,x,y,z,parent){
-  const o = new THREE.Mesh(new THREE.TorusGeometry(r,t,10,26), m);
-  o.position.set(x,y,z); (parent||scene).add(o); return o;
-}
-const RX = (o,a)=>{o.rotation.x=a;return o;};
-const RY = (o,a)=>{o.rotation.y=a;return o;};
-const RZ = (o,a)=>{o.rotation.z=a;return o;};
-const V = (x,y,z)=>new THREE.Vector3(x,y,z);
-
-/* a run of tube through waypoints; returns {mesh, curve} */
-function tubeRun(pts, r, m, parent, seg, radial){
-  const curve = new THREE.CatmullRomCurve3(pts.map(p=>p.clone()), false, 'catmullrom', 0.06);
-  const g = new THREE.TubeGeometry(curve, seg||Math.max(32, pts.length*14), r, radial||14, false);
-  const mesh = new THREE.Mesh(g, m);
-  (parent||scene).add(mesh);
-  return {mesh, curve};
-}
-/* flanged / bell-and-spigot collars repeated along a straight run */
-function collars(from, to, every, r, m, parent){
-  const d = new THREE.Vector3().subVectors(to, from);
-  const len = d.length(), n = Math.floor(len/every);
-  const out=[];
-  for(let i=1;i<=n;i++){
-    const p = from.clone().addScaledVector(d.clone().normalize(), i*every);
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(r,r,0.09,16), m);
-    c.position.copy(p);
-    c.quaternion.setFromUnitVectors(V(0,1,0), d.clone().normalize());
-    (parent||scene).add(c); out.push(c);
-  }
-  return out;
-}
-/* small human, 1.75 m, for scale */
-function figure(x,y,z,parent,rot){
-  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0;
-  const c = mat.cloth;
-  box(.42,.62,.24,c,0,1.15,0,g);
-  box(.34,.46,.22,c,0,.62,0,g);
-  box(.14,.5,.16,c,-.11,.24,0,g); box(.14,.5,.16,c,.11,.24,0,g);
-  sph(.13,mat.felt,0,1.56,0,g);
-  box(.15,.42,.13,c,-.27,1.12,.02,g); box(.15,.42,.13,c,.27,1.12,.02,g);
-  (parent||scene).add(g); return g;
-}
-/* enamel station name-plate that always faces the camera */
-const labelSprites = [];
-function label(text, x,y,z, size, colour){
-  const cv = document.createElement('canvas');
-  const ctx = cv.getContext('2d');
-  const f = 44; cv.width = 1024; cv.height = 128;
-  ctx.font = `500 ${f}px Georgia, serif`;
-  const w = ctx.measureText(text).width + 60;
-  cv.width = Math.ceil(w); cv.height = 128;
-  ctx.font = `500 ${f}px Georgia, serif`;
-  ctx.fillStyle = 'rgba(16,20,23,.86)'; ctx.fillRect(0,0,cv.width,cv.height);
-  ctx.strokeStyle = colour || '#c7a24a'; ctx.lineWidth = 4;
-  ctx.strokeRect(2,2,cv.width-4,cv.height-4);
-  ctx.fillStyle = '#e9e3d4'; ctx.textBaseline='middle';
-  ctx.fillText(text, 30, 68);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.minFilter = THREE.LinearFilter;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:tex, depthTest:false, transparent:true}));
-  const s = size || 4;
-  sp.scale.set(s*cv.width/cv.height, s, 1);
-  sp.position.set(x,y,z);
-  sp.renderOrder = 999;
-  G.labels.add(sp); labelSprites.push(sp);
-  return sp;
-}
-/* =====================================================================
-   1.  GROUND, STREET AND THE OPEN TRENCH
-   ===================================================================== */
-function paving(x0,x1,z0,z1){
-  const b = box(x1-x0, .34, z1-z0, mat.paving, (x0+x1)/2, -.17, (z0+z1)/2, G.street);
-  b.receiveShadow = true; return b;
-}
-/* street surface, cut away along the line of the tubes */
-paving(-70,-62, 3.2, 40); paving(-32, 64, 3.2, 40);
-paving(-70, 64, 40, 52);
-paving(-70, 27, -48, -3.2); paving(33, 66, -48, -3.2); paving(27,33,-48,-19);
-
-/* --- soil section faces: the classic cut through the roadway -------- */
-function soilFace(w,h,d,x,y,z,ry){
-  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = ry||0;
-  box(w,.30,d,mat.paving, 0, h/2-.15, 0, g);                 // pavement edge
-  box(w,.55,d*.98,mat.stoneDk, 0, h/2-.55, 0, g);            // road bed / macadam
-  box(w,h-.85,d*.96, mat.soil, 0, -.42, 0, g);               // made ground
-  box(w,1.1,d*.94, mat.soilTop, 0, -h/2+.55, 0, g);          // clay
-  G.soil.add(g); return g;
-}
-const TRENCH_D = 5.6;
-soilFace(132, TRENCH_D, .5, -3, -TRENCH_D/2,  3.35);
-soilFace(96, TRENCH_D, .5, -21, -TRENCH_D/2, -3.35);
-soilFace(30, TRENCH_D, .5, 48, -TRENCH_D/2, -3.35);
-soilFace(16, TRENCH_D, .5, 27.25, -TRENCH_D/2, -11, Math.PI/2);
-soilFace(16, TRENCH_D, .5, 32.75, -TRENCH_D/2, -11, Math.PI/2);
-box(132,.4,7.0, mat.soilTop, -3, -TRENCH_D-.2, 0, G.soil);     // trench floor
-box(6,.4,16, mat.soilTop, 30, -TRENCH_D-.2, -11, G.soil);
-
-/* tram rails and kerbs, for period flavour and scale */
-for(const z of [4.6, 6.2]){
-  const r = box(120,.12,.10, mat.steel, -5, .06, z, G.street);
-  r.castShadow=false;
-}
-for(let x=-60; x<62; x+=2.2){ box(.2,.08,2.0, mat.wood, x, -.02, 5.4, G.street); }
-P(box(.34,4.4,.34, mat.ironDark, -21, 2.2, 4.0, G.street), {
-  name:'Street lamp standard', de:'', cat:'Street & context',
-  desc:'Cast-iron lamp standard on the kerb line. Included only for scale: it fixes the eye at 1.75 m and lets you judge the depth of the trench and the size of the carriers against a familiar object.'});
-
-/* =====================================================================
-   2.  BUILDING SHELLS  (cut open toward the default viewpoint)
-   ===================================================================== */
-function shell(o){
-  const g  = new THREE.Group(); G.buildings.add(g);   // slabs, columns, basement
-  const gw = new THREE.Group(); G.walls.add(gw);      // the enclosing walls only
-  const w = o.x1-o.x0, d = o.z1-o.z0, cx=(o.x0+o.x1)/2, cz=(o.z0+o.z1)/2;
-  let y = o.base || 0;
-  const slabs=[];
-  // basement floor
-  if(o.basement){
-    box(w+.6,.5,d+.6, mat.concrete, cx, o.basement-.25, cz, g).receiveShadow=true;
-    const bw1 = box(.5,-o.basement,d, mat.brickDk, o.x0-.25, o.basement/2, cz, gw);
-    const bw2 = box(w,-o.basement,.5, mat.brickDk, cx, o.basement/2, o.z0-.25, gw);
-    slabs.push(bw1,bw2);
-  }
-  o.storeys.forEach((h,i)=>{
-    const slab = box(w+.5,.42,d+.5, mat.concrete, cx, y-.21, cz, g);
-    slab.receiveShadow = true; slabs.push(slab);
-    // far walls only — the near two faces are cut away
-    const wallW = box(.55,h,d, o.mat||mat.stone, o.x0-.27, y+h/2, cz, gw);
-    const wallD = box(w,h,.55, o.mat||mat.stone, cx, y+h/2, o.z0-.27, gw);
-    slabs.push(wallW, wallD);
-    // windows punched in the far walls
-    for(let t=o.z0+3; t<o.z1-2; t+=4.2){
-      box(.16,h*.5,1.5, mat.glass, o.x0-.02, y+h*.56, t, gw);
-      box(.3,.24,1.9, o.matDk||mat.stoneDk, o.x0-.3, y+h*.30, t, gw);
-    }
-    for(let t=o.x0+3; t<o.x1-2; t+=4.2){
-      box(1.5,h*.5,.16, mat.glass, t, y+h*.56, o.z0-.02, gw);
-      box(1.9,.24,.3, o.matDk||mat.stoneDk, t, y+h*.30, o.z0-.3, gw);
-    }
-    // cut-edge pilasters, so the section reads as deliberate
-    box(.55,h,.9, o.matDk||mat.stoneDk, o.x1-.27, y+h/2, o.z0+.45, gw);
-    box(.9,h,.55, o.matDk||mat.stoneDk, o.x0+.45, y+h/2, o.z1-.27, gw);
-    box(.8,h,.8, o.matDk||mat.stoneDk, o.x1-.4, y+h/2, o.z1-.4, gw);
-    // interior columns
-    for(let a=o.x0+5; a<o.x1-3; a+=7)
-      for(let b=o.z0+5; b<o.z1-3; b+=7)
-        box(.42,h,.42, o.matDk||mat.stoneDk, a, y+h/2, b, g);
-    y += h;
-  });
-  // cornice + roof
-  box(w+1.4,.5,d+1.4, o.matDk||mat.stoneDk, cx, y+.2, cz, gw);
-  box(w,.3,d, mat.ironDark, cx, y+.5, cz, gw);
-  return {g, gw, top:y, cx, cz};
-}
-
-const CTO = shell({x0:-62,x1:-32, z0:4, z1:30, storeys:[5.2,4.3,4.3], basement:-6.4,
-                   mat:mat.stone, matDk:mat.stoneDk});
-const DPO = shell({x0:-2, x1:16, z0:8, z1:26, storeys:[4.6,3.9], mat:mat.brick, matDk:mat.brickDk});
-const EXC = shell({x0:34, x1:52, z0:6, z1:22, storeys:[6.4,4.0], mat:mat.stone, matDk:mat.stoneDk});
-const RMT = shell({x0:22, x1:58, z0:-40, z1:-18, storeys:[8.5], mat:mat.brick, matDk:mat.brickDk});
-const STR = shell({x0:-38,x1:-16, z0:-34, z1:-14, storeys:[5.0,4.4], mat:mat.stone, matDk:mat.stoneDk});
-
-label('Central Telegraph Office  ·  Maschinenstation', -47, 21.5, 17, 2.6);
-label('District Post Office  ·  Zwischenstation', 7, 12.5, 17, 2.1);
-label('Stock Exchange', 43, 14.5, 14, 2.1);
-label('Railway Mail Terminal  ·  8-inch postal tubes', 40, 12.5, -29, 2.4);
-label('Department Store  ·  Lamson cash system', -27, 13.0, -24, 2.2);
-
-/* the pickable identity of each building */
-P(box(30,.2,26, mat.concrete, -47, -6.55, 17, G.buildings), {
-  name:'Central Telegraph Office', de:'Maschinenstation', cat:'Buildings & context',
-  desc:'The hub of the whole installation. Telegrams arrive here by tube from every district office; telegraphists on the upper floors then send them onward electrically. In the basement is the machine station — boilers, a compound steam engine, compressor, vacuum pump, coolers and reservoirs — which supplies compressed and rarefied air to the entire network.',
-  meta:'London-type radial system · six engines in the basement'});
-P(box(18,.2,18, mat.concrete, 7, -.5, 17, G.buildings), {
-  name:'District Post Office', de:'Zwischenstation', cat:'Buildings & context',
-  desc:'An intermediate station. It has sending and receiving apparatus and pressure/vacuum reservoirs fed from the mains, but no steam plant of its own. A carrier can be received here, sorted, and put into the next section of line — the network works like a railway made of successive sections rather than one unbroken pipe from everywhere to everywhere.',
-  meta:'Kraftstation class · reservoirs, no boiler'});
-P(box(18,.2,16, mat.concrete, 43, -.5, 14, G.buildings), {
-  name:'Stock Exchange branch', de:'', cat:'Buildings & context',
-  desc:'The Exchange is served by a single reversible tube: one pipe worked by pressure in one direction, then switched to vacuum for the return. Economical, but only one direction at a time. The very first practical pneumatic line — Latimer Clark\u2019s of 1853 — was exactly this: 220 yards from the Central Telegraph Station to the Stock Exchange, worked one way only.',
-  meta:'Single reversible line · price quotations'});
-P(box(36,.2,22, mat.concrete, 40, -.5, -29, G.buildings), {
-  name:'Railway Mail Terminal', de:'', cat:'Buildings & context',
-  desc:'The American end of the model. Bulk first-class mail is fired between the post office and the railway terminal in 8-inch tubes — not telegrams but hundreds of letters at a time. The public never saw these; the tubes worked behind the scenes between post offices, sorting rooms and rail stations.',
-  meta:'Batcheller postal system · closed pressure circuit'});
-P(box(22,.2,20, mat.concrete, -27, -.5, -24, G.buildings), {
-  name:'Department store', de:'Hausrohrpost', cat:'Buildings & context',
-  desc:'A quite separate branch of the technology, and the one most ordinary people actually saw. The tubes here carry cash and sales slips, not mail: the clerk sends money to a central cashier\u2019s cage and the change comes back. Small brass tubes, a rotary blower, one building.',
-  meta:'Lamson-type · 2¼-inch brass tube'});
-/* =====================================================================
-   3.  THE MACHINE STATION  (basement of the Central Telegraph Office)
-        Boiler → engine → compressor / vacuum pump → cooler → receivers
-   ===================================================================== */
-const MS = new THREE.Group(); G.machine.add(MS);
-const FLR = -6.4;                       // basement floor level
-
-box(30,.14,26, mat.stoneDk, -47, FLR+.07, 17, MS).receiveShadow = true;
-label('MACHINE STATION', -47, -1.2, 5.2, 1.5, '#4e9c8c');
-
-/* ---------- boiler house ------------------------------------------- */
-const boiler = P(RZ(cyl(1.45,1.45,7.2, mat.ironDark, -57, -4.3, 18, MS, 24), Math.PI/2), {
-  name:'Water-tube boiler', de:'Kessel', cat:'Steam plant',
-  desc:'Steam is the beginning of everything here. The later Berlin plant at Magazinstraße carried water-tube boilers at roughly twelve atmospheres with superheated steam. Nothing in the tubes moves until this fire is lit — the carriers have no motor of their own, and the entire network is ultimately powered by coal.',
-  meta:'≈12 atm · superheated'});
-RZ(cyl(1.45,1.45,7.2, mat.ironDark, -57, -4.3, 18, MS, 24), Math.PI/2);
-alias(RZ(cyl(.85,.85,6.4, mat.brickDk, -57, -5.6, 18, MS, 18), Math.PI/2), boiler);
-P(box(1.5,1.5,2.4, mat.red, -57, -5.5, 14.0, MS), {
-  name:'Firebox and stoking doors', de:'Feuerung', cat:'Steam plant',
-  desc:'The furnace front. A stoker works here through the whole traffic day; the load on the tubes — a rush of telegrams at the close of the Exchange, say — is felt first as a demand for coal. The glow you can see is the only light in this corner of the model.',
-  meta:'hand-fired · coal bunker adjacent'});
-P(RZ(cyl(.55,.55,5.6, mat.castIron, -57, -2.5, 18, MS, 18), Math.PI/2), {
-  name:'Steam drum', de:'Dampfdom', cat:'Steam plant',
-  desc:'Steam separates from water here and is drawn off dry to the engine. Wet steam would wreck the engine cylinders, so the drum, its baffles and the superheater exist purely to keep water out of the steam.',
-  meta:''});
-P(cyl(.9,1.1,26, mat.brickDk, -59.5, 7, 8.5, MS, 16), {
-  name:'Boiler flue and chimney', de:'Schornstein', cat:'Steam plant',
-  desc:'Carries the products of combustion up past three floors of telegraph instrument rooms and out above the roof. In an urban pneumatic-post station the chimney is the visible sign of what the tubes actually run on.',
-  meta:''});
-P(box(1.1,1.3,1.1, mat.castIron, -60.2, -5.7, 22.5, MS), {
-  name:'Boiler feed pump', de:'Speisepumpe', cat:'Steam plant',
-  desc:'Forces feed water into the boiler against its own pressure. A small duplex steam pump, running continuously, quite independent of the main engine.',
-  meta:''});
-box(4.6,1.5,3.2, mat.ironDark, -59.5, -5.6, 26.5, MS);
-P(box(4.4,1.2,3.0, mat.rubber, -59.5, -4.7, 26.5, MS), {
-  name:'Coal bunker', de:'Kohlenbunker', cat:'Steam plant',
-  desc:'Coal for the boilers. Worth noticing in a pedagogical model: the fuel bill was one of the reasons these systems died. When the U.S. Post Office suspended pneumatic mail on 31 December 1953 it called the service obsolete, unnecessary and excessively expensive.',
-  meta:''});
-figure(-55.4, FLR+.14, 14.6, MS, Math.PI*0.5);
-
-/* ---------- compound steam engine ---------------------------------- */
-const bed = P(box(11,.7,3.4, mat.ironDark, -46, FLR+.5, 11.5, MS), {
-  name:'Engine and pump bedplate', de:'Luftpumpmaschine', cat:'Air machinery',
-  desc:'Berlin frequently built the steam engine, the compressor and the vacuum pump into one great reciprocating assembly on a single bedplate and called the whole thing a Luftpumpmaschine — an air-pumping machine. One crankshaft therefore drives both pneumatic utilities at once.',
-  meta:'one crankshaft · two utilities'});
-const fly = P(RZ(cyl(2.1,2.1,.42, mat.castIron, -49.5, -3.4, 9.2, MS, 40), Math.PI/2), {
-  name:'Flywheel', de:'Schwungrad', cat:'Air machinery',
-  desc:'Smooths the violently uneven torque of a reciprocating engine, and carries the pistons through the dead centres. Its inertia is what keeps the compressor turning steadily between power strokes.',
-  meta:'4.2 m diameter'});
-alias(RZ(cyl(.45,.45,.6, mat.steel, -49.5,-3.4,9.2, MS, 16), Math.PI/2), fly);
-for(let i=0;i<6;i++){ const a=i*Math.PI/3;
-  alias(RX(cyl(.1,.1,1.75, mat.castIron, -49.5, -3.4+0.95*Math.cos(a), 9.2+0.95*Math.sin(a), MS, 8), a), fly);
-}
-const crank = P(RZ(cyl(.28,.28,7.5, mat.steel, -46, -3.4, 9.2, MS, 16), Math.PI/2), {
-  name:'Crankshaft', de:'Kurbelwelle', cat:'Air machinery',
-  desc:'Turns the straight-line motion of the steam pistons into rotation and back into the straight-line motion of the air pistons. Every cylinder on this bedplate — steam, pressure, vacuum — is hung on this one shaft.',
-  meta:''});
-P(RZ(cyl(1.0,1.0,2.6, mat.castIron, -43.4, -3.4, 11.6, MS, 22), Math.PI/2), {
-  name:'High-pressure steam cylinder', de:'Hochdruckzylinder', cat:'Steam plant',
-  desc:'The first expansion. Boiler steam does work here at full pressure, then exhausts — still hot and still useful — into the larger low-pressure cylinder alongside. Using the steam twice is what makes the engine "compound".',
-  meta:''});
-P(RZ(cyl(1.35,1.35,2.6, mat.castIron, -43.4, -3.4, 14.6, MS, 22), Math.PI/2), {
-  name:'Low-pressure steam cylinder', de:'Niederdruckzylinder', cat:'Steam plant',
-  desc:'Larger in bore because the steam entering it is already partly expanded and therefore weaker. It extracts a second helping of work from the same pound of steam before releasing it to the condenser or the air.',
-  meta:''});
-P(RZ(cyl(.13,.13,2.4, mat.steel, -45.2, -3.4, 11.6, MS, 12), Math.PI/2), {
-  name:'Piston rod and crosshead', de:'Kolbenstange, Kreuzkopf', cat:'Air machinery',
-  desc:'The crosshead slides in guides and takes the sideways thrust of the connecting rod, so that the piston rod itself is pushed and pulled in a perfectly straight line. Without it the piston would grind itself against the cylinder wall.',
-  meta:''});
-P(RZ(cyl(.16,.16,2.9, mat.steel, -47.6, -3.4, 10.4, MS, 12), Math.PI/2.6), {
-  name:'Connecting rod', de:'Pleuelstange', cat:'Air machinery',
-  desc:'Links the crosshead to the crank pin, and is the one component in the machine that is neither purely rotating nor purely reciprocating \u2014 it does both at once, swinging as it goes. Everything downstream of it turns; everything upstream of it slides.', meta:''});
-const gov = P(cyl(.09,.09,1.2, mat.brass, -44.6, -2.3, 12.9, MS, 10), {
-  name:'Centrifugal governor', de:'Fliehkraftregler', cat:'Control hardware',
-  desc:'Two weighted balls spin on the shaft; if the engine runs fast they fly outward and throttle the steam. This is the installation\u2019s automatic control loop — pressure demand rises when the tubes get busy, the engine slows under load, and the governor opens the throttle to meet it.',
-  meta:''});
-alias(sph(.16, mat.brass, -44.35, -1.75, 12.9, MS), gov);
-alias(sph(.16, mat.brass, -44.85, -1.75, 12.9, MS), gov);
-
-/* ---------- compressor & vacuum pump ------------------------------- */
-P(RZ(cyl(1.05,1.05,2.4, mat.castIron, -48.9, -3.4, 13.3, MS, 22), Math.PI/2), {
-  name:'Air compressor, high-pressure end', de:'Verdichter / Kompressor', cat:'Air machinery', mode:'druck',
-  desc:'Produces the Druckluft — the compressed air that pushes carriers away from the station. A duplex machine: two cylinders on the same shaft, phased so that one is always on its delivery stroke, which halves the pulsation in the delivery main.',
-  meta:'street tubes worked at roughly 6–12 lb per sq in'});
-P(RZ(cyl(1.05,1.05,2.4, mat.castIron, -48.9, -3.4, 16.1, MS, 22), Math.PI/2), {
-  name:'Air compressor, second cylinder', de:'Kompressionszylinder', cat:'Air machinery', mode:'druck',
-  desc:'The second half of the duplex compressor. Note how large the air cylinders are compared with the steam cylinders driving them: air is bulky and compressing it is expensive work.',
-  meta:''});
-P(box(.9,.9,.9, mat.fibre, -48.9, -1.9, 13.3, MS), {
-  name:'Intake filter', de:'Luftfilter', cat:'Air machinery',
-  desc:'Every particle of grit drawn in here will eventually be carried the length of the network and rubbed into the bore of a tube or the packing of a carrier. Filtration is not fussiness; it is what keeps the felts and the bores alive.',
-  meta:''});
-P(cyl(.16,.16,.5, mat.brass, -48.9,-2.55,14.7, MS, 12), {
-  name:'Poppet valves', de:'Ventile', cat:'Control hardware',
-  desc:'Spring-loaded suction and delivery valves in the compressor head. They open by pressure difference alone — no linkage tells them when — which is why a compressor can run at any speed the engine happens to give it.',
-  meta:''});
-P(RZ(cyl(1.15,1.15,2.6, mat.ironDark, -48.9, -3.4, 19.4, MS, 22), Math.PI/2), {
-  name:'Vacuum pump', de:'Vakuumpumpe / Luftverdünnungspumpe', cat:'Air machinery', mode:'saug',
-  desc:'Produces the Saugluft — rarefied air. It does not pull carriers along; it removes air from the tube ahead of them so that ordinary atmospheric pressure behind can push them. Vacuum working moves less mass of air for the same transit time, so it is thermodynamically the cheaper of the two — but it can only ever muster the roughly 14.7 lb of the atmosphere, whereas a compressor can be pushed higher.',
-  meta:'street vacuum ≈ 6–7 lb below atmosphere'});
-P(box(2.0,1.4,1.4, mat.green, -52.2, -5.4, 22.6, MS), {
-  name:'Electric motor drive', de:'Elektromotor', cat:'Air machinery',
-  desc:'By the 1920s electric motors were beginning to replace steam on the smaller sets. The model shows the transitional moment: the great compound engine still runs the mains, while a motor drives an auxiliary compressor for light or out-of-hours traffic.',
-  meta:'partial electrification, 1920s'});
-P(RZ(cyl(.9,.9,.16, mat.leather, -50.8, -5.0, 22.6, MS, 24), Math.PI/2), {
-  name:'Belt drive and pulley', de:'Riemenantrieb', cat:'Air machinery',
-  desc:'Flat leather belting on fast-and-loose pulleys — the standard way of taking power off a shaft before individual motors became cheap.', meta:''});
-
-/* ---------- cooling & moisture ------------------------------------- */
-const cooler = P(RZ(cyl(.85,.85,3.6, mat.patina, -41.4, -3.4, 13.5, MS, 24), Math.PI/2), {
-  name:'Aftercooler', de:'Kühler / Rohrkühler', cat:'Air storage & conditioning', mode:'druck',
-  desc:'Compress air and it gets hot — at Magazinstraße it left the compressor at about 70 °C. Here it passes through a nest of copper tubes inside a water-jacketed iron shell before it is allowed near the reservoir. Cooling it in the machine room, on purpose, is how you stop it cooling underground by accident and raining inside your tubes.',
-  meta:'≈70 °C in · near ambient out'});
-for(let i=-1;i<=1;i++)
-  alias(RZ(cyl(.09,.09,3.9, mat.copper, -41.4+i*0.34, -3.4+i*0.3, 13.5, MS, 8), Math.PI/2), cooler);
-P(cyl(.13,.13,2.2, mat.patina, -41.4, -1.9, 12.0, MS, 10), {
-  name:'Cooling-water circuit', de:'Kühlwasser', cat:'Air storage & conditioning',
-  desc:'Town water in at the bottom, warm water out at the top. In Paris the water main was put to an even cleverer use: water let into a tank compressed the air, and water draining to the sewer created the vacuum — pneumatic power without a steam engine at all.',
-  meta:'Paris: water-displacement pumping'});
-P(cyl(.6,.6,2.0, mat.castIron, -41.4, -4.9, 16.6, MS, 18), {
-  name:'Moisture separator', de:'Wasserabscheider', cat:'Air storage & conditioning',
-  desc:'Air cooled after compression drops its water. If that water reaches the underground tubes it wets the felts, slows the carriers and rots the mail. The separator makes it fall out here instead, where a man with a bucket can deal with it.',
-  meta:''});
-P(cyl(.45,.45,1.4, mat.castIron, -41.4, -5.2, 18.4, MS, 16), {
-  name:'Oil separator', de:'Ölabscheider', cat:'Air storage & conditioning',
-  desc:'Cylinder oil is carried over from the compressor as a mist. Some of it is welcome in the tubes as lubrication; too much gums the packing rings and blackens the letters, so most is caught here.', meta:''});
-P(cyl(.14,.14,.5, mat.brass, -41.4, -5.9, 16.6, MS, 10), {
-  name:'Condensate drain trap', de:'Kondenswasserableiter', cat:'Air storage & conditioning',
-  desc:'Blown down by hand several times a day. The same fitting appears again at every low point of the underground network — water always finds the bottom of a pipe, and every bottom needs a drain.', meta:''});
-
-/* ---------- receivers / reservoirs ---------------------------------- */
-const ptank = P(cyl(1.25,1.25,4.4, mat.druck, -37.0, -3.9, 11.5, MS, 26), {
-  name:'Pressure receiver', de:'Druckluftbehälter', cat:'Air storage & conditioning', mode:'druck',
-  desc:'A reciprocating compressor delivers in pulses, not in a stream. The receiver stores air, steadies the pressure, damps the pulsation, lets dirt and oil settle out, and holds a reserve for the sudden rush of a dozen despatches at once. Batcheller\u2019s original Philadelphia plant had exactly such a tank immediately downstream of its duplex compressor.',
-  meta:'store · steady · settle · reserve'});
-alias(sph(1.25, mat.druck, -37.0, -1.7, 11.5, MS), ptank);
-alias(sph(1.25, mat.druck, -37.0, -6.1, 11.5, MS), ptank);
-const vtank = P(cyl(1.25,1.25,4.4, mat.saug, -37.0, -3.9, 17.5, MS, 26), {
-  name:'Vacuum receiver', de:'Saugluftbehälter / Vakuumbehälter', cat:'Air storage & conditioning', mode:'saug',
-  desc:'The mirror image of the pressure tank: a reservoir of rarefied air. Berlin eventually gave up circulating air continuously and worked instead from stored power like this — tanks connected to a tube only at the moment a despatch was due, every five to fifteen minutes.',
-  meta:'stored-power working'});
-alias(sph(1.25, mat.saug, -37.0, -1.7, 17.5, MS), vtank);
-alias(sph(1.25, mat.saug, -37.0, -6.1, 17.5, MS), vtank);
-P(cyl(.14,.14,.7, mat.brass, -37.0, -1.4, 12.6, MS, 10), {
-  name:'Safety valve', de:'Sicherheitsventil', cat:'Control hardware',
-  desc:'Lifts and blows off if the receiver is over-charged. An air vessel of this size failing at 12 lb would take the machine room with it.', meta:''});
-P(box(.7,.55,.28, mat.brass, -35.5, -2.6, 11.5, MS), {
-  name:'Pressure regulator', de:'Druckregler', cat:'Control hardware',
-  desc:'Holds the delivery to the street tubes at a set working pressure regardless of what the receiver behind it happens to hold. The tubes want a constant push; the compressor wants to run when it likes; the regulator reconciles them.', meta:''});
-const gauges = P(box(1.5,1.1,.18, mat.ironDark, -34.6, -3.2, 14.5, MS), {
-  name:'Gauge board', de:'Manometertafel', cat:'Control hardware',
-  desc:'Pressure gauges and vacuum gauges together on one board — the engineer\u2019s whole picture of the network in one glance. A gauge reading low means either a carrier under way, or a leak, or a jam venting somewhere out under the street.',
-  meta:'Manometer · Vakuummeter'});
-for(let i=0;i<3;i++)
-  alias(cyl(.19,.19,.07, i<2?mat.druck:mat.saug, -35.05+0*i, -3.2+0.0, 14.5-0.5+i*0.5, MS, 18).rotateZ(Math.PI/2), gauges);
-P(cyl(.2,.2,.5, mat.brass, -37.0, -6.6, 14.5, MS, 12), {
-  name:'Non-return valve', de:'Rückschlagventil', cat:'Control hardware',
-  desc:'Lets air out of the receiver toward the mains but never back. Every junction between two parts of a pneumatic system that hold different pressures needs one of these somewhere.', meta:''});
-P(box(1.3,1.3,.5, mat.castIron, -35.0, -4.6, 20.0, MS), {
-  name:'Air diverter (air switch)', de:'Luftwechselhahn', cat:'Control hardware',
-  desc:'The single most characteristic fitting of the whole technology. Turning this cock connects a tube either to the pressure main or to the suction main — that is, it decides which way carriers will travel on a reversible line. Berlin\u2019s station apparatus had one on the sending chamber itself, with a manometer beside it so the clerk could watch the change take effect.',
-  meta:'pressure ⟷ suction'});
-P(box(1.6,2.4,.35, mat.wood, -33.0, -4.4, 23.0, MS), {
-  name:'Signalling switchboard', de:'Signaltafel', cat:'Signalling',
-  desc:'Bells, annunciator drops and telephone circuits from every station on the network, gathered onto one slate panel. A pneumatic tube was never only plumbing: it was a plumbing system with a telegraph running alongside it, because no one can see inside a pipe.',
-  meta:''});
-figure(-39.5, FLR+.14, 20.5, MS, -Math.PI*0.35);
-figure(-44.0, FLR+.14, 9.0, MS, Math.PI*0.15);
-/* =====================================================================
-   4.  THE UNDERGROUND: running tubes, air mains, joints, manholes
-   ===================================================================== */
-const ROUTES = {};
-const proxyMat = new THREE.MeshBasicMaterial({transparent:true, opacity:0, depthWrite:false});
-
-/* a registered run of pipe, with an invisible fatter proxy so that very
-   small-bore tubes can still be picked with the mouse                */
-function run(key, pts, r, m, info, parent){
-  const t = tubeRun(pts, r, m, parent||G.tubes, Math.max(48, pts.length*16), 14);
-  P(t.mesh, info);
-  const pr = tubeRun(pts, Math.max(r+0.11, 0.16), proxyMat, parent||G.tubes, 48, 8);
-  pr.mesh.castShadow = pr.mesh.receiveShadow = false;
-  pr.mesh.userData.rec = t.mesh.userData.rec;
-  pickables.push(pr.mesh);
-  ROUTES[key] = t.curve;
-  return t;
-}
-/* ---- true bores, to scale -----------------------------------------
-   Berlin Fahrrohr        65 mm  → r 0.0325
-   London street tube   2¼ in   → r 0.0286  (in a cast-iron duct)
-   American postal      8 in    → r 0.1016
-   air mains            ~250 mm → r 0.125
-   ------------------------------------------------------------------- */
-const R_BERLIN = 0.0325, R_LONDON = 0.0286, R_US = 0.1016, R_MAIN = 0.125;
-
-/* --- 4a. Berlin-type paired line: Central office ⇄ District office --- */
-const p1 = [V(-35.0,1.15,7.6), V(-35.0,0.2,7.0), V(-35.0,-1.5,5.6), V(-35.0,-1.5,-0.10),
-            V(-20,-1.5,-0.10), V(0,-1.5,-0.10), V(2.4,-1.5,-0.10), V(2.4,-1.5,6.0),
-            V(2.4,-1.5,9.4), V(2.4,0.2,10.4), V(2.4,1.15,10.9)];
-run('cto_dpo', p1, R_BERLIN, mat.steel, {
-  name:'Running tube, outward', de:'Fahrrohr (Druckrichtung)', cat:'Tubes & underground', mode:'druck',
-  desc:'The pipe the carrier actually travels in — the Fahrrohr, as distinct from the much larger pipes that carry air about the system. About 65 mm bore, drawn wrought iron, carefully round and smooth inside, flanged ends bolted up with rubber sealing rings. On this pair, outward traffic is worked by compressed air.',
-  meta:'65 mm bore · drawn wrought iron · flanged joints'});
-const p2 = [V(4.6,1.15,10.9), V(4.6,0.2,10.4), V(4.6,-1.5,9.4), V(4.6,-1.5,-0.55),
-            V(0,-1.5,-0.55), V(-20,-1.5,-0.55), V(-37.2,-1.5,-0.55), V(-37.2,-1.5,5.6),
-            V(-37.2,0.2,7.0), V(-37.2,1.15,7.6)];
-run('dpo_cto', p2, R_BERLIN, mat.steel, {
-  name:'Running tube, return', de:'Fahrrohr (Saugrichtung)', cat:'Tubes & underground', mode:'saug',
-  desc:'The second pipe of the pair, worked by suction so that traffic can run both ways at once — the pneumatic equivalent of a double-track railway. A single tube can only ever carry carriers one direction at a time, which is the whole reason paired tubes exist.',
-  meta:'paired working · vacuum inbound'});
-P(new THREE.Mesh(new THREE.CylinderGeometry(R_BERLIN+.03,R_BERLIN+.03,.06,14), mat.brass)
-  .translateX(-20).translateY(-1.5).translateZ(-0.10), {
-  name:'Flanged joint with rubber ring', de:'Flanschverbindung', cat:'Tubes & underground',
-  desc:'The Berlin way of joining tube: machined flanges bolted together on a rubber ring. The one thing that must never happen is a lip or ridge on the inside of the joint — a carrier catching on a ledge stops the traffic of a whole district.',
-  meta:'internal smoothness is non-negotiable'});
-G.tubes.add(parts[parts.length-1].mesh);
-collars(V(-33,-1.5,-0.10), V(2,-1.5,-0.10), 4.0, R_BERLIN+.028, mat.brass, G.tubes);
-collars(V(-33,-1.5,-0.55), V(2,-1.5,-0.55), 4.0, R_BERLIN+.028, mat.brass, G.tubes);
-
-/* --- 4b. London single reversible lead tube: office ⇄ Exchange ------ */
-const p3 = [V(-32.6,1.15,10.5), V(-32.6,0.2,9.4), V(-32.6,-1.5,6.0), V(-32.6,-1.5,-1.05),
-            V(-10,-1.5,-1.05), V(20,-1.5,-1.05), V(38.8,-1.5,-1.05), V(38.8,-1.5,4.0),
-            V(38.8,0.4,7.0), V(38.8,1.4,8.2)];
-run('cto_exc', p3, R_LONDON, mat.lead, {
-  name:'Lead street tube', de:'', cat:'Tubes & underground',
-  desc:'The London pattern: soft lead pipe, about 8 lb to the foot, laid in lengths of some 28 feet. At each joint a heated polished steel mandrel was drawn through to leave the bore perfectly smooth, and then a plumber\u2019s wiped joint was made over it. Lead is workable but weak, so the whole run is threaded inside a larger cast-iron duct for protection.',
-  meta:'2¼ in bore · 28-foot lengths · wiped joints'});
-const duct = tubeRun(p3.slice(2,8), 0.115, mat.castIron, G.tubes, 80, 12);
-P(duct.mesh, {
-  name:'Protective cast-iron duct', de:'', cat:'Tubes & underground',
-  desc:'The lead tube does not lie loose in the ground. It runs inside a larger cast-iron pipe, roughly two feet below the roadway, which takes the weight of the traffic overhead and the movement of frost and heat. Lead tubes expand notably in summer and contract in winter; the duct lets them do it.',
-  meta:'≈2 ft below the roadway'});
-duct.mesh.material.transparent = true; duct.mesh.material.opacity = 0.55;
-collars(V(-30,-1.5,-1.05), V(36,-1.5,-1.05), 8.53, 0.145, mat.castIron, G.tubes);
-
-/* --- 4c. American 8-inch paired postal main: office ⇄ rail terminal -- */
-const p4 = [V(-33.5,0.95,19.5), V(-33.5,0.0,18.0), V(-33.5,-2.10,13.0), V(-33.5,-2.10,-1.70),
-            V(-10,-2.10,-1.70), V(15,-2.10,-1.70), V(26.0,-2.10,-1.72), V(29.4,-2.10,-4.6),
-            V(29.4,-2.10,-14.0), V(29.4,-2.10,-19.4), V(29.4,-0.4,-21.6), V(29.4,1.05,-22.6)];
-run('cto_rmt', p4, R_US, mat.castIron, {
-  name:'8-inch postal tube, outward', de:'', cat:'Tubes & underground', mode:'druck',
-  desc:'The American answer to the same problem, at four times the bore. Cast-iron sections about eleven feet long, the bores carefully machined, one end belled and the other spigoted, packed with oakum and lead like a water main — but with the ends turned so that no internal lip is left for a carrier to strike. Laid anywhere from a few feet to eighteen feet down, often over the subway.',
-  meta:'8 in bore · 11-ft cast-iron sections · ≈35 mph'});
-const p5 = [V(30.8,1.05,-22.6), V(30.8,-0.4,-21.6), V(30.8,-2.10,-19.4), V(30.8,-2.10,-14.0),
-            V(30.8,-2.10,-4.6), V(27.4,-2.10,-1.75), V(15,-2.10,-2.35), V(-10,-2.10,-2.35),
-            V(-35.3,-2.10,-2.35), V(-35.3,-2.10,13.0), V(-35.3,0.0,18.0), V(-35.3,0.95,19.5)];
-run('rmt_cto', p5, R_US, mat.castIron, {
-  name:'8-inch postal tube, return', de:'', cat:'Tubes & underground', mode:'druck',
-  desc:'The return leg. In the Batcheller postal system the two pipes form a closed pressure circuit: compressor → pressure tank → outgoing tube → distant office → return tube → receiving tank → compressor. The same air is used over and over rather than being thrown away at each end.',
-  meta:'closed circulating-air system'});
-const bells = collars(V(-31,-2.10,-1.70), V(24,-2.10,-1.70), 3.35, R_US+.055, mat.castIron, G.tubes);
-P(bells[6], {
-  name:'Bell-and-spigot joint, lead and oakum', de:'', cat:'Tubes & underground',
-  desc:'Oakum — tarred hemp — is driven into the socket first, then molten lead is run in and caulked home. The joint is airtight and slightly flexible, so the line can settle with the street without cracking. Exactly the practice of a gas or water main, borrowed wholesale.',
-  meta:'airtight, and deliberately a little flexible'});
-collars(V(-33,-2.10,-2.35), V(24,-2.10,-2.35), 3.35, R_US+.055, mat.castIron, G.tubes);
-/* the long-radius bend at the branch */
-P(new THREE.Mesh(new THREE.TorusGeometry(2.6, R_US+.06, 10, 24, Math.PI/2), mat.brass)
-   .translateX(26.8).translateY(-2.10).translateZ(-4.3), {
-  name:'Seamless brass bend', de:'', cat:'Tubes & underground',
-  desc:'A long carrier cannot turn a plumbing elbow — it would wedge solid. Curves were therefore made of seamless brass with a radius of about twelve times the bore; for the 6⅛-inch Philadelphia tube Batcheller would go no tighter than about six feet. The bigger and longer the carrier, the broader every corner in the city has to become.',
-  meta:'minimum bend radius ≈ 12 × diameter'});
-const lastBend = parts[parts.length-1].mesh;
-lastBend.rotation.x = Math.PI/2; lastBend.rotation.z = Math.PI;
-G.tubes.add(lastBend);
-
-/* --- 4d. air-supply mains ------------------------------------------ */
-const pm = [V(-37.0,-2.35,11.5), V(-36.2,-2.35,6.0), V(-34.5,-2.35,1.05),
-            V(-10,-2.35,1.05), V(20,-2.35,1.05), V(44.5,-2.35,1.05)];
-run('press_main', pm, R_MAIN, mat.druck, {
-  name:'Compressed-air main', de:'Druckrohrleitung', cat:'Tubes & underground', mode:'druck',
-  desc:'Not a carrier tube at all: a utility main distributing compressed air from the machine station to stations that have no engine of their own. In Berlin these ran at roughly 150–300 mm — far larger than the 65 mm tubes the carriers travel in. That contrast is the thing to look at here: the pipe carrying the message is the small one.',
-  meta:'≈250 mm · Druckluft'});
-const sm = [V(-37.0,-2.95,17.5), V(-36.2,-2.95,6.0), V(-34.5,-2.95,0.50),
-            V(-10,-2.95,0.50), V(20,-2.95,0.50), V(44.5,-2.95,0.50)];
-run('suct_main', sm, R_MAIN, mat.saug, {
-  name:'Suction main', de:'Saugrohrleitung', cat:'Tubes & underground', mode:'saug',
-  desc:'The second pneumatic utility, running beside the first. A city network needs both because a long tube holds an enormous mass of air: you are not merely moving a carrier, you are accelerating and compressing everything in front of it. Berlin therefore piped two kinds of air — Druckluft and Saugluft — around the town.',
-  meta:'≈250 mm · Saugluft'});
-/* branch risers to the district office and the Exchange */
-tubeRun([V(8,-2.35,1.05),V(8,-2.35,6),V(8,-2.35,11),V(8,-1.2,11.6)], .09, mat.druck, G.tubes);
-tubeRun([V(9,-2.95,0.50),V(9,-2.95,6),V(9,-2.95,11),V(9,-1.4,11.6)], .09, mat.saug, G.tubes);
-tubeRun([V(44,-2.35,1.05),V(44,-2.35,5),V(44,-1.0,7.5)], .09, mat.druck, G.tubes);
-tubeRun([V(29.4,-2.35,1.05),V(29.9,-2.35,-4),V(29.9,-2.35,-18),V(29.9,-1.0,-20)], .09, mat.druck, G.tubes);
-
-/* --- 4e. neighbouring services, for context ------------------------- */
-run('sewer', [V(-64,-4.35,2.5),V(0,-4.45,2.5),V(60,-4.35,2.5)], .5, mat.brickDk, {
-  name:'Brick sewer', de:'', cat:'Street & context',
-  desc:'Not part of the installation — but it decides where the installation can go. Every pneumatic route had to be threaded between sewers, water and gas mains, subway structures and building foundations, which is why so many tubes take odd, wandering courses under a city.',
-  meta:'context service'});
-run('water', [V(-64,-3.4,1.75),V(60,-3.4,1.75)], .18, mat.ironDark, {
-  name:'Water main', de:'', cat:'Street & context',
-  desc:'Context — with one direct connection: town water is what cools the compressed air in the machine station upstairs, and in Paris the water main was used to compress the air directly.',
-  meta:'context service'});
-run('gas', [V(-64,-3.4,-2.95),V(60,-3.4,-2.95)], .15, mat.green, {
-  name:'Gas main', de:'', cat:'Street & context',
-  desc:'Context. Worth one thought, though: a vacuum-worked tube with a leaky joint draws in whatever surrounds it. Batcheller counted that among the reasons to prefer pressure working on wet or crowded underground routes — a pressure leak blows out, a vacuum leak sucks in.',
-  meta:'context service'});
-run('sigcable', [V(-40,-1.15,-1.35),V(0,-1.15,-1.35),V(46,-1.15,-1.35)], .07, mat.rubber, {
-  name:'Signalling and telephone cable', de:'', cat:'Signalling',
-  desc:'A multi-conductor cable laid the whole length of the tube route. Philadelphia did exactly this. It carries the bells, the annunciators, the circuit-closers that report a passing carrier, and a telephone circuit so that two stations can simply talk to each other about what is stuck where.',
-  meta:'laid alongside the tubes'});
-
-/* --- 4f. manholes ---------------------------------------------------- */
-let manholeHost = null;
-function manhole(x, first){
-  const g = new THREE.Group(); G.under.add(g);
-  const floorMesh = box(2.3,.18,2.2, mat.brickDk, x, -2.85, -1.2, g);
-  const m = manholeHost ? alias(floorMesh, manholeHost) : P(floorMesh, {
-    name:'Manhole / inspection chamber', de:'Einsteigschacht', cat:'Tubes & underground',
-    desc:'Carriers jam. Chicago\u2019s improved system put manholes at roughly 350-foot intervals so that no blockage could ever be more than about 175 feet from an access point; jointed rods were then pushed in from the chamber to drive the stuck carrier along. A pneumatic system is only as good as its ability to be got at.',
-    meta:'Chicago: \u2248350-ft spacing'});
-  if(!manholeHost) manholeHost = m;
-  alias(box(.2,2.9,2.2, mat.brickDk, x-1.15, -1.4, -1.2, g), m);
-  alias(box(.2,2.9,2.2, mat.brickDk, x+1.15, -1.4, -1.2, g), m);
-  alias(box(2.3,2.9,.2, mat.brickDk, x, -1.4, -2.25, g), m);
-  alias(box(.5,.14,2.2, mat.castIron, x-.9, .02, -1.2, g), m);
-  alias(box(.5,.14,2.2, mat.castIron, x+.9, .02, -1.2, g), m);
-  alias(cyl(.34,.34,.1, mat.castIron, x, .03, -1.2, g, 18), m);
-  for(let i=0;i<4;i++) alias(box(.5,.08,.1, mat.steel, x-1.0, -.5-i*.6, -2.1, g), m);
-  if(first){
-    P(RZ(cyl(.035,.035,3.4, mat.steel, x-0.6, -0.9, -0.4, g, 8), Math.PI/7), {
-      name:'Jointed clearing rods', de:'', cat:'Tubes & underground',
-      desc:'Screwed together a length at a time and pushed up the bore to shift a jammed carrier. Alongside them lived the other cleaning apparatus: oil-soaked dummy carriers sent through periodically to lubricate the tube, and plain clearing projectiles to sweep it.',
-      meta:'with oil dummies and clearing projectiles'});
-  }
-  return g;
-}
-[-40,-14,12,38].forEach((x,i)=>manhole(x, i===1));
-P(cyl(.16,.16,.34, mat.brass, -14,-1.72,-0.62, G.under, 12), {
-  name:'Condensate trap at a low point', de:'Wassersack', cat:'Tubes & underground',
-  desc:'Compressed air carries water; the water condenses as the air cools underground and runs to the lowest point of the line. Wherever the profile dips, a trap and drain is put in — otherwise a carrier eventually arrives soaked, or worse, is stopped dead by a plug of water.',
-  meta:''});
-P(box(.5,.16,.5, mat.castIron, -26, -1.65, -0.32, G.under), {
-  name:'Support bracket', de:'Rohrschelle', cat:'Tubes & underground',
-  desc:'Tubes are carried on brackets, not bedded loose in the fill. A pipe that sags between supports collects water at the sag and strains its joints at the ends.', meta:''});
-/* =====================================================================
-   5.  STATION APPARATUS
-       (a) Berlin pattern at the district office
-       (b) London pattern at the Central Telegraph Office
-       (c) Batcheller pattern at the railway mail terminal
-   ===================================================================== */
-const ST = G.stations;
-
-/* ---------- (a) BERLIN: Kammerapparat and closed receiver ----------- */
-box(8,.14,1.8, mat.wood, 3.6, .95, 11.9, ST).receiveShadow = true;
-for(const x of [0.4, 6.8]) box(.14,.95,1.6, mat.wood, x, .47, 11.9, ST);
-
-P(box(.52,1.0,.52, mat.castIron, 4.6, 1.55, 11.5, ST), {
-  name:'Sending chamber', de:'Sendeapparat / Kammerapparat', cat:'Sending apparatus', mode:'druck',
-  desc:'You cannot simply open a tube that is under pressure. Between the clerk and the running tube there is therefore a short chamber — an air-lock. The carrier goes in, the door is sealed, the air cock is turned, and only then does the carrier meet the pressure of the line. Atmosphere → loading chamber → isolating valve → pressurised tube.',
-  meta:'the whole apparatus is an air-lock'});
-P(RZ(cyl(.24,.24,.09, mat.brass, 4.86, 1.75, 11.5, ST, 20), Math.PI/2), {
-  name:'Airtight loading door', de:'Verschlußtür', cat:'Sending apparatus',
-  desc:'Hinged, with a rubber face and a swing bolt. It is not opened again until the time-lock releases it, which is the mechanical guarantee that two carriers cannot be launched nose-to-tail into the same section.',
-  meta:''});
-P(cyl(.09,.09,.34, mat.brass, 4.25, 1.35, 11.5, ST, 12), {
-  name:'Air-change cock', de:'Luftwechselhahn', cat:'Control hardware',
-  desc:'One handle, two utilities. Turned one way it connects the chamber to the compressed-air main; turned the other, to the suction main. This single fitting is what lets a station send by pressure and receive by vacuum on the same apparatus.',
-  meta:'Druckluft ⟷ Saugluft'});
-P(cyl(.07,.07,.3, mat.brass, 4.25, 1.05, 11.5, ST, 10), {
-  name:'Air cocks', de:'Lufthähne', cat:'Control hardware',
-  desc:'Subsidiary cocks: one vents the chamber to atmosphere before the door is opened, another admits air behind the carrier. Opening a door against 10 lb of pressure would break the clerk\u2019s wrist.', meta:''});
-P(RZ(cyl(.13,.13,.05, mat.enamel, 4.6, 2.15, 11.5, ST, 20), Math.PI/2), {
-  name:'Station manometer', de:'Manometer', cat:'Control hardware',
-  desc:'The clerk\u2019s only window into the pipe. Berlin\u2019s apparatus put a pressure gauge right on the chamber so the operator could watch the pressure build and know the moment the carrier had gone away.',
-  meta:''});
-P(box(.34,.5,.34, mat.castIron, 3.9, 1.25, 11.9, ST), {
-  name:'Time-lock', de:'Zeitsperre', cat:'Signalling',
-  desc:'An oil-damped dashpot. Once a carrier is despatched the sending door is locked shut for a set number of seconds — long enough for the previous carrier to clear the section. Batcheller compared it outright to the railway block system, and that is exactly what it is: headway enforced by machinery rather than by trust.',
-  meta:'dashpot · seconds of headway'});
-P(box(.5,1.0,.5, mat.castIron, 2.4, 1.55, 11.5, ST), {
-  name:'Closed receiver', de:'Empfangsapparat', cat:'Receiving apparatus', mode:'saug',
-  desc:'Used where there is still real pressure in the line at the terminal. The carrier is caught in a sealed chamber, stopped, isolated from the main pipe, and only then released. An open receiver — used where the line pressure has already fallen to about atmospheric — simply lets the carrier drop into a tray.',
-  meta:'open vs closed receiver'});
-P(box(.42,.42,.42, mat.steel, 2.4, 2.2, 11.5, ST), {
-  name:'Air cushion chamber', de:'Luftpuffer', cat:'Receiving apparatus',
-  desc:'Firing a carrier into the closed end of a steel pipe would destroy carrier and contents alike. Instead the carrier runs into a blind chamber; the air trapped ahead of it is compressed and acts as a spring, slowing it progressively. The American engineers called it, plainly, an air-cushion.',
-  meta:'compressed air as a spring'});
-P(box(.24,.1,.5, mat.brass, 2.05, 1.72, 11.5, ST), {
-  name:'Sluice gate', de:'Schieber', cat:'Receiving apparatus',
-  desc:'A quick-opening isolation gate. Put two in series and you have an air-lock at the receiving end too: tube | gate | chamber | gate | room, one always shut. London\u2019s double sluice valve did precisely this and let carriers follow one another far more closely than before.',
-  meta:''});
-P(RZ(box(.5,.06,.7, mat.wood, 2.4, .99, 12.4, ST), -0.28), {
-  name:'Receiving table', de:'Empfangstisch', cat:'Receiving apparatus',
-  desc:'The carrier rolls out here and a clerk empties it. This is the point the whole installation exists to reach — and it is also the point that never became automatic. Transit was mechanical; the terminals stayed thoroughly manual and thoroughly staffed.',
-  meta:''});
-P(sph(.11, mat.brass, 1.4, 1.9, 11.5, ST), {
-  name:'Signal bell', de:'Signalglocke', cat:'Signalling',
-  desc:'Rung electrically by the despatching station, or by the carrier itself as it passes a circuit-closer up the line. Nobody can see into a pipe, so everything a clerk knows about traffic comes to him as a sound or a dropped flag.',
-  meta:''});
-P(box(.4,.55,.14, mat.wood, 1.0, 1.6, 11.9, ST), {
-  name:'Annunciator', de:'Fallklappentafel', cat:'Signalling',
-  desc:'A board of small hinged flags. A flag drops to show which line has just sent, or which is clear. Together with the bells and the telephone it forms the electrical nervous system laid alongside the pneumatic one.',
-  meta:''});
-P(box(.2,.34,.2, mat.ironDark, 0.7, 1.25, 11.5, ST), {
-  name:'Telephone set', de:'Fernsprecher', cat:'Signalling',
-  desc:'The unglamorous but indispensable fitting. When something is wrong the clerk does not consult a gauge; he rings the next station and asks whether the carrier ever arrived.', meta:''});
-P(box(.3,.3,.6, mat.brass, 5.6, 1.2, 11.5, ST), {
-  name:'Electro-pneumatic branch switch', de:'Weiche', cat:'Sending apparatus',
-  desc:'A solenoid throws a short section of tube across to divert a carrier from the main line into a branch. In the later Berlin system carriers could route themselves: rings or contact studs on the carrier body tripped the switch as it passed, so it did not have to be lifted out and reloaded at every junction.',
-  meta:'later systems: self-routing carriers'});
-P(box(.28,.42,.1, mat.steel, 6.3, 1.25, 11.5, ST), {
-  name:'Obstructing screen', de:'', cat:'Receiving apparatus',
-  desc:'A perforated barrier dropped into the tube at an intermediate station to stop a carrier that would otherwise run straight through. Air passes; the carrier does not. This was how the Siemens circuit system took traffic off a continuously flowing line.',
-  meta:'Siemens circuit system'});
-P(box(.44,.36,.44, mat.castIron, 7.0, 1.15, 11.9, ST), {
-  name:'Transfer unit', de:'', cat:'Sending apparatus',
-  desc:'A compact crossing apparatus that hands a carrier from one line to another inside a large station. Berlin\u2019s network was sectional, like a railway: a carrier for a distant office was received here, sorted, and put into the next section — not blown down one unbroken pipe from origin to destination.',
-  meta:'sectional network working'});
-figure(3.2, 0, 13.3, ST, Math.PI);
-figure(5.6, 0, 13.4, ST, Math.PI*0.9);
-label('Berlin pattern apparatus', 3.8, 3.4, 11.5, 1.2, '#4e9c8c');
-
-/* ---------- (b) LONDON pattern at the Central Telegraph Office ------ */
-box(8,.14,1.8, mat.wood, -34.5, .95, 8.4, ST).receiveShadow = true;
-P(box(.6,.9,.6, mat.castIron, -35.0, 1.5, 8.0, ST), {
-  name:'Double sluice valve', de:'', cat:'Sending apparatus',
-  desc:'A London improvement of the first importance. Two sluices in series form an air-lock: one gate can be worked while the other stays shut, so the tube is never opened to the room. It raised the rate at which carriers could be despatched — they could now follow one another closely instead of waiting for the line to be opened and shut.',
-  meta:'closer headway, higher throughput'});
-P(box(.55,.55,.55, mat.brass, -35.0, 2.15, 8.0, ST), {
-  name:'D-box', de:'', cat:'Sending apparatus',
-  desc:'The simpler successor to Wilmot\u2019s complicated sluice-valve: an airtight box with a sliding lid, connected by a three-way cock to either the pressure or the vacuum main. Most of this technology\u2019s progress looks like this — not new physics, but a fitting with fewer moving parts that a clerk can work all day without thinking.',
-  meta:'succeeded the Wilmot sluice-valve'});
-P(cyl(.1,.1,.36, mat.brass, -35.5, 1.3, 8.0, ST, 12), {
-  name:'Three-way cock', de:'', cat:'Control hardware',
-  desc:'Connects the box to pressure, to vacuum, or to atmosphere. On a single reversible tube this is the fitting that reverses the traffic.', meta:''});
-P(box(.5,.8,.5, mat.castIron, -37.2, 1.45, 8.0, ST), {
-  name:'Open receiver', de:'', cat:'Receiving apparatus',
-  desc:'Where the line pressure at the terminal has already fallen to about atmospheric, no elaborate catching gear is needed: the carrier simply runs out into a tray. Cheap, quick, and quite useless on an American 8-inch line where a 21-lb canister arrives at 35 miles an hour.',
-  meta:''});
-P(RZ(box(.7,.06,.9, mat.wood, -37.4, .99, 8.9, ST), -0.3), {
-  name:'Discharge tray', de:'', cat:'Receiving apparatus',
-  desc:'Felt-lined, and angled so the carrier settles rather than bounces.', meta:''});
-P(box(.55,.85,.55, mat.castIron, -32.6, 1.45, 10.6, ST), {
-  name:'Exchange line terminal', de:'', cat:'Sending apparatus',
-  desc:'The terminal of the single reversible tube to the Stock Exchange. One pipe, worked by pressure one way and then switched to vacuum for the return: economical, but traffic cannot pass in both directions at once. Latimer Clark\u2019s original line of 1853 ran only one way at all.',
-  meta:'single reversible working'});
-figure(-36.2, 0, 9.6, ST, Math.PI*0.95);
-/* telegraph instrument room above — the reason London\u2019s tubes existed */
-for(let i=0;i<4;i++){
-  const t = box(.5,.3,.36, mat.brass, -52+i*3.4, 6.3, 12, ST);
-  if(i===0) P(t, {
-    name:'Telegraph instrument room', de:'', cat:'Buildings & context',
-    desc:'The point of the London system in one room. A telegram handed in at a district office would need a skilled telegraphist and a dedicated circuit to send it electrically from there. Send the paper instead, by tube, to a room like this — and one pneumatic pipe replaces several telegraph circuits and several skilled operators out in the districts. The electric telegraph moved messages between cities; the pneumatic telegraph moved the paper about inside one.',
-    meta:'the tube as a labour-saving device'});
-  else alias(t, parts.find(p=>p.name==='Telegraph instrument room').mesh);
-  box(1.8,.1,1.0, mat.wood, -52+i*3.4, 6.1, 12, ST);
-  figure(-52+i*3.4, 5.2, 13.4, ST, Math.PI);
-}
-label('London pattern · pneumatic telegraph', -35.5, 3.6, 8.0, 1.2, '#4e9c8c');
-
-/* ---------- (c) BATCHELLER pattern: 8-inch postal terminals --------- */
-function usTerminal(x,y,z,ry,full){
-  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = ry; ST.add(g);
-  box(3.6,.16,1.6, mat.wood, 0, -.12, .9, g);
-  const sendMesh = box(.9,1.1,.9, mat.castIron, .7, .45, 0, g);
-  const sendHost = full ? P(sendMesh, {
-    name:'8-inch transmitter', de:'', cat:'Sending apparatus', mode:'druck',
-    desc:'Batcheller\u2019s sender is a short length of tube carried on trunnions inside a housing. The operator swings the section out of the main line, drops the canister in, closes it and swings it back into alignment — loading the tube without dumping the entire air supply of the system into the room.',
-    meta:'swing-tube on trunnions'}) : alias(sendMesh, parts.find(p=>p.name==='8-inch transmitter').mesh);
-  if(full){
-    P(RZ(cyl(.1,.1,1.0, mat.steel, .7, .45, 0, g, 12), Math.PI/2), {
-      name:'Trunnions', de:'', cat:'Sending apparatus',
-      desc:'The two pivots the swinging tube section turns on. Small, and the reason the whole scheme works: the moving part is a piece of the tube itself, so there is nothing extra to seal.', meta:''});
-    P(box(.34,.34,.34, mat.brass, 1.35, .45, 0, g), {
-      name:'Circuit closer', de:'', cat:'Signalling',
-      desc:'A passing carrier physically closes an electrical contact beside the tube. That current locks the transmitters at intermediate stations for a set number of seconds, so nobody can inject a canister in front of one already running. The carrier is thus its own signalman.',
-      meta:'the pneumatic block system'});
-  }
-  const recMesh = box(1.0,1.2,1.0, mat.castIron, -1.1, .5, 0, g);
-  const recHost = full ? P(recMesh, {
-    name:'8-inch closed receiver', de:'', cat:'Receiving apparatus',
-    desc:'Harder to build than the sender, because it must do three things nearly at once: stop the carrier, keep the system\u2019s air in, and hand the carrier to the operator. Twenty-one pounds of steel arriving at thirty-five miles an hour has to be brought to rest in a few feet without hurting anybody.',
-    meta:'stop \u00b7 seal \u00b7 deliver'}) : alias(recMesh, parts.find(p=>p.name==='8-inch closed receiver').mesh);
-  if(full){
-    P(box(.36,.16,1.05, mat.steel, -1.1, .95, 0, g), {
-      name:'Exhaust slots', de:'', cat:'Receiving apparatus',
-      desc:'Slots cut in the tube just short of the stopping chamber. The driving air escapes sideways through them into a side passage while the carrier runs on into the blind chamber beyond — so the air is taken away from the carrier before the carrier has to be taken out of the air.',
-      meta:''});
-    P(box(.7,.7,.7, mat.steel, -1.1, 1.35, 0, g), {
-      name:'Catching chamber and air cushion', de:'', cat:'Receiving apparatus',
-      desc:'The blind end. Air trapped in front of the canister compresses and brings it to rest as a spring would. Some receivers then tilted the entire tube section about forty degrees and let gravity roll the carrier out — a large cast-iron pneumatically-worked mechanical hand.',
-      meta:'or: tilting receiver'});
-    P(box(.3,.12,.9, mat.brass, -1.6, .72, 0, g), {
-      name:'Receiver sluice gate', de:'', cat:'Receiving apparatus',
-      desc:'Once the carrier has stopped, pneumatic pressure drives a piston that opens this gate and lets it out onto the table. Then the gate shuts and the line is ready for the next.',
-      meta:''});
-    P(RZ(box(1.2,.08,1.4, mat.wood, -2.1, .28, .3, g), -.22), {
-      name:'Discharge table', de:'', cat:'Receiving apparatus',
-      desc:'Where the mail actually reappears. Beyond this point everything is hands, sacks and sorting frames — the tube saved the journey across the city, not the labour at either end.',
-      meta:''});
-  }
-  return g;
-}
-usTerminal(29.4, 1.05, -23.6, Math.PI, true);
-usTerminal(-34.2, 0.95, 20.6, 0, false);
-figure(28.0, 0.95, -24.8, ST, 0);
-figure(31.4, 0.95, -24.6, ST, .4);
-label('Batcheller pattern · 8-inch postal', 30, 5.2, -23.6, 1.3, '#4e9c8c');
-/* mail sorting frames in the terminal */
-for(let i=0;i<4;i++){
-  box(3.0,.1,1.2, mat.wood, 36+i*4.6, .9, -26, ST);
-  box(3.0,1.4,.12, mat.wood, 36+i*4.6, 1.6, -26.5, ST);
-  figure(36+i*4.6, 0, -24.9, ST, Math.PI);
-}
-P(box(1.2,1.0,.8, mat.leather, 46, .5, -21, ST), {
-  name:'Mail sacks and sorting frames', de:'', cat:'Buildings & context',
-  desc:'The American system was a bulk conveyor working behind the scenes between post offices, sorting rooms and railway terminals. By 1915 the six American cities with postal pneumatic systems had more than fifty-six miles of tube between them; in New York the tubes carried something over half the city\u2019s mail in the 1920s.',
-  meta:'Philadelphia, New York/Brooklyn, Boston, Chicago, St Louis'});
-/* =====================================================================
-   6.  DEPARTMENT-STORE CASH SYSTEM  (a separate branch of the art)
-   ===================================================================== */
-const SS = G.store;
-box(3.2,2.6,3.2, mat.wood, -27, 1.3, -24, SS);
-P(box(3.0,1.0,3.0, mat.brass, -27, 2.2, -24, SS), {
-  name:'Cashier\u2019s cage', de:'', cat:'Store cash system',
-  desc:'The point of the whole store system is not speed but control. A sales clerk keeps no till: the customer\u2019s money and the sales slip go into a carrier, the tube takes them to this cage, the cashier records the sale and sends back the change and the receipt. One cashier oversees dozens of counters.',
-  meta:'cash control, not mail'});
-const blower = P(cyl(.55,.55,.5, mat.castIron, -30.6, .3, -20.5, SS, 22), {
-  name:'Rotary blower', de:'', cat:'Store cash system',
-  desc:'A blower, not a compressor — and the distinction is worth having. A blower moves a large quantity of air at modest pressure, which is all a short indoor run needs. A compressor makes a big pressure difference and is what a city network under the streets requires. Small plants could even do without either, using a steam inspirator to induce the draught.',
-  meta:'blower vs compressor vs exhauster'});
-box(.7,.5,.5, mat.green, -31.6, .3, -20.5, SS);
-P(box(1.9,.22,.22, mat.brass, -29.4, .75, -20.5, SS), {
-  name:'Manifold', de:'', cat:'Store cash system',
-  desc:'The blower\u2019s output is split here among the outgoing tubes, and the return tubes are gathered onto its intake. Pressure out from the cage, exhaust back to it: Batcheller described American store installations as ordinarily having two tubes with air circulating continuously, compressed one way and exhausted the other.',
-  meta:'pressure out · suction back'});
-/* radial spokes to six counters */
-const counters = [[-35,-30],[-35,-24],[-35,-18],[-19,-30],[-19,-24],[-19,-18]];
-counters.forEach((c,i)=>{
-  const [cx,cz] = c;
-  box(2.6,.95,1.0, mat.wood, cx, .47, cz, SS);
-  const term = box(.26,.7,.26, mat.brass, cx+(cx<-27?1.2:-1.2), 1.3, cz, SS);
-  if(i===0) P(term, {
-    name:'Counter terminal', de:'', cat:'Store cash system',
-    desc:'A small sending-and-receiving head at the end of the counter. Store carriers were usually about 2¼ or 3 inches, in seamless brass tubing, with felt rings and — in later patterns — an accelerator disc at the rear that flared under the airstream to seal better as it went.',
-    meta:'2¼ or 3 in seamless brass'});
-  else alias(term, parts.find(p=>p.name==='Counter terminal').mesh);
-  const a = cx<-27 ? [V(cx+1.2,1.6,cz), V(-30,2.6,cz), V(-28.4,2.4,-24)]
-                   : [V(cx-1.2,1.6,cz), V(-24,2.6,cz), V(-25.6,2.4,-24)];
-  const t = tubeRun(a, .032, mat.brass, SS, 40, 10);
-  if(i===0) P(t.mesh, {
-    name:'Store tube, radial spoke', de:'', cat:'Store cash system',
-    desc:'A pure radial system: every counter has its own pipe straight to the middle. No junctions, no switches, no block signalling — which is why the store system stayed cheap and simple while the city networks grew into something resembling a railway.',
-    meta:'radial: hub and spokes'});
-  else alias(t.mesh, parts.find(p=>p.name==='Store tube, radial spoke').mesh);
-  figure(cx+(cx<-27?1.0:-1.0), 0, cz+1.6, SS, cx<-27?-1.3:1.3);
-});
-label('Radial system · store cash tubes', -27, 7.5, -24, 1.4, '#4e9c8c');
-
-/* =====================================================================
-   7.  CARRIERS — the specimen stand, to true scale
-   ===================================================================== */
-const CB = new THREE.Group(); G.carriers.add(CB);
-box(5.0,.9,1.1, mat.stoneDk, -7, .45, -8, CB).receiveShadow = true;
-box(5.2,.1,1.3, mat.wood, -7, .93, -8, CB);
-label('Carriers, to scale', -7, 2.4, -8, 1.1, '#c7a24a');
-
-/* -- London telegram carrier -- */
-const lc = new THREE.Group(); lc.position.set(-8.1,1.12,-8); lc.rotation.z = Math.PI/2; CB.add(lc);
-P(cyl(.0286,.0286,.20, mat.gutta, 0,0,0, lc, 16), {
-  name:'London telegram carrier', de:'', cat:'Carriers',
-  desc:'A gutta-percha cylinder covered in felt, open at the rear, with an elastic band to hold the folded telegram forms in. Capacity ran from about twenty forms in the 1½-inch size to seventy-five in the 3-inch. The body is deliberately a little undersize so it can take the bends; only the felt discs at the head actually fit the bore.',
-  meta:'gutta-percha and felt · ~25 forms'});
-const lcHost = parts[parts.length-1].mesh;
-alias(cyl(.0295,.0295,.03, mat.felt, 0,.09,0, lc, 16), lcHost);
-alias(cyl(.0295,.0295,.02, mat.felt, 0,.055,0, lc, 16), lcHost);
-P(torus(.028,.004, mat.red, 0,-.09,0, lc), {
-  name:'Elastic retaining band', de:'', cat:'Carriers',
-  desc:'The rear of a London carrier is simply open, and this band holds the papers in. There is no lid to lose, no latch to fail, and nothing to jam — a good example of how much of this engineering is about removing parts rather than adding them.',
-  meta:''});
-P(cyl(.031,.031,.045, mat.felt, 0,.135,0, lc, 16), {
-  name:'Felt buffer and driving discs', de:'', cat:'Carriers',
-  desc:'Several felt discs, cut to the bore, doing four jobs at once: sealing against the air, centring the carrier, absorbing the shock of arrival, and wearing out instead of the tube. They are consumables. As they wear, air leaks past and the carrier slows — so their diameter was checked and they were replaced on a strict rule.',
-  meta:'the part that is meant to wear out'});
-
-/* -- Berlin Rohrpostbüchse -- */
-const bc = new THREE.Group(); bc.position.set(-7,1.12,-8); bc.rotation.z = Math.PI/2; CB.add(bc);
-P(cyl(.0285,.0285,.19, mat.alum, 0,0,0, bc, 16), {
-  name:'Rohrpostb\u00fcchse', de:'Fahrb\u00fcchse / B\u00fcchse', cat:'Carriers',
-  desc:'Literally a tube-post can. A surviving Berlin example of about 1880–1930 has an aluminium inner container in a leather outer sleeve, is roughly 57 mm across, and weighs only about 225 grams. Light, because everything the air has to accelerate costs coal at the machine station.',
-  meta:'≈57 mm · ≈225 g · aluminium and leather'});
-const bcHost = parts[parts.length-1].mesh;
-alias(cyl(.029,.029,.13, mat.leather, 0,0,0, bc, 16), bcHost);
-P(cyl(.0295,.0295,.02, mat.rubber, 0,.10,0, bc, 16), {
-  name:'Driving disc and packing collar', de:'Treibscheibe', cat:'Carriers',
-  desc:'Berlin\u2019s carriers evolved from sheet steel with leather and felt seals to light aluminium with rubber-fabric caps. The seal must be tight enough to catch the airstream and loose enough to slide — too tight and friction eats the pressure, too loose and the air simply goes past.',
-  meta:''});
-
-/* -- American mail canister -- */
-const uc = new THREE.Group(); uc.position.set(-5.6,1.2,-8); uc.rotation.z = Math.PI/2; CB.add(uc);
-P(cyl(.089,.089,.61, mat.steel, 0,0,0, uc, 22), {
-  name:'8-inch mail canister', de:'', cat:'Carriers',
-  desc:'Two feet long, seven inches across, about twenty-one pounds empty, and holding somewhere between four and six hundred letters depending on the pattern. The newspapers called them torpedoes, which is fair — set beside the Berlin B\u00fcchse on this stand, the difference in ambition between the two national systems needs no explanation.',
-  meta:'≈24 in × 7 in · ≈21 lb empty · 400–600 letters'});
-const ucHost = parts[parts.length-1].mesh;
-P(sph(.088, mat.steel, 0,.31,0, uc), {
-  name:'Convex buffer head', de:'', cat:'Carriers',
-  desc:'The closed, domed end, faced with felt or with cork and leather. Orientation is not optional: buffer foremost, always. Load one backwards and the open end deforms on the first impact.',
-  meta:'buffer foremost — an absolute rule'});
-P(cyl(.093,.093,.05, mat.fibre, 0,.16,0, uc, 22), {
-  name:'Woven bearing rings', de:'', cat:'Carriers',
-  desc:'Replaceable fibrous rings clamped round the body. They carry the carrier\u2019s weight, keep steel off cast iron, and wear away sacrificially — Batcheller reckoned their life at about a thousand miles. To keep the friction manageable, oil-soaked dummy carriers were sent through the line at intervals to lubricate the bore.',
-  meta:'life ≈ 1,000 miles'});
-alias(cyl(.093,.093,.05, mat.fibre, 0,-.16,0, uc, 22), parts[parts.length-1].mesh);
-P(cyl(.086,.086,.03, mat.ironDark, 0,-.30,0, uc, 22), {
-  name:'Hinged locking lid', de:'', cat:'Carriers',
-  desc:'The mail end, hinged and locked. Mail is legally protected in a way telegram forms are not, so the American carrier has a fastening the European message carriers never needed.',
-  meta:''});
-P(cyl(.089,.089,.4, mat.copper, -5.6,1.2,-7.5, CB, 20).rotateZ(Math.PI/2), {
-  name:'Oil dummy carrier', de:'', cat:'Carriers',
-  desc:'Not a carrier of anything. An oil-charged projectile sent down the line at intervals to lay a film on the bore. Beside it in the store cupboard lived the clearing projectile, which swept the tube out. Lubrication and cleaning were routine work, not repairs.',
-  meta:'routine maintenance, not repair'});
-/* -- Paris piston and the store cash carrier, on the same stand ------ */
-const pp = new THREE.Group(); pp.position.set(-4.6,1.14,-8); pp.rotation.z = Math.PI/2; CB.add(pp);
-P(cyl(.0325,.0325,.15, mat.wood, 0,0,0, pp, 16), {
-  name:'Paris driving piston', de:'', cat:'Carriers',
-  desc:'Paris did not push carriers one at a time. It despatched them in trains of six to ten, driven from behind by a wooden, iron-clad piston with a cup-leather seal, each carrier in the train separately labelled for its own station. The piston is not a carrier at all: it carries nothing, and exists solely to convert the air pressure into a shove.',
-  meta:'trains of 6–10 · cup-leather seal'});
-const ppHost = parts[parts.length-1].mesh;
-alias(cyl(.0335,.0335,.025, mat.leather, 0,.08,0, pp, 16), ppHost);
-alias(cyl(.0335,.0335,.02, mat.steel, 0,-.075,0, pp, 16), ppHost);
-
-const cc = new THREE.Group(); cc.position.set(-9.0,1.13,-8); cc.rotation.z = Math.PI/2; CB.add(cc);
-P(cyl(.029,.029,.17, mat.brass, 0,0,0, cc, 16), {
-  name:'Store cash carrier', de:'', cat:'Store cash system',
-  desc:'The smallest member of the family, and the one that outlived all the others. Money and a sales slip go in at the counter; change and a receipt come back. Its sealing band \u2014 felt, leather or rubber, tight enough to catch the airstream and loose enough to slide \u2014 is the direct ancestor of the rubber gasket on the carrier that runs in a hospital today.',
-  meta:'2¼ in · the surviving branch'});
-const ccHost = parts[parts.length-1].mesh;
-P(cyl(.0305,.0305,.02, mat.felt, 0,-.085,0, cc, 16), {
-  name:'Accelerator disc', de:'', cat:'Store cash system',
-  desc:'A flared disc at the rear of a store carrier. Airflow pushes the skirt outward against the tube wall, so the seal actually improves as the carrier moves. The same idea appears on British telegram carriers as a felt skirt at the tail that flares under the draught.',
-  meta:'the seal tightens itself'});
-
-/* =====================================================================
-   7b.  FITTINGS THAT ARE EASY TO OVERLOOK
-   ===================================================================== */
-/* house tube and ticket tube inside the Central Telegraph Office */
-const ht = tubeRun([V(-45,1.0,9.5),V(-45,3.5,10.5),V(-45,6.0,11.6),V(-45,6.4,12.6)], .022, mat.brass, G.tubes, 40, 10);
-P(ht.mesh, {
-  name:'House tube', de:'Hausrohrpost', cat:'Tubes & underground',
-  desc:'British practice classified tubes as street tubes, house tubes and ticket tubes. This is a house tube: it never leaves the building, running from the counter below to the instrument room above. Shorter, smaller, lower pressure, sometimes hand-pumped \u2014 the same principle domesticated.',
-  meta:'street tube / house tube / ticket tube'});
-const tt = tubeRun([V(-47,1.0,9.5),V(-47,3.5,10.5),V(-47,6.0,11.6),V(-47,6.4,12.6)], .014, mat.brass, G.tubes, 40, 10);
-P(tt.mesh, {
-  name:'Ticket tube', de:'', cat:'Tubes & underground',
-  desc:'The smallest class of all: a tube for tickets and single slips, of an inch or so. At this bore the carrier holds one folded paper, and the whole apparatus can be worked by a foot bellows.',
-  meta:'≈1 in'});
-P(cyl(.09,.09,.4, mat.brass, -45, .8, 9.5, G.tubes, 12), {
-  name:'House tube terminal', de:'', cat:'Sending apparatus',
-  desc:'A flap or funnel end \u2014 the simplest sending apparatus there is. The elaborate sluice boxes and swing tubes elsewhere in this model exist because street tubes hold real pressure; a house tube often does not, and can be left open.',
-  meta:''});
-
-/* Kraftstation reservoirs at the district office */
-P(cyl(.55,.55,2.0, mat.druck, 8.5, 1.0, 13.8, G.stations, 20), {
-  name:'District pressure reservoir', de:'Druckluftbehälter (Kraftstation)', cat:'Air storage & conditioning', mode:'druck',
-  desc:'This station has no boiler and no engine. It is a Kraftstation: it draws Druckluft and Saugluft from the mains and stores them in tanks like this one, connecting a tank to a tube only at the moment a despatch is due. Berlin worked its later network exactly so, on stored power, at intervals of five to fifteen minutes.',
-  meta:'stored power, no steam plant'});
-P(cyl(.55,.55,2.0, mat.saug, 10.0, 1.0, 13.8, G.stations, 20), {
-  name:'District vacuum reservoir', de:'Saugluftbehälter (Kraftstation)', cat:'Air storage & conditioning', mode:'saug',
-  desc:'Its opposite number. Between them these two tanks let a small office send and receive in both directions without a single moving machine of its own on the premises.',
-  meta:''});
-tubeRun([V(8,-1.2,11.6),V(8.5,-.2,12.6),V(8.5,0.0,13.8)], .07, mat.druck, G.tubes, 24, 10);
-tubeRun([V(9,-1.4,11.6),V(10.0,-.2,12.6),V(10.0,0.0,13.8)], .07, mat.saug, G.tubes, 24, 10);
-
-P(cyl(.12,.12,.5, mat.brass, 2.0, 2.05, 11.0, G.stations, 12), {
-  name:'Vorluft vent', de:'', cat:'Receiving apparatus',
-  desc:'The air already sitting in the line ahead of a carrier \u2014 the Vorluft, the "air in front" \u2014 has to go somewhere. On a pressure despatch it is simply vented to atmosphere at the receiving end. Half of understanding a pneumatic tube is remembering that you are moving a whole pipeful of air, not just the little can inside it.',
-  meta:'the air in front'});
-P(cyl(.24,.24,.06, mat.brass, -34.5, -2.35, 3.0, G.tubes, 18), {
-  name:'Isolating gate valve', de:'Absperrschieber', cat:'Control hardware',
-  desc:'Shuts off a whole main so that a length of it can be opened for repair without stopping the city. Every branch off the pressure and suction mains has one, and knowing which to close is most of what a night engineer is paid for.',
-  meta:''});
-P(cyl(.18,.18,.05, mat.brass, -53.0, -2.6, 18.0, G.machine, 18), {
-  name:'Steam stop valve', de:'Absperrventil', cat:'Steam plant',
-  desc:'Between the boiler and the engine. Closing it separates the fire from the machinery \u2014 the first thing done in an emergency and the last thing undone in the morning.',
-  meta:''});
-P(cyl(.1,.1,.34, mat.brass, -37.0, -1.3, 10.6, G.machine, 12), {
-  name:'Relief valve', de:'Überdruckventil', cat:'Control hardware',
-  desc:'Distinct from the boiler safety valve: this one protects the air side. Air is compressible and stores a great deal of energy at quite ordinary pressures, which is precisely what makes it useful and precisely what makes a receiver dangerous.',
-  meta:''});
-P(box(10,5.6,.05, mat.soil, -5, -2.8, 3.36, G.soil), {
-  name:'Tube trench and made ground', de:'', cat:'Street & context',
-  desc:'The cut face of the roadway: setts, road bed, made ground, then clay. Tubes were laid two or three feet down for the small lines and as much as eighteen feet for the American mains, often threaded above a subway tunnel and always between the sewer, the water and the gas. Depth was not chosen; it was whatever the other services left over.',
-  meta:'2 ft to 18 ft, depending on what was already there'});
-P(box(10,.34,3.2, mat.paving, -5, -.16, 5.0, G.street), {
-  name:'Street surface', de:'', cat:'Street & context',
-  desc:'Granite setts and a tram track. Worth one moment of attention: the whole point of the installation below is that a carrier under this pavement moves at twenty to thirty-five miles an hour, while everything on top of it in 1925 is doing perhaps eight.',
-  meta:'the tubes were faster than the street'});
-/* =====================================================================
-   8.  CARRIERS IN MOTION, AND THE AIR CURRENT
-   ===================================================================== */
-G.moving = new THREE.Group(); scene.add(G.moving);
-const movers = [];
-const dotTex = (()=>{ const c=document.createElement('canvas'); c.width=c.height=64;
-  const x=c.getContext('2d'); const g=x.createRadialGradient(32,32,0,32,32,32);
-  g.addColorStop(0,'rgba(255,225,150,.95)'); g.addColorStop(.4,'rgba(255,170,60,.35)');
-  g.addColorStop(1,'rgba(255,140,40,0)'); x.fillStyle=g; x.fillRect(0,0,64,64);
-  return new THREE.CanvasTexture(c); })();
-
-function carrier(routeKey, kind, offset, speed){
-  const curve = ROUTES[routeKey]; if(!curve) return;
-  const len = curve.getLength();
-  const g = new THREE.Group(); G.moving.add(g);
-  let body;
-  if(kind==='us'){
-    body = cyl(.089,.089,.61, mat.steel, 0,0,0, g, 18);
-    sph(.088, mat.steel, 0,.31,0, g);
-    cyl(.093,.093,.05, mat.fibre, 0,.16,0, g, 18);
-    cyl(.093,.093,.05, mat.fibre, 0,-.16,0, g, 18);
-  }else if(kind==='berlin'){
-    body = cyl(.0285,.0285,.19, mat.alum, 0,0,0, g, 12);
-    cyl(.029,.029,.13, mat.leather, 0,0,0, g, 12);
-  }else{
-    body = cyl(.0286,.0286,.20, mat.gutta, 0,0,0, g, 12);
-    cyl(.0295,.0295,.03, mat.felt, 0,.09,0, g, 12);
-  }
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({map:dotTex, transparent:true,
-    blending:THREE.AdditiveBlending, depthTest:false, opacity:.85}));
-  halo.scale.set(1.1,1.1,1); halo.renderOrder = 900; g.add(halo);
-  movers.push({g, curve, t:offset, v:speed/len});
-  return g;
-}
-carrier('cto_dpo','berlin', .05, 11);
-carrier('cto_dpo','berlin', .48, 11);
-for(let i=0;i<6;i++) carrier('dpo_cto','berlin', .30 + i*0.006, 10);   /* a train of Büchsen */
-carrier('cto_exc','london', .62, 9);
-carrier('cto_rmt','us', .18, 15.6);
-carrier('rmt_cto','us', .70, 15.6);
-
-const trainHost = P(RZ(cyl(.0285,.0285,.19, mat.alum, 3.15, 1.03, 12.45, G.moving, 12), Math.PI/2), {
-  name:'Train of carriers', de:'Zug', cat:'Carriers',
-  desc:'Berlin could send eight or ten B\u00fcchsen together as a train rather than one at a time, and Paris pushed trains of six to ten with a wooden, iron-clad piston fitted with a cup-leather seal, each carrier labelled for its own station. Look at the return tube from the district office in this model: the carriers are running in a group, not singly.',
-  meta:'Berlin 8\u201310 \u00b7 Paris 6\u201310 behind a piston'});
-for(let i=1;i<4;i++)
-  alias(RZ(cyl(.0285,.0285,.19, mat.alum, 3.15, 1.03, 12.45-i*0.21, G.moving, 12), Math.PI/2), trainHost);
-
-/* --- the air current: which way, and which kind ---------------------- */
-G.air.visible = true;
-const arrows = [];
-function airFlow(routeKey, colour, reverse, n, speed, size){
-  const curve = ROUTES[routeKey]; if(!curve) return;
-  const len = curve.getLength();
-  const s = size || .17;
-  const m = M(colour,{emissive:colour, emissiveIntensity:.7, roughness:.5});
-  for(let i=0;i<n;i++){
-    const c = new THREE.Mesh(new THREE.ConeGeometry(s, s*3, 10), m);
-    c.castShadow = false;
-    G.air.add(c);
-    arrows.push({m:c, curve, t:i/n, v:speed/len, rev:reverse});
-  }
-}
-airFlow('press_main', 0xff5a3c, false, 22, 9, .17);
-airFlow('suct_main',  0x4fa8dd, true,  22, 9, .17);
-airFlow('cto_rmt',    0xff5a3c, false, 16, 14, .11);
-airFlow('rmt_cto',    0xff5a3c, false, 16, 14, .11);
-airFlow('dpo_cto',    0x4fa8dd, false, 14, 10, .06);
-airFlow('cto_dpo',    0xff5a3c, false, 14, 10, .06);
-
-P(RZ(new THREE.Mesh(new THREE.ConeGeometry(.28,.85,12), M(0xff5a3c,{emissive:0xff5a3c,emissiveIntensity:.6}))
-  .translateX(-16).translateY(-2.35).translateZ(1.05), -Math.PI/2), {
-  name:'Direction of the air current', de:'', cat:'Air machinery', mode:'druck',
-  desc:'Red is compressed air travelling away from the machine station; blue is air being drawn back toward it. Strictly, a vacuum never pulls a carrier: air is removed ahead of it and the ordinary atmosphere behind does the pushing. C. F. Varley noticed in 1858 that a pressure-driven carrier starts quicker than a vacuum-drawn one, because compressed air acts at once whereas the rarefaction has to travel down the line first.',
-  meta:'pressure starts faster · vacuum is cheaper to run'});
-G.air.add(parts[parts.length-1].mesh);
-
-/* =====================================================================
-   9.  PICKING, THE INFO PLATE AND THE PARTS SCHEDULE
-   ===================================================================== */
-const ray = new THREE.Raycaster();
-ray.params.Line = {threshold:0.1};
-const ptr = new THREE.Vector2(-5,-5);
-let hovered = null, selected = null, needPick = false;
-const tag = document.getElementById('tag'), tagName = document.getElementById('tagName'),
-      tagDe = document.getElementById('tagDe');
-const HOVER = new THREE.Color(0x6b5316), SEL = new THREE.Color(0x1f5a4e);
-
-renderer.domElement.addEventListener('pointermove', e=>{
-  ptr.x = (e.clientX/innerWidth)*2-1;
-  ptr.y = -(e.clientY/innerHeight)*2+1;
-  tag.style.left = Math.min(e.clientX+16, innerWidth-262)+'px';
-  tag.style.top  = (e.clientY+16)+'px';
-  needPick = true;
-});
-renderer.domElement.addEventListener('pointerleave', ()=>{ setHover(null); });
-
-function emis(rec, colour){
-  if(!rec) return;
-  const walk = o=>{ if(o.material && o.material.emissive) o.material.emissive.copy(colour); };
-  walk(rec.mesh); rec.mesh.traverse(walk);
-}
-function setHover(rec){
-  if(hovered === rec) return;
-  if(hovered && hovered !== selected) emis(hovered, hovered.baseEmissive || new THREE.Color(0));
-  hovered = rec;
-  if(rec){
-    if(rec !== selected) emis(rec, HOVER);
-    tagName.textContent = rec.name;
-    tagDe.textContent = rec.de || '';
-    tagDe.style.display = rec.de ? 'block' : 'none';
-    tag.style.display = 'block';
-    document.body.style.cursor = 'pointer';
-  }else{
-    tag.style.display = 'none';
-    document.body.style.cursor = 'default';
-  }
-}
-function pick(){
-  needPick = false;
-  ray.setFromCamera(ptr, camera);
-  const hits = ray.intersectObjects(pickables, false);
-  for(const h of hits){
-    if(h.object.visible && h.object.parent && h.object.parent.visible){
-      const rec = h.object.userData.rec;
-      if(rec){ setHover(rec); return; }
-    }
-  }
-  setHover(null);
-}
-
-const plate = document.getElementById('plate');
-function select(rec, fly){
-  if(selected && selected !== rec) emis(selected, selected.baseEmissive || new THREE.Color(0));
-  selected = rec;
-  if(!rec){ plate.style.display='none'; return; }
-  emis(rec, SEL);
-  document.getElementById('plateNo').textContent = 'PART ' + rec.no;
-  document.getElementById('plateName').textContent = rec.name;
-  const de = document.getElementById('plateDe');
-  de.textContent = rec.de || ''; de.style.display = rec.de ? 'block' : 'none';
-  const pills = document.getElementById('platePills');
-  let ph = `<span class="pill n">${rec.cat}</span>`;
-  if(rec.mode==='druck') ph += '<span class="pill d">Druckluft</span>';
-  if(rec.mode==='saug')  ph += '<span class="pill s">Saugluft</span>';
-  pills.innerHTML = ph;
-  document.getElementById('plateDesc').innerHTML = '<p>'+rec.desc+'</p>';
-  document.getElementById('plateMeta').textContent = rec.meta || '';
-  document.getElementById('plateMeta').style.display = rec.meta ? 'block' : 'none';
-  document.getElementById('plateBar').style.background =
-    rec.mode==='druck' ? 'var(--druck)' : rec.mode==='saug' ? 'var(--saug)' : 'var(--patina)';
-  plate.style.display = 'block';
-  document.querySelectorAll('.item').forEach(el=>
-    el.classList.toggle('sel', el.dataset.no === rec.no));
-  if(fly) flyTo(rec);
-}
-function flyTo(rec){
-  const b = new THREE.Box3().setFromObject(rec.mesh);
-  const c = b.getCenter(new THREE.Vector3());
-  const r = Math.max(b.getSize(new THREE.Vector3()).length()*1.6, 2.2);
-  controls.frame(c, Math.min(r+2.5, 140));
-}
-let downAt = null;
-renderer.domElement.addEventListener('pointerdown', e=>{ downAt = [e.clientX, e.clientY]; });
-renderer.domElement.addEventListener('click', e=>{
-  if(downAt && Math.hypot(e.clientX-downAt[0], e.clientY-downAt[1]) > 5) return;
-  if(hovered) select(hovered, false); else select(null);
-});
-renderer.domElement.addEventListener('dblclick', ()=>{ if(hovered) select(hovered, true); });
-document.getElementById('plateClose').onclick = ()=>select(null);
-
-/* ---------- the parts schedule ------------------------------------- */
-const CAT_ORDER = ['Carriers','Tubes & underground','Sending apparatus','Receiving apparatus',
-  'Air machinery','Steam plant','Air storage & conditioning','Control hardware','Signalling',
-  'Store cash system','Buildings & context','Street & context'];
-const index = document.getElementById('index');
-function buildIndex(filter){
-  index.innerHTML = '';
-  const f = (filter||'').trim().toLowerCase();
-  CAT_ORDER.forEach(cat=>{
-    const list = parts.filter(p=>p.cat===cat && (!f ||
-      (p.name+' '+(p.de||'')+' '+p.desc+' '+(p.meta||'')).toLowerCase().includes(f)));
-    if(!list.length) return;
-    const h = document.createElement('div'); h.className='cat'; h.textContent=cat;
-    index.appendChild(h);
-    list.forEach(p=>{
-      const d = document.createElement('div');
-      d.className='item'; d.dataset.no = p.no;
-      d.innerHTML = `<span class="no">${p.no}</span><span>${p.name}` +
-        (p.de?`<span class="de">${p.de}</span>`:'') + `</span>`;
-      d.onclick = ()=>select(p, true);
-      d.onmouseenter = ()=>{ if(p!==selected) emis(p, HOVER); };
-      d.onmouseleave = ()=>{ if(p!==selected) emis(p, p.baseEmissive||new THREE.Color(0)); };
-      index.appendChild(d);
-    });
-  });
-  if(!index.children.length)
-    index.innerHTML = '<div style="padding:22px 18px;color:#8b9298;font-size:13px">'+
-      'No part matches that. Try a material (felt, oakum, brass), a function (cushion, sluice, block) '+
-      'or a German term (Fahrrohr, B\u00fcchse, Saugluft).</div>';
-}
-buildIndex();
-document.getElementById('search').addEventListener('input', e=>buildIndex(e.target.value));
-/* =====================================================================
-   10.  VIEWS, LAYERS, GUIDED TOUR, LOOP
-   ===================================================================== */
-const VIEWS = {
-  whole:    [V(0,-1.5,-2), 178],
-  machine:  [V(-45,-3.4,15), 36],
-  street:   [V(-6,-2.0,-0.6), 28],
-  district: [V(3.6,1.2,11.6), 13],
-  rail:     [V(31,0.6,-24), 22],
-  store:    [V(-27,1.6,-24), 34]
-};
-document.querySelectorAll('[data-view]').forEach(b=>{
-  b.onclick = ()=>{ const v = VIEWS[b.dataset.view]; controls.frame(v[0], v[1]); };
-});
-
-const LAYERS = {
-  walls:    ()=>G.walls,
-  soil:     ()=>G.soil,
-  air:      ()=>G.air,
-  carriers: ()=>[G.moving, G.carriers],
-  labels:   ()=>G.labels
-};
-document.querySelectorAll('[data-layer]').forEach(b=>{
-  b.onclick = ()=>{
-    const on = !b.classList.contains('on');
-    b.classList.toggle('on', on);
-    const t = LAYERS[b.dataset.layer]();
-    (Array.isArray(t)?t:[t]).forEach(g=>g.visible = on);
-    b.setAttribute('aria-pressed', on);
-  };
-});
-const rail = document.getElementById('rail');
-document.getElementById('railtog').onclick = ()=>rail.classList.toggle('closed');
-
-/* ---------- guided tour --------------------------------------------- */
-const TOUR = [
-  {t:'A city solved a problem with air', p:null, v:'whole',
-   x:'Five buildings, one machine station and about a mile of pipe. Everything you can see was built to answer a single question: how do you get a piece of paper across a crowded city faster than a man can walk it? Between about 1853 and the 1930s the answer was compressed air. Follow the tour, or simply fly around and put the mouse on anything.'},
-  {t:'The carrier is a loose piston', p:'Rohrpostb\u00fcchse',
-   x:'Start with the thing that moves. It is a can with a soft collar round it that very nearly touches the bore. Raise the pressure behind it and lower it in front, and the difference pushes it along. That is the entire physics of the technology; everything else in this model exists to produce, control, store or survive that pressure difference.'},
-  {t:'Two kinds of air, piped separately', p:'Compressed-air main',
-   x:'A city network needs both. Red mains carry Druckluft — compressed air — outward; blue mains carry Saugluft, rarefied air, back. Now compare this pipe with the little tube beside it that the carrier actually travels in. The message pipe is the small one. Most of the buried iron here is not carrying messages at all; it is carrying the means of moving them.'},
-  {t:'Where the pressure difference is manufactured', p:'Air compressor, high-pressure end', v:'machine',
-   x:'Coal, boiler, compound engine, compressor and vacuum pump on one bedplate — the Luftpumpmaschine. Then a cooler, because compressed air comes out hot; then a separator, because hot air cooled drops its water; then a reservoir, because a piston compressor delivers in thumps rather than in a stream. Each machine in this row exists because of the one before it.'},
-  {t:'Every station is an air-lock', p:'Sending chamber', v:'district',
-   x:'You cannot open a tube that is under pressure. So the clerk loads into a short chamber, seals it, and only then turns the air-change cock to let the line take the carrier. Atmosphere, chamber, valve, pressurised tube. The American version does the same thing differently: a piece of the tube itself swings out on trunnions to be loaded.'},
-  {t:'Under the roadway', p:'Lead street tube', v:'street',
-   x:'Lead pipe drawn smooth with a heated mandrel and wiped at the joints, threaded inside a cast-iron duct about two feet down. Beside it, the American 8-inch cast-iron main with its lead-and-oakum joints. Every joint must be flush inside: one ridge and the traffic of a whole district stops. Every curve must be broad: a long carrier cannot turn a plumbing elbow.'},
-  {t:'Stopping it again without breaking it', p:'Catching chamber and air cushion',
-   x:'Twenty-one pounds of steel at thirty-five miles an hour has to be brought to rest in a few feet. Slots let the driving air escape sideways; the carrier runs on into a blind chamber where the air trapped ahead compresses and acts as a spring. Then a sluice gate opens and the mail rolls onto a table, where hands take over again.'},
-  {t:'Nobody can see inside a pipe', p:'Circuit closer',
-   x:'So the pneumatic system was wired throughout. A passing carrier closes a contact; that current locks the transmitters up the line for a few seconds, exactly as a railway block system does, and lets many carriers share one pipe safely. Bells, annunciators, telephones and time-locks are as much a part of this technology as the compressors are.'},
-  {t:'Three countries, three different machines', p:'8-inch mail canister',
-   x:'The same principle, built for three different jobs. London ran small tubes to shift telegram forms to its telegraphists. Berlin ran a genuine public Stadtrohrpost — you could hand in a letter and have it blown across town. America went the other way and built a bulk conveyor, with tubes wide enough to swallow six hundred letters at once. Set the carriers side by side on the stand and the difference in ambition is obvious.'},
-  {t:'And the version everyone actually saw', p:'Cashier\u2019s cage', v:'store',
-   x:'Not mail at all: cash. Brass tubes, a rotary blower, one building, and a cashier in a cage at the centre of a radial system. Telephones and teletypewriters killed the city networks — America shut its postal tubes at the end of 1953 as obsolete and excessively expensive — but the store tube survived, and its descendants still run in hospitals and banks today.'}
+const groups=[
+  ['Main Rotor & Rotor Head',[1,12]],['Flight-Control System',[13,19]],['Engine & Powerplant',[20,28]],['Transmission & Main Drivetrain',[29,34]],['Tail-Rotor Drivetrain',[35,37]],['Tail Rotor & Anti-Torque',[38,42]],['Stabilizing Surfaces',[43,44]],['Fuel System',[45,48]],['Electrical System',[49,51]],['Airframe & Structure',[52,62]],['Landing Gear',[63,65]],['Flight Instruments & Avionics',[66,72]]
 ];
-let tourAt = -1;
-const tourEl = document.getElementById('tour');
-function showTour(i){
-  tourAt = Math.max(0, Math.min(TOUR.length-1, i));
-  const s = TOUR[tourAt];
-  tourEl.style.display = 'block';
-  document.getElementById('tourStep').textContent = `${tourAt+1} / ${TOUR.length}`;
-  document.getElementById('tourTitle').textContent = s.t;
-  document.getElementById('tourText').textContent = s.x;
-  if(s.v && !s.p){ const v = VIEWS[s.v]; controls.frame(v[0], v[1]); }
-  if(s.p){
-    const rec = parts.find(p=>p.name===s.p);
-    if(rec) select(rec, true);
-  }
-  document.getElementById('hint').classList.add('hide');
-  document.getElementById('tourPrev').disabled = tourAt===0;
-  document.getElementById('tourNext').textContent = tourAt===TOUR.length-1 ? 'Finish' : 'Next \u2192';
-}
-document.getElementById('tourBtn').onclick = ()=>{
-  if(tourEl.style.display==='block'){ endTour(); } else { showTour(0);
-    document.getElementById('tourBtn').classList.add('on'); }
+const parts=[
+[1,'Main Rotor Blades','Main Rotor & Rotor Head','Rotating aerodynamic wings that generate the helicopter’s principal lift and thrust.'],
+[2,'Main Rotor Hub / Rotor Head','Main Rotor & Rotor Head','Central assembly connecting the rotor blades to the mast and accommodating the movements required for rotor control.'],
+[3,'Main Rotor Mast','Main Rotor & Rotor Head','Heavy vertical drive shaft carrying rotational power from the main transmission to the rotor hub.'],
+[4,'Blade Grips','Main Rotor & Rotor Head','Structural fittings securing each rotor blade to the hub while allowing blade pitch change.'],
+[5,'Pitch-Change Bearings','Main Rotor & Rotor Head','Bearings that let each blade rotate around its longitudinal axis for feathering and pitch adjustment.'],
+[6,'Flapping Hinges / Bearings','Main Rotor & Rotor Head','Permit blade movement up and down relative to the hub as aerodynamic loading changes.'],
+[7,'Lead-Lag Hinges / Bearings','Main Rotor & Rotor Head','Permit small fore-and-aft blade motion within the plane of rotation to relieve stresses.'],
+[8,'Droop Stops','Main Rotor & Rotor Head','Mechanical stops preventing excessive blade sag when the rotor is stopped or turning slowly.'],
+[9,'Swashplate Assembly','Main Rotor & Rotor Head','Transfers stationary cockpit control inputs into the rotating rotor system.'],
+[10,'Stationary Swashplate','Main Rotor & Rotor Head','Nonrotating lower portion that tilts and moves vertically according to pilot control inputs.'],
+[11,'Rotating Swashplate','Main Rotor & Rotor Head','Upper portion that rotates with the rotor while following the commanded angle of the stationary plate.'],
+[12,'Main Rotor Pitch Links','Main Rotor & Rotor Head','Adjustable rods connecting the rotating swashplate to blade grips to change blade pitch.'],
+[13,'Cyclic Control','Flight-Control System','Pilot control stick that tilts the rotor disc for forward, backward, and sideways motion.'],
+[14,'Collective Control','Flight-Control System','Lever that changes the pitch of all main rotor blades together, primarily controlling lift.'],
+[15,'Anti-Torque Pedals','Flight-Control System','Foot controls commanding tail-rotor thrust and helicopter yaw.'],
+[16,'Mixing Unit','Flight-Control System','Mechanical or hydraulic unit combining cyclic and collective commands into coordinated swashplate movements.'],
+[17,'Control Rods / Push-Pull Tubes','Flight-Control System','Rigid linkages carrying control movements between cockpit controls, servos, and rotor mechanisms.'],
+[18,'Hydraulic Servos / Actuators','Flight-Control System','Power-assisted actuators moving rotor controls against large aerodynamic forces.'],
+[19,'Hydraulic Pump','Flight-Control System','Pump supplying hydraulic pressure for control servos and associated equipment.'],
+[20,'Turboshaft Engine','Engine & Powerplant','Gas-turbine engine optimized to produce rotating shaft power rather than direct jet thrust.'],
+[21,'Engine Air Intake','Engine & Powerplant','Duct admitting outside air to the engine compressor.'],
+[22,'Particle Separator','Engine & Powerplant','Intake device that removes dust and debris before air reaches the compressor.'],
+[23,'Compressor Section','Engine & Powerplant','Multiple stages that raise the pressure of incoming air before combustion.'],
+[24,'Combustion Chamber / Combustor','Engine & Powerplant','Region where compressed air mixes with fuel and burns.'],
+[25,'Power Turbine','Engine & Powerplant','Turbine stages extracting energy from hot gases and converting it into shaft rotation.'],
+[26,'Engine Output Shaft','Engine & Powerplant','Shaft carrying rotational power from the turbine toward the helicopter drivetrain.'],
+[27,'Engine Exhaust','Engine & Powerplant','Ducting that routes hot turbine exhaust away from the airframe.'],
+[28,'Fuel Control Unit','Engine & Powerplant','Meters fuel to the engine according to operating condition and power demand.'],
+[29,'Main Transmission / Main Gearbox','Transmission & Main Drivetrain','Reduction gearbox converting very high engine RPM to the much lower speed required by the rotor.'],
+[30,'Main Gearbox Input Drive','Transmission & Main Drivetrain','Coupling and shaft assembly carrying engine power into the transmission.'],
+[31,'Freewheeling Unit / Sprag Clutch','Transmission & Main Drivetrain','Automatically disconnects the engine when engine RPM falls below rotor RPM, permitting autorotation.'],
+[32,'Transmission Oil Pump','Transmission & Main Drivetrain','Circulates lubricating oil through transmission gears and bearings.'],
+[33,'Oil Cooler','Transmission & Main Drivetrain','Heat exchanger removing excess heat from lubricating oil.'],
+[34,'Rotor Brake','Transmission & Main Drivetrain','Brake used on some helicopters to stop the rotor after shutdown or hold it while parked.'],
+[35,'Tail Rotor Driveshaft','Tail-Rotor Drivetrain','Long rotating shaft transmitting power through the tail boom.'],
+[36,'Intermediate Gearbox','Tail-Rotor Drivetrain','Gearbox changing drivetrain direction where the tail structure changes angle.'],
+[37,'Tail Rotor Gearbox','Tail-Rotor Drivetrain','Final gearbox redirecting and adjusting drive rotation for the tail rotor.'],
+[38,'Tail Rotor Blades','Tail Rotor & Anti-Torque','Aerodynamic blades producing lateral thrust to oppose main-rotor torque and control yaw.'],
+[39,'Tail Rotor Hub','Tail Rotor & Anti-Torque','Central assembly securing tail-rotor blades to their driven shaft.'],
+[40,'Tail Rotor Blade Grips','Tail Rotor & Anti-Torque','Fittings holding tail-rotor blades while allowing blade pitch change.'],
+[41,'Tail Rotor Pitch Links','Tail Rotor & Anti-Torque','Linkages carrying pitch-control movement to individual tail-rotor blades.'],
+[42,'Pitch Beam / Pitch-Change Spider','Tail Rotor & Anti-Torque','Sliding mechanism changing tail-rotor blade pitch together when pedal input changes.'],
+[43,'Vertical Stabilizer / Fin','Stabilizing Surfaces','Vertical aerodynamic surface improving directional stability in forward flight.'],
+[44,'Horizontal Stabilizer','Stabilizing Surfaces','Horizontal aerodynamic surface helping manage fuselage pitch attitude.'],
+[45,'Fuel Tanks / Fuel Cells','Fuel System','Containers or crash-resistant bladders storing the helicopter’s fuel.'],
+[46,'Fuel Pump','Fuel System','Moves fuel from the tanks toward the engine.'],
+[47,'Fuel Lines','Fuel System','Tubing carrying fuel between tanks, pumps, filters, controls, and engine.'],
+[48,'Fuel Filter','Fuel System','Removes contaminants before fuel reaches sensitive engine components.'],
+[49,'Battery','Electrical System','Stores electrical energy for starting, emergency power, and operation without the generator.'],
+[50,'Starter-Generator','Electrical System','Cranks the turbine during start and then becomes an electrical generator.'],
+[51,'Electrical Distribution System','Electrical System','Busbars, relays, breakers, wiring, and control units distributing electrical power.'],
+[52,'Fuselage','Airframe & Structure','Main structural body containing cockpit, cabin, equipment, and major systems.'],
+[53,'Cockpit','Airframe & Structure','Forward crew compartment containing flight controls, instruments, and avionics.'],
+[54,'Cabin','Airframe & Structure','Occupied fuselage space for passengers, cargo, crew, or mission equipment.'],
+[55,'Tail Boom','Airframe & Structure','Long structural extension carrying tail drivetrain, rotor, and stabilizers.'],
+[56,'Bulkheads','Airframe & Structure','Internal structural frames maintaining fuselage shape and transmitting loads.'],
+[57,'Engine Mounts','Airframe & Structure','Structural fittings supporting the engine and transferring its loads into the airframe.'],
+[58,'Transmission Mounts','Airframe & Structure','Heavy attachments supporting the gearbox and carrying rotor loads into the fuselage.'],
+[59,'Firewall','Airframe & Structure','Fire-resistant barrier separating the engine compartment from occupied or vulnerable areas.'],
+[60,'Cowling','Airframe & Structure','Removable aerodynamic panels covering machinery while allowing maintenance access.'],
+[61,'Windscreen / Windshield','Airframe & Structure','Transparent forward panels providing pilot visibility.'],
+[62,'Cabin Doors','Airframe & Structure','Access openings for crew and passengers.'],
+[63,'Skid Landing Gear','Landing Gear','Tubular landing structure commonly used on light and medium helicopters.'],
+[64,'Cross Tubes','Landing Gear','Flexible transverse members attaching skids to the fuselage and absorbing some landing energy.'],
+[65,'Wheeled Landing Gear','Landing Gear','Alternative wheel-and-strut landing system used on many larger helicopters.'],
+[66,'Airspeed Indicator','Flight Instruments & Avionics','Displays aircraft speed relative to the surrounding air.'],
+[67,'Altimeter','Flight Instruments & Avionics','Uses atmospheric pressure to indicate altitude above a selected pressure reference.'],
+[68,'Attitude Indicator / Artificial Horizon','Flight Instruments & Avionics','Displays aircraft pitch and roll relative to the horizon.'],
+[69,'Dual Tachometer','Flight Instruments & Avionics','Displays engine and rotor RPM, traditionally with two needles on a common instrument.'],
+[70,'Torque Meter','Flight Instruments & Avionics','Shows engine or transmission torque being produced.'],
+[71,'Radio Transceiver','Flight Instruments & Avionics','Provides voice communication with air traffic control and other stations.'],
+[72,'Navigation System / GPS','Flight Instruments & Avionics','Provides position, routes, headings, waypoints, and navigation information.']
+].map(x=>({id:x[0],name:x[1],system:x[2],desc:x[3]}));
+const byId=new Map(parts.map(p=>[p.id,p]));
+
+const complexityLevels=[
+  {label:'Level 1 · Bare essentials',desc:'The simplest helicopter reading: the shell, the main rotor, the engine/transmission masses, the tail rotor path, and the landing stance.',ids:[1,3,20,29,35,38,43,52,53,55,61,63]},
+  {label:'Level 2 · Primary structure',desc:'Adds the core structural context and the main external mechanical supports so the helicopter reads clearly as an aircraft.',ids:[1,2,3,20,29,35,38,39,43,44,52,53,54,55,57,58,60,61,63,64]},
+  {label:'Level 3 · Control architecture',desc:'Adds the pilot controls, control rods, hydraulic actuation, and the swashplate system so the control pathway becomes legible.',ids:[1,2,3,4,9,10,11,12,13,14,15,16,17,18,19,20,29,35,38,39,43,44,52,53,54,55,57,58,60,61,63,64]},
+  {label:'Level 4 · Rotor-head intricacy',desc:'Adds the more intricate rotor-head hardware such as grips, pitch bearings, flapping and lead-lag articulation, and the engine-to-gearbox couplings.',ids:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,26,29,30,31,35,38,39,43,44,52,53,54,55,57,58,60,61,63,64]},
+  {label:'Level 5 · Powerplant breakdown',desc:'Adds the internal engine stages, lubrication items, rotor brake, and the complete tail-rotor control mechanism for a truly mechanical helicopter.',ids:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,52,53,54,55,57,58,60,61,63,64]},
+  {label:'Level 6 · Support systems',desc:'Adds fuel storage and flow, electrical start/generation, the firewall, bulkheads, and the service-side support systems.',ids:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,63,64,62]},
+  {label:'Level 7 · Fully instrumented helicopter',desc:'Adds the cockpit instrumentation and avionics, making the helicopter nearly complete while still omitting only the alternate landing-gear reference.',ids:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,66,67,68,69,70,71,72]},
+  {label:'Level 8 · Full glossary build',desc:'The most complex layer, with the entire 72-part glossary visible or available, including the alternate wheeled landing-gear reference.',ids:parts.map(p=>p.id)}
+];
+let currentComplexity=5;
+let currentComplexitySet=new Set(complexityLevels[currentComplexity-1].ids);
+
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.08;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x91a2aa);scene.fog=new THREE.Fog(0x91a2aa,34,95);
+const camera=new THREE.PerspectiveCamera(44,1,.1,160);camera.position.set(14,9.5,13);camera.up.set(0,1,0);
+const controls=new OrbitControls(camera,canvas);controls.enableDamping=true;controls.dampingFactor=.065;controls.target.set(-.7,3.25,0);controls.minDistance=5.5;controls.maxDistance=40;controls.minPolarAngle=.15;controls.maxPolarAngle=1.52;controls.enablePan=true;controls.panSpeed=.7;controls.rotateSpeed=.62;controls.zoomSpeed=.75;controls.screenSpacePanning=true;controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};controls.touches={ONE:THREE.TOUCH.ROTATE,TWO:THREE.TOUCH.DOLLY_PAN};
+scene.add(new THREE.HemisphereLight(0xe7f3f6,0x29383e,2.1));
+const sun=new THREE.DirectionalLight(0xffefd3,3);sun.position.set(15,22,-10);sun.castShadow=true;sun.shadow.mapSize.set(1536,1536);sun.shadow.camera.left=-22;sun.shadow.camera.right=22;sun.shadow.camera.top=22;sun.shadow.camera.bottom=-22;scene.add(sun);
+const rim=new THREE.DirectionalLight(0x9fcae0,1.4);rim.position.set(-18,9,18);scene.add(rim);
+
+const M={
+ rotor:new THREE.MeshStandardMaterial({color:0xc9aa61,metalness:.7,roughness:.26}),
+ control:new THREE.MeshStandardMaterial({color:0x6f9db4,metalness:.58,roughness:.3}),
+ power:new THREE.MeshStandardMaterial({color:0xbd795c,metalness:.63,roughness:.28}),
+ drive:new THREE.MeshStandardMaterial({color:0xaeb8bd,metalness:.84,roughness:.2}),
+ tail:new THREE.MeshStandardMaterial({color:0x9d83aa,metalness:.6,roughness:.28}),
+ fuel:new THREE.MeshStandardMaterial({color:0x688d72,metalness:.32,roughness:.42}),
+ elec:new THREE.MeshStandardMaterial({color:0x9a718d,metalness:.25,roughness:.44}),
+ dark:new THREE.MeshStandardMaterial({color:0x273239,metalness:.68,roughness:.28}),
+ black:new THREE.MeshStandardMaterial({color:0x141a1d,metalness:.15,roughness:.72}),
+ ghost:new THREE.MeshPhysicalMaterial({color:0xd5eef3,transparent:true,opacity:.055,roughness:.1,metalness:0,transmission:.75,depthWrite:false,side:THREE.DoubleSide}),
+ ghostWire:new THREE.MeshBasicMaterial({color:0xe2f4f7,transparent:true,opacity:.13,wireframe:true,depthWrite:false}),
+ glass:new THREE.MeshPhysicalMaterial({color:0xc6e7ee,transparent:true,opacity:.04,roughness:.04,transmission:.88,depthWrite:false,side:THREE.DoubleSide}),
+ roof:new THREE.MeshStandardMaterial({color:0x596269,roughness:.94}),
+ roof2:new THREE.MeshStandardMaterial({color:0x374149,roughness:.86}),
+ white:new THREE.MeshStandardMaterial({color:0xdcded7,roughness:.66}),
+ instrument:new THREE.MeshStandardMaterial({color:0x1c252a,metalness:.2,roughness:.6})
 };
-document.getElementById('tourNext').onclick = ()=>{
-  if(tourAt===TOUR.length-1) endTour(); else showTour(tourAt+1); };
-document.getElementById('tourPrev').onclick = ()=>showTour(tourAt-1);
-document.getElementById('tourEnd').onclick = ()=>endTour();
-function endTour(){
-  tourEl.style.display='none'; tourAt=-1;
-  document.getElementById('hint').classList.remove('hide');
-  document.getElementById('tourBtn').classList.remove('on');
+const pickables=[];const registry=new Map();const relatedMap=new Map();
+function part(id,obj,related=[]){const data=byId.get(id);obj.userData.partId=id;obj.traverse(o=>{if(o.isMesh){o.userData.partId=id;pickables.push(o)}});registry.set(id,obj);relatedMap.set(id,related);return obj}
+function partMulti(id,objs,related=[]){for(const obj of objs){obj.userData.partId=id;obj.traverse(o=>{if(o.isMesh){o.userData.partId=id;pickables.push(o)}})}const proxy=new THREE.Group();proxy.userData.members=objs;registry.set(id,proxy);relatedMap.set(id,related);return proxy}
+function add(m,p=[0,0,0],r=[0,0,0],s=[1,1,1],shadow=true){m.position.set(...p);m.rotation.set(...r);m.scale.set(...s);m.castShadow=shadow;m.receiveShadow=shadow;scene.add(m);return m}
+function box(sz,mat,p,r,s){return add(new THREE.Mesh(new THREE.BoxGeometry(...sz),mat),p,r,s)}
+function cyl(rt,rb,h,mat,p,r=[0,0,0],seg=24){return add(new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat),p,r)}
+function sph(rx,ry,rz,mat,p,seg=24){const m=add(new THREE.Mesh(new THREE.SphereGeometry(1,seg,Math.max(12,seg/2)),mat),p);m.scale.set(rx,ry,rz);return m}
+function tube(a,b,r,mat,seg=12){const A=new THREE.Vector3(...a),B=new THREE.Vector3(...b),d=B.clone().sub(A),mid=A.clone().add(B).multiplyScalar(.5);const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,d.length(),seg),mat);m.position.copy(mid);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.clone().normalize());m.castShadow=true;scene.add(m);return m}
+function group(list=[]){const g=new THREE.Group();scene.add(g);for(const o of list){if(o.parent) o.parent.remove(o);g.add(o)}return g}
+function torus(R,r,mat,p,rot=[Math.PI/2,0,0]){return add(new THREE.Mesh(new THREE.TorusGeometry(R,r,12,48),mat),p,rot)}
+function ringDetail(axis='x',p=[0,0,0],R=.6,count=5,spacing=.16,mat=M.drive){const g=new THREE.Group();scene.add(g);for(let i=0;i<count;i++){const t=new THREE.Mesh(new THREE.TorusGeometry(R-i*.03,.025,8,32),mat);if(axis==='x')t.rotation.z=Math.PI/2;if(axis==='z')t.rotation.x=Math.PI/2;t.position.set(...p);if(axis==='x')t.position.x+=(i-(count-1)/2)*spacing;if(axis==='z')t.position.z+=(i-(count-1)/2)*spacing;g.add(t)}return g}
+function hot(id,p,r=.1){const m=sph(r,r,r,new THREE.MeshBasicMaterial({transparent:true,opacity:.001,depthWrite:false}),p,10);m.userData.partId=id;pickables.push(m);registry.set(id,m);return m}
+
+// Rooftop and skyline
+box([27,.6,27],M.roof,[0,-.3,0]);
+for(const z of [-13.15,13.15]) box([27,1.2,.35],M.roof2,[0,.3,z]);
+for(const x of [-13.15,13.15]) box([.35,1.2,27],M.roof2,[x,.3,0]);
+const hRing=add(new THREE.Mesh(new THREE.TorusGeometry(6.6,.12,10,80),M.white),[0,.03,0],[Math.PI/2,0,0]);box([4.2,.08,.4],M.white,[0,.05,0]);box([.4,.08,4.2],M.white,[0,.05,0]);
+box([2.1,1.4,1.8],M.roof2,[8.5,.7,-8.4]);box([1.4,.8,2.0],M.roof2,[-8.9,.4,-7.7]);
+for(let i=0;i<20;i++){const a=i/20*Math.PI*2,rad=34+(i%4)*6,w=4+(i%4)*1.5,d=5+((i+2)%5),h=9+(i%7)*3;const mat=new THREE.MeshStandardMaterial({color:0x4f5d65,roughness:.9});box([w,h,d],mat,[Math.cos(a)*rad,h/2-2.5,Math.sin(a)*rad])}
+
+// Ghost airframe: structural context only
+const fus=sph(4.05,1.65,1.58,M.ghost,[.7,3.0,0],30);fus.rotation.z=-.015;part(52,fus,[53,54,56]);
+const fusWire=sph(4.08,1.68,1.61,M.ghostWire,[.7,3.0,0],18);fusWire.rotation.z=-.015;
+const cockpit=sph(1.9,1.45,1.48,M.glass,[3.45,3.0,0],26);part(53,cockpit,[61,66,72]);
+const cabin=box([3.4,2.55,2.8],M.ghost,[.5,3.0,0]);part(54,cabin,[52,56,62]);
+const tailBoom=cyl(.24,.58,7.1,M.ghost,[-5.35,3.35,0],[0,0,Math.PI/2],20);part(55,tailBoom,[35,43,44]);
+add(new THREE.Mesh(new THREE.CylinderGeometry(.25,.59,7.1,12),M.ghostWire),[-5.35,3.35,0],[0,0,Math.PI/2]);
+const fin=box([1.0,2.2,.09],M.ghost,[-8.82,4.4,0],[0,0,-.15]);part(43,fin,[44,37,38]);
+const hstab=box([1.55,.09,3.0],M.ghost,[-7.8,3.7,0]);part(44,hstab,[43,55]);
+const windshield=sph(1.68,1.28,1.35,M.glass,[3.7,3.18,0],26);part(61,windshield,[53,66,68]);
+const cowl=box([2.6,1.55,2.4],M.ghost,[.1,4.15,0]);part(60,cowl,[20,29,59]);
+const doors=group([box([1.45,1.7,.05],M.ghost,[1.65,3.0,-1.43]),box([1.45,1.7,.05],M.ghost,[1.65,3.0,1.43])]);part(62,doors,[54,52]);
+const firewall=box([.08,2.4,2.5],M.ghost,[-.8,3.2,0]);part(59,firewall,[20,54]);
+const bulk=group([-1.25,.2,1.5,2.7].map(x=>{const t=new THREE.Mesh(new THREE.TorusGeometry(1.32,.035,8,34),M.ghostWire);t.position.set(x,3.0,0);t.rotation.x=Math.PI/2;scene.add(t);return t}));part(56,bulk,[52,57,58]);
+
+// Landing gear
+const skids=group([cyl(.07,.07,6.4,M.drive,[.6,.52,-1.43],[0,0,Math.PI/2],14),cyl(.07,.07,6.4,M.drive,[.6,.52,1.43],[0,0,Math.PI/2],14)]);part(63,skids,[64]);
+const cross=group([tube([-.8,.55,-1.42],[-.55,1.7,-.72],.065,M.drive),tube([-.8,.55,1.42],[-.55,1.7,.72],.065,M.drive),tube([2.2,.55,-1.42],[1.95,1.7,-.72],.065,M.drive),tube([2.2,.55,1.42],[1.95,1.7,.72],.065,M.drive)]);part(64,cross,[63]);
+const wheels=group([cyl(.19,.19,.16,M.black,[2.5,.65,-1.35],[Math.PI/2,0,0]),cyl(.19,.19,.16,M.black,[2.5,.65,1.35],[Math.PI/2,0,0])]);wheels.visible=false;part(65,wheels,[63]);
+for(const ghostObj of [fus,cockpit,cabin,tailBoom,fin,hstab,windshield,cowl,doors,firewall,bulk])ghostObj.traverse(o=>{if(o.isMesh)o.userData.isGhost=true});
+
+// Transmission foundation + mounts
+const txMount=group([box([.18,.75,.18],M.drive,[-.55,3.1,-.75]),box([.18,.75,.18],M.drive,[-.55,3.1,.75]),box([.18,.75,.18],M.drive,[.6,3.1,-.75]),box([.18,.75,.18],M.drive,[.6,3.1,.75])]);part(58,txMount,[29,56]);
+const gbParts=group([cyl(.95,.78,1.15,M.drive,[0,4.35,0]),cyl(.62,.62,.28,M.dark,[0,5.02,0]),ringDetail('x',[0,4.36,0],.72,4,.1,M.dark)]);part(29,gbParts,[30,31,32,33]);
+const mast=cyl(.14,.14,2.5,M.drive,[0,5.72,0]);part(3,mast,[2,9,29]);
+const rotorBrake=torus(.49,.07,M.dark,[0,5.15,0],[Math.PI/2,0,0]);part(34,rotorBrake,[29,3]);
+const oilPump=cyl(.17,.17,.42,M.drive,[-.7,4.2,.55],[0,0,Math.PI/2],14);part(32,oilPump,[29,33]);
+const oilCooler=box([.25,.85,.8],M.dark,[-1.05,3.7,.8]);part(33,oilCooler,[32,20]);
+
+// Engine mounts
+const engineMount=group([tube([-.4,3.1,-.8],[-.1,4.1,-.85],.055,M.drive),tube([-.4,3.1,.8],[-.1,4.1,.85],.055,M.drive),tube([1.9,3.0,-.75],[1.75,4.1,-.82],.055,M.drive),tube([1.9,3.0,.75],[1.75,4.1,.82],.055,M.drive)]);part(57,engineMount,[20,56]);
+
+// Turboshaft: axis along x
+const engineGroup=new THREE.Group();scene.add(engineGroup);engineGroup.position.set(1.2,4.15,-.7);
+function eMesh(g,mat,x,rad,len){const m=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad,len,28),mat);m.rotation.z=Math.PI/2;m.position.x=x;g.add(m);m.castShadow=true;return m}
+const intake=eMesh(engineGroup,M.dark,1.1,.7,.28);part(21,intake,[22,23]);
+const particle=eMesh(engineGroup,M.drive,.86,.66,.14);part(22,particle,[21,23]);
+const compSeg=[];for(let i=0;i<6;i++){const m=eMesh(engineGroup,i%2?M.drive:M.dark,.45-i*.11,.62-i*.025,.055);compSeg.push(m)}const compressor=group([]);for(const m of compSeg){engineGroup.remove(m);compressor.add(m)}engineGroup.add(compressor);part(23,compressor,[21,22,24]);
+const combustor=eMesh(engineGroup,M.power,-.08,.61,.44);part(24,combustor,[23,25,28]);
+const turbine=eMesh(engineGroup,M.drive,-.48,.58,.35);part(25,turbine,[24,26]);
+const exhaust=eMesh(engineGroup,M.dark,-.85,.52,.38);part(27,exhaust,[25]);
+const fuelControl=box([.34,.27,.26],M.power,[1.6,3.58,-.92]);part(28,fuelControl,[24,47,48]);
+const engineOuter=eMesh(engineGroup,new THREE.MeshStandardMaterial({color:0x9aa3a6,metalness:.8,roughness:.22,transparent:true,opacity:.26}),.03,.75,2.2);part(20,engineOuter,[23,24,25]);
+const output=tube([.15,4.1,-.72],[-.55,4.1,-.25],.1,M.power);part(26,output,[25,30]);
+const inputDrive=tube([-.55,4.1,-.25],[-.72,4.25,0],.12,M.drive);part(30,inputDrive,[26,31,29]);
+const freewheel=cyl(.19,.19,.36,M.drive,[-.56,4.1,-.25],[Math.PI/2,0,0],16);part(31,freewheel,[26,30,29]);
+
+// Rotor head sophistication
+const statSw=torus(.69,.075,M.control,[0,6.2,0],[Math.PI/2,0,0]);part(10,statSw,[9,11,18]);
+const rotSw=torus(.65,.07,M.rotor,[0,6.42,0],[Math.PI/2,0,0]);part(11,rotSw,[9,10,12]);
+const swash=group([hot(9,[0,6.31,0],.2)]);part(9,swash,[10,11,12]);
+const hubCore=cyl(.28,.28,.34,M.rotor,[0,7.05,0]);
+const hubArms=[];for(let i=0;i<4;i++){const a=i*Math.PI/2;const arm=box([1.2,.18,.22],M.rotor,[Math.cos(a)*.55,7.05,Math.sin(a)*.55],[0,-a,0]);hubArms.push(arm)}const hub=group([hubCore,...hubArms]);part(2,hub,[4,5,6,7]);
+const mainRotor=new THREE.Group();mainRotor.position.set(0,0,0);scene.add(mainRotor);
+const grips=[],bearings=[],flaps=[],leads=[],stops=[],pitchLinks=[],blades=[];
+for(let i=0;i<4;i++){
+ const a=i*Math.PI/2;const arm=new THREE.Group();arm.rotation.y=-a;arm.position.y=7.05;mainRotor.add(arm);
+ const flap=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.26,12),M.drive);flap.rotation.z=Math.PI/2;flap.position.x=.53;arm.add(flap);flaps.push(flap);
+ const lead=new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,.24,12),M.drive);lead.rotation.x=Math.PI/2;lead.position.x=.72;arm.add(lead);leads.push(lead);
+ const bearing=new THREE.Mesh(new THREE.TorusGeometry(.13,.04,8,20),M.drive);bearing.rotation.y=Math.PI/2;bearing.position.x=.9;arm.add(bearing);bearings.push(bearing);
+ const grip=new THREE.Mesh(new THREE.BoxGeometry(.5,.18,.23),M.rotor);grip.position.x=1.05;arm.add(grip);grips.push(grip);
+ const stop=new THREE.Mesh(new THREE.BoxGeometry(.12,.11,.12),M.dark);stop.position.set(.48,-.16,0);arm.add(stop);stops.push(stop);
+ const blade=new THREE.Mesh(new THREE.BoxGeometry(6.6,.07,.24),new THREE.MeshStandardMaterial({color:0xb8c0c3,metalness:.46,roughness:.4}));blade.position.x=4.45;blade.castShadow=true;arm.add(blade);blades.push(blade);
+ const px=Math.cos(a)*.62,pz=Math.sin(a)*.62,qx=Math.cos(a)*1.0,qz=Math.sin(a)*1.0;pitchLinks.push(tube([px,6.42,pz],[qx,6.95,qz],.035,M.control));
 }
-addEventListener('keydown', e=>{
-  if(e.target.tagName==='INPUT') return;
-  if(tourAt>=0 && e.code==='BracketRight') showTour(tourAt+1);
-  if(e.code==='Escape'){ if(tourAt>=0) endTour(); else select(null); }
-});
+partMulti(1,blades,[2,4]);partMulti(4,grips,[2,5,12]);partMulti(5,bearings,[4,12]);partMulti(6,flaps,[2,7]);partMulti(7,leads,[2,6]);partMulti(8,stops,[2,6]);partMulti(12,pitchLinks,[11,4]);
+// The rotating upper swashplate, hub, and pitch links share rotor rotation; the stationary plate remains fixed.
+scene.remove(hub);mainRotor.add(hub);scene.remove(rotSw);mainRotor.add(rotSw);for(const l of pitchLinks){scene.remove(l);mainRotor.add(l)}
 
-/* ---------- resize & scale bar -------------------------------------- */
-addEventListener('resize', ()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-const scaleTxt = document.getElementById('scaleTxt');
-function updateScale(){
-  const d = controls.sph.radius;
-  const worldPerPx = 2*Math.tan(camera.fov*Math.PI/360)*d/innerHeight;
-  const m = worldPerPx*120;
-  scaleTxt.textContent = m < 1 ? (m*100).toFixed(0)+' cm'
-                       : m < 10 ? m.toFixed(1)+' m' : m.toFixed(0)+' m';
+// Flight controls and hydraulics
+const cyclic=tube([2.55,1.8,-.3],[2.38,2.72,-.28],.045,M.control);part(13,cyclic,[16,17]);
+const collective=tube([2.05,1.78,.65],[1.35,2.15,.72],.045,M.control);part(14,collective,[16,17]);
+const pedals=group([box([.45,.08,.18],M.control,[3.25,1.78,-.4],[0,0,.15]),box([.45,.08,.18],M.control,[3.25,1.78,.4],[0,0,-.15])]);part(15,pedals,[17,42]);
+const mixing=group([box([.45,.28,.55],M.control,[.55,3.1,.55]),cyl(.08,.08,.55,M.control,[.55,3.35,.55],[Math.PI/2,0,0],12)]);part(16,mixing,[13,14,17,18]);
+const rods=group([tube([2.35,2.5,-.3],[.72,3.0,.45],.025,M.control),tube([1.5,2.05,.7],[.58,3.0,.6],.025,M.control),tube([.4,3.2,.4],[-.55,5.6,-.45],.025,M.control),tube([.55,3.2,.6],[.55,5.65,-.35],.025,M.control)]);part(17,rods,[16,18,10]);
+const servos=group([cyl(.11,.11,.82,M.control,[-.55,5.63,-.45]),cyl(.11,.11,.82,M.control,[.55,5.63,-.35]),cyl(.11,.11,.82,M.control,[0,5.63,.58])]);part(18,servos,[17,19,10]);
+const hydPump=cyl(.17,.17,.45,M.control,[-.8,3.45,-.65],[0,0,Math.PI/2],14);part(19,hydPump,[18]);
+
+// Tail drivetrain
+const tailShaft=group([tube([-1.0,4.15,0],[-7.8,4.0,0],.055,M.tail)]);part(35,tailShaft,[36,37]);
+for(let i=0;i<12;i++){const x=-1.3-i*.52;torus(.13,.022,M.drive,[x,4.13,0],[Math.PI/2,0,0])}
+const igb=box([.5,.5,.5],M.tail,[-7.8,4.0,0]);part(36,igb,[35,37]);
+const tailBox=cyl(.34,.34,.52,M.tail,[-8.92,4.55,0],[Math.PI/2,0,0],18);part(37,tailBox,[35,36,39]);
+tube([-7.8,4.0,0],[-8.9,4.52,0],.05,M.tail);
+const tailRotor=new THREE.Group();tailRotor.position.set(-8.92,4.55,-.3);scene.add(tailRotor);
+const trHub=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.42,16),M.tail);trHub.rotation.x=Math.PI/2;tailRotor.add(trHub);part(39,trHub,[37,40,42]);
+const trBlades=[],trGrips=[],trLinks=[];for(let i=0;i<4;i++){const a=i*Math.PI/2;const arm=new THREE.Group();arm.rotation.z=a;tailRotor.add(arm);const g=new THREE.Mesh(new THREE.BoxGeometry(.4,.16,.15),M.tail);g.position.x=.36;arm.add(g);trGrips.push(g);const b=new THREE.Mesh(new THREE.BoxGeometry(2.2,.08,.18),M.tail);b.position.x=1.4;arm.add(b);trBlades.push(b);const l=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,.4,8),M.control);l.rotation.z=Math.PI/2;l.position.set(.35,.18,0);arm.add(l);trLinks.push(l)}partMulti(38,trBlades,[39,40,41]);partMulti(40,trGrips,[38,41]);partMulti(41,trLinks,[40,42]);const spider=torus(.23,.035,M.control,[-8.92,4.55,-.48],[Math.PI/2,0,0]);part(42,spider,[15,41]);
+
+// Fuel and electrical
+const fuelTanks=group([box([2.35,.58,.82],M.fuel,[.45,1.35,-.52]),box([2.35,.58,.82],M.fuel,[.45,1.35,.52])]);part(45,fuelTanks,[46,47]);
+const fuelPump=cyl(.12,.12,.35,M.fuel,[.95,1.72,-.72],[0,0,Math.PI/2],12);part(46,fuelPump,[45,47,48]);
+const fuelLines=group([tube([.8,1.52,-.6],[1.35,3.55,-.85],.023,M.fuel),tube([1.35,3.55,-.85],[1.55,3.58,-.9],.023,M.fuel)]);part(47,fuelLines,[45,46,28]);
+const fuelFilter=cyl(.09,.09,.3,M.fuel,[1.2,2.25,-.72],[0,0,Math.PI/2],10);part(48,fuelFilter,[46,47]);
+const battery=box([.75,.48,.55],M.elec,[1.15,1.35,.92]);part(49,battery,[50,51]);
+const starter=cyl(.22,.22,.55,M.elec,[.25,3.35,-1.0],[0,0,Math.PI/2],16);part(50,starter,[20,49,51]);
+const elec=group([box([.5,.7,.2],M.elec,[1.8,2.25,1.1]),tube([1.1,1.55,.9],[1.75,2.2,1.05],.015,M.elec),tube([1.75,2.2,1.05],[.2,3.25,-.95],.015,M.elec)]);part(51,elec,[49,50]);
+
+// Cockpit instruments
+box([.22,1.35,1.45],M.instrument,[3.18,2.75,0],[0,0,-.12]);
+const instrumentPositions=[[66,-.8,.42],[67,-.4,.42],[68,0,.42],[69,.4,.42],[70,.8,.42],[71,-.35,-.15],[72,.35,-.15]];
+for(const [id,z,y] of instrumentPositions){const m=cyl(.12,.12,.06,id===72?M.control:M.drive,[3.29,2.75+y,z],[0,0,Math.PI/2],18);part(id,m,id===72?[71,67]:[53])}
+
+// selection
+let selectedId=null;let selectedObj=null;let selectedRelated=[];let showRelated=false;let motionOn=!prefersReduced;let mode='inspect';
+const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null;
+function worldCenter(obj){const b=new THREE.Box3();if(obj.userData?.members){for(const m of obj.userData.members)b.expandByObject(m)}else b.setFromObject(obj);if(b.isEmpty()){const p=new THREE.Vector3();obj.getWorldPosition(p);return p}return b.getCenter(new THREE.Vector3())}
+function select(id,open=true){const data=byId.get(id);const obj=registry.get(id);if(!data||!obj)return;if(id===65){setRegisteredVisible(wheels,true)}selectedId=id;selectedObj=obj;selectedRelated=relatedMap.get(id)||[];document.getElementById('partName').textContent=data.name;document.getElementById('partSystem').textContent=data.system;document.getElementById('partDesc').textContent=data.desc+(id===65?' This model normally displays skids; the wheels appear here as an alternate landing-gear reference, included only in the highest-complexity build.':'');markerLabel.textContent=data.name;marker.classList.add('show');if(open)info.classList.add('open');showRelated=false;updateVisibilityHighlights()}
+function clearSelection(){if(currentComplexity<8)setRegisteredVisible(wheels,false);selectedId=null;selectedObj=null;marker.classList.remove('show');info.classList.remove('open');updateVisibilityHighlights()}
+function eachMesh(obj,fn){if(!obj)return;if(obj.userData?.members){for(const m of obj.userData.members)m.traverse(o=>{if(o.isMesh)fn(o)})}else obj.traverse(o=>{if(o.isMesh)fn(o)})}
+function updateVisibilityHighlights(){for(const [,obj] of registry)eachMesh(obj,o=>{o.material?.emissive?.setHex(0x000000);if(o.material?.emissive)o.material.emissiveIntensity=0});
+ if(selectedObj)eachMesh(selectedObj,o=>{if(o.material?.emissive){o.material.emissive.setHex(0x214d5f);o.material.emissiveIntensity=.45}});
+ if(showRelated)for(const id of selectedRelated){const obj=registry.get(id);eachMesh(obj,o=>{if(o.material?.emissive){o.material.emissive.setHex(0x56481c);o.material.emissiveIntensity=.38}})}
 }
+function screenMarker(){if(!selectedObj||!marker.classList.contains('show'))return;const p=worldCenter(selectedObj).project(camera);const x=(p.x*.5+.5)*innerWidth,y=(-p.y*.5+.5)*innerHeight;marker.style.left=x+'px';marker.style.top=y+'px';marker.style.opacity=(p.z<-1||p.z>1)?'0':'1'}
+function hitAt(e){const r=canvas.getBoundingClientRect();pointer.x=((e.clientX-r.left)/r.width)*2-1;pointer.y=-((e.clientY-r.top)/r.height)*2+1;ray.setFromCamera(pointer,camera);const hits=ray.intersectObjects(pickables,false).filter(h=>h.object.visible);return hits.find(h=>!h.object.userData.isGhost)||hits[0]||null}
+function inspectPointer(e){const hit=hitAt(e);if(hit){const id=hit.object.userData.partId;if(id)select(id,true)}}
+canvas.addEventListener('pointerdown',e=>down={x:e.clientX,y:e.clientY});canvas.addEventListener('pointerup',e=>{if(!down)return;const moved=Math.hypot(e.clientX-down.x,e.clientY-down.y);down=null;if(moved<6&&mode==='inspect')inspectPointer(e)});
+canvas.addEventListener('pointermove',e=>{if(down)return;const hit=hitAt(e);canvas.style.cursor=hit?'pointer':'grab'});canvas.addEventListener('pointerleave',()=>canvas.style.cursor='grab');
 
-/* ---------- main loop ------------------------------------------------ */
-const clock = new THREE.Clock();
-const up = V(0,1,0), q = new THREE.Quaternion();
-function tick(){
-  requestAnimationFrame(tick);
-  const dt = Math.min(clock.getDelta(), 0.05);
-  controls.update(dt);
-  if(G.moving.visible) for(const c of movers){
-    c.t = (c.t + c.v*dt) % 1;
-    const p = c.curve.getPointAt(c.t), tn = c.curve.getTangentAt(c.t);
-    c.g.position.copy(p);
-    q.setFromUnitVectors(up, tn); c.g.quaternion.copy(q);
-  }
-  if(G.air.visible) for(const a of arrows){
-    a.t = (a.t + a.v*dt) % 1;
-    const p = a.curve.getPointAt(a.t);
-    const tn = a.curve.getTangentAt(a.t);
-    if(a.rev) tn.negate();
-    a.m.position.copy(p);
-    q.setFromUnitVectors(up, tn); a.m.quaternion.copy(q);
-  }
-  if(needPick) pick();
-  updateScale();
-  renderer.render(scene, camera);
+// Smooth camera transitions without locking orbit target during ordinary inspection
+let fly=null;function cameraTo(pos,target,dur=850){fly={t0:performance.now(),dur,startPos:camera.position.clone(),startTarget:controls.target.clone(),endPos:new THREE.Vector3(...pos),endTarget:new THREE.Vector3(...target)}}
+function focusSelected(){if(!selectedObj)return;const c=worldCenter(selectedObj);const dir=camera.position.clone().sub(controls.target).normalize();let dist=6.2;if(selectedId===1)dist=10;if(selectedId===35||selectedId===38)dist=7.5;const p=c.clone().add(dir.multiplyScalar(dist));p.y=Math.max(p.y,2.2);cameraTo(p.toArray(),c.toArray(),780)}
+function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2}
+function updateFly(now){if(!fly)return;const t=Math.min(1,(now-fly.t0)/fly.dur),q=ease(t);camera.position.lerpVectors(fly.startPos,fly.endPos,q);controls.target.lerpVectors(fly.startTarget,fly.endTarget,q);if(t>=1)fly=null}
+
+const views={left:[[14,9.5,13],[-.7,3.25,0]],right:[[14,9.5,-13],[-.7,3.25,0]],front:[[15,5.2,0],[0,3.1,0]],rear:[[-17,6.6,0],[-1.6,3.5,0]],top:[[0,22,.1],[-1,3.1,0]],reset:[[14,9.5,13],[-.7,3.25,0]]};
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{const [p,t]=views[b.dataset.view];cameraTo(p,t,900);document.getElementById('viewMenu').classList.remove('open')}));
+
+// UI
+const partsBtn=document.getElementById('partsBtn'),quizBtn=document.getElementById('quizBtn'),motionBtn=document.getElementById('motionBtn');
+document.getElementById('inspectBtn').addEventListener('click',()=>{mode='inspect';drawer.classList.remove('open');quiz.classList.remove('open');document.getElementById('viewMenu').classList.remove('open');toastMsg('Inspect mode')});
+partsBtn.addEventListener('click',()=>{drawer.classList.toggle('open');quiz.classList.remove('open');document.getElementById('viewMenu').classList.remove('open')});
+document.getElementById('drawerClose').addEventListener('click',()=>drawer.classList.remove('open'));
+document.getElementById('infoClose').addEventListener('click',clearSelection);document.getElementById('focusBtn').addEventListener('click',focusSelected);document.getElementById('relatedBtn').addEventListener('click',()=>{showRelated=!showRelated;updateVisibilityHighlights();toastMsg(showRelated?'Related components highlighted':'Related highlight cleared')});
+document.getElementById('viewBtn').addEventListener('click',()=>{document.getElementById('viewMenu').classList.toggle('open');drawer.classList.remove('open');quiz.classList.remove('open')});
+motionBtn.classList.toggle('active',motionOn);motionBtn.addEventListener('click',()=>{motionOn=!motionOn;motionBtn.classList.toggle('active',motionOn);toastMsg(motionOn?'Mechanical motion on':'Mechanical motion paused')});
+function toastMsg(s){toast.textContent=s;toast.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>toast.classList.remove('show'),1400)}
+
+function buildParts(filter=''){
+ const list=document.getElementById('partsList');list.innerHTML='';const f=filter.trim().toLowerCase();
+ for(const [groupName,[a,b]] of groups){const subset=parts.filter(p=>p.id>=a&&p.id<=b&&(!f||(p.name+' '+p.system).toLowerCase().includes(f)));if(!subset.length)continue;const sec=document.createElement('div');sec.className='group';const title=document.createElement('div');title.className='group-title';title.textContent=groupName;sec.appendChild(title);for(const p of subset){const btn=document.createElement('button');btn.type='button';btn.className='part-row';btn.innerHTML=`<span class="num">${p.id}</span><span class="name">${p.name}</span>`;btn.addEventListener('click',()=>{select(p.id,true);drawer.classList.remove('open')});sec.appendChild(btn)}list.appendChild(sec)}
 }
+buildParts();document.getElementById('search').addEventListener('input',e=>buildParts(e.target.value));
 
-/* ---------- raise pressure, then open ------------------------------- */
-const boot = document.getElementById('boot'), needle = document.getElementById('bootNeedle'),
-      rd = document.getElementById('bootRd'), bmsg = document.getElementById('bootMsg');
-const bootSteps = ['raising steam','starting the compressor','charging the receiver','line clear'];
-let bp = 0;
-const bootTimer = setInterval(()=>{
-  bp++;
-  const lb = Math.min(bp*1.1, 10);
-  needle.style.transform = `rotate(${-130 + lb*26}deg)`;
-  rd.textContent = lb.toFixed(1)+' lb';
-  bmsg.textContent = bootSteps[Math.min(Math.floor(bp/2.6), 3)];
-  if(bp>=9){
-    clearInterval(bootTimer);
-    boot.style.opacity = 0;
-    setTimeout(()=>boot.remove(), 700);
-  }
-}, 190);
+// Study mode: one highlighted component + four choices. Camera stays where user left it.
+let qOrder=[],qIndex=0,qScore=0,qAnswered=false;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function startQuiz(){mode='study';drawer.classList.remove('open');quiz.classList.add('open');qOrder=shuffle(parts.filter(p=>currentComplexitySet.has(p.id)).map(p=>p.id)).slice(0,10);qIndex=0;qScore=0;nextQuestion()}
+function nextQuestion(){qAnswered=false;if(qIndex>=qOrder.length){document.getElementById('quizPrompt').textContent=`Finished: ${qScore} of ${qOrder.length} correct.`;document.getElementById('quizChoices').innerHTML='<button type="button" id="restartQ">Play again</button>';document.getElementById('restartQ').addEventListener('click',startQuiz);marker.classList.remove('show');return}const id=qOrder[qIndex];select(id,false);focusSelected();document.getElementById('quizProgress').textContent=`${qIndex+1} / ${qOrder.length}`;document.getElementById('quizScore').textContent=`Score ${qScore}`;document.getElementById('quizPrompt').textContent='Which component is highlighted?';document.getElementById('quizFeedback').textContent='';const pool=parts.filter(p=>p.system===byId.get(id).system&&p.id!==id);const distract=shuffle(pool.length>=3?pool:parts.filter(p=>p.id!==id)).slice(0,3);const choices=shuffle([byId.get(id),...distract]);const wrap=document.getElementById('quizChoices');wrap.innerHTML='';for(const p of choices){const b=document.createElement('button');b.type='button';b.textContent=p.name;b.addEventListener('click',()=>answerQ(p.id));wrap.appendChild(b)}}
+function answerQ(id){if(qAnswered)return;qAnswered=true;const right=qOrder[qIndex];if(id===right){qScore++;document.getElementById('quizFeedback').textContent='Correct.'}else document.getElementById('quizFeedback').textContent=`Correct answer: ${byId.get(right).name}`;document.getElementById('quizScore').textContent=`Score ${qScore}`;setTimeout(()=>{qIndex++;nextQuestion()},1100)}
+quizBtn.addEventListener('click',startQuiz);document.getElementById('quizClose').addEventListener('click',()=>{quiz.classList.remove('open');mode='inspect';clearSelection()});
 
-controls.frame(V(0,-1.5,-2), 178);
-controls.sphD.theta = 0.72; controls.sphD.phi = 1.02;
-controls.sph.theta = 0.72; controls.sph.phi = 1.02; controls.sph.radius = 300;
-tick();
+// Resize / animation
+function resize(){const w=Math.max(1,innerWidth),h=Math.max(1,innerHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();loading.classList.add('hidden');
+const clock=new THREE.Clock();let phase=0;function animate(now){requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.035);updateFly(now);controls.update();if(motionOn){phase+=dt*(0.45+rotorSpeedFactor*.55);mainRotor.rotation.y+=dt*.62*rotorSpeedFactor;tailRotor.rotation.z+=dt*2.2*rotorSpeedFactor;engineOuter.rotation.x+=dt*.25*(0.35+rotorSpeedFactor*.65);compressor.rotation.x+=dt*.8*(0.35+rotorSpeedFactor*.65);turbine.rotation.x+=dt*1.1*(0.35+rotorSpeedFactor*.65);gbParts.rotation.y+=dt*.05*(0.4+rotorSpeedFactor*.6);tailShaft.rotation.x+=dt*.72*(0.35+rotorSpeedFactor*.65);rotSw.rotation.y+=dt*.62*rotorSpeedFactor;const cyc=Math.sin(phase*.7);rotSw.rotation.z=.025*cyc;rotSw.rotation.x=.018*Math.cos(phase*.6);statSw.position.y=6.2+.018*Math.sin(phase*.8)}screenMarker();renderer.render(scene,camera)}requestAnimationFrame(animate);
 </script>
 </body>
 </html>
