@@ -1,0 +1,2295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Virtual Woodshop 3D - Interactive Tools & Workstations</title>
+    <!-- Three.js, OrbitControls, DragControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/DragControls.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-dark: #101216;
+            --panel-bg: rgba(20, 24, 29, 0.94);
+            --panel-border: rgba(212, 163, 115, 0.28);
+            --accent-wood: #d4a373;
+            --accent-warm: #e76f51;
+            --accent-gold: #f4a261;
+            --accent-teal: #2a9d8f;
+            --text-main: #f8f9fa;
+            --text-dim: #9aa5b1;
+            --highlight-glow: rgba(212, 163, 115, 0.55);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #webgl-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, rgba(12,14,18,0.96) 0%, rgba(12,14,18,0.6) 75%, transparent 100%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .brand {
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--accent-wood), var(--accent-warm));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: #121417;
+            box-shadow: 0 4px 16px rgba(231, 111, 81, 0.35);
+        }
+
+        .brand-text h1 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: var(--text-main);
+        }
+
+        .brand-text p {
+            font-size: 0.72rem;
+            color: var(--accent-wood);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+        }
+
+        .header-controls {
+            pointer-events: auto;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .hud-btn {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .hud-btn:hover, .hud-btn.active {
+            background: var(--accent-wood);
+            color: #101216;
+            border-color: var(--accent-wood);
+            box-shadow: 0 0 15px var(--highlight-glow);
+        }
+
+        .mode-tabs {
+            pointer-events: auto;
+            display: flex;
+            background: rgba(18, 22, 28, 0.9);
+            border-radius: 8px;
+            padding: 3px;
+            border: 1px solid var(--panel-border);
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            padding: 6px 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent-wood);
+            color: #101216;
+        }
+
+        .sidebar {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            bottom: 20px;
+            width: 320px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(14px);
+            box-shadow: 0 10px 35px rgba(0,0,0,0.6);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(-360px);
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sidebar-title {
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: var(--accent-wood);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge {
+            background: rgba(212, 163, 115, 0.2);
+            color: var(--accent-wood);
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(212, 163, 115, 0.35);
+        }
+
+        .search-box {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .search-box input:focus {
+            border-color: var(--accent-wood);
+        }
+
+        .list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .list-container::-webkit-scrollbar {
+            width: 5px;
+        }
+        .list-container::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.18);
+            border-radius: 3px;
+        }
+
+        .item-card {
+            padding: 11px 13px;
+            margin-bottom: 6px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .item-card:hover {
+            background: rgba(212, 163, 115, 0.1);
+            border-color: rgba(212, 163, 115, 0.35);
+            transform: translateX(4px);
+        }
+
+        .item-card.active {
+            background: rgba(212, 163, 115, 0.22);
+            border-color: var(--accent-wood);
+        }
+
+        .item-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .item-num {
+            font-family: monospace;
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--accent-wood);
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.45);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .item-name {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .item-sub {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-top: 2px;
+        }
+
+        .inspect-panel {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            width: 380px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 12px 45px rgba(0,0,0,0.65);
+            max-height: calc(100vh - 110px);
+            animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(40px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .inspect-header {
+            padding: 18px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .inspect-title h2 {
+            font-size: 1.18rem;
+            font-weight: 800;
+            color: var(--accent-wood);
+        }
+
+        .inspect-title .type-tag {
+            display: inline-block;
+            font-size: 0.65rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            background: rgba(231, 111, 81, 0.25);
+            color: var(--accent-warm);
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-top: 4px;
+            border: 1px solid rgba(231, 111, 81, 0.4);
+        }
+
+        .close-btn {
+            background: rgba(255,255,255,0.06);
+            border: none;
+            color: var(--text-dim);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .close-btn:hover {
+            background: rgba(231, 111, 81, 0.35);
+            color: #fff;
+        }
+
+        .inspect-body {
+            padding: 20px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        .inspect-section {
+            margin-bottom: 14px;
+        }
+
+        .inspect-section h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-gold);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .inspect-section p {
+            color: var(--text-dim);
+        }
+
+        .spec-list {
+            list-style: none;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .spec-list li {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .spec-list li:last-child {
+            border-bottom: none;
+        }
+
+        .spec-label {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+        }
+
+        .spec-val {
+            color: var(--text-main);
+            font-weight: 700;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .interactive-tool-box {
+            background: rgba(42, 157, 143, 0.12);
+            border: 1px solid rgba(42, 157, 143, 0.4);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+        }
+
+        .interactive-tool-box h5 {
+            font-size: 0.75rem;
+            color: var(--accent-teal);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-slider-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .tool-slider-row label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            min-width: 80px;
+        }
+
+        .tool-slider-row input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-wood);
+            cursor: pointer;
+        }
+
+        .tool-action-btn {
+            width: 100%;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.2s;
+            margin-top: 6px;
+        }
+
+        .tool-action-btn:hover {
+            background: var(--accent-teal);
+            color: #101216;
+            border-color: var(--accent-teal);
+        }
+
+        .action-btns-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .approach-btn {
+            background: linear-gradient(135deg, var(--accent-wood), var(--accent-warm));
+            color: #101216;
+            font-weight: 800;
+            border: none;
+            padding: 11px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(212, 163, 115, 0.3);
+            transition: all 0.2s;
+        }
+
+        .approach-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-2px);
+        }
+
+        .inspect-mode-btn {
+            background: rgba(212, 163, 115, 0.15);
+            border: 1px solid var(--accent-wood);
+            color: var(--accent-wood);
+            font-weight: 700;
+            padding: 11px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .inspect-mode-btn:hover {
+            background: var(--accent-wood);
+            color: #101216;
+        }
+
+        #hud-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(18, 22, 28, 0.95);
+            border: 1px solid var(--accent-wood);
+            padding: 7px 14px;
+            border-radius: 7px;
+            color: var(--text-main);
+            font-size: 0.82rem;
+            font-weight: 700;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+            display: none;
+            z-index: 20;
+            transform: translate(-50%, -140%);
+            white-space: nowrap;
+        }
+
+        .bottom-bar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            padding: 8px 18px;
+            border-radius: 30px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            z-index: 10;
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+        }
+
+        .view-btn {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--text-main);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .view-btn:hover, .view-btn.active {
+            background: var(--accent-wood);
+            color: #101216;
+            border-color: var(--accent-wood);
+        }
+
+        .controls-hint {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(18, 22, 28, 0.85);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.74rem;
+            color: var(--text-dim);
+            z-index: 10;
+            backdrop-filter: blur(8px);
+            display: flex;
+            gap: 14px;
+        }
+
+        .hint-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .key {
+            background: rgba(255,255,255,0.12);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .drag-banner {
+            position: absolute;
+            top: 76px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(42, 157, 143, 0.85);
+            color: #fff;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            z-index: 9;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="webgl-container"></div>
+    <div id="hud-tooltip">Tool / Station Name</div>
+
+    <div class="drag-banner">
+        <i class="fa-solid fa-hand-pointer"></i> <b>Interactive Sandbox Active:</b> Click & Drag any tool across workbench surfaces or inspect below!
+    </div>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon"><i class="fa-solid fa-tree"></i></div>
+            <div class="brand-text">
+                <h1>MASTER VIRTUAL WOODSHOP 3D</h1>
+                <p>12 Workstations &bull; 20 Essential Instruments &bull; Interactive Sandbox</p>
+            </div>
+        </div>
+
+        <div class="header-controls">
+            <div class="mode-tabs">
+                <button class="tab-btn active" id="tab-stations" onclick="switchListMode('stations')"><i class="fa-solid fa-industry"></i> Workstations (12)</button>
+                <button class="tab-btn" id="tab-instruments" onclick="switchListMode('instruments')"><i class="fa-solid fa-screwdriver-wrench"></i> Instruments (20)</button>
+            </div>
+            <button class="hud-btn" onclick="toggleOverview()"><i class="fa-solid fa-compass"></i> Overview</button>
+            <button class="hud-btn" id="btn-sound" onclick="toggleAudio()"><i class="fa-solid fa-volume-high"></i> Audio Active</button>
+        </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-title">
+                <i class="fa-solid fa-layer-group"></i> <span id="sidebar-category-title">Workstations</span>
+                <span class="badge" id="item-count-badge">12</span>
+            </div>
+            <button class="close-btn" onclick="toggleSidebar()"><i class="fa-solid fa-chevron-left"></i></button>
+        </div>
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search station or tool..." oninput="filterItems()">
+        </div>
+        <div class="list-container" id="items-list"></div>
+    </aside>
+
+    <section class="inspect-panel" id="inspect-panel">
+        <div class="inspect-header">
+            <div class="inspect-title">
+                <h2 id="inspect-name">Cabinet Table Saw Hub</h2>
+                <span class="type-tag" id="inspect-type">Primary Dimensioning</span>
+            </div>
+            <button class="close-btn" onclick="closeInspect()"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="inspect-body">
+            <div class="inspect-section">
+                <h4><i class="fa-solid fa-circle-info"></i> Purpose & Workflow</h4>
+                <p id="inspect-desc">Primary ripping, precision crosscutting, sheet goods breakdown, and joinery dados.</p>
+            </div>
+            <div class="inspect-section">
+                <h4><i class="fa-solid fa-sliders"></i> Key Machinery & Features</h4>
+                <p id="inspect-features">10" 3HP Cabinet Saw, 52" T-Glide Fence, Dado Head Arbors, Cast-iron Extension Wings.</p>
+            </div>
+            <div class="inspect-section">
+                <h4><i class="fa-solid fa-list-check"></i> Technical Specs</h4>
+                <ul class="spec-list" id="inspect-specs"></ul>
+            </div>
+
+            <div class="inspect-section" id="tool-controls-container" style="display:none;">
+                <div class="interactive-tool-box">
+                    <h5><i class="fa-solid fa-gamepad"></i> Tool Movability & Mechanics</h5>
+                    <div id="dynamic-tool-sliders"></div>
+                    <button class="tool-action-btn" id="btn-tool-action" onclick="triggerToolMechanicalAction()">
+                        <i class="fa-solid fa-play"></i> Animate Tool Action
+                    </button>
+                </div>
+            </div>
+
+            <div class="action-btns-grid">
+                <button class="approach-btn" onclick="approachCurrentTarget()"><i class="fa-solid fa-crosshairs"></i> Fly to Object</button>
+                <button class="inspect-mode-btn" onclick="liftAndInspectTarget()"><i class="fa-solid fa-rotate"></i> 360° Lift & Turn</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="bottom-bar">
+        <span style="font-size: 0.75rem; color: var(--accent-wood); font-weight: 700;"><i class="fa-solid fa-video"></i> PRESETS:</span>
+        <button class="view-btn" onclick="setPresetView('isometric')"><i class="fa-solid fa-cube"></i> Isometric</button>
+        <button class="view-btn" onclick="setPresetView('top')"><i class="fa-solid fa-map"></i> Top-Down Plan</button>
+        <button class="view-btn" onclick="setPresetView('walk')"><i class="fa-solid fa-person-walking"></i> Walkthrough</button>
+        <button class="view-btn" onclick="setPresetView('bench')"><i class="fa-solid fa-hand"></i> Roubo Bench</button>
+    </div>
+
+    <div class="controls-hint">
+        <div class="hint-item"><span class="key">Left Drag</span> Orbit / Move Tool</div>
+        <div class="hint-item"><span class="key">Right Drag</span> Pan</div>
+        <div class="hint-item"><span class="key">Scroll</span> Zoom</div>
+    </div>
+
+    <script>
+        function generateProceduralWoodTexture(baseColor = '#d4a373', grainColor = '#8c5828', ringFreq = 18) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = baseColor;
+            ctx.fillRect(0, 0, 512, 512);
+
+            ctx.fillStyle = grainColor;
+            for (let i = 0; i < 512; i += 2) {
+                const noise = Math.sin(i / ringFreq) * 12 + Math.sin(i / 5) * 4;
+                const alpha = (Math.sin((i + noise) / 8) + 1) * 0.12;
+                ctx.fillStyle = grainColor;
+                ctx.globalAlpha = alpha;
+                ctx.fillRect(0, i, 512, 2);
+            }
+
+            ctx.globalAlpha = 0.08;
+            ctx.fillStyle = '#000000';
+            for (let j = 0; j < 3000; j++) {
+                const rx = Math.random() * 512;
+                const ry = Math.random() * 512;
+                const rw = Math.random() * 40 + 10;
+                ctx.fillRect(rx, ry, rw, 1);
+            }
+
+            ctx.globalAlpha = 1.0;
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function generateRulerTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#cfd4da';
+            ctx.fillRect(0, 0, 1024, 128);
+
+            ctx.fillStyle = '#22252a';
+            ctx.font = 'bold 16px monospace';
+
+            for (let x = 10; x < 1014; x += 8) {
+                const inchMark = ((x - 10) % 80) === 0;
+                const halfMark = ((x - 10) % 40) === 0;
+                const quarterMark = ((x - 10) % 20) === 0;
+
+                let h = 12;
+                if (inchMark) h = 38;
+                else if (halfMark) h = 26;
+                else if (quarterMark) h = 18;
+
+                ctx.fillRect(x, 0, 2, h);
+
+                if (inchMark) {
+                    const inchVal = Math.round((x - 10) / 80);
+                    ctx.fillText(`${inchVal}`, x + 4, 34);
+                }
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+
+        function generateCastIronTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#22252a';
+            ctx.fillRect(0, 0, 256, 256);
+
+            for (let i = 0; i < 4000; i++) {
+                const c = Math.random() > 0.5 ? '#3a3f47' : '#14161a';
+                ctx.fillStyle = c;
+                ctx.globalAlpha = Math.random() * 0.4;
+                ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+            }
+            ctx.globalAlpha = 1.0;
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        const WORKSTATIONS = [
+            {
+                id: "st_miter",
+                num: "01",
+                name: "Lumber Storage & Miter Station",
+                type: "Stock Breakdown",
+                pos: [-14, 0, -9],
+                targetPos:,
+                camPos:,
+                desc: "Material intake and rough dimensioning station. Vertical and cantilever racks feed directly into the sliding compound miter saw table equipped with flip-stop wings for repeatable crosscuts.",
+                features: "Cantilever steel lumber rack, 12\" sliding compound miter saw, 12ft fence with metric/imperial flip stops, vacuum hood.",
+                specs: [
+                    { label: "Cut Capacity", val: "14\" Crosscut" },
+                    { label: "Fence Length", val: "12 Feet Total" },
+                    { label: "Location", val: "North Wall (Intake)" }
+                ]
+            },
+            {
+                id: "st_jointer",
+                num: "02",
+                name: "Face & Edge Jointer Station",
+                type: "Milling & Truing",
+                pos: [-7, 0, -9],
+                targetPos: [-7, 1.2, -8],
+                camPos: [-7, 2.5, -4.5],
+                desc: "Flattening one face and squaring one reference edge to 90 degrees. Essential initial milling step before thicknessing.",
+                features: "8\" Parallelogram extra-long cast-iron beds, helical cutterhead with carbide inserts, center-mounted precision fence.",
+                specs: [
+                    { label: "Bed Length", val: "76 Inches" },
+                    { label: "Cutterhead", val: "4-Row Helical" },
+                    { label: "Tolerance", val: "±0.001\" over 6ft" }
+                ]
+            },
+            {
+                id: "st_planer",
+                num: "03",
+                name: "Thickness Planer Station",
+                type: "Dimensioning",
+                pos: [0, 0, -9],
+                targetPos: [0, 1.2, -8.5],
+                camPos: [0, 2.4, -5],
+                desc: "Dimensioning stock to exact uniform thickness with parallel top and bottom faces referenced off the jointed face.",
+                features: "15\" Heavy-duty stationary cabinet planer, digital read-out (DRO) elevation scale, segmental serrated infeed roll, integrated 4\" dust chute.",
+                specs: [
+                    { label: "Max Width", val: "15 Inches" },
+                    { label: "Feed Rates", val: "16 & 20 FPM" },
+                    { label: "Motor", val: "3 HP Induction" }
+                ]
+            },
+            {
+                id: "st_bandsaw",
+                num: "04",
+                name: "Resaw & Curve Bandsaw Station",
+                type: "Contouring & Resawing",
+                pos: [7, 0, -9],
+                targetPos: [7, 1.8, -8.5],
+                camPos: [7, 2.6, -5],
+                desc: "Dedicated to curved profiles, cabriole legs, circle cutting, and deep resawing of thick timbers into bookmatched veneers.",
+                features: "18\" Floor bandsaw with 14\" resaw throat, ceramic Euro-style blade guides, rack-and-pinion post, cast iron tilting trunnion table.",
+                specs: [
+                    { label: "Throat Depth", val: "18 Inches" },
+                    { label: "Resaw Height", val: "14 Inches Max" },
+                    { label: "Blade Speed", val: "3,200 FPM" }
+                ]
+            },
+            {
+                id: "st_drillpress",
+                num: "05",
+                name: "Floor Drill Press Station",
+                type: "Boring & Mortising",
+                pos: [14, 0, -9],
+                targetPos: [14, 1.8, -8.5],
+                camPos: [14, 2.8, -5],
+                desc: "Precision perpendicular hole boring, counterboring with Forstner bits, pocket hole setups, and hollow-chisel mortising.",
+                features: "Floor-standing column drill press, laser alignment crosshairs, woodworking auxiliary table with T-tracks and flip-stops.",
+                specs: [
+                    { label: "Spindle Travel", val: "6 Inches" },
+                    { label: "Speed Range", val: "150 - 4,200 RPM" },
+                    { label: "Chuck", val: "5/8\" Keyless JT3" }
+                ]
+            },
+            {
+                id: "st_tablesaw",
+                num: "06",
+                name: "Cabinet Table Saw & Outfeed Hub",
+                type: "Primary Sizing Hub",
+                pos: [-6, 0, -2],
+                targetPos: [-6, 1.1, -2],
+                camPos: [-6, 3.2, 2.5],
+                desc: "The central heartbeat of the shop. Handles precision rip cuts, crosscut sled joinery, dadoes, grooves, and sheet breakdown.",
+                features: "10\" 3HP Cabinet Saw, 52\" T-glide fence, cast iron extension wings, overhead dust-collection blade guard, large flush outfeed assembly table.",
+                specs: [
+                    { label: "Rip Capacity", val: "52\" Right / 18\" Left" },
+                    { label: "Blade Tilt", val: "Left Tilt (0-45°)" },
+                    { label: "Arbor Size", val: "5/8\" with 8\" Dado" }
+                ]
+            },
+            {
+                id: "st_workbench",
+                num: "07",
+                name: "Traditional Roubo Joinery Bench",
+                type: "Hand Joinery & Paring",
+                pos: [6, 0, -2],
+                targetPos: [6, 1.1, -2],
+                camPos: [6, 2.8, 2.2],
+                desc: "Massive solid maple split-top workbench engineered for stability during heavy hand planing, chisel mortising, and intricate dovetail joinery.",
+                features: "4\" thick laminated rock maple top, quick-release leg vise with massive hub, wagon/tail vise, 3/4\" dog hole matrix, lower tool tray.",
+                specs: [
+                    { label: "Bench Weight", val: "380 lbs (Vibration Free)" },
+                    { label: "Dimensions", val: "84\" L x 28\" W x 35\" H" },
+                    { label: "Vise Travel", val: "9\" Leg / 6\" Tail" }
+                ]
+            },
+            {
+                id: "st_router",
+                num: "08",
+                name: "Precision Router Table Station",
+                type: "Molding & Profiles",
+                pos: [-14, 0, 7],
+                targetPos: [-14, 1.2, 7],
+                camPos: [-14, 2.6, 3.5],
+                desc: "Specialized in decorative edge profiling, stile-and-rail cabinet doors, raised panels, precise template routing, and lock-miter joinery.",
+                features: "Heavy cast-iron table top, precision above-table router lift mechanism, extruded aluminum micro-adjust split fence, dual featherboards.",
+                specs: [
+                    { label: "Motor", val: "3-1/4 HP Variable Speed" },
+                    { label: "Lift Accuracy", val: "0.001\" per click" },
+                    { label: "Fence Travel", val: "Micro-metric geared" }
+                ]
+            },
+            {
+                id: "st_lathe",
+                num: "09",
+                name: "Woodturning Lathe Station",
+                type: "Spindle & Bowl Turning",
+                pos: [-7, 0, 7],
+                targetPos: [-7, 1.3, 7],
+                camPos: [-7, 2.6, 3.5],
+                desc: "Radial shaping of round furniture legs, balusters, tool handles, bowls, and hollow vessels from solid timber blanks.",
+                features: "Cast-iron variable speed bed lathe, headstock swiveling 360°, quick-lock tool rest banjo, MT2 tailstock with live center.",
+                specs: [
+                    { label: "Swing Over Bed", val: "18 Inches" },
+                    { label: "Distance Between Centers", val: "40 Inches" },
+                    { label: "Spindle Speeds", val: "50 - 3,850 RPM" }
+                ]
+            },
+            {
+                id: "st_scrollsaw",
+                num: "10",
+                name: "Marquetry & Scroll Saw Bench",
+                type: "Fine Detail Piercing",
+                pos: [0, 0, 7],
+                targetPos: [0, 1.2, 7],
+                camPos: [0, 2.4, 3.5],
+                desc: "Dedicated to intricate fretwork, pierced internal cuts, wooden gear teeth, marquetry, and delicate veneer inlays.",
+                features: "21\" Parallel link arm scroll saw, toolless blade clamps, continuous air dust blower, 45-degree dual-tilting table.",
+                specs: [
+                    { label: "Throat Capacity", val: "21 Inches" },
+                    { label: "Stroke Rate", val: "400 - 1,550 SPM" },
+                    { label: "Blade Type", val: "Pinless 5\" Jeweler Blades" }
+                ]
+            },
+            {
+                id: "st_assembly",
+                num: "11",
+                name: "Assembly & Clamping Island",
+                type: "Dry Fit & Glue-Up",
+                pos: [7, 0, 7],
+                targetPos: [7, 1.0, 7],
+                camPos: [7, 2.8, 3.5],
+                desc: "360-degree walkaround island for dry fitting, squaring carcasses, pocket hole assembly, and stress-free glue clamp-ups.",
+                features: "Torsion box grid assembly table at ergonomic low height (30\"), flanked by a mobile vertical clamp cart loaded with parallel jaw clamps.",
+                specs: [
+                    { label: "Table Surface", val: "6ft x 4ft Flat Torsion Box" },
+                    { label: "Height", val: "30\" for High Clamping Leverage" },
+                    { label: "Clamp Storage", val: "32 Parallel & F-Clamps" }
+                ]
+            },
+            {
+                id: "st_finishing",
+                num: "12",
+                name: "Sanding & Finishing Booth",
+                type: "Surface Prep & Coating",
+                pos: [14, 0, 7],
+                targetPos: [14, 1.3, 7],
+                camPos: [14, 2.7, 3.5],
+                desc: "Surface sanding, dust capture, grain raising, and clean application of hardwax oils, varnishes, stains, and protective topcoats.",
+                features: "Perforated downdraft sanding table with HEPA filtration, oscillating spindle/belt sander combo, turntable spray pedestal, drying rack.",
+                specs: [
+                    { label: "Downdraft Airflow", val: "1,200 CFM" },
+                    { label: "Filtration", val: "0.5 Micron Dual Canister" },
+                    { label: "Curing Capacity", val: "10-Tier Drying Rack" }
+                ]
+            }
+        ];
+
+        const INSTRUMENTS = [
+            {
+                id: "tool_combsquare",
+                num: "01",
+                name: "12\" Combination Square",
+                cat: "Layout & Marking",
+                stationId: "st_tablesaw",
+                pos: [-5.6, 1.05, -2.2],
+                desc: "The universal layout standard with precision-etched stainless steel rule and cast-iron 90°/45° head.",
+                use: "Slide the rule along the cast head to calibrate blade depth or check squareness.",
+                movableParts: "Sliding Rule & Knurled Brass Nut",
+                actionName: "Slide Rule"
+            },
+            {
+                id: "tool_markgauge",
+                num: "02",
+                name: "Wheel Marking Gauge",
+                cat: "Layout & Marking",
+                stationId: "st_workbench",
+                pos: [5.8, 1.05, -2.1],
+                desc: "Micro-bevel round circular cutter cleanly severs wood fibers across and with the grain.",
+                use: "Adjust fence distance along brass stem to scribe joinery baselines.",
+                movableParts: "Brass Collet & Cutter Stem",
+                actionName: "Scribe Baseline"
+            },
+            {
+                id: "tool_tbevel",
+                num: "03",
+                name: "Sliding T-Bevel",
+                cat: "Layout & Marking",
+                stationId: "st_workbench",
+                pos: [6.1, 1.05, -2.1],
+                desc: "Rosewood stock with a locking steel blade to capture, hold, and transfer compound angles.",
+                use: "Rotate blade to set arbitrary dovetail or compound miter angles.",
+                movableParts: "Pivot Locking Blade",
+                actionName: "Rotate Angle"
+            },
+            {
+                id: "tool_dovetailsaddle",
+                num: "04",
+                name: "Dovetail Marking Saddle (1:6 / 1:8)",
+                cat: "Layout & Marking",
+                stationId: "st_workbench",
+                pos: [6.4, 1.05, -2.1],
+                desc: "Anodized aluminum blue saddle template for rapid layout of dovetail pins and tails.",
+                use: "Slide over board corner to scribe 1:6 or 1:8 slopes.",
+                movableParts: "Corner Saddle Bracket",
+                actionName: "Flip Saddle Ratio"
+            },
+            {
+                id: "tool_calipers",
+                num: "05",
+                name: "Digital Dial Calipers (6\")",
+                cat: "Precision Measuring",
+                stationId: "st_planer",
+                pos: [0.2, 1.05, -8.3],
+                desc: "Hardened stainless steel four-way measurement jaws with LCD digital readout.",
+                use: "Slide thumb roller to measure tenon thickness or drill bit shank diameters.",
+                movableParts: "Sliding Measuring Jaws",
+                actionName: "Open / Close Jaws"
+            },
+            {
+                id: "tool_framingsquare",
+                num: "06",
+                name: "24\" Steel Framing Square",
+                cat: "Layout & Marking",
+                stationId: "st_assembly",
+                pos: [7.2, 1.05, 6.7],
+                desc: "Large 24\" x 16\" ground steel square for verifying absolute squareness across large cabinet carcasses.",
+                use: "Align against cabinet corners to check diagonal squareness.",
+                movableParts: "L-Beam Reference Arms",
+                actionName: "Check Diagonals"
+            },
+            {
+                id: "tool_windingsticks",
+                num: "07",
+                name: "Matched Winding Sticks",
+                cat: "Layout & Marking",
+                stationId: "st_jointer",
+                pos: [-6.8, 1.05, -8.8],
+                desc: "Pair of parallel contrasting maple/ebony straightedges used to visually detect board twist.",
+                use: "Sight across both sticks down the board length to detect high opposite corners.",
+                movableParts: "Sight Pins",
+                actionName: "Sight Plane"
+            },
+            {
+                id: "tool_chisels",
+                num: "08",
+                name: "Bevel-Edge Bench Chisel Set",
+                cat: "Cutting & Paring",
+                stationId: "st_workbench",
+                pos: [5.5, 1.05, -2.4],
+                desc: "High-carbon O1 tool steel blades with thin side bevels for paring into acute dovetail corners.",
+                use: "Chop dovetail waste and pare joint cheeks to final tolerance.",
+                movableParts: "Chisel Blade & Socket Handle",
+                actionName: "Pare Joinery Waste"
+            },
+            {
+                id: "tool_blockplane",
+                num: "09",
+                name: "Low-Angle Block Plane",
+                cat: "Cutting & Paring",
+                stationId: "st_workbench",
+                pos: [5.8, 1.05, -1.8],
+                desc: "12-degree bed angle with bevel-up blade orientation and adjustable mouth for end grain.",
+                use: "Turn brass depth knob to advance cutting iron for whisper-thin end-grain shavings.",
+                movableParts: "Micro-Depth Knurled Knob",
+                actionName: "Take Shaving"
+            },
+            {
+                id: "tool_smoothplane",
+                num: "10",
+                name: "No. 4 Smoothing Hand Plane",
+                cat: "Cutting & Paring",
+                stationId: "st_workbench",
+                pos: [6.2, 1.05, -1.8],
+                desc: "Ductile iron sole with bubinga wood tote taking continuous gossamer wood shavings.",
+                use: "Final surface smoothing before finish, eliminating sandpaper scratches.",
+                movableParts: "Lateral Adjustment Lever & Frog",
+                actionName: "Produce Gossamer Curl"
+            },
+            {
+                id: "tool_dozuki",
+                num: "11",
+                name: "Japanese Dozuki Pull Saw",
+                cat: "Hand Saws",
+                stationId: "st_workbench",
+                pos: [6.6, 1.05, -1.8],
+                desc: "Ultra-thin 0.3mm kerf pull-stroke saw with stiffened steel spine and bamboo wrapped handle.",
+                use: "Rhythmic pull stroke cutting for razor-clean tenon shoulders and dovetails.",
+                movableParts: "Tensioned Pull Blade",
+                actionName: "Simulate Pull Cut"
+            },
+            {
+                id: "tool_tenonsaw",
+                num: "12",
+                name: "Western Brass-Backed Tenon Saw",
+                cat: "Hand Saws",
+                stationId: "st_workbench",
+                pos: [6.9, 1.05, -1.8],
+                desc: "Heavy folded brass spine provides balanced forward cutting momentum for rip cuts.",
+                use: "Deep rip-sawing of mortise-and-tenon cheeks.",
+                movableParts: "Brass Spine & Walnut Grip",
+                actionName: "Simulate Push Cut"
+            },
+            {
+                id: "tool_scraper",
+                num: "13",
+                name: "Cabinet Scraper (Card Scraper)",
+                cat: "Surface Shaping",
+                stationId: "st_finishing",
+                pos: [13.8, 1.05, 6.8],
+                desc: "Rectangular spring-steel card prepared with a sharp rolled hook burr.",
+                use: "Flex between thumbs to shave curly ribbons from figured grain without tearout.",
+                movableParts: "Flexible Steel Leaf",
+                actionName: "Flex & Shave"
+            },
+            {
+                id: "tool_rasp",
+                num: "14",
+                name: "Cabinetmaker's Hand-Stitched Rasp",
+                cat: "Surface Shaping",
+                stationId: "st_finishing",
+                pos: [14.1, 1.05, 6.8],
+                desc: "Individually hand-stitched teeth in an organic pattern for rapid fairing of curved stock.",
+                use: "Sculpt organic shapes and fair transitions on cabriole legs.",
+                movableParts: "Forged Rasp Body",
+                actionName: "Shape Contour"
+            },
+            {
+                id: "tool_markknife",
+                num: "15",
+                name: "Spear-Point Marking Knife",
+                cat: "Layout & Marking",
+                stationId: "st_workbench",
+                pos: [5.6, 1.05, -2.1],
+                desc: "Double-bevel spear point blade registers flat against squares to sever wood fibers.",
+                use: "Scribe exact layout lines that prevent tearout during crosscuts.",
+                movableParts: "Beveled Blade Tip",
+                actionName: "Score Layout Line"
+            },
+            {
+                id: "tool_clamps",
+                num: "16",
+                name: "Parallel Jaw Bar Clamps",
+                cat: "Holding & Clamping",
+                stationId: "st_assembly",
+                pos: [6.7, 1.2, 7.4],
+                desc: "Heavy cold-drawn steel rails with composite jaws maintaining dead 90° alignment.",
+                use: "Turn wooden handle to tighten clamping pressure across glued tabletop panels.",
+                movableParts: "Sliding Jaw & Threaded Crank",
+                actionName: "Tighten Clamp Pressure"
+            },
+            {
+                id: "tool_mallet",
+                num: "17",
+                name: "Joiner's Wooden Mallet",
+                cat: "Striking Tools",
+                stationId: "st_workbench",
+                pos: [6.8, 1.05, -2.4],
+                desc: "Laminated dense beech head with angled striking faces matching natural swing arcs.",
+                use: "Deliver non-marring dead blows to mortise chisels and dry-fit assemblies.",
+                movableParts: "Angled Striking Head",
+                actionName: "Strike Chisel"
+            },
+            {
+                id: "tool_holdfasts",
+                num: "18",
+                name: "Forged Steel Holdfasts & Dogs",
+                cat: "Holding & Clamping",
+                stationId: "st_workbench",
+                pos: [5.4, 1.05, -1.7],
+                desc: "Forged ductile iron holdfasts lock stock via wedge friction inside 3/4\" bench dog holes.",
+                use: "Tap top with mallet to lock workpiece instantly to bench surface.",
+                movableParts: "Friction Wedge Arm",
+                actionName: "Lock Down Board"
+            },
+            {
+                id: "tool_anglegauge",
+                num: "19",
+                name: "Digital Magnetic Angle Gauge",
+                cat: "Precision Measuring",
+                stationId: "st_tablesaw",
+                pos: [-6.3, 1.05, -2.2],
+                desc: "Magnetic cube with backlit LCD inclinometer displaying true angles to 0.1°.",
+                use: "Attach magnetically to table saw blade to set precise 45.0° and 90.0° bevels.",
+                movableParts: "Magnetic Base & Digital Readout",
+                actionName: "Zero Angle Sensor"
+            },
+            {
+                id: "tool_scratchawl",
+                num: "20",
+                name: "Woodworker's Scratch Awl",
+                cat: "Layout & Marking",
+                stationId: "st_drillpress",
+                pos: [14.1, 1.05, -8.3],
+                desc: "Turned bulbous hardwood palm handle fitted with a hardened round steel needle point.",
+                use: "Pierce starter center divots to locate Forstner bit brad points.",
+                movableParts: "Palm Grip & Scribe Point",
+                actionName: "Punch Center Hole"
+            }
+        ];
+
+        let scene, camera, renderer, controls, dragControls;
+        let interactiveStations = [];
+        let draggableToolMeshes = [];
+        let toolGroupsById = {};
+        let currentTargetObject = null;
+        let isAudioEnabled = true;
+        let audioCtx = null;
+
+        let isTransitioning = false;
+        let camStartPos = new THREE.Vector3();
+        let camEndPos = new THREE.Vector3();
+        let targetStartPos = new THREE.Vector3();
+        let targetEndPos = new THREE.Vector3();
+        let transitionProgress = 0;
+        const transitionDuration = 1.0;
+
+        function init() {
+            const container = document.getElementById('webgl-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x101317);
+            scene.fog = new THREE.FogExp2(0x101317, 0.024);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 14, 22);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.15;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02;
+            controls.minDistance = 1.2;
+            controls.maxDistance = 40;
+            controls.target.set(0, 1.4, 0);
+
+            setupLighting();
+            buildWorkshopEnvironment();
+            buildAllWorkstations();
+            buildAllInstrumentsWithTexturesAndPhysics();
+            setupDragAndDropControls();
+            setupRaycastingInteractions();
+            populateList('stations');
+
+            window.addEventListener('resize', onWindowResize);
+            animate(0);
+        }
+
+        function setupLighting() {
+            const ambient = new THREE.AmbientLight(0xffeedd, 0.5);
+            scene.add(ambient);
+
+            const sunLight = new THREE.DirectionalLight(0xfff5e6, 0.9);
+            sunLight.position.set(15, 25, 10);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 60;
+            sunLight.shadow.camera.left = -22;
+            sunLight.shadow.camera.right = 22;
+            sunLight.shadow.camera.top = 20;
+            sunLight.shadow.camera.bottom = -20;
+            sunLight.shadow.bias = -0.0004;
+            scene.add(sunLight);
+
+            const pendantPositions = [
+                [-6, 5, -2], [6, 5, -2],
+                [-6, 5, 7],  [6, 5, 7],
+                [-14, 5, -9], [0, 5, -9], [14, 5, -9],
+                [-14, 5, 7],  [0, 5, 7],  [14, 5, 7]
+            ];
+
+            pendantPositions.forEach(pos => {
+                const point = new THREE.PointLight(0xffb86c, 0.7, 9);
+                point.position.set(pos[0], pos, pos);
+                scene.add(point);
+
+                const shadeMat = new THREE.MeshStandardMaterial({ color: 0x22262a, roughness: 0.5, metalness: 0.8, side: THREE.DoubleSide });
+                const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffe2b3 });
+
+                const pendant = new THREE.Group();
+                const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.8, 8), shadeMat);
+                cord.position.y = 0.9;
+                const shade = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.25, 16, 1, true), shadeMat);
+                const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), bulbMat);
+                bulb.position.y = -0.05;
+
+                pendant.add(cord);
+                pendant.add(shade);
+                pendant.add(bulb);
+                pendant.position.set(pos[0], pos + 0.1, pos);
+                scene.add(pendant);
+            });
+        }
+
+        function buildWorkshopEnvironment() {
+            const floorGeo = new THREE.PlaneGeometry(44, 32);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x24282e,
+                roughness: 0.35,
+                metalness: 0.15
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const gridHelper = new THREE.GridHelper(40, 40, 0xd4a373, 0x343942);
+            gridHelper.position.y = 0.002;
+            scene.add(gridHelper);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x20242a, roughness: 0.85 });
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(44, 8, 0.4), wallMat);
+            backWall.position.set(0, 4, -14);
+            backWall.receiveShadow = true;
+            scene.add(backWall);
+
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 32), wallMat);
+            leftWall.position.set(-22, 4, 0);
+            leftWall.receiveShadow = true;
+            scene.add(leftWall);
+
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 8, 32), wallMat);
+            rightWall.position.set(22, 4, 0);
+            rightWall.receiveShadow = true;
+            scene.add(rightWall);
+
+            const birchTex = generateProceduralWoodTexture('#9e7d56', '#6e4f30', 24);
+            const cleatMat = new THREE.MeshStandardMaterial({ map: birchTex, roughness: 0.65 });
+            const cleatWall = new THREE.Mesh(new THREE.BoxGeometry(40, 2.8, 0.08), cleatMat);
+            cleatWall.position.set(0, 2.5, -13.7);
+            scene.add(cleatWall);
+
+            const ductMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
+            const mainDuct = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 40, 16), ductMat);
+            mainDuct.rotation.z = Math.PI / 2;
+            mainDuct.position.set(0, 6.2, -4);
+            scene.add(mainDuct);
+
+            [[-6, -2], [6, -2], [-14, -9], [0, -9], [7, -9], [14, 7], [-14, 7]].forEach(dPos => {
+                const drop = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 4.2, 12), ductMat);
+                drop.position.set(dPos[0], 4.2, dPos);
+                scene.add(drop);
+            });
+        }
+
+        function buildAllWorkstations() {
+            const castIronTex = generateCastIronTexture();
+            const mapleTex = generateProceduralWoodTexture('#cfb285', '#947247', 16);
+            const walnutTex = generateProceduralWoodTexture('#543d2b', '#302014', 14);
+
+            const castIronMat = new THREE.MeshStandardMaterial({ map: castIronTex, roughness: 0.4, metalness: 0.75 });
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0x8a929a, roughness: 0.25, metalness: 0.9 });
+            const mapleMat = new THREE.MeshStandardMaterial({ map: mapleTex, roughness: 0.6 });
+            const walnutMat = new THREE.MeshStandardMaterial({ map: walnutTex, roughness: 0.65 });
+            const cabinetBlueMat = new THREE.MeshStandardMaterial({ color: 0x1e3d59, roughness: 0.55 });
+            const cabinetYellowMat = new THREE.MeshStandardMaterial({ color: 0xd48b28, roughness: 0.5 });
+
+            WORKSTATIONS.forEach(st => {
+                const group = new THREE.Group();
+                group.position.set(st.pos[0], st.pos, st.pos);
+
+                switch(st.id) {
+                    case "st_miter": {
+                        const bench = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.9, 0.9), cabinetBlueMat);
+                        bench.position.set(0, 0.45, 0);
+                        bench.castShadow = true;
+                        group.add(bench);
+
+                        const miterFence = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.15, 0.08), steelMat);
+                        miterFence.position.set(0, 0.98, -0.35);
+                        group.add(miterFence);
+
+                        const sawBase = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 16), castIronMat);
+                        sawBase.position.set(0, 0.95, 0);
+                        group.add(sawBase);
+                        const sawArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.45, 0.35), cabinetYellowMat);
+                        sawArm.position.set(0, 1.25, -0.1);
+                        sawArm.rotation.x = -0.3;
+                        group.add(sawArm);
+                        break;
+                    }
+                    case "st_jointer": {
+                        const stand = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.75, 0.55), cabinetBlueMat);
+                        stand.position.set(0, 0.375, 0);
+                        group.add(stand);
+
+                        const infeedBed = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.38), castIronMat);
+                        infeedBed.position.set(-0.7, 0.8, 0);
+                        group.add(infeedBed);
+
+                        const outfeedBed = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 0.38), castIronMat);
+                        outfeedBed.position.set(0.7, 0.8, 0);
+                        group.add(outfeedBed);
+
+                        const fence = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.22, 0.06), castIronMat);
+                        fence.position.set(0, 0.95, -0.16);
+                        group.add(fence);
+                        break;
+                    }
+                    case "st_planer": {
+                        const stand = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.65, 0.8), cabinetBlueMat);
+                        stand.position.set(0, 0.325, 0);
+                        group.add(stand);
+
+                        const planerHead = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.6, 0.75), cabinetYellowMat);
+                        planerHead.position.set(0, 0.95, 0);
+                        group.add(planerHead);
+
+                        const bed = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.65), castIronMat);
+                        bed.position.set(0, 0.75, 0);
+                        group.add(bed);
+                        break;
+                    }
+                    case "st_bandsaw": {
+                        const base = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.7), cabinetBlueMat);
+                        base.position.set(0, 0.25, 0);
+                        group.add(base);
+
+                        const lowerWheelBox = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.65, 0.35), cabinetBlueMat);
+                        lowerWheelBox.position.set(-0.1, 0.7, 0);
+                        group.add(lowerWheelBox);
+
+                        const spine = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1.4, 0.3), cabinetBlueMat);
+                        spine.position.set(-0.35, 1.4, 0);
+                        group.add(spine);
+
+                        const upperWheelBox = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.65, 0.35), cabinetBlueMat);
+                        upperWheelBox.position.set(-0.1, 2.1, 0);
+                        group.add(upperWheelBox);
+
+                        const table = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.08, 0.75), castIronMat);
+                        table.position.set(0.1, 1.05, 0);
+                        group.add(table);
+                        break;
+                    }
+                    case "st_drillpress": {
+                        const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.7), castIronMat);
+                        base.position.set(0, 0.04, 0);
+                        group.add(base);
+
+                        const column = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 16), steelMat);
+                        column.position.set(0, 1.04, -0.15);
+                        group.add(column);
+
+                        const auxTable = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.06, 0.55), mapleMat);
+                        auxTable.position.set(0, 0.95, 0.1);
+                        group.add(auxTable);
+
+                        const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.75), cabinetBlueMat);
+                        head.position.set(0, 1.95, 0.05);
+                        group.add(head);
+                        break;
+                    }
+                    case "st_tablesaw": {
+                        const cabinet = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.8, 0.9), cabinetBlueMat);
+                        cabinet.position.set(0, 0.4, 0);
+                        cabinet.castShadow = true;
+                        group.add(cabinet);
+
+                        const castTop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.0), castIronMat);
+                        castTop.position.set(0, 0.84, 0);
+                        group.add(castTop);
+
+                        const outfeedTable = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 1.8), mapleMat);
+                        outfeedTable.position.set(0.3, 0.84, -1.35);
+                        group.add(outfeedTable);
+                        break;
+                    }
+                    case "st_workbench": {
+                        const top = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.18, 0.9), mapleMat);
+                        top.position.set(0, 0.85, 0);
+                        top.castShadow = true;
+                        group.add(top);
+
+                        for(let x of [-0.95, 0.95]) {
+                            for(let z of [-0.32, 0.32]) {
+                                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.76, 0.14), mapleMat);
+                                leg.position.set(x, 0.38, z);
+                                group.add(leg);
+                            }
+                        }
+
+                        const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.04, 0.65), walnutMat);
+                        shelf.position.set(0, 0.2, 0);
+                        group.add(shelf);
+
+                        const viseChop = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.72, 0.1), walnutMat);
+                        viseChop.position.set(-0.95, 0.44, 0.45);
+                        group.add(viseChop);
+                        break;
+                    }
+                    case "st_router": {
+                        const cabinet = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 0.7), cabinetBlueMat);
+                        cabinet.position.set(0, 0.4, 0);
+                        group.add(cabinet);
+
+                        const castTop = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.8), castIronMat);
+                        castTop.position.set(0, 0.84, 0);
+                        group.add(castTop);
+                        break;
+                    }
+                    case "st_lathe": {
+                        const bedWays = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.28), steelMat);
+                        bedWays.position.set(0, 0.78, 0);
+                        group.add(bedWays);
+
+                        const headstock = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.32), cabinetBlueMat);
+                        headstock.position.set(-0.75, 0.98, 0);
+                        group.add(headstock);
+
+                        const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.1, 0.2, 16), walnutMat);
+                        bowl.rotation.z = Math.PI / 2;
+                        bowl.position.set(-0.45, 0.98, 0);
+                        group.add(bowl);
+                        break;
+                    }
+                    case "st_scrollsaw": {
+                        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.25, 0.75, 12), castIronMat);
+                        pedestal.position.set(0, 0.375, 0);
+                        group.add(pedestal);
+
+                        const sawBody = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.8), cabinetYellowMat);
+                        sawBody.position.set(0, 0.95, -0.15);
+                        group.add(sawBody);
+                        break;
+                    }
+                    case "st_assembly": {
+                        const torsionTop = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.14, 1.4), mapleMat);
+                        torsionTop.position.set(0, 0.7, 0);
+                        torsionTop.castShadow = true;
+                        group.add(torsionTop);
+                        break;
+                    }
+                    case "st_finishing": {
+                        const downdraft = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.8, 0.85), cabinetBlueMat);
+                        downdraft.position.set(-0.6, 0.4, 0);
+                        group.add(downdraft);
+
+                        const dryingRack = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.7, 0.6), steelMat);
+                        dryingRack.position.set(0.65, 0.85, 0);
+                        group.add(dryingRack);
+                        break;
+                    }
+                }
+
+                const hitBox = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.8, 2.4, 2.2),
+                    new THREE.MeshBasicMaterial({ color: 0xd4a373, wireframe: true, transparent: true, opacity: 0.0 })
+                );
+                hitBox.position.y = 1.1;
+                hitBox.userData = { isWorkstation: true, data: st };
+                group.add(hitBox);
+                interactiveStations.push(hitBox);
+
+                const labelCanvas = document.createElement('canvas');
+                labelCanvas.width = 256;
+                labelCanvas.height = 64;
+                const ctx = labelCanvas.getContext('2d');
+                ctx.fillStyle = 'rgba(16, 18, 22, 0.88)';
+                ctx.roundRect(0, 0, 256, 64, 10);
+                ctx.fill();
+                ctx.strokeStyle = '#d4a373';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                ctx.font = 'bold 24px monospace';
+                ctx.fillStyle = '#f8f9fa';
+                ctx.textAlign = 'center';
+                ctx.fillText(`STATION ${st.num}`, 128, 42);
+
+                const labelTex = new THREE.CanvasTexture(labelCanvas);
+                const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex }));
+                labelSprite.position.set(0, 2.4, 0);
+                labelSprite.scale.set(1.4, 0.35, 1);
+                group.add(labelSprite);
+
+                scene.add(group);
+            });
+        }
+
+        function buildAllInstrumentsWithTexturesAndPhysics() {
+            const rulerTex = generateRulerTexture();
+            const brassTex = generateProceduralWoodTexture('#d4af37', '#9e7a1e', 30);
+            const hornbeamTex = generateProceduralWoodTexture('#e0c29e', '#b8946e', 16);
+            const rosewoodTex = generateProceduralWoodTexture('#4a2216', '#260f08', 12);
+            const castIronTex = generateCastIronTexture();
+
+            const brassMat = new THREE.MeshStandardMaterial({ map: brassTex, metalness: 0.85, roughness: 0.25 });
+            const steelRulerMat = new THREE.MeshStandardMaterial({ map: rulerTex, metalness: 0.9, roughness: 0.2 });
+            const plainSteelMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
+            const hornbeamMat = new THREE.MeshStandardMaterial({ map: hornbeamTex, roughness: 0.65 });
+            const rosewoodMat = new THREE.MeshStandardMaterial({ map: rosewoodTex, roughness: 0.6 });
+            const darkIronMat = new THREE.MeshStandardMaterial({ map: castIronTex, roughness: 0.4, metalness: 0.75 });
+            const anodizedBlueMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.35, metalness: 0.6 });
+            const safetyRedMat = new THREE.MeshStandardMaterial({ color: 0xcc2929, roughness: 0.3 });
+
+            INSTRUMENTS.forEach(tool => {
+                const group = new THREE.Group();
+                group.position.set(tool.pos[0], tool.pos, tool.pos);
+
+                toolGroupsById[tool.id] = group;
+                group.userData = { isInstrumentGroup: true, data: tool, originalPos: [...tool.pos] };
+
+                switch(tool.id) {
+                    case "tool_combsquare": {
+                        const rule = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.012, 0.035), steelRulerMat);
+                        rule.name = "sub_rule";
+                        const head = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.12), darkIronMat);
+                        head.position.set(-0.08, 0.01, 0.04);
+                        const thumbscrew = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.02, 12), brassMat);
+                        thumbscrew.position.set(-0.08, 0.025, 0.04);
+                        group.add(rule);
+                        group.add(head);
+                        group.add(thumbscrew);
+                        break;
+                    }
+                    case "tool_markgauge": {
+                        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.24, 12), brassMat);
+                        stem.rotation.z = Math.PI / 2;
+                        const fence = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.03, 16), brassMat);
+                        fence.rotation.z = Math.PI / 2;
+                        fence.position.x = -0.04;
+                        fence.name = "sub_fence";
+                        group.add(stem);
+                        group.add(fence);
+                        break;
+                    }
+                    case "tool_tbevel": {
+                        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 0.035), rosewoodMat);
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.008, 0.025), plainSteelMat);
+                        blade.position.set(0.06, 0.015, 0.04);
+                        blade.rotation.y = 0.4;
+                        blade.name = "sub_blade";
+                        group.add(handle);
+                        group.add(blade);
+                        break;
+                    }
+                    case "tool_dovetailsaddle": {
+                        const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.08), anodizedBlueMat);
+                        group.add(saddle);
+                        break;
+                    }
+                    case "tool_calipers": {
+                        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.01, 0.03), steelRulerMat);
+                        const jawsFixed = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.08), plainSteelMat);
+                        jawsFixed.position.set(-0.11, 0, 0.025);
+                        const jawsSliding = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.012, 0.08), plainSteelMat);
+                        jawsSliding.position.set(-0.04, 0, 0.025);
+                        jawsSliding.name = "sub_jaw";
+                        const lcd = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.04), darkIronMat);
+                        lcd.position.set(-0.04, 0.01, 0);
+                        jawsSliding.add(lcd);
+                        group.add(beam);
+                        group.add(jawsFixed);
+                        group.add(jawsSliding);
+                        break;
+                    }
+                    case "tool_framingsquare": {
+                        const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.008, 0.04), steelRulerMat);
+                        const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.008, 0.32), steelRulerMat);
+                        leg2.position.set(-0.205, 0, 0.14);
+                        group.add(leg1);
+                        group.add(leg2);
+                        break;
+                    }
+                    case "tool_windingsticks": {
+                        const stick1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.02), hornbeamMat);
+                        const stick2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.04, 0.02), rosewoodMat);
+                        stick2.position.z = 0.06;
+                        group.add(stick1);
+                        group.add(stick2);
+                        break;
+                    }
+                    case "tool_chisels": {
+                        for(let i = 0; i < 4; i++) {
+                            const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.01, 0.12, 12), hornbeamMat);
+                            handle.rotation.x = Math.PI / 2;
+                            handle.position.set(i * 0.04 - 0.06, 0, -0.06);
+                            const ferrule = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.015, 12), brassMat);
+                            ferrule.rotation.x = Math.PI / 2;
+                            ferrule.position.set(i * 0.04 - 0.06, 0, -0.005);
+                            const blade = new THREE.Mesh(new THREE.BoxGeometry(0.01 + i*0.008, 0.006, 0.14), plainSteelMat);
+                            blade.position.set(i * 0.04 - 0.06, 0, 0.065);
+                            group.add(handle);
+                            group.add(ferrule);
+                            group.add(blade);
+                        }
+                        break;
+                    }
+                    case "tool_blockplane": {
+                        const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.07), brassMat);
+                        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.03, 0.06), safetyRedMat);
+                        cap.position.set(-0.02, 0.035, 0);
+                        const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 12), brassMat);
+                        knob.position.set(-0.06, 0.04, 0);
+                        group.add(body);
+                        group.add(cap);
+                        group.add(knob);
+                        break;
+                    }
+                    case "tool_smoothplane": {
+                        const body = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.06, 0.09), darkIronMat);
+                        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.03), rosewoodMat);
+                        handle.position.set(-0.09, 0.07, 0);
+                        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.025, 12, 12), rosewoodMat);
+                        knob.position.set(0.09, 0.055, 0);
+                        const iron = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.008), plainSteelMat);
+                        iron.rotation.z = 0.5;
+                        iron.position.set(-0.02, 0.08, 0);
+                        group.add(body);
+                        group.add(handle);
+                        group.add(knob);
+                        group.add(iron);
+                        break;
+                    }
+                    case "tool_dozuki": {
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.07, 0.005), plainSteelMat);
+                        const spine = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.012, 0.01), plainSteelMat);
+                        spine.position.y = 0.035;
+                        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 12), hornbeamMat);
+                        handle.rotation.z = Math.PI / 2;
+                        handle.position.set(-0.22, 0, 0);
+                        group.add(blade);
+                        group.add(spine);
+                        group.add(handle);
+                        break;
+                    }
+                    case "tool_tenonsaw": {
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.006), plainSteelMat);
+                        const spine = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.016, 0.014), brassMat);
+                        spine.position.y = 0.048;
+                        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.11, 0.025), rosewoodMat);
+                        handle.position.set(-0.16, 0.01, 0);
+                        group.add(blade);
+                        group.add(spine);
+                        group.add(handle);
+                        break;
+                    }
+                    case "tool_scraper": {
+                        const card = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.005), plainSteelMat);
+                        group.add(card);
+                        break;
+                    }
+                    case "tool_rasp": {
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.015, 0.03), darkIronMat);
+                        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.01, 0.1, 12), walnutMat);
+                        handle.rotation.z = Math.PI / 2;
+                        handle.position.x = -0.16;
+                        group.add(blade);
+                        group.add(handle);
+                        break;
+                    }
+                    case "tool_markknife": {
+                        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.015, 0.025), rosewoodMat);
+                        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.005, 0.02), plainSteelMat);
+                        blade.position.x = 0.08;
+                        group.add(handle);
+                        group.add(blade);
+                        break;
+                    }
+                    case "tool_clamps": {
+                        const rail = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.6, 0.04), plainSteelMat);
+                        const jawFixed = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.14), safetyRedMat);
+                        jawFixed.position.set(0, 0.24, 0.05);
+                        const jawSlide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.14), safetyRedMat);
+                        jawSlide.position.set(0, -0.18, 0.05);
+                        jawSlide.name = "sub_jaw";
+                        group.add(rail);
+                        group.add(jawFixed);
+                        group.add(jawSlide);
+                        break;
+                    }
+                    case "tool_mallet": {
+                        const head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.08), hornbeamMat);
+                        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.012, 0.26, 12), hornbeamMat);
+                        handle.position.y = -0.12;
+                        group.add(head);
+                        group.add(handle);
+                        break;
+                    }
+                    case "tool_holdfasts": {
+                        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.24, 12), darkIronMat);
+                        const hook = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 12, Math.PI), darkIronMat);
+                        hook.position.set(0.06, 0.12, 0);
+                        group.add(stem);
+                        group.add(hook);
+                        break;
+                    }
+                    case "tool_anglegauge": {
+                        const box = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), darkIronMat);
+                        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.03), new THREE.MeshBasicMaterial({ color: 0x55ffaa }));
+                        screen.position.set(0, 0, 0.031);
+                        group.add(box);
+                        group.add(screen);
+                        break;
+                    }
+                    case "tool_scratchawl": {
+                        const handle = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12), hornbeamMat);
+                        const point = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.008, 0.14, 8), plainSteelMat);
+                        point.position.y = 0.08;
+                        group.add(handle);
+                        group.add(point);
+                        break;
+                    }
+                }
+
+                const toolHit = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.55, 0.45, 0.55),
+                    new THREE.MeshBasicMaterial({ color: 0xe76f51, wireframe: true, transparent: true, opacity: 0.0 })
+                );
+                toolHit.userData = { isInstrument: true, data: tool, parentGroup: group };
+                group.add(toolHit);
+                draggableToolMeshes.push(toolHit);
+
+                const halo = new THREE.Mesh(
+                    new THREE.RingGeometry(0.12, 0.16, 24),
+                    new THREE.MeshBasicMaterial({ color: 0xd4a373, side: THREE.DoubleSide, transparent: true, opacity: 0.75 })
+                );
+                halo.rotation.x = -Math.PI / 2;
+                halo.position.y = -0.02;
+                group.add(halo);
+
+                scene.add(group);
+            });
+        }
+
+        function setupDragAndDropControls() {
+            dragControls = new THREE.DragControls(draggableToolMeshes, camera, renderer.domElement);
+
+            dragControls.addEventListener('dragstart', function (event) {
+                controls.enabled = false;
+                const parentGroup = event.object.userData.parentGroup;
+                if (parentGroup) {
+                    parentGroup.position.y += 0.2;
+                    playTapSound(620, 0.08);
+                }
+                selectInstrument(event.object.userData.data, false);
+            });
+
+            dragControls.addEventListener('drag', function (event) {
+                const parentGroup = event.object.userData.parentGroup;
+                if (parentGroup) {
+                    parentGroup.position.x = event.object.position.x;
+                    parentGroup.position.z = event.object.position.z;
+                }
+            });
+
+            dragControls.addEventListener('dragend', function (event) {
+                controls.enabled = true;
+                const parentGroup = event.object.userData.parentGroup;
+                if (parentGroup) {
+                    parentGroup.position.y = parentGroup.userData.originalPos;
+                    playTapSound(440, 0.1);
+                }
+            });
+        }
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredHit = null;
+
+        function setupRaycastingInteractions() {
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('click', onSceneClick);
+        }
+
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            const tooltip = document.getElementById('hud-tooltip');
+            raycaster.setFromCamera(mouse, camera);
+
+            const allTargets = [...interactiveStations, ...draggableToolMeshes];
+            const intersects = raycaster.intersectObjects(allTargets);
+
+            if (intersects.length > 0) {
+                const target = intersects[0].object;
+                if (hoveredHit !== target) {
+                    hoveredHit = target;
+                    document.body.style.cursor = 'grab';
+                    
+                    const itemData = target.userData.data;
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = `<i class="fa-solid ${target.userData.isWorkstation ? 'fa-industry' : 'fa-hand'}"></i> ${itemData.name} <span style="font-size:0.7rem; color:var(--accent-wood)">[Click or Drag]</span>`;
+                }
+                tooltip.style.left = `${event.clientX}px`;
+                tooltip.style.top = `${event.clientY}px`;
+            } else {
+                if (hoveredHit) {
+                    hoveredHit = null;
+                    document.body.style.cursor = 'default';
+                    tooltip.style.display = 'none';
+                }
+            }
+        }
+
+        function onSceneClick(event) {
+            if (event.clientY < 75 || event.clientX < 340 || event.clientX > window.innerWidth - 400) {
+                return;
+            }
+
+            raycaster.setFromCamera(mouse, camera);
+            const allTargets = [...interactiveStations, ...draggableToolMeshes];
+            const intersects = raycaster.intersectObjects(allTargets);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                if (hit.userData.isWorkstation) {
+                    selectWorkstation(hit.userData.data);
+                } else if (hit.userData.isInstrument) {
+                    selectInstrument(hit.userData.data, true);
+                }
+                playTapSound(480, 0.08);
+            }
+        }
+
+        function selectWorkstation(st) {
+            currentTargetObject = st;
+            
+            document.getElementById('inspect-panel').style.display = 'flex';
+            document.getElementById('inspect-name').textContent = st.name;
+            document.getElementById('inspect-type').textContent = st.type;
+            document.getElementById('inspect-desc').textContent = st.desc;
+            document.getElementById('inspect-features').textContent = st.features;
+            document.getElementById('tool-controls-container').style.display = 'none';
+
+            const specsList = document.getElementById('inspect-specs');
+            specsList.innerHTML = '';
+            st.specs.forEach(s => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="spec-label">${s.label}</span><span class="spec-val">${s.val}</span>`;
+                specsList.appendChild(li);
+            });
+
+            highlightListItem(st.id);
+            flyCameraTo(st.camPos, st.targetPos);
+        }
+
+        function selectInstrument(tool, shouldFly = true) {
+            currentTargetObject = tool;
+
+            document.getElementById('inspect-panel').style.display = 'flex';
+            document.getElementById('inspect-name').textContent = tool.name;
+            document.getElementById('inspect-type').textContent = tool.cat;
+            document.getElementById('inspect-desc').textContent = tool.desc;
+            document.getElementById('inspect-features').textContent = `Primary Action: ${tool.use}`;
+
+            const specsList = document.getElementById('inspect-specs');
+            specsList.innerHTML = `
+                <li><span class="spec-label">Category</span><span class="spec-val">${tool.cat}</span></li>
+                <li><span class="spec-label">Movable Component</span><span class="spec-val">${tool.movableParts}</span></li>
+                <li><span class="spec-label">Interactive Mode</span><span class="spec-val">Sandbox Drag & Animate</span></li>
+            `;
+
+            const toolControls = document.getElementById('tool-controls-container');
+            toolControls.style.display = 'block';
+
+            const slidersContainer = document.getElementById('dynamic-tool-sliders');
+            slidersContainer.innerHTML = `
+                <div class="tool-slider-row">
+                    <label>Manual Calibrate</label>
+                    <input type="range" min="0" max="100" value="50" oninput="onToolManualSlider('${tool.id}', this.value)">
+                </div>
+            `;
+            document.getElementById('btn-tool-action').innerHTML = `<i class="fa-solid fa-play"></i> ${tool.actionName}`;
+
+            highlightListItem(tool.id);
+
+            if (shouldFly) {
+                const toolCamPos = [tool.pos[0], tool.pos + 0.6, tool.pos + 1.2];
+                flyCameraTo(toolCamPos, tool.pos);
+            }
+        }
+
+        function onToolManualSlider(toolId, value) {
+            const group = toolGroupsById[toolId];
+            if (!group) return;
+            const norm = value / 100;
+
+            const subJaw = group.getObjectByName('sub_jaw');
+            const subRule = group.getObjectByName('sub_rule');
+            const subFence = group.getObjectByName('sub_fence');
+            const subBlade = group.getObjectByName('sub_blade');
+
+            if (subJaw) subJaw.position.x = -0.11 + norm * 0.14;
+            if (subRule) subRule.position.x = -0.1 + norm * 0.2;
+            if (subFence) subFence.position.x = -0.1 + norm * 0.18;
+            if (subBlade) subBlade.rotation.y = (norm - 0.5) * Math.PI;
+        }
+
+        function triggerToolMechanicalAction() {
+            if (!currentTargetObject) return;
+            const group = toolGroupsById[currentTargetObject.id];
+            if (!group) return;
+
+            playTapSound(580, 0.12);
+
+            let start = Date.now();
+            const origX = group.position.x;
+            const origY = group.position.y;
+
+            function stepAnimation() {
+                const elapsed = (Date.now() - start) / 1000;
+                if (elapsed < 1.2) {
+                    group.position.x = origX + Math.sin(elapsed * 12) * 0.12;
+                    group.position.y = origY + Math.abs(Math.sin(elapsed * 12)) * 0.04;
+                    group.rotation.y += 0.04;
+                    requestAnimationFrame(stepAnimation);
+                } else {
+                    group.position.x = origX;
+                    group.position.y = origY;
+                    group.rotation.y = 0;
+                }
+            }
+            stepAnimation();
+        }
+
+        function liftAndInspectTarget() {
+            if (!currentTargetObject) return;
+            const group = toolGroupsById[currentTargetObject.id];
+            if (group) {
+                playTapSound(640, 0.1);
+                let start = Date.now();
+                const origY = group.position.y;
+                group.position.y += 0.4;
+
+                function spinInspection() {
+                    const elapsed = (Date.now() - start) / 1000;
+                    if (elapsed < 3.0) {
+                        group.rotation.y += 0.03;
+                        group.rotation.x = Math.sin(elapsed * 4) * 0.2;
+                        requestAnimationFrame(spinInspection);
+                    } else {
+                        group.position.y = origY;
+                        group.rotation.set(0, 0, 0);
+                    }
+                }
+                spinInspection();
+            }
+        }
+
+        function approachCurrentTarget() {
+            if (currentTargetObject) {
+                if (currentTargetObject.camPos) {
+                    flyCameraTo(currentTargetObject.camPos, currentTargetObject.targetPos);
+                } else {
+                    const tPos = [currentTargetObject.pos[0], currentTargetObject.pos + 0.5, currentTargetObject.pos + 1.0];
+                    flyCameraTo(tPos, currentTargetObject.pos);
+                }
+                playTapSound(520, 0.1);
+            }
+        }
+
+        function closeInspect() {
+            document.getElementById('inspect-panel').style.display = 'none';
+        }
+
+        function flyCameraTo(newCamPos, newTargetPos) {
+            camStartPos.copy(camera.position);
+            camEndPos.set(newCamPos[0], newCamPos, newCamPos);
+            
+            targetStartPos.copy(controls.target);
+            targetEndPos.set(newTargetPos[0], newTargetPos, newTargetPos);
+
+            transitionProgress = 0;
+            isTransitioning = true;
+        }
+
+        function setPresetView(preset) {
+            switch(preset) {
+                case 'isometric':
+                    flyCameraTo([18, 16, 20], [0, 1.5, 0]);
+                    break;
+                case 'top':
+                    flyCameraTo([0, 26, 0.1], [0, 0, 0]);
+                    break;
+                case 'walk':
+                    flyCameraTo([0, 1.7, 12], [0, 1.5, -4]);
+                    break;
+                case 'bench':
+                    flyCameraTo([6, 2.5, 1.5], [6, 1.0, -2]);
+                    break;
+            }
+            playTapSound(380, 0.08);
+        }
+
+        function toggleOverview() {
+            flyCameraTo([0, 18, 22], [0, 1.0, 0]);
+            playTapSound(320, 0.1);
+        }
+
+        let currentMode = 'stations';
+
+        function switchListMode(mode) {
+            currentMode = mode;
+            document.getElementById('tab-stations').classList.toggle('active', mode === 'stations');
+            document.getElementById('tab-instruments').classList.toggle('active', mode === 'instruments');
+            
+            document.getElementById('sidebar-category-title').textContent = mode === 'stations' ? 'Workstations' : 'Instruments';
+            document.getElementById('item-count-badge').textContent = mode === 'stations' ? '12' : '20';
+            
+            document.getElementById('search-input').value = '';
+            populateList(mode);
+            playTapSound(480, 0.05);
+        }
+
+        function populateList(mode) {
+            const container = document.getElementById('items-list');
+            container.innerHTML = '';
+
+            const items = mode === 'stations' ? WORKSTATIONS : INSTRUMENTS;
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.id = `card_${item.id}`;
+                card.onclick = () => {
+                    if (mode === 'stations') selectWorkstation(item);
+                    else selectInstrument(item, true);
+                };
+
+                card.innerHTML = `
+                    <div class="item-info">
+                        <div class="item-num">${item.num}</div>
+                        <div>
+                            <div class="item-name">${item.name}</div>
+                            <div class="item-sub">${item.type || item.cat}</div>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right" style="font-size:0.7rem; color:var(--text-dim)"></i>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function filterItems() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const items = currentMode === 'stations' ? WORKSTATIONS : INSTRUMENTS;
+
+            items.forEach(item => {
+                const card = document.getElementById(`card_${item.id}`);
+                const matches = item.name.toLowerCase().includes(query) || (item.type && item.type.toLowerCase().includes(query)) || (item.cat && item.cat.toLowerCase().includes(query));
+                if (card) card.style.display = matches ? 'flex' : 'none';
+            });
+        }
+
+        function highlightListItem(id) {
+            document.querySelectorAll('.item-card').forEach(c => c.classList.remove('active'));
+            const activeCard = document.getElementById(`card_${id}`);
+            if (activeCard) {
+                activeCard.classList.add('active');
+                activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playTapSound(freq = 440, duration = 0.08) {
+            if (!isAudioEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(freq * 0.4, audioCtx.currentTime + duration);
+
+                gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e){}
+        }
+
+        function toggleAudio() {
+            isAudioEnabled = !isAudioEnabled;
+            const btn = document.getElementById('btn-sound');
+            btn.innerHTML = isAudioEnabled ? '<i class="fa-solid fa-volume-high"></i> Audio Active' : '<i class="fa-solid fa-volume-xmark"></i> Muted';
+            btn.classList.toggle('active', isAudioEnabled);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        let lastTime = 0;
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            const delta = (time - lastTime) / 1000;
+            lastTime = time;
+
+            if (isTransitioning) {
+                transitionProgress += delta / transitionDuration;
+                if (transitionProgress >= 1.0) {
+                    transitionProgress = 1.0;
+                    isTransitioning = false;
+                }
+                const t = transitionProgress < 0.5 ? 2 * transitionProgress * transitionProgress : -1 + (4 - 2 * transitionProgress) * transitionProgress;
+                camera.position.lerpVectors(camStartPos, camEndPos, t);
+                controls.target.lerpVectors(targetStartPos, targetEndPos, t);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
