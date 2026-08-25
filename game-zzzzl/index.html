@@ -67,10 +67,10 @@ const loading=$('#loading'), canvas=$('#scene'), viewport=$('#viewport');
 if(!window.THREE || !THREE.OrbitControls){loading.innerHTML='<div><strong class="error">3D library could not load.</strong><span>This page needs access to cdnjs/jsDelivr for Three.js.</span></div>';return;}
 const renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:true,alpha:false});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.outputEncoding=THREE.sRGBEncoding; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.0;
-const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9cb2bd); scene.fog=new THREE.Fog(0x9cb2bd,42,105);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0xb8c9d1); scene.fog=new THREE.Fog(0xb8c9d1,58,145);
 const camera=new THREE.PerspectiveCamera(42,1,.1,180); camera.position.set(16,9.4,16);
 const controls=new THREE.OrbitControls(camera,canvas); controls.enableDamping=true; controls.dampingFactor=.07; controls.target.set(-.8,3.1,0); controls.minDistance=6.2; controls.maxDistance=38; controls.maxPolarAngle=Math.PI*.93; controls.enablePan=true; controls.screenSpacePanning=true; controls.autoRotate=false;
-scene.add(new THREE.HemisphereLight(0xeaf7ff,0x26343b,1.75)); const keyLight=new THREE.DirectionalLight(0xfff0da,2.65); keyLight.position.set(16,24,-11); keyLight.castShadow=true; keyLight.shadow.mapSize.width=2048; keyLight.shadow.mapSize.height=2048; keyLight.shadow.camera.left=-20;keyLight.shadow.camera.right=20;keyLight.shadow.camera.top=20;keyLight.shadow.camera.bottom=-20;scene.add(keyLight); const fill=new THREE.DirectionalLight(0xa9d4ed,.9); fill.position.set(-14,9,17); scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xf3fbff,0x3c474b,1.55)); const keyLight=new THREE.DirectionalLight(0xfff2dd,2.45); keyLight.position.set(18,26,-14); keyLight.castShadow=true; keyLight.shadow.mapSize.width=2048; keyLight.shadow.mapSize.height=2048; keyLight.shadow.camera.left=-24;keyLight.shadow.camera.right=24;keyLight.shadow.camera.top=24;keyLight.shadow.camera.bottom=-24;scene.add(keyLight); const fill=new THREE.DirectionalLight(0xb7d9e7,.72); fill.position.set(-18,11,16); scene.add(fill); const warmRim=new THREE.DirectionalLight(0xffd5a8,.38); warmRim.position.set(-8,7,-20); scene.add(warmRim);
 const COLORS={rotor:0xd4b15e,power:0xd7815d,drive:0xc1c9cd,control:0x69a3c6,tail:0x8f78aa,fluid:0x6f9c78,elec:0xb37aa1,structure:0x68757d,dark:0x26343b,white:0xf2f4f3,accent:0x2e79b4,glass:0x192e3c};
 const systems={rotor:'Rotor system',power:'Engines & powerplant',drive:'Transmission & drivetrain',control:'Flight controls',tail:'Tail rotor & anti-torque',fluid:'Fuel & hydraulic systems',elec:'Electrical & avionics',structure:'Airframe & structure',exterior:'Exterior airframe'};
 const materials={};
@@ -85,40 +85,131 @@ function cyl(r1,r2,h,mat,pos,rot,parent,seg){return mesh(new THREE.CylinderGeome
 function sph(scale,mat,pos,parent,seg){const o=mesh(new THREE.SphereGeometry(1,seg||24,16),mat,pos,null,parent);o.scale.set(scale[0],scale[1],scale[2]);return o}
 function torus(R,r,mat,pos,rot,parent){return mesh(new THREE.TorusGeometry(R,r,10,36),mat,pos,rot,parent)}
 function tube(a,b,r,mat,parent){const A=new THREE.Vector3(a[0],a[1],a[2]),B=new THREE.Vector3(b[0],b[1],b[2]),D=B.clone().sub(A);const o=mesh(new THREE.CylinderGeometry(r,r,D.length(),12),mat,null,null,parent);o.position.copy(A).add(B).multiplyScalar(.5);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),D.clone().normalize());return o}
+function taperedTube(a,b,r1,r2,mat,parent){const A=new THREE.Vector3(a[0],a[1],a[2]),B=new THREE.Vector3(b[0],b[1],b[2]),D=B.clone().sub(A);const o=mesh(new THREE.CylinderGeometry(r2,r1,D.length(),24),mat,null,null,parent);o.position.copy(A).add(B).multiplyScalar(.5);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),D.clone().normalize());return o}
+function taperedBlade(len,rootChord,tipChord,thick,mat,parent){const x0=0,x1=len,rz=rootChord*.5,tz=tipChord*.5,y=thick*.5;const v=new Float32Array([x0,-y,-rz,x0,-y,rz,x0,y,-rz,x0,y,rz,x1,-y,-tz,x1,-y,tz,x1,y,-tz,x1,y,tz]);const idx=[0,4,6,0,6,2,1,3,7,1,7,5,0,1,5,0,5,4,2,6,7,2,7,3,0,2,3,0,3,1,4,5,7,4,7,6];const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(v,3));g.setIndex(idx);g.computeVertexNormals();return mesh(g,mat,[0,0,0],null,parent)}
+function loftBody(stations,radialSeg,mat,parent){
+  radialSeg=radialSeg||32;const v=[],idx=[];
+  for(let i=0;i<stations.length;i++){const st=stations[i],x=st[0],yc=st[1],ry=st[2],rz=st[3];for(let j=0;j<radialSeg;j++){const a=j/radialSeg*Math.PI*2;v.push(x,yc+Math.cos(a)*ry,Math.sin(a)*rz)}}
+  for(let i=0;i<stations.length-1;i++){for(let j=0;j<radialSeg;j++){const n=(j+1)%radialSeg,a=i*radialSeg+j,b=i*radialSeg+n,c=(i+1)*radialSeg+n,d=(i+1)*radialSeg+j;idx.push(a,b,c,a,c,d)}}
+  const start=v.length/3;v.push(stations[0][0],stations[0][1],0);const end=v.length/3;const e=stations[stations.length-1];v.push(e[0],e[1],0);
+  for(let j=0;j<radialSeg;j++){const n=(j+1)%radialSeg;idx.push(start,n,j);const base=(stations.length-1)*radialSeg;idx.push(end,base+j,base+n)}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(idx);g.computeVertexNormals();return mesh(g,mat,null,null,parent)
+}
+function roundedPanel(w,h,r,depth,mat,pos,rot,parent){const sh=new THREE.Shape(),x=-w/2,y=-h/2;sh.moveTo(x+r,y);sh.lineTo(x+w-r,y);sh.quadraticCurveTo(x+w,y,x+w,y+r);sh.lineTo(x+w,y+h-r);sh.quadraticCurveTo(x+w,y+h,x+w-r,y+h);sh.lineTo(x+r,y+h);sh.quadraticCurveTo(x,y+h,x,y+h-r);sh.lineTo(x,y+r);sh.quadraticCurveTo(x,y,x+r,y);const g=new THREE.ExtrudeGeometry(sh,{depth:depth,bevelEnabled:false,curveSegments:6});g.translate(0,0,-depth/2);return mesh(g,mat,pos,rot,parent)}
+function shapePlate(points,depth,mat,pos,rot,parent){const sh=new THREE.Shape();sh.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)sh.lineTo(points[i][0],points[i][1]);sh.closePath();const g=new THREE.ExtrudeGeometry(sh,{depth:depth,bevelEnabled:false});g.translate(0,0,-depth/2);return mesh(g,mat,pos,rot,parent)}
 const heli=new THREE.Group(); heli.position.set(0,.16,0); scene.add(heli);
 const parts=[]; const pick=[];
 function part(name,system,level,desc,objects,opts){objects=Array.isArray(objects)?objects:[objects];const p={name,system,level,desc,objects,kind:(opts&&opts.kind)||'internal',panel:(opts&&opts.panel)||false};parts.push(p);objects.forEach(o=>o.traverse(n=>{if(n.isMesh){n.userData.part=p;pick.push(n)}}));return p}
 function group(){const g=new THREE.Group();heli.add(g);return g}
-// Rooftop / city context
-(function rooftop(){const roof=mesh(new THREE.BoxGeometry(29,.7,29),new THREE.MeshStandardMaterial({color:0x53616a,roughness:.92}),[0,-.35,0],null,scene);roof.receiveShadow=true;const building=mesh(new THREE.BoxGeometry(25,18,25),new THREE.MeshStandardMaterial({color:0x34434b,roughness:.9}),[0,-9.35,0],null,scene);const ring=mesh(new THREE.TorusGeometry(6.6,.12,10,96),new THREE.MeshStandardMaterial({color:0xf0f1e9,roughness:.65}),[0,.03,0],[Math.PI/2,0,0],scene);box([4.5,.06,.36],M('white',.1,.7),[0,.04,0],null,scene);box([.36,.06,4.5],M('white',.1,.7),[0,.04,0],null,scene);for(const z of [-14.1,14.1])box([29,1.0,.28],M('structure',.1,.8),[0,.5,z],null,scene);for(const x of [-14.1,14.1])box([.28,1.0,29],M('structure',.1,.8),[x,.5,0],null,scene);for(let i=0;i<22;i++){const a=i/22*Math.PI*2,r=39+(i%5)*5,w=3.4+(i%4),d=3.5+((i+1)%5),h=8+(i%8)*3.2;mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color:i%3?0x5d6c74:0x697981,roughness:.93}),[Math.cos(a)*r,h/2-2.8,Math.sin(a)*r],null,scene)}})();
+// Rooftop / city context — deliberately restrained so the aircraft remains the focus
+(function rooftop(){
+  const concrete=new THREE.MeshStandardMaterial({color:0x686b6b,roughness:.96,metalness:.01});
+  const joint=new THREE.MeshStandardMaterial({color:0x484d4f,roughness:1});
+  const paintWhite=new THREE.MeshStandardMaterial({color:0xe7e7df,roughness:.82});
+  const paintYellow=new THREE.MeshStandardMaterial({color:0xd6b84d,roughness:.78});
+  const steel=new THREE.MeshStandardMaterial({color:0x59646a,roughness:.5,metalness:.5});
+  const darkGlass=new THREE.MeshStandardMaterial({color:0x334a57,roughness:.24,metalness:.22});
+
+  // Atmospheric sky dome: no procedural box-wall horizon.
+  const skyCanvas=document.createElement('canvas');skyCanvas.width=32;skyCanvas.height=512;const sx=skyCanvas.getContext('2d');const grd=sx.createLinearGradient(0,0,0,512);grd.addColorStop(0,'#7897ad');grd.addColorStop(.56,'#b9ccd5');grd.addColorStop(1,'#e1e3df');sx.fillStyle=grd;sx.fillRect(0,0,32,512);const skyTex=new THREE.CanvasTexture(skyCanvas);skyTex.encoding=THREE.sRGBEncoding;const sky=new THREE.Mesh(new THREE.SphereGeometry(115,32,20),new THREE.MeshBasicMaterial({map:skyTex,side:THREE.BackSide,fog:false}));scene.add(sky);
+  scene.fog=new THREE.Fog(0xb5c7ce,58,150);
+
+  // Executive-office tower roof: broad, simple, and believable.
+  const roof=mesh(new THREE.BoxGeometry(38,.72,34),concrete,[0,-.36,0],null,scene);roof.receiveShadow=true;
+  mesh(new THREE.BoxGeometry(34,24,30),new THREE.MeshStandardMaterial({color:0x3f474b,roughness:.88}),[0,-12.35,0],null,scene);
+  // expansion/control joints stay subtle
+  for(let x=-16;x<=16;x+=4)box([.025,.012,31],joint,[x,.018,0],null,scene);
+  for(let z=-14;z<=14;z+=4)box([35,.012,.025],joint,[0,.019,z],null,scene);
+
+  // Raised helipad surface and markings.
+  const pad=mesh(new THREE.CylinderGeometry(8.15,8.15,.08,96),new THREE.MeshStandardMaterial({color:0x55595a,roughness:.98}),[0,.04,0],null,scene);pad.receiveShadow=true;
+  mesh(new THREE.TorusGeometry(7.38,.115,10,120),paintWhite,[0,.105,0],[Math.PI/2,0,0],scene);
+  box([5.3,.035,.48],paintWhite,[0,.11,0],null,scene);box([.48,.035,5.3],paintWhite,[0,.111,0],null,scene);
+  for(let i=0;i<8;i++){const a=i*Math.PI/4;const r=8.85;box([1.05,.036,.15],paintYellow,[Math.cos(a)*r,.105,Math.sin(a)*r],[0,-a,0],scene)}
+  // drainage strip around the pad
+  mesh(new THREE.TorusGeometry(8.45,.035,8,120),joint,[0,.09,0],[Math.PI/2,0,0],scene);
+
+  // Low parapet, with a clearer open approach side toward the skyline.
+  box([38,.9,.28],joint,[0,.45,-16.55],null,scene);box([38,.9,.28],joint,[0,.45,16.55],null,scene);box([.28,.9,34],joint,[-18.85,.45,0],null,scene);box([.28,.9,34],joint,[18.85,.45,0],null,scene);
+  const redLamp=new THREE.MeshStandardMaterial({color:0xc63f35,emissive:0x8f1d18,emissiveIntensity:.85,roughness:.3});
+  [[-18.2,-15.9],[-18.2,15.9],[18.2,-15.9],[18.2,15.9]].forEach(([x,z])=>{cyl(.055,.055,.48,steel,[x,1.0,z],null,scene);sph([.1,.1,.1],redLamp,[x,1.31,z],scene,12)});
+
+  // Access core and restrained rooftop equipment stay behind the helicopter.
+  const core=new THREE.Group();scene.add(core);box([6.0,3.25,4.8],new THREE.MeshStandardMaterial({color:0x757b7c,roughness:.82}),[-12.2,1.63,10.3],null,core);box([4.9,2.15,.12],darkGlass,[-12.2,1.55,7.84],null,core);box([1.15,2.25,.14],new THREE.MeshStandardMaterial({color:0x2d3235,roughness:.52,metalness:.16}),[-12.2,1.18,7.75],null,core);box([6.4,.16,5.15],steel,[-12.2,3.32,10.3],null,core);
+  function hvac(x,z,w,d,h){const g=new THREE.Group();scene.add(g);box([w,h,d],new THREE.MeshStandardMaterial({color:0x737a7d,roughness:.68,metalness:.28}),[x,h/2,z],null,g);for(let k=-1;k<=1;k++)box([w*.74,.035,.05],steel,[x,h*.67+k*.12,z+d*.505],null,g);cyl(Math.min(w,d)*.19,Math.min(w,d)*.19,.035,steel,[x,h+.03,z],null,g,28)}
+  hvac(13.3,10.9,3.1,2.0,1.25);hvac(14.1,7.8,2.1,1.55,.98);for(const [x,z] of [[13.8,-11.2],[15.5,-10.0]]){cyl(.16,.2,1.05,steel,[x,.53,z],null,scene);cyl(.24,.24,.16,steel,[x,1.13,z],null,scene)}
+
+  // Purpose-built skyline: fixed composition, varied facade types, no circular random wall of boxes.
+  const facade=[
+    new THREE.MeshStandardMaterial({color:0x526875,roughness:.32,metalness:.18}),
+    new THREE.MeshStandardMaterial({color:0x6f7373,roughness:.76,metalness:.03}),
+    new THREE.MeshStandardMaterial({color:0x435965,roughness:.42,metalness:.12}),
+    new THREE.MeshStandardMaterial({color:0x77736d,roughness:.8,metalness:.02})
+  ];
+  const win=new THREE.MeshStandardMaterial({color:0x9cb4bf,roughness:.18,metalness:.18,transparent:true,opacity:.52});
+  function tower(x,z,w,d,h,mi,setback){const g=new THREE.Group();scene.add(g);const m=facade[mi%facade.length];box([w,h,d],m,[x,h/2-5,z],null,g);if(setback)box([w*.72,h*.22,d*.72],m,[x,h-5-h*.11,z],null,g);for(let y=2;y<h-2;y+=2.2){if(mi%2===0)box([w*1.005,.05,.035],win,[x,y-5,z+d*.505],null,g)}return g}
+  const skyline=[[-34,-58,9,10,31,0,1],[-22,-64,7,8,23,1,0],[-10,-68,11,9,42,2,1],[5,-72,8,10,27,3,0],[19,-66,10,8,36,0,1],[33,-60,7,9,25,1,0],[49,-54,12,11,45,2,1],[-52,-50,10,9,28,3,1],[-46,38,9,10,34,2,0],[-28,48,12,10,26,1,1],[-8,58,8,8,39,0,1],[15,55,11,9,31,3,0],[35,44,9,11,43,2,1],[52,34,12,9,29,1,0]];
+  skyline.forEach(t=>tower(...t));
+})();;
 // Exterior: sleek executive helicopter silhouette
 const shell=[];
-const fus=sph([4.4,1.62,1.58],shellMat,[.7,2.86,0]);shell.push(fus);part('Fuselage shell','exterior',1,'The streamlined primary body enclosing the cockpit, cabin, fuel bay, controls, and much of the powerplant.',fus,{kind:'shell'});
-const nose=sph([1.85,1.38,1.46],shellMat,[3.72,2.78,0]);shell.push(nose);part('Nose fairing','exterior',1,'Aerodynamic forward shell surrounding the cockpit structure and instrument panel.',nose,{kind:'shell'});
-const windL=sph([1.52,1.16,.69],glassMat,[3.68,3.02,-.68]);windL.rotation.z=-.08;shell.push(windL);part('Left windshield','exterior',1,'Curved cockpit glazing providing forward and downward visibility.',windL,{kind:'glass'});
-const windR=sph([1.52,1.16,.69],glassMat,[3.68,3.02,.68]);windR.rotation.z=-.08;shell.push(windR);part('Right windshield','exterior',1,'Curved cockpit glazing providing forward and downward visibility.',windR,{kind:'glass'});
-const tailBoom=tube([-2.5,3.15,0],[-9.15,3.78,0],.42,shellMat);shell.push(tailBoom);part('Tail boom skin','exterior',1,'Tapered aft airframe carrying the tail driveshaft and stabilizing surfaces.',tailBoom,{kind:'shell'});
-const fin=box([1.12,2.55,.12],shellMat,[-9.1,4.75,0],[0,0,-.12]);shell.push(fin);part('Vertical fin','exterior',1,'Fixed vertical surface improving directional stability in forward flight.',fin,{kind:'shell'});
-const hstab=box([1.55,.12,3.25],shellMat,[-7.85,3.88,0]);shell.push(hstab);part('Horizontal stabilizer','exterior',1,'Fixed or lightly adjustable surface helping manage fuselage pitch attitude.',hstab,{kind:'shell'});
-const stripe=box([5.6,.12,.08],accentMat,[.5,2.35,-1.55],[0,0,.01]);part('Accent stripe','exterior',1,'A simple executive livery stripe marking the otherwise white airframe.',stripe,{kind:'shell'});
-const doors=[];for(const [name,x,z] of [['Left cabin door',.85,-1.51],['Right cabin door',.85,1.51],['Left cockpit door',2.75,-1.35],['Right cockpit door',2.75,1.35]]){const d=box([1.35,1.72,.06],shellMat,[x,2.63,z]);doors.push(d);shell.push(d);part(name,'exterior',1,'Hinged access panel integrated into the fuselage shell.',d,{kind:'shell',panel:true})}
-const engineCowling=sph([2.25,.78,1.16],shellMat,[.05,4.16,0]);shell.push(engineCowling);part('Engine cowling','exterior',1,'Removable upper fuselage panels providing maintenance access to the engines and transmission.',engineCowling,{kind:'shell',panel:true});
-const transDeck=box([2.1,.24,2.1],shellMat,[0,4.72,0]);shell.push(transDeck);part('Transmission deck fairing','exterior',1,'Upper deck structure and fairing around the main gearbox and mast base.',transDeck,{kind:'shell',panel:true});
+// The complete aircraft is now a lofted fuselage instead of two stretched spheres.
+const fus=loftBody([
+  [4.95,2.72,.18,.16],[4.55,2.75,.72,.66],[3.75,2.79,1.22,1.08],[2.75,2.82,1.46,1.38],
+  [1.35,2.84,1.56,1.52],[-.15,2.88,1.58,1.55],[-1.45,2.99,1.40,1.34],[-2.45,3.08,.86,.82]
+],40,shellMat);shell.push(fus);part('Fuselage shell','exterior',1,'The smoothly tapered primary body enclosing the cockpit, executive cabin, controls, fuel bay, and much of the powerplant.',fus,{kind:'shell'});
+const tailBoom=loftBody([[-2.35,3.12,.64,.70],[-4.2,3.27,.52,.56],[-6.2,3.45,.40,.44],[-8.1,3.63,.30,.33],[-9.15,3.78,.22,.23]],26,shellMat);shell.push(tailBoom);part('Tail boom skin','exterior',1,'Tapered aft airframe shell carrying the tail driveshaft and stabilizing surfaces.',tailBoom,{kind:'shell'});
+// Upper twin-engine doghouse/cowling.
+const engineCowling=loftBody([[1.45,4.03,.34,.82],[.85,4.17,.63,1.08],[-.25,4.24,.72,1.16],[-1.25,4.15,.58,.98],[-1.8,3.98,.35,.72]],28,shellMat);shell.push(engineCowling);part('Engine cowling','exterior',1,'Removable upper fairing over the twin turboshaft engines and accessory deck.',engineCowling,{kind:'shell',panel:true});
+const transDeck=sph([1.12,.34,1.02],shellMat,[-.05,4.82,0]);shell.push(transDeck);part('Transmission deck fairing','exterior',1,'Compact aerodynamic fairing surrounding the main transmission and mast base.',transDeck,{kind:'shell',panel:true});
+
+// Proper side glazing and window rhythm for a business/passenger cabin.
+for(const side of [-1,1]){
+  const w1=roundedPanel(1.55,.98,.17,.032,glassMat,[2.92,3.05,side*1.30],[0,0,-.10]);part((side<0?'Left':'Right')+' pilot side window','exterior',1,'Large dark-tinted cockpit side glazing with a forward-raked upper edge.',w1,{kind:'glass'});
+  const w2=roundedPanel(1.42,1.02,.16,.032,glassMat,[1.25,3.02,side*1.49],[0,0,0]);part((side<0?'Left':'Right')+' forward cabin window','exterior',1,'Executive cabin side window providing outward visibility for forward passengers.',w2,{kind:'glass'});
+  const w3=roundedPanel(1.30,1.00,.16,.032,glassMat,[-.30,3.03,side*1.50],[0,0,0]);part((side<0?'Left':'Right')+' aft cabin window','exterior',1,'Aft passenger window integrated into the cabin door and side shell.',w3,{kind:'glass'});
+}
+// Front windshield pair, raked to follow the nose.
+const windL=roundedPanel(1.43,1.20,.18,.035,glassMat,[3.80,3.03,-.92],[0,0,-.20]);part('Left windshield','exterior',1,'Raked cockpit glazing providing the pilot a broad forward and downward field of view.',windL,{kind:'glass'});
+const windR=roundedPanel(1.43,1.20,.18,.035,glassMat,[3.80,3.03,.92],[0,0,-.20]);part('Right windshield','exterior',1,'Raked cockpit glazing providing the copilot a broad forward and downward field of view.',windR,{kind:'glass'});
+const canopyFrame=group();box([1.48,.045,.055],M('dark',.35,.42),[4.08,3.46,0],[0,0,-.18],canopyFrame);box([.055,1.25,.055],M('dark',.35,.42),[3.55,3.05,0],[0,0,-.18],canopyFrame);part('Windshield center frame','exterior',1,'Central structural glazing frame separating the two forward windshields.',canopyFrame);
+
+// Door outlines and handles sit on the actual side surface.
+const doors=[];for(const [name,x,z,w] of [['Left cabin door',.45,-1.535,1.55],['Right cabin door',.45,1.535,1.55],['Left cockpit door',2.65,-1.385,1.28],['Right cockpit door',2.65,1.385,1.28]]){const d=roundedPanel(w,1.78,.12,.025,shellMat,[x,2.62,z],[0,0,0]);doors.push(d);shell.push(d);part(name,'exterior',1,'Hinged access door integrated into the fuselage side shell.',d,{kind:'shell',panel:true});const handle=box([.22,.045,.035],M('dark',.28,.42),[x+w*.32,2.63,z+(z<0?-.027:.027)]);part(name+' handle','exterior',1,'Flush exterior handle for opening the cabin or cockpit door.',handle)}
+// Single restrained livery stripe along both sides.
+for(const side of [-1,1]){const stripe=box([6.2,.075,.038],accentMat,[.35,2.24,side*1.49],[0,0,.01]);part((side<0?'Left':'Right')+' accent stripe','exterior',1,'A restrained blue executive livery stripe running along the white fuselage.',stripe,{kind:'shell'})}
+
+// Tail surfaces are shaped plates rather than rectangular boards.
+const fin=shapePlate([[-.46,-1.0],[.35,-.72],[.58,1.78],[.05,2.22],[-.34,.85]],.12,shellMat,[-9.05,4.35,0],[0,0,0]);shell.push(fin);part('Vertical fin','exterior',1,'Swept fixed vertical surface improving directional stability in forward flight.',fin,{kind:'shell'});
+const stabMat=shellMat;for(const side of [-1,1]){const st=taperedBlade(1.78,.68,.34,.09,stabMat,heli);st.position.set(-7.75,3.83,side*.18);st.rotation.y=side>0?-Math.PI/2:Math.PI/2;part((side<0?'Left':'Right')+' horizontal stabilizer','exterior',1,'Tapered horizontal stabilizer panel helping manage fuselage pitch attitude.',st,{kind:'shell'})}
+const tailCone=loftBody([[-8.85,3.73,.26,.28],[-9.55,3.86,.14,.15]],20,shellMat);part('Tail cone','exterior',1,'Small tapered transition around the aft tail-boom and gearbox region.',tailCone,{kind:'shell'});
+
+// Exterior engine openings and lighting.
+for(const side of [-1,1]){const inlet=cyl(.30,.34,.12,M('dark',.2,.35),[1.0,4.24,side*1.02],[Math.PI/2,0,0]);part((side<0?'Left':'Right')+' engine inlet','exterior',1,'Upper-side intake opening feeding outside air to one turboshaft engine.',inlet);const ex=taperedTube([-.95,4.17,side*.78],[-1.58,4.38,side*.94],.18,.25,M('dark',.55,.28));part((side<0?'Left':'Right')+' exhaust outlet','exterior',1,'Heat-resistant outlet directing turbine exhaust away from the cabin and tail boom.',ex)}
+const mastFair=sph([.58,.34,.55],shellMat,[0,5.25,0]);part('Rotor mast fairing','exterior',1,'Small aerodynamic fairing smoothing the upper transition around the mast.',mastFair,{kind:'shell',panel:true});
+const navRed=sph([.07,.07,.07],new THREE.MeshStandardMaterial({color:0xa92d2a,emissive:0x6d0f0d,emissiveIntensity:.75}),[-7.86,3.88,-1.65],null,12);part('Left navigation light','exterior',1,'Red position light identifying the aircraft left side at night.',navRed);
+const navGreen=sph([.07,.07,.07],new THREE.MeshStandardMaterial({color:0x2d8c5a,emissive:0x0d5b33,emissiveIntensity:.75}),[-7.86,3.88,1.65],null,12);part('Right navigation light','exterior',1,'Green position light identifying the aircraft right side at night.',navGreen);
+const beacon=sph([.10,.075,.10],new THREE.MeshStandardMaterial({color:0xc64535,emissive:0x922418,emissiveIntensity:.7}),[-1.55,4.76,0],null,12);part('Anti-collision beacon','exterior',1,'High-visibility beacon improving recognition around airports and rooftop pads.',beacon);
+const steps=group();for(const side of [-1,1]){box([.68,.05,.16],M('structure'),[1.8,.91,side*1.48],null,steps);tube([1.52,.94,side*1.48],[1.34,1.30,side*1.20],.032,M('structure'),steps)}part('Cabin boarding steps','structure',1,'Small external steps helping passengers board the raised executive cabin from the skids.',steps);
+
 // Landing gear exterior
 const skidGroup=group();for(const z of [-1.42,1.42])cyl(.07,.07,6.4,M('structure'),[.55,.55,z],[0,0,Math.PI/2],skidGroup);part('Skid landing gear','structure',1,'Paired tubular skids spread landing loads along the ground and tolerate moderate vertical flexing.',skidGroup);
 const crossGroup=group();[[[-1.0,.55,-1.42],[-.65,1.45,-.72]],[[-1,.55,1.42],[-.65,1.45,.72]],[[2.15,.55,-1.42],[1.82,1.45,-.72]],[[2.15,.55,1.42],[1.82,1.45,.72]]].forEach(x=>tube(x[0],x[1],.065,M('structure'),crossGroup));part('Skid cross tubes','structure',2,'Spring-like transverse members connecting the skids to reinforced fuselage attachment points.',crossGroup);
 // Rotor blades visible from level 1
 const mainRotor=new THREE.Group();mainRotor.position.set(0,6.72,0);heli.add(mainRotor);const hubCore=cyl(.31,.31,.34,M('rotor'),[0,0,0],null,mainRotor);part('Main rotor hub','rotor',3,'Central rotating structure that distributes mast torque and blade-control loads to the four rotor arms.',hubCore);
-for(let i=0;i<4;i++){const a=i*Math.PI/2,arm=new THREE.Group();arm.rotation.y=a;mainRotor.add(arm);const blade=box([6.45,.07,.27],new THREE.MeshStandardMaterial({color:0xbac2c5,metalness:.35,roughness:.42}),[4.35,0,0],null,arm);part('Main rotor blade '+(i+1),'rotor',1,'One of four long aerodynamic wings rotating to generate the helicopter’s principal lift and thrust.',blade);const grip=box([.72,.20,.27],M('rotor'),[.83,0,0],null,arm);part('Blade grip '+(i+1),'rotor',4,'Grip securing the blade root while allowing controlled feathering about the blade span axis.',grip);const pitchB=torus(.15,.035,M('drive'),[1.16,0,0],[0,Math.PI/2,0],arm);part('Pitch bearing '+(i+1),'rotor',4,'Bearing allowing the blade to rotate slightly around its long axis to change aerodynamic pitch.',pitchB);const flap=cyl(.075,.075,.22,M('drive'),[.46,0,0],[0,0,Math.PI/2],arm);part('Flapping bearing '+(i+1),'rotor',4,'Articulation allowing the blade to move vertically as aerodynamic loading changes around the rotor disc.',flap);const lag=cyl(.075,.075,.21,M('drive'),[.64,0,0],[Math.PI/2,0,0],arm);part('Lead-lag bearing '+(i+1),'rotor',4,'Articulation allowing slight fore-and-aft movement in the rotor plane to relieve dynamic loads.',lag);const stop=box([.12,.12,.11],M('dark'),[.4,-.15,0],null,arm);part('Droop stop '+(i+1),'rotor',4,'Mechanical stop limiting how far a blade can sag downward when rotor speed is low.',stop)}
+for(let i=0;i<4;i++){const a=i*Math.PI/2,arm=new THREE.Group();arm.rotation.y=a;mainRotor.add(arm);const blade=taperedBlade(6.4,.31,.21,.065,new THREE.MeshStandardMaterial({color:0xb8c0c3,metalness:.32,roughness:.4}),arm);blade.position.set(1.15,0,0);part('Main rotor blade '+(i+1),'rotor',1,'One of four long aerodynamic wings rotating to generate the helicopter’s principal lift and thrust.',blade);const grip=box([.72,.20,.27],M('rotor'),[.83,0,0],null,arm);part('Blade grip '+(i+1),'rotor',4,'Grip securing the blade root while allowing controlled feathering about the blade span axis.',grip);const pitchB=torus(.15,.035,M('drive'),[1.16,0,0],[0,Math.PI/2,0],arm);part('Pitch bearing '+(i+1),'rotor',4,'Bearing allowing the blade to rotate slightly around its long axis to change aerodynamic pitch.',pitchB);const flap=cyl(.075,.075,.22,M('drive'),[.46,0,0],[0,0,Math.PI/2],arm);part('Flapping bearing '+(i+1),'rotor',4,'Articulation allowing the blade to move vertically as aerodynamic loading changes around the rotor disc.',flap);const lag=cyl(.075,.075,.21,M('drive'),[.64,0,0],[Math.PI/2,0,0],arm);part('Lead-lag bearing '+(i+1),'rotor',4,'Articulation allowing slight fore-and-aft movement in the rotor plane to relieve dynamic loads.',lag);const stop=box([.12,.12,.11],M('dark'),[.4,-.15,0],null,arm);part('Droop stop '+(i+1),'rotor',4,'Mechanical stop limiting how far a blade can sag downward when rotor speed is low.',stop)}
 const mast=cyl(.14,.14,2.25,M('drive'),[0,5.52,0]);part('Main rotor mast','drive',2,'Vertical drive shaft transmitting torque from the main transmission to the rotor head.',mast);
 // Tail rotor exterior and detailed hub
-const tailRotor=new THREE.Group();tailRotor.position.set(-9.12,4.3,-.36);heli.add(tailRotor);const tailHub=cyl(.17,.17,.42,M('tail'),[0,0,0],[Math.PI/2,0,0],tailRotor);part('Tail rotor hub','tail',5,'Compact hub carrying the tail blades and transmitting pitch-change commands.',tailHub);for(let i=0;i<4;i++){const a=i*Math.PI/2,arm=new THREE.Group();arm.rotation.z=a;tailRotor.add(arm);const b=box([2.05,.08,.2],M('tail'),[1.28,0,0],null,arm);part('Tail rotor blade '+(i+1),'tail',1,'Small rotor blade producing side force to oppose main-rotor torque and control yaw.',b);const g=box([.42,.16,.16],M('tail'),[.33,0,0],null,arm);part('Tail blade grip '+(i+1),'tail',6,'Grip holding a tail blade while permitting synchronized pitch changes.',g)}
+const tailRotor=new THREE.Group();tailRotor.position.set(-9.12,4.3,-.36);heli.add(tailRotor);const tailHub=cyl(.17,.17,.42,M('tail'),[0,0,0],[Math.PI/2,0,0],tailRotor);part('Tail rotor hub','tail',5,'Compact hub carrying the tail blades and transmitting pitch-change commands.',tailHub);for(let i=0;i<4;i++){const a=i*Math.PI/2,arm=new THREE.Group();arm.rotation.z=a;tailRotor.add(arm);const b=taperedBlade(1.95,.22,.15,.075,M('tail'),arm);b.position.set(.48,0,0);part('Tail rotor blade '+(i+1),'tail',1,'Small rotor blade producing side force to oppose main-rotor torque and control yaw.',b);const g=box([.42,.16,.16],M('tail'),[.33,0,0],null,arm);part('Tail blade grip '+(i+1),'tail',6,'Grip holding a tail blade while permitting synchronized pitch changes.',g)}
 // Level 2: frames, floor, seats, panel removal reveal
 const floor=box([5.7,.14,2.8],M('structure'),[.8,1.58,0]);part('Cabin floor beam','structure',2,'Primary lower cabin structure supporting seats, occupants, and landing-gear attachments.',floor);
 for(let i=0;i<9;i++){const x=-1.8+i*.62;const r=torus(1.32,.035,M('structure'),[x,2.82,0],[Math.PI/2,0,0]);r.scale.set(1,1.08,1);part('Fuselage frame '+(i+1),'structure',3,'Transverse structural frame maintaining fuselage shape and carrying localized shell and equipment loads.',r)}
 for(let i=0;i<5;i++){const z=-1.15+i*.57;const l=tube([-1.9,1.8,z],[3.5,1.8,z],.028,M('structure'));part('Longeron '+(i+1),'structure',3,'Longitudinal structural member carrying bending loads along the fuselage.',l)}
 const fw=box([.08,2.25,2.4],M('structure'),[-.85,3.25,0]);part('Engine firewall','structure',3,'Heat- and fire-resistant barrier separating the powerplant bay from occupied fuselage spaces.',fw);
-for(let i=0;i<4;i++){const seat=group();box([.75,.14,.72],M('dark'),[1.55-(i%2)*1.45,2.0,(i<2?-1:1)*.62],null,seat);box([.16,1.0,.72],M('dark'),[1.9-(i%2)*1.45,2.52,(i<2?-1:1)*.62],[-.15,0,0],seat);part('Cabin seat '+(i+1),'structure',2,'Representative executive cabin seat mounted to the reinforced floor structure.',seat)}
+function makeForwardSeat(name,x,z,level,pilot){const g=group();const leather=new THREE.MeshStandardMaterial({color:pilot?0x283138:0x31383b,roughness:.72,metalness:.02});box([.72,.15,.68],leather,[x,1.98,z],null,g);box([.18,.92,.70],leather,[x-.36,2.48,z],[-.12,0,0],g);box([.16,.34,.46],leather,[x-.40,3.02,z],[-.08,0,0],g);box([.52,.08,.09],M('structure'),[x-.02,1.77,z],null,g);for(const side of [-1,1])box([.42,.08,.08],M('dark'),[x-.10,2.28,z+side*.39],null,g);part(name,'structure',level,(pilot?'Forward-facing energy-absorbing pilot seat aligned toward the helicopter nose and cockpit controls.':'Forward-facing executive passenger seat mounted to the cabin floor structure, with the seat back correctly placed aft of the cushion.'),g)}
+makeForwardSeat('Pilot seat',2.72,-.56,2,true);makeForwardSeat('Copilot seat',2.72,.56,2,true);
+makeForwardSeat('Forward-left passenger seat',1.15,-.62,2,false);makeForwardSeat('Forward-right passenger seat',1.15,.62,2,false);
+makeForwardSeat('Aft-left passenger seat',-.15,-.62,2,false);makeForwardSeat('Aft-right passenger seat',-.15,.62,2,false);
 // Level 4: controls and swashplate
 const statSw=torus(.72,.075,M('control'),[0,5.98,0],[Math.PI/2,0,0]);part('Stationary swashplate','control',4,'Non-rotating lower swashplate moved by hydraulic servos according to pilot cyclic and collective commands.',statSw);
 const rotSw=torus(.66,.068,M('rotor'),[0,6.13,0],[Math.PI/2,0,0]);part('Rotating swashplate','rotor',4,'Upper swashplate rotating with the rotor while retaining the commanded tilt and height.',rotSw);
@@ -166,7 +257,7 @@ const pitot=tube([4.45,2.45,-.35],[5.05,2.45,-.35],.025,M('drive'));part('Pitot 
 const antenna=box([.08,.55,.08],M('dark'),[-2.0,4.55,0]);part('VHF antenna','elec',8,'External antenna supporting line-of-sight aircraft radio communication.',antenna);
 const navAnt=sph([.23,.09,.18],M('dark'),[-1.2,4.62,.55]);part('GPS antenna','elec',8,'Satellite-navigation antenna mounted with a clear view of the sky.',navAnt);
 // Wireframe structural ghost reference
-const wireF=sph([4.42,1.64,1.60],ghostWire,[.7,2.86,0]);wireF.userData.ignorePick=true;const wireTail=tube([-2.5,3.15,0],[-9.15,3.78,0],.425,ghostWire);wireTail.userData.ignorePick=true;
+const wireF=loftBody([[4.95,2.72,.18,.16],[4.55,2.75,.72,.66],[3.75,2.79,1.22,1.08],[2.75,2.82,1.46,1.38],[1.35,2.84,1.56,1.52],[-.15,2.88,1.58,1.55],[-1.45,2.99,1.40,1.34],[-2.45,3.08,.86,.82]],28,ghostWire);wireF.userData.ignorePick=true;const wireTail=loftBody([[-2.35,3.12,.64,.70],[-4.2,3.27,.52,.56],[-6.2,3.45,.40,.44],[-8.1,3.63,.30,.33],[-9.15,3.78,.22,.23]],20,ghostWire);wireTail.userData.ignorePick=true;
 // levels
 const levelDefs=[
  {title:'Level 1 · Complete aircraft',short:'Exterior',desc:'Start with a polished private executive helicopter as a coherent flying machine.',focus:'Study the silhouette: main rotor, tail rotor, stabilizers, cabin, tail boom and landing gear.'},
