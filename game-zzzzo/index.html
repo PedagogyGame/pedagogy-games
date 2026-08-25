@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>VOIDMOUSE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;500;600;700&family=Sora:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --void: #07070b;
+      --surface: #12141c;
+      --fg: #e8eef4;
+      --muted: #8b939e;
+      --laser: #5eead4;
+      --danger: #fb7185;
+      --border: #262b36;
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; background: var(--void); color: var(--fg); font-family: Sora, system-ui, sans-serif; overflow: hidden; touch-action: none; }
+    canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+    .overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+    .card-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 1.1rem; background: rgba(7,7,11,.7); pointer-events: auto; }
+    .card {
+      width: min(28rem, 100%);
+      background: rgba(18,20,28,.94);
+      border: 1px solid var(--border);
+      border-radius: 32px;
+      padding: 1.5rem;
+    }
+    .kicker { font-family: Oxanium, sans-serif; font-size: .72rem; letter-spacing: .32em; text-transform: uppercase; color: var(--laser); }
+    h1, h2 { font-family: Oxanium, sans-serif; font-weight: 600; letter-spacing: -0.03em; text-wrap: balance; }
+    h1 { font-size: clamp(2.4rem, 8vw, 3.2rem); line-height: .95; margin: .7rem 0 0; }
+    h2 { font-size: 1.55rem; margin: .55rem 0 0; }
+    .lede { margin-top: 1rem; color: var(--muted); font-size: .92rem; line-height: 1.55; text-wrap: pretty; }
+    .btns { display: grid; gap: .7rem; margin-top: 1.35rem; }
+    button {
+      font-family: Oxanium, sans-serif; font-weight: 500; font-size: 1rem;
+      height: 3.15rem; border-radius: 1rem; border: 1px solid transparent;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .5rem;
+    }
+    button:disabled { opacity: .4; cursor: default; }
+    .primary { background: var(--laser); color: var(--void); }
+    .primary:hover { opacity: .92; }
+    .danger { background: rgba(251,113,133,.12); color: var(--danger); border-color: rgba(251,113,133,.4); }
+    .ghost { background: var(--surface); color: var(--fg); border-color: var(--border); }
+    .hud { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 1.1rem; }
+    .hud-top { display: flex; justify-content: space-between; gap: .8rem; align-items: flex-start; }
+    .brand { font-family: Oxanium, sans-serif; font-size: .7rem; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); }
+    .strikes { border: 1px solid var(--border); background: rgba(18,20,28,.8); border-radius: 1.1rem; padding: .55rem .8rem; display: flex; flex-direction: column; align-items: flex-end; gap: .4rem; }
+    .pips { display: flex; gap: .35rem; }
+    .pip { width: 1.4rem; height: .55rem; border-radius: 99px; background: rgba(232,238,244,.15); }
+    .pip.on { background: var(--danger); }
+    .hud-bot { display: flex; justify-content: space-between; align-items: flex-end; gap: .8rem; color: var(--muted); font-size: .75rem; }
+    .laser { color: var(--laser); font-family: Oxanium, sans-serif; }
+    #minimap { width: 108px; height: 132px; border-radius: .8rem; border: 1px solid var(--border); background: #07070bcc; }
+    #stick {
+      position: absolute; left: 1.1rem; bottom: 1.1rem; width: 108px; height: 108px;
+      border-radius: 999px; border: 1px solid var(--border); background: rgba(18,20,28,.7);
+      pointer-events: auto; touch-action: none;
+    }
+    #knob {
+      position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px;
+      border-radius: 999px; border: 1px solid rgba(94,234,212,.4); background: rgba(94,234,212,.25);
+    }
+    #flash { position: absolute; inset: 0; pointer-events: none; }
+    #flash.wrong { background: rgba(251,113,133,.2); }
+    #flash.correct { background: rgba(94,234,212,.1); }
+    .hidden { display: none !important; }
+    @media (max-width: 640px) {
+      #minimap, .hint { display: none; }
+      .card-wrap { align-items: end; }
+      .card { margin-bottom: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="overlay">
+    <div id="flash"></div>
+    <div id="hud" class="hud hidden">
+      <div class="hud-top">
+        <div>
+          <p class="brand">Voidmouse</p>
+          <p id="switchLabel" style="font-family:Oxanium,sans-serif;margin-top:.25rem">Switches 0/3</p>
+        </div>
+        <div style="display:flex;gap:.7rem;align-items:flex-start">
+          <canvas id="minimap" width="108" height="132"></canvas>
+          <div class="strikes">
+            <p class="brand">Wrong turns</p>
+            <div class="pips">
+              <span class="pip" data-pip="0"></span>
+              <span class="pip" data-pip="1"></span>
+              <span class="pip" data-pip="2"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="hud-bot">
+        <p class="hint">WASD or arrows to scurry. A turns left. Three wrong answers seal the exit.</p>
+        <p id="exitState" class="laser">Exit aligned</p>
+      </div>
+    </div>
+    <div id="title" class="card-wrap">
+      <div class="card">
+        <p class="kicker">Vacuum maze</p>
+        <h1>VOIDMOUSE</h1>
+        <p class="lede">You are a mouse in a floating neon maze. Path switches stand in for answers. Three wrong turns rotate the final gate into a dead end. Stay on the true path to escape.</p>
+        <div class="btns">
+          <button class="primary" id="enterBtn">Enter the maze</button>
+          <p style="text-align:center;color:var(--muted);font-size:.75rem">Desktop: WASD · Mobile: left stick</p>
+        </div>
+      </div>
+    </div>
+    <div id="answer" class="card-wrap hidden">
+      <div class="card">
+        <p class="kicker" id="switchKicker">Path switch 1 of 3</p>
+        <h2>Align the next gate</h2>
+        <p class="lede">A correct answer holds the exit path. A wrong answer turns the maze toward the void. Three wrong turns and the final fork seals you in.</p>
+        <div class="btns">
+          <button class="primary" id="correctBtn">Hold the path</button>
+          <button class="danger" id="wrongBtn">Wrong turn</button>
+        </div>
+      </div>
+    </div>
+    <div id="end" class="card-wrap hidden">
+      <div class="card">
+        <p class="kicker" id="endKicker">Escape</p>
+        <h2 id="endTitle">You left the vacuum.</h2>
+        <p class="lede" id="endLede"></p>
+        <div class="btns">
+          <button class="primary" id="againBtn">Run it again</button>
+          <button class="ghost" id="titleBtn">Title</button>
+        </div>
+      </div>
+    </div>
+    <div id="stick" class="hidden"><div id="knob"></div></div>
+  </div>
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js" } }
+  </script>
+  <script type="module">
+  import * as THREE from "three";
+
+    const COLS = 25, ROWS = 31, CELL = 3.55, WALL_H = 2.35, WALL_T = 0.11, MOUSE_R = 0.4, MAX_STRIKES = 3;
+    const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
+    const cellKey = (x,z) => x + "," + z;
+    const worldOf = (gx,gz) => ({ x: (gx - (COLS-1)/2)*CELL, z: (gz - (ROWS-1)/2)*CELL });
+    const cellOf = (wx,wz) => ({ x: Math.round(wx/CELL + (COLS-1)/2), z: Math.round(wz/CELL + (ROWS-1)/2) });
+    function mulberry32(seed) {
+      let s = seed >>> 0;
+      return () => {
+        s += 0x6d2b79f5;
+        let t = Math.imul(s ^ (s >>> 15), 1 | s);
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+    function inInterior(x,z){ return x>=1 && z>=1 && x<=COLS-2 && z<=ROWS-2; }
+    function makeGrid(fill){ return Array.from({length:ROWS},()=>Array(COLS).fill(fill)); }
+    function carve(wall,x,z){ if(inInterior(x,z)) wall[z][x]=false; }
+    function carveRoom(wall,cx,cz,rx,rz){ for(let z=cz-rz;z<=cz+rz;z++) for(let x=cx-rx;x<=cx+rx;x++) carve(wall,x,z); }
+    function carveLine(wall,x0,z0,x1,z1){ let x=x0,z=z0; carve(wall,x,z); while(x!==x1){x+=Math.sign(x1-x);carve(wall,x,z);} while(z!==z1){z+=Math.sign(z1-z);carve(wall,x,z);} }
+    function isFloor(wall,x,z){ return inInterior(x,z) && !wall[z][x]; }
+    function bfs(wall, from, to){
+      const q=[from], prev=new Map(); prev.set(cellKey(from.x,from.z), null);
+      for(let i=0;i<q.length;i++){
+        const c=q[i];
+        if(c.x===to.x && c.z===to.z) break;
+        for(const [dx,dz] of DIRS){
+          const nx=c.x+dx, nz=c.z+dz, k=cellKey(nx,nz);
+          if(prev.has(k) || !isFloor(wall,nx,nz)) continue;
+          prev.set(k, cellKey(c.x,c.z)); q.push({x:nx,z:nz});
+        }
+      }
+      const endK=cellKey(to.x,to.z); if(!prev.has(endK)) return null;
+      const path=[]; let cur=endK; while(cur){ const [xs,zs]=cur.split(","); path.push({x:+xs,z:+zs}); cur=prev.get(cur)??null; }
+      path.reverse(); return path;
+    }
+    function reachable(wall,a,b){ return bfs(wall,a,b)!==null; }
+    function segment(x1,z1,x2,z2){
+      const mx=(x1+x2)/2, mz=(z1+z2)/2, dx=x2-x1, dz=z2-z1;
+      return {x1,z1,x2,z2,mx,mz,rotY:Math.atan2(dx,dz),length:Math.hypot(dx,dz)};
+    }
+    function generateMaze(seed=23){
+      const rnd=mulberry32(seed), wall=makeGrid(true);
+      const startCell={x:11,z:29}, s1Door={x:5,z:24}, s2Door={x:19,z:16}, s3Door={x:7,z:8};
+      const forkCell={x:11,z:4}, exitCell={x:3,z:1}, deadCell={x:21,z:1};
+      const stack=[{...startCell}]; wall[startCell.z][startCell.x]=false;
+      while(stack.length){
+        const cur=stack[stack.length-1], opts=[];
+        for(const [dx,dz] of DIRS){
+          const nx=cur.x+dx*2, nz=cur.z+dz*2;
+          if(!inInterior(nx,nz) || !wall[nz][nx]) continue;
+          opts.push({n:{x:nx,z:nz}, w:{x:cur.x+dx,z:cur.z+dz}});
+        }
+        if(!opts.length){ stack.pop(); continue; }
+        const pick=opts[Math.floor(rnd()*opts.length)];
+        wall[pick.w.z][pick.w.x]=false; wall[pick.n.z][pick.n.x]=false; stack.push(pick.n);
+      }
+      let loops=0, guard=0;
+      while(loops<16 && guard++<800){
+        const x=1+Math.floor(rnd()*((COLS-1)/2))*2;
+        const z=1+Math.floor(rnd()*((ROWS-1)/2))*2;
+        const [dx,dz]=DIRS[Math.floor(rnd()*4)];
+        const wx=x+dx, wz=z+dz, nx=x+dx*2, nz=z+dz*2;
+        if(!inInterior(nx,nz) || wall[z][x] || wall[nz][nx] || !wall[wz][wx]) continue;
+        wall[wz][wx]=false; loops++;
+      }
+      const seal=(z,doorX)=>{ for(let x=0;x<COLS;x++) wall[z][x]=true; carve(wall,doorX,z); };
+      seal(24,s1Door.x); seal(16,s2Door.x); seal(8,s3Door.x);
+      for(let z=0;z<=7;z++) for(let x=0;x<COLS;x++) wall[z][x]=true;
+      carveRoom(wall,forkCell.x,forkCell.z,2,1);
+      carveLine(wall,3,4,21,4); carveLine(wall,3,4,3,1); carveLine(wall,21,4,21,1);
+      carveRoom(wall,exitCell.x,exitCell.z,1,1); carveRoom(wall,deadCell.x,deadCell.z,1,1);
+      carveLine(wall,s3Door.x,7,forkCell.x,forkCell.z);
+      const s1Pad={x:s1Door.x,z:s1Door.z+1}, s2Pad={x:s2Door.x,z:s2Door.z+1}, s3Pad={x:s3Door.x,z:s3Door.z+1};
+      carveRoom(wall,startCell.x,startCell.z,1,1);
+      carveRoom(wall,s1Pad.x,s1Pad.z,1,0); carveRoom(wall,s2Pad.x,s2Pad.z,1,0); carveRoom(wall,s3Pad.x,s3Pad.z,1,0);
+      carve(wall,s1Door.x,s1Door.z); carve(wall,s2Door.x,s2Door.z); carve(wall,s3Door.x,s3Door.z);
+      const links=[[startCell,s1Pad],[s1Door,{x:s1Door.x,z:23}],[{x:s1Door.x,z:23},s2Pad],[s2Door,{x:s2Door.x,z:15}],[{x:s2Door.x,z:15},s3Pad],[s3Door,{x:s3Door.x,z:7}],[{x:7,z:7},forkCell]];
+      for(const [a,b] of links){
+        if(!isFloor(wall,a.x,a.z)) carve(wall,a.x,a.z);
+        if(!isFloor(wall,b.x,b.z)) carve(wall,b.x,b.z);
+        if(!reachable(wall,a,b)) carveLine(wall,a.x,a.z,b.x,b.z);
+      }
+      const floors=[];
+      for(let z=0;z<ROWS;z++) for(let x=0;x<COLS;x++) if(!wall[z][x]) floors.push({x,z});
+      const walls=[], seen=new Set();
+      const addWall=(x1,z1,x2,z2)=>{
+        const a=x1.toFixed(3)+","+z1.toFixed(3), b=x2.toFixed(3)+","+z2.toFixed(3);
+        const k=a<b?a+"|"+b:b+"|"+a; if(seen.has(k)) return; seen.add(k); walls.push(segment(x1,z1,x2,z2));
+      };
+      for(const cell of floors){
+        const c=worldOf(cell.x,cell.z), h=CELL/2;
+        if(!isFloor(wall,cell.x,cell.z-1)) addWall(c.x-h,c.z-h,c.x+h,c.z-h);
+        if(!isFloor(wall,cell.x,cell.z+1)) addWall(c.x-h,c.z+h,c.x+h,c.z+h);
+        if(!isFloor(wall,cell.x-1,cell.z)) addWall(c.x-h,c.z-h,c.x-h,c.z+h);
+        if(!isFloor(wall,cell.x+1,cell.z)) addWall(c.x+h,c.z-h,c.x+h,c.z+h);
+      }
+      const gateFromDoor=(door,kind,id,stationId)=>{
+        const c=worldOf(door.x,door.z), h=CELL*0.46;
+        return {id,kind,stationId,...segment(c.x-h,c.z-CELL*0.08,c.x+h,c.z-CELL*0.08)};
+      };
+      const west=worldOf(8,4), east=worldOf(14,4), gh=CELL*0.48;
+      const w1=worldOf(s1Pad.x,s1Pad.z), w2=worldOf(s2Pad.x,s2Pad.z), w3=worldOf(s3Pad.x,s3Pad.z);
+      const stations=[
+        {id:0,gx:s1Pad.x,gz:s1Pad.z,wx:w1.x,wz:w1.z},
+        {id:1,gx:s2Pad.x,gz:s2Pad.z,wx:w2.x,wz:w2.z},
+        {id:2,gx:s3Pad.x,gz:s3Pad.z,wx:w3.x,wz:w3.z},
+      ];
+      const gates=[
+        gateFromDoor(s1Door,"station","s1",0),
+        gateFromDoor(s2Door,"station","s2",1),
+        gateFromDoor(s3Door,"station","s3",2),
+        {id:"exit",kind:"exit",...segment(west.x,west.z-gh,west.x,west.z+gh)},
+        {id:"dead",kind:"dead",...segment(east.x,east.z-gh,east.x,east.z+gh)},
+      ];
+      const exitCells=new Set(), deadCells=new Set();
+      for(const p of (bfs(wall,forkCell,exitCell)||[])) exitCells.add(cellKey(p.x,p.z));
+      for(const p of (bfs(wall,forkCell,deadCell)||[])) deadCells.add(cellKey(p.x,p.z));
+      return {
+        start: worldOf(startCell.x,startCell.z), startCell, exit: worldOf(exitCell.x,exitCell.z),
+        dead: worldOf(deadCell.x,deadCell.z), fork: worldOf(forkCell.x,forkCell.z),
+        stations, gates, walls, floors: floors.map(c=>worldOf(c.x,c.z)),
+        walkable: wall.map(row=>row.map(w=>!w)), exitCells, deadCells,
+      };
+    }
+
+    const maze = generateMaze(23);
+    function gateClosed(g, strikes, answered){
+      if(g.kind==="station" && g.stationId!==undefined) return !answered[g.stationId];
+      if(g.kind==="exit") return strikes>=MAX_STRIKES;
+      if(g.kind==="dead") return strikes<MAX_STRIKES;
+      return false;
+    }
+    function closedGateSegs(strikes, answered){
+      return maze.gates.filter(g=>gateClosed(g,strikes,answered));
+    }
+    function collideCircle(x,z,radius,extra){
+      let px=x,pz=z;
+      const all=maze.walls.concat(extra);
+      for(let i=0;i<3;i++){
+        for(const w of all){
+          const dx=w.x2-w.x1, dz=w.z2-w.z1, len2=dx*dx+dz*dz||1;
+          let t=((px-w.x1)*dx+(pz-w.z1)*dz)/len2; t=Math.max(0,Math.min(1,t));
+          const cx=w.x1+dx*t, cz=w.z1+dz*t, ox=px-cx, oz=pz-cz, d=Math.hypot(ox,oz);
+          const min=radius+WALL_T*0.55;
+          if(d<min && d>1e-6){ const push=(min-d)/d; px+=ox*push; pz+=oz*push; }
+          else if(d<=1e-6) px+=0.02;
+        }
+      }
+      return {x:px,z:pz};
+    }
+
+    const sim = { x: maze.start.x, z: maze.start.z, yaw: 0, speed: 0, moving: false, frames: 0 };
+    const game = { phase: "title", strikes: 0, answered: [false,false,false], activeStation: null, flash: null, trauma: 0 };
+    function resetSim(){ sim.x=maze.start.x; sim.z=maze.start.z; sim.yaw=0; sim.speed=0; sim.moving=false; }
+
+    let audioCtx=null, drone=null;
+    function ac(){ if(!audioCtx) audioCtx=new AudioContext(); if(audioCtx.state==="suspended") audioCtx.resume(); return audioCtx; }
+    function tone(freq,dur,type,gain,slide){
+      const c=ac(); const o=c.createOscillator(), g=c.createGain();
+      o.type=type; o.frequency.value=freq;
+      if(slide) o.frequency.exponentialRampToValueAtTime(slide,c.currentTime+dur);
+      g.gain.value=gain; g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur);
+      o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime+dur+0.02);
+    }
+    function sfxCorrect(){ tone(392,.09,"sine",.05); setTimeout(()=>tone(523,.1,"sine",.05),70); setTimeout(()=>tone(784,.16,"triangle",.045),140); }
+    function sfxWrong(){ tone(196,.28,"sawtooth",.03,90); tone(140,.32,"square",.02); }
+    function sfxWin(){ tone(523,.14,"sine",.05); setTimeout(()=>tone(659,.14,"sine",.05),120); setTimeout(()=>tone(784,.22,"triangle",.05),240); setTimeout(()=>tone(1046,.35,"sine",.04),380); }
+    function sfxLose(){ tone(220,.4,"triangle",.04,80); tone(110,.55,"sine",.05,50); }
+    function sfxStart(){ tone(330,.12,"sine",.04); setTimeout(()=>tone(660,.18,"triangle",.035),90); }
+    function sfxStep(){ tone(90+Math.random()*30,.05,"sine",.012); }
+    function startDrone(){
+      const c=ac(); if(!c||drone) return;
+      const o1=c.createOscillator(), o2=c.createOscillator(), g=c.createGain(), f=c.createBiquadFilter();
+      o1.type=o2.type="sine"; o1.frequency.value=55; o2.frequency.value=82.4; f.type="lowpass"; f.frequency.value=240; g.gain.value=0.025;
+      o1.connect(f); o2.connect(f); f.connect(g).connect(c.destination); o1.start(); o2.start();
+      drone={stop(){ g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+.4); setTimeout(()=>{o1.stop();o2.stop();},420); drone=null; }};
+    }
+    function stopDrone(){ drone&&drone.stop(); drone=null; }
+
+    const keys=new Set();
+    const stick={x:0,y:0,active:false};
+    const GAME_CODES=new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"]);
+    window.addEventListener("keydown",e=>{ if(GAME_CODES.has(e.code)) e.preventDefault(); keys.add(e.code); });
+    window.addEventListener("keyup",e=>keys.delete(e.code));
+    window.addEventListener("blur",()=>{ keys.clear(); stick.active=false; stick.x=0; stick.y=0; });
+    function sampleMove(){
+      let forward=0, steer=0;
+      if(keys.has("KeyW")||keys.has("ArrowUp")) forward+=1;
+      if(keys.has("KeyS")||keys.has("ArrowDown")) forward-=1;
+      if(keys.has("KeyA")||keys.has("ArrowLeft")) steer+=1;
+      if(keys.has("KeyD")||keys.has("ArrowRight")) steer-=1;
+      if(stick.active){ forward+=stick.y; steer+=-stick.x; }
+      return { forward: Math.max(-1,Math.min(1,forward)), steer: Math.max(-1,Math.min(1,steer)) };
+    }
+
+    const el = {
+      title: document.getElementById("title"),
+      answer: document.getElementById("answer"),
+      end: document.getElementById("end"),
+      hud: document.getElementById("hud"),
+      stick: document.getElementById("stick"),
+      flash: document.getElementById("flash"),
+      switchLabel: document.getElementById("switchLabel"),
+      switchKicker: document.getElementById("switchKicker"),
+      exitState: document.getElementById("exitState"),
+      endKicker: document.getElementById("endKicker"),
+      endTitle: document.getElementById("endTitle"),
+      endLede: document.getElementById("endLede"),
+      minimap: document.getElementById("minimap"),
+      knob: document.getElementById("knob"),
+    };
+    const pips=[...document.querySelectorAll("[data-pip]")];
+    const coarse = window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 640px)").matches;
+    function showStick(){
+      const on = coarse && (game.phase==="playing" || game.phase==="answering");
+      el.stick.classList.toggle("hidden", !on);
+    }
+    function renderUI(){
+      el.title.classList.toggle("hidden", game.phase!=="title");
+      el.answer.classList.toggle("hidden", game.phase!=="answering");
+      el.end.classList.toggle("hidden", game.phase!=="won" && game.phase!=="lost");
+      el.hud.classList.toggle("hidden", game.phase!=="playing" && game.phase!=="answering");
+      const done=game.answered.filter(Boolean).length;
+      el.switchLabel.textContent="Switches "+done+"/3";
+      pips.forEach((p,i)=>p.classList.toggle("on", i<game.strikes));
+      el.exitState.textContent=game.strikes>=MAX_STRIKES?"Exit sealed":"Exit aligned";
+      if(game.phase==="answering") el.switchKicker.textContent="Path switch "+((game.activeStation||0)+1)+" of 3";
+      if(game.phase==="won"){
+        el.endKicker.textContent="Escape";
+        el.endTitle.textContent="You left the vacuum.";
+        el.endLede.textContent="Every switch held. The cyan portal stayed open long enough to run through.";
+      }
+      if(game.phase==="lost"){
+        el.endKicker.textContent="Dead end";
+        el.endTitle.textContent="The gate sealed behind you.";
+        el.endLede.textContent="Three wrong answers rotated the final fork into the red chamber. Nothing comes back from it.";
+      }
+      el.flash.className = game.flash || "";
+      el.flash.id="flash";
+      if(game.flash) el.flash.classList.add(game.flash);
+      showStick();
+      paintMinimap();
+      paintFloors();
+      paintGates();
+      paintStations();
+      paintPortals();
+    }
+    function startRun(){
+      ac(); sfxStart(); startDrone(); resetSim();
+      game.phase="playing"; game.strikes=0; game.answered=[false,false,false]; game.activeStation=null; game.flash=null; game.trauma=0;
+      renderUI();
+    }
+    function answer(correct){
+      if(game.activeStation===null) return;
+      game.answered[game.activeStation]=true;
+      if(correct) sfxCorrect(); else { sfxWrong(); game.strikes=Math.min(MAX_STRIKES, game.strikes+1); }
+      game.phase="playing"; game.activeStation=null; game.flash=correct?"correct":"wrong"; game.trauma=correct?0.18:0.55;
+      renderUI();
+      setTimeout(()=>{ if(game.flash){ game.flash=null; el.flash.className=""; } }, 420);
+    }
+    function win(){ if(game.phase==="won") return; stopDrone(); sfxWin(); game.phase="won"; game.trauma=0.2; renderUI(); }
+    function lose(){ if(game.phase==="lost") return; stopDrone(); sfxLose(); game.phase="lost"; game.trauma=0.7; renderUI(); }
+    function toTitle(){ stopDrone(); resetSim(); game.phase="title"; game.strikes=0; game.answered=[false,false,false]; game.activeStation=null; game.flash=null; game.trauma=0; renderUI(); }
+
+    document.getElementById("enterBtn").onclick=startRun;
+    document.getElementById("correctBtn").onclick=()=>answer(true);
+    document.getElementById("wrongBtn").onclick=()=>answer(false);
+    document.getElementById("againBtn").onclick=startRun;
+    document.getElementById("titleBtn").onclick=toTitle;
+
+    const stickEl=el.stick;
+    const origin={x:0,y:0,id:-1};
+    stickEl.addEventListener("pointerdown",e=>{
+      stickEl.setPointerCapture(e.pointerId);
+      const r=stickEl.getBoundingClientRect();
+      origin.x=r.left+r.width/2; origin.y=r.top+r.height/2; origin.id=e.pointerId; stick.active=true;
+    });
+    stickEl.addEventListener("pointermove",e=>{
+      if(origin.id!==e.pointerId) return;
+      const dx=e.clientX-origin.x, dy=e.clientY-origin.y, max=36;
+      const m=Math.hypot(dx,dy), s=m>max?max/m:1, kx=dx*s, ky=dy*s;
+      el.knob.style.transform="translate("+kx+"px,"+ky+"px)";
+      stick.x=kx/max; stick.y=-ky/max; stick.active=true;
+    });
+    function releaseStick(e){ if(e && origin.id!==e.pointerId) return; origin.id=-1; stick.active=false; stick.x=0; stick.y=0; el.knob.style.transform=""; }
+    stickEl.addEventListener("pointerup",releaseStick);
+    stickEl.addEventListener("pointercancel",releaseStick);
+
+    const canvas=document.getElementById("c");
+    const renderer=new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setClearColor(0x07070b);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    const scene=new THREE.Scene();
+    scene.fog=new THREE.Fog(0x07070b, 16, 62);
+    const camera=new THREE.PerspectiveCamera(55, 1, 0.1, 180);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+    const hemi=new THREE.HemisphereLight(0x1c2740, 0x07070b, 0.35); scene.add(hemi);
+
+    const starGeo=new THREE.BufferGeometry();
+    const starN=1800, starArr=new Float32Array(starN*3);
+    for(let i=0;i<starN;i++){
+      const r=36+Math.random()*90, theta=Math.random()*Math.PI*2, phi=Math.acos(2*Math.random()-1);
+      starArr[i*3]=r*Math.sin(phi)*Math.cos(theta);
+      starArr[i*3+1]=r*Math.cos(phi);
+      starArr[i*3+2]=r*Math.sin(phi)*Math.sin(theta);
+    }
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starArr,3));
+    const stars=new THREE.Points(starGeo, new THREE.PointsMaterial({size:0.16,color:0xd7e4ff,sizeAttenuation:true,fog:false,transparent:true,opacity:0.9}));
+    scene.add(stars);
+
+    const dummy=new THREE.Object3D();
+    const wallMat=new THREE.MeshStandardMaterial({color:0x0b1016, metalness:0.78, roughness:0.26});
+    const capMat=new THREE.MeshStandardMaterial({color:0x5eead4, emissive:0x5eead4, emissiveIntensity:1.8, toneMapped:false});
+    const wallMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), wallMat, maze.walls.length);
+    const capMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), capMat, maze.walls.length);
+    wallMesh.frustumCulled=false; capMesh.frustumCulled=false;
+    maze.walls.forEach((w,i)=>{
+      dummy.position.set(w.mx, WALL_H/2, w.mz); dummy.rotation.set(0,w.rotY,0); dummy.scale.set(WALL_T,WALL_H,Math.max(w.length,0.05)); dummy.updateMatrix();
+      wallMesh.setMatrixAt(i, dummy.matrix);
+      dummy.position.y=WALL_H+0.03; dummy.scale.set(WALL_T*1.8,0.05,Math.max(w.length,0.05)); dummy.updateMatrix();
+      capMesh.setMatrixAt(i, dummy.matrix);
+    });
+    scene.add(wallMesh, capMesh);
+
+    const floorMat=new THREE.MeshStandardMaterial({color:0x0a1014, metalness:0.4, roughness:0.55, emissive:0x0c2a28, emissiveIntensity:0.35});
+    const floorMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), floorMat, maze.floors.length);
+    floorMesh.frustumCulled=false; floorMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const tile=CELL*0.86, col=new THREE.Color();
+    function paintFloors(){
+      maze.floors.forEach((f,i)=>{
+        dummy.position.set(f.x,-0.045,f.z); dummy.rotation.set(0,0,0); dummy.scale.set(tile,0.08,tile); dummy.updateMatrix();
+        floorMesh.setMatrixAt(i, dummy.matrix);
+        const cell=cellOf(f.x,f.z), k=cellKey(cell.x,cell.z);
+        if(maze.exitCells.has(k)) col.set(game.strikes>=3?"#1a1214":"#0c2a28");
+        else if(maze.deadCells.has(k)) col.set(game.strikes>=3?"#3a1218":"#1a1012");
+        else col.set("#0a1014");
+        floorMesh.setColorAt(i, col);
+      });
+      floorMesh.instanceMatrix.needsUpdate=true;
+      if(floorMesh.instanceColor) floorMesh.instanceColor.needsUpdate=true;
+    }
+    scene.add(floorMesh);
+
+    const gateGroup=new THREE.Group(); scene.add(gateGroup);
+    function paintGates(){
+      gateGroup.clear();
+      maze.gates.forEach(g=>{
+        if(!gateClosed(g, game.strikes, game.answered)) return;
+        const rose=g.kind==="dead"||g.kind==="exit";
+        const c=new THREE.Color(rose?"#fb7185":"#5eead4");
+        const faceY=Math.atan2(g.z2-g.z1, g.x2-g.x1);
+        const grp=new THREE.Group(); grp.position.set(g.mx, WALL_H*0.52, g.mz); grp.rotation.y=faceY;
+        const mk=(w,op)=>{
+          const m=new THREE.Mesh(new THREE.PlaneGeometry(w, WALL_H*0.92), new THREE.MeshBasicMaterial({color:c, transparent:op<1, opacity:op, toneMapped:false}));
+          return m;
+        };
+        grp.add(mk(g.length*0.92,0.22));
+        const bar=mk(g.length*0.08,1); bar.position.z=0.02; grp.add(bar);
+        const l=mk(g.length*0.05,0.7); l.position.set(-g.length*0.22,0,0.02); grp.add(l);
+        const r=mk(g.length*0.05,0.7); r.position.set(g.length*0.22,0,0.02); grp.add(r);
+        gateGroup.add(grp);
+      });
+    }
+
+    const stationGroups=[];
+    maze.stations.forEach(s=>{
+      const grp=new THREE.Group(); grp.position.set(s.wx,0.02,s.wz);
+      const disc=new THREE.Mesh(new THREE.CircleGeometry(0.85,28), new THREE.MeshStandardMaterial({color:0x0b1418, emissive:0x5eead4, emissiveIntensity:1.4, toneMapped:false}));
+      disc.rotation.x=-Math.PI/2;
+      const ring=new THREE.Mesh(new THREE.RingGeometry(0.72,0.84,28), new THREE.MeshBasicMaterial({color:0x5eead4, toneMapped:false}));
+      ring.rotation.x=-Math.PI/2; ring.position.y=0.01;
+      const light=new THREE.PointLight(0x5eead4,1.6,5);
+      grp.add(disc, ring, light); scene.add(grp);
+      stationGroups.push({grp, disc, ring, light, id:s.id});
+    });
+    function paintStations(){
+      stationGroups.forEach(sg=>{
+        const done=game.answered[sg.id], lit=game.activeStation===sg.id;
+        const c=done?0x2dd4bf:0x5eead4;
+        sg.disc.material.emissive.setHex(c);
+        sg.disc.material.emissiveIntensity=done?0.6:lit?2.2:1.4;
+        sg.ring.material.color.setHex(c);
+        sg.light.color.setHex(c);
+        sg.light.intensity=done?0.6:1.6;
+      });
+    }
+
+    const forkRoot=new THREE.Group(); forkRoot.position.set(maze.fork.x,0.85,maze.fork.z);
+    const forkMat=new THREE.MeshBasicMaterial({color:0x5eead4, toneMapped:false});
+    const torus=new THREE.Mesh(new THREE.TorusGeometry(0.55,0.035,10,28), forkMat); torus.rotation.x=Math.PI/2;
+    const cone=new THREE.Mesh(new THREE.ConeGeometry(0.16,0.42,8), forkMat); cone.position.z=-0.7; cone.rotation.x=-Math.PI/2;
+    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.7,8), forkMat);
+    const forkLight=new THREE.PointLight(0x5eead4,2.2,7);
+    forkRoot.add(torus, cone, cyl, forkLight); scene.add(forkRoot);
+
+    function makePortal(pos, hue){
+      const g=new THREE.Group(); g.position.set(pos.x,0.95,pos.z);
+      const mat=new THREE.MeshBasicMaterial({color:hue, transparent:true, opacity:1, toneMapped:false});
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(0.95,0.055,12,36), mat); ring.rotation.x=Math.PI/2;
+      const ring2=new THREE.Mesh(new THREE.TorusGeometry(0.62,0.03,10,28), mat.clone()); ring2.rotation.x=Math.PI/2;
+      const tube=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,1.8,20,1,true), new THREE.MeshBasicMaterial({color:hue, transparent:true, opacity:0.16, side:THREE.DoubleSide, toneMapped:false}));
+      const light=new THREE.PointLight(hue,3.2,8);
+      g.add(ring, ring2, tube, light);
+      scene.add(g);
+      return {g, ring, ring2, tube, light};
+    }
+    const exitPortal=makePortal(maze.exit, 0x5eead4);
+    const deadPortal=makePortal(maze.dead, 0xfb7185);
+    function paintPortals(){
+      const openExit=game.strikes<3, openDead=game.strikes>=3;
+      exitPortal.ring.material.opacity=openExit?1:0.25;
+      exitPortal.ring2.material.opacity=openExit?0.8:0.15;
+      exitPortal.tube.material.opacity=openExit?0.16:0.04;
+      exitPortal.light.intensity=openExit?3.2:0.4;
+      deadPortal.ring.material.opacity=openDead?1:0.25;
+      deadPortal.ring2.material.opacity=openDead?0.8:0.15;
+      deadPortal.tube.material.opacity=openDead?0.16:0.04;
+      deadPortal.light.intensity=openDead?3.2:0.4;
+      const col=game.strikes>=3?0xfb7185:0x5eead4;
+      forkMat.color.setHex(col); forkLight.color.setHex(col);
+    }
+
+    const mouse=new THREE.Group();
+    const fur=0x6d5648, belly=0xcbb79a, ear=0x8a6a62, dark=0x1c1410;
+    function sph(sx,sy,sz, px,py,pz, color, extra){
+      const m=new THREE.Mesh(new THREE.SphereGeometry(1, extra||12, 10), new THREE.MeshStandardMaterial({color, roughness:0.72}));
+      m.scale.set(sx,sy,sz); m.position.set(px,py,pz); return m;
+    }
+    mouse.add(sph(0.42,0.3,0.58, 0,0.08,0.02, fur, 16));
+    mouse.add(sph(0.28,0.16,0.42, 0,0.02,0.04, belly));
+    mouse.add(sph(0.28,0.24,0.28, 0,0.16,0.42, fur, 14));
+    const earL=sph(0.12,0.16,0.04, -0.16,0.34,0.4, fur); earL.rotation.set(0.15,0,-0.35); mouse.add(earL);
+    const earR=sph(0.12,0.16,0.04, 0.16,0.34,0.4, fur); earR.rotation.set(0.15,0,0.35); mouse.add(earR);
+    const eyeM=new THREE.MeshStandardMaterial({color:0xb8fff4, emissive:0x5eead4, emissiveIntensity:2.4});
+    const e1=new THREE.Mesh(new THREE.SphereGeometry(0.045,8,8), eyeM); e1.position.set(-0.09,0.2,0.62); mouse.add(e1);
+    const e2=new THREE.Mesh(new THREE.SphereGeometry(0.045,8,8), eyeM); e2.position.set(0.09,0.2,0.62); mouse.add(e2);
+    mouse.add(sph(0.06,0.045,0.05, 0,0.12,0.68, dark, 8));
+    const stripe=new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0x5eead4, emissive:0x5eead4, emissiveIntensity:1.6, transparent:true, opacity:0.85}));
+    stripe.scale.set(0.06,0.015,0.42); stripe.position.set(0,0.22,-0.02); stripe.rotation.x=0.15; mouse.add(stripe);
+    const legs=new THREE.Group();
+    function cap(x,z,r,h){ const m=new THREE.Mesh(new THREE.CapsuleGeometry(r,h,4,8), new THREE.MeshStandardMaterial({color:dark})); m.position.set(x,-0.12,z); return m; }
+    legs.add(cap(-0.16,0.22,0.045,0.12), cap(0.16,0.22,0.045,0.12), cap(-0.16,-0.18,0.05,0.14), cap(0.16,-0.18,0.05,0.14));
+    mouse.add(legs);
+    const tail=new THREE.Group(); tail.position.set(0,0.1,-0.52);
+    const t1=new THREE.Mesh(new THREE.CapsuleGeometry(0.035,0.22,4,6), new THREE.MeshStandardMaterial({color:fur})); t1.position.set(0,0,-0.12); t1.rotation.x=0.4; tail.add(t1);
+    const t2=new THREE.Mesh(new THREE.CapsuleGeometry(0.025,0.22,4,6), new THREE.MeshStandardMaterial({color:fur})); t2.position.set(0,0.08,-0.34); t2.rotation.x=0.7; tail.add(t2);
+    const t3=new THREE.Mesh(new THREE.CapsuleGeometry(0.016,0.18,4,6), new THREE.MeshStandardMaterial({color:0x4a3a32})); t3.position.set(0,0.18,-0.52); t3.rotation.x=1; tail.add(t3);
+    mouse.add(tail);
+    mouse.add(new THREE.PointLight(0x5eead4,1.8,6.5));
+    scene.add(mouse);
+
+    function paintMinimap(){
+      const ctx=el.minimap.getContext("2d"); if(!ctx) return;
+      const w=el.minimap.width, h=el.minimap.height;
+      ctx.fillStyle="#07070b"; ctx.fillRect(0,0,w,h);
+      const sx=w/COLS, sy=h/ROWS;
+      for(let z=0;z<ROWS;z++) for(let x=0;x<COLS;x++){
+        if(!maze.walkable[z][x]) continue;
+        const k=cellKey(x,z);
+        if(maze.exitCells.has(k)) ctx.fillStyle=game.strikes>=3?"#3a1218":"#0c3a36";
+        else if(maze.deadCells.has(k)) ctx.fillStyle=game.strikes>=3?"#5a1a22":"#2a1014";
+        else ctx.fillStyle="#1a2228";
+        ctx.fillRect(x*sx, z*sy, sx, sy);
+      }
+      maze.stations.forEach(s=>{
+        ctx.fillStyle=game.answered[s.id]?"#2dd4bf":"#5eead4";
+        ctx.beginPath(); ctx.arc((s.gx+0.5)*sx,(s.gz+0.5)*sy,2.2,0,Math.PI*2); ctx.fill();
+      });
+      const pc=cellOf(sim.x,sim.z);
+      ctx.fillStyle="#e8eef4";
+      ctx.beginPath(); ctx.arc((pc.x+0.5)*sx,(pc.z+0.5)*sy,2.6,0,Math.PI*2); ctx.fill();
+    }
+
+    function resize(){
+      const w=innerWidth, h=innerHeight;
+      renderer.setSize(w,h,false);
+      camera.aspect=w/h; camera.updateProjectionMatrix();
+    }
+    addEventListener("resize", resize); resize();
+
+    const MOVE_SPEED=5.6, TURN_RATE=2.7, CAM_H=2.15, CAM_DIST=4.6, CAM_LOOK=0.42, CAM_LAG=7.2;
+    const camDesired=new THREE.Vector3(), look=new THREE.Vector3();
+    let last=performance.now(), stepAcc=0, clock=0;
+
+    function tick(now){
+      const dt=Math.min((now-last)/1000, 0.1); last=now; clock+=dt; sim.frames++;
+      if(game.trauma>0) game.trauma=Math.max(0, game.trauma-dt*1.4);
+      stars.rotation.y+=dt*0.008;
+      forkRoot.position.y=0.85+Math.sin(now*0.002)*0.06;
+      const forkTarget=(Math.PI/2)*(1-(2*game.strikes)/3);
+      let diff=forkTarget-forkRoot.rotation.y;
+      while(diff>Math.PI) diff-=Math.PI*2; while(diff<-Math.PI) diff+=Math.PI*2;
+      forkRoot.rotation.y+=diff*(1-Math.exp(-6*dt));
+      exitPortal.ring.rotation.z+=dt*(game.strikes<3?1.2:0.25);
+      deadPortal.ring.rotation.z+=dt*(game.strikes>=3?1.2:0.25);
+
+      if(game.phase==="title"||game.phase==="won"||game.phase==="lost"){
+        const r=22;
+        camera.position.set(Math.sin(clock*0.11)*r, 13.5, Math.cos(clock*0.11)*r);
+        camera.lookAt(maze.fork.x, 0.4, maze.fork.z);
+      } else {
+        const playing=game.phase==="playing";
+        const {forward, steer}=playing?sampleMove():{forward:0,steer:0};
+        if(playing){
+          sim.yaw+=steer*TURN_RATE*dt;
+          const fx=-Math.sin(sim.yaw), fz=-Math.cos(sim.yaw);
+          const vx=fx*forward*MOVE_SPEED, vz=fz*forward*MOVE_SPEED;
+          sim.speed=Math.hypot(vx,vz); sim.moving=sim.speed>0.2;
+          const next=collideCircle(sim.x+vx*dt, sim.z+vz*dt, MOUSE_R, closedGateSegs(game.strikes, game.answered));
+          sim.x=next.x; sim.z=next.z;
+          if(sim.moving){ stepAcc+=dt*(2.8+sim.speed*0.4); if(stepAcc>1){ stepAcc=0; sfxStep(); } }
+          for(const s of maze.stations){
+            if(game.answered[s.id]) continue;
+            if(Math.hypot(sim.x-s.wx, sim.z-s.wz)<CELL*0.72){ game.phase="answering"; game.activeStation=s.id; renderUI(); break; }
+          }
+          if(game.phase==="playing"){
+            if(Math.hypot(sim.x-maze.exit.x, sim.z-maze.exit.z)<CELL*0.85 && game.strikes<MAX_STRIKES) win();
+            if(Math.hypot(sim.x-maze.dead.x, sim.z-maze.dead.z)<CELL*0.85 && game.strikes>=MAX_STRIKES) lose();
+          }
+        } else { sim.speed=0; sim.moving=false; }
+        const fx=-Math.sin(sim.yaw), fz=-Math.cos(sim.yaw);
+        camDesired.set(sim.x-fx*CAM_DIST, CAM_H, sim.z-fz*CAM_DIST);
+        camera.position.lerp(camDesired, 1-Math.exp(-CAM_LAG*dt));
+        look.set(sim.x, CAM_LOOK, sim.z); camera.lookAt(look);
+        const shake=game.trauma*game.trauma;
+        if(shake>0.002){
+          const t=clock*29;
+          camera.position.x+=Math.sin(t*1.7)*shake*0.18;
+          camera.position.y+=Math.cos(t*1.3)*shake*0.1;
+        }
+      }
+
+      const run=sim.moving?1:0, gait=clock*17;
+      const bob=Math.abs(Math.sin(gait))*0.045*run;
+      mouse.position.set(sim.x, 0.16+bob, sim.z);
+      mouse.rotation.y=sim.yaw+Math.PI;
+      mouse.rotation.x=Math.sin(gait)*0.07*run;
+      const a=Math.sin(gait)*0.55*run, b=Math.sin(gait+Math.PI)*0.55*run;
+      legs.children[0].rotation.x=a; legs.children[1].rotation.x=b; legs.children[2].rotation.x=b; legs.children[3].rotation.x=a;
+      tail.rotation.y=Math.sin(clock*6)*0.35*(0.35+run);
+      tail.rotation.x=0.45+Math.sin(clock*4)*0.08;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+
+    window.__game={
+      start:startRun, answer, getPhase:()=>game.phase, getStrikes:()=>game.strikes,
+      getPos:()=>({x:sim.x,z:sim.z,yaw:sim.yaw}), getYaw:()=>sim.yaw, getFrames:()=>sim.frames,
+      teleport:(x,z,yaw)=>{ sim.x=x; sim.z=z; if(yaw!==undefined) sim.yaw=yaw; },
+    };
+    window.__controlsTest={ getYaw:()=>sim.yaw, getSpeed:()=>sim.speed };
+
+    paintFloors(); paintGates(); paintStations(); paintPortals(); paintMinimap();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>
