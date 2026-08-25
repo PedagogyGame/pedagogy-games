@@ -14,11 +14,12 @@
       --fg: #e8eef4;
       --muted: #8b939e;
       --laser: #5eead4;
+      --laser-mist: #9ff5ea;
       --danger: #fb7185;
       --border: #262b36;
     }
     * { box-sizing: border-box; margin: 0; }
-    html, body { height: 100%; background: var(--void); color: var(--fg); font-family: Sora, system-ui, sans-serif; overflow: hidden; touch-action: none; }
+    html, body { height: 100%; background: var(--void); color: var(--fg); font-family: Sora, system-ui, sans-serif; overflow: hidden; }
     canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
     .overlay { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
     .card-wrap { position: absolute; inset: 0; display: grid; place-items: center; padding: 1.1rem; background: rgba(7,7,11,.7); pointer-events: auto; }
@@ -40,10 +41,8 @@
       height: 3.15rem; border-radius: 1rem; border: 1px solid transparent;
       cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .5rem;
     }
-    button:disabled { opacity: .4; cursor: default; }
     .primary { background: var(--laser); color: var(--void); }
     .primary:hover { opacity: .92; }
-    .danger { background: rgba(251,113,133,.12); color: var(--danger); border-color: rgba(251,113,133,.4); }
     .ghost { background: var(--surface); color: var(--fg); border-color: var(--border); }
     .hud { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 1.1rem; }
     .hud-top { display: flex; justify-content: space-between; gap: .8rem; align-items: flex-start; }
@@ -52,26 +51,59 @@
     .pips { display: flex; gap: .35rem; }
     .pip { width: 1.4rem; height: .55rem; border-radius: 99px; background: rgba(232,238,244,.15); }
     .pip.on { background: var(--danger); }
-    .hud-bot { display: flex; justify-content: space-between; align-items: flex-end; gap: .8rem; color: var(--muted); font-size: .75rem; }
+    .hud-bot { display: flex; justify-content: flex-end; color: var(--muted); font-size: .75rem; }
     .laser { color: var(--laser); font-family: Oxanium, sans-serif; }
     #minimap { width: 108px; height: 132px; border-radius: .8rem; border: 1px solid var(--border); background: #07070bcc; }
-    #stick {
-      position: absolute; left: 1.1rem; bottom: 1.1rem; width: 108px; height: 108px;
-      border-radius: 999px; border: 1px solid var(--border); background: rgba(18,20,28,.7);
-      pointer-events: auto; touch-action: none;
-    }
-    #knob {
-      position: absolute; left: 50%; top: 50%; width: 36px; height: 36px; margin: -18px 0 0 -18px;
-      border-radius: 999px; border: 1px solid rgba(94,234,212,.4); background: rgba(94,234,212,.25);
-    }
     #flash { position: absolute; inset: 0; pointer-events: none; }
     #flash.wrong { background: rgba(251,113,133,.2); }
     #flash.correct { background: rgba(94,234,212,.1); }
     .hidden { display: none !important; }
+    .q-wrap {
+      position: absolute; inset: 0 auto auto 0; width: 100%;
+      display: flex; justify-content: center; padding: 4.6rem 1rem 0;
+      pointer-events: none;
+    }
+    .laser-plate {
+      position: relative;
+      overflow: hidden;
+      pointer-events: auto;
+      width: min(36rem, 100%);
+      padding: 1.25rem 1.4rem 1.15rem;
+      border: 1px solid rgba(94,234,212,.38);
+      background:
+        linear-gradient(180deg, rgba(12,34,32,.94), rgba(10,16,22,.96)),
+        repeating-linear-gradient(90deg, transparent 0 11px, rgba(94,234,212,.04) 11px 12px);
+      box-shadow: 0 0 40px rgba(94,234,212,.18), inset 0 0 0 1px rgba(94,234,212,.08);
+    }
+    .eq-glow {
+      font-family: Oxanium, sans-serif;
+      font-size: clamp(1.6rem, 5vw, 2.2rem);
+      letter-spacing: .04em;
+      text-align: center;
+      color: var(--laser-mist);
+      text-shadow: 0 0 8px rgba(94,234,212,.85), 0 0 28px rgba(94,234,212,.35);
+      margin: .85rem 0 0;
+    }
+    .eq-field {
+      display: block; width: 100%; margin-top: 1rem;
+      border: none; border-bottom: 2px solid var(--laser);
+      background: rgba(7,7,11,.35);
+      padding: .65rem .4rem .5rem;
+      text-align: center;
+      font-family: Oxanium, sans-serif;
+      font-size: 1.55rem;
+      letter-spacing: .08em;
+      color: var(--laser-mist);
+      caret-color: var(--laser);
+      outline: none;
+      text-shadow: 0 0 12px rgba(94,234,212,.45);
+    }
+    .eq-field::placeholder { color: rgba(94,234,212,.28); letter-spacing: .12em; text-shadow: none; }
     @media (max-width: 640px) {
-      #minimap, .hint { display: none; }
+      #minimap { display: none; }
       .card-wrap { align-items: end; }
       .card { margin-bottom: 1.5rem; }
+      .q-wrap { padding-top: 4.2rem; }
     }
   </style>
 </head>
@@ -83,7 +115,7 @@
       <div class="hud-top">
         <div>
           <p class="brand">Voidmouse</p>
-          <p id="switchLabel" style="font-family:Oxanium,sans-serif;margin-top:.25rem">Switches 0/3</p>
+          <p id="switchLabel" style="font-family:Oxanium,sans-serif;margin-top:.25rem">Gate 0/30</p>
         </div>
         <div style="display:flex;gap:.7rem;align-items:flex-start">
           <canvas id="minimap" width="108" height="132"></canvas>
@@ -97,32 +129,26 @@
           </div>
         </div>
       </div>
-      <div class="hud-bot">
-        <p class="hint">WASD or arrows to scurry. A turns left. Three wrong answers seal the exit.</p>
-        <p id="exitState" class="laser">Exit aligned</p>
-      </div>
+      <div class="hud-bot"><p id="exitState" class="laser">Exit aligned</p></div>
     </div>
     <div id="title" class="card-wrap">
       <div class="card">
         <p class="kicker">Vacuum maze</p>
         <h1>VOIDMOUSE</h1>
-        <p class="lede">You are a mouse in a floating neon maze. Path switches stand in for answers. Three wrong turns rotate the final gate into a dead end. Stay on the true path to escape.</p>
+        <p class="lede">The mouse runs the maze on its own. Thirty laser equations appear along the path. Type the number, press Enter. Three misses turn the final fork into a dead end.</p>
         <div class="btns">
           <button class="primary" id="enterBtn">Enter the maze</button>
-          <p style="text-align:center;color:var(--muted);font-size:.75rem">Desktop: WASD · Mobile: left stick</p>
+          <p style="text-align:center;color:var(--muted);font-size:.75rem">Type answers. Begin and retry are the only clicks you need.</p>
         </div>
       </div>
     </div>
-    <div id="answer" class="card-wrap hidden">
-      <div class="card">
-        <p class="kicker" id="switchKicker">Path switch 1 of 3</p>
-        <h2>Align the next gate</h2>
-        <p class="lede">A correct answer holds the exit path. A wrong answer turns the maze toward the void. Three wrong turns and the final fork seals you in.</p>
-        <div class="btns">
-          <button class="primary" id="correctBtn">Hold the path</button>
-          <button class="danger" id="wrongBtn">Wrong turn</button>
-        </div>
-      </div>
+    <div id="answer" class="q-wrap hidden">
+      <form class="laser-plate" id="eqForm">
+        <p class="kicker" id="switchKicker">Gate 1 of 30 · Evaluate</p>
+        <p class="eq-glow" id="eqLine">sin(π / 2) = ?</p>
+        <p class="lede" id="eqHint" style="text-align:center;margin-top:.7rem">Height at the top of the unit circle.</p>
+        <input class="eq-field" id="eqInput" inputmode="decimal" enterkeyhint="done" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="type the number" aria-label="Answer" />
+      </form>
     </div>
     <div id="end" class="card-wrap hidden">
       <div class="card">
@@ -130,12 +156,11 @@
         <h2 id="endTitle">You left the vacuum.</h2>
         <p class="lede" id="endLede"></p>
         <div class="btns">
-          <button class="primary" id="againBtn">Run it again</button>
+          <button class="primary" id="againBtn">Retry</button>
           <button class="ghost" id="titleBtn">Title</button>
         </div>
       </div>
     </div>
-    <div id="stick" class="hidden"><div id="knob"></div></div>
   </div>
   <script type="importmap">
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js" } }
@@ -143,7 +168,7 @@
   <script type="module">
   import * as THREE from "three";
 
-    const COLS = 25, ROWS = 31, CELL = 3.55, WALL_H = 2.35, WALL_T = 0.11, MOUSE_R = 0.4, MAX_STRIKES = 3;
+    const COLS = 25, ROWS = 31, CELL = 3.55, WALL_H = 2.35, WALL_T = 0.11, MAX_STRIKES = 3, QN = 30;
     const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];
     const cellKey = (x,z) => x + "," + z;
     const worldOf = (gx,gz) => ({ x: (gx - (COLS-1)/2)*CELL, z: (gz - (ROWS-1)/2)*CELL });
@@ -239,9 +264,9 @@
         if(!isFloor(wall,cell.x-1,cell.z)) addWall(c.x-h,c.z-h,c.x-h,c.z+h);
         if(!isFloor(wall,cell.x+1,cell.z)) addWall(c.x+h,c.z-h,c.x+h,c.z+h);
       }
-      const gateFromDoor=(door,kind,id,stationId)=>{
+      const gateFromDoor=(door,kind,id)=>{
         const c=worldOf(door.x,door.z), h=CELL*0.46;
-        return {id,kind,stationId,...segment(c.x-h,c.z-CELL*0.08,c.x+h,c.z-CELL*0.08)};
+        return {id,kind,...segment(c.x-h,c.z-CELL*0.08,c.x+h,c.z-CELL*0.08)};
       };
       const west=worldOf(8,4), east=worldOf(14,4), gh=CELL*0.48;
       const w1=worldOf(s1Pad.x,s1Pad.z), w2=worldOf(s2Pad.x,s2Pad.z), w3=worldOf(s3Pad.x,s3Pad.z);
@@ -251,9 +276,9 @@
         {id:2,gx:s3Pad.x,gz:s3Pad.z,wx:w3.x,wz:w3.z},
       ];
       const gates=[
-        gateFromDoor(s1Door,"station","s1",0),
-        gateFromDoor(s2Door,"station","s2",1),
-        gateFromDoor(s3Door,"station","s3",2),
+        gateFromDoor(s1Door,"station","s1"),
+        gateFromDoor(s2Door,"station","s2"),
+        gateFromDoor(s3Door,"station","s3"),
         {id:"exit",kind:"exit",...segment(west.x,west.z-gh,west.x,west.z+gh)},
         {id:"dead",kind:"dead",...segment(east.x,east.z-gh,east.x,east.z+gh)},
       ];
@@ -261,42 +286,126 @@
       for(const p of (bfs(wall,forkCell,exitCell)||[])) exitCells.add(cellKey(p.x,p.z));
       for(const p of (bfs(wall,forkCell,deadCell)||[])) deadCells.add(cellKey(p.x,p.z));
       return {
-        start: worldOf(startCell.x,startCell.z), startCell, exit: worldOf(exitCell.x,exitCell.z),
+        start: worldOf(startCell.x, startCell.z), startCell, exit: worldOf(exitCell.x,exitCell.z),
         dead: worldOf(deadCell.x,deadCell.z), fork: worldOf(forkCell.x,forkCell.z),
+        forkCell, exitCell, deadCell,
         stations, gates, walls, floors: floors.map(c=>worldOf(c.x,c.z)),
-        walkable: wall.map(row=>row.map(w=>!w)), exitCells, deadCells,
+        walkable: wall.map(row=>row.map(w=>!w)), wallGrid: wall, exitCells, deadCells,
       };
     }
 
     const maze = generateMaze(23);
-    function gateClosed(g, strikes, answered){
-      if(g.kind==="station" && g.stationId!==undefined) return !answered[g.stationId];
+    function gateClosed(g, strikes){
+      if(g.kind==="station") return false;
       if(g.kind==="exit") return strikes>=MAX_STRIKES;
       if(g.kind==="dead") return strikes<MAX_STRIKES;
       return false;
     }
-    function closedGateSegs(strikes, answered){
-      return maze.gates.filter(g=>gateClosed(g,strikes,answered));
-    }
-    function collideCircle(x,z,radius,extra){
-      let px=x,pz=z;
-      const all=maze.walls.concat(extra);
-      for(let i=0;i<3;i++){
-        for(const w of all){
-          const dx=w.x2-w.x1, dz=w.z2-w.z1, len2=dx*dx+dz*dz||1;
-          let t=((px-w.x1)*dx+(pz-w.z1)*dz)/len2; t=Math.max(0,Math.min(1,t));
-          const cx=w.x1+dx*t, cz=w.z1+dz*t, ox=px-cx, oz=pz-cz, d=Math.hypot(ox,oz);
-          const min=radius+WALL_T*0.55;
-          if(d<min && d>1e-6){ const push=(min-d)/d; px+=ox*push; pz+=oz*push; }
-          else if(d<=1e-6) px+=0.02;
+
+    function joinRoutes(parts){
+      const out=[];
+      for(const part of parts){
+        for(const c of part||[]){
+          const last=out[out.length-1];
+          if(last && last.x===c.x && last.z===c.z) continue;
+          out.push(c);
         }
       }
-      return {x:px,z:pz};
+      return out;
+    }
+    function makeRail(cells){
+      const points=cells.map(c=>worldOf(c.x,c.z));
+      const lengths=[0];
+      for(let i=1;i<points.length;i++) lengths.push(lengths[i-1]+Math.hypot(points[i].x-points[i-1].x, points[i].z-points[i-1].z));
+      return {points, lengths, total: lengths[lengths.length-1]||1};
+    }
+    function sampleRail(rail, dist, lookAhead=8.2){
+      const d=Math.max(0, Math.min(rail.total, dist));
+      const {points, lengths}=rail;
+      let i=0; while(i<lengths.length-2 && lengths[i+1]<d) i++;
+      const span=Math.max(1e-6, lengths[i+1]-lengths[i]);
+      const t=(d-lengths[i])/span;
+      const x=points[i].x+(points[i+1].x-points[i].x)*t;
+      const z=points[i].z+(points[i+1].z-points[i].z)*t;
+      const ad=Math.min(rail.total, d+lookAhead);
+      let j=i; while(j<lengths.length-2 && lengths[j+1]<ad) j++;
+      const aspan=Math.max(1e-6, lengths[j+1]-lengths[j]);
+      const at=(ad-lengths[j])/aspan;
+      const lookX=points[j].x+(points[j+1].x-points[j].x)*at;
+      const lookZ=points[j].z+(points[j+1].z-points[j].z)*at;
+      let dx=lookX-x, dz=lookZ-z, mag=Math.hypot(dx,dz)||1;
+      dx/=mag; dz/=mag;
+      return {x,z,yaw:Math.atan2(-dx,-dz), fx:dx, fz:dz, lookX, lookZ};
+    }
+    const s0={x:maze.stations[0].gx,z:maze.stations[0].gz};
+    const s1={x:maze.stations[1].gx,z:maze.stations[1].gz};
+    const s2={x:maze.stations[2].gx,z:maze.stations[2].gz};
+    const railMain=makeRail(joinRoutes([
+      bfs(maze.wallGrid, maze.startCell, s0),
+      bfs(maze.wallGrid, s0, s1),
+      bfs(maze.wallGrid, s1, s2),
+      bfs(maze.wallGrid, s2, maze.forkCell),
+    ]));
+    const railExit=makeRail(bfs(maze.wallGrid, maze.forkCell, maze.exitCell)||[maze.forkCell]);
+    const railDead=makeRail(bfs(maze.wallGrid, maze.forkCell, maze.deadCell)||[maze.forkCell]);
+    const STOPS=Array.from({length:QN},(_,i)=>((i+1)/(QN+1))*railMain.total*0.96);
+    function railOf(name){ return name==="exit"?railExit:name==="dead"?railDead:railMain; }
+
+    const QUESTIONS = [
+      { equation:"sin(π / 2)", hint:"Height at the top of the unit circle.", value:1, aliases:["1","+1"] },
+      { equation:"cos(π)", hint:"Half a turn from 1.", value:-1, aliases:["-1"] },
+      { equation:"tan(π / 4)", hint:"Equal opposite and adjacent.", value:1, aliases:["1","+1"] },
+      { equation:"sin(0)", hint:"No height at the start of the circle.", value:0, aliases:["0"] },
+      { equation:"cos(0)", hint:"The unit circle starts on the x-axis.", value:1, aliases:["1","+1"] },
+      { equation:"sin(π)", hint:"Back on the x-axis after half a turn.", value:0, aliases:["0"] },
+      { equation:"cos(π / 2)", hint:"Top of the circle has no x.", value:0, aliases:["0"] },
+      { equation:"tan(0)", hint:"Opposite is zero.", value:0, aliases:["0"] },
+      { equation:"sin(π / 6)", hint:"30 degrees. Half of one.", value:0.5, aliases:["1/2","0.5",".5"] },
+      { equation:"cos(π / 3)", hint:"60 degrees. Same as sin(π/6).", value:0.5, aliases:["1/2","0.5",".5"] },
+      { equation:"sin(π / 3)", hint:"√3 / 2", value:Math.sqrt(3)/2, aliases:["√3/2","sqrt(3)/2","0.866"] },
+      { equation:"cos(π / 6)", hint:"√3 / 2", value:Math.sqrt(3)/2, aliases:["√3/2","sqrt(3)/2","0.866"] },
+      { equation:"tan(π / 6)", hint:"1 / √3", value:1/Math.sqrt(3), aliases:["1/√3","1/sqrt(3)","√3/3","sqrt(3)/3","0.577"] },
+      { equation:"tan(π / 3)", hint:"√3", value:Math.sqrt(3), aliases:["√3","sqrt(3)","1.732"] },
+      { equation:"sin(3π / 2)", hint:"Bottom of the circle.", value:-1, aliases:["-1"] },
+      { equation:"cos(3π / 2)", hint:"Bottom of the circle has no x.", value:0, aliases:["0"] },
+      { equation:"sin(π / 4)", hint:"√2 / 2", value:Math.SQRT1_2, aliases:["√2/2","sqrt(2)/2","1/√2","1/sqrt(2)","0.707"] },
+      { equation:"cos(π / 4)", hint:"Same as sin(π/4).", value:Math.SQRT1_2, aliases:["√2/2","sqrt(2)/2","1/√2","1/sqrt(2)","0.707"] },
+      { equation:"sin(−π / 2)", hint:"Mirror of the top point.", value:-1, aliases:["-1"] },
+      { equation:"cos(2π)", hint:"A full turn returns home.", value:1, aliases:["1","+1"] },
+      { equation:"2 sin(π / 6)", hint:"Two times one half.", value:1, aliases:["1","+1"] },
+      { equation:"sin²θ + cos²θ", hint:"The Pythagorean identity, any θ.", value:1, aliases:["1","+1"] },
+      { equation:"cos²(π / 3)", hint:"(1/2)²", value:0.25, aliases:["1/4","0.25",".25"] },
+      { equation:"sin(π / 2) + cos(π)", hint:"1 + (−1)", value:0, aliases:["0"] },
+      { equation:"4 sin(π / 6)", hint:"Four times one half.", value:2, aliases:["2","+2"] },
+      { equation:"sin(2π)", hint:"Full turn, no height.", value:0, aliases:["0"] },
+      { equation:"tan(−π / 4)", hint:"Odd function.", value:-1, aliases:["-1"] },
+      { equation:"2 cos(π / 3)", hint:"Two times one half.", value:1, aliases:["1","+1"] },
+      { equation:"cos(−π)", hint:"Cosine is even.", value:-1, aliases:["-1"] },
+      { equation:"3 sin(π / 6)", hint:"Three times one half.", value:1.5, aliases:["3/2","1.5"] },
+    ];
+    function normalize(raw){
+      return raw.trim().toLowerCase().replace(/−/g,"-").replace(/\s+/g,"").replace(/√/g,"sqrt");
+    }
+    function parseExpr(s){
+      if(!s) return null;
+      if(/^[+-]?\d+(\.\d+)?$/.test(s)) return Number(s);
+      const frac=s.match(/^([+-]?\d+)\/(\d+)$/); if(frac) return Number(frac[1])/Number(frac[2]);
+      const sqrtN=s.match(/^([+-]?)sqrt\((\d+)\)$/); if(sqrtN) return (sqrtN[1]==="-"?-1:1)*Math.sqrt(Number(sqrtN[2]));
+      const sqrtFrac=s.match(/^([+-]?)sqrt\((\d+)\)\/(\d+)$/); if(sqrtFrac) return (sqrtFrac[1]==="-"?-1:1)*Math.sqrt(Number(sqrtFrac[2]))/Number(sqrtFrac[3]);
+      const overSqrt=s.match(/^([+-]?)(\d+)\/sqrt\((\d+)\)$/); if(overSqrt) return (overSqrt[1]==="-"?-1:1)*Number(overSqrt[2])/Math.sqrt(Number(overSqrt[3]));
+      return null;
+    }
+    function matchesAnswer(q, typed){
+      const s=normalize(typed); if(!s) return false;
+      if(q.aliases.some(a=>normalize(a)===s)) return true;
+      const n=parseExpr(s); if(n===null || Number.isNaN(n)) return false;
+      return Math.abs(n-q.value)<=0.02;
     }
 
-    const sim = { x: maze.start.x, z: maze.start.z, yaw: 0, speed: 0, moving: false, frames: 0 };
-    const game = { phase: "title", strikes: 0, answered: [false,false,false], activeStation: null, flash: null, trauma: 0 };
-    function resetSim(){ sim.x=maze.start.x; sim.z=maze.start.z; sim.yaw=0; sim.speed=0; sim.moving=false; }
+    const sim = { x: maze.start.x, z: maze.start.z, yaw: 0, speed: 0, lean: 0, gait: 0, dist: 0, rail: "main", moving: false, frames: 0 };
+    const game = { phase: "title", strikes: 0, answered: Array(QN).fill(false), active: null, flash: null, trauma: 0 };
+    function resetSim(){ sim.x=maze.start.x; sim.z=maze.start.z; sim.yaw=0; sim.speed=0; sim.lean=0; sim.gait=0; sim.dist=0; sim.rail="main"; sim.moving=false; }
+    function wrapAngle(a){ return Math.atan2(Math.sin(a), Math.cos(a)); }
 
     let audioCtx=null, drone=null;
     function ac(){ if(!audioCtx) audioCtx=new AudioContext(); if(audioCtx.state==="suspended") audioCtx.resume(); return audioCtx; }
@@ -322,28 +431,11 @@
     }
     function stopDrone(){ drone&&drone.stop(); drone=null; }
 
-    const keys=new Set();
-    const stick={x:0,y:0,active:false};
-    const GAME_CODES=new Set(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"]);
-    window.addEventListener("keydown",e=>{ if(GAME_CODES.has(e.code)) e.preventDefault(); keys.add(e.code); });
-    window.addEventListener("keyup",e=>keys.delete(e.code));
-    window.addEventListener("blur",()=>{ keys.clear(); stick.active=false; stick.x=0; stick.y=0; });
-    function sampleMove(){
-      let forward=0, steer=0;
-      if(keys.has("KeyW")||keys.has("ArrowUp")) forward+=1;
-      if(keys.has("KeyS")||keys.has("ArrowDown")) forward-=1;
-      if(keys.has("KeyA")||keys.has("ArrowLeft")) steer+=1;
-      if(keys.has("KeyD")||keys.has("ArrowRight")) steer-=1;
-      if(stick.active){ forward+=stick.y; steer+=-stick.x; }
-      return { forward: Math.max(-1,Math.min(1,forward)), steer: Math.max(-1,Math.min(1,steer)) };
-    }
-
     const el = {
       title: document.getElementById("title"),
       answer: document.getElementById("answer"),
       end: document.getElementById("end"),
       hud: document.getElementById("hud"),
-      stick: document.getElementById("stick"),
       flash: document.getElementById("flash"),
       switchLabel: document.getElementById("switchLabel"),
       switchKicker: document.getElementById("switchKicker"),
@@ -352,84 +444,70 @@
       endTitle: document.getElementById("endTitle"),
       endLede: document.getElementById("endLede"),
       minimap: document.getElementById("minimap"),
-      knob: document.getElementById("knob"),
+      eqLine: document.getElementById("eqLine"),
+      eqHint: document.getElementById("eqHint"),
+      eqInput: document.getElementById("eqInput"),
     };
     const pips=[...document.querySelectorAll("[data-pip]")];
-    const coarse = window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 640px)").matches;
-    function showStick(){
-      const on = coarse && (game.phase==="playing" || game.phase==="answering");
-      el.stick.classList.toggle("hidden", !on);
-    }
     function renderUI(){
       el.title.classList.toggle("hidden", game.phase!=="title");
       el.answer.classList.toggle("hidden", game.phase!=="answering");
       el.end.classList.toggle("hidden", game.phase!=="won" && game.phase!=="lost");
       el.hud.classList.toggle("hidden", game.phase!=="playing" && game.phase!=="answering");
       const done=game.answered.filter(Boolean).length;
-      el.switchLabel.textContent="Switches "+done+"/3";
+      const shown=Math.min(done+(game.phase==="answering"?1:0), QN);
+      el.switchLabel.textContent="Gate "+shown+"/"+QN;
       pips.forEach((p,i)=>p.classList.toggle("on", i<game.strikes));
       el.exitState.textContent=game.strikes>=MAX_STRIKES?"Exit sealed":"Exit aligned";
-      if(game.phase==="answering") el.switchKicker.textContent="Path switch "+((game.activeStation||0)+1)+" of 3";
+      if(game.phase==="answering" && game.active!==null){
+        const q=QUESTIONS[game.active];
+        el.switchKicker.textContent="Gate "+(game.active+1)+" of "+QN+" · Evaluate";
+        el.eqLine.textContent=q.equation+" = ?";
+        el.eqHint.textContent=q.hint;
+        el.eqInput.value="";
+        setTimeout(()=>el.eqInput.focus(), 40);
+      }
       if(game.phase==="won"){
         el.endKicker.textContent="Escape";
         el.endTitle.textContent="You left the vacuum.";
-        el.endLede.textContent="Every switch held. The cyan portal stayed open long enough to run through.";
+        el.endLede.textContent="The path held. "+(QN-game.strikes)+" of "+QN+" gates kept the cyan portal open.";
       }
       if(game.phase==="lost"){
         el.endKicker.textContent="Dead end";
         el.endTitle.textContent="The gate sealed behind you.";
-        el.endLede.textContent="Three wrong answers rotated the final fork into the red chamber. Nothing comes back from it.";
+        el.endLede.textContent="Three wrong values rotated the final fork into the red chamber. Nothing comes back from it.";
       }
-      el.flash.className = game.flash || "";
+      el.flash.className=game.flash||"";
       el.flash.id="flash";
       if(game.flash) el.flash.classList.add(game.flash);
-      showStick();
-      paintMinimap();
-      paintFloors();
-      paintGates();
-      paintStations();
-      paintPortals();
+      paintMinimap(); paintFloors(); paintGates(); paintStations(); paintPortals();
     }
     function startRun(){
       ac(); sfxStart(); startDrone(); resetSim();
-      game.phase="playing"; game.strikes=0; game.answered=[false,false,false]; game.activeStation=null; game.flash=null; game.trauma=0;
-      renderUI();
+      game.phase="playing"; game.strikes=0; game.answered=Array(QN).fill(false); game.active=null; game.flash=null; game.trauma=0;
+      snapCam=true; renderUI();
     }
     function answer(correct){
-      if(game.activeStation===null) return;
-      game.answered[game.activeStation]=true;
+      if(game.active===null) return;
+      game.answered[game.active]=true;
       if(correct) sfxCorrect(); else { sfxWrong(); game.strikes=Math.min(MAX_STRIKES, game.strikes+1); }
-      game.phase="playing"; game.activeStation=null; game.flash=correct?"correct":"wrong"; game.trauma=correct?0.18:0.55;
+      game.phase="playing"; game.active=null; game.flash=correct?"correct":"wrong"; game.trauma=correct?0.16:0.5;
       renderUI();
       setTimeout(()=>{ if(game.flash){ game.flash=null; el.flash.className=""; } }, 420);
     }
     function win(){ if(game.phase==="won") return; stopDrone(); sfxWin(); game.phase="won"; game.trauma=0.2; renderUI(); }
     function lose(){ if(game.phase==="lost") return; stopDrone(); sfxLose(); game.phase="lost"; game.trauma=0.7; renderUI(); }
-    function toTitle(){ stopDrone(); resetSim(); game.phase="title"; game.strikes=0; game.answered=[false,false,false]; game.activeStation=null; game.flash=null; game.trauma=0; renderUI(); }
+    function toTitle(){ stopDrone(); resetSim(); game.phase="title"; game.strikes=0; game.answered=Array(QN).fill(false); game.active=null; game.flash=null; game.trauma=0; renderUI(); }
 
     document.getElementById("enterBtn").onclick=startRun;
-    document.getElementById("correctBtn").onclick=()=>answer(true);
-    document.getElementById("wrongBtn").onclick=()=>answer(false);
     document.getElementById("againBtn").onclick=startRun;
     document.getElementById("titleBtn").onclick=toTitle;
-
-    const stickEl=el.stick;
-    const origin={x:0,y:0,id:-1};
-    stickEl.addEventListener("pointerdown",e=>{
-      stickEl.setPointerCapture(e.pointerId);
-      const r=stickEl.getBoundingClientRect();
-      origin.x=r.left+r.width/2; origin.y=r.top+r.height/2; origin.id=e.pointerId; stick.active=true;
+    document.getElementById("eqForm").addEventListener("submit", (e)=>{
+      e.preventDefault();
+      if(game.phase!=="answering" || game.active===null) return;
+      const text=el.eqInput.value.trim(); if(!text) return;
+      answer(matchesAnswer(QUESTIONS[game.active], text));
     });
-    stickEl.addEventListener("pointermove",e=>{
-      if(origin.id!==e.pointerId) return;
-      const dx=e.clientX-origin.x, dy=e.clientY-origin.y, max=36;
-      const m=Math.hypot(dx,dy), s=m>max?max/m:1, kx=dx*s, ky=dy*s;
-      el.knob.style.transform="translate("+kx+"px,"+ky+"px)";
-      stick.x=kx/max; stick.y=-ky/max; stick.active=true;
-    });
-    function releaseStick(e){ if(e && origin.id!==e.pointerId) return; origin.id=-1; stick.active=false; stick.x=0; stick.y=0; el.knob.style.transform=""; }
-    stickEl.addEventListener("pointerup",releaseStick);
-    stickEl.addEventListener("pointercancel",releaseStick);
 
     const canvas=document.getElementById("c");
     const renderer=new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:"high-performance"});
@@ -438,9 +516,9 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene=new THREE.Scene();
     scene.fog=new THREE.Fog(0x07070b, 16, 62);
-    const camera=new THREE.PerspectiveCamera(55, 1, 0.1, 180);
+    const camera=new THREE.PerspectiveCamera(58, 1, 0.12, 180);
     scene.add(new THREE.AmbientLight(0xffffff, 0.07));
-    const hemi=new THREE.HemisphereLight(0x1c2740, 0x07070b, 0.35); scene.add(hemi);
+    scene.add(new THREE.HemisphereLight(0x1c2740, 0x07070b, 0.35));
 
     const starGeo=new THREE.BufferGeometry();
     const starN=1800, starArr=new Float32Array(starN*3);
@@ -470,7 +548,7 @@
 
     const floorMat=new THREE.MeshStandardMaterial({color:0x0a1014, metalness:0.4, roughness:0.55, emissive:0x0c2a28, emissiveIntensity:0.35});
     const floorMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), floorMat, maze.floors.length);
-    floorMesh.frustumCulled=false; floorMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    floorMesh.frustumCulled=false;
     const tile=CELL*0.86, col=new THREE.Color();
     function paintFloors(){
       maze.floors.forEach((f,i)=>{
@@ -491,14 +569,13 @@
     function paintGates(){
       gateGroup.clear();
       maze.gates.forEach(g=>{
-        if(!gateClosed(g, game.strikes, game.answered)) return;
+        if(!gateClosed(g, game.strikes)) return;
         const rose=g.kind==="dead"||g.kind==="exit";
         const c=new THREE.Color(rose?"#fb7185":"#5eead4");
         const faceY=Math.atan2(g.z2-g.z1, g.x2-g.x1);
         const grp=new THREE.Group(); grp.position.set(g.mx, WALL_H*0.52, g.mz); grp.rotation.y=faceY;
         const mk=(w,op)=>{
-          const m=new THREE.Mesh(new THREE.PlaneGeometry(w, WALL_H*0.92), new THREE.MeshBasicMaterial({color:c, transparent:op<1, opacity:op, toneMapped:false}));
-          return m;
+          return new THREE.Mesh(new THREE.PlaneGeometry(w, WALL_H*0.92), new THREE.MeshBasicMaterial({color:c, transparent:op<1, opacity:op, toneMapped:false}));
         };
         grp.add(mk(g.length*0.92,0.22));
         const bar=mk(g.length*0.08,1); bar.position.z=0.02; grp.add(bar);
@@ -517,12 +594,13 @@
       ring.rotation.x=-Math.PI/2; ring.position.y=0.01;
       const light=new THREE.PointLight(0x5eead4,1.6,5);
       grp.add(disc, ring, light); scene.add(grp);
-      stationGroups.push({grp, disc, ring, light, id:s.id});
+      stationGroups.push({disc, ring, light});
     });
     function paintStations(){
+      const lit=game.phase==="answering";
+      const done=game.strikes>=3;
+      const c=done?0xfb7185:0x5eead4;
       stationGroups.forEach(sg=>{
-        const done=game.answered[sg.id], lit=game.activeStation===sg.id;
-        const c=done?0x2dd4bf:0x5eead4;
         sg.disc.material.emissive.setHex(c);
         sg.disc.material.emissiveIntensity=done?0.6:lit?2.2:1.4;
         sg.ring.material.color.setHex(c);
@@ -562,12 +640,12 @@
       deadPortal.ring2.material.opacity=openDead?0.8:0.15;
       deadPortal.tube.material.opacity=openDead?0.16:0.04;
       deadPortal.light.intensity=openDead?3.2:0.4;
-      const col=game.strikes>=3?0xfb7185:0x5eead4;
-      forkMat.color.setHex(col); forkLight.color.setHex(col);
+      const c=game.strikes>=3?0xfb7185:0x5eead4;
+      forkMat.color.setHex(c); forkLight.color.setHex(c);
     }
 
     const mouse=new THREE.Group();
-    const fur=0x6d5648, belly=0xcbb79a, ear=0x8a6a62, dark=0x1c1410;
+    const fur=0x6d5648, belly=0xcbb79a, dark=0x1c1410;
     function sph(sx,sy,sz, px,py,pz, color, extra){
       const m=new THREE.Mesh(new THREE.SphereGeometry(1, extra||12, 10), new THREE.MeshStandardMaterial({color, roughness:0.72}));
       m.scale.set(sx,sy,sz); m.position.set(px,py,pz); return m;
@@ -608,10 +686,6 @@
         else ctx.fillStyle="#1a2228";
         ctx.fillRect(x*sx, z*sy, sx, sy);
       }
-      maze.stations.forEach(s=>{
-        ctx.fillStyle=game.answered[s.id]?"#2dd4bf":"#5eead4";
-        ctx.beginPath(); ctx.arc((s.gx+0.5)*sx,(s.gz+0.5)*sy,2.2,0,Math.PI*2); ctx.fill();
-      });
       const pc=cellOf(sim.x,sim.z);
       ctx.fillStyle="#e8eef4";
       ctx.beginPath(); ctx.arc((pc.x+0.5)*sx,(pc.z+0.5)*sy,2.6,0,Math.PI*2); ctx.fill();
@@ -624,9 +698,19 @@
     }
     addEventListener("resize", resize); resize();
 
-    const MOVE_SPEED=5.6, TURN_RATE=2.7, CAM_H=2.15, CAM_DIST=4.6, CAM_LOOK=0.42, CAM_LAG=7.2;
+    const MOVE_SPEED=4.6, ACCEL=6.4, DECEL=11, YAW_FOLLOW=14, CAM_H=2.85, CAM_DIST=2.55, CAM_LOOK_Y=0.52, CAM_LAG=10;
     const camDesired=new THREE.Vector3(), look=new THREE.Vector3();
-    let last=performance.now(), stepAcc=0, clock=0;
+    let last=performance.now(), stepAcc=0, clock=0, snapCam=true, prevPhase="title";
+
+    function cameraOnPath(x,z,fx,fz){
+      let dist=CAM_DIST, cx=x-fx*dist, cz=z-fz*dist;
+      for(; dist>=0.5; dist-=0.1){
+        cx=x-fx*dist; cz=z-fz*dist;
+        const c=cellOf(cx,cz);
+        if(maze.walkable[c.z] && maze.walkable[c.z][c.x]) break;
+      }
+      return {x:cx, y:CAM_H+Math.max(0,(CAM_DIST-dist)*0.35), z:cz};
+    }
 
     function tick(now){
       const dt=Math.min((now-last)/1000, 0.1); last=now; clock+=dt; sim.frames++;
@@ -644,48 +728,65 @@
         const r=22;
         camera.position.set(Math.sin(clock*0.11)*r, 13.5, Math.cos(clock*0.11)*r);
         camera.lookAt(maze.fork.x, 0.4, maze.fork.z);
+        snapCam=true;
       } else {
         const playing=game.phase==="playing";
-        const {forward, steer}=playing?sampleMove():{forward:0,steer:0};
-        if(playing){
-          sim.yaw+=steer*TURN_RATE*dt;
-          const fx=-Math.sin(sim.yaw), fz=-Math.cos(sim.yaw);
-          const vx=fx*forward*MOVE_SPEED, vz=fz*forward*MOVE_SPEED;
-          sim.speed=Math.hypot(vx,vz); sim.moving=sim.speed>0.2;
-          const next=collideCircle(sim.x+vx*dt, sim.z+vz*dt, MOUSE_R, closedGateSegs(game.strikes, game.answered));
-          sim.x=next.x; sim.z=next.z;
-          if(sim.moving){ stepAcc+=dt*(2.8+sim.speed*0.4); if(stepAcc>1){ stepAcc=0; sfxStep(); } }
-          for(const s of maze.stations){
-            if(game.answered[s.id]) continue;
-            if(Math.hypot(sim.x-s.wx, sim.z-s.wz)<CELL*0.72){ game.phase="answering"; game.activeStation=s.id; renderUI(); break; }
+        const target=playing?MOVE_SPEED:0;
+        const rate=target>sim.speed?ACCEL:DECEL;
+        sim.speed+=(target-sim.speed)*(1-Math.exp(-rate*dt));
+        if(sim.speed<0.04 && !playing) sim.speed=0;
+        if(playing && sim.speed>0) sim.dist+=sim.speed*dt;
+
+        if(playing && sim.rail==="main"){
+          for(let i=0;i<STOPS.length;i++){
+            if(!game.answered[i] && sim.dist>=STOPS[i]){
+              game.phase="answering"; game.active=i; renderUI(); break;
+            }
           }
-          if(game.phase==="playing"){
-            if(Math.hypot(sim.x-maze.exit.x, sim.z-maze.exit.z)<CELL*0.85 && game.strikes<MAX_STRIKES) win();
-            if(Math.hypot(sim.x-maze.dead.x, sim.z-maze.dead.z)<CELL*0.85 && game.strikes>=MAX_STRIKES) lose();
+          if(sim.dist>=railMain.total-0.35 && game.answered.every(Boolean)){
+            sim.rail=game.strikes>=MAX_STRIKES?"dead":"exit";
+            sim.dist=0;
           }
-        } else { sim.speed=0; sim.moving=false; }
-        const fx=-Math.sin(sim.yaw), fz=-Math.cos(sim.yaw);
-        camDesired.set(sim.x-fx*CAM_DIST, CAM_H, sim.z-fz*CAM_DIST);
-        camera.position.lerp(camDesired, 1-Math.exp(-CAM_LAG*dt));
-        look.set(sim.x, CAM_LOOK, sim.z); camera.lookAt(look);
+        }
+        const rail=railOf(sim.rail);
+        if(playing && sim.rail!=="main" && sim.dist>=rail.total-0.55){
+          if(sim.rail==="exit") win(); else lose();
+        }
+        const sample=sampleRail(rail, sim.dist);
+        sim.x=sample.x; sim.z=sample.z;
+        const dyaw=wrapAngle(sample.yaw-sim.yaw);
+        if(prevPhase==="title") sim.yaw=sample.yaw;
+        else sim.yaw+=dyaw*(1-Math.exp(-YAW_FOLLOW*dt));
+        sim.lean+=(-dyaw*2.8-sim.lean)*(1-Math.exp(-10*dt));
+        sim.moving=sim.speed>0.2;
+        sim.gait+=dt*(6.5+sim.speed*2.6);
+        if(sim.moving){ stepAcc+=dt*(2.2+sim.speed*0.55); if(stepAcc>1){ stepAcc=0; sfxStep(); } }
+
+        const cam=cameraOnPath(sample.x, sample.z, sample.fx, sample.fz);
+        camDesired.set(cam.x,cam.y,cam.z);
+        if(snapCam){ camera.position.copy(camDesired); snapCam=false; }
+        else camera.position.lerp(camDesired, 1-Math.exp(-CAM_LAG*dt));
+        look.set(sample.lookX, CAM_LOOK_Y, sample.lookZ);
+        camera.lookAt(look);
         const shake=game.trauma*game.trauma;
         if(shake>0.002){
           const t=clock*29;
-          camera.position.x+=Math.sin(t*1.7)*shake*0.18;
-          camera.position.y+=Math.cos(t*1.3)*shake*0.1;
+          camera.position.x+=Math.sin(t*1.7)*shake*0.12;
+          camera.position.y+=Math.cos(t*1.3)*shake*0.07;
         }
       }
 
-      const run=sim.moving?1:0, gait=clock*17;
-      const bob=Math.abs(Math.sin(gait))*0.045*run;
+      const run=Math.min(1, sim.speed/MOVE_SPEED), gait=sim.gait*2.15, idle=1-run;
+      const bob=Math.abs(Math.sin(gait))*0.05*run + Math.sin(clock*2.15)*0.012*idle;
       mouse.position.set(sim.x, 0.16+bob, sim.z);
       mouse.rotation.y=sim.yaw+Math.PI;
-      mouse.rotation.x=Math.sin(gait)*0.07*run;
-      const a=Math.sin(gait)*0.55*run, b=Math.sin(gait+Math.PI)*0.55*run;
+      mouse.rotation.x=Math.sin(gait)*0.09*run;
+      mouse.rotation.z=sim.lean;
+      const a=Math.sin(gait)*(0.38+0.32*run), b=Math.sin(gait+Math.PI)*(0.38+0.32*run);
       legs.children[0].rotation.x=a; legs.children[1].rotation.x=b; legs.children[2].rotation.x=b; legs.children[3].rotation.x=a;
-      tail.rotation.y=Math.sin(clock*6)*0.35*(0.35+run);
-      tail.rotation.x=0.45+Math.sin(clock*4)*0.08;
-
+      tail.rotation.y=Math.sin(clock*5.4+gait)*0.42*(0.28+run);
+      tail.rotation.x=0.42+Math.sin(clock*3.4)*0.1+run*0.08;
+      prevPhase=game.phase;
       renderer.render(scene, camera);
       requestAnimationFrame(tick);
     }
