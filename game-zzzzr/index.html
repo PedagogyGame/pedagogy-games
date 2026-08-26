@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Snowball Math Siege</title>
+  <meta name="description" content="A first-person winter math survival game. Solve, aim the arc, and defend the field." />
+  <style>
+    :root {
+      --ice: #dff6ff;
+      --frost: rgba(9, 24, 37, .78);
+      --frost-strong: rgba(6, 17, 28, .92);
+      --line: rgba(210, 240, 255, .25);
+      --gold: #ffd36a;
+      --red: #ff6f61;
+      --green: #8fe3b2;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #07131d; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: white; user-select: none; }
+    button, input { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+    #game { position: fixed; inset: 0; }
+    #game canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    #vignette {
+      position: fixed; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse at 50% 48%, transparent 40%, rgba(3, 9, 14, .18) 72%, rgba(1, 5, 9, .68) 125%),
+        linear-gradient(180deg, rgba(5,15,23,.22), transparent 28%, transparent 75%, rgba(5,13,20,.35));
+      z-index: 2;
+    }
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+    .topbar {
+      position: absolute; top: 18px; left: 20px; right: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+    }
+    .brand { text-shadow: 0 2px 16px rgba(0,0,0,.7); }
+    .brand h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(19px, 2.1vw, 31px); letter-spacing: .055em; font-weight: 700; }
+    .brand p { margin: 4px 0 0; color: rgba(231,247,255,.72); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; }
+    .stats { display: flex; gap: 9px; align-items: stretch; }
+    .stat {
+      min-width: 100px; padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px;
+      background: linear-gradient(180deg, rgba(10,30,44,.82), rgba(5,17,27,.68));
+      box-shadow: inset 0 1px rgba(255,255,255,.07), 0 8px 26px rgba(0,0,0,.18); backdrop-filter: blur(10px);
+    }
+    .stat span { display: block; color: rgba(220,243,255,.62); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
+    .stat strong { display: block; margin-top: 2px; font-family: Georgia, serif; font-size: 23px; line-height: 1; font-variant-numeric: tabular-nums; }
+    #ammoStat strong { color: var(--gold); }
+    .bottom-ui {
+      position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+    }
+    .control-card {
+      width: min(390px, 40vw); padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: linear-gradient(135deg, rgba(8,25,38,.76), rgba(6,17,27,.6)); backdrop-filter: blur(9px);
+      box-shadow: 0 12px 32px rgba(0,0,0,.18);
+    }
+    .control-card b { color: var(--ice); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    .control-card p { margin: 5px 0 0; color: rgba(229,246,255,.68); font-size: 11px; line-height: 1.45; }
+    #solveBtn {
+      pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,221,135,.62); border-radius: 12px; min-width: 228px;
+      padding: 13px 18px 12px; color: #10202a; background: linear-gradient(180deg, #ffe296, #efbd4e);
+      box-shadow: inset 0 1px rgba(255,255,255,.75), 0 9px 25px rgba(2,9,14,.35); font-weight: 850; letter-spacing: .06em; text-transform: uppercase;
+      transition: transform .15s ease, filter .15s ease, opacity .15s ease;
+    }
+    #solveBtn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.06); }
+    #solveBtn:active:not(:disabled) { transform: translateY(0); }
+    #solveBtn:disabled { cursor: default; opacity: .42; filter: grayscale(.45); }
+    #solveBtn small { display: block; margin-top: 3px; font-size: 9px; font-weight: 700; letter-spacing: .12em; opacity: .68; }
+    #muteBtn {
+      pointer-events: auto; cursor: pointer; position: absolute; right: 20px; top: 108px; width: 38px; height: 38px; border-radius: 50%;
+      color: var(--ice); border: 1px solid var(--line); background: rgba(5,18,29,.68); backdrop-filter: blur(8px); font-size: 16px;
+    }
+    #toast {
+      position: fixed; z-index: 12; left: 50%; top: 19%; transform: translate(-50%,-12px); opacity: 0; pointer-events: none;
+      color: white; font-family: Georgia, serif; font-size: clamp(20px,3vw,40px); font-weight: 700; text-shadow: 0 3px 15px black;
+      transition: opacity .18s ease, transform .18s ease; white-space: nowrap;
+    }
+    #toast.show { opacity: 1; transform: translate(-50%,0); }
+    #mathLayer { position: fixed; inset: 0; z-index: 15; pointer-events: none; display: none; }
+    #mathLayer.active { display: block; }
+    .math-card {
+      pointer-events: auto; position: absolute; right: clamp(20px, 4vw, 64px); top: 50%; transform: translateY(-50%); width: min(430px, calc(100vw - 40px));
+      padding: 20px; border-radius: 18px; border: 1px solid rgba(211,241,255,.32); background: linear-gradient(155deg, rgba(7,25,39,.94), rgba(4,14,23,.94));
+      box-shadow: 0 28px 70px rgba(0,0,0,.48), inset 0 1px rgba(255,255,255,.08); backdrop-filter: blur(16px);
+    }
+    .math-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+    .math-head span { color: rgba(222,244,255,.64); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
+    #timerText { color: var(--green); font-family: Georgia, serif; font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .timer-track { height: 4px; margin: 10px 0 20px; border-radius: 5px; overflow: hidden; background: rgba(255,255,255,.1); }
+    #timerFill { width: 100%; height: 100%; transform-origin: left; background: var(--green); transition: background .2s linear; }
+    #questionText { margin: 0 0 17px; min-height: 86px; display: flex; align-items: center; font-family: Georgia, serif; font-size: clamp(22px, 2.25vw, 34px); line-height: 1.25; }
+    .answer-row { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
+    #answerInput {
+      min-width: 0; padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(207,239,255,.34); outline: none;
+      color: white; background: rgba(0,8,14,.62); font-size: 19px; font-weight: 700; user-select: text;
+    }
+    #answerInput:focus { border-color: rgba(255,213,106,.75); box-shadow: 0 0 0 3px rgba(255,213,106,.12); }
+    #submitAnswer {
+      cursor: pointer; border: 0; border-radius: 10px; padding: 0 18px; color: #12202a; background: var(--ice); font-weight: 850; text-transform: uppercase; letter-spacing: .06em;
+    }
+    #submitAnswer:disabled, #answerInput:disabled { opacity: .55; }
+    #feedback { min-height: 28px; margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: rgba(230,247,255,.72); }
+    #feedback.good { color: var(--green); }
+    #feedback.bad { color: #ff9b8f; }
+    .answer-choices { display: none; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }
+    .answer-choices.visible { display: grid; }
+    .answer-choices button {
+      cursor: pointer; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(214,241,255,.28);
+      color: var(--ice); background: rgba(223,246,255,.08); font-size: 11px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase;
+    }
+    .answer-choices button:first-child { color: #14232b; border-color: rgba(255,224,143,.7); background: linear-gradient(180deg,#ffe39a,#efbe52); }
+    .answer-choices button:hover:not(:disabled) { filter: brightness(1.08); }
+    .answer-choices button:disabled { cursor: default; opacity: .38; }
+    #screen {
+      position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 24px;
+      background: radial-gradient(circle at 50% 40%, rgba(20,47,64,.34), rgba(2,9,15,.84)); backdrop-filter: blur(5px);
+    }
+    #screen.hidden { display: none; }
+    .screen-card {
+      width: min(680px, 100%); padding: clamp(27px, 5vw, 52px); border: 1px solid rgba(215,242,255,.28); border-radius: 22px;
+      background: linear-gradient(145deg, rgba(9,29,43,.94), rgba(4,15,24,.96)); box-shadow: 0 38px 100px rgba(0,0,0,.55), inset 0 1px rgba(255,255,255,.09);
+      text-align: center;
+    }
+    .eyebrow { color: var(--gold); font-size: 10px; letter-spacing: .28em; text-transform: uppercase; }
+    .screen-card h2 { margin: 12px 0 10px; font-family: Georgia, serif; font-size: clamp(38px,7vw,70px); line-height: .95; letter-spacing: -.025em; }
+    .screen-card .lead { margin: 0 auto; max-width: 560px; color: rgba(226,244,253,.73); font-size: 14px; line-height: 1.65; }
+    .rules { margin: 26px auto; display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; text-align: left; }
+    .rule { padding: 12px; border-radius: 11px; border: 1px solid rgba(211,240,255,.14); background: rgba(255,255,255,.035); }
+    .rule b { display: block; color: var(--ice); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .rule span { display: block; margin-top: 5px; color: rgba(222,242,252,.59); font-size: 10px; line-height: 1.4; }
+    #startBtn, #restartBtn {
+      cursor: pointer; min-width: 230px; padding: 14px 22px; border: 1px solid rgba(255,231,167,.82); border-radius: 12px;
+      color: #17242b; background: linear-gradient(180deg, #ffe5a2, #efbd50); box-shadow: inset 0 1px white, 0 12px 28px rgba(0,0,0,.25);
+      font-weight: 900; letter-spacing: .09em; text-transform: uppercase;
+    }
+    #finalStats { display: none; margin: 24px 0; }
+    #finalStats.visible { display: flex; justify-content: center; gap: 12px; }
+    .final-stat { min-width: 120px; padding: 12px; border: 1px solid rgba(220,245,255,.16); border-radius: 10px; background: rgba(255,255,255,.035); }
+    .final-stat strong { display: block; font-family: Georgia, serif; font-size: 30px; color: var(--gold); }
+    .final-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: .14em; color: rgba(225,244,252,.55); }
+    #countdown { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; pointer-events: none; font-family: Georgia,serif; font-size: min(28vw,230px); font-weight: 800; color: white; text-shadow: 0 8px 45px #07131d; }
+    #countdown.visible { display: grid; }
+    @media (max-width: 760px) {
+      .topbar { top: 10px; left: 10px; right: 10px; }
+      .brand p, #timeStat { display: none; }
+      .stat { min-width: 76px; padding: 8px 9px; }
+      .stat strong { font-size: 19px; }
+      .bottom-ui { left: 10px; right: 10px; bottom: 10px; }
+      .control-card { display: none; }
+      #solveBtn { min-width: 200px; margin-left: auto; }
+      #muteBtn { top: 72px; right: 10px; }
+      .rules { grid-template-columns: 1fr; }
+      .rule { padding: 9px 11px; }
+      .math-card { right: 10px; width: calc(100vw - 20px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game" aria-label="Three-dimensional snowy defense field"></div>
+  <div id="vignette"></div>
+  <div id="hud">
+    <div class="topbar">
+      <div class="brand"><h1>SNOWBALL MATH SIEGE</h1><p>Solve · Aim the arc · Survive</p></div>
+      <div class="stats">
+        <div class="stat"><span>Defeated</span><strong id="kills">0 / 500</strong></div>
+        <div class="stat" id="ammoStat"><span>Snowballs</span><strong id="ammo">0 / 15</strong></div>
+        <div class="stat" id="timeStat"><span>Survived</span><strong id="runTime">0:00</strong></div>
+      </div>
+    </div>
+    <button id="muteBtn" aria-label="Mute sound" title="Mute sound">♪</button>
+    <div class="bottom-ui">
+      <div class="control-card"><b>Directional throw guide</b><p>The short arrow shows only the opening direction of the throw. Judge the unseen flight and landing distance yourself.</p></div>
+      <button id="solveBtn" disabled>Solve for snowballs<small>20 seconds · +2 or fast +3</small></button>
+    </div>
+  </div>
+  <div id="toast"></div>
+  <div id="mathLayer" aria-hidden="true">
+    <section class="math-card" role="dialog" aria-modal="true" aria-labelledby="questionText">
+      <div class="math-head"><span>Earn ammunition</span><strong id="timerText">20.0</strong></div>
+      <div class="timer-track"><div id="timerFill"></div></div>
+      <h2 id="questionText"></h2>
+      <div class="answer-row">
+        <input id="answerInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Type your answer" placeholder="Type answer" />
+        <button id="submitAnswer">Enter</button>
+      </div>
+      <p id="feedback">The field remains active while you solve.</p>
+      <div class="answer-choices" id="answerChoices">
+        <button id="throwChoice">Throw snowballs</button>
+        <button id="nextChoice">Next question</button>
+      </div>
+    </section>
+  </div>
+  <div id="countdown">3</div>
+  <div id="screen">
+    <main class="screen-card">
+      <div class="eyebrow">A first-person arithmetic survival game</div>
+      <h2 id="screenTitle">Snowball<br>Math Siege</h2>
+      <p class="lead" id="screenLead">Snowmen are emerging through the storm. Earn every snowball with mathematics, then read the short launch guide and judge the unseen flight yourself. One miss is one snowball gone. One snowman reaching you ends the run.</p>
+      <div class="rules" id="rules">
+        <div class="rule"><b>Solve</b><span>20 seconds. Correct answers earn 2 snowballs; answers within 10 seconds earn 3.</span></div>
+        <div class="rule"><b>Aim</b><span>The mouse sets the launch direction. The short guide never reveals the landing point or snaps onto a target.</span></div>
+        <div class="rule"><b>Survive</b><span>Enemies never pause. Store at most 15 snowballs and defeat 500 to win.</span></div>
+      </div>
+      <div id="finalStats">
+        <div class="final-stat"><strong id="finalKills">0</strong><span>Defeated</span></div>
+        <div class="final-stat"><strong id="finalAccuracy">0%</strong><span>Throw accuracy</span></div>
+        <div class="final-stat"><strong id="finalMath">0%</strong><span>Math accuracy</span></div>
+      </div>
+      <button id="startBtn">Enter the storm</button>
+      <button id="restartBtn" style="display:none">Try again</button>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script>
+  (() => {
+    'use strict';
+    const $ = (id) => document.getElementById(id);
+    const ui = {
+      game: $('game'), kills: $('kills'), ammo: $('ammo'), runTime: $('runTime'), solve: $('solveBtn'), mute: $('muteBtn'),
+      toast: $('toast'), math: $('mathLayer'), timerText: $('timerText'), timerFill: $('timerFill'),
+      question: $('questionText'), input: $('answerInput'), submit: $('submitAnswer'), feedback: $('feedback'), choices: $('answerChoices'),
+      throwChoice: $('throwChoice'), nextChoice: $('nextChoice'), screen: $('screen'),
+      screenTitle: $('screenTitle'), screenLead: $('screenLead'), rules: $('rules'), start: $('startBtn'), restart: $('restartBtn'),
+      finalStats: $('finalStats'), finalKills: $('finalKills'), finalAccuracy: $('finalAccuracy'), finalMath: $('finalMath'), countdown: $('countdown')
+    };
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x8fa7b2);
+    scene.fog = new THREE.FogExp2(0xc3d0d3, 0.0205);
+    const camera = new THREE.PerspectiveCamera(57, innerWidth / innerHeight, 0.1, 300);
+    camera.position.set(0, 3.25, 12);
+    camera.lookAt(0, 1.8, -56);
+    scene.add(camera);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = .94;
+    ui.game.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xe6f5ff, 0x435766, 2.0);
+    scene.add(hemi);
+    const moon = new THREE.DirectionalLight(0xe7f2ff, 2.55);
+    moon.position.set(-32, 55, 18);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.camera.left = -75; moon.shadow.camera.right = 75; moon.shadow.camera.top = 70; moon.shadow.camera.bottom = -35;
+    moon.shadow.camera.near = 1; moon.shadow.camera.far = 180; moon.shadow.bias = -.00025;
+    scene.add(moon);
+
+    function mulberry32(seed) {
+      return function() { let t = seed += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    }
+    const worldRand = mulberry32(24122026);
+
+    function makeSnowTexture() {
+      const c = document.createElement('canvas'); c.width = c.height = 512;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, 0, 512); grad.addColorStop(0, '#d8e4e6'); grad.addColorStop(1, '#b6c9ce'); g.fillStyle = grad; g.fillRect(0,0,512,512);
+      for (let i=0;i<13000;i++) {
+        const v = 188 + Math.floor(worldRand()*55); const a=.025+worldRand()*.07; g.fillStyle=`rgba(${v},${v+5},${v+7},${a})`;
+        const s=.3+worldRand()*1.3; g.fillRect(worldRand()*512,worldRand()*512,s,s);
+      }
+      const tex = new THREE.CanvasTexture(c); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(18,24); tex.colorSpace=THREE.SRGBColorSpace; tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+      return tex;
+    }
+    const groundGeo = new THREE.PlaneGeometry(190, 270, 80, 100);
+    const gp = groundGeo.attributes.position;
+    for (let i=0;i<gp.count;i++) {
+      const x=gp.getX(i), y=gp.getY(i); const edge=Math.min(1,Math.abs(x)/75);
+      gp.setZ(i, Math.sin(x*.13+y*.04)*.16 + Math.sin(y*.11)*.11 + (worldRand()-.5)*.11 + edge*.45);
+    }
+    groundGeo.computeVertexNormals();
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color:0xd6e3e5, map:makeSnowTexture(), roughness:.96, metalness:0 }));
+    ground.rotation.x = -Math.PI/2; ground.position.set(0,-.18,-92); ground.receiveShadow=true; scene.add(ground);
+
+    // Wind-carved ridges add depth without revealing enemy locations.
+    const ridgeMat = new THREE.MeshStandardMaterial({color:0xc8d8dc,roughness:1});
+    for(let i=0;i<18;i++){
+      const ridge=new THREE.Mesh(new THREE.SphereGeometry(1,16,8),ridgeMat);
+      const z=-10-worldRand()*150, spread=18+(-z)*.37; ridge.scale.set(5+worldRand()*13,.12+worldRand()*.24,1.4+worldRand()*4);
+      ridge.position.set((worldRand()-.5)*spread*2,-.08,z); ridge.rotation.y=worldRand()*.5-.25; ridge.receiveShadow=true; scene.add(ridge);
+    }
+
+    const trunkMat = new THREE.MeshStandardMaterial({color:0x25332f,roughness:1});
+    const pineMats = [0x2f4947,0x385451,0x425d59].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1}));
+    const trunkGeo = new THREE.CylinderGeometry(.16,.25,2,6);
+    const pineGeo = new THREE.ConeGeometry(2,5,8);
+    function addPine(x,z,s){
+      const group=new THREE.Group();
+      const trunk=new THREE.Mesh(trunkGeo,trunkMat); trunk.position.y=1*s; trunk.scale.set(s,s,s); group.add(trunk);
+      for(let j=0;j<3;j++){ const p=new THREE.Mesh(pineGeo,pineMats[j%3]); p.scale.set(s*(1-j*.16),s*.72,s*(1-j*.16)); p.position.y=(2.5+j*1.2)*s; p.castShadow=true; group.add(p); }
+      group.position.set(x,0,z); scene.add(group);
+    }
+    for(let i=0;i<52;i++){
+      const side=i%2?-1:1, z=-20-worldRand()*150, x=side*(44+worldRand()*34+Math.max(0,-z-70)*.08); addPine(x,z,.72+worldRand()*1.45);
+    }
+    for(let i=0;i<22;i++) addPine(-72+worldRand()*144,-170-worldRand()*14,.85+worldRand()*1.2);
+
+    // A small warm refuge, deliberately off-axis so the open field remains dominant.
+    const cabin=new THREE.Group();
+    const woodMat=new THREE.MeshStandardMaterial({color:0x3b2d28,roughness:.9});
+    const roofMat=new THREE.MeshStandardMaterial({color:0x8fa1a3,roughness:1});
+    const house=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,6),woodMat); house.position.y=2.1; cabin.add(house);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(7.2,3.3,4),roofMat); roof.rotation.y=Math.PI/4; roof.scale.z=.72; roof.position.y=5.3; cabin.add(roof);
+    const glowMat=new THREE.MeshBasicMaterial({color:0xffb44c});
+    for(const x of [-2.2,2.2]){const w=new THREE.Mesh(new THREE.PlaneGeometry(1.35,1.25),glowMat);w.position.set(x,2.45,3.01);cabin.add(w);}
+    cabin.position.set(-42,0,-113); cabin.rotation.y=.13; scene.add(cabin);
+    const warm=new THREE.PointLight(0xffb45d,8,22,2); warm.position.set(-42,3,-108); scene.add(warm);
+
+    function createSnow(count, near){
+      const arr=new Float32Array(count*3), speed=new Float32Array(count);
+      for(let i=0;i<count;i++){ arr[i*3]=(worldRand()-.5)*(near?125:210); arr[i*3+1]=worldRand()*(near?45:75); arr[i*3+2]=12-worldRand()*(near?125:220); speed[i]=near?.72+worldRand()*1.6:.3+worldRand()*.75; }
+      const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(arr,3));
+      const mat=new THREE.PointsMaterial({color:near?0xffffff:0xd9e6e8,size:near?.18:.26,transparent:true,opacity:near?.82:.42,depthWrite:false,sizeAttenuation:true});
+      const points=new THREE.Points(geo,mat); scene.add(points); return {points,arr,speed,count,near};
+    }
+    const snowLayers=[createSnow(2600,true),createSnow(1500,false)];
+
+    const snowWhite=new THREE.MeshStandardMaterial({color:0xf2f7f6,roughness:1,metalness:0});
+    const snowShade=new THREE.MeshStandardMaterial({color:0xcbdcdf,roughness:1,metalness:0});
+    const snowHighlight=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.96,metalness:0});
+    const coalMat=new THREE.MeshStandardMaterial({color:0x101719,roughness:.82});
+    const carrotMat=new THREE.MeshStandardMaterial({color:0xe56c25,roughness:.72});
+    const stickMat=new THREE.MeshStandardMaterial({color:0x4a3427,roughness:1});
+    const scarfMats=[0x9e2f35,0x274f6e,0x786224,0x445e4c].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.8}));
+    // Uneven silhouettes and shallow dents make the enemies read as hand-packed snow,
+    // rather than mathematically perfect white balls.
+    function packedSnowGeometry(radius,seed){
+      const geo=new THREE.SphereGeometry(radius,28,20),p=geo.attributes.position;
+      for(let i=0;i<p.count;i++){
+        const x=p.getX(i),y=p.getY(i),z=p.getZ(i),len=Math.hypot(x,y,z)||1;
+        const nx=x/len,ny=y/len,nz=z/len;
+        const coarse=Math.sin(nx*7.3+seed)*Math.sin(ny*8.7-seed*.7)*Math.sin(nz*6.1+seed*1.3);
+        const fine=Math.sin((nx+nz)*19+seed*2.1)*.012;
+        const scale=1+coarse*.026+fine;
+        p.setXYZ(i,x*scale,y*(scale+Math.sin(nx*5+seed)*.009),z*scale);
+      }
+      geo.computeVertexNormals();return geo;
+    }
+    const ballGeos=[packedSnowGeometry(1.12,1.7),packedSnowGeometry(.86,3.1),packedSnowGeometry(.63,5.4)];
+    const coalGeo=new THREE.SphereGeometry(.065,8,6), carrotGeo=new THREE.ConeGeometry(.09,.72,10), limbGeo=new THREE.CylinderGeometry(.045,.065,1,7);
+    function cylinderBetween(a,b,mat){
+      const m=new THREE.Mesh(limbGeo,mat), d=b.clone().sub(a), len=d.length(); m.scale.y=len; m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); return m;
+    }
+    function makeSnowman(x,z){
+      const g=new THREE.Group();
+      const body=new THREE.Mesh(ballGeos[0],snowShade); body.position.y=1.03; body.scale.set(1.04,.96,1);body.castShadow=body.receiveShadow=true; g.add(body);
+      const mid=new THREE.Mesh(ballGeos[1],snowWhite); mid.position.set(.035,2.22,0);mid.scale.set(.98,1.03,.96);mid.rotation.z=-.025;mid.castShadow=true; g.add(mid);
+      const head=new THREE.Mesh(ballGeos[2],snowWhite); head.position.set(-.025,3.25,.015);head.scale.set(1.01,.98,.99);head.rotation.z=.035;head.castShadow=true; g.add(head);
+      // A few fused handfuls of brighter snow break up the smooth computer-generated surface.
+      for(const c of [[-.48,.72,.88,.16],[.42,1.24,.91,.13],[-.3,2.36,.72,.1],[.25,3.48,.53,.075]]){
+        const clump=new THREE.Mesh(new THREE.SphereGeometry(c[3],9,7),snowHighlight);clump.position.set(c[0],c[1],c[2]);clump.scale.set(1.35,.55,.42);g.add(clump);
+      }
+      for(const ex of [-.23,.23]){const eye=new THREE.Mesh(coalGeo,coalMat); eye.position.set(ex,3.39,.58); eye.scale.set(1,1,.65); g.add(eye);}
+      for(let i=0;i<3;i++){const b=new THREE.Mesh(coalGeo,coalMat);b.position.set(0,2.54-i*.31,.82);b.scale.set(1.1,1.1,.7);g.add(b);}
+      const nose=new THREE.Mesh(carrotGeo,carrotMat);nose.rotation.x=Math.PI/2;nose.position.set(0,3.22,.91);g.add(nose);
+      for(let i=0;i<5;i++){const mouth=new THREE.Mesh(coalGeo,coalMat);const a=-.72+i*.36;mouth.position.set(Math.sin(a)*.25,3.02-Math.cos(a)*.035,.58);mouth.scale.set(.72,.72,.55);g.add(mouth);}
+      const scarf=new THREE.Mesh(new THREE.TorusGeometry(.62,.11,8,22),scarfMats[Math.floor(worldRand()*scarfMats.length)]);scarf.rotation.x=Math.PI/2;scarf.position.y=2.82;g.add(scarf);
+      const lRoot=new THREE.Vector3(-.68,2.43,0),lTip=new THREE.Vector3(-1.48,2.82,.08),rRoot=new THREE.Vector3(.68,2.43,0),rTip=new THREE.Vector3(1.48,2.78,.08);
+      g.add(cylinderBetween(lRoot,lTip,stickMat));g.add(cylinderBetween(rRoot,rTip,stickMat));
+      g.add(cylinderBetween(lTip,new THREE.Vector3(-1.77,3.08,.1),stickMat));g.add(cylinderBetween(lTip,new THREE.Vector3(-1.72,2.63,.12),stickMat));
+      g.add(cylinderBetween(rTip,new THREE.Vector3(1.76,3.02,.1),stickMat));g.add(cylinderBetween(rTip,new THREE.Vector3(1.73,2.59,.12),stickMat));
+      g.position.set(x,0,z); const s=.82+worldRand()*.22;g.scale.setScalar(s);scene.add(g);
+      return {group:g,baseX:x,speed:0,phase:worldRand()*Math.PI*2,scale:s};
+    }
+
+    // First-person arm. Its motion follows the launch bearing, while the short guide withholds the landing point.
+    const arm=new THREE.Group(); arm.position.set(.7,-.63,-.92); camera.add(arm);
+    const sleeveMat=new THREE.MeshStandardMaterial({color:0x234e69,roughness:.72});
+    const cuffMat=new THREE.MeshStandardMaterial({color:0xd9e8eb,roughness:1});
+    const gloveMat=new THREE.MeshStandardMaterial({color:0x8e3d38,roughness:.85});
+    const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(.17,.26,.82,12),sleeveMat);sleeve.rotation.x=Math.PI/2;sleeve.position.z=-.34;arm.add(sleeve);
+    const cuff=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.19,12),cuffMat);cuff.rotation.x=Math.PI/2;cuff.position.z=-.79;arm.add(cuff);
+    const glove=new THREE.Mesh(new THREE.SphereGeometry(.25,14,10),gloveMat);glove.scale.set(1,.82,1.25);glove.position.set(0,-.015,-.98);arm.add(glove);
+    const heldBall=new THREE.Mesh(new THREE.SphereGeometry(.22,14,10),snowWhite);heldBall.position.set(0,.06,-1.23);heldBall.castShadow=true;arm.add(heldBall);
+
+    const aim = { mouseX:innerWidth*.5, mouseY:innerHeight*.52, yaw:0, pitch:.35, velocity:new THREE.Vector3(), flightTime:1, points:[] };
+    // A short, solid launch gesture: thick enough to read through the storm,
+    // but deliberately too short to disclose the snowball's landing point.
+    const guideMat=new THREE.MeshBasicMaterial({color:0xffd66f,transparent:true,opacity:.94,depthTest:false});
+    let arcGeo=new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(),new THREE.Vector3(0,0,-1)),8,.13,12,false);
+    const arcLine=new THREE.Mesh(arcGeo,guideMat);arcLine.renderOrder=30;scene.add(arcLine);
+    // A rounded teardrop profile reads as an arrow without looking like a sharp cursor.
+    const tipProfile=[
+      new THREE.Vector2(0,-.43),new THREE.Vector2(.19,-.38),new THREE.Vector2(.29,-.17),
+      new THREE.Vector2(.28,.06),new THREE.Vector2(.18,.32),new THREE.Vector2(0,.62)
+    ];
+    const tip=new THREE.Mesh(new THREE.LatheGeometry(tipProfile,18),guideMat);tip.renderOrder=31;scene.add(tip);
+    const releasePoint=new THREE.Vector3(.7,2.56,10.12);
+    const THROW_SPEED=33, THROW_GRAVITY=9.8;
+    function ballisticPoint(velocity,time,out=new THREE.Vector3()){
+      out.copy(releasePoint).addScaledVector(velocity,time);out.y-=.5*THROW_GRAVITY*time*time;return out;
+    }
+    function updateAim(clientX=aim.mouseX,clientY=aim.mouseY){
+      aim.mouseX=clientX;aim.mouseY=clientY;
+      const nx=THREE.MathUtils.clamp(clientX/innerWidth*2-1,-1,1),ny=THREE.MathUtils.clamp(clientY/innerHeight,0,1);
+      aim.yaw=nx*.53;aim.pitch=THREE.MathUtils.lerp(-.08,.82,Math.pow(1-ny,.92));
+      const horizontal=Math.cos(aim.pitch)*THROW_SPEED;
+      aim.velocity.set(Math.sin(aim.yaw)*horizontal,Math.sin(aim.pitch)*THROW_SPEED,-Math.cos(aim.yaw)*horizontal);
+      aim.flightTime=(aim.velocity.y+Math.sqrt(aim.velocity.y*aim.velocity.y+2*THROW_GRAVITY*(releasePoint.y-.08)))/THROW_GRAVITY;
+      // Only the opening fraction is drawn. It is an aiming cue, never a landing prediction.
+      const guideTime=Math.min(.42,aim.flightTime*.22),pts=[];for(let i=0;i<=13;i++)pts.push(ballisticPoint(aim.velocity,guideTime*i/13));aim.points=pts;
+      const oldGuideGeo=arcLine.geometry;
+      arcGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),22,.13,12,false);
+      arcLine.geometry=arcGeo;oldGuideGeo.dispose();
+      const tangent=aim.velocity.clone();tangent.y-=THROW_GRAVITY*guideTime;tip.position.copy(pts[13]);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent.normalize());
+      arm.userData.aimYaw=-aim.yaw*.78;arm.userData.aimPitch=aim.pitch*.7-.08;
+    }
+    updateAim();
+
+    const state={mode:'intro',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,muted:false};
+
+    let audioCtx=null,windGain=null;
+    function initAudio(){
+      if(audioCtx)return; audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+      const buffer=audioCtx.createBuffer(1,audioCtx.sampleRate*2,audioCtx.sampleRate),data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*.24;
+      const src=audioCtx.createBufferSource();src.buffer=buffer;src.loop=true;const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=620;windGain=audioCtx.createGain();windGain.gain.value=.085;src.connect(filter).connect(windGain).connect(audioCtx.destination);src.start();
+    }
+    function tone(freq,dur,type='sine',vol=.08,slide=0){if(!audioCtx||state.muted)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(30,freq+slide),audioCtx.currentTime+dur);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);}
+    function showToast(text,color='#fff'){ui.toast.textContent=text;ui.toast.style.color=color;ui.toast.classList.add('show');clearTimeout(showToast.t);showToast.t=setTimeout(()=>ui.toast.classList.remove('show'),900);}
+    function updateHud(){ui.kills.textContent=state.kills+' / 500';ui.ammo.textContent=state.ammo+' / 15';const s=Math.floor(state.elapsed),m=Math.floor(s/60);ui.runTime.textContent=m+':'+String(s%60).padStart(2,'0');ui.solve.disabled=state.mode!=='playing'||state.ammo>=15;heldBall.visible=state.mode==='playing'&&state.ammo>0&&!(state.armT>=.34&&state.armT<1);}
+
+    function startGame(){
+      initAudio(); if(audioCtx.state==='suspended')audioCtx.resume();
+      for(const e of state.enemies)scene.remove(e.group);for(const p of state.projectiles)scene.remove(p.mesh);for(const c of state.chunks)scene.remove(c.mesh);
+      Object.assign(state,{mode:'countdown',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0});
+      ui.screen.classList.add('hidden');ui.math.classList.remove('active');ui.choices.classList.remove('visible');arcLine.visible=tip.visible=false;updateHud();
+      ui.countdown.classList.add('visible');let n=3;ui.countdown.textContent=n;
+      const id=setInterval(()=>{n--;if(n>0){ui.countdown.textContent=n;tone(350,0.09,'sine',.05);}else{clearInterval(id);ui.countdown.textContent='SURVIVE';tone(620,.25,'triangle',.09,250);setTimeout(()=>{ui.countdown.classList.remove('visible');state.mode='playing';state.startedAt=performance.now();state.lastSpawn=-1.6;arcLine.visible=tip.visible=true;updateHud();},650);}},700);
+    }
+
+    function spawnEnemy(){
+      const depth=78+Math.random()*40, width=18+depth*.27, x=(Math.random()*2-1)*width;
+      const e=makeSnowman(x,camera.position.z-depth);e.speed=Math.min(2.15,.66+state.kills*.0022+state.elapsed*.00115)*(0.86+Math.random()*.28);state.enemies.push(e);
+    }
+    function spawnInterval(){return Math.max(.48,4.7-state.kills*.0068-state.elapsed*.0051);}
+
+    const projectileGeo=new THREE.SphereGeometry(.23,14,10),projectileMat=new THREE.MeshStandardMaterial({color:0xf8ffff,roughness:.82});
+    function beginThrow(){
+      if(state.mode!=='playing'||state.question||state.armT>=0)return;
+      if(state.ammo<=0){showToast('NO SNOWBALLS — SOLVE FIRST','#ffcf75');tone(105,.18,'square',.035,-25);return;}
+      state.ammo--;state.shots++;state.armT=0;state.pendingVelocity=aim.velocity.clone();state.pendingFlightTime=aim.flightTime;updateHud();tone(160,.12,'triangle',.06,180);
+    }
+    function releaseThrow(){
+      const mesh=new THREE.Mesh(projectileGeo,projectileMat);mesh.castShadow=true;mesh.position.copy(releasePoint);scene.add(mesh);
+      state.projectiles.push({mesh,velocity:state.pendingVelocity.clone(),age:0,maxAge:state.pendingFlightTime+.18});state.pendingVelocity=null;
+    }
+    function burst(pos){
+      tone(185,.12,'triangle',.075,-80);tone(540,.08,'sine',.04,-150);
+      for(let i=0;i<15;i++){const mesh=new THREE.Mesh(new THREE.SphereGeometry(.07+Math.random()*.09,7,5),projectileMat);mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*.9,Math.random()*1.7,(Math.random()-.5)*.7));scene.add(mesh);state.chunks.push({mesh,vel:new THREE.Vector3((Math.random()-.5)*3.8,1.5+Math.random()*3.5,(Math.random()-.5)*3.2),life:.75+Math.random()*.55});}
+    }
+    function eliminate(enemy,at){
+      scene.remove(enemy.group);state.enemies.splice(state.enemies.indexOf(enemy),1);state.kills++;state.hits++;burst(at);showToast(state.kills===100?'100 — THE STORM DEEPENS':state.kills===200?'200 — NO BREATHING ROOM':state.kills===300?'300 — EXTRAORDINARY':state.kills===400?'400 — ALMOST IMPOSSIBLE':'DIRECT HIT',state.kills%100===0?'#ffd36a':'#e6fbff');updateHud();if(state.kills>=500)finish(true);
+    }
+
+    const gcd=(a,b)=>{a=Math.abs(a);b=Math.abs(b);while(b){const t=b;b=a%b;a=t;}return a||1;};
+    const ri=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+    const pick=a=>a[Math.floor(Math.random()*a.length)];
+    const clean=n=>Math.round(n*1000000)/1000000;
+    function fractionText(n,d){const g=gcd(n,d);n/=g;d/=g;return d===1?String(n):n+'/'+d;}
+    function makeQuestion(){
+      const progress=Math.min(1,(state.kills+state.elapsed*.2)/360),r=Math.random();let text,answer,display;
+      const type = r<.15?'add':r<.28?'sub':r<.40?'mult':r<.51?'div':r<.62?'decimal':r<.73?'fraction':r<.83?'percent':r<.89?'mixed':r<.94?'word':r<.975?'geometry':'pythag';
+      if(type==='add'){const a=ri(140,9999+Math.floor(progress*30000)),b=ri(90,8999);answer=a+b;text=`${a.toLocaleString()} + ${b.toLocaleString()} = ?`;}
+      else if(type==='sub'){let a=ri(800,18000),b=ri(120,a-1);answer=a-b;text=`${a.toLocaleString()} − ${b.toLocaleString()} = ?`;}
+      else if(type==='mult'){const a=ri(7,24+Math.floor(progress*18)),b=ri(4,18);answer=a*b;text=`${a} × ${b} = ?`;}
+      else if(type==='div'){const b=ri(3,18),q=ri(4,32+Math.floor(progress*18));answer=q;text=`${b*q} ÷ ${b} = ?`;}
+      else if(type==='decimal'){const a=ri(15,899)/10,b=ri(11,599)/10;if(Math.random()<.55){answer=clean(a+b);text=`${a.toFixed(1)} + ${b.toFixed(1)} = ?`;}else{const factor=ri(2,9);answer=clean(a*factor);text=`${a.toFixed(1)} × ${factor} = ?`;}}
+      else if(type==='fraction'){const b=ri(3,10),d=ri(3,12),a=ri(1,b-1),c=ri(1,d-1),op=Math.random()<.72?'+':'−';let n=a*d+(op==='+'?1:-1)*c*b,den=b*d;if(n<=0){n=a*d+c*b;text=`${a}/${b} + ${c}/${d} = ?`;}else text=`${a}/${b} ${op} ${c}/${d} = ?`;answer=n/den;display=fractionText(n,den);}
+      else if(type==='percent'){if(Math.random()<.7){const pct=pick([10,15,20,25,30,40,50,60,75]),base=pick([40,60,80,100,120,160,200,240]);answer=base*pct/100;text=`What is ${pct}% of ${base}?`;}else{const pct=pick([20,25,40,50,60,75]),base=pick([40,60,80,100,120]);const part=base*pct/100;answer=pct;text=`${part} is what percent of ${base}?`;display=pct+'%';}}
+      else if(type==='mixed'){const a=ri(4,18),b=ri(3,14),c=ri(2,9);answer=a+b*c;text=`${a} + ${b} × ${c} = ?`;}
+      else if(type==='word'){const kind=ri(0,2);if(kind===0){const boxes=ri(4,12),each=ri(6,18),used=ri(3,Math.min(20,boxes*each-1));answer=boxes*each-used;text=`You packed ${boxes} boxes with ${each} snowballs each, then used ${used}. How many remain?`;}else if(kind===1){const total=pick([60,80,100,120,160]),pct=pick([10,20,25,50,75]);answer=total*pct/100;text=`A team cleared ${pct}% of ${total} drifts. How many drifts did they clear?`;}else{const rate=ri(3,8),mins=ri(4,12);answer=rate*mins;text=`Snow falls ${rate} cm per minute for ${mins} minutes. How many centimeters fall?`;}}
+      else if(type==='geometry'){if(Math.random()<.55){const l=ri(5,18),w=ri(3,14);answer=2*(l+w);text=`A rectangular snowfield is ${l} m by ${w} m. What is its perimeter?`;}else{const b=ri(4,18)*2,h=ri(3,14);answer=b*h/2;text=`A triangular flag has base ${b} cm and height ${h} cm. What is its area?`;}}
+      else {const triples=pick([[3,4,5],[5,12,13],[6,8,10],[8,15,17],[9,12,15]]);const missing=Math.random()<.7?2:1;if(missing===2){answer=triples[2];text=`A right triangle has legs ${triples[0]} and ${triples[1]}. Find the hypotenuse c.`;}else{answer=triples[1];text=`A right triangle has leg ${triples[0]} and hypotenuse ${triples[2]}. Find the other leg.`;}}
+      if(display===undefined)display=Number.isInteger(answer)?String(answer):String(clean(answer));
+      return {text,answer,display};
+    }
+    function parseAnswer(raw){
+      let s=raw.trim().replace(/,/g,'').replace(/%/g,'');if(!s)return NaN;
+      const mixed=s.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);if(mixed)return Number(mixed[1])+Math.sign(Number(mixed[1])||1)*Number(mixed[2])/Number(mixed[3]);
+      const frac=s.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/);if(frac&&Number(frac[2])!==0)return Number(frac[1])/Number(frac[2]);
+      return Number(s);
+    }
+    function openQuestion(){
+      if(state.mode!=='playing'||state.question||state.ammo>=15)return;
+      state.question=makeQuestion();state.questionStarted=performance.now();state.questionResolved=false;state.mathAsked++;
+      ui.question.textContent=state.question.text;ui.input.value='';ui.input.disabled=false;ui.submit.disabled=false;ui.feedback.className='';ui.feedback.textContent='The field remains active while you solve.';
+      ui.choices.classList.remove('visible');ui.nextChoice.disabled=false;ui.math.classList.add('active');ui.math.setAttribute('aria-hidden','false');arcLine.visible=tip.visible=false;ui.solve.disabled=true;setTimeout(()=>ui.input.focus(),30);
+    }
+    function resolveQuestion(result){
+      if(!state.question||state.questionResolved)return;state.questionResolved=true;ui.input.disabled=true;ui.submit.disabled=true;
+      const elapsed=(performance.now()-state.questionStarted)/1000;
+      if(result==='correct'){
+        state.mathCorrect++;const earned=elapsed<=10?3:2,before=state.ammo;state.ammo=Math.min(15,state.ammo+earned);const actual=state.ammo-before;
+        ui.feedback.className='good';ui.feedback.textContent=`Correct — ${elapsed<=10?'fast answer! ':''}+${actual} snowball${actual===1?'':'s'}. Bank: ${state.ammo}/15. Choose what to do next.`;ui.choices.classList.add('visible');ui.nextChoice.disabled=state.ammo>=15;tone(440,.18,'sine',.07,240);
+      } else {
+        ui.feedback.className='bad';ui.feedback.textContent=`${result==='timeout'?'Time expired.':'Not quite.'} Correct answer: ${state.question.display}`;tone(150,.28,'sawtooth',.045,-55);setTimeout(closeQuestion,3000);
+      }
+      updateHud();
+    }
+    function submitAnswer(){if(!state.question||state.questionResolved)return;const value=parseAnswer(ui.input.value);if(Number.isNaN(value))return;resolveQuestion(Math.abs(value-state.question.answer)<1e-6?'correct':'wrong');}
+    function closeQuestion(){if(state.mode!=='playing'){state.question=null;return;}state.question=null;ui.choices.classList.remove('visible');ui.math.classList.remove('active');ui.math.setAttribute('aria-hidden','true');arcLine.visible=tip.visible=true;updateHud();}
+    function nextQuestion(){if(state.mode!=='playing'||!state.questionResolved||state.ammo>=15)return;state.question=null;openQuestion();}
+
+    function finish(won){
+      if(state.mode==='ended')return;state.mode='ended';state.question=null;ui.math.classList.remove('active');ui.choices.classList.remove('visible');arcLine.visible=tip.visible=false;heldBall.visible=false;ui.solve.disabled=true;
+      tone(won?620:95,won?.8:.65,won?'triangle':'sawtooth',.09,won?380:-40);
+      ui.screenTitle.innerHTML=won?'The Field<br>Is Clear':'The Siege<br>Breaks Through';
+      ui.screenLead.textContent=won?'Five hundred snowmen defeated. You mastered the mathematics, the ammunition economy, and every depth-controlled throw.':'A snowman reached your position. The field kept moving while you calculated—and eventually the storm found a way through.';
+      ui.rules.style.display='none';ui.start.style.display='none';ui.restart.style.display='inline-block';ui.finalStats.classList.add('visible');
+      ui.finalKills.textContent=state.kills;ui.finalAccuracy.textContent=(state.shots?Math.round(state.hits/state.shots*100):0)+'%';ui.finalMath.textContent=(state.mathAsked?Math.round(state.mathCorrect/state.mathAsked*100):0)+'%';ui.screen.classList.remove('hidden');
+    }
+
+    function updateSnow(dt,t){
+      for(const l of snowLayers){const p=l.arr;for(let i=0;i<l.count;i++){p[i*3]+=dt*(l.near?3.2:1.2)+Math.sin(t*.001+i)*dt*.18;p[i*3+1]-=dt*l.speed*5.2;p[i*3+2]+=dt*(l.near?1.1:.35);if(p[i*3+1]<-.2||p[i*3]>15||p[i*3+2]>18){p[i*3]=(worldRand()-.5)*(l.near?125:210);p[i*3+1]=(l.near?35:65)+worldRand()*18;p[i*3+2]=12-worldRand()*(l.near?125:220);}}l.points.geometry.attributes.position.needsUpdate=true;}
+    }
+    function updateArm(dt){
+      const baseYaw=arm.userData.aimYaw||0,basePitch=arm.userData.aimPitch??-.14;
+      if(state.armT<0){arm.rotation.x=THREE.MathUtils.lerp(arm.rotation.x,basePitch,.14);arm.rotation.y=THREE.MathUtils.lerp(arm.rotation.y,baseYaw,.16);arm.rotation.z=THREE.MathUtils.lerp(arm.rotation.z,.06,.14);return;}
+      const prev=state.armT;state.armT+=dt/.52;const t=state.armT;
+      let swing;if(t<.28)swing=THREE.MathUtils.lerp(basePitch,basePitch+.72,t/.28);else swing=THREE.MathUtils.lerp(basePitch+.72,basePitch-.62,Math.min(1,(t-.28)/.43));
+      arm.rotation.x=swing;arm.rotation.y=baseYaw;arm.rotation.z=.06+Math.sin(Math.min(1,t)*Math.PI)*.1;
+      if(prev<.34&&t>=.34&&state.pendingVelocity)releaseThrow();if(t>=1){state.armT=-1;arm.rotation.x=basePitch;}
+    }
+    function updateProjectiles(dt){
+      for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i];p.age+=dt;ballisticPoint(p.velocity,p.age,p.mesh.position);p.mesh.rotation.x+=dt*8;
+        let hit=null;for(const e of state.enemies){const center=e.group.position.clone();center.y=1.95*e.scale;if(p.mesh.position.distanceTo(center)<1.08*e.scale){hit=e;break;}}
+        if(hit){eliminate(hit,p.mesh.position.clone());scene.remove(p.mesh);state.projectiles.splice(i,1);continue;}
+        if(p.age>=p.maxAge||p.mesh.position.y<=.08){scene.remove(p.mesh);state.projectiles.splice(i,1);tone(105,.08,'sine',.018,-20);}
+      }
+    }
+    function updateChunks(dt){for(let i=state.chunks.length-1;i>=0;i--){const c=state.chunks[i];c.life-=dt;c.vel.y-=8.5*dt;c.mesh.position.addScaledVector(c.vel,dt);c.mesh.scale.setScalar(Math.max(0,c.life/.6));if(c.life<=0){scene.remove(c.mesh);state.chunks.splice(i,1);}}}
+    function updateEnemies(dt,t){
+      for(let i=state.enemies.length-1;i>=0;i--){const e=state.enemies[i];e.group.position.z+=e.speed*dt;e.group.position.x=e.baseX+Math.sin(t*.0017+e.phase)*.42;e.group.rotation.z=Math.sin(t*.005+e.phase)*.022;e.group.rotation.y=Math.sin(t*.002+e.phase)*.035;
+        if(e.group.position.z>camera.position.z-4.2){finish(false);return;}
+      }
+    }
+
+    const clock=new THREE.Clock();
+    function animate(now){
+      requestAnimationFrame(animate);const dt=Math.min(.05,clock.getDelta());updateSnow(dt,now);updateArm(dt);updateProjectiles(dt);updateChunks(dt);
+      if(state.mode==='playing'){
+        state.elapsed=(now-state.startedAt)/1000;updateEnemies(dt,now);
+        if(state.mode==='playing'&&state.elapsed-state.lastSpawn>=spawnInterval()){spawnEnemy();state.lastSpawn=state.elapsed;}
+        if(state.question&&!state.questionResolved){const left=Math.max(0,20-(now-state.questionStarted)/1000),ratio=left/20;ui.timerText.textContent=left.toFixed(1);ui.timerFill.style.transform=`scaleX(${ratio})`;const c=ratio>.5?'#8fe3b2':ratio>.22?'#ffd36a':'#ff6f61';ui.timerText.style.color=c;ui.timerFill.style.background=c;if(left<=0)resolveQuestion('timeout');}
+        updateHud();
+      }
+      renderer.render(scene,camera);
+    }
+    requestAnimationFrame(animate);
+
+    renderer.domElement.addEventListener('mousemove',e=>updateAim(e.clientX,e.clientY));
+    renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)beginThrow();});
+    ui.solve.addEventListener('click',openQuestion);ui.submit.addEventListener('click',submitAnswer);ui.throwChoice.addEventListener('click',closeQuestion);ui.nextChoice.addEventListener('click',nextQuestion);
+    ui.input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitAnswer();}});
+    ui.start.addEventListener('click',startGame);ui.restart.addEventListener('click',()=>{ui.rules.style.display='grid';ui.finalStats.classList.remove('visible');ui.restart.style.display='none';startGame();});
+    ui.mute.addEventListener('click',()=>{state.muted=!state.muted;ui.mute.textContent=state.muted?'×':'♪';ui.mute.setAttribute('aria-label',state.muted?'Unmute sound':'Mute sound');if(windGain)windGain.gain.value=state.muted?0:.085;});
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));updateAim(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));});
+    document.addEventListener('visibilitychange',()=>{if(document.hidden&&audioCtx)audioCtx.suspend();else if(audioCtx&&!state.muted)audioCtx.resume();});
+    updateHud();
+  })();
+  </script>
+</body>
+</html>
