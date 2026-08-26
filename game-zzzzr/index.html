@@ -127,6 +127,15 @@
     .rule { padding: 12px; border-radius: 11px; border: 1px solid rgba(211,240,255,.14); background: rgba(255,255,255,.035); }
     .rule b { display: block; color: var(--ice); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
     .rule span { display: block; margin-top: 5px; color: rgba(222,242,252,.59); font-size: 10px; line-height: 1.4; }
+    .difficulty-select { margin: 22px auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 470px; }
+    .difficulty-btn {
+      cursor: pointer; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(211,240,255,.2);
+      color: rgba(229,247,255,.72); background: rgba(255,255,255,.035); text-align: left; transition: border-color .16s ease, background .16s ease, transform .16s ease;
+    }
+    .difficulty-btn:hover { transform: translateY(-1px); border-color: rgba(211,240,255,.38); }
+    .difficulty-btn.selected { color: white; border-color: rgba(255,215,112,.78); background: linear-gradient(145deg,rgba(255,211,106,.16),rgba(255,255,255,.045)); box-shadow: inset 0 0 0 1px rgba(255,219,129,.13); }
+    .difficulty-btn b { display:block; font-family:Georgia,serif; font-size:16px; }
+    .difficulty-btn span { display:block; margin-top:3px; color:rgba(222,242,252,.6); font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
     #startBtn, #restartBtn {
       cursor: pointer; min-width: 230px; padding: 14px 22px; border: 1px solid rgba(255,231,167,.82); border-radius: 12px;
       color: #17242b; background: linear-gradient(180deg, #ffe5a2, #efbd50); box-shadow: inset 0 1px white, 0 12px 28px rgba(0,0,0,.25);
@@ -149,6 +158,7 @@
       #solveBtn { min-width: 200px; margin-left: auto; }
       #muteBtn { top: 72px; right: 10px; }
       .rules { grid-template-columns: 1fr; }
+      .difficulty-select { grid-template-columns:1fr; }
       .rule { padding: 9px 11px; }
       .math-card { right: 10px; width: calc(100vw - 20px); }
     }
@@ -175,7 +185,7 @@
   <div id="toast"></div>
   <div id="mathLayer" aria-hidden="true">
     <section class="math-card" role="dialog" aria-modal="true" aria-labelledby="questionText">
-      <div class="math-head"><span>Earn ammunition</span><strong id="timerText">20.0</strong></div>
+      <div class="math-head"><span id="mathMode">Hard · Grade 6–7</span><strong id="timerText">20.0</strong></div>
       <div class="timer-track"><div id="timerFill"></div></div>
       <h2 id="questionText"></h2>
       <div class="answer-row">
@@ -195,6 +205,10 @@
       <div class="eyebrow">A first-person arithmetic survival game</div>
       <h2 id="screenTitle">Snowball<br>Math Siege</h2>
       <p class="lead" id="screenLead">Snowmen are emerging through the storm. Earn every snowball with mathematics, then read the short launch guide and judge the unseen flight yourself. One miss is one snowball gone. One snowman reaching you ends the run.</p>
+      <div class="difficulty-select" id="difficultySelect" aria-label="Choose math difficulty">
+        <button class="difficulty-btn" type="button" data-difficulty="easy"><b>Easy Mode</b><span>Fifth-grade mathematics</span></button>
+        <button class="difficulty-btn selected" type="button" data-difficulty="hard"><b>Hard Mode</b><span>Grade 6 to early grade 7</span></button>
+      </div>
       <div class="rules" id="rules">
         <div class="rule"><b>Solve</b><span>20 seconds. Correct answers earn 2 snowballs; answers within 10 seconds earn 3. A wrong or unanswered problem makes every snowman move at double speed for 4 seconds.</span></div>
         <div class="rule"><b>Aim</b><span>The mouse sets the launch direction. The short guide never reveals the landing point or snaps onto a target.</span></div>
@@ -218,21 +232,21 @@
     const ui = {
       game: $('game'), kills: $('kills'), ammo: $('ammo'), runTime: $('runTime'), solve: $('solveBtn'), mute: $('muteBtn'),
       toast: $('toast'), math: $('mathLayer'), timerText: $('timerText'), timerFill: $('timerFill'),
-      question: $('questionText'), input: $('answerInput'), submit: $('submitAnswer'), feedback: $('feedback'), choices: $('answerChoices'),
-      throwChoice: $('throwChoice'), nextChoice: $('nextChoice'), screen: $('screen'),
+      question: $('questionText'), mathMode: $('mathMode'), input: $('answerInput'), submit: $('submitAnswer'), feedback: $('feedback'), choices: $('answerChoices'),
+      throwChoice: $('throwChoice'), nextChoice: $('nextChoice'), screen: $('screen'), difficultySelect: $('difficultySelect'),
       screenTitle: $('screenTitle'), screenLead: $('screenLead'), rules: $('rules'), start: $('startBtn'), restart: $('restartBtn'),
       finalStats: $('finalStats'), finalKills: $('finalKills'), finalAccuracy: $('finalAccuracy'), finalMath: $('finalMath'), countdown: $('countdown')
     };
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8fa7b2);
-    scene.fog = new THREE.FogExp2(0xc3d0d3, 0.0205);
+    scene.background = new THREE.Color(0x819ba8);
+    scene.fog = new THREE.FogExp2(0xb9c9ce, 0.0148);
     const camera = new THREE.PerspectiveCamera(57, innerWidth / innerHeight, 0.1, 300);
     camera.position.set(0, 3.25, 12);
     camera.lookAt(0, 1.8, -56);
     scene.add(camera);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2.2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -240,6 +254,18 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = .94;
     ui.game.appendChild(renderer.domElement);
+
+    // A full atmospheric sky dome replaces the old flat background color. Broad,
+    // slowly shifting storm bands preserve the limited visibility without reading
+    // as a blank gray wall.
+    const skyUniforms={time:{value:0},top:{value:new THREE.Color(0x213747)},mid:{value:new THREE.Color(0x78939f)},horizon:{value:new THREE.Color(0xd1dcde)}};
+    const sky=new THREE.Mesh(new THREE.SphereGeometry(235,40,24),new THREE.ShaderMaterial({
+      side:THREE.BackSide,depthWrite:false,uniforms:skyUniforms,
+      vertexShader:'varying vec3 vPos; void main(){vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader:'uniform float time;uniform vec3 top;uniform vec3 mid;uniform vec3 horizon;varying vec3 vPos;void main(){float h=clamp(normalize(vPos).y*.82+.24,0.0,1.0);vec3 c=mix(horizon,mid,smoothstep(.05,.46,h));c=mix(c,top,smoothstep(.43,1.0,h));float band=sin(vPos.x*.022+sin(vPos.z*.017)+time*.022)*.5+.5;float cloud=smoothstep(.35,.9,band)*(1.0-smoothstep(.55,.98,h));c=mix(c,c*vec3(.67,.74,.78),cloud*.32);gl_FragColor=vec4(c,1.0);}'
+    }));scene.add(sky);
+    const moonDisc=new THREE.Mesh(new THREE.CircleGeometry(5.2,32),new THREE.MeshBasicMaterial({color:0xe4edf0,transparent:true,opacity:.28,depthWrite:false}));
+    moonDisc.position.set(-64,47,-170);moonDisc.lookAt(camera.position);scene.add(moonDisc);
 
     const hemi = new THREE.HemisphereLight(0xe6f5ff, 0x435766, 2.0);
     scene.add(hemi);
@@ -274,7 +300,8 @@
       gp.setZ(i, Math.sin(x*.13+y*.04)*.16 + Math.sin(y*.11)*.11 + (worldRand()-.5)*.11 + edge*.45);
     }
     groundGeo.computeVertexNormals();
-    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color:0xd6e3e5, map:makeSnowTexture(), roughness:.96, metalness:0 }));
+    const groundTexture=makeSnowTexture();
+    const ground = new THREE.Mesh(groundGeo, new THREE.MeshStandardMaterial({ color:0xd6e3e5, map:groundTexture, bumpMap:groundTexture, bumpScale:.075, roughness:.96, metalness:0 }));
     ground.rotation.x = -Math.PI/2; ground.position.set(0,-.18,-92); ground.receiveShadow=true; scene.add(ground);
 
     // Wind-carved ridges add depth without revealing enemy locations.
@@ -285,14 +312,33 @@
       ridge.position.set((worldRand()-.5)*spread*2,-.08,z); ridge.rotation.y=worldRand()*.5-.25; ridge.receiveShadow=true; scene.add(ridge);
     }
 
+    // Layered, irregular mountain silhouettes give the field a real horizon.
+    function addMountainRange(z,baseY,height,color,seedOffset){
+      const rand=mulberry32(24122026+seedOffset),segments=32,verts=[],indices=[];
+      for(let i=0;i<=segments;i++){
+        const x=-120+i*(240/segments),shoulder=Math.sin(i*.83+seedOffset)*.28+Math.sin(i*.29)*.36;
+        const peak=baseY+height*(.42+rand()*.48+shoulder);
+        verts.push(x,baseY,z,x,peak,z);
+        if(i<segments){const a=i*2;indices.push(a,a+1,a+3,a,a+3,a+2);}
+      }
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geo.setIndex(indices);geo.computeVertexNormals();
+      const mesh=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({color,side:THREE.DoubleSide,fog:true}));scene.add(mesh);
+    }
+    addMountainRange(-138,-2,24,0x6f858d,19);addMountainRange(-166,-3,33,0x526a75,47);
+
     const trunkMat = new THREE.MeshStandardMaterial({color:0x25332f,roughness:1});
     const pineMats = [0x2f4947,0x385451,0x425d59].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1}));
     const trunkGeo = new THREE.CylinderGeometry(.16,.25,2,6);
-    const pineGeo = new THREE.ConeGeometry(2,5,8);
+    const pineGeo = new THREE.ConeGeometry(2,5,12);
+    const pineSnowGeo = new THREE.ConeGeometry(2.03,.55,12);
+    const branchSnowMat=new THREE.MeshStandardMaterial({color:0xd9e6e7,roughness:1});
     function addPine(x,z,s){
       const group=new THREE.Group();
       const trunk=new THREE.Mesh(trunkGeo,trunkMat); trunk.position.y=1*s; trunk.scale.set(s,s,s); group.add(trunk);
-      for(let j=0;j<3;j++){ const p=new THREE.Mesh(pineGeo,pineMats[j%3]); p.scale.set(s*(1-j*.16),s*.72,s*(1-j*.16)); p.position.y=(2.5+j*1.2)*s; p.castShadow=true; group.add(p); }
+      for(let j=0;j<4;j++){
+        const layerScale=1-j*.145,p=new THREE.Mesh(pineGeo,pineMats[j%3]);p.scale.set(s*layerScale,s*.54,s*layerScale);p.position.y=(2.15+j*.92)*s;p.rotation.y=j*.41+worldRand()*.18;p.castShadow=true;group.add(p);
+        const cap=new THREE.Mesh(pineSnowGeo,branchSnowMat);cap.scale.set(s*layerScale*1.015,s*.72,s*layerScale*1.015);cap.position.y=(3.48+j*.92)*s;cap.rotation.y=p.rotation.y;cap.castShadow=true;group.add(cap);
+      }
       group.position.set(x,0,z); scene.add(group);
     }
     for(let i=0;i<52;i++){
@@ -306,10 +352,20 @@
     const roofMat=new THREE.MeshStandardMaterial({color:0x8fa1a3,roughness:1});
     const house=new THREE.Mesh(new THREE.BoxGeometry(9,4.5,6),woodMat); house.position.y=2.1; cabin.add(house);
     const roof=new THREE.Mesh(new THREE.ConeGeometry(7.2,3.3,4),roofMat); roof.rotation.y=Math.PI/4; roof.scale.z=.72; roof.position.y=5.3; cabin.add(roof);
+    const roofSnow=new THREE.Mesh(new THREE.ConeGeometry(7.34,3.1,4),new THREE.MeshStandardMaterial({color:0xd7e3e4,roughness:1}));roofSnow.rotation.y=Math.PI/4;roofSnow.scale.z=.72;roofSnow.position.y=5.48;cabin.add(roofSnow);
+    const chimney=new THREE.Mesh(new THREE.BoxGeometry(.85,2.6,.85),new THREE.MeshStandardMaterial({color:0x4a4140,roughness:1}));chimney.position.set(2.25,6.25,-.4);cabin.add(chimney);
+    // Horizontal log courses and window trim remain legible through the snow haze.
+    const courseMat=new THREE.MeshStandardMaterial({color:0x594038,roughness:1});
+    for(let y=.25;y<4.35;y+=.48){const course=new THREE.Mesh(new THREE.BoxGeometry(9.08,.12,6.06),courseMat);course.position.y=y;cabin.add(course);}
     const glowMat=new THREE.MeshBasicMaterial({color:0xffb44c});
-    for(const x of [-2.2,2.2]){const w=new THREE.Mesh(new THREE.PlaneGeometry(1.35,1.25),glowMat);w.position.set(x,2.45,3.01);cabin.add(w);}
+    const trimMat=new THREE.MeshStandardMaterial({color:0x201b19,roughness:.9});
+    for(const x of [-2.2,2.2]){const w=new THREE.Mesh(new THREE.PlaneGeometry(1.35,1.25),glowMat);w.position.set(x,2.45,3.07);cabin.add(w);for(const ox of [-.74,.74]){const trim=new THREE.Mesh(new THREE.BoxGeometry(.12,1.55,.12),trimMat);trim.position.set(x+ox,2.45,3.13);cabin.add(trim);}for(const oy of [-.7,.7]){const trim=new THREE.Mesh(new THREE.BoxGeometry(1.6,.12,.12),trimMat);trim.position.set(x,2.45+oy,3.13);cabin.add(trim);}}
     cabin.position.set(-42,0,-113); cabin.rotation.y=.13; scene.add(cabin);
     const warm=new THREE.PointLight(0xffb45d,8,22,2); warm.position.set(-42,3,-108); scene.add(warm);
+
+    const fenceMat=new THREE.MeshStandardMaterial({color:0x5d5048,roughness:1});
+    function addFenceSection(x,z,rot=0){const f=new THREE.Group();for(const px of [-3,0,3]){const post=new THREE.Mesh(new THREE.BoxGeometry(.18,1.5,.18),fenceMat);post.position.set(px,.62,0);f.add(post);}for(const y of [.45,1.0]){const rail=new THREE.Mesh(new THREE.BoxGeometry(6.2,.13,.16),fenceMat);rail.position.y=y;f.add(rail);}f.position.set(x,0,z);f.rotation.y=rot;scene.add(f);}
+    for(let i=0;i<6;i++)addFenceSection(-58+i*6,-103-i*.7,-.1);
 
     function createSnow(count, near){
       const arr=new Float32Array(count*3), speed=new Float32Array(count);
@@ -412,7 +468,7 @@
     }
     updateAim();
 
-    const state={mode:'intro',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0,muted:false};
+    const state={mode:'intro',difficulty:'hard',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0,muted:false};
 
     let audioCtx=null,windGain=null;
     function initAudio(){
@@ -465,7 +521,7 @@
     const pick=a=>a[Math.floor(Math.random()*a.length)];
     const clean=n=>Math.round(n*1000000)/1000000;
     function fractionText(n,d){const g=gcd(n,d);n/=g;d/=g;return d===1?String(n):n+'/'+d;}
-    function makeQuestion(){
+    function makeHardQuestion(){
       const progress=Math.min(1,(state.kills+state.elapsed*.2)/360),r=Math.random();let text,answer,display;
       const type = r<.15?'add':r<.28?'sub':r<.40?'mult':r<.51?'div':r<.62?'decimal':r<.73?'fraction':r<.83?'percent':r<.89?'mixed':r<.94?'word':r<.975?'geometry':'pythag';
       if(type==='add'){const a=ri(140,9999+Math.floor(progress*30000)),b=ri(90,8999);answer=a+b;text=`${a.toLocaleString()} + ${b.toLocaleString()} = ?`;}
@@ -482,6 +538,34 @@
       if(display===undefined)display=Number.isInteger(answer)?String(answer):String(clean(answer));
       return {text,answer,display};
     }
+    function makeEasyQuestion(){
+      const r=Math.random();let text,answer,display;
+      const type=r<.19?'add':r<.36?'sub':r<.51?'mult':r<.64?'div':r<.75?'decimal':r<.84?'fraction':r<.91?'percent':r<.96?'word':'geometry';
+      if(type==='add'){
+        const a=ri(120,4999),b=ri(80,2999);answer=a+b;text=`${a.toLocaleString()} + ${b.toLocaleString()} = ?`;
+      }else if(type==='sub'){
+        const a=ri(400,6500),b=ri(50,a-1);answer=a-b;text=`${a.toLocaleString()} − ${b.toLocaleString()} = ?`;
+      }else if(type==='mult'){
+        const a=ri(3,12),b=Math.random()<.7?ri(3,12):ri(13,35);answer=a*b;text=`${a} × ${b} = ?`;
+      }else if(type==='div'){
+        const divisor=ri(2,12),quotient=ri(3,18);answer=quotient;text=`${divisor*quotient} ÷ ${divisor} = ?`;
+      }else if(type==='decimal'){
+        const a=ri(11,199)/10,b=ri(5,99)/10;answer=clean(a+b);text=`${a.toFixed(1)} + ${b.toFixed(1)} = ?`;
+      }else if(type==='fraction'){
+        const d=pick([4,5,6,8,10]),a=ri(1,d-2),b=ri(1,d-a);answer=(a+b)/d;text=`${a}/${d} + ${b}/${d} = ?`;display=fractionText(a+b,d);
+      }else if(type==='percent'){
+        const pct=pick([10,25,50]),base=pick([20,40,60,80,100,120,200]);answer=base*pct/100;text=`What is ${pct}% of ${base}?`;
+      }else if(type==='word'){
+        if(Math.random()<.5){const bags=ri(3,9),each=ri(4,12);answer=bags*each;text=`There are ${bags} bags with ${each} snowballs in each bag. How many snowballs are there?`;}
+        else{const start=ri(35,90),used=ri(8,start-5);answer=start-used;text=`You made ${start} snowballs and threw ${used}. How many remain?`;}
+      }else{
+        if(Math.random()<.5){const l=ri(4,14),w=ri(3,10);answer=l*w;text=`A rectangular snow fort is ${l} m long and ${w} m wide. What is its area?`;}
+        else{const l=ri(4,15),w=ri(3,12);answer=2*(l+w);text=`A rectangle is ${l} m by ${w} m. What is its perimeter?`;}
+      }
+      if(display===undefined)display=Number.isInteger(answer)?String(answer):String(clean(answer));
+      return {text,answer,display};
+    }
+    function makeQuestion(){return state.difficulty==='easy'?makeEasyQuestion():makeHardQuestion();}
     function parseAnswer(raw){
       let s=raw.trim().replace(/,/g,'').replace(/%/g,'');if(!s)return NaN;
       const mixed=s.match(/^(-?\d+)\s+(\d+)\s*\/\s*(\d+)$/);if(mixed)return Number(mixed[1])+Math.sign(Number(mixed[1])||1)*Number(mixed[2])/Number(mixed[3]);
@@ -491,6 +575,7 @@
     function openQuestion(){
       if(state.mode!=='playing'||state.question||state.ammo>=15)return;
       state.question=makeQuestion();state.questionStarted=performance.now();state.questionResolved=false;state.mathAsked++;
+      ui.mathMode.textContent=state.difficulty==='easy'?'Easy · Grade 5':'Hard · Grade 6–7';
       ui.question.textContent=state.question.text;ui.input.value='';ui.input.disabled=false;ui.submit.disabled=false;ui.feedback.className='';ui.feedback.textContent='The field remains active while you solve.';
       ui.choices.classList.remove('visible');ui.nextChoice.disabled=false;ui.math.classList.add('active');ui.math.setAttribute('aria-hidden','false');arcLine.visible=tip.visible=false;ui.solve.disabled=true;setTimeout(()=>ui.input.focus(),30);
     }
@@ -516,7 +601,7 @@
       tone(won?620:95,won?.8:.65,won?'triangle':'sawtooth',.09,won?380:-40);
       ui.screenTitle.innerHTML=won?'The Field<br>Is Clear':'The Siege<br>Breaks Through';
       ui.screenLead.textContent=won?'Five hundred snowmen defeated. You mastered the mathematics, the ammunition economy, and every depth-controlled throw.':'A snowman reached your position. The field kept moving while you calculated—and eventually the storm found a way through.';
-      ui.rules.style.display='none';ui.start.style.display='none';ui.restart.style.display='inline-block';ui.finalStats.classList.add('visible');
+      ui.rules.style.display='none';ui.difficultySelect.style.display='none';ui.start.style.display='none';ui.restart.style.display='inline-block';ui.finalStats.classList.add('visible');
       ui.finalKills.textContent=state.kills;ui.finalAccuracy.textContent=(state.shots?Math.round(state.hits/state.shots*100):0)+'%';ui.finalMath.textContent=(state.mathAsked?Math.round(state.mathCorrect/state.mathAsked*100):0)+'%';ui.screen.classList.remove('hidden');
     }
 
@@ -552,7 +637,7 @@
 
     const clock=new THREE.Clock();
     function animate(now){
-      requestAnimationFrame(animate);const dt=Math.min(.05,clock.getDelta());updateSnow(dt,now);updateArm(dt);updateProjectiles(dt);updateChunks(dt);
+      requestAnimationFrame(animate);const dt=Math.min(.05,clock.getDelta());skyUniforms.time.value=now*.001;updateSnow(dt,now);updateArm(dt);updateProjectiles(dt);updateChunks(dt);
       if(state.mode==='playing'){
         state.elapsed=(now-state.startedAt)/1000;updateEnemies(dt,now);
         if(state.mode==='playing'&&state.elapsed-state.lastSpawn>=spawnInterval()){spawnEnemy();state.lastSpawn=state.elapsed;}
@@ -567,9 +652,14 @@
     renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)beginThrow();});
     ui.solve.addEventListener('click',openQuestion);ui.submit.addEventListener('click',submitAnswer);ui.throwChoice.addEventListener('click',closeQuestion);ui.nextChoice.addEventListener('click',nextQuestion);
     ui.input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitAnswer();}});
-    ui.start.addEventListener('click',startGame);ui.restart.addEventListener('click',()=>{ui.rules.style.display='grid';ui.finalStats.classList.remove('visible');ui.restart.style.display='none';startGame();});
+    document.querySelectorAll('.difficulty-btn').forEach(btn=>btn.addEventListener('click',()=>{
+      state.difficulty=btn.dataset.difficulty;document.querySelectorAll('.difficulty-btn').forEach(b=>b.classList.toggle('selected',b===btn));
+      ui.start.textContent=state.difficulty==='easy'?'Start Easy Mode':'Start Hard Mode';
+    }));
+    ui.start.textContent='Start Hard Mode';
+    ui.start.addEventListener('click',startGame);ui.restart.addEventListener('click',()=>{ui.rules.style.display='grid';ui.difficultySelect.style.display='grid';ui.finalStats.classList.remove('visible');ui.restart.style.display='none';startGame();});
     ui.mute.addEventListener('click',()=>{state.muted=!state.muted;ui.mute.textContent=state.muted?'×':'♪';ui.mute.setAttribute('aria-label',state.muted?'Unmute sound':'Mute sound');if(windGain)windGain.gain.value=state.muted?0:.085;});
-    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));updateAim(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));});
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2.2));updateAim(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));});
     document.addEventListener('visibilitychange',()=>{if(document.hidden&&audioCtx)audioCtx.suspend();else if(audioCtx&&!state.muted)audioCtx.resume();});
     updateHud();
   })();
