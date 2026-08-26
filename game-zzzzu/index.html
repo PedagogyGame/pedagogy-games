@@ -65,8 +65,11 @@
     .secondary { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--elevated); color: var(--fg); font-weight: 500; padding: 0 1.25rem; }
     .row { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: 2rem; }
     .end { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2rem 1.25rem 7rem; }
-    .portrait svg { width: 100%; height: auto; max-height: 11rem; display: block; }
-    @media (min-width: 800px) { .portrait svg { max-height: 24rem; } }
+    .portrait { position: relative; overflow: hidden; border-radius: 12px; background: var(--elevated); width: 100%; }
+    .portrait img { width: 100%; height: 16rem; object-fit: cover; object-position: top; display: block; }
+    @media (min-width: 800px) { .portrait img { height: 24rem; } }
+    .portrait .cap { position: absolute; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--bg) 85%, transparent); padding: 0.75rem 1rem; }
+    .portrait .name { font-family: var(--display); font-size: 1.25rem; margin-top: 0.15rem; }
     .muted { color: var(--muted); }
     .subtle { color: var(--subtle); font-size: 0.75rem; }
     .title { font-size: clamp(2rem, 5vw, 3rem); }
@@ -202,82 +205,19 @@ function lookFor(breed) {
   else if (v.pattern === "hairless") parts.push("bare skin");
   return parts.join("; ");
 }
-function earPath(v, side) {
-  const s = side === "L" ? 1 : -1;
-  if (v.ears === "fold") return `M ${100 - s * 28} 86 C ${100 - s * 52} 92, ${100 - s * 44} 108, ${100 - s * 22} 100`;
-  if (v.ears === "curl") return `M ${100 - s * 30} 82 C ${100 - s * 56} 70, ${100 - s * 48} 38, ${100 - s * 22} 64`;
-  const h = v.ears === "large" ? 34 : v.ears === "tufted" ? 36 : 30;
-  return `M ${100 - s * 30} 80 L ${100 - s * 48} ${80 - h} L ${100 - s * 16} 74 Z`;
-}
-function portraitSVG(breed, reveal) {
-  const v = breed.visual;
-  const id = breed.name.replace(/\s+/g, "-").toLowerCase();
-  const point = v.pattern === "point";
-  const spots = v.pattern === "spotted";
-  const tabby = v.pattern === "tabby" || v.pattern === "ticked";
-  const bicolor = v.pattern === "bicolor";
-  const van = v.pattern === "van";
-  const roan = v.pattern === "roan";
-  const hairless = v.pattern === "hairless" || v.fur === "none";
-  const rex = v.fur === "rex";
-  const longFur = v.fur === "long";
-  const faceRx = v.face === "wedge" ? 36 : v.face === "brachy" ? 48 : v.face === "square" ? 44 : 42;
-  const faceRy = v.face === "brachy" ? 38 : v.face === "wedge" ? 46 : 42;
-  const muzzleY = v.face === "brachy" ? 130 : 124;
-  const tailFill = point || van ? v.coat2 : v.coat;
-  const tailD = v.tail === "bob" ? "M 138 168 C 158 156, 166 174, 150 180" : v.tail === "plumed" ? "M 132 170 C 168 150, 186 190, 148 206" : "M 132 168 C 170 140, 176 200, 146 198";
-  const spotsBody = spots ? [0,1,2,3,4,5].map(i => `<ellipse cx="${74 + (i % 3) * 22}" cy="${174 + Math.floor(i / 3) * 14}" rx="7" ry="5.5" fill="${v.coat2}" opacity="0.85" />`).join("") : "";
-  return `
-    <div class="portrait">
-      <svg viewBox="0 0 200 240" role="img" aria-label="${reveal ? breed.name : "Unidentified cat specimen"}">
-        <defs>
-          <radialGradient id="${id}-glow" cx="50%" cy="40%" r="60%">
-            <stop offset="0%" stop-color="${v.coat}" stop-opacity="0.18" />
-            <stop offset="100%" stop-color="#0a0e17" stop-opacity="0" />
-          </radialGradient>
-          <linearGradient id="${id}-fur" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="${lighten(v.coat, 12)}" />
-            <stop offset="100%" stop-color="${v.coat}" />
-          </linearGradient>
-        </defs>
-        <rect width="200" height="240" fill="#1a2436" rx="12" />
-        <ellipse cx="100" cy="118" rx="88" ry="96" fill="url(#${id}-glow)" />
-        ${v.tail !== "none" ? `<path d="${tailD}" fill="${tailFill}" stroke="${v.coat2}" stroke-width="${v.tail === "plumed" || longFur ? 14 : v.tail === "bob" ? 9 : 10}" stroke-linecap="round" opacity="0.95" />` : ""}
-        <ellipse cx="100" cy="186" rx="${longFur ? 58 : 50}" ry="${longFur ? 38 : 32}" fill="url(#${id}-fur)" />
-        ${bicolor ? `<ellipse cx="78" cy="178" rx="16" ry="14" fill="${v.coat2}" opacity="0.92" /><ellipse cx="118" cy="192" rx="18" ry="12" fill="${v.coat2}" opacity="0.88" />` : ""}
-        ${van ? `<ellipse cx="100" cy="196" rx="40" ry="22" fill="${lighten(v.coat, 8)}" opacity="0.95" />` : ""}
-        ${spotsBody}
-        ${longFur ? `<ellipse cx="100" cy="146" rx="54" ry="22" fill="${lighten(v.coat, 8)}" opacity="0.9" />` : ""}
-        <ellipse cx="100" cy="108" rx="${faceRx}" ry="${faceRy}" fill="${point || van ? lighten(v.coat, 6) : v.coat}" />
-        <path d="${earPath(v, "L")}" fill="${point || van ? v.coat2 : v.coat}" />
-        <path d="${earPath(v, "R")}" fill="${point || van ? v.coat2 : v.coat}" />
-        ${v.ears === "tufted" ? `<path d="M 56 48 L 52 28 L 64 50" stroke="${v.coat2}" stroke-width="2" fill="none" /><path d="M 144 48 L 148 28 L 136 50" stroke="${v.coat2}" stroke-width="2" fill="none" />` : ""}
-        <ellipse cx="${v.ears === "fold" ? 72 : 62}" cy="${v.ears === "fold" ? 94 : 66}" rx="7" ry="9" fill="${v.coat2}" opacity="0.35" />
-        <ellipse cx="${v.ears === "fold" ? 128 : 138}" cy="${v.ears === "fold" ? 94 : 66}" rx="7" ry="9" fill="${v.coat2}" opacity="0.35" />
-        ${point ? `<ellipse cx="100" cy="116" rx="28" ry="22" fill="${v.coat2}" opacity="0.55" />` : ""}
-        ${van ? `<ellipse cx="100" cy="88" rx="30" ry="18" fill="${v.coat2}" opacity="0.72" />` : ""}
-        ${tabby ? `<path d="M 100 70 L 100 96" stroke="${v.coat2}" stroke-width="3" opacity="0.45" /><path d="M 88 74 L 94 96" stroke="${v.coat2}" stroke-width="2.5" opacity="0.4" /><path d="M 112 74 L 106 96" stroke="${v.coat2}" stroke-width="2.5" opacity="0.4" />` : ""}
-        ${roan ? `<ellipse cx="78" cy="100" rx="12" ry="9" fill="${v.coat2}" opacity="0.5" /><ellipse cx="122" cy="100" rx="12" ry="9" fill="${v.coat2}" opacity="0.5" /><ellipse cx="100" cy="86" rx="18" ry="12" fill="${v.coat2}" opacity="0.42" />` : ""}
-        ${hairless ? `<path d="M 78 96 Q 86 88 94 98" stroke="#b07a5a" stroke-width="1.4" fill="none" /><path d="M 106 98 Q 114 88 122 96" stroke="#b07a5a" stroke-width="1.4" fill="none" /><path d="M 86 130 Q 100 140 114 130" stroke="#b07a5a" stroke-width="1.2" fill="none" />` : ""}
-        ${rex ? `<path d="M 70 100 Q 80 88 90 102 Q 100 86 110 102 Q 120 88 130 100" fill="none" stroke="${v.coat2}" stroke-width="1.6" opacity="0.55" />` : ""}
-        <ellipse cx="82" cy="108" rx="${v.face === "brachy" ? 11 : 9}" ry="11" fill="#0b1220" />
-        <ellipse cx="118" cy="108" rx="${v.face === "brachy" ? 11 : 9}" ry="11" fill="#0b1220" />
-        <ellipse cx="82" cy="108" rx="6" ry="8" fill="${v.eyes}" />
-        <ellipse cx="118" cy="108" rx="6" ry="8" fill="${v.eyes}" />
-        <ellipse cx="80" cy="105" rx="2" ry="2.4" fill="#f8fafc" />
-        <ellipse cx="116" cy="105" rx="2" ry="2.4" fill="#f8fafc" />
-        <ellipse cx="100" cy="${muzzleY}" rx="${v.face === "brachy" ? 20 : 14}" ry="10" fill="${lighten(v.coat, 16)}" />
-        <ellipse cx="100" cy="${muzzleY - 2}" rx="4.5" ry="3.2" fill="#c47a7a" />
-        <path d="M 100 ${muzzleY + 1} Q 92 ${muzzleY + 10} 86 ${muzzleY + 6}" stroke="#3a2a2a" stroke-width="1.4" fill="none" />
-        <path d="M 100 ${muzzleY + 1} Q 108 ${muzzleY + 10} 114 ${muzzleY + 6}" stroke="#3a2a2a" stroke-width="1.4" fill="none" />
-        <path d="M 84 126 L 48 118" stroke="#cbd5e1" stroke-width="0.8" opacity="0.5" />
-        <path d="M 84 130 L 46 130" stroke="#cbd5e1" stroke-width="0.8" opacity="0.5" />
-        <path d="M 116 126 L 152 118" stroke="#cbd5e1" stroke-width="0.8" opacity="0.5" />
-        <path d="M 116 130 L 154 130" stroke="#cbd5e1" stroke-width="0.8" opacity="0.5" />
-        ${spots ? `<ellipse cx="74" cy="96" rx="4" ry="3.2" fill="${v.coat2}" opacity="0.7" /><ellipse cx="128" cy="94" rx="4" ry="3.2" fill="${v.coat2}" opacity="0.7" />` : ""}
-      </svg>
+function photoCard(breed, reveal) {
+  const slug = breed.name.toLowerCase().replace(/\s+/g, "-");
+  const label = reveal ? breed.name : "Name this cat";
+  const kicker = reveal ? "Breed identification" : "Unidentified specimen";
+  return `<div class="portrait">
+      <img src="cats/${slug}.jpg" alt="${esc(reveal ? breed.name : "Cat specimen")}" />
+      <div class="cap">
+        <p class="kicker">${kicker}</p>
+        <p class="name">${esc(label)}</p>
+      </div>
     </div>`;
 }
+
 
 const state = {
   screen: "hub",
@@ -423,9 +363,7 @@ function play() {
     </section>`;
   const pCard = `
     <section class="card" style="order:${portraitFirst ? 1 : 2};display:flex;flex-direction:column;align-items:center">
-      ${portraitSVG(breed, state.mode === "temperament" || state.answered)}
-      <p class="kicker" style="margin-top:0.75rem">${state.mode === "identity" && !state.answered ? "Unidentified specimen" : "Breed identification"}</p>
-      <p style="margin-top:0.25rem;font-family:var(--display);font-size:1.25rem">${state.mode === "identity" && !state.answered ? "Name this cat" : esc(breed.name)}</p>
+      ${photoCard(breed, state.mode === "temperament" || state.answered)}
     </section>`;
   return `
     <div class="play">
