@@ -1,396 +1,1800 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Woodshop Simulation</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
-  body { background: #111418; color: #fff; font-family: sans-serif; overflow: hidden; width: 100vw; height: 100vh; }
-  #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
-  #ui-overlay { position: absolute; top: 16px; left: 16px; z-index: 10; pointer-events: none; }
-  .title-card { background: rgba(20,24,30,0.9); padding: 12px 18px; border-radius: 8px; border: 1px solid #d4a373; pointer-events: auto; }
-  .title-card h1 { font-size: 1.1rem; color: #d4a373; margin-bottom: 4px; }
-  .title-card p { font-size: 0.8rem; color: #aaa; }
-  #controls-card { position: absolute; top: 16px; right: 16px; z-index: 10; background: rgba(20,24,30,0.92); border: 1px solid #d4a373; border-radius: 8px; padding: 14px; width: 280px; }
-  #controls-card h2 { font-size: 0.95rem; color: #f4a261; margin-bottom: 10px; }
-  .control-row { margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
-  .control-row label { font-size: 0.75rem; color: #ccc; display: flex; justify-content: space-between; }
-  .control-row input[type="range"] { width: 100%; accent-color: #d4a373; cursor: pointer; }
-  .btn { width: 100%; background: #d4a373; color: #111; border: none; padding: 8px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 0.8rem; margin-top: 6px; }
-  .btn:hover { background: #e76f51; color: #fff; }
-  .btn.active { background: #2a9d8f; color: #fff; }
-  #hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.7); padding: 6px 14px; border-radius: 20px; font-size: 0.75rem; color: #aaa; z-index: 10; }
-</style>
-<!-- Three.js and OrbitControls via CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Le Défi des Idiomes Français | French Idioms Arcade</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-gold: #e5b95c;
+      --primary-gold-hover: #f3ce7a;
+      --gold-border: rgba(229, 185, 92, 0.4);
+      --bg-dark: #0d131a;
+      --card-bg: rgba(15, 23, 36, 0.85);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-green: #2ecc71;
+      --accent-red: #e74c3c;
+      --accent-blue: #3498db;
+      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
+      --font-serif: 'Cinzel', Georgia, 'Times New Roman', serif;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Background Layers for Smooth Crossfade */
+    #bg-layer-1, #bg-layer-2 {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1), transform 12s ease-out;
+      z-index: -3;
+      transform: scale(1.02);
+    }
+
+    #bg-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: radial-gradient(circle at center, rgba(13, 19, 26, 0.65) 0%, rgba(8, 12, 18, 0.88) 100%);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: -2;
+    }
+
+    /* Scenery indicator badge */
+    .scenery-badge {
+      position: fixed;
+      bottom: 16px;
+      right: 20px;
+      background: rgba(15, 23, 36, 0.75);
+      border: 1px solid var(--gold-border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      color: var(--primary-gold);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .scenery-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary-gold);
+      box-shadow: 0 0 8px var(--primary-gold);
+    }
+
+    #app-container {
+      width: 100%;
+      max-width: 900px;
+      padding: 24px;
+      margin: auto;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .top-nav {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 12px 20px;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand-title {
+      font-family: var(--font-serif);
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--primary-gold);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: 1px;
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-nav {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #e2e8f0;
+      padding: 7px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-nav:hover, .btn-nav.active {
+      background: rgba(229, 185, 92, 0.2);
+      border-color: var(--primary-gold);
+      color: var(--primary-gold-hover);
+    }
+
+    .panel {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(16px);
+      display: none;
+      animation: fadeIn 0.4s ease-out forwards;
+    }
+    .panel.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .game-hero {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .game-hero h1 {
+      font-family: var(--font-serif);
+      font-size: 2.3rem;
+      color: var(--primary-gold);
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+      text-shadow: 0 2px 10px rgba(229, 185, 92, 0.3);
+    }
+    .game-hero p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+      margin-bottom: 28px;
+    }
+
+    .mode-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+    .mode-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--primary-gold);
+      background: rgba(229, 185, 92, 0.08);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+    }
+    .mode-icon {
+      font-size: 2rem;
+      margin-bottom: 12px;
+      color: var(--primary-gold);
+    }
+    .mode-card h3 {
+      font-family: var(--font-serif);
+      font-size: 1.2rem;
+      margin-bottom: 6px;
+      color: #fff;
+    }
+    .mode-card p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .settings-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      background: rgba(0,0,0,0.25);
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .setting-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+    .setting-group label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .setting-select {
+      background: #1a2332;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 8px;
+      outline: none;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .quiz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .progress-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .q-counter {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--primary-gold);
+      font-weight: 700;
+    }
+    .bg-info-text {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .score-stats {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .stat-pill {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .stat-pill.streak {
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary-gold), #ffd166);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .question-box {
+      text-align: center;
+      margin-bottom: 28px;
+      padding: 24px 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 16px;
+      border: 1px solid rgba(229, 185, 92, 0.25);
+      position: relative;
+    }
+    .prompt-label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .prompt-text {
+      font-family: var(--font-serif);
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.35;
+      margin-bottom: 12px;
+    }
+    .audio-btn {
+      background: rgba(229, 185, 92, 0.15);
+      border: 1px solid var(--primary-gold);
+      color: var(--primary-gold);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .audio-btn:hover {
+      background: var(--primary-gold);
+      color: #0d131a;
+    }
+
+    .choices-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 680px) {
+      .choices-grid { grid-template-columns: 1fr; }
+    }
+
+    .choice-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 18px 20px;
+      color: #f1f5f9;
+      font-size: 1.02rem;
+      font-family: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      line-height: 1.35;
+    }
+    .choice-key {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--primary-gold);
+      flex-shrink: 0;
+    }
+    .choice-btn:hover:not(.disabled) {
+      background: rgba(229, 185, 92, 0.12);
+      border-color: var(--primary-gold);
+      transform: translateY(-2px);
+    }
+    .choice-btn.correct {
+      background: rgba(46, 204, 113, 0.25) !important;
+      border-color: var(--accent-green) !important;
+      color: #2ecc71 !important;
+      font-weight: 600;
+    }
+    .choice-btn.wrong {
+      background: rgba(231, 76, 60, 0.25) !important;
+      border-color: var(--accent-red) !important;
+      color: #e74c3c !important;
+    }
+    .choice-btn.disabled {
+      cursor: default;
+      opacity: 0.7;
+    }
+    .choice-btn.eliminated {
+      opacity: 0.2;
+      pointer-events: none;
+    }
+
+    .feedback-banner {
+      display: none;
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      animation: fadeIn 0.3s ease;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .feedback-banner.correct {
+      display: flex;
+      background: rgba(46, 204, 113, 0.15);
+      border: 1px solid var(--accent-green);
+      color: #a7f3d0;
+    }
+    .feedback-banner.wrong {
+      display: flex;
+      background: rgba(231, 76, 60, 0.15);
+      border: 1px solid var(--accent-red);
+      color: #fecaca;
+    }
+    .feedback-text h4 {
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+    .feedback-text p {
+      font-size: 0.88rem;
+      opacity: 0.9;
+    }
+
+    .action-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .lifelines {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-lifeline {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-lifeline:hover:not(:disabled) {
+      border-color: var(--primary-gold);
+      color: var(--primary-gold);
+    }
+    .btn-lifeline:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary-gold), #d4a036);
+      border: none;
+      color: #0d131a;
+      font-weight: 700;
+      font-size: 1rem;
+      padding: 12px 28px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px rgba(229, 185, 92, 0.35);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(229, 185, 92, 0.5);
+    }
+
+    /* Matching Pairs Game Panel */
+    .match-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .match-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px 14px;
+      font-size: 0.95rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 70px;
+      line-height: 1.3;
+    }
+    .match-card:hover {
+      border-color: var(--primary-gold);
+      background: rgba(229, 185, 92, 0.1);
+    }
+    .match-card.selected {
+      border-color: var(--primary-gold);
+      background: rgba(229, 185, 92, 0.25);
+      box-shadow: 0 0 12px rgba(229, 185, 92, 0.4);
+      transform: scale(1.02);
+    }
+    .match-card.matched {
+      background: rgba(46, 204, 113, 0.2);
+      border-color: var(--accent-green);
+      color: #2ecc71;
+      opacity: 0.6;
+      cursor: default;
+      pointer-events: none;
+    }
+    .match-card.error {
+      background: rgba(231, 76, 60, 0.25);
+      border-color: var(--accent-red);
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-6px); }
+      40%, 80% { transform: translateX(6px); }
+    }
+
+    /* Flashcard Panel */
+    .flashcard-wrapper {
+      perspective: 1000px;
+      width: 100%;
+      max-width: 600px;
+      height: 320px;
+      margin: 0 auto 24px;
+      cursor: pointer;
+    }
+    .flashcard-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      text-align: center;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-style: preserve-3d;
+    }
+    .flashcard-wrapper.flipped .flashcard-inner {
+      transform: rotateY(180deg);
+    }
+    .flashcard-face {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 20px;
+      padding: 32px 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(18, 26, 40, 0.9);
+      border: 2px solid var(--gold-border);
+      box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+    }
+    .flashcard-back {
+      transform: rotateY(180deg);
+      background: rgba(25, 34, 52, 0.95);
+    }
+    .flashcard-face h3 {
+      font-family: var(--font-serif);
+      font-size: 1.8rem;
+      color: #fff;
+      margin-bottom: 12px;
+      line-height: 1.35;
+    }
+    .flashcard-face p {
+      color: var(--primary-gold);
+      font-size: 1.25rem;
+      font-weight: 500;
+    }
+    .card-hint {
+      position: absolute;
+      bottom: 16px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Study Library / Glossary Table */
+    .glossary-controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 240px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 10px 16px;
+      border-radius: 10px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+    .search-input:focus { border-color: var(--primary-gold); }
+
+    .glossary-table-container {
+      max-height: 480px;
+      overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+    }
+    .glossary-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    .glossary-table th {
+      background: rgba(15, 23, 36, 0.95);
+      position: sticky;
+      top: 0;
+      padding: 14px 18px;
+      color: var(--primary-gold);
+      font-family: var(--font-serif);
+      font-size: 0.95rem;
+      border-bottom: 2px solid var(--gold-border);
+      z-index: 2;
+    }
+    .glossary-table td {
+      padding: 12px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 0.92rem;
+    }
+    .glossary-table tr:hover {
+      background: rgba(229, 185, 92, 0.06);
+    }
+    .glossary-fr {
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .glossary-en { color: #cbd5e1; }
+    .table-speak-btn {
+      background: transparent;
+      border: none;
+      color: var(--primary-gold);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 2px 4px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    .table-speak-btn:hover { opacity: 1; }
+
+    /* Results */
+    .results-card {
+      text-align: center;
+      padding: 20px 10px;
+    }
+    .result-rank {
+      font-family: var(--font-serif);
+      font-size: 2.2rem;
+      color: var(--primary-gold);
+      margin-bottom: 8px;
+    }
+    .result-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 14px;
+      margin: 24px 0 32px;
+    }
+    .stat-box {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 16px;
+      border-radius: 12px;
+    }
+    .stat-box .val {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .stat-box .lbl {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .mistakes-list {
+      text-align: left;
+      margin-bottom: 24px;
+      background: rgba(0,0,0,0.25);
+      border-radius: 12px;
+      padding: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .mistake-item {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 600px) {
+      #app-container { padding: 12px; }
+      .panel { padding: 20px 16px; }
+      .prompt-text { font-size: 1.35rem; }
+      .game-hero h1 { font-size: 1.7rem; }
+    }
+  </style>
 </head>
 <body>
 
-<div id="canvas-container"></div>
+  <!-- Dynamic Backgrounds -->
+  <div id="bg-layer-1"></div>
+  <div id="bg-layer-2" style="opacity: 0;"></div>
+  <div id="bg-overlay"></div>
 
-<div id="ui-overlay">
-  <div class="title-card">
-    <h1>3D Virtual Woodshop</h1>
-    <p>Cabinet Table Saw & Roubo Workbench</p>
-  </div>
-</div>
-
-<div id="controls-card">
-  <h2>Machine Controls</h2>
-  
-  <div class="control-row">
-    <button class="btn" id="btn-motor" onclick="toggleSawMotor()">Start Table Saw Motor</button>
-  </div>
-  
-  <div class="control-row">
-    <label><span>Blade Height</span><span id="txt-blade-h">1.2 in</span></label>
-    <input type="range" min="0" max="100" value="50" oninput="updateBladeHeight(this.value)">
-  </div>
-  
-  <div class="control-row">
-    <label><span>Blade Tilt Angle</span><span id="txt-blade-tilt">0.0&deg;</span></label>
-    <input type="range" min="0" max="45" value="0" oninput="updateBladeTilt(this.value)">
+  <!-- Scenery Badge -->
+  <div class="scenery-badge" id="sceneryBadge">
+    <div class="scenery-dot"></div>
+    <span id="sceneryLabel">Lac de Gérardmer (Vosges)</span>
   </div>
 
-  <div class="control-row">
-    <label><span>Rip Fence Position</span><span id="txt-fence-pos">6.0 in</span></label>
-    <input type="range" min="0" max="100" value="35" oninput="updateFencePosition(this.value)">
+  <div id="app-container">
+    <nav class="top-nav">
+      <div class="brand-title">
+        <span>⚜️</span>
+        <span>Idiomes Français</span>
+      </div>
+      <div class="nav-buttons">
+        <button class="btn-nav active" id="navHomeBtn" onclick="showPanel('homePanel')">🏠 Accueil</button>
+        <button class="btn-nav" id="navStudyBtn" onclick="showPanel('glossaryPanel')">📖 Glossaire (193)</button>
+        <button class="btn-nav" id="soundToggleBtn" onclick="toggleAudio()"><span id="soundIcon">🔊</span> Son</button>
+      </div>
+    </nav>
+
+    <!-- 1. HOME PANEL -->
+    <div id="homePanel" class="panel active">
+      <div class="game-hero">
+        <h1>Le Grand Quiz des Idiomes</h1>
+        <p>Maîtrisez 193 expressions idiomatiques et proverbes français à travers des paysages emblématiques.</p>
+      </div>
+
+      <div class="settings-row">
+        <div class="setting-group">
+          <label for="gameDirection">Mode de Question :</label>
+          <select id="gameDirection" class="setting-select">
+            <option value="fr-to-en">Français ➔ Signification Anglaise</option>
+            <option value="en-to-fr">Anglais ➔ Expression Française</option>
+            <option value="mixed">Aléatoire / Mixte</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label for="questionCount">Longueur :</label>
+          <select id="questionCount" class="setting-select">
+            <option value="12">12 Questions (Rapide)</option>
+            <option value="20" selected>20 Questions (Standard)</option>
+            <option value="40">40 Questions (Avancé)</option>
+            <option value="193">193 Expressions (Marathon Complet)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mode-grid">
+        <div class="mode-card" onclick="startQuiz('classic')">
+          <div class="mode-icon">🎯</div>
+          <h3>Quiz Classique</h3>
+          <p>Questions à choix multiples à votre rythme avec rotation automatique des décors toutes les 4 questions.</p>
+        </div>
+
+        <div class="mode-card" onclick="startQuiz('timeAttack')">
+          <div class="mode-icon">⚡</div>
+          <h3>Contre-la-Montre</h3>
+          <p>60 secondes pour répondre au plus grand nombre d'idiomes. +2s par bonne réponse !</p>
+        </div>
+
+        <div class="mode-card" onclick="startMatchingGame()">
+          <div class="mode-icon">🧩</div>
+          <h3>Jeu des Paires</h3>
+          <p>Associez les expressions françaises à leurs équivalents anglais sur une grille interactive.</p>
+        </div>
+
+        <div class="mode-card" onclick="startFlashcards()">
+          <div class="mode-icon">🗂️</div>
+          <h3>Cartes Mémoire</h3>
+          <p>Étudiez chaque expression avec audio haute fidélité et retournez la carte pour vérifier le sens.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. QUIZ PANEL -->
+    <div id="quizPanel" class="panel">
+      <div class="quiz-header">
+        <div class="progress-info">
+          <span class="q-counter" id="quizCounter">Question 1 / 20</span>
+          <span class="bg-info-text" id="quizBgRotationNote">Décor 1/8 (Change toutes les 4 questions)</span>
+        </div>
+        <div class="score-stats">
+          <div class="stat-pill" id="timePill" style="display:none;">⏳ <span id="timerText">60s</span></div>
+          <div class="stat-pill streak">🔥 <span id="streakText">0</span></div>
+          <div class="stat-pill">⭐ <span id="scoreText">0</span></div>
+        </div>
+      </div>
+
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" id="progressBarFill"></div>
+      </div>
+
+      <div class="question-box">
+        <div class="prompt-label" id="promptLabel">Expression Française</div>
+        <div class="prompt-text" id="promptText">...</div>
+        <button class="audio-btn" id="audioSpeakBtn" onclick="speakCurrentPrompt()">
+          <span>🗣️</span> Écouter la prononciation
+        </button>
+      </div>
+
+      <div class="choices-grid" id="choicesGrid"></div>
+
+      <div class="feedback-banner" id="feedbackBanner">
+        <div class="feedback-text">
+          <h4 id="feedbackTitle">Correct !</h4>
+          <p id="feedbackDetail">Excellente déduction.</p>
+        </div>
+        <button class="btn-primary" id="nextQuestionBtn" onclick="nextQuestion()">Suivant ➔</button>
+      </div>
+
+      <div class="action-row" id="quizActionRow">
+        <div class="lifelines">
+          <button class="btn-lifeline" id="btn5050" onclick="use5050()">✂️ 50 / 50</button>
+          <button class="btn-lifeline" id="btnSkip" onclick="useSkip()">⏭️ Passer</button>
+        </div>
+        <button class="btn-nav" onclick="quitToHome()">Quitter</button>
+      </div>
+    </div>
+
+    <!-- 3. MATCHING PAIRS PANEL -->
+    <div id="matchingPanel" class="panel">
+      <div class="quiz-header">
+        <div class="progress-info">
+          <span class="q-counter" id="matchRoundCounter">Tour de Correspondance 1</span>
+          <span class="bg-info-text">Associez chaque expression à son sens exact</span>
+        </div>
+        <div class="score-stats">
+          <div class="stat-pill">✨ Matches: <span id="matchCount">0</span> / 6</div>
+          <div class="stat-pill">⭐ <span id="matchScore">0</span></div>
+        </div>
+      </div>
+
+      <div class="match-grid" id="matchGrid"></div>
+
+      <div class="action-row">
+        <button class="btn-nav" onclick="quitToHome()">Quitter</button>
+        <button class="btn-primary" id="btnNextMatchRound" style="display:none;" onclick="setupMatchRound()">Tour Suivant ➔</button>
+      </div>
+    </div>
+
+    <!-- 4. FLASHCARD PANEL -->
+    <div id="flashcardPanel" class="panel">
+      <div class="quiz-header">
+        <div class="progress-info">
+          <span class="q-counter" id="flashCounter">Carte 1 / 193</span>
+          <span class="bg-info-text">Cliquez sur la carte pour la retourner</span>
+        </div>
+        <div class="score-stats">
+          <div class="stat-pill">✅ Maîtrisés : <span id="masteredCount">0</span></div>
+        </div>
+      </div>
+
+      <div class="flashcard-wrapper" id="flashcardElement" onclick="flipFlashcard()">
+        <div class="flashcard-inner">
+          <div class="flashcard-face flashcard-front">
+            <span class="prompt-label">Expression Française</span>
+            <h3 id="flashFrText">...</h3>
+            <button class="audio-btn" onclick="event.stopPropagation(); speakText(currentFlashcard.french)">
+              <span>🗣️</span> Écouter
+            </button>
+            <span class="card-hint">Cliquer pour révéler le sens anglais</span>
+          </div>
+          <div class="flashcard-face flashcard-back">
+            <span class="prompt-label">Sens Anglais</span>
+            <p id="flashEnText">...</p>
+            <span class="card-hint">Cliquer pour retourner</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row" style="justify-content: center; gap: 14px;">
+        <button class="btn-nav" onclick="prevFlashcard()">⬅️ Précédent</button>
+        <button class="btn-nav" style="border-color: var(--accent-green); color: var(--accent-green);" onclick="toggleMasteredCurrent()">
+          <span id="masteredIcon">⭐</span> Mémorisé
+        </button>
+        <button class="btn-primary" onclick="nextFlashcard()">Suivant ➔</button>
+      </div>
+      <div style="text-align: center; margin-top: 20px;">
+        <button class="btn-nav" style="margin: 0 auto;" onclick="quitToHome()">Retour à l'accueil</button>
+      </div>
+    </div>
+
+    <!-- 5. GLOSSARY / STUDY PANEL -->
+    <div id="glossaryPanel" class="panel">
+      <div class="game-hero" style="margin-bottom: 18px;">
+        <h2>Glossaire Intégral des 193 Expressions</h2>
+        <p>Consultez, recherchez et écoutez l'ensemble des expressions et proverbes.</p>
+      </div>
+
+      <div class="glossary-controls">
+        <input type="text" id="glossarySearch" class="search-input" placeholder="🔍 Rechercher en français ou en anglais..." oninput="filterGlossary()">
+      </div>
+
+      <div class="glossary-table-container">
+        <table class="glossary-table">
+          <thead>
+            <tr>
+              <th style="width: 48%;">Expression Française</th>
+              <th style="width: 44%;">Sens Anglais</th>
+              <th style="width: 8%; text-align: center;">Audio</th>
+            </tr>
+          </thead>
+          <tbody id="glossaryTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="action-row" style="margin-top: 20px;">
+        <button class="btn-nav" onclick="quitToHome()">⬅️ Retour à l'Accueil</button>
+        <button class="btn-primary" onclick="startQuiz('classic')">Lancer un Quiz ➔</button>
+      </div>
+    </div>
+
+    <!-- 6. RESULTS PANEL -->
+    <div id="resultsPanel" class="panel">
+      <div class="results-card">
+        <div class="result-rank" id="resultRankTitle">Grand Maître de la Langue</div>
+        <p style="color: var(--text-muted); font-size: 1.05rem;" id="resultSubtitle">Félicitations pour votre session !</p>
+
+        <div class="result-stats-grid">
+          <div class="stat-box">
+            <div class="val" id="resScore">0</div>
+            <div class="lbl">Score Total</div>
+          </div>
+          <div class="stat-box">
+            <div class="val" id="resAccuracy">0%</div>
+            <div class="lbl">Précision</div>
+          </div>
+          <div class="stat-box">
+            <div class="val" id="resBestStreak">0</div>
+            <div class="lbl">Meilleure Série</div>
+          </div>
+          <div class="stat-box">
+            <div class="val" id="resQuestionsDone">0</div>
+            <div class="lbl">Questions Répondues</div>
+          </div>
+        </div>
+
+        <div id="mistakesSection" style="display:none;">
+          <h4 style="text-align: left; margin-bottom: 8px; color: var(--primary-gold);">Expressions à réviser :</h4>
+          <div class="mistakes-list" id="mistakesList"></div>
+        </div>
+
+        <div class="action-row" style="justify-content: center; gap: 16px;">
+          <button class="btn-nav" onclick="quitToHome()">🏠 Menu Principal</button>
+          <button class="btn-primary" id="btnRetryMissed" style="display:none;" onclick="retryMissedOnly()">🔄 Rejouer les erreurs</button>
+          <button class="btn-primary" onclick="restartQuiz()">Rejouer une partie ➔</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <hr style="border:0; border-top:1px solid #333; margin:10px 0;">
+  <script>
+    // Embedded Idioms Database (193 items)
+    const IDIOMS = [
+      {"french": "À chaque jour suffit sa peine", "english": "Deal with today's troubles today"},
+      {"french": "À cœur vaillant, rien d’impossible", "english": "Nothing is impossible to a determined person"},
+      {"french": "À la longue", "english": "In the long run"},
+      {"french": "À quelque chose malheur est bon", "english": "Some good can come from misfortune"},
+      {"french": "À tout bout de champ", "english": "Constantly; every five minutes"},
+      {"french": "À vue de nez", "english": "Roughly; at a guess"},
+      {"french": "Aller au charbon", "english": "Tackle the hard/unpleasant work"},
+      {"french": "Appeler un chat un chat", "english": "To call a spade a spade"},
+      {"french": "Après la pluie, le beau temps", "english": "Every cloud has a silver lining"},
+      {"french": "Arrondir les angles", "english": "Smooth things over"},
+      {"french": "Au pied levé", "english": "At very short notice"},
+      {"french": "Avaler des couleuvres", "english": "To swallow an insult or humiliation"},
+      {"french": "Avoir beau faire", "english": "To do something in vain, however much one tries"},
+      {"french": "Avoir bon dos", "english": "To be an easy scapegoat"},
+      {"french": "Avoir de la bouteille", "english": "To have experience"},
+      {"french": "Avoir du bol", "english": "To be lucky"},
+      {"french": "Avoir du pain sur la planche", "english": "To have a lot on one’s plate; have a lot of work ahead"},
+      {"french": "Avoir la dalle", "english": "To be very hungry (slang)"},
+      {"french": "Avoir la frite", "english": "To feel lively and cheerful"},
+      {"french": "Avoir la gueule de bois", "english": "To have a hangover"},
+      {"french": "Avoir la langue bien pendue", "english": "To be very talkative"},
+      {"french": "Avoir la main verte", "english": "To have a talent for gardening"},
+      {"french": "Avoir la pêche", "english": "To feel energetic, be in great form"},
+      {"french": "Avoir la tête dans le guidon", "english": "To be too absorbed to see the bigger picture; be so busy you lose perspective"},
+      {"french": "Avoir la tête sur les épaules", "english": "To be sensible and level-headed"},
+      {"french": "Avoir le bras long", "english": "To have influence or connections"},
+      {"french": "Avoir le cafard", "english": "To feel down, have the blues"},
+      {"french": "Avoir le dernier mot", "english": "Have the final say"},
+      {"french": "Avoir le nez creux", "english": "To have good instincts, foresight, or intuition"},
+      {"french": "Avoir les dents longues", "english": "To be highly ambitious"},
+      {"french": "Avoir les épaules pour", "english": "Have the ability or character required"},
+      {"french": "Avoir les nerfs", "english": "To be angry or fed up"},
+      {"french": "Avoir les reins solides", "english": "Have enough resources or strength to withstand something"},
+      {"french": "Avoir les yeux plus gros que le ventre", "english": "To take more than one can handle"},
+      {"french": "Avoir plusieurs cordes à son arc", "english": "Possess several useful skills"},
+      {"french": "Avoir quelqu’un dans le nez", "english": "Strongly dislike someone"},
+      {"french": "Avoir son mot à dire", "english": "To have a say"},
+      {"french": "Avoir un chat dans la poche", "english": "To be unable to speak up, especially from shyness"},
+      {"french": "Avoir un poil dans la main", "english": "To be extremely lazy"},
+      {"french": "Bien mal acquis ne profite jamais", "english": "Ill-gotten gains bring no good"},
+      {"french": "Bon gré mal gré", "english": "Willingly or unwillingly"},
+      {"french": "C’est en forgeant qu’on devient forgeron", "english": "Practice makes perfect"},
+      {"french": "Ça ne casse pas trois pattes à un canard", "english": "It is nothing special or extraordinary"},
+      {"french": "Ça ne mange pas de pain", "english": "It costs nothing to try"},
+      {"french": "Casser du sucre sur le dos de quelqu’un", "english": "To gossip or criticize behind someone’s back"},
+      {"french": "Casser la baraque", "english": "To be a huge success; knock it out of the park"},
+      {"french": "Casser la croûte", "english": "To grab a bite to eat"},
+      {"french": "Casser les pieds à quelqu’un", "english": "To annoy someone intensely"},
+      {"french": "Ce n’est pas la mer à boire", "english": "It is not that difficult"},
+      {"french": "Changer son fusil d’épaule", "english": "Change strategy"},
+      {"french": "Chassez le naturel, il revient au galop", "english": "A person’s true nature soon returns"},
+      {"french": "Chercher midi à quatorze heures", "english": "To unnecessarily overcomplicate something"},
+      {"french": "Couper l’herbe sous le pied de quelqu’un", "english": "Pre-empt someone"},
+      {"french": "Couper les cheveux en quatre", "english": "Split hairs"},
+      {"french": "Coûter les yeux de la tête", "english": "To cost a fortune"},
+      {"french": "Cracher dans la soupe", "english": "To criticize something one benefits from"},
+      {"french": "Damer le pion à quelqu’un", "english": "Outdo or get ahead of someone"},
+      {"french": "De but en blanc", "english": "Abruptly, without preparation"},
+      {"french": "De fil en aiguille", "english": "One thing leading to another"},
+      {"french": "Donner sa langue au chat", "english": "To give up guessing"},
+      {"french": "Du jour au lendemain", "english": "Suddenly; overnight"},
+      {"french": "En deux temps trois mouvements", "english": "Very quickly"},
+      {"french": "En faire tout un fromage", "english": "To make a mountain out of a molehill"},
+      {"french": "Enfoncer des portes ouvertes", "english": "Labor an obvious point"},
+      {"french": "Être à côté de la plaque", "english": "To be completely off the mark"},
+      {"french": "Être au bout du rouleau", "english": "To be exhausted or at the end of one’s rope"},
+      {"french": "Être au pied du mur", "english": "Have no choice but to act"},
+      {"french": "Être au taquet", "english": "To be at full capacity; highly motivated"},
+      {"french": "Être comme chien et chat", "english": "To fight constantly"},
+      {"french": "Être dans de beaux draps", "english": "To be in a mess or difficult situation"},
+      {"french": "Être dans le même bateau", "english": "To be in the same situation"},
+      {"french": "Être dans le pétrin", "english": "To be in a jam or trouble"},
+      {"french": "Être dans le rouge", "english": "To be overdrawn or in debt"},
+      {"french": "Être fauché comme les blés", "english": "To be broke"},
+      {"french": "Être sur la même longueur d’onde", "english": "To be on the same wavelength"},
+      {"french": "Être sur son trente-et-un", "english": "To be dressed to the nines"},
+      {"french": "Être tiré à quatre épingles", "english": "To be impeccably dressed"},
+      {"french": "Faire avec les moyens du bord", "english": "Make do with what is available"},
+      {"french": "Faire cavalier seul", "english": "Go it alone"},
+      {"french": "Faire chou blanc", "english": "To come away empty-handed; fail completely in an attempt"},
+      {"french": "Faire contre mauvaise fortune bon cœur", "english": "To make the best of a bad situation"},
+      {"french": "Faire d’une pierre deux coups", "english": "To kill two birds with one stone"},
+      {"french": "Faire des pieds et des mains", "english": "Go to great lengths"},
+      {"french": "Faire faux bond à quelqu’un", "english": "To let someone down; fail to show"},
+      {"french": "Faire l’autruche", "english": "To bury one’s head in the sand"},
+      {"french": "Faire la part des choses", "english": "Judge things in proper perspective"},
+      {"french": "Faire la pluie et le beau temps", "english": "To call all the shots"},
+      {"french": "Faire la sourde oreille", "english": "To turn a deaf ear; deliberately ignore something"},
+      {"french": "Faire mouche", "english": "Hit the mark exactly"},
+      {"french": "Faire profil bas", "english": "Keep a low profile"},
+      {"french": "Faire une gaffe", "english": "To make a blunder"},
+      {"french": "Faire une tête d’enterrement", "english": "To look miserable or gloomy"},
+      {"french": "Faute avouée est à moitié pardonnée", "english": "A confessed fault is half forgiven"},
+      {"french": "Il n’y a que le premier pas qui coûte", "english": "Starting is the hardest part"},
+      {"french": "Il y a anguille sous roche", "english": "Something suspicious is going on"},
+      {"french": "Jeter de l’huile sur le feu", "english": "Make a conflict worse"},
+      {"french": "Jeter l’argent par les fenêtres", "english": "To throw money away"},
+      {"french": "Jouer cartes sur table", "english": "Be completely open about one’s intentions"},
+      {"french": "L’occasion fait le larron", "english": "Opportunity can tempt people into wrongdoing"},
+      {"french": "Le mieux est l’ennemi du bien", "english": "Pursuing perfection can ruin something already good"},
+      {"french": "Les absents ont toujours tort", "english": "Those absent cannot defend their interests"},
+      {"french": "Les conseilleurs ne sont pas les payeurs", "english": "People giving advice don't bear its consequences"},
+      {"french": "Les dés sont jetés", "english": "The die is cast; the decision is irreversible"},
+      {"french": "Les promesses n’engagent que ceux qui les écoutent", "english": "Promises bind only those foolish enough to believe them"},
+      {"french": "Lire entre les lignes", "english": "Understand what is implied"},
+      {"french": "Manger les pissenlits par la racine", "english": "To be dead and buried"},
+      {"french": "Manger son chapeau", "english": "To eat one’s words"},
+      {"french": "Ménager la chèvre et le chou", "english": "Try to satisfy opposing sides"},
+      {"french": "Mettre de l’eau dans son vin", "english": "To moderate one’s position, demands, or tone; compromise"},
+      {"french": "Mettre des bâtons dans les roues", "english": "Obstruct someone"},
+      {"french": "Mettre du beurre dans les épinards", "english": "To earn useful extra money"},
+      {"french": "Mettre la barre haut", "english": "Set a high standard"},
+      {"french": "Mettre la charrue avant les bœufs", "english": "To put the cart before the horse; do things in the wrong order"},
+      {"french": "Mettre la main à la pâte", "english": "To pitch in"},
+      {"french": "Mettre les bouchées doubles", "english": "To step things up; work twice as hard"},
+      {"french": "Mettre les mains dans le cambouis", "english": "Get personally involved in practical work"},
+      {"french": "Mettre les pieds dans le plat", "english": "To blunder into a sensitive subject; bring up something awkward bluntly"},
+      {"french": "Mettre les points sur les i", "english": "Make matters completely clear"},
+      {"french": "Mettre les voiles", "english": "To leave quickly"},
+      {"french": "Mettre quelqu’un au pied du mur", "english": "To force someone to make a decision"},
+      {"french": "Mettre quelqu’un dans le bain", "english": "To get someone started or up to speed"},
+      {"french": "Mettre quelqu’un devant le fait accompli", "english": "Confront someone with an irreversible situation"},
+      {"french": "Mettre un coup de collier", "english": "Make a strong concerted effort"},
+      {"french": "Mieux vaut prévenir que guérir", "english": "Better safe than sorry"},
+      {"french": "Mine de rien", "english": "Casually; without seeming to"},
+      {"french": "Monter sur ses grands chevaux", "english": "Become indignant or overreact"},
+      {"french": "Mordre la poussière", "english": "To suffer defeat"},
+      {"french": "Ne pas avoir sa langue dans sa poche", "english": "Be outspoken"},
+      {"french": "Ne pas en revenir", "english": "To be unable to believe it"},
+      {"french": "Ne pas être né de la dernière pluie", "english": "Not to have been born yesterday"},
+      {"french": "Ne pas être sorti de l’auberge", "english": "Not to be out of trouble yet; still have trouble ahead"},
+      {"french": "Ne pas mâcher ses mots", "english": "To speak very bluntly"},
+      {"french": "Ne pas y aller de main morte", "english": "Not hold back"},
+      {"french": "Ne plus savoir où donner de la tête", "english": "Be overwhelmed by too many things"},
+      {"french": "Ni vu ni connu", "english": "Unnoticed; as if nothing happened"},
+      {"french": "Noyer le poisson", "english": "To muddy the waters; dodge an issue or evade a question"},
+      {"french": "Nul n’est prophète en son pays", "english": "No one is appreciated in their own hometown"},
+      {"french": "On ne fait pas d’omelette sans casser des œufs", "english": "You cannot make progress without some cost"},
+      {"french": "On ne peut pas être au four et au moulin", "english": "You cannot be in two places or do everything at once"},
+      {"french": "On reconnaît l’arbre à ses fruits", "english": "You know a person by their actions"},
+      {"french": "Parler à tort et à travers", "english": "Talk indiscriminately or nonsensically"},
+      {"french": "Parler pour ne rien dire", "english": "To talk without saying anything useful"},
+      {"french": "Passer à la casserole", "english": "To undergo an unpleasant or unavoidable ordeal"},
+      {"french": "Passer du coq à l’âne", "english": "To jump abruptly between topics"},
+      {"french": "Passer l’éponge", "english": "To forgive and forget"},
+      {"french": "Passer un savon à quelqu’un", "english": "To give someone a telling-off"},
+      {"french": "Perdre la boule", "english": "To lose one’s mind or get confused"},
+      {"french": "Perdre le fil", "english": "To lose one’s train of thought; lose track of what is happening"},
+      {"french": "Perdre pied", "english": "Lose control of a situation"},
+      {"french": "Petit à petit, l’oiseau fait son nid", "english": "Little by little, one gets there"},
+      {"french": "Prendre au pied de la lettre", "english": "Interpret literally"},
+      {"french": "Prendre de la bouteille", "english": "To improve or gain character with age"},
+      {"french": "Prendre des vessies pour des lanternes", "english": "Be fooled into mistaking one thing for another"},
+      {"french": "Prendre du recul", "english": "Step back and gain perspective"},
+      {"french": "Prendre la grosse tête", "english": "To become conceited"},
+      {"french": "Prendre la mouche", "english": "To suddenly take offense easily"},
+      {"french": "Prendre la porte", "english": "To be fired or thrown out"},
+      {"french": "Prendre le problème à bras-le-corps", "english": "Tackle a problem head-on"},
+      {"french": "Prendre le taureau par les cornes", "english": "To tackle a problem head-on"},
+      {"french": "Prendre quelqu’un en grippe", "english": "Develop a dislike for someone"},
+      {"french": "Prendre quelqu’un pour une quiche", "english": "To take someone for a fool"},
+      {"french": "Prendre son mal en patience", "english": "To endure patiently; patiently endure something"},
+      {"french": "Qui ne tente rien n’a rien", "english": "Nothing ventured, nothing gained"},
+      {"french": "Qui se ressemble s’assemble", "english": "Birds of a feather flock together"},
+      {"french": "Qui trop embrasse mal étreint", "english": "Taking on too much means doing nothing well"},
+      {"french": "Raconter des salades", "english": "To tell tall tales or nonsense"},
+      {"french": "Remettre les pendules à l’heure", "english": "Set the record straight"},
+      {"french": "Remuer ciel et terre", "english": "Move heaven and earth"},
+      {"french": "Rester bouche bée", "english": "To be speechless"},
+      {"french": "Rester sur sa faim", "english": "Be left wanting more"},
+      {"french": "Retourner sa veste", "english": "Switch sides opportunistically"},
+      {"french": "Retrousser ses manches", "english": "Get down to work"},
+      {"french": "Revoir sa copie", "english": "Rethink or redo one’s approach"},
+      {"french": "Rien ne sert de courir, il faut partir à point", "english": "Slow and steady wins the race"},
+      {"french": "Se creuser la tête", "english": "To rack one’s brains; think very hard"},
+      {"french": "Se faire des cheveux blancs", "english": "To worry oneself sick"},
+      {"french": "Se faire rouler dans la farine", "english": "To get fooled or conned"},
+      {"french": "Se faire tirer l’oreille", "english": "Be reluctant to agree"},
+      {"french": "Se noyer dans un verre d’eau", "english": "To get overwhelmed by a minor difficulty"},
+      {"french": "Se serrer la ceinture", "english": "To tighten one’s belt"},
+      {"french": "Se serrer les coudes", "english": "Stick together and help one another"},
+      {"french": "Se tenir à carreau", "english": "To behave oneself; keep a low profile"},
+      {"french": "Tant bien que mal", "english": "As best one can; with difficulty"},
+      {"french": "Tel est pris qui croyait prendre", "english": "The trickster gets tricked"},
+      {"french": "Tenir la route", "english": "Stand up to scrutiny; be viable"},
+      {"french": "Tenir tête à quelqu’un", "english": "Stand up to someone"},
+      {"french": "Tirer les ficelles", "english": "Manipulate/control things behind the scenes"},
+      {"french": "Tirer son épingle du jeu", "english": "Manage to come out well"},
+      {"french": "Tirer un trait sur quelque chose", "english": "Give something up for good"},
+      {"french": "Tomber des nues", "english": "To be astonished"},
+      {"french": "Tourner autour du pot", "english": "To beat around the bush; avoid getting to the point"},
+      {"french": "Tout vient à point à qui sait attendre", "english": "Good things come to those who wait"},
+      {"french": "Un clou chasse l’autre", "english": "One thing, or person, replaces another"}
+    ];
 
-  <div class="control-row">
-    <label><span>Roubo Leg Vise</span><span id="txt-vise">Clamped</span></label>
-    <input type="range" min="0" max="100" value="75" oninput="updateLegVise(this.value)">
-  </div>
+    // Background Images & Captions
+    const BACKGROUNDS = [
+      {"file": "AdobeStock_371595300.jpeg", "caption": "Lac de Gérardmer (Vosges)"},
+      {"file": "AdobeStock_772361485.jpeg", "caption": "Remparts Médiévaux & Forêt"},
+      {"file": "AdobeStock_517782095-2.jpeg", "caption": "Château Gaillard & Vallée de Seine"},
+      {"file": "AdobeStock_465468909.jpeg", "caption": "Galerie en Arches de Pierre"},
+      {"file": "AdobeStock_311853217-2.jpeg", "caption": "Château des Milandes (Dordogne)"},
+      {"file": "AdobeStock_179506792-2.jpeg", "caption": "Château du Haut-Kœnigsbourg (Alsace)"},
+      {"file": "AdobeStock_357443719.jpeg", "caption": "Carte Historique de la Nouvelle-France (1664)"},
+      {"file": "AdobeStock_526629746.jpeg", "caption": "Sous-Bois Ensoleillé"}
+    ];
 
-  <div class="control-row">
-    <button class="btn" onclick="pushHandPlane()">Take Hand Plane Shaving</button>
-  </div>
-</div>
+    // Game State
+    let currentBgIndex = 0;
+    let activeBgLayer = 1;
+    let soundEnabled = true;
+    let audioCtx = null;
 
-<div id="hint">Click & Drag to Rotate Camera | Right-Click to Pan | Scroll to Zoom</div>
+    let quizMode = 'classic';
+    let sessionPool = [];
+    let currentQIndex = 0;
+    let score = 0;
+    let streak = 0;
+    let bestStreak = 0;
+    let correctCount = 0;
+    let answeredCount = 0;
+    let timerInterval = null;
+    let timeLeft = 60;
+    let missedQuestions = [];
+    let currentQuestionData = null;
+    let hasAnsweredCurrent = false;
 
-<script>
-window.addEventListener('DOMContentLoaded', () => {
-  // 1. Scene, Camera, Renderer
-  const container = document.getElementById('canvas-container');
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x14181f);
-  scene.fog = new THREE.FogExp2(0x14181f, 0.03);
+    let matchRound = 1;
+    let selectedFirst = null;
+    let matchedPairsCount = 0;
 
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(0, 7, 11);
+    let flashIndex = 0;
+    let currentFlashcard = null;
+    let masteredSet = new Set(JSON.parse(localStorage.getItem('french_idioms_mastered') || '[]'));
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
-  renderer.shadowMap.enabled = true;
-  container.appendChild(renderer.domElement);
-
-  const controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.maxPolarAngle = Math.PI / 2 - 0.01;
-  controls.target.set(0, 1.0, 0);
-
-  // 2. Lighting
-  const ambient = new THREE.AmbientLight(0xffeedd, 0.6);
-  scene.add(ambient);
-
-  const sun = new THREE.DirectionalLight(0xffffff, 0.85);
-  sun.position.set(8, 15, 6);
-  sun.castShadow = true;
-  scene.add(sun);
-
-  // Point lights over saw and bench
-  const p1 = new THREE.PointLight(0xffaa55, 0.8, 8);
-  p1.position.set(-2.8, 3.8, 0);
-  scene.add(p1);
-
-  const p2 = new THREE.PointLight(0xffaa55, 0.8, 8);
-  p2.position.set(2.8, 3.8, 0);
-  scene.add(p2);
-
-  // 3. Procedural Canvas Textures
-  function getWoodTex(c1, c2) {
-    const cv = document.createElement('canvas');
-    cv.width = 256; cv.height = 256;
-    const ctx = cv.getContext('2d');
-    ctx.fillStyle = c1; ctx.fillRect(0,0,256,256);
-    ctx.fillStyle = c2;
-    for (let y = 0; y < 256; y += 3) {
-      ctx.globalAlpha = (Math.sin(y / 8) + 1) * 0.12;
-      ctx.fillRect(0, y, 256, 3);
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
-    return t;
-  }
-
-  const mapleTex = getWoodTex('#cfb285', '#9e7a4f');
-  const walnutTex = getWoodTex('#543d2b', '#302014');
-  const pineTex = getWoodTex('#ddb87a', '#a67d3d');
-
-  const matMaple = new THREE.MeshStandardMaterial({ map: mapleTex, roughness: 0.6 });
-  const matWalnut = new THREE.MeshStandardMaterial({ map: walnutTex, roughness: 0.7 });
-  const matPine = new THREE.MeshStandardMaterial({ map: pineTex, roughness: 0.75 });
-  const matIron = new THREE.MeshStandardMaterial({ color: 0x22252a, roughness: 0.4, metalness: 0.7 });
-  const matSteel = new THREE.MeshStandardMaterial({ color: 0x999ea6, roughness: 0.25, metalness: 0.9 });
-  const matCabinetBlue = new THREE.MeshStandardMaterial({ color: 0x1e3d59, roughness: 0.6 });
-  const matGoldBlade = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.95, roughness: 0.15 });
-  const matRed = new THREE.MeshStandardMaterial({ color: 0xcc2929, roughness: 0.3 });
-
-  // 4. Room Environment
-  // Floor
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(22, 16), new THREE.MeshStandardMaterial({ color: 0x252930, roughness: 0.4 }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  scene.add(floor);
-
-  const grid = new THREE.GridHelper(20, 20, 0xd4a373, 0x383e47);
-  grid.position.y = 0.002;
-  scene.add(grid);
-
-  // Walls
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2126, roughness: 0.9 });
-  const backWall = new THREE.Mesh(new THREE.BoxGeometry(22, 6, 0.2), wallMat);
-  backWall.position.set(0, 3, -8);
-  scene.add(backWall);
-
-  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 6, 16), wallMat);
-  leftWall.position.set(-11, 3, 0);
-  scene.add(leftWall);
-
-  const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.2, 6, 16), wallMat);
-  rightWall.position.set(11, 3, 0);
-  scene.add(rightWall);
-
-  // Wooden Tool Cleat Board
-  const cleat = new THREE.Mesh(new THREE.BoxGeometry(18, 2, 0.05), matPine);
-  cleat.position.set(0, 2.4, -7.85);
-  scene.add(cleat);
-
-  // Ceiling Trusses
-  for (let z = -6; z <= 6; z += 4) {
-    const truss = new THREE.Mesh(new THREE.BoxGeometry(22, 0.2, 0.2), matPine);
-    truss.position.set(0, 5.8, z);
-    scene.add(truss);
-  }
-
-  // Spiral Dust Collection Pipe
-  const duct = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 20, 16), matSteel);
-  duct.rotation.z = Math.PI / 2;
-  duct.position.set(0, 5.0, -3.0);
-  scene.add(duct);
-
-  const drop1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.8, 12), matSteel);
-  drop1.position.set(-2.8, 3.6, -3.0);
-  scene.add(drop1);
-
-  const drop2 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.8, 12), matSteel);
-  drop2.position.set(2.8, 3.6, -3.0);
-  scene.add(drop2);
-
-  // 5. Piece 1: 10" Cabinet Table Saw
-  const sawGroup = new THREE.Group();
-  sawGroup.position.set(-2.8, 0, 0);
-
-  const sawCabinet = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.8, 0.9), matCabinetBlue);
-  sawCabinet.position.set(0, 0.4, 0);
-  sawCabinet.castShadow = true;
-  sawGroup.add(sawCabinet);
-
-  const sawTop = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.0), matIron);
-  sawTop.position.set(0, 0.84, 0);
-  sawGroup.add(sawTop);
-
-  const throatPlate = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.005, 0.38), matRed);
-  throatPlate.position.set(0, 0.883, 0);
-  sawGroup.add(throatPlate);
-
-  // Saw Blade
-  const bladeGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.006, 32);
-  const sawBlade = new THREE.Mesh(bladeGeo, matGoldBlade);
-  sawBlade.rotation.z = Math.PI / 2;
-  sawBlade.position.set(0, 0.94, 0);
-  sawGroup.add(sawBlade);
-
-  // Rip Fence Rail
-  const fenceRail = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.06), matSteel);
-  fenceRail.position.set(0.25, 0.84, 0.53);
-  sawGroup.add(fenceRail);
-
-  // Rip Fence
-  const fenceGroup = new THREE.Group();
-  const fenceBody = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 1.05), matSteel);
-  const fenceLock = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.1, 12), matRed);
-  fenceLock.rotation.x = Math.PI / 2;
-  fenceLock.position.set(0, 0.05, 0.54);
-  fenceGroup.add(fenceBody);
-  fenceGroup.add(fenceLock);
-  fenceGroup.position.set(0.35, 0.89, 0);
-  sawGroup.add(fenceGroup);
-
-  // Outfeed Table
-  const outfeed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.08, 1.4), matMaple);
-  outfeed.position.set(0.1, 0.84, -1.2);
-  sawGroup.add(outfeed);
-
-  // Outfeed Legs
-  const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 0.08), matSteel);
-  leg1.position.set(-0.6, 0.4, -1.7);
-  sawGroup.add(leg1);
-  const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.8, 0.08), matSteel);
-  leg2.position.set(0.8, 0.4, -1.7);
-  sawGroup.add(leg2);
-
-  scene.add(sawGroup);
-
-  // 6. Piece 2: French Roubo Workbench
-  const benchGroup = new THREE.Group();
-  benchGroup.position.set(2.8, 0, 0);
-
-  const benchTop = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.16, 0.85), matMaple);
-  benchTop.position.set(0, 0.85, 0);
-  benchTop.castShadow = true;
-  benchGroup.add(benchTop);
-
-  // 4 Legs
-  const bLegPositions = [[-0.9, -0.28], [0.9, -0.28], [-0.9, 0.28], [0.9, 0.28]];
-  bLegPositions.forEach(p => {
-    const bLeg = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.77, 0.13), matMaple);
-    bLeg.position.set(p[0], 0.385, p);
-    benchGroup.add(bLeg);
-  });
-
-  const bShelf = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.04, 0.6), matWalnut);
-  bShelf.position.set(0, 0.2, 0);
-  benchGroup.add(bShelf);
-
-  // Leg Vise
-  const viseGroup = new THREE.Group();
-  const viseChop = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.72, 0.09), matWalnut);
-  viseChop.position.set(-0.9, 0.44, 0.44);
-  const viseHub = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.12, 16), matWalnut);
-  viseHub.rotation.x = Math.PI / 2;
-  viseHub.position.set(-0.9, 0.45, 0.52);
-  const visePin = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.32, 12), matMaple);
-  visePin.position.set(-0.9, 0.45, 0.58);
-  viseGroup.add(viseChop);
-  viseGroup.add(viseHub);
-  viseGroup.add(visePin);
-  benchGroup.add(viseGroup);
-
-  // Clamped Board
-  const clampedTimber = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.32, 1.1), matWalnut);
-  clampedTimber.position.set(-0.9, 0.94, 0.2);
-  benchGroup.add(clampedTimber);
-
-  // No. 4 Smoothing Hand Plane
-  const planeGroup = new THREE.Group();
-  const pBody = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.08), matIron);
-  const pTote = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.09, 0.025), matWalnut);
-  pTote.position.set(-0.08, 0.06, 0);
-  const pKnob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 12, 12), matWalnut);
-  pKnob.position.set(0.08, 0.05, 0);
-  const pIron = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.006), matSteel);
-  pIron.rotation.z = 0.5;
-  pIron.position.set(-0.02, 0.07, 0);
-  planeGroup.add(pBody); planeGroup.add(pTote); planeGroup.add(pKnob); planeGroup.add(pIron);
-  planeGroup.position.set(0.1, 0.96, 0.1);
-  benchGroup.add(planeGroup);
-
-  // 12" Combination Square on bench
-  const sqRule = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.008, 0.03), matSteel);
-  const sqHead = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.016, 0.1), matIron);
-  sqHead.position.set(-0.07, 0.008, 0.035);
-  const squareGroup = new THREE.Group();
-  squareGroup.add(sqRule); squareGroup.add(sqHead);
-  squareGroup.position.set(0.6, 0.94, -0.15);
-  squareGroup.rotation.y = -0.3;
-  benchGroup.add(squareGroup);
-
-  scene.add(benchGroup);
-
-  // 7. Interactive State Variables & Window Handlers
-  let isMotorOn = false;
-
-  window.toggleSawMotor = function() {
-    isMotorOn = !isMotorOn;
-    const btn = document.getElementById('btn-motor');
-    if (isMotorOn) {
-      btn.textContent = 'Stop Motor (Active)';
-      btn.classList.add('active');
-    } else {
-      btn.textContent = 'Start Table Saw Motor';
-      btn.classList.remove('active');
-    }
-  };
-
-  window.updateBladeHeight = function(val) {
-    const norm = val / 100;
-    sawBlade.position.y = 0.88 + norm * 0.12;
-    document.getElementById('txt-blade-h').textContent = (norm * 2.5).toFixed(2) + ' in';
-  };
-
-  window.updateBladeTilt = function(deg) {
-    sawBlade.rotation.x = (deg * Math.PI) / 180;
-    document.getElementById('txt-blade-tilt').innerHTML = deg + '&deg;';
-  };
-
-  window.updateFencePosition = function(val) {
-    const norm = val / 100;
-    fenceGroup.position.x = 0.12 + norm * 0.65;
-    document.getElementById('txt-fence-pos').textContent = (norm * 18).toFixed(1) + ' in';
-  };
-
-  window.updateLegVise = function(val) {
-    const norm = val / 100;
-    viseGroup.position.z = (1.0 - norm) * 0.12;
-    document.getElementById('txt-vise').textContent = norm > 0.8 ? 'Clamped' : (norm * 6).toFixed(1) + ' in';
-  };
-
-  window.pushHandPlane = function() {
-    const origZ = planeGroup.position.z;
-    let start = Date.now();
-    function step() {
-      const el = (Date.now() - start) / 1000;
-      if (el < 0.8) {
-        planeGroup.position.z -= 0.015;
-        requestAnimationFrame(step);
-      } else {
-        planeGroup.position.z = origZ;
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
       }
     }
-    step();
-  };
 
-  // 8. Animation Loop
-  let lastTime = 0;
-  function animate(time) {
-    requestAnimationFrame(animate);
-    const delta = (time - lastTime) / 1000;
-    lastTime = time;
+    function playTone(freq, type, duration, delay = 0) {
+      if (!soundEnabled) return;
+      initAudio();
+      if (!audioCtx) return;
 
-    if (isMotorOn && sawBlade) {
-      sawBlade.rotation.x += delta * 40;
+      setTimeout(() => {
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + duration);
+        } catch(e) {}
+      }, delay * 1000);
     }
 
-    controls.update();
-    renderer.render(scene, camera);
-  }
+    function playCorrectSfx() {
+      playTone(523.25, 'sine', 0.15, 0);
+      playTone(659.25, 'sine', 0.18, 0.08);
+      playTone(783.99, 'sine', 0.28, 0.16);
+    }
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    function playWrongSfx() {
+      playTone(260, 'triangle', 0.2, 0);
+      playTone(220, 'triangle', 0.3, 0.12);
+    }
 
-  animate(0);
-});
-</script>
+    function playMatchSfx() {
+      playTone(587.33, 'sine', 0.12, 0);
+      playTone(880.00, 'sine', 0.25, 0.08);
+    }
+
+    function toggleAudio() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('soundIcon').innerText = soundEnabled ? '🔊' : '🔇';
+    }
+
+    function speakText(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.92;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function speakCurrentPrompt() {
+      if (currentQuestionData) {
+        speakText(currentQuestionData.rawFrench);
+      }
+    }
+
+    // Rotates background every 4th question
+    function updateBackgroundForQuestion(qIndex) {
+      const targetBgIndex = Math.floor(qIndex / 4) % BACKGROUNDS.length;
+      if (targetBgIndex !== currentBgIndex) {
+        currentBgIndex = targetBgIndex;
+        applyBackground(targetBgIndex);
+      }
+      const bgData = BACKGROUNDS[currentBgIndex];
+      document.getElementById('sceneryLabel').innerText = `Décor ${(currentBgIndex + 1)}/${BACKGROUNDS.length}: ${bgData.caption}`;
+      const bgNote = document.getElementById('quizBgRotationNote');
+      if (bgNote) {
+        bgNote.innerText = `Décor ${(currentBgIndex + 1)}/${BACKGROUNDS.length} (Change toutes les 4 questions)`;
+      }
+    }
+
+    function applyBackground(index) {
+      const bgData = BACKGROUNDS[index];
+      const layer1 = document.getElementById('bg-layer-1');
+      const layer2 = document.getElementById('bg-layer-2');
+
+      const nextLayer = activeBgLayer === 1 ? layer2 : layer1;
+      const currentLayer = activeBgLayer === 1 ? layer1 : layer2;
+
+      nextLayer.style.backgroundImage = `url('${bgData.file}')`;
+      nextLayer.style.opacity = '1';
+      currentLayer.style.opacity = '0';
+
+      activeBgLayer = activeBgLayer === 1 ? 2 : 1;
+    }
+
+    function showPanel(panelId) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById(panelId);
+      if (target) target.classList.add('active');
+
+      document.getElementById('navHomeBtn').classList.toggle('active', panelId === 'homePanel');
+      document.getElementById('navStudyBtn').classList.toggle('active', panelId === 'glossaryPanel');
+
+      if (timerInterval && panelId !== 'quizPanel') {
+        clearInterval(timerInterval);
+      }
+    }
+
+    function quitToHome() {
+      if (timerInterval) clearInterval(timerInterval);
+      showPanel('homePanel');
+    }
+
+    // --- QUIZ ENGINE ---
+    function startQuiz(mode, customPool = null) {
+      quizMode = mode;
+      const countVal = parseInt(document.getElementById('questionCount').value, 10);
+
+      if (customPool) {
+        sessionPool = [...customPool];
+      } else {
+        sessionPool = shuffleArray([...IDIOMS]).slice(0, countVal);
+      }
+
+      currentQIndex = 0;
+      score = 0;
+      streak = 0;
+      bestStreak = 0;
+      correctCount = 0;
+      answeredCount = 0;
+      missedQuestions = [];
+
+      document.getElementById('scoreText').innerText = '0';
+      document.getElementById('streakText').innerText = '0';
+      document.getElementById('btn5050').disabled = false;
+      document.getElementById('btnSkip').disabled = false;
+
+      const timePill = document.getElementById('timePill');
+      if (mode === 'timeAttack') {
+        timePill.style.display = 'flex';
+        timeLeft = 60;
+        document.getElementById('timerText').innerText = `${timeLeft}s`;
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+          timeLeft--;
+          document.getElementById('timerText').innerText = `${timeLeft}s`;
+          if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            finishQuiz();
+          }
+        }, 1000);
+      } else {
+        timePill.style.display = 'none';
+      }
+
+      showPanel('quizPanel');
+      loadQuestion();
+    }
+
+    function restartQuiz() {
+      startQuiz(quizMode);
+    }
+
+    function retryMissedOnly() {
+      if (missedQuestions.length > 0) {
+        startQuiz('classic', missedQuestions);
+      }
+    }
+
+    function loadQuestion() {
+      hasAnsweredCurrent = false;
+      document.getElementById('feedbackBanner').style.display = 'none';
+      document.getElementById('quizActionRow').style.display = 'flex';
+
+      if (currentQIndex >= sessionPool.length) {
+        finishQuiz();
+        return;
+      }
+
+      updateBackgroundForQuestion(currentQIndex);
+
+      document.getElementById('quizCounter').innerText = `Question ${currentQIndex + 1} / ${sessionPool.length}`;
+      const pct = ((currentQIndex) / sessionPool.length) * 100;
+      document.getElementById('progressBarFill').style.width = `${pct}%`;
+
+      const item = sessionPool[currentQIndex];
+      const dirSetting = document.getElementById('gameDirection').value;
+      let isFrToEn = true;
+      if (dirSetting === 'fr-to-en') isFrToEn = true;
+      else if (dirSetting === 'en-to-fr') isFrToEn = false;
+      else isFrToEn = Math.random() > 0.5;
+
+      const promptLabel = isFrToEn ? "Expression Française" : "Sens Naturel en Anglais";
+      const promptText = isFrToEn ? item.french : item.english;
+      const correctAnswer = isFrToEn ? item.english : item.french;
+
+      currentQuestionData = {
+        item: item,
+        isFrToEn: isFrToEn,
+        prompt: promptText,
+        correctAnswer: correctAnswer,
+        rawFrench: item.french,
+        rawEnglish: item.english
+      };
+
+      document.getElementById('promptLabel').innerText = promptLabel;
+      document.getElementById('promptText').innerText = promptText;
+
+      if (isFrToEn && soundEnabled) {
+        speakText(item.french);
+      }
+
+      const distractors = [];
+      while (distractors.length < 3) {
+        const rIdx = Math.floor(Math.random() * IDIOMS.length);
+        const candidate = isFrToEn ? IDIOMS[rIdx].english : IDIOMS[rIdx].french;
+        if (candidate !== correctAnswer && !distractors.includes(candidate)) {
+          distractors.push(candidate);
+        }
+      }
+
+      const options = shuffleArray([correctAnswer, ...distractors]);
+      const choicesGrid = document.getElementById('choicesGrid');
+      choicesGrid.innerHTML = '';
+
+      const keys = ['A', 'B', 'C', 'D'];
+      options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'choice-btn';
+        btn.innerHTML = `<div class="choice-key">${keys[idx]}</div><span>${opt}</span>`;
+        btn.onclick = () => handleChoiceSelection(opt, btn);
+        choicesGrid.appendChild(btn);
+      });
+    }
+
+    function handleChoiceSelection(selectedOpt, btnElement) {
+      if (hasAnsweredCurrent) return;
+      hasAnsweredCurrent = true;
+      answeredCount++;
+
+      const isCorrect = selectedOpt === currentQuestionData.correctAnswer;
+      const allBtns = document.querySelectorAll('.choice-btn');
+
+      allBtns.forEach(b => {
+        b.classList.add('disabled');
+        const spanText = b.querySelector('span').innerText;
+        if (spanText === currentQuestionData.correctAnswer) {
+          b.classList.add('correct');
+        }
+      });
+
+      const feedbackBanner = document.getElementById('feedbackBanner');
+      const feedbackTitle = document.getElementById('feedbackTitle');
+      const feedbackDetail = document.getElementById('feedbackDetail');
+
+      if (isCorrect) {
+        btnElement.classList.add('correct');
+        streak++;
+        if (streak > bestStreak) bestStreak = streak;
+        correctCount++;
+
+        const streakBonus = Math.min(streak * 20, 100);
+        const pts = 100 + streakBonus;
+        score += pts;
+
+        if (quizMode === 'timeAttack') {
+          timeLeft += 2;
+          document.getElementById('timerText').innerText = `${timeLeft}s`;
+        }
+
+        playCorrectSfx();
+        feedbackBanner.className = 'feedback-banner correct';
+        feedbackTitle.innerText = `✨ Correct ! (+${pts} pts)`;
+        feedbackDetail.innerText = `${currentQuestionData.rawFrench} ➔ ${currentQuestionData.rawEnglish}`;
+      } else {
+        btnElement.classList.add('wrong');
+        streak = 0;
+        missedQuestions.push(currentQuestionData.item);
+        playWrongSfx();
+        feedbackBanner.className = 'feedback-banner wrong';
+        feedbackTitle.innerText = `❌ Oups ! La bonne réponse était :`;
+        feedbackDetail.innerText = `${currentQuestionData.correctAnswer} (${currentQuestionData.rawFrench} = ${currentQuestionData.rawEnglish})`;
+      }
+
+      document.getElementById('scoreText').innerText = score;
+      document.getElementById('streakText').innerText = streak;
+      feedbackBanner.style.display = 'flex';
+    }
+
+    function nextQuestion() {
+      currentQIndex++;
+      loadQuestion();
+    }
+
+    function use5050() {
+      if (hasAnsweredCurrent) return;
+      document.getElementById('btn5050').disabled = true;
+      const allBtns = Array.from(document.querySelectorAll('.choice-btn'));
+      const wrongBtns = allBtns.filter(b => b.querySelector('span').innerText !== currentQuestionData.correctAnswer);
+      const shuffledWrong = shuffleArray(wrongBtns).slice(0, 2);
+      shuffledWrong.forEach(b => b.classList.add('eliminated'));
+      playTone(440, 'sine', 0.1);
+    }
+
+    function useSkip() {
+      if (hasAnsweredCurrent) return;
+      document.getElementById('btnSkip').disabled = true;
+      currentQIndex++;
+      loadQuestion();
+    }
+
+    function finishQuiz() {
+      if (timerInterval) clearInterval(timerInterval);
+      showPanel('resultsPanel');
+
+      const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+      document.getElementById('resScore').innerText = score;
+      document.getElementById('resAccuracy').innerText = `${accuracy}%`;
+      document.getElementById('resBestStreak').innerText = bestStreak;
+      document.getElementById('resQuestionsDone').innerText = `${correctCount} / ${answeredCount}`;
+
+      let rank = "Apprenti Linguiste";
+      let subtitle = "Un bon début ! La pratique forge le maître.";
+      if (accuracy >= 90 && score >= 1000) {
+        rank = "⚜️ Grand Maître de l'Académie";
+        subtitle = "Performance magistrale ! Vous maîtrisez les subtilités de la langue française.";
+      } else if (accuracy >= 75) {
+        rank = "Érudit Raffiné";
+        subtitle = "Très belle culture idiomatique. Encore quelques tours et ce sera parfait !";
+      } else if (accuracy >= 50) {
+        rank = "Voyageur Curieux";
+        subtitle = "De bonnes bases solides. Continuez votre immersion !";
+      }
+
+      document.getElementById('resultRankTitle').innerText = rank;
+      document.getElementById('resultSubtitle').innerText = subtitle;
+
+      const mistakesSection = document.getElementById('mistakesSection');
+      const mistakesList = document.getElementById('mistakesList');
+      const btnRetryMissed = document.getElementById('btnRetryMissed');
+
+      if (missedQuestions.length > 0) {
+        mistakesSection.style.display = 'block';
+        btnRetryMissed.style.display = 'inline-flex';
+        mistakesList.innerHTML = missedQuestions.map(m => `
+          <div class="mistake-item">
+            <strong style="color: var(--primary-gold);">${m.french}</strong> : ${m.english}
+          </div>
+        `).join('');
+      } else {
+        mistakesSection.style.display = 'none';
+        btnRetryMissed.style.display = 'none';
+      }
+    }
+
+    // --- MATCHING TILES ---
+    function startMatchingGame() {
+      matchRound = 1;
+      showPanel('matchingPanel');
+      setupMatchRound();
+    }
+
+    function setupMatchRound() {
+      updateBackgroundForQuestion((matchRound - 1) * 4);
+      document.getElementById('matchRoundCounter').innerText = `Tour de Correspondance ${matchRound}`;
+      document.getElementById('btnNextMatchRound').style.display = 'none';
+      matchedPairsCount = 0;
+      selectedFirst = null;
+
+      const sample = shuffleArray([...IDIOMS]).slice(0, 6);
+      const cards = [];
+      sample.forEach((item, idx) => {
+        cards.push({ id: idx, type: 'fr', text: item.french, fullItem: item });
+        cards.push({ id: idx, type: 'en', text: item.english, fullItem: item });
+      });
+
+      const shuffledCards = shuffleArray(cards);
+      const grid = document.getElementById('matchGrid');
+      grid.innerHTML = '';
+
+      shuffledCards.forEach((c) => {
+        const el = document.createElement('div');
+        el.className = 'match-card';
+        el.innerText = c.text;
+        el.onclick = () => handleMatchCardClick(c, el);
+        grid.appendChild(el);
+      });
+
+      document.getElementById('matchCount').innerText = '0';
+    }
+
+    function handleMatchCardClick(cardData, cardElement) {
+      if (cardElement.classList.contains('matched') || cardElement.classList.contains('selected')) return;
+
+      if (!selectedFirst) {
+        selectedFirst = { data: cardData, el: cardElement };
+        cardElement.classList.add('selected');
+        if (cardData.type === 'fr') speakText(cardData.text);
+      } else {
+        if (selectedFirst.el === cardElement) return;
+
+        if (selectedFirst.data.id === cardData.id && selectedFirst.data.type !== cardData.type) {
+          cardElement.classList.add('matched');
+          selectedFirst.el.classList.add('matched');
+          selectedFirst.el.classList.remove('selected');
+          matchedPairsCount++;
+          playMatchSfx();
+          document.getElementById('matchCount').innerText = matchedPairsCount;
+
+          if (cardData.type === 'fr') speakText(cardData.text);
+          else speakText(selectedFirst.data.text);
+
+          score += 150;
+          document.getElementById('matchScore').innerText = score;
+          selectedFirst = null;
+
+          if (matchedPairsCount === 6) {
+            document.getElementById('btnNextMatchRound').style.display = 'inline-flex';
+            matchRound++;
+          }
+        } else {
+          cardElement.classList.add('error');
+          selectedFirst.el.classList.add('error');
+          playWrongSfx();
+          const firstEl = selectedFirst.el;
+          setTimeout(() => {
+            cardElement.classList.remove('error', 'selected');
+            firstEl.classList.remove('error', 'selected');
+          }, 500);
+          selectedFirst = null;
+        }
+      }
+    }
+
+    // --- FLASHCARDS ---
+    function startFlashcards() {
+      flashIndex = 0;
+      showPanel('flashcardPanel');
+      loadFlashcard();
+    }
+
+    function loadFlashcard() {
+      updateBackgroundForQuestion(flashIndex);
+      document.getElementById('flashcardElement').classList.remove('flipped');
+      currentFlashcard = IDIOMS[flashIndex];
+
+      document.getElementById('flashCounter').innerText = `Carte ${flashIndex + 1} / ${IDIOMS.length}`;
+      document.getElementById('flashFrText').innerText = currentFlashcard.french;
+      document.getElementById('flashEnText').innerText = currentFlashcard.english;
+      document.getElementById('masteredCount').innerText = masteredSet.size;
+
+      const isMastered = masteredSet.has(currentFlashcard.french);
+      document.getElementById('masteredIcon').innerText = isMastered ? '⭐' : '☆';
+    }
+
+    function flipFlashcard() {
+      document.getElementById('flashcardElement').classList.toggle('flipped');
+      playTone(380, 'sine', 0.08);
+    }
+
+    function nextFlashcard() {
+      flashIndex = (flashIndex + 1) % IDIOMS.length;
+      loadFlashcard();
+    }
+
+    function prevFlashcard() {
+      flashIndex = (flashIndex - 1 + IDIOMS.length) % IDIOMS.length;
+      loadFlashcard();
+    }
+
+    function toggleMasteredCurrent() {
+      if (!currentFlashcard) return;
+      if (masteredSet.has(currentFlashcard.french)) {
+        masteredSet.delete(currentFlashcard.french);
+      } else {
+        masteredSet.add(currentFlashcard.french);
+      }
+      localStorage.setItem('french_idioms_mastered', JSON.stringify([...masteredSet]));
+      loadFlashcard();
+    }
+
+    // --- GLOSSARY TABLE ---
+    function renderGlossary(filterText = '') {
+      const tbody = document.getElementById('glossaryTableBody');
+      const q = filterText.toLowerCase().trim();
+      const filtered = IDIOMS.filter(i => i.french.toLowerCase().includes(q) || i.english.toLowerCase().includes(q));
+
+      tbody.innerHTML = filtered.map(i => `
+        <tr>
+          <td><div class="glossary-fr">${i.french}</div></td>
+          <td><div class="glossary-en">${i.english}</div></td>
+          <td style="text-align: center;">
+            <button class="table-speak-btn" onclick="speakText('${i.french.replace(/'/g, "\\\\'")}')" title="Écouter">🔊</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function filterGlossary() {
+      const q = document.getElementById('glossarySearch').value;
+      renderGlossary(q);
+    }
+
+    function shuffleArray(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (document.getElementById('quizPanel').classList.contains('active')) {
+        if (e.key === '1' || e.key === 'a' || e.key === 'A') {
+          const btn = document.querySelectorAll('.choice-btn')[0];
+          if (btn && !btn.classList.contains('disabled')) btn.click();
+        } else if (e.key === '2' || e.key === 'b' || e.key === 'B') {
+          const btn = document.querySelectorAll('.choice-btn');
+          if (btn && !btn.classList.contains('disabled')) btn.click();
+        } else if (e.key === '3' || e.key === 'c' || e.key === 'C') {
+          const btn = document.querySelectorAll('.choice-btn');
+          if (btn && !btn.classList.contains('disabled')) btn.click();
+        } else if (e.key === '4' || e.key === 'd' || e.key === 'D') {
+          const btn = document.querySelectorAll('.choice-btn');
+          if (btn && !btn.classList.contains('disabled')) btn.click();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          const nextBtn = document.getElementById('nextQuestionBtn');
+          if (document.getElementById('feedbackBanner').style.display === 'flex' && nextBtn) {
+            nextBtn.click();
+          }
+        }
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      applyBackground(0);
+      renderGlossary();
+    });
+  </script>
 </body>
 </html>
