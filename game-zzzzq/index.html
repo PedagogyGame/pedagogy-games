@@ -158,12 +158,12 @@ const EXTRA = BANK.filter((w) => w.tier === 0);
 const EASY = BANK.filter((w) => w.tier >= 1 && w.tier <= 3);
 const HARD = BANK.filter((w) => w.tier === 4);
 
-const STRIP_H = 128;
-const JUMP_TIME = 0.48;
+const STRIP_H = 208;
+const JUMP_TIME = 0.5;
 const CORRECT_HOLD = 0.38;
 const REVEAL_TIME = 1.8;
 const MAX_CHARS = 14;
-const SAVE_KEY = "spell-crossing-html-v2";
+const SAVE_KEY = "spell-crossing-html-v3";
 const LABELS = { extra: "Extra Easy", easy: "Easy", hard: "Hard" };
 
 function answerTime() {
@@ -189,28 +189,46 @@ function safe(kind, zone) {
 }
 const RAW = [
   safe("grass", "Curb"),
-  hz("highway", 1, 86, "Six-lane highway"),
-  hz("highway", -1, 118, "Six-lane highway"),
-  hz("highway", 1, 74, "Six-lane highway"),
-  hz("highway", -1, 132, "Six-lane highway"),
-  hz("highway", 1, 98, "Six-lane highway"),
-  hz("highway", -1, 88, "Six-lane highway"),
+  hz("highway", 1, 86, "Twelve-lane highway"),
+  hz("highway", -1, 124, "Twelve-lane highway"),
+  hz("highway", 1, 74, "Twelve-lane highway"),
+  hz("highway", -1, 138, "Twelve-lane highway"),
+  hz("highway", 1, 98, "Twelve-lane highway"),
+  hz("highway", -1, 88, "Twelve-lane highway"),
+  hz("highway", 1, 112, "Twelve-lane highway"),
+  hz("highway", -1, 150, "Twelve-lane highway"),
+  hz("highway", 1, 80, "Twelve-lane highway"),
+  hz("highway", -1, 106, "Twelve-lane highway"),
+  hz("highway", 1, 94, "Twelve-lane highway"),
+  hz("highway", -1, 128, "Twelve-lane highway"),
   safe("grass", "Median"),
-  hz("bike", 1, 54, "Bike path"),
-  hz("bike", -1, 66, "Bike path"),
+  hz("highway", 1, 90, "Inner lanes"),
+  hz("highway", -1, 118, "Inner lanes"),
+  hz("highway", 1, 76, "Inner lanes"),
+  hz("highway", -1, 132, "Inner lanes"),
   safe("grass", "Median"),
-  hz("train", 1, 214, "Freight line"),
-  hz("train", -1, 188, "Freight line"),
+  hz("highway", 1, 102, "Inner lanes"),
+  hz("highway", -1, 144, "Inner lanes"),
+  hz("highway", 1, 84, "Inner lanes"),
+  hz("highway", -1, 110, "Inner lanes"),
   safe("grass", "Median"),
-  hz("highway", -1, 104, "Six-lane highway"),
-  hz("highway", 1, 124, "Six-lane highway"),
-  hz("highway", -1, 82, "Six-lane highway"),
-  hz("highway", 1, 140, "Six-lane highway"),
-  hz("highway", -1, 110, "Six-lane highway"),
-  hz("highway", 1, 92, "Six-lane highway"),
+  hz("highway", -1, 104, "Twelve-lane highway"),
+  hz("highway", 1, 126, "Twelve-lane highway"),
+  hz("highway", -1, 82, "Twelve-lane highway"),
+  hz("highway", 1, 140, "Twelve-lane highway"),
+  hz("highway", -1, 110, "Twelve-lane highway"),
+  hz("highway", 1, 92, "Twelve-lane highway"),
+  hz("highway", -1, 120, "Twelve-lane highway"),
+  hz("highway", 1, 78, "Twelve-lane highway"),
+  hz("highway", -1, 136, "Twelve-lane highway"),
+  hz("highway", 1, 100, "Twelve-lane highway"),
+  hz("highway", -1, 88, "Twelve-lane highway"),
+  hz("highway", 1, 114, "Twelve-lane highway"),
   safe("grass", "Median"),
-  hz("sideroad", 1, 78, "Two-lane side road"),
-  hz("sideroad", -1, 70, "Two-lane side road"),
+  hz("sideroad", 1, 78, "Side road"),
+  hz("sideroad", -1, 70, "Side road"),
+  hz("sideroad", 1, 88, "Side road"),
+  hz("sideroad", -1, 64, "Side road"),
   safe("finish", "Far sidewalk"),
 ];
 const STRIPS = RAW.map((s, id) => ({ ...s, id }));
@@ -238,10 +256,9 @@ const FLEET = [
   { kind: "jeep", lanes: "HS", w: 70, color: "#6b8f3a" },
   { kind: "limo", lanes: "H", w: 124, color: "#1c1c1c" },
   { kind: "food", lanes: "HS", w: 96, color: "#7eb8a0" },
-  { kind: "moto", lanes: "HB", w: 46, color: "#2a2a2a" },
-  { kind: "scooter", lanes: "B", w: 40, color: "#5aa0d4" },
-  { kind: "bike", lanes: "B", w: 48, color: "#d24b3a" },
-  { kind: "dirt", lanes: "HB", w: 50, color: "#c45c12" },
+  { kind: "tanker", lanes: "H", w: 146, color: "#c9a24a" },
+  { kind: "boxtruck", lanes: "HS", w: 118, color: "#4a6fa5" },
+  { kind: "suv", lanes: "HS", w: 86, color: "#2c5a78" },
 ];
 const HUES = [0, 18, 36, 70, 130, 180, 210, 260, 310];
 
@@ -262,14 +279,29 @@ function shuffle(items, rand) {
   return copy;
 }
 function dealRun(rand, n, diff) {
-  if (diff === "hard") return shuffle(HARD.slice(), rand).slice(0, n);
-  if (diff === "extra") return shuffle(EXTRA.slice(), rand).slice(0, n);
-  const pools = [1, 2, 3].map((t) => shuffle(EASY.filter((w) => w.tier === t), rand));
+  let seed;
+  if (diff === "hard") seed = HARD.slice();
+  else if (diff === "extra") seed = EXTRA.slice();
+  else {
+    const pools = [1, 2, 3].map((t) => shuffle(EASY.filter((w) => w.tier === t), rand));
+    seed = [];
+    for (let i = 0; i < Math.min(n, EASY.length); i++) {
+      const t = i < n * 0.4 ? 0 : i < n * 0.75 ? 1 : 2;
+      const pool = pools[t].length ? pools[t] : pools.find((p) => p.length);
+      if (pool && pool.length) seed.push(pool.shift());
+    }
+    if (!seed.length) seed = EASY.slice();
+  }
   const out = [];
-  for (let i = 0; i < n; i++) {
-    const t = i < n * 0.4 ? 0 : i < n * 0.75 ? 1 : 2;
-    const pool = pools[t].length ? pools[t] : pools.find((p) => p.length);
-    if (pool && pool.length) out.push(pool.shift());
+  let guard = 0;
+  while (out.length < n && seed.length && guard < n * 6) {
+    const next = shuffle(seed.slice(), rand);
+    for (const w of next) {
+      if (out.length >= n) break;
+      if (out.length && out[out.length - 1].id === w.id) continue;
+      out.push(w);
+    }
+    guard += 1;
   }
   return out;
 }
@@ -288,9 +320,8 @@ function matches(guess, word) {
 }
 function stoopY(id) { return id * STRIP_H + 16; }
 function trafficY(id) { return id * STRIP_H + STRIP_H * 0.62; }
-function fleetFor(lane) {
-  const key = lane === "bike" ? "B" : lane === "sideroad" ? "S" : "H";
-  return FLEET.filter((s) => s.lanes.includes(key));
+function fleetFor() {
+  return FLEET;
 }
 
 let ac = null, muted = false;
@@ -357,48 +388,42 @@ function writeSave() {
 }
 
 function makeVehicle(strip, dir, speed, spec, x) {
-  const w = spec.w * (1.15 + G.rand() * 0.18);
-  const hue = spec.lock ? 0 : (G.rand() < 0.4 ? 0 : HUES[Math.floor(G.rand() * HUES.length)]);
+  const w = spec.w * (1.28 + G.rand() * 0.28);
+  const hue = spec.lock ? 0 : (G.rand() < 0.35 ? 0 : HUES[Math.floor(G.rand() * HUES.length)]);
   return {
-    strip, x, dir, speed, w,
+    strip, x, dir, speed: speed * (0.88 + G.rand() * 0.28), w,
     kind: spec.kind,
     color: hueShift(spec.color, hue),
     hue: 0,
     flash: !!spec.flash,
     cars: 0,
+    bob: G.rand() * Math.PI * 2,
+    bobAmp: 1.2 + G.rand() * 2.8,
+    hScale: 0.9 + G.rand() * 0.28,
   };
 }
 
 function spawnTraffic() {
   G.vehicles = [];
-  const span = Math.max(G.width, 720);
+  const span = Math.max(G.width, 860);
+  const pool = fleetFor();
   for (const strip of STRIPS) {
     if (!strip.hazard) continue;
-    if (strip.kind === "train") {
-      const cars = 3 + Math.floor(G.rand() * 3);
-      G.vehicles.push({
-        strip: strip.id, x: G.rand() * 120 - 40, dir: strip.dir, speed: strip.speed * trafficScale(),
-        w: 140 + cars * 86, kind: "train", color: "#c45c2a", hue: 0, flash: false, cars,
-      });
-      continue;
-    }
-    const lane = strip.kind === "bike" ? "bike" : strip.kind === "sideroad" ? "sideroad" : "highway";
-    const pool = fleetFor(lane);
-    const density = strip.kind === "bike" ? 170 : strip.kind === "sideroad" ? 250 : 210;
-    const count = Math.max(4, Math.round(span / density));
-    let x = G.rand() * 50 - 20;
+    const density = strip.kind === "sideroad" ? 168 : 148;
+    const count = Math.max(6, Math.round(span / density));
+    let x = G.rand() * 40 - 30;
     for (let i = 0; i < count; i++) {
       const spec = pool[Math.floor(G.rand() * pool.length)] || pool[0];
       const v = makeVehicle(strip.id, strip.dir, strip.speed * trafficScale(), spec, x);
       G.vehicles.push(v);
-      x += v.w + 30 + G.rand() * 90;
+      x += v.w + 26 + G.rand() * 70;
     }
   }
   keepGaps();
 }
 
 function keepGaps() {
-  const minGap = 28;
+  const minGap = 36;
   const groups = new Map();
   for (const v of G.vehicles) {
     const list = groups.get(v.strip);
@@ -526,7 +551,10 @@ function burst(x, y, color, n) {
 }
 
 function stepTraffic(dt) {
-  for (const v of G.vehicles) v.x += v.dir * v.speed * dt;
+  for (const v of G.vehicles) {
+    v.x += v.dir * v.speed * dt;
+    v.bob += dt * (2.2 + v.speed * 0.012);
+  }
   for (const v of G.vehicles) {
     if (v.dir > 0 && v.x > G.width + 90) {
       const others = G.vehicles.filter((o) => o.strip === v.strip && o !== v);
@@ -545,13 +573,7 @@ function stepTraffic(dt) {
 
 function reroll(v) {
   const strip = STRIPS[v.strip];
-  if (strip.kind === "train") {
-    v.cars = 3 + Math.floor(G.rand() * 3);
-    v.w = 140 + v.cars * 86;
-    return;
-  }
-  const lane = strip.kind === "bike" ? "bike" : strip.kind === "sideroad" ? "sideroad" : "highway";
-  const pool = fleetFor(lane);
+  const pool = fleetFor();
   const spec = pool[Math.floor(G.rand() * pool.length)] || pool[0];
   const next = makeVehicle(strip.id, strip.dir, strip.speed * trafficScale(), spec, v.x);
   Object.assign(v, next);
@@ -580,10 +602,12 @@ function update(dt) {
     const t = Math.min(1, G.hopT);
     const eased = t * t * (3 - 2 * t);
     G.worldY = G.hopFrom + (G.hopTo - G.hopFrom) * eased;
-    G.hopArc = Math.sin(Math.PI * t) * 34;
-    G.squash = t < 0.18 ? 0.78 : t < 0.55 ? 1.18 : 0.9;
+    G.hopArc = Math.sin(Math.PI * t) * 62;
+    G.squash = t < 0.18 ? 0.72 : t < 0.55 ? 1.26 : 0.88;
+    camKick = Math.sin(Math.PI * t) * 22;
     if (G.hopT >= 1) land();
   } else if (G.mode === "won") stepTraffic(c * 0.35);
+  if (G.mode !== "jumping") camKick += (0 - camKick) * (1 - Math.exp(-8 * c));
   for (const p of G.particles) {
     p.life -= c; p.x += p.vx * c; p.y += p.vy * c; p.vy += 70 * c;
   }
@@ -591,8 +615,9 @@ function update(dt) {
 }
 
 let camY = 0;
+let camKick = 0;
 function worldToScreen(worldY, height) {
-  return height * 0.86 - (worldY - camY);
+  return height * 0.94 - (worldY - camY) + camKick;
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -645,24 +670,32 @@ function hueShift(hex, deg) {
   return "#" + hx(rp) + hx(gp) + hx(bp);
 }
 
-function wheel(ctx, x, y, r) {
+function wheel(ctx, x, y, r, spin) {
   ctx.fillStyle = "rgba(10,12,16,0.35)";
   ctx.beginPath(); ctx.ellipse(x, y + r * 0.35, r * 1.05, r * 0.35, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#1a1c20";
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#6a6e76";
-  ctx.beginPath(); ctx.arc(x, y, r * 0.62, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(spin || 0);
+  ctx.strokeStyle = "#8a8e96";
+  ctx.lineWidth = 1.6;
+  for (let i = 0; i < 4; i++) {
+    ctx.rotate(Math.PI / 4);
+    ctx.beginPath(); ctx.moveTo(-r * 0.55, 0); ctx.lineTo(r * 0.55, 0); ctx.stroke();
+  }
+  ctx.restore();
   ctx.fillStyle = "#d8dce4";
-  ctx.beginPath(); ctx.arc(x, y, r * 0.38, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r * 0.34, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#2c3138";
-  ctx.beginPath(); ctx.arc(x, y, r * 0.14, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r * 0.12, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawCarBody(ctx, x, y, w, h, color) {
+function drawCarBody(ctx, x, y, w, h, color, spin) {
   ctx.fillStyle = "rgba(12,16,22,0.28)";
-  ctx.beginPath(); ctx.ellipse(x + w / 2, y + h - 2, w * 0.46, 7, 0, 0, Math.PI * 2); ctx.fill();
-  wheel(ctx, x + w * 0.22, y + h - 4, Math.min(11, h * 0.22));
-  wheel(ctx, x + w * 0.78, y + h - 4, Math.min(11, h * 0.22));
+  ctx.beginPath(); ctx.ellipse(x + w / 2, y + h - 2, w * 0.46, 8, 0, 0, Math.PI * 2); ctx.fill();
+  wheel(ctx, x + w * 0.22, y + h - 4, Math.min(13, h * 0.24), spin);
+  wheel(ctx, x + w * 0.78, y + h - 4, Math.min(13, h * 0.24), spin);
   const body = ctx.createLinearGradient(x, y, x, y + h);
   body.addColorStop(0, mix(color, 0.35, "#ffffff"));
   body.addColorStop(0.45, color);
@@ -691,9 +724,10 @@ function drawCarBody(ctx, x, y, w, h, color) {
 function drawVehicle(ctx, v, y, frozen) {
   ctx.save();
   if (frozen) ctx.globalAlpha = 0.92;
-  const two = v.kind === "moto" || v.kind === "bike" || v.kind === "scooter" || v.kind === "dirt";
-  const h = two ? 52 : 56;
+  y += frozen ? 0 : Math.sin(v.bob || 0) * (v.bobAmp || 0);
+  const h = 90 * (v.hScale || 1);
   const w = v.w;
+  const spin = frozen ? 0 : (v.x / 16) * v.dir;
   if (v.dir < 0) {
     ctx.translate(v.x + w / 2, y);
     ctx.scale(-1, 1);
@@ -701,28 +735,7 @@ function drawVehicle(ctx, v, y, frozen) {
   }
   const col = v.color;
   const top = y - h;
-  if (v.kind === "train") {
-    ctx.fillStyle = "rgba(12,16,22,0.3)";
-    ctx.beginPath(); ctx.ellipse(v.x + v.w / 2, y - 2, v.w * 0.46, 8, 0, 0, Math.PI * 2); ctx.fill();
-    const locoG = ctx.createLinearGradient(v.x, top, v.x, y);
-    locoG.addColorStop(0, "#e07038"); locoG.addColorStop(1, "#8a2e12");
-    ctx.fillStyle = locoG;
-    roundRect(ctx, v.x, top + 8, 84, h - 6, 6); ctx.fill();
-    ctx.fillStyle = "#2a3038";
-    roundRect(ctx, v.x + 10, top - 10, 28, 22, 3); ctx.fill();
-    ctx.fillStyle = "#f4e27a";
-    ctx.beginPath(); ctx.arc(v.x + 78, top + 28, 6, 0, Math.PI * 2); ctx.fill();
-    wheel(ctx, v.x + 22, y - 6, 10); wheel(ctx, v.x + 58, y - 6, 10);
-    for (let i = 0; i < v.cars; i++) {
-      const cx = v.x + 86 + i * 96;
-      const cg = ctx.createLinearGradient(cx, top, cx, y);
-      cg.addColorStop(0, i % 2 ? "#8a9bb0" : "#c4783a");
-      cg.addColorStop(1, i % 2 ? "#3d4a5c" : "#6b3a18");
-      ctx.fillStyle = cg;
-      roundRect(ctx, cx, top + 12, 90, h - 12, 4); ctx.fill();
-      wheel(ctx, cx + 20, y - 6, 9); wheel(ctx, cx + 70, y - 6, 9);
-    }
-  } else if (v.kind === "bus" || v.kind === "school") {
+  if (v.kind === "bus" || v.kind === "school") {
     ctx.fillStyle = "rgba(12,16,22,0.28)";
     ctx.beginPath(); ctx.ellipse(v.x + w / 2, y - 2, w * 0.46, 8, 0, 0, Math.PI * 2); ctx.fill();
     const g = ctx.createLinearGradient(v.x, top, v.x, y);
@@ -735,35 +748,25 @@ function drawVehicle(ctx, v, y, frozen) {
       roundRect(ctx, v.x + 14 + i * (w / 7), top + 8, w / 10, 16, 2);
       ctx.fill();
     }
-    wheel(ctx, v.x + 22, y - 4, 11); wheel(ctx, v.x + w - 24, y - 4, 11);
-  } else if (v.kind === "semi") {
-    drawCarBody(ctx, v.x, top, 52, h, col);
+    wheel(ctx, v.x + 22, y - 4, 13, spin); wheel(ctx, v.x + w - 24, y - 4, 13, spin);
+  } else if (v.kind === "semi" || v.kind === "tanker" || v.kind === "boxtruck") {
+    drawCarBody(ctx, v.x, top, 58, h, col, spin);
     const g = ctx.createLinearGradient(v.x + 50, top, v.x + 50, y);
-    g.addColorStop(0, "#efe6d4"); g.addColorStop(1, "#8a7d68");
+    g.addColorStop(0, v.kind === "tanker" ? "#f0d27a" : v.kind === "boxtruck" ? "#7a97c4" : "#efe6d4");
+    g.addColorStop(1, v.kind === "tanker" ? "#8a6a18" : v.kind === "boxtruck" ? "#2c456e" : "#8a7d68");
     ctx.fillStyle = g;
     roundRect(ctx, v.x + 50, top + 10, w - 54, h - 16, 4); ctx.fill();
-    wheel(ctx, v.x + w - 28, y - 4, 11); wheel(ctx, v.x + w - 58, y - 4, 11);
+    wheel(ctx, v.x + w - 28, y - 4, 14, spin); wheel(ctx, v.x + w - 58, y - 4, 14, spin);
   } else if (v.kind === "mixer") {
-    drawCarBody(ctx, v.x, top, w * 0.48, h, "#d0cbc3");
+    drawCarBody(ctx, v.x, top, w * 0.48, h, "#d0cbc3", spin);
     const drum = ctx.createLinearGradient(v.x, top, v.x + w, y);
     drum.addColorStop(0, "#f0ebe3"); drum.addColorStop(1, "#8b8378");
     ctx.fillStyle = drum;
     ctx.beginPath();
     ctx.ellipse(v.x + w * 0.72, top + h * 0.42, w * 0.24, h * 0.34, -0.45, 0, Math.PI * 2);
     ctx.fill();
-  } else if (two) {
-    wheel(ctx, v.x + 12, y - 8, 10);
-    wheel(ctx, v.x + w - 12, y - 8, 10);
-    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(v.x + 12, y - 10); ctx.lineTo(v.x + w - 14, y - 22); ctx.stroke();
-    ctx.fillStyle = "#2a8f4e";
-    ctx.beginPath(); ctx.ellipse(v.x + w * 0.42, y - 34, 9, 8, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#e8f3c8";
-    ctx.beginPath(); ctx.arc(v.x + w * 0.42, y - 42, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#1a1f2b";
-    ctx.beginPath(); ctx.arc(v.x + w * 0.42, y - 42, 2.4, 0, Math.PI * 2); ctx.fill();
   } else {
-    drawCarBody(ctx, v.x, top, w, h, col);
+    drawCarBody(ctx, v.x, top, w, h, col, spin);
     if (v.kind === "taxi") {
       ctx.fillStyle = "#1a1a1a";
       roundRect(ctx, v.x + w * 0.42, top + 2, 16, 8, 2); ctx.fill();
@@ -781,7 +784,14 @@ function drawVehicle(ctx, v, y, frozen) {
   }
   if (v.flash) {
     ctx.fillStyle = Math.sin(G.elapsed * 16) > 0 ? "#3d8cff" : "#ff4d3a";
-    ctx.beginPath(); ctx.arc(v.x + w * 0.42, top + 6, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(v.x + w * 0.42, top + 6, 6, 0, Math.PI * 2); ctx.fill();
+  }
+  if (!frozen) {
+    const glow = ctx.createRadialGradient(v.x + w * 0.92, y - h * 0.42, 2, v.x + w * 0.92, y - h * 0.42, 22);
+    glow.addColorStop(0, "rgba(255,244,180,0.7)");
+    glow.addColorStop(1, "rgba(255,244,180,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(v.x + w * 0.92, y - h * 0.42, 22, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 }
@@ -838,42 +848,22 @@ function drawStrip(ctx, strip, top, width) {
     }
     return;
   }
-  if (strip.kind === "bike") {
-    const g = ctx.createLinearGradient(0, top, 0, top + h);
-    g.addColorStop(0, "#8aaa6e"); g.addColorStop(1, "#4e6a40");
-    ctx.fillStyle = g; ctx.fillRect(0, top, width, h);
-    ctx.strokeStyle = "rgba(243,238,228,0.85)";
-    ctx.setLineDash([14, 14]); ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(0, top + h / 2); ctx.lineTo(width, top + h / 2); ctx.stroke();
-    ctx.setLineDash([]);
-    return;
-  }
-  if (strip.kind === "train") {
-    const g = ctx.createLinearGradient(0, top, 0, top + h);
-    g.addColorStop(0, "#7a6858"); g.addColorStop(1, "#3e342c");
-    ctx.fillStyle = g; ctx.fillRect(0, top, width, h);
-    ctx.fillStyle = "#2a241e";
-    for (let x = 0; x < width; x += 28) ctx.fillRect(x, top + 28, 14, h - 52);
-    ctx.strokeStyle = "#d5dde6"; ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(0, top + 30); ctx.lineTo(width, top + 30);
-    ctx.moveTo(0, top + h - 30); ctx.lineTo(width, top + h - 30);
-    ctx.stroke();
-    return;
-  }
   const g = ctx.createLinearGradient(0, top, 0, top + h);
   g.addColorStop(0, strip.kind === "sideroad" ? "#4a5262" : "#3b4454");
   g.addColorStop(0.5, "#2a313e");
   g.addColorStop(1, "#1c222c");
   ctx.fillStyle = g; ctx.fillRect(0, top, width, h);
-  ctx.fillStyle = "rgba(255,255,255,0.03)";
+  ctx.fillStyle = "rgba(255,255,255,0.04)";
   for (let i = 0; i < 40; i++) ctx.fillRect((i * 97 + strip.id * 13) % width, top + (i * 17) % h, 2, 2);
-  ctx.fillStyle = "rgba(243,238,228,0.18)";
-  ctx.fillRect(0, top, width, 4);
-  ctx.fillRect(0, top + h - 4, width, 4);
-  ctx.strokeStyle = "#f0d24a"; ctx.lineWidth = 5; ctx.setLineDash([22, 18]);
+  ctx.fillStyle = "rgba(243,238,228,0.22)";
+  ctx.fillRect(0, top, width, 5);
+  ctx.fillRect(0, top + h - 5, width, 5);
+  ctx.strokeStyle = "#f0d24a"; ctx.lineWidth = 6;
+  ctx.setLineDash([26, 20]);
+  ctx.lineDashOffset = G.mode === "frozen" || G.mode === "correct" ? 0 : -(G.elapsed * strip.dir * strip.speed * 0.45);
   ctx.beginPath(); ctx.moveTo(0, top + h / 2); ctx.lineTo(width, top + h / 2); ctx.stroke();
   ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
 }
 
 function draw(ctx, w, h) {
@@ -886,11 +876,17 @@ function draw(ctx, w, h) {
   const drift = (G.elapsed * 8) % (w + 180);
   ctx.beginPath(); ctx.ellipse(drift - 80, 52, 74, 22, 0, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse((drift * 0.6 + w * 0.45) % (w + 200) - 60, 38, 96, 26, 0, 0, Math.PI * 2); ctx.fill();
+  const sun = ctx.createRadialGradient(w * 0.82, 36, 8, w * 0.82, 36, 90);
+  sun.addColorStop(0, "rgba(255,236,170,0.85)");
+  sun.addColorStop(1, "rgba(255,236,170,0)");
+  ctx.fillStyle = sun; ctx.fillRect(w * 0.82 - 90, 0, 180, 120);
   const shake = G.trauma * G.trauma;
   ctx.save();
   if (shake > 0.002) ctx.translate((Math.random() * 2 - 1) * shake * 14, (Math.random() * 2 - 1) * shake * 10);
   for (const strip of STRIPS) {
-    drawStrip(ctx, strip, worldToScreen((strip.id + 1) * STRIP_H, h), w);
+    const top = worldToScreen((strip.id + 1) * STRIP_H, h);
+    if (top > h + 40 || top + STRIP_H < -40) continue;
+    drawStrip(ctx, strip, top, w);
   }
   const park = worldToScreen(STRIPS.length * STRIP_H + 160, h);
   const pg = ctx.createLinearGradient(0, park - 90, 0, park + 140);
@@ -904,8 +900,13 @@ function draw(ctx, w, h) {
   }
   const frozen = G.mode === "frozen" || G.mode === "correct";
   const drawn = G.vehicles.slice().sort((a, b) => b.strip - a.strip || a.x - b.x);
-  for (const v of drawn) drawVehicle(ctx, v, worldToScreen(trafficY(v.strip), h), frozen);
-  drawFrog(ctx, w / 2, worldToScreen(G.worldY, h) - G.hopArc, 96);
+  for (const v of drawn) {
+    const sy = worldToScreen(trafficY(v.strip), h);
+    if (sy < -90 || sy > h + 90) continue;
+    drawVehicle(ctx, v, sy, frozen);
+  }
+  const idle = G.mode === "jumping" ? 0 : Math.sin(G.elapsed * 3.1) * 5;
+  drawFrog(ctx, w / 2, worldToScreen(G.worldY, h) - G.hopArc - idle, 136);
   for (const p of G.particles) {
     ctx.globalAlpha = Math.max(0, p.life / p.max);
     ctx.fillStyle = p.color;
@@ -947,7 +948,7 @@ function renderCard() {
       <ul>
         <li>Three modes. Accuracy over speed.</li>
         <li>Accepted spellings like donut / doughnut count.</li>
-        <li>Five crossings. Eighteen lanes. No continues.</li>
+        <li>Thirty-six lanes of cars and trucks. No continues.</li>
       </ul>
       ${modeButtons()}
       <p id="stats">Extra ${G.save.extraBest} · Easy ${G.save.best} · Hard ${G.save.hardBest}</p>`;
@@ -1055,7 +1056,7 @@ function loop(now) {
   }
   G.width = w;
   update(dt);
-  camY += (G.worldY - camY) * (1 - Math.exp(-6.2 * dt));
+  camY += (G.worldY - camY) * (1 - Math.exp(-6.8 * dt));
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = true;
