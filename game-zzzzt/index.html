@@ -47,6 +47,12 @@ button{font:inherit;color:var(--btnInk);background:var(--btn);border:1px solid v
 .face{position:absolute;inset:0;border-radius:28px;background:var(--paper2);border:1px solid var(--line);box-shadow:0 24px 66px rgba(31,17,7,.24);backface-visibility:hidden;display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden}
 .face.back{transform:rotateY(180deg)}
 .character{font-size:clamp(8rem,17vw,13rem);line-height:.9;font-weight:500;color:var(--ink);text-shadow:0 1px 0 rgba(255,255,255,.22)}
+.englishBack{width:88%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.englishBackTitle{font-size:.92rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin-bottom:18px}
+.englishBackList{display:grid;gap:12px;width:100%}
+.englishBackItem{font-size:clamp(1.35rem,2.8vw,2.15rem);line-height:1.2;padding:11px 14px;border-bottom:1px solid var(--line)}
+.englishBackItem:last-child{border-bottom:0}
+
 .answerPanel{grid-column:2;width:100%;height:min(650px,72vh);border-radius:22px;background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);backdrop-filter:blur(12px);padding:18px 20px;overflow:auto;opacity:0;transform:translateX(28px) scale(.985);pointer-events:none;transition:opacity .25s ease,transform .34s cubic-bezier(.22,.74,.22,1)}
 .study.revealed .answerPanel{opacity:1;transform:none;pointer-events:auto}
 .answerHeader{display:grid;grid-template-columns:auto 1fr;column-gap:16px;align-items:center;padding-bottom:13px;border-bottom:1px solid var(--line)}
@@ -96,40 +102,69 @@ function backdropUrl(b){
  const base=COMMONS_FILE_BASE+encodeURIComponent(b.file).replace(/%2F/g,'/');
  return b.width?`${base}?width=${b.width}`:base;
 }
-const S={index:0,revealed:false,further:false,flipped:false,bg:0,showA:true,auto:null};
+const S={index:0,panelOpen:false,flipped:false,bg:0,showA:true,auto:null};
 const E={study:document.getElementById('study'),flashcard:document.getElementById('flashcard'),front:document.getElementById('front'),back:document.getElementById('back'),answer:document.getElementById('answer'),reveal:document.getElementById('reveal'),flip:document.getElementById('flip'),prevTop:document.getElementById('prevTop'),nextTop:document.getElementById('nextTop'),count:document.getElementById('count'),bgA:document.getElementById('bgA'),bgB:document.getElementById('bgB')};
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 function current(){return DATA[S.index]}
+function englishEquivalents(d){
+ const out=[d.meaning];
+ d.words.forEach(w=>{
+  const m=String(w).match(/\(([^()]*)\)\s*$/);
+  if(m&&m[1]&&!out.includes(m[1]))out.push(m[1]);
+ });
+ return out;
+}
 function render(){
  const d=current();
  E.front.innerHTML=`<div class="character">${esc(d.char)}</div>`;
- E.back.innerHTML=`<div class="character">${esc(d.char)}</div>`;
+ E.back.innerHTML=`<div class="englishBack"><div class="englishBackTitle">English Equivalents</div><div class="englishBackList">${englishEquivalents(d).map(x=>`<div class="englishBackItem">${esc(x)}</div>`).join('')}</div></div>`;
  E.flashcard.classList.toggle('flipped',S.flipped);
- E.study.classList.toggle('revealed',S.revealed);
- E.answer.classList.toggle('furtherShown',S.further);
+ E.study.classList.toggle('revealed',S.panelOpen);
  E.count.textContent=`Card ${S.index+1} of ${DATA.length}`;
- E.prevTop.disabled=S.index===0; E.nextTop.disabled=S.index===DATA.length-1;
- E.reveal.style.visibility=S.revealed?'hidden':'visible';
+ E.prevTop.disabled=S.index===0;
+ E.nextTop.disabled=S.index===DATA.length-1;
+
+ if(!S.panelOpen && !S.flipped){
+  E.reveal.textContent='Reveal';
+  E.reveal.style.visibility='visible';
+ }else if(!S.panelOpen && S.flipped){
+  E.reveal.textContent='Reveal Further';
+  E.reveal.style.visibility='visible';
+ }else{
+  E.reveal.style.visibility='hidden';
+ }
+
+ E.flip.textContent=S.flipped?'Flip Back':'Flip';
  renderAnswer(d);
 }
 function renderAnswer(d){
+ E.answer.classList.add('furtherShown');
  E.answer.innerHTML=`
   <div class="answerHeader"><div class="answerChar">${esc(d.char)}</div><div><div class="answerPinyin">${esc(d.pinyin)}</div><div class="answerMeaning">${esc(d.meaning)}</div></div></div>
   <div class="sectionLabel">Common Words</div>
   <div class="words">${d.words.map(w=>`<div class="word">${esc(w)}</div>`).join('')}</div>
-  <div class="revealFurtherRow"><button id="furtherBtn" class="primary">Reveal Further</button></div>
-  <div class="further"><div class="sectionLabel">Example Sentences</div><div class="examples ${d.examples.reduce((n,x)=>n+x.zh.length+x.py.length+x.en.length,0)>285?'compactAll':''}">${d.examples.map((x,i)=>{const L=x.zh.length+x.py.length+x.en.length;const sizeClass=L>112?'long':L>82?'medium':'';return `<div class="example ${sizeClass}"><div class="zh">${i+1}. ${esc(x.zh)}</div><div class="py">${esc(x.py)}</div><div class="en">${esc(x.en)}</div></div>`}).join('')}</div></div>`;
- const b=document.getElementById('furtherBtn');
- if(S.further){b.style.display='none'}
- b.addEventListener('click',()=>{S.further=true;E.answer.classList.add('furtherShown');b.style.display='none'});
+  <div class="further" style="display:block"><div class="sectionLabel">Example Sentences</div><div class="examples ${d.examples.reduce((n,x)=>n+x.zh.length+x.py.length+x.en.length,0)>285?'compactAll':''}">${d.examples.map((x,i)=>{const L=x.zh.length+x.py.length+x.en.length;const sizeClass=L>112?'long':L>82?'medium':'';return `<div class="example ${sizeClass}"><div class="zh">${i+1}. ${esc(x.zh)}</div><div class="py">${esc(x.py)}</div><div class="en">${esc(x.en)}</div></div>`}).join('')}</div></div>`;
 }
-function revealSame(){if(!S.revealed){S.revealed=true;S.further=false;render()}}
-function flipSame(){
- if(!S.revealed){S.revealed=true;S.further=false}
+function revealAction(){
+ if(S.panelOpen)return;
+ // Reveal from the front opens the complete side panel immediately.
+ // Reveal Further only exists after Flip and opens that same complete panel.
+ S.panelOpen=true;
+ render();
+}
+function flipAction(){
  S.flipped=!S.flipped;
  render();
 }
-function go(delta){const n=S.index+delta;if(n<0||n>=DATA.length)return;S.index=n;S.revealed=false;S.further=false;S.flipped=false;render();rotateBg()}
+function go(delta){
+ const n=S.index+delta;
+ if(n<0||n>=DATA.length)return;
+ S.index=n;
+ S.panelOpen=false;
+ S.flipped=false;
+ render();
+ rotateBg();
+}
 function applyTheme(kind){
  const r=document.documentElement;
  if(kind==='dark'){
@@ -164,7 +199,7 @@ function rotateBg(){
  }
  S.showA=!S.showA;applyTheme(b.theme);preloadBackdrop(next);
 }
-E.reveal.addEventListener('click',revealSame);E.flip.addEventListener('click',flipSame);E.prevTop.addEventListener('click',()=>go(-1));E.nextTop.addEventListener('click',()=>go(1));document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);if(e.key.toLowerCase()==='r')revealSame();if(e.key.toLowerCase()==='f')flipSame()});
+E.reveal.addEventListener('click',revealAction);E.flip.addEventListener('click',flipAction);E.prevTop.addEventListener('click',()=>go(-1));E.nextTop.addEventListener('click',()=>go(1));document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')go(-1);if(e.key==='ArrowRight')go(1);if(e.key.toLowerCase()==='r')revealAction();if(e.key.toLowerCase()==='f')flipAction()});
 setBg();render();S.auto=setInterval(rotateBg,18000);
 </script>
 </body></html>
