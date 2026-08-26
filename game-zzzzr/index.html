@@ -434,7 +434,7 @@
     const glove=new THREE.Mesh(new THREE.SphereGeometry(.25,14,10),gloveMat);glove.scale.set(1,.82,1.25);glove.position.set(0,-.015,-.98);arm.add(glove);
     const heldBall=new THREE.Mesh(new THREE.SphereGeometry(.22,14,10),snowWhite);heldBall.position.set(0,.06,-1.23);heldBall.castShadow=true;arm.add(heldBall);
 
-    const aim = { mouseX:innerWidth*.5, mouseY:innerHeight*.52, yaw:0, pitch:.35, velocity:new THREE.Vector3(), flightTime:1, points:[] };
+    const aim = { mouseX:innerWidth*.5, mouseY:innerHeight*.52, yaw:0, pitch:.35, targetYaw:0, targetPitch:.35, velocity:new THREE.Vector3(), flightTime:1, points:[] };
     // A short, solid launch gesture: thick enough to read through the storm,
     // but deliberately too short to disclose the snowball's landing point.
     const guideMat=new THREE.MeshBasicMaterial({color:0xffd66f,transparent:true,opacity:.94,depthTest:false});
@@ -442,31 +442,41 @@
     const arcLine=new THREE.Mesh(arcGeo,guideMat);arcLine.renderOrder=30;scene.add(arcLine);
     // A rounded teardrop profile reads as an arrow without looking like a sharp cursor.
     const tipProfile=[
-      new THREE.Vector2(0,-.43),new THREE.Vector2(.19,-.38),new THREE.Vector2(.29,-.17),
-      new THREE.Vector2(.28,.06),new THREE.Vector2(.18,.32),new THREE.Vector2(0,.62)
+      new THREE.Vector2(0,-.4),new THREE.Vector2(.17,-.37),new THREE.Vector2(.255,-.18),
+      new THREE.Vector2(.245,.08),new THREE.Vector2(.15,.4),new THREE.Vector2(.065,.61),new THREE.Vector2(0,.72)
     ];
-    const tip=new THREE.Mesh(new THREE.LatheGeometry(tipProfile,18),guideMat);tip.renderOrder=31;scene.add(tip);
+    const tip=new THREE.Mesh(new THREE.LatheGeometry(tipProfile,24),guideMat);tip.renderOrder=31;scene.add(tip);
     const releasePoint=new THREE.Vector3(.7,2.56,10.12);
     const THROW_SPEED=33, THROW_GRAVITY=9.8;
     function ballisticPoint(velocity,time,out=new THREE.Vector3()){
       out.copy(releasePoint).addScaledVector(velocity,time);out.y-=.5*THROW_GRAVITY*time*time;return out;
     }
-    function updateAim(clientX=aim.mouseX,clientY=aim.mouseY){
+    function setAimTarget(clientX=aim.mouseX,clientY=aim.mouseY){
       aim.mouseX=clientX;aim.mouseY=clientY;
       const nx=THREE.MathUtils.clamp(clientX/innerWidth*2-1,-1,1),ny=THREE.MathUtils.clamp(clientY/innerHeight,0,1);
-      aim.yaw=nx*.53;aim.pitch=THREE.MathUtils.lerp(-.08,.82,Math.pow(1-ny,.92));
+      // Perspective-correct screen mapping reaches the true left and right edges
+      // of the camera view instead of stopping at the former 30-degree limit.
+      const verticalHalfFov=THREE.MathUtils.degToRad(camera.fov)*.5;
+      aim.targetYaw=Math.atan(nx*Math.tan(verticalHalfFov)*camera.aspect);
+      aim.targetPitch=THREE.MathUtils.lerp(-.08,.82,Math.pow(1-ny,.92));
+    }
+    function updateAim(dt=0,force=false){
+      const blend=force?1:1-Math.exp(-dt*26),oldYaw=aim.yaw,oldPitch=aim.pitch;
+      aim.yaw=THREE.MathUtils.lerp(aim.yaw,aim.targetYaw,blend);aim.pitch=THREE.MathUtils.lerp(aim.pitch,aim.targetPitch,blend);
+      if(!force&&Math.abs(aim.yaw-oldYaw)<.000015&&Math.abs(aim.pitch-oldPitch)<.000015)return;
       const horizontal=Math.cos(aim.pitch)*THROW_SPEED;
       aim.velocity.set(Math.sin(aim.yaw)*horizontal,Math.sin(aim.pitch)*THROW_SPEED,-Math.cos(aim.yaw)*horizontal);
       aim.flightTime=(aim.velocity.y+Math.sqrt(aim.velocity.y*aim.velocity.y+2*THROW_GRAVITY*(releasePoint.y-.08)))/THROW_GRAVITY;
-      // Only the opening fraction is drawn. It is an aiming cue, never a landing prediction.
-      const guideTime=Math.min(.42,aim.flightTime*.22),pts=[];for(let i=0;i<=13;i++)pts.push(ballisticPoint(aim.velocity,guideTime*i/13));aim.points=pts;
+      // Show a longer, smoothly sampled opening section of the exact physical arc,
+      // while still ending well before the undisclosed landing position.
+      const guideTime=Math.min(.62,Math.max(.28,aim.flightTime*.3)),pts=[];for(let i=0;i<=24;i++)pts.push(ballisticPoint(aim.velocity,guideTime*i/24));aim.points=pts;
       const oldGuideGeo=arcLine.geometry;
-      arcGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),22,.13,12,false);
+      arcGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),38,.13,14,false);
       arcLine.geometry=arcGeo;oldGuideGeo.dispose();
-      const tangent=aim.velocity.clone();tangent.y-=THROW_GRAVITY*guideTime;tip.position.copy(pts[13]);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent.normalize());
+      const tangent=aim.velocity.clone();tangent.y-=THROW_GRAVITY*guideTime;tip.position.copy(pts[24]);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent.normalize());
       arm.userData.aimYaw=-aim.yaw*.78;arm.userData.aimPitch=aim.pitch*.7-.08;
     }
-    updateAim();
+    setAimTarget();updateAim(0,true);
 
     const state={mode:'intro',difficulty:'hard',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0,muted:false};
 
@@ -493,9 +503,11 @@
       const depth=78+Math.random()*40, width=18+depth*.27, x=(Math.random()*2-1)*width;
       const e=makeSnowman(x,camera.position.z-depth);e.speed=Math.min(2.15,.66+state.kills*.0022+state.elapsed*.00115)*(0.86+Math.random()*.28);state.enemies.push(e);
     }
-    function spawnInterval(){return Math.max(.48,4.7-state.kills*.0068-state.elapsed*.0051);}
+    // A 17.647% longer interval produces exactly 15% fewer spawns over time.
+    function spawnInterval(){return Math.max(.565,(4.7-state.kills*.0068-state.elapsed*.0051)/.85);}
 
     const projectileGeo=new THREE.SphereGeometry(.23,14,10),projectileMat=new THREE.MeshStandardMaterial({color:0xf8ffff,roughness:.82});
+    const SNOWMAN_HIT_PARTS=[[0,1.03,0,1.17],[.035,2.22,0,.91],[-.025,3.25,.015,.71]];
     // Traverse the unchanged ballistic path at ten times the previous flight speed.
     // The trajectory and landing point stay identical; only real travel time changes.
     const PROJECTILE_TIME_SCALE=18.5;
@@ -620,7 +632,15 @@
       for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i],travel=dt*PROJECTILE_TIME_SCALE,steps=Math.max(1,Math.ceil(travel/.018)),step=travel/steps;let hit=null;
         for(let s=0;s<steps&&!hit;s++){
           p.age+=step;ballisticPoint(p.velocity,p.age,p.mesh.position);
-          for(const e of state.enemies){const center=e.group.position.clone();center.y=1.95*e.scale;if(p.mesh.position.distanceTo(center)<1.08*e.scale){hit=e;break;}}
+          // Match the actual three-part snowman silhouette. Head, torso, and lower
+          // body hits now register independently instead of relying on one undersized center sphere.
+          for(const e of state.enemies){
+            for(const part of SNOWMAN_HIT_PARTS){
+              const dx=p.mesh.position.x-(e.group.position.x+part[0]*e.scale),dy=p.mesh.position.y-(e.group.position.y+part[1]*e.scale),dz=p.mesh.position.z-(e.group.position.z+part[2]*e.scale),radius=part[3]*e.scale+.23;
+              if(dx*dx+dy*dy+dz*dz<radius*radius){hit=e;break;}
+            }
+            if(hit)break;
+          }
         }
         p.mesh.rotation.x+=travel*8;
         if(hit){eliminate(hit,p.mesh.position.clone());scene.remove(p.mesh);state.projectiles.splice(i,1);continue;}
@@ -629,7 +649,7 @@
     }
     function updateChunks(dt){for(let i=state.chunks.length-1;i>=0;i--){const c=state.chunks[i];c.life-=dt;c.vel.y-=8.5*dt;c.mesh.position.addScaledVector(c.vel,dt);c.mesh.scale.setScalar(Math.max(0,c.life/.6));if(c.life<=0){scene.remove(c.mesh);state.chunks.splice(i,1);}}}
     function updateEnemies(dt,t){
-      const speedMultiplier=t<state.speedSurgeUntil?2:1;
+      const speedMultiplier=1.1*(t<state.speedSurgeUntil?2:1);
       for(let i=state.enemies.length-1;i>=0;i--){const e=state.enemies[i];e.group.position.z+=e.speed*speedMultiplier*dt;e.group.position.x=e.baseX+Math.sin(t*.0017+e.phase)*.42;e.group.rotation.z=Math.sin(t*.005+e.phase)*.022;e.group.rotation.y=Math.sin(t*.002+e.phase)*.035;
         if(e.group.position.z>camera.position.z-4.2){finish(false);return;}
       }
@@ -637,7 +657,7 @@
 
     const clock=new THREE.Clock();
     function animate(now){
-      requestAnimationFrame(animate);const dt=Math.min(.05,clock.getDelta());skyUniforms.time.value=now*.001;updateSnow(dt,now);updateArm(dt);updateProjectiles(dt);updateChunks(dt);
+      requestAnimationFrame(animate);const dt=Math.min(.05,clock.getDelta());skyUniforms.time.value=now*.001;updateSnow(dt,now);updateAim(dt);updateArm(dt);updateProjectiles(dt);updateChunks(dt);
       if(state.mode==='playing'){
         state.elapsed=(now-state.startedAt)/1000;updateEnemies(dt,now);
         if(state.mode==='playing'&&state.elapsed-state.lastSpawn>=spawnInterval()){spawnEnemy();state.lastSpawn=state.elapsed;}
@@ -648,7 +668,7 @@
     }
     requestAnimationFrame(animate);
 
-    renderer.domElement.addEventListener('mousemove',e=>updateAim(e.clientX,e.clientY));
+    addEventListener('mousemove',e=>setAimTarget(e.clientX,e.clientY));
     renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)beginThrow();});
     ui.solve.addEventListener('click',openQuestion);ui.submit.addEventListener('click',submitAnswer);ui.throwChoice.addEventListener('click',closeQuestion);ui.nextChoice.addEventListener('click',nextQuestion);
     ui.input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitAnswer();}});
@@ -659,7 +679,7 @@
     ui.start.textContent='Start Hard Mode';
     ui.start.addEventListener('click',startGame);ui.restart.addEventListener('click',()=>{ui.rules.style.display='grid';ui.difficultySelect.style.display='grid';ui.finalStats.classList.remove('visible');ui.restart.style.display='none';startGame();});
     ui.mute.addEventListener('click',()=>{state.muted=!state.muted;ui.mute.textContent=state.muted?'×':'♪';ui.mute.setAttribute('aria-label',state.muted?'Unmute sound':'Mute sound');if(windGain)windGain.gain.value=state.muted?0:.085;});
-    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2.2));updateAim(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));});
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2.2));setAimTarget(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));updateAim(0,true);});
     document.addEventListener('visibilitychange',()=>{if(document.hidden&&audioCtx)audioCtx.suspend();else if(audioCtx&&!state.muted)audioCtx.resume();});
     updateHud();
   })();
