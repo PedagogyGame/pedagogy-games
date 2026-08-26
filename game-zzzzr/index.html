@@ -246,7 +246,9 @@
     camera.lookAt(0, 1.8, -56);
     scene.add(camera);
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2.2));
+    // A 1.65 cap remains crisp on Retina/5K displays without rendering millions
+    // of unnecessary extra pixels every frame.
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
     renderer.setSize(innerWidth, innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -272,7 +274,7 @@
     const moon = new THREE.DirectionalLight(0xe7f2ff, 2.55);
     moon.position.set(-32, 55, 18);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.mapSize.set(1024, 1024);
     moon.shadow.camera.left = -75; moon.shadow.camera.right = 75; moon.shadow.camera.top = 70; moon.shadow.camera.bottom = -35;
     moon.shadow.camera.near = 1; moon.shadow.camera.far = 180; moon.shadow.bias = -.00025;
     scene.add(moon);
@@ -336,24 +338,27 @@
     addMountainRange(-138,-2,24,0x6f858d,19);addMountainRange(-166,-3,33,0x526a75,47);
 
     const trunkMat = new THREE.MeshStandardMaterial({color:0x25332f,roughness:1});
-    const pineMats = [0x2f4947,0x385451,0x425d59].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1}));
-    const trunkGeo = new THREE.CylinderGeometry(.16,.25,2,6);
-    const pineGeo = new THREE.ConeGeometry(2,5,12);
-    const pineSnowGeo = new THREE.ConeGeometry(2.03,.55,12);
+    const pineMat = new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,vertexColors:true});
     const branchSnowMat=new THREE.MeshStandardMaterial({color:0xd9e6e7,roughness:1});
-    function addPine(x,z,s){
-      const group=new THREE.Group();
-      const trunk=new THREE.Mesh(trunkGeo,trunkMat); trunk.position.y=1*s; trunk.scale.set(s,s,s); group.add(trunk);
+    const trunkGeo = new THREE.CylinderGeometry(.16,.25,2,9);
+    // Higher radial resolution than the former trees, but all trunks, boughs, and
+    // snow shelves are consolidated into only three instanced draw calls.
+    const pineGeo = new THREE.ConeGeometry(2,5,18);
+    const pineSnowGeo = new THREE.ConeGeometry(2.03,.55,18);
+    const pineSpecs=[];
+    for(let i=0;i<52;i++){const side=i%2?-1:1,z=-20-worldRand()*150,x=side*(44+worldRand()*34+Math.max(0,-z-70)*.08);pineSpecs.push({x,z,s:.72+worldRand()*1.45});}
+    for(let i=0;i<22;i++)pineSpecs.push({x:-72+worldRand()*144,z:-170-worldRand()*14,s:.85+worldRand()*1.2});
+    const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,pineSpecs.length),boughs=new THREE.InstancedMesh(pineGeo,pineMat,pineSpecs.length*4),snowShelves=new THREE.InstancedMesh(pineSnowGeo,branchSnowMat,pineSpecs.length*4);
+    const matrix=new THREE.Matrix4(),position=new THREE.Vector3(),quaternion=new THREE.Quaternion(),scale=new THREE.Vector3(),axisY=new THREE.Vector3(0,1,0),pineColors=[new THREE.Color(0x2f4947),new THREE.Color(0x385451),new THREE.Color(0x425d59)];let layerIndex=0;
+    pineSpecs.forEach((spec,i)=>{
+      position.set(spec.x,spec.s,spec.z);quaternion.identity();scale.setScalar(spec.s);matrix.compose(position,quaternion,scale);trunks.setMatrixAt(i,matrix);
       for(let j=0;j<4;j++){
-        const layerScale=1-j*.145,p=new THREE.Mesh(pineGeo,pineMats[j%3]);p.scale.set(s*layerScale,s*.54,s*layerScale);p.position.y=(2.15+j*.92)*s;p.rotation.y=j*.41+worldRand()*.18;p.castShadow=true;group.add(p);
-        const cap=new THREE.Mesh(pineSnowGeo,branchSnowMat);cap.scale.set(s*layerScale*1.015,s*.72,s*layerScale*1.015);cap.position.y=(3.48+j*.92)*s;cap.rotation.y=p.rotation.y;cap.castShadow=true;group.add(cap);
+        const layerScale=1-j*.145,yaw=j*.41+worldRand()*.18;position.set(spec.x,(2.15+j*.92)*spec.s,spec.z);quaternion.setFromAxisAngle(axisY,yaw);scale.set(spec.s*layerScale,spec.s*.54,spec.s*layerScale);matrix.compose(position,quaternion,scale);boughs.setMatrixAt(layerIndex,matrix);boughs.setColorAt(layerIndex,pineColors[j%3]);
+        position.set(spec.x,(3.48+j*.92)*spec.s,spec.z);scale.set(spec.s*layerScale*1.015,spec.s*.72,spec.s*layerScale*1.015);matrix.compose(position,quaternion,scale);snowShelves.setMatrixAt(layerIndex,matrix);layerIndex++;
       }
-      group.position.set(x,0,z); scene.add(group);
-    }
-    for(let i=0;i<52;i++){
-      const side=i%2?-1:1, z=-20-worldRand()*150, x=side*(44+worldRand()*34+Math.max(0,-z-70)*.08); addPine(x,z,.72+worldRand()*1.45);
-    }
-    for(let i=0;i<22;i++) addPine(-72+worldRand()*144,-170-worldRand()*14,.85+worldRand()*1.2);
+    });
+    trunks.instanceMatrix.needsUpdate=boughs.instanceMatrix.needsUpdate=snowShelves.instanceMatrix.needsUpdate=true;if(boughs.instanceColor)boughs.instanceColor.needsUpdate=true;
+    boughs.castShadow=snowShelves.castShadow=true;trunks.receiveShadow=boughs.receiveShadow=snowShelves.receiveShadow=true;scene.add(trunks,boughs,snowShelves);
 
     // A small warm refuge, deliberately off-axis so the open field remains dominant.
     const cabin=new THREE.Group();
@@ -394,11 +399,24 @@
     const shrubGeo=new THREE.BufferGeometry();shrubGeo.setAttribute('position',new THREE.Float32BufferAttribute(shrubVerts,3));scene.add(new THREE.LineSegments(shrubGeo,new THREE.LineBasicMaterial({color:0x4d4842,transparent:true,opacity:.72})));
     const shrubSnowGeo=new THREE.BufferGeometry();shrubSnowGeo.setAttribute('position',new THREE.Float32BufferAttribute(shrubSnow,3));scene.add(new THREE.Points(shrubSnowGeo,new THREE.PointsMaterial({color:0xe9f0ef,size:.14,sizeAttenuation:true,transparent:true,opacity:.86})));
 
+    const rockGeo=new THREE.DodecahedronGeometry(1,1),rockMat=new THREE.MeshStandardMaterial({color:0x667477,roughness:1}),rockCapGeo=new THREE.SphereGeometry(1,14,8),rockCapMat=new THREE.MeshStandardMaterial({color:0xdce7e7,roughness:1});
+    for(let i=0;i<24;i++){
+      const side=i%2?-1:1,z=-9-worldRand()*128,x=side*(25+worldRand()*45),s=.32+worldRand()*1.05;
+      const rock=new THREE.Mesh(rockGeo,rockMat);rock.position.set(x,s*.28,z);rock.scale.set(s*(.85+worldRand()*.45),s*.62,s*(.7+worldRand()*.3));rock.rotation.set(worldRand()*.35,worldRand()*Math.PI,worldRand()*.22);rock.castShadow=rock.receiveShadow=true;scene.add(rock);
+      const cap=new THREE.Mesh(rockCapGeo,rockCapMat);cap.position.set(x,s*.63,z);cap.scale.set(s*.82,s*.12,s*.67);cap.rotation.y=rock.rotation.y;scene.add(cap);
+    }
+
+    function makeFlakeTexture(){
+      const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d'),r=g.createRadialGradient(32,32,2,32,32,30);
+      r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.38,'rgba(255,255,255,.92)');r.addColorStop(.72,'rgba(236,247,250,.4)');r.addColorStop(1,'rgba(236,247,250,0)');g.fillStyle=r;g.fillRect(0,0,64,64);
+      const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return tex;
+    }
+    const flakeTexture=makeFlakeTexture();
     function createSnow(count, near){
       const arr=new Float32Array(count*3), speed=new Float32Array(count);
       for(let i=0;i<count;i++){ arr[i*3]=(worldRand()-.5)*(near?125:210); arr[i*3+1]=worldRand()*(near?45:75); arr[i*3+2]=12-worldRand()*(near?125:220); speed[i]=near?.72+worldRand()*1.6:.3+worldRand()*.75; }
       const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(arr,3));
-      const mat=new THREE.PointsMaterial({color:near?0xffffff:0xd9e6e8,size:near?.18:.26,transparent:true,opacity:near?.82:.42,depthWrite:false,sizeAttenuation:true});
+      const mat=new THREE.PointsMaterial({color:near?0xffffff:0xd9e6e8,map:flakeTexture,alphaTest:.012,size:near?.2:.27,transparent:true,opacity:near?.84:.44,depthWrite:false,sizeAttenuation:true});
       const points=new THREE.Points(geo,mat); scene.add(points); return {points,arr,speed,count,near};
     }
     const snowLayers=[createSnow(2600,true),createSnow(1500,false)];
@@ -407,7 +425,13 @@
     const snowShade=new THREE.MeshStandardMaterial({color:0xcbdcdf,roughness:1,metalness:0});
     const snowHighlight=new THREE.MeshStandardMaterial({color:0xffffff,roughness:.96,metalness:0});
     const superSnow=new THREE.MeshPhysicalMaterial({color:0xddebed,roughness:.83,metalness:0,clearcoat:.08,clearcoatRoughness:.72});
-    const packedBallMat=new THREE.MeshPhysicalMaterial({color:0xf5f9f8,roughness:.78,metalness:0,clearcoat:.055,clearcoatRoughness:.8});
+    function makeGranularSnowTexture(){
+      const c=document.createElement('canvas');c.width=c.height=192;const g=c.getContext('2d');g.fillStyle='#eef5f4';g.fillRect(0,0,192,192);
+      for(let i=0;i<8500;i++){const light=195+Math.floor(worldRand()*60),a=.045+worldRand()*.17,size=.25+worldRand()*1.8;g.fillStyle=`rgba(${light},${Math.min(255,light+7)},${Math.min(255,light+9)},${a})`;g.beginPath();g.arc(worldRand()*192,worldRand()*192,size,0,Math.PI*2);g.fill();}
+      const tex=new THREE.CanvasTexture(c);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(1.8,1.8);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=renderer.capabilities.getMaxAnisotropy();return tex;
+    }
+    const ballSnowTexture=makeGranularSnowTexture();
+    const packedBallMat=new THREE.MeshPhysicalMaterial({color:0xf5f9f8,map:ballSnowTexture,bumpMap:ballSnowTexture,bumpScale:.032,roughness:.84,metalness:0,clearcoat:.035,clearcoatRoughness:.88});
     const superScarfMat=new THREE.MeshStandardMaterial({color:0x6d2430,roughness:.78});
     const superHatMat=new THREE.MeshStandardMaterial({color:0x203846,roughness:.92});
     const coalMat=new THREE.MeshStandardMaterial({color:0x101719,roughness:.82});
@@ -429,7 +453,7 @@
       geo.computeVertexNormals();return geo;
     }
     const ballGeos=[packedSnowGeometry(1.12,1.7),packedSnowGeometry(.86,3.1),packedSnowGeometry(.63,5.4)];
-    const coalGeo=new THREE.SphereGeometry(.065,8,6), carrotGeo=new THREE.ConeGeometry(.09,.72,10), limbGeo=new THREE.CylinderGeometry(.045,.065,1,7);
+    const coalGeo=new THREE.SphereGeometry(.065,8,6), carrotGeo=new THREE.ConeGeometry(.09,.72,10), limbGeo=new THREE.CylinderGeometry(.045,.065,1,7),clumpGeo=new THREE.SphereGeometry(1,9,7),scarfGeo=new THREE.TorusGeometry(.62,.11,8,22),superScarfGeo=new THREE.TorusGeometry(.62,.145,8,22);
     function cylinderBetween(a,b,mat){
       const m=new THREE.Mesh(limbGeo,mat), d=b.clone().sub(a), len=d.length(); m.scale.y=len; m.position.copy(a).add(b).multiplyScalar(.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); return m;
     }
@@ -440,14 +464,14 @@
       const head=new THREE.Mesh(ballGeos[2],isSuper?superSnow:snowWhite); head.position.set(-.025,3.25,.015);head.scale.set(1.01,.98,.99);head.rotation.z=.035;head.castShadow=true; g.add(head);
       // A few fused handfuls of brighter snow break up the smooth computer-generated surface.
       for(const c of [[-.48,.72,.88,.16],[.42,1.24,.91,.13],[-.3,2.36,.72,.1],[.25,3.48,.53,.075]]){
-        const clump=new THREE.Mesh(new THREE.SphereGeometry(c[3],9,7),snowHighlight);clump.position.set(c[0],c[1],c[2]);clump.scale.set(1.35,.55,.42);g.add(clump);
+        const clump=new THREE.Mesh(clumpGeo,snowHighlight);clump.position.set(c[0],c[1],c[2]);clump.scale.set(c[3]*1.35,c[3]*.55,c[3]*.42);g.add(clump);
       }
       for(const ex of [-.23,.23]){const eye=new THREE.Mesh(coalGeo,coalMat); eye.position.set(ex,3.39,.58); eye.scale.set(1,1,.65); g.add(eye);}
       const damageMarks=[];
       for(let i=0;i<3;i++){const b=new THREE.Mesh(coalGeo,coalMat);b.position.set(0,2.54-i*.31,.82);b.scale.set(isSuper?1.55:1.1,isSuper?1.55:1.1,.7);g.add(b);damageMarks.push(b);}
       const nose=new THREE.Mesh(carrotGeo,carrotMat);nose.rotation.x=Math.PI/2;nose.position.set(0,3.22,.91);g.add(nose);
       for(let i=0;i<5;i++){const mouth=new THREE.Mesh(coalGeo,coalMat);const a=-.72+i*.36;mouth.position.set(Math.sin(a)*.25,3.02-Math.cos(a)*.035,.58);mouth.scale.set(.72,.72,.55);g.add(mouth);}
-      const scarf=new THREE.Mesh(new THREE.TorusGeometry(.62,isSuper ? .145 : .11,8,22),isSuper?superScarfMat:scarfMats[Math.floor(worldRand()*scarfMats.length)]);scarf.rotation.x=Math.PI/2;scarf.position.y=2.82;g.add(scarf);
+      const scarf=new THREE.Mesh(isSuper?superScarfGeo:scarfGeo,isSuper?superScarfMat:scarfMats[Math.floor(worldRand()*scarfMats.length)]);scarf.rotation.x=Math.PI/2;scarf.position.y=2.82;g.add(scarf);
       if(isSuper){
         const brim=new THREE.Mesh(new THREE.TorusGeometry(.61,.09,9,24),superHatMat);brim.rotation.x=Math.PI/2;brim.position.y=3.76;g.add(brim);
         const crown=new THREE.Mesh(new THREE.CylinderGeometry(.48,.58,.48,18),superHatMat);crown.position.y=3.98;g.add(crown);
@@ -469,20 +493,16 @@
     const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(.17,.26,.82,12),sleeveMat);sleeve.rotation.x=Math.PI/2;sleeve.position.z=-.34;arm.add(sleeve);
     const cuff=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.19,12),cuffMat);cuff.rotation.x=Math.PI/2;cuff.position.z=-.79;arm.add(cuff);
     const glove=new THREE.Mesh(new THREE.SphereGeometry(.25,14,10),gloveMat);glove.scale.set(1,.82,1.25);glove.position.set(0,-.015,-.98);arm.add(glove);
-    const heldBall=new THREE.Mesh(packedSnowGeometry(.22,7.8),packedBallMat);heldBall.position.set(0,.06,-1.23);heldBall.castShadow=true;arm.add(heldBall);
+    const heldBall=new THREE.Mesh(packedSnowGeometry(.24,7.8),packedBallMat);heldBall.position.set(0,.06,-1.23);heldBall.castShadow=true;arm.add(heldBall);
 
     const aim = { mouseX:innerWidth*.5, mouseY:innerHeight*.52, yaw:0, pitch:.35, targetYaw:0, targetPitch:.35, velocity:new THREE.Vector3(), flightTime:1, points:[] };
     // A short, solid launch gesture: thick enough to read through the storm,
     // but deliberately too short to disclose the snowball's landing point.
     const guideMat=new THREE.MeshBasicMaterial({color:0xffd66f,transparent:true,opacity:.94,depthTest:false});
-    let arcGeo=new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(),new THREE.Vector3(0,0,-1)),8,.13,12,false);
+    let arcGeo=new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(),new THREE.Vector3(0,0,-1)),8,.085,8,false);
     const arcLine=new THREE.Mesh(arcGeo,guideMat);arcLine.renderOrder=30;scene.add(arcLine);
-    // A rounded teardrop profile reads as an arrow without looking like a sharp cursor.
-    const tipProfile=[
-      new THREE.Vector2(0,-.4),new THREE.Vector2(.17,-.37),new THREE.Vector2(.255,-.18),
-      new THREE.Vector2(.245,.08),new THREE.Vector2(.15,.4),new THREE.Vector2(.065,.61),new THREE.Vector2(0,.72)
-    ];
-    const tip=new THREE.Mesh(new THREE.LatheGeometry(tipProfile,24),guideMat);tip.renderOrder=31;scene.add(tip);
+    // A compact cone is unambiguously an arrowhead rather than a ball or marker.
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(.2,.56,18),guideMat);tip.renderOrder=31;scene.add(tip);
     const releasePoint=new THREE.Vector3(.7,2.56,10.12);
     const THROW_SPEED=33, THROW_GRAVITY=9.8;
     function ballisticPoint(velocity,time,out=new THREE.Vector3()){
@@ -504,13 +524,13 @@
       const horizontal=Math.cos(aim.pitch)*THROW_SPEED;
       aim.velocity.set(Math.sin(aim.yaw)*horizontal,Math.sin(aim.pitch)*THROW_SPEED,-Math.cos(aim.yaw)*horizontal);
       aim.flightTime=(aim.velocity.y+Math.sqrt(aim.velocity.y*aim.velocity.y+2*THROW_GRAVITY*(releasePoint.y-.08)))/THROW_GRAVITY;
-      // Show a longer, smoothly sampled opening section of the exact physical arc,
-      // while still ending well before the undisclosed landing position.
-      const guideTime=Math.min(.62,Math.max(.28,aim.flightTime*.3)),pts=[];for(let i=0;i<=24;i++)pts.push(ballisticPoint(aim.velocity,guideTime*i/24));aim.points=pts;
+      // A compact opening section of the exact physical arc: readable, but smaller
+      // and cheaper to rebuild than the former oversized tube.
+      const guideTime=Math.min(.47,Math.max(.23,aim.flightTime*.245)),pts=[];for(let i=0;i<=18;i++)pts.push(ballisticPoint(aim.velocity,guideTime*i/18));aim.points=pts;
       const oldGuideGeo=arcLine.geometry;
-      arcGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),38,.13,14,false);
+      arcGeo=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),24,.085,8,false);
       arcLine.geometry=arcGeo;oldGuideGeo.dispose();
-      const tangent=aim.velocity.clone();tangent.y-=THROW_GRAVITY*guideTime;tip.position.copy(pts[24]);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent.normalize());
+      const tangent=aim.velocity.clone();tangent.y-=THROW_GRAVITY*guideTime;tip.position.copy(pts[18]);tip.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),tangent.normalize());
       arm.userData.aimYaw=-aim.yaw*.78;arm.userData.aimPitch=aim.pitch*.7-.08;
     }
     setAimTarget();updateAim(0,true);
@@ -529,7 +549,7 @@
 
     function startGame(){
       initAudio(); if(audioCtx.state==='suspended')audioCtx.resume();
-      for(const e of state.enemies)scene.remove(e.group);for(const p of state.projectiles)scene.remove(p.mesh);for(const c of state.chunks)scene.remove(c.mesh);
+      for(const e of state.enemies)scene.remove(e.group);for(const p of state.projectiles){scene.remove(p.mesh);if(p.trail){scene.remove(p.trail);p.trail.geometry.dispose();p.trail.material.dispose();}}for(const c of state.chunks)scene.remove(c.mesh);
       Object.assign(state,{mode:'countdown',ammo:0,kills:0,spawned:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0});
       ui.screen.classList.add('hidden');ui.math.classList.remove('active');ui.choices.classList.remove('visible');arcLine.visible=tip.visible=false;updateHud();
       ui.countdown.classList.add('visible');let n=3;ui.countdown.textContent=n;
@@ -544,12 +564,13 @@
     // A 17.647% longer interval produces exactly 15% fewer spawns over time.
     function spawnInterval(){return Math.max(.565,(4.7-state.kills*.0068-state.elapsed*.0051)/.85);}
 
-    const projectileGeo=packedSnowGeometry(.23,9.35),projectileMat=packedBallMat;
+    const projectileGeo=packedSnowGeometry(.27,9.35),projectileMat=packedBallMat,snowChunkGeo=new THREE.SphereGeometry(1,7,5);
     const SNOWMAN_HIT_PARTS=[[0,1.03,0,1.17],[.035,2.22,0,.91],[-.025,3.25,.015,.71]];
-    const HIT_ASSIST=1.12;
+    const HIT_ASSIST=1.48,DEPTH_ASSIST=1.96;
     // Traverse the unchanged ballistic path at ten times the previous flight speed.
     // The trajectory and landing point stay identical; only real travel time changes.
     const PROJECTILE_TIME_SCALE=18.5;
+    const MIN_VISIBLE_FLIGHT=.3;
     function beginThrow(){
       if(state.mode!=='playing'||state.question||state.armT>=0)return;
       if(state.ammo<=0){showToast('NO SNOWBALLS — SOLVE FIRST','#ffcf75');tone(105,.18,'square',.035,-25);return;}
@@ -557,11 +578,19 @@
     }
     function releaseThrow(){
       const mesh=new THREE.Mesh(projectileGeo,projectileMat);mesh.castShadow=true;mesh.position.copy(releasePoint);scene.add(mesh);
-      state.projectiles.push({mesh,velocity:state.pendingVelocity.clone(),age:0,maxAge:state.pendingFlightTime+.18,spinAxis:new THREE.Vector3(.35+Math.random(),.25+Math.random()*.4,.55+Math.random()).normalize()});state.pendingVelocity=null;
+      const trailArray=new Float32Array(24);for(let i=0;i<8;i++){trailArray[i*3]=releasePoint.x;trailArray[i*3+1]=releasePoint.y;trailArray[i*3+2]=releasePoint.z;}
+      const trailGeo=new THREE.BufferGeometry();trailGeo.setAttribute('position',new THREE.BufferAttribute(trailArray,3));
+      const trail=new THREE.Points(trailGeo,new THREE.PointsMaterial({color:0xf8ffff,map:flakeTexture,alphaTest:.01,size:.16,transparent:true,opacity:.38,depthWrite:false,sizeAttenuation:true}));scene.add(trail);
+      const playbackScale=Math.min(PROJECTILE_TIME_SCALE,Math.max(1,state.pendingFlightTime/MIN_VISIBLE_FLIGHT));
+      state.projectiles.push({mesh,trail,trailArray,velocity:state.pendingVelocity.clone(),age:0,maxAge:state.pendingFlightTime+.18,playbackScale,spinAxis:new THREE.Vector3(.35+Math.random(),.25+Math.random()*.4,.55+Math.random()).normalize()});state.pendingVelocity=null;
     }
     function burst(pos,count=15){
       tone(185,.12,'triangle',.075,-80);tone(540,.08,'sine',.04,-150);
-      for(let i=0;i<count;i++){const mesh=new THREE.Mesh(new THREE.SphereGeometry(.07+Math.random()*.09,7,5),projectileMat);mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*.9,Math.random()*1.7,(Math.random()-.5)*.7));scene.add(mesh);state.chunks.push({mesh,vel:new THREE.Vector3((Math.random()-.5)*3.8,1.5+Math.random()*3.5,(Math.random()-.5)*3.2),life:.75+Math.random()*.55});}
+      for(let i=0;i<count;i++){const size=.07+Math.random()*.09,life=.75+Math.random()*.55,mesh=new THREE.Mesh(snowChunkGeo,projectileMat);mesh.scale.setScalar(size);mesh.position.copy(pos).add(new THREE.Vector3((Math.random()-.5)*.9,Math.random()*1.7,(Math.random()-.5)*.7));scene.add(mesh);state.chunks.push({mesh,size,vel:new THREE.Vector3((Math.random()-.5)*3.8,1.5+Math.random()*3.5,(Math.random()-.5)*3.2),life,startLife:life});}
+    }
+    function groundPuff(pos){
+      tone(92,.1,'sine',.024,-18);
+      for(let i=0;i<9;i++){const size=.045+Math.random()*.055,life=.42+Math.random()*.38,mesh=new THREE.Mesh(snowChunkGeo,projectileMat);mesh.scale.setScalar(size);mesh.position.copy(pos);mesh.position.y=Math.max(.08,mesh.position.y);scene.add(mesh);state.chunks.push({mesh,size,vel:new THREE.Vector3((Math.random()-.5)*2.1,.45+Math.random()*1.25,(Math.random()-.5)*2.1),life,startLife:life});}
     }
     function eliminate(enemy,at){
       scene.remove(enemy.group);state.enemies.splice(state.enemies.indexOf(enemy),1);state.kills++;burst(at);const message=state.kills===100?'100 — THE STORM DEEPENS':state.kills===200?'200 — NO BREATHING ROOM':state.kills===300?'300 — EXTRAORDINARY':state.kills===400?'400 — ALMOST IMPOSSIBLE':enemy.isSuper?'SUPER SNOWMAN DEFEATED':'DIRECT HIT';showToast(message,state.kills%100===0||enemy.isSuper?'#ffd36a':'#e6fbff');updateHud();if(state.kills>=500)finish(true);
@@ -674,25 +703,26 @@
       if(prev<.34&&t>=.34&&state.pendingVelocity)releaseThrow();if(t>=1){state.armT=-1;arm.rotation.x=basePitch;}
     }
     function updateProjectiles(dt){
-      for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i],travel=dt*PROJECTILE_TIME_SCALE,steps=Math.max(1,Math.ceil(travel/.018)),step=travel/steps;let hit=null;
+      for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i],travel=dt*p.playbackScale,steps=Math.max(1,Math.ceil(travel/.018)),step=travel/steps;let hit=null;
         for(let s=0;s<steps&&!hit;s++){
           p.age+=step;ballisticPoint(p.velocity,p.age,p.mesh.position);
           // Match the actual three-part snowman silhouette. Head, torso, and lower
           // body hits now register independently instead of relying on one undersized center sphere.
           for(const e of state.enemies){
             for(const part of SNOWMAN_HIT_PARTS){
-              const dx=p.mesh.position.x-(e.group.position.x+part[0]*e.scale),dy=p.mesh.position.y-(e.group.position.y+part[1]*e.scale),dz=p.mesh.position.z-(e.group.position.z+part[2]*e.scale),radius=part[3]*e.scale*HIT_ASSIST+.23;
-              if(dx*dx+dy*dy+dz*dz<radius*radius){hit=e;break;}
+              const dx=p.mesh.position.x-(e.group.position.x+part[0]*e.scale),dy=p.mesh.position.y-(e.group.position.y+part[1]*e.scale),dz=p.mesh.position.z-(e.group.position.z+part[2]*e.scale),base=part[3]*e.scale,rx=base*HIT_ASSIST+.27,ry=base*1.34+.24,rz=base*DEPTH_ASSIST+.36;
+              if(dx*dx/(rx*rx)+dy*dy/(ry*ry)+dz*dz/(rz*rz)<1){hit=e;break;}
             }
             if(hit)break;
           }
         }
         p.mesh.rotateOnAxis(p.spinAxis,travel*8);
-        if(hit){damageEnemy(hit,p.mesh.position.clone());scene.remove(p.mesh);state.projectiles.splice(i,1);continue;}
-        if(p.age>=p.maxAge||p.mesh.position.y<=.08){scene.remove(p.mesh);state.projectiles.splice(i,1);tone(105,.08,'sine',.018,-20);}
+        for(let j=7;j>0;j--){p.trailArray[j*3]=p.trailArray[(j-1)*3];p.trailArray[j*3+1]=p.trailArray[(j-1)*3+1];p.trailArray[j*3+2]=p.trailArray[(j-1)*3+2];}p.trailArray[0]=p.mesh.position.x;p.trailArray[1]=p.mesh.position.y;p.trailArray[2]=p.mesh.position.z;p.trail.geometry.attributes.position.needsUpdate=true;
+        if(hit){damageEnemy(hit,p.mesh.position.clone());scene.remove(p.mesh);scene.remove(p.trail);p.trail.geometry.dispose();p.trail.material.dispose();state.projectiles.splice(i,1);continue;}
+        if(p.age>=p.maxAge||p.mesh.position.y<=.08){groundPuff(p.mesh.position.clone());scene.remove(p.mesh);scene.remove(p.trail);p.trail.geometry.dispose();p.trail.material.dispose();state.projectiles.splice(i,1);}
       }
     }
-    function updateChunks(dt){for(let i=state.chunks.length-1;i>=0;i--){const c=state.chunks[i];c.life-=dt;c.vel.y-=8.5*dt;c.mesh.position.addScaledVector(c.vel,dt);c.mesh.scale.setScalar(Math.max(0,c.life/.6));if(c.life<=0){scene.remove(c.mesh);state.chunks.splice(i,1);}}}
+    function updateChunks(dt){for(let i=state.chunks.length-1;i>=0;i--){const c=state.chunks[i];c.life-=dt;c.vel.y-=8.5*dt;c.mesh.position.addScaledVector(c.vel,dt);c.mesh.scale.setScalar(c.size*Math.max(0,c.life/c.startLife));if(c.life<=0){scene.remove(c.mesh);state.chunks.splice(i,1);}}}
     function updateEnemies(dt,t){
       const speedMultiplier=1.1*(t<state.speedSurgeUntil?2:1);
       for(let i=state.enemies.length-1;i>=0;i--){const e=state.enemies[i];
@@ -700,7 +730,7 @@
         e.wander=THREE.MathUtils.lerp(e.wander,e.wanderTarget,1-Math.exp(-dt*.82));
         const pace=1+Math.sin(t*.00115+e.pacePhase)*.048;
         e.group.position.z+=e.speed*speedMultiplier*pace*dt;e.group.position.x=e.baseX+e.wander+Math.sin(t*.0017+e.phase)*.32;e.group.rotation.z=Math.sin(t*.0044+e.phase)*.027;e.group.rotation.y=Math.sin(t*.0016+e.phase)*.045;
-        if(e.group.position.z>camera.position.z-4.2){finish(false);return;}
+        if(e.group.position.z>camera.position.z-1.65){finish(false);return;}
       }
     }
 
@@ -728,7 +758,7 @@
     ui.start.textContent='Start Hard Mode';
     ui.start.addEventListener('click',startGame);ui.restart.addEventListener('click',()=>{ui.rules.style.display='grid';ui.difficultySelect.style.display='grid';ui.finalStats.classList.remove('visible');ui.restart.style.display='none';startGame();});
     ui.mute.addEventListener('click',()=>{state.muted=!state.muted;ui.mute.textContent=state.muted?'×':'♪';ui.mute.setAttribute('aria-label',state.muted?'Unmute sound':'Mute sound');if(windGain)windGain.gain.value=state.muted?0:.085;});
-    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2.2));setAimTarget(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));updateAim(0,true);});
+    addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));setAimTarget(Math.min(aim.mouseX,innerWidth),Math.min(aim.mouseY,innerHeight));updateAim(0,true);});
     document.addEventListener('visibilitychange',()=>{if(document.hidden&&audioCtx)audioCtx.suspend();else if(audioCtx&&!state.muted)audioCtx.resume();});
     updateHud();
   })();
