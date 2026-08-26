@@ -196,7 +196,7 @@
       <h2 id="screenTitle">Snowball<br>Math Siege</h2>
       <p class="lead" id="screenLead">Snowmen are emerging through the storm. Earn every snowball with mathematics, then read the short launch guide and judge the unseen flight yourself. One miss is one snowball gone. One snowman reaching you ends the run.</p>
       <div class="rules" id="rules">
-        <div class="rule"><b>Solve</b><span>20 seconds. Correct answers earn 2 snowballs; answers within 10 seconds earn 3.</span></div>
+        <div class="rule"><b>Solve</b><span>20 seconds. Correct answers earn 2 snowballs; answers within 10 seconds earn 3. A wrong or unanswered problem makes every snowman move at double speed for 4 seconds.</span></div>
         <div class="rule"><b>Aim</b><span>The mouse sets the launch direction. The short guide never reveals the landing point or snaps onto a target.</span></div>
         <div class="rule"><b>Survive</b><span>Enemies never pause. Store at most 15 snowballs and defeat 500 to win.</span></div>
       </div>
@@ -412,7 +412,7 @@
     }
     updateAim();
 
-    const state={mode:'intro',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,muted:false};
+    const state={mode:'intro',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionStarted:0,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0,muted:false};
 
     let audioCtx=null,windGain=null;
     function initAudio(){
@@ -421,13 +421,13 @@
       const src=audioCtx.createBufferSource();src.buffer=buffer;src.loop=true;const filter=audioCtx.createBiquadFilter();filter.type='lowpass';filter.frequency.value=620;windGain=audioCtx.createGain();windGain.gain.value=.085;src.connect(filter).connect(windGain).connect(audioCtx.destination);src.start();
     }
     function tone(freq,dur,type='sine',vol=.08,slide=0){if(!audioCtx||state.muted)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(30,freq+slide),audioCtx.currentTime+dur);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);}
-    function showToast(text,color='#fff'){ui.toast.textContent=text;ui.toast.style.color=color;ui.toast.classList.add('show');clearTimeout(showToast.t);showToast.t=setTimeout(()=>ui.toast.classList.remove('show'),900);}
+    function showToast(text,color='#fff',duration=900){ui.toast.textContent=text;ui.toast.style.color=color;ui.toast.classList.add('show');clearTimeout(showToast.t);showToast.t=setTimeout(()=>ui.toast.classList.remove('show'),duration);}
     function updateHud(){ui.kills.textContent=state.kills+' / 500';ui.ammo.textContent=state.ammo+' / 15';const s=Math.floor(state.elapsed),m=Math.floor(s/60);ui.runTime.textContent=m+':'+String(s%60).padStart(2,'0');ui.solve.disabled=state.mode!=='playing'||state.ammo>=15;heldBall.visible=state.mode==='playing'&&state.ammo>0&&!(state.armT>=.34&&state.armT<1);}
 
     function startGame(){
       initAudio(); if(audioCtx.state==='suspended')audioCtx.resume();
       for(const e of state.enemies)scene.remove(e.group);for(const p of state.projectiles)scene.remove(p.mesh);for(const c of state.chunks)scene.remove(c.mesh);
-      Object.assign(state,{mode:'countdown',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0});
+      Object.assign(state,{mode:'countdown',ammo:0,kills:0,startedAt:0,elapsed:0,lastSpawn:0,enemies:[],projectiles:[],chunks:[],shots:0,hits:0,mathAsked:0,mathCorrect:0,question:null,questionResolved:false,armT:-1,pendingVelocity:null,pendingFlightTime:0,speedSurgeUntil:0});
       ui.screen.classList.add('hidden');ui.math.classList.remove('active');ui.choices.classList.remove('visible');arcLine.visible=tip.visible=false;updateHud();
       ui.countdown.classList.add('visible');let n=3;ui.countdown.textContent=n;
       const id=setInterval(()=>{n--;if(n>0){ui.countdown.textContent=n;tone(350,0.09,'sine',.05);}else{clearInterval(id);ui.countdown.textContent='SURVIVE';tone(620,.25,'triangle',.09,250);setTimeout(()=>{ui.countdown.classList.remove('visible');state.mode='playing';state.startedAt=performance.now();state.lastSpawn=-1.6;arcLine.visible=tip.visible=true;updateHud();},650);}},700);
@@ -440,6 +440,9 @@
     function spawnInterval(){return Math.max(.48,4.7-state.kills*.0068-state.elapsed*.0051);}
 
     const projectileGeo=new THREE.SphereGeometry(.23,14,10),projectileMat=new THREE.MeshStandardMaterial({color:0xf8ffff,roughness:.82});
+    // Traverse the unchanged ballistic path at ten times the previous flight speed.
+    // The trajectory and landing point stay identical; only real travel time changes.
+    const PROJECTILE_TIME_SCALE=18.5;
     function beginThrow(){
       if(state.mode!=='playing'||state.question||state.armT>=0)return;
       if(state.ammo<=0){showToast('NO SNOWBALLS — SOLVE FIRST','#ffcf75');tone(105,.18,'square',.035,-25);return;}
@@ -498,7 +501,9 @@
         state.mathCorrect++;const earned=elapsed<=10?3:2,before=state.ammo;state.ammo=Math.min(15,state.ammo+earned);const actual=state.ammo-before;
         ui.feedback.className='good';ui.feedback.textContent=`Correct — ${elapsed<=10?'fast answer! ':''}+${actual} snowball${actual===1?'':'s'}. Bank: ${state.ammo}/15. Choose what to do next.`;ui.choices.classList.add('visible');ui.nextChoice.disabled=state.ammo>=15;tone(440,.18,'sine',.07,240);
       } else {
-        ui.feedback.className='bad';ui.feedback.textContent=`${result==='timeout'?'Time expired.':'Not quite.'} Correct answer: ${state.question.display}`;tone(150,.28,'sawtooth',.045,-55);setTimeout(closeQuestion,3000);
+        state.speedSurgeUntil=performance.now()+4000;
+        ui.feedback.className='bad';ui.feedback.textContent=`${result==='timeout'?'Time expired.':'Not quite.'} Correct answer: ${state.question.display}. Snowmen are moving at double speed for 4 seconds!`;
+        showToast('SNOWMEN SURGE — 2× SPEED FOR 4 SECONDS','#ff8b7f',4000);tone(150,.28,'sawtooth',.045,-55);setTimeout(closeQuestion,3000);
       }
       updateHud();
     }
@@ -527,15 +532,20 @@
       if(prev<.34&&t>=.34&&state.pendingVelocity)releaseThrow();if(t>=1){state.armT=-1;arm.rotation.x=basePitch;}
     }
     function updateProjectiles(dt){
-      for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i];p.age+=dt;ballisticPoint(p.velocity,p.age,p.mesh.position);p.mesh.rotation.x+=dt*8;
-        let hit=null;for(const e of state.enemies){const center=e.group.position.clone();center.y=1.95*e.scale;if(p.mesh.position.distanceTo(center)<1.08*e.scale){hit=e;break;}}
+      for(let i=state.projectiles.length-1;i>=0;i--){const p=state.projectiles[i],travel=dt*PROJECTILE_TIME_SCALE,steps=Math.max(1,Math.ceil(travel/.018)),step=travel/steps;let hit=null;
+        for(let s=0;s<steps&&!hit;s++){
+          p.age+=step;ballisticPoint(p.velocity,p.age,p.mesh.position);
+          for(const e of state.enemies){const center=e.group.position.clone();center.y=1.95*e.scale;if(p.mesh.position.distanceTo(center)<1.08*e.scale){hit=e;break;}}
+        }
+        p.mesh.rotation.x+=travel*8;
         if(hit){eliminate(hit,p.mesh.position.clone());scene.remove(p.mesh);state.projectiles.splice(i,1);continue;}
         if(p.age>=p.maxAge||p.mesh.position.y<=.08){scene.remove(p.mesh);state.projectiles.splice(i,1);tone(105,.08,'sine',.018,-20);}
       }
     }
     function updateChunks(dt){for(let i=state.chunks.length-1;i>=0;i--){const c=state.chunks[i];c.life-=dt;c.vel.y-=8.5*dt;c.mesh.position.addScaledVector(c.vel,dt);c.mesh.scale.setScalar(Math.max(0,c.life/.6));if(c.life<=0){scene.remove(c.mesh);state.chunks.splice(i,1);}}}
     function updateEnemies(dt,t){
-      for(let i=state.enemies.length-1;i>=0;i--){const e=state.enemies[i];e.group.position.z+=e.speed*dt;e.group.position.x=e.baseX+Math.sin(t*.0017+e.phase)*.42;e.group.rotation.z=Math.sin(t*.005+e.phase)*.022;e.group.rotation.y=Math.sin(t*.002+e.phase)*.035;
+      const speedMultiplier=t<state.speedSurgeUntil?2:1;
+      for(let i=state.enemies.length-1;i>=0;i--){const e=state.enemies[i];e.group.position.z+=e.speed*speedMultiplier*dt;e.group.position.x=e.baseX+Math.sin(t*.0017+e.phase)*.42;e.group.rotation.z=Math.sin(t*.005+e.phase)*.022;e.group.rotation.y=Math.sin(t*.002+e.phase)*.035;
         if(e.group.position.z>camera.position.z-4.2){finish(false);return;}
       }
     }
