@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>哪边</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0f14;color:#e8e4d9;font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;justify-content:center;min-height:100vh}
+#app{width:100%;max-width:520px;display:flex;flex-direction:column;min-height:100vh}
+.screen{flex:1;display:flex;flex-direction:column;padding:16px;gap:14px;overflow-y:auto}
+h1{font-size:34px;font-weight:500;letter-spacing:2px}
+.sub{color:#8b8577;font-size:14px;line-height:1.6}
+.btn{background:#1b1f27;border:1px solid #3a3f4a;color:#e8e4d9;padding:14px 18px;border-radius:8px;font-size:17px;cursor:pointer;font-family:inherit;text-align:center;transition:background .12s}
+.btn:hover{background:#252a34}
+.btn:active{background:#2e3440}
+.card{background:#1b1f27;border:1px solid #3a3f4a;border-radius:8px;padding:16px;cursor:pointer;font-size:26px;text-align:center;letter-spacing:1px;transition:background .12s,border-color .12s}
+.card:hover{background:#252a34;border-color:#5a6070}
+.card.wrong{background:#3a1c1c;border-color:#7a3333}
+.card.right{background:#1c3a2a;border-color:#337a55}
+.cards{display:flex;flex-direction:column;gap:10px}
+.hud{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#8b8577;padding:0 2px}
+.strikes{letter-spacing:4px;color:#c96a5a}
+.line{background:#151920;border-left:2px solid #4a5568;padding:12px 14px;font-size:22px;letter-spacing:1px}
+.line .py{display:block;font-size:12px;color:#7a7466;letter-spacing:.5px;margin-top:5px}
+.gate{display:flex;flex-direction:column;gap:8px}
+.you{font-size:11px;color:#6b6559;text-transform:uppercase;letter-spacing:1px}
+select{background:#1b1f27;border:1px solid #3a3f4a;color:#e8e4d9;padding:13px;border-radius:8px;font-size:17px;width:100%;font-family:inherit}
+.pin{font-size:12px;color:#7a7466;text-align:center;letter-spacing:.5px;min-height:16px}
+.tog{font-size:12px;color:#6b6559;text-align:center;cursor:pointer;padding:4px}
+.big{font-size:44px;letter-spacing:3px;text-align:center;padding:20px 0}
+.mid{text-align:center;font-size:16px;color:#8b8577;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var app=document.getElementById('app');
+var pinyinOn=false;
+
+function say(t){
+  try{
+    speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(t);
+    u.lang='zh-CN';u.rate=.8;
+    var vs=speechSynthesis.getVoices();
+    for(var i=0;i<vs.length;i++){if(vs[i].lang&&vs[i].lang.indexOf('zh')===0){u.voice=vs[i];break;}}
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+if(window.speechSynthesis)speechSynthesis.getVoices();
+
+var DIR={
+  left:{zh:['左转','左拐'],py:['zuǒ zhuǎn','zuǒ guǎi']},
+  right:{zh:['右转','右拐'],py:['yòu zhuǎn','yòu guǎi']},
+  straight:{zh:['一直走'],py:['yìzhí zǒu']},
+  that:{zh:['那边'],py:['nàbiān']}
+};
+/* 转 is standard everywhere; 拐 is colloquial and leans northern.
+   Oscillate rather than fix, so the player meets both registers. */
+function dirZh(d){var a=DIR[d].zh;return a[Math.floor(Math.random()*a.length)];}
+/* agreement: 对 and 是 both mean yes here. 不是 is the refusal. */
+var AGREE=['对','是'];
+function agreeZh(){return AGREE[Math.floor(Math.random()*AGREE.length)];}
+
+var COUNTRIES=[['韩国','Hánguó','South Korea'],['日本','Rìběn','Japan'],['美国','Měiguó','United States'],
+['俄罗斯','Éluósī','Russia'],['越南','Yuènán','Vietnam'],['马来西亚','Mǎláixīyà','Malaysia'],
+['新加坡','Xīnjiāpō','Singapore'],['菲律宾','Fēilǜbīn','Philippines'],['蒙古','Ménggǔ','Mongolia'],
+['泰国','Tàiguó','Thailand'],['加拿大','Jiānádà','Canada'],['澳大利亚','Àodàlìyà','Australia'],
+['印度','Yìndù','India'],['德国','Déguó','Germany'],['英国','Yīngguó','United Kingdom'],
+['法国','Fǎguó','France'],['印度尼西亚','Yìndùníxīyà','Indonesia'],['意大利','Yìdàlì','Italy'],
+['哈萨克斯坦','Hāsàkèsītǎn','Kazakhstan'],['缅甸','Miǎndiàn','Myanmar']];
+
+var NODES={
+ start:{p:[140,196],lm:null,go:{straight:'j1'}},
+ j1 :{p:[140,172],lm:'车站',  pt:'right',   go:{straight:'j2',left:'k1'}, dead:{right:[176,172]}},
+ k1 :{p:[104,172],lm:'小卖部',pt:'straight',go:{straight:'k2'},  dead:{left:[72,172]}},
+ k2 :{p:[104,148],lm:'地铁站',pt:'left',    go:{right:'j2',straight:'j3b'}, dead:{left:[72,148]}},
+ j2 :{p:[140,148],lm:'地铁站',pt:'left',    go:{left:'j3',straight:'j4'},  dead:{right:[176,148]}},
+ j3 :{p:[122,148],lm:'小卖部',pt:'left',    go:{straight:'j3b'}, dead:{left:[90,140]}},
+ j3b:{p:[104,124],lm:'车站',  pt:'right',   go:{right:'j5',straight:'k3'}, dead:{left:[72,124]}},
+ j4 :{p:[140,124],lm:'车站',  pt:'straight',go:{straight:'j5',right:'m1'}, dead:{}},
+ m1 :{p:[176,124],lm:'小卖部',pt:'left',    go:{straight:'m2'},  dead:{right:[212,124]}},
+ m2 :{p:[176,100],lm:'地铁站',pt:'right',   go:{left:'j5',straight:'m3'},  dead:{right:[212,100]}},
+ m3 :{p:[176,76], lm:'车站',  pt:'straight',go:{straight:'j7'},  dead:{right:[212,76]}},
+ k3 :{p:[104,100],lm:'地铁站',pt:'straight',go:{right:'j5'},     dead:{straight:[104,76]}},
+ j5 :{p:[140,100],lm:'地铁站',pt:'left',    go:{straight:'j6'},  dead:{left:[122,88]}},
+ j6 :{p:[140, 76],lm:'小卖部',pt:'right',   go:{right:'j7',straight:'n1'}, dead:{left:[104,76]}},
+ n1 :{p:[140, 52],lm:'车站',  pt:'left',    go:{right:'j8'},     dead:{straight:[140,28],left:[104,52]}},
+ j7 :{p:[158, 76],lm:'地铁站',pt:'right',   go:{straight:'j8'},  dead:{right:[194,68]}},
+ j8 :{p:[158, 52],lm:'车站',  pt:'left',    go:{left:'j9'},      dead:{straight:[158,28]}},
+ j9 :{p:[122, 52],lm:'小卖部',pt:'straight',go:{straight:'j10'}, dead:{left:[90,52]}},
+ j10:{p:[122, 28],lm:'地铁站',pt:'right',   go:{left:'goal'},    dead:{straight:[122,8],right:[158,28]}},
+ goal:{p:[86,28],lm:null,go:{}}
+};
+
+var S={};
+function reset(){
+  S={name:'',country:null,at:'start',strikes:0,mins:0,busy:false,cards:{},pt:{},seen:{}};
+  rollPointing();
+}
+/* The driver is a real driver: mostly right, sometimes wrong, and never
+   wrong in the same place twice running. Rolled fresh each game so the
+   route can't be memorised — you have to read the cards. */
+var RIGHT_RATE=0.62;
+function rollPointing(){
+  S.pt={};
+  for(var id in NODES){
+    var n=NODES[id];
+    if(!n.pt)continue;
+    var viable=[],dead=[];
+    for(var d in n.go)viable.push(d);
+    for(var d2 in (n.dead||{}))dead.push(d2);
+    var pool=(Math.random()<RIGHT_RATE||!dead.length)?viable:dead;
+    if(!pool.length)pool=viable;
+    S.pt[id]=pool[Math.floor(Math.random()*pool.length)];
+  }
+}
+function curPt(){return S.pt[S.at]||NODES[S.at].pt;}
+reset();
+
+/* Traffic. A block takes three or four minutes depending on the lights,
+   which averages 3.5 — enough that the long way round can cost you the
+   restaurant, but only if you also guess wrong somewhere. */
+function blockTime(){return 3+(Math.random()<0.5?0:1);}
+var DEAD_MIN=11;
+var OPEN_MIN=21*60+40;   /* 21:40 — you get in the cab */
+var CLOSE_MIN=22*60+30;  /* 22:30 — the shutter comes down */
+function nowMin(){return OPEN_MIN+S.mins;}
+function isLate(){return nowMin()>CLOSE_MIN;}
+function minsLeft(){return CLOSE_MIN-nowMin();}
+function clockStr(){
+  var t=Math.round(nowMin());
+  var h=Math.floor(t/60)%24,m=Math.floor(t%60);
+  return (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+function L(zh,py){
+  return '<div class="line" onclick="say(\''+zh+'\')">'+zh+
+    (pinyinOn?'<span class="py">'+py+'</span>':'')+'</div>';
+}
+
+/* ---------- title ---------- */
+function title(){
+  app.innerHTML='<div class="screen" style="justify-content:center;gap:22px">'+
+   '<h1 style="text-align:center">哪边</h1>'+
+   '<div class="mid">Beijing, 2010. A taxi. A restaurant that closes at 22:30.<br>You do not speak Chinese.</div>'+
+   '<div class="sub" style="text-align:center">Every answer is in characters. The map shows you where to go — the words are how you say it. Those are the same problem.</div>'+
+   '<div class="btn" onclick="reset();gate(0)">开始</div>'+
+   '<div class="tog" onclick="pinyinOn=!pinyinOn;title()">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
+}
+
+function cab(step){
+  var s='<svg viewBox="0 0 280 130" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
+  s+='<rect x="0" y="96" width="280" height="34" fill="#15191f"/>';
+  s+='<rect x="0" y="96" width="280" height="2" fill="#252b33"/>';
+  for(var i=0;i<7;i++) s+='<rect x="'+(8+i*42)+'" y="112" width="22" height="3" fill="#2b323b"/>';
+  s+='<circle cx="34" cy="20" r="14" fill="#e8b830" opacity=".14"/>';
+  s+='<circle cx="34" cy="20" r="4" fill="#f0c94a" opacity=".5"/>';
+  s+='<rect x="152" y="18" width="112" height="62" fill="#12171e"/>';
+  for(var r=0;r<3;r++)for(var c2=0;c2<4;c2++){
+    var lit=((r*4+c2)%3!==1);
+    s+='<rect x="'+(160+c2*26)+'" y="'+(26+r*20)+'" width="14" height="11" fill="'+(lit?'#c9a94a':'#1b2129')+'" opacity="'+(lit?'.5':'1')+'"/>';
+  }
+  s+='<rect x="24" y="52" width="118" height="40" rx="7" fill="#1f6b52"/>';
+  s+='<rect x="24" y="52" width="118" height="13" rx="6" fill="#e8dcc0"/>';
+  s+='<rect x="38" y="58" width="30" height="20" rx="3" fill="#0f1a18"/>';
+  s+='<rect x="80" y="58" width="34" height="20" rx="3" fill="#0f1a18"/>';
+  s+='<circle cx="48" cy="94" r="9" fill="#14181e"/>';
+  s+='<circle cx="122" cy="94" r="9" fill="#14181e"/>';
+  s+='<rect x="30" y="40" width="40" height="12" rx="3" fill="#f0c94a"/>';
+  s+='<text x="50" y="49" fill="#3a2f10" font-size="8" text-anchor="middle">TAXI</text>';
+  if(step>=1) s+='<circle cx="60" cy="70" r="6" fill="#2b333f"/>';
+  s+='<rect x="200" y="46" width="46" height="20" rx="3" fill="#c9241c" stroke="#ff6b5a" stroke-width="1.2"/>';
+  s+='<text x="223" y="61" fill="#fff3e0" font-size="12" text-anchor="middle">饭馆</text>';
+  s+='<ellipse cx="223" cy="56" rx="40" ry="16" fill="#ff5540" opacity=".10"/>';
+  return s+'</svg>';
+}
+
+/* ---------- gate ---------- */
+var GATE=[
+ {q:'The driver waits. What is this vehicle called?',zh:'出租车',py:'chūzūchē',en:'taxi'},
+ {q:'Greet him.',zh:'你好',py:'nǐ hǎo',en:'hello'},
+ {q:'Tell him your name.',zh:'我叫',py:'wǒ jiào',en:'my name is…',name:true},
+ {q:'Tell him where you are from.',zh:'我是',py:'wǒ shì … rén',en:'I am from…',country:true},
+ {q:'Tell him where you need to go.',zh:'我要去饭馆',py:'wǒ yào qù fànguǎn',en:'I need to go to the restaurant'}
+];
+
+function gate(i){
+  if(i>=GATE.length)return knowWay();
+  var g=GATE[i];
+  say(g.zh);
+  var body='<div class="screen"><div class="hud"><span>'+(i+1)+' / 5</span><span>'+clockStr()+'</span></div>'+
+    cab(i)+'<div class="sub">'+g.q+'</div><div class="big">'+g.zh+(g.name?'…':'')+'</div>'+
+    '<div class="pin">'+(pinyinOn?g.py+' — ':'')+g.en+'</div><div class="gate">';
+  if(g.name){
+    body+='<input id="nm" class="btn" style="text-align:left" placeholder="your name" value="'+esc(S.name)+'">'+
+      '<div class="btn" onclick="S.name=(document.getElementById(\'nm\').value||\'Ben\');say(\'我叫\'+S.name);setTimeout(function(){gate('+(i+1)+')},700)">说</div>';
+  }else if(g.country){
+    body+='<select id="ct">';
+    for(var k=0;k<COUNTRIES.length;k++)body+='<option value="'+k+'">'+COUNTRIES[k][0]+' — '+COUNTRIES[k][2]+'</option>';
+    body+='</select><div class="btn" onclick="pickCountry('+(i+1)+')">说</div>';
+  }else{
+    body+='<div class="card" onclick="say(\''+g.zh+'\');setTimeout(function(){gate('+(i+1)+')},700)">'+g.zh+'</div>';
+  }
+  body+='</div><div class="tog" onclick="pinyinOn=!pinyinOn;gate('+i+')">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
+  app.innerHTML=body;
+}
+function pickCountry(n){
+  var k=+document.getElementById('ct').value;
+  S.country=COUNTRIES[k];
+  say('我是'+S.country[0]+'人');
+  setTimeout(function(){gate(n)},900);
+}
+
+/* ---------- the trap ---------- */
+function knowWay(){
+  say('你知道路吗');
+  app.innerHTML='<div class="screen"><div class="hud"><span>出租车</span><span>'+clockStr()+'</span></div>'+
+    cab(5)+L('你知道路吗？','nǐ zhīdào lù ma?')+
+    '<div class="sub">He is waiting for an answer before he pulls away.</div>'+
+    '<div class="cards" style="margin-top:auto">'+
+    '<div class="card" onclick="say(\'知道\');setTimeout(drive,800)">知道</div>'+
+    '<div class="card" id="no" onclick="refuse()">不知道</div></div>'+
+    '<div class="pin" id="nt"></div></div>';
+}
+var noCount=0;
+function refuse(){
+  noCount++;say('不知道');
+  var m=['He does not move.','He still does not move.','He looks at you in the mirror.','The meter is running.','You are going to have to say you know.'];
+  document.getElementById('nt').textContent=m[Math.min(noCount-1,m.length-1)];
+}
+
+/* ---------- map ---------- */
+function map(){
+  var s='<svg viewBox="0 0 280 218" style="width:100%;height:auto;background:#12151b;border:1px solid #262b34;border-radius:8px">';
+  var seen={};
+  for(var id in NODES){
+    var n=NODES[id];
+    for(var d in (n.go||{})){
+      var t=NODES[n.go[d]];if(!t)continue;
+      var key=id+'-'+n.go[d];if(seen[key])continue;seen[key]=1;
+      var viable=(id===S.at);
+      s+='<path d="M'+n.p[0]+' '+n.p[1]+' V'+t.p[1]+' H'+t.p[0]+'" fill="none" stroke="'+
+        (viable?'#4ade80':'#3a4150')+'" stroke-width="'+(viable?3:2)+'"/>';
+    }
+    for(var d2 in (n.dead||{})){
+      var e=n.dead[d2];
+      s+='<path d="M'+n.p[0]+' '+n.p[1]+' V'+e[1]+' H'+e[0]+'" fill="none" stroke="#3a4150" stroke-width="2"/>';
+      s+='<circle cx="'+e[0]+'" cy="'+e[1]+'" r="2.5" fill="#4a5160"/>';
+    }
+  }
+  var LMC={'车站':'#f0c94a','地铁站':'#5aa8f0','小卖部':'#ff6b5a'};
+  for(var id3 in NODES){
+    var n3=NODES[id3];
+    if(!n3.lm)continue;
+    var col=LMC[n3.lm]||'#888';
+    s+='<circle cx="'+(n3.p[0]+7)+'" cy="'+(n3.p[1]-6)+'" r="6" fill="'+col+'" opacity=".18"/>';
+    s+='<circle cx="'+(n3.p[0]+7)+'" cy="'+(n3.p[1]-6)+'" r="2.6" fill="'+col+'" opacity=".85"/>';
+  }
+  var g=NODES.goal.p;
+  s+='<circle cx="'+g[0]+'" cy="'+g[1]+'" r="11" fill="#e05a3a" opacity=".16"/>';
+  s+='<circle cx="'+g[0]+'" cy="'+g[1]+'" r="5" fill="#e05a3a"/>';
+  s+='<text x="'+(g[0]-10)+'" y="'+(g[1]-9)+'" fill="#e8a08a" font-size="10">饭馆</text>';
+  var c=NODES[S.at].p;
+  s+='<circle cx="'+c[0]+'" cy="'+c[1]+'" r="5" fill="#f5d90a"/>';
+  s+='<path d="M'+c[0]+' '+(c[1]-8)+' l4 6 h-8 z" fill="#f5d90a"/>';
+  s+='<circle cx="14" cy="207" r="3" fill="#f0c94a"/><text x="21" y="211" fill="#8b8577" font-size="9">车站</text>';
+  s+='<circle cx="60" cy="207" r="3" fill="#5aa8f0"/><text x="67" y="211" fill="#8b8577" font-size="9">地铁站</text>';
+  s+='<circle cx="118" cy="207" r="3" fill="#ff6b5a"/><text x="125" y="211" fill="#8b8577" font-size="9">小卖部</text>';
+  return s+'</svg>';
+}
+
+/* ---------- scene ---------- */
+function hand(hx,hy,dir){
+  var s='';
+  var flip=(dir==='left')?-1:1;
+  s+='<line x1="70" y1="106" x2="'+hx+'" y2="'+hy+'" stroke="#1a2029" stroke-width="13" stroke-linecap="round"/>';
+  s+='<line x1="70" y1="106" x2="'+hx+'" y2="'+hy+'" stroke="#232b36" stroke-width="9" stroke-linecap="round"/>';
+  s+='<ellipse cx="'+hx+'" cy="'+hy+'" rx="8" ry="6.5" fill="#2b333f"/>';
+  s+='<line x1="'+hx+'" y1="'+hy+'" x2="'+(hx+flip*15)+'" y2="'+(hy-3)+'" stroke="#2b333f" stroke-width="5" stroke-linecap="round"/>';
+  s+='<line x1="'+(hx-flip*2)+'" y1="'+(hy+4)+'" x2="'+(hx+flip*7)+'" y2="'+(hy+7)+'" stroke="#242b35" stroke-width="4" stroke-linecap="round"/>';
+  return s;
+}
+
+function sign(x,y,txt,side){
+  var w=txt.length*15+14;
+  var s='';
+  s+='<rect x="'+(x-w/2-3)+'" y="'+(y-3)+'" width="'+(w+6)+'" height="30" rx="4" fill="#ff4d3d" opacity=".22"/>';
+  s+='<rect x="'+(x-w/2)+'" y="'+y+'" width="'+w+'" height="24" rx="3" fill="#c9241c" stroke="#ff6b5a" stroke-width="1.5"/>';
+  s+='<text x="'+x+'" y="'+(y+17)+'" fill="#fff3e0" font-size="14" text-anchor="middle">'+txt+'</text>';
+  s+='<line x1="'+x+'" y1="'+(y+24)+'" x2="'+x+'" y2="'+(y+40)+'" stroke="#39404c" stroke-width="2.5"/>';
+  s+='<ellipse cx="'+x+'" cy="'+(y+12)+'" rx="'+(w/2+16)+'" ry="20" fill="#ff5540" opacity=".10"/>';
+  return s;
+}
+
+function scene(pt,lm){
+  var hx={left:14,right:126,straight:74}[pt];
+  var hy={left:88,right:88,straight:56}[pt];
+  var s='<svg viewBox="0 0 280 170" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
+
+  s+='<rect x="26" y="16" width="228" height="88" rx="5" fill="#141b26"/>';
+  s+='<rect x="26" y="72" width="228" height="32" fill="#2a2118"/>';
+  s+='<path d="M112 104 L130 74 h20 l18 30 z" fill="#3d3226"/>';
+  s+='<line x1="140" y1="104" x2="140" y2="86" stroke="#c9b27a" stroke-width="2.5" opacity=".55"/>';
+
+  s+='<circle cx="58" cy="30" r="11" fill="#e8b830" opacity=".16"/>';
+  s+='<circle cx="58" cy="30" r="4" fill="#f0c94a" opacity=".55"/>';
+  s+='<circle cx="222" cy="26" r="9" fill="#e8b830" opacity=".13"/>';
+  s+='<circle cx="222" cy="26" r="3" fill="#f0c94a" opacity=".5"/>';
+  s+='<rect x="188" y="60" width="5" height="9" fill="#ff6b4a" opacity=".7"/>';
+  s+='<rect x="198" y="60" width="5" height="9" fill="#ff6b4a" opacity=".7"/>';
+
+  if(lm) s+=sign(206,34,lm,'right');
+
+  s+='<rect x="0" y="0" width="26" height="170" fill="#0f141b"/>';
+  s+='<rect x="254" y="0" width="26" height="170" fill="#0f141b"/>';
+  s+='<rect x="0" y="0" width="280" height="16" fill="#0f141b"/>';
+  s+='<rect x="106" y="16" width="68" height="17" rx="3" fill="#161c25" stroke="#242c38" stroke-width="1"/>';
+  s+='<circle cx="127" cy="25" r="1.8" fill="#5a6472"/>';
+  s+='<circle cx="153" cy="25" r="1.8" fill="#5a6472"/>';
+
+  s+='<path d="M0 104 H280 V170 H0 Z" fill="#121820"/>';
+  s+='<rect x="0" y="104" width="280" height="5" fill="#1b2330"/>';
+  s+='<rect x="196" y="118" width="58" height="26" rx="4" fill="#0d1218" stroke="#232b36" stroke-width="1"/>';
+  s+='<text x="225" y="136" fill="#3ad17a" font-size="13" text-anchor="middle" font-family="monospace">'+
+     (12+S.mins*2)+'.0</text>';
+
+  s+='<ellipse cx="56" cy="152" rx="40" ry="32" fill="#161d27"/>';
+  s+='<circle cx="56" cy="112" r="19" fill="#1b232e"/>';
+  s+='<path d="M40 100 a17 12 0 0 1 32 0 z" fill="#111720"/>';
+  s+=hand(hx,hy,pt);
+  return s+'</svg>';
+}
+
+/* ---------- drive ---------- */
+function drive(){
+  var n=NODES[S.at];
+  if(S.at==='goal')return win();
+  if(S.at==='start'){S.at='j1';return drive();}
+  var opts=[];
+  for(var d in n.go)opts.push({dir:d,ok:true});
+  for(var d2 in (n.dead||{}))opts.push({dir:d2,ok:false});
+  opts.sort(function(){return Math.random()-.5});
+  say('哪边');
+  var h='<div class="screen" style="gap:10px"><div class="hud"><span class="strikes">'+
+    (S.strikes?'✕'.repeat(S.strikes):'')+'</span><span>'+clockStr()+' — 关门 22:30'+
+    (minsLeft()<=12?' <b style="color:#e0765a">('+Math.max(0,Math.round(minsLeft()))+')</b>':'')+
+    '</span></div>'+
+    map()+scene(curPt(),n.lm)+
+    L('哪边？','nǎbiān?')+'<div class="cards">';
+  S.cards={};
+  if(n.lm)S.seen[n.lm]=(S.seen[n.lm]||0)+1;
+  for(var i=0;i<opts.length;i++){
+    var o=opts[i];
+    var pre=(o.dir===curPt())?agreeZh():'不是';
+    var txt=pre+'，'+dirZh(o.dir);
+    S.cards[o.dir]=txt;
+    h+='<div class="card" onclick="answer(\''+o.dir+'\','+o.ok+',this)">'+txt+'</div>';
+  }
+  h+='</div><div class="tog" onclick="pinyinOn=!pinyinOn;drive()">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
+  app.innerHTML=h;
+}
+
+function answer(dir,ok,el){
+  if(S.busy)return;S.busy=true;
+  var n=NODES[S.at];
+  say((S.cards&&S.cards[dir])||dirZh(dir));
+  el.className='card '+(ok?'right':'wrong');
+  setTimeout(function(){
+    S.busy=false;
+    if(ok){S.mins+=blockTime();S.at=n.go[dir];drive();}
+    else{
+      S.strikes++;S.mins+=DEAD_MIN;
+      if(S.strikes>=2)return over();
+      deadEnd();
+    }
+  },900);
+}
+
+function deadEnd(){
+  say('不对');
+  app.innerHTML='<div class="screen" style="justify-content:center;gap:18px">'+
+    '<div class="hud"><span class="strikes">✕</span><span>'+clockStr()+'</span></div>'+
+    '<div class="big">不对</div>'+
+    '<div class="mid">The street ends at a wall of blue hoarding.<br>He reverses out without a word.</div>'+
+    '<div class="sub" style="text-align:center">One more and he gives up.</div>'+
+    '<div class="btn" onclick="drive()">继续</div></div>';
+}
+
+function over(){
+  say('游戏结束');
+  app.innerHTML='<div class="screen" style="justify-content:center;gap:18px">'+
+    '<div class="big">游戏结束</div>'+
+    '<div class="mid">He stops asking. He takes a turn you did not choose,<br>pulls up at a dead end, and waits for you to get out.</div>'+
+    '<div class="btn" onclick="title()">再来</div>'+review()+'</div>';
+}
+
+function review(){
+  var V=[['哪边','nǎbiān','which way — what he asks you'],
+         ['那边','nàbiān','that way — one tone apart from 哪边'],
+         ['左转','zuǒ zhuǎn','left'],['左拐','zuǒ guǎi','left, colloquial'],
+         ['右转','yòu zhuǎn','right'],['右拐','yòu guǎi','right, colloquial'],
+         ['一直走','yìzhí zǒu','straight on'],
+         ['对','duì','right / correct'],['是','shì','yes'],['不是','bú shì','no — never said alone']];
+  var h='<div style="border-top:1px solid #262b34;margin-top:6px;padding-top:12px">'+
+        '<div class="you" style="text-align:center;margin-bottom:8px">tonight\'s words</div>';
+  for(var i=0;i<V.length;i++){
+    h+='<div onclick="say(\''+V[i][0]+'\')" style="display:flex;justify-content:space-between;'+
+       'align-items:baseline;padding:5px 2px;cursor:pointer;border-bottom:1px solid #171b22">'+
+       '<span style="font-size:19px">'+V[i][0]+'</span>'+
+       '<span style="font-size:11px;color:#6b6559;text-align:right">'+V[i][1]+' · '+V[i][2]+'</span></div>';
+  }
+  var lm=[];
+  for(var k in S.seen) lm.push(k+' ×'+S.seen[k]);
+  if(lm.length) h+='<div class="pin" style="margin-top:10px">landmarks passed: '+lm.join('   ')+'</div>';
+  return h+'</div>';
+}
+
+function win(){
+  var late=isLate();
+  say(late?'关门了':'到了');
+  app.innerHTML='<div class="screen" style="justify-content:center;gap:18px">'+
+    '<div class="big">'+(late?'关门了':'到了')+'</div>'+
+    '<div class="mid">'+(late
+      ? 'The shutter is down. The red sign is off.<br>You were eleven minutes late.'
+      : 'Six tables, one fluorescent tube, plastic stools.<br>The knife-cut noodles are still going.')+'</div>'+
+    '<div class="sub" style="text-align:center">'+clockStr()+' · '+S.strikes+' strike'+(S.strikes===1?'':'s')+'</div>'+
+    '<div class="btn" onclick="title()">再来</div>'+review()+'</div>';
+}
+
+title();
+</script>
+</body>
+</html>

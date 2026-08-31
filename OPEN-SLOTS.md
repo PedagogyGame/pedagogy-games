@@ -16,4 +16,6 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 | Open Slot 9 | `game-zzzzzzzzm/` | `.game-147` |
 | Open Slot 10 | `game-zzzzzzzzn/` | `.game-148` |
 
-To add more later: next folder is `game-zzzzzzzzo`, next class is `.game-149`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
+
+To add more later: next folder is `game-zzzzzzzzp`, next class is `.game-150`. Three pieces must match: folder name, `href`, CSS class.
