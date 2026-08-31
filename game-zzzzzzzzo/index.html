@@ -21,6 +21,7 @@ h1{font-size:34px;font-weight:500;letter-spacing:2px}
 .cards{display:flex;flex-direction:column;gap:10px}
 .hud{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#8b8577;padding:0 2px}
 .strikes{letter-spacing:4px;color:#c96a5a}
+.quiet{color:#6f6a5e;font-size:13px;line-height:1.6;padding:10px 4px;text-align:center;font-style:italic}
 .line{background:#151920;border-left:2px solid #4a5568;padding:12px 14px;font-size:22px;letter-spacing:1px}
 .line .py{display:block;font-size:12px;color:#7a7466;letter-spacing:.5px;margin-top:5px}
 .gate{display:flex;flex-direction:column;gap:8px}
@@ -96,15 +97,16 @@ var NODES={
 
 var S={};
 function reset(){
-  S={name:'',country:null,at:'start',strikes:0,mins:0,busy:false,cards:{},pt:{},seen:{}};
+  S={name:'',country:null,at:'start',strikes:0,mins:0,busy:false,cards:{},pt:{},ask:{},side:{},seen:{}};
   rollPointing();
 }
 /* The driver is a real driver: mostly right, sometimes wrong, and never
    wrong in the same place twice running. Rolled fresh each game so the
    route can't be memorised — you have to read the cards. */
 var RIGHT_RATE=0.62;
+var ASK_RATE=0.40;   /* he only speaks up when he actually has a doubt */
 function rollPointing(){
-  S.pt={};
+  S.pt={};S.ask={};S.side={};
   for(var id in NODES){
     var n=NODES[id];
     if(!n.pt)continue;
@@ -114,8 +116,12 @@ function rollPointing(){
     var pool=(Math.random()<RIGHT_RATE||!dead.length)?viable:dead;
     if(!pool.length)pool=viable;
     S.pt[id]=pool[Math.floor(Math.random()*pool.length)];
+    S.ask[id]=Math.random()<ASK_RATE;
+    S.side[id]=Math.random()<0.5?'left':'right';
   }
 }
+function curAsk(){return !!S.ask[S.at];}
+function curSide(){return S.side[S.at]||'right';}
 function curPt(){return S.pt[S.at]||NODES[S.at].pt;}
 reset();
 
@@ -274,64 +280,78 @@ function map(){
 }
 
 /* ---------- scene ---------- */
-function hand(hx,hy,dir){
+/* Arm from the driver's right shoulder, jointed at the elbow, with a
+   real hand on the end: closed fist, one finger out. Drawn last so it
+   sits in front of the cabin, which is why it looked broken before. */
+function hand(dir){
+  var SX=74, SY=118;                       /* shoulder */
+  var E={left:[104,102],right:[112,96],straight:[100,88]}[dir];
+  var H={left:[136,86], right:[152,74], straight:[122,52]}[dir];
+  var F={left:[168,74], right:[196,56], straight:[122,26]}[dir];
   var s='';
-  var flip=(dir==='left')?-1:1;
-  s+='<line x1="70" y1="106" x2="'+hx+'" y2="'+hy+'" stroke="#1a2029" stroke-width="13" stroke-linecap="round"/>';
-  s+='<line x1="70" y1="106" x2="'+hx+'" y2="'+hy+'" stroke="#232b36" stroke-width="9" stroke-linecap="round"/>';
-  s+='<ellipse cx="'+hx+'" cy="'+hy+'" rx="8" ry="6.5" fill="#2b333f"/>';
-  s+='<line x1="'+hx+'" y1="'+hy+'" x2="'+(hx+flip*15)+'" y2="'+(hy-3)+'" stroke="#2b333f" stroke-width="5" stroke-linecap="round"/>';
-  s+='<line x1="'+(hx-flip*2)+'" y1="'+(hy+4)+'" x2="'+(hx+flip*7)+'" y2="'+(hy+7)+'" stroke="#242b35" stroke-width="4" stroke-linecap="round"/>';
+  s+='<line x1="'+SX+'" y1="'+SY+'" x2="'+E[0]+'" y2="'+E[1]+'" stroke="#0c1016" stroke-width="17" stroke-linecap="round"/>';
+  s+='<line x1="'+E[0]+'" y1="'+E[1]+'" x2="'+H[0]+'" y2="'+H[1]+'" stroke="#0c1016" stroke-width="15" stroke-linecap="round"/>';
+  s+='<line x1="'+SX+'" y1="'+SY+'" x2="'+E[0]+'" y2="'+E[1]+'" stroke="#252e3a" stroke-width="13" stroke-linecap="round"/>';
+  s+='<line x1="'+E[0]+'" y1="'+E[1]+'" x2="'+H[0]+'" y2="'+H[1]+'" stroke="#2d3745" stroke-width="11" stroke-linecap="round"/>';
+  s+='<circle cx="'+E[0]+'" cy="'+E[1]+'" r="6" fill="#252e3a"/>';
+  s+='<circle cx="'+H[0]+'" cy="'+H[1]+'" r="7.5" fill="#c9a184"/>';   /* fist */
+  s+='<line x1="'+H[0]+'" y1="'+H[1]+'" x2="'+F[0]+'" y2="'+F[1]+'" stroke="#c9a184" stroke-width="5.5" stroke-linecap="round"/>';
+  s+='<circle cx="'+F[0]+'" cy="'+F[1]+'" r="2.8" fill="#d9b294"/>';   /* fingertip */
   return s;
 }
 
-function sign(x,y,txt,side){
-  var w=txt.length*15+14;
+/* Landmark signs: big, lit, unmissable. Left or right of the road so the
+   pointing finger has something to point AT. */
+function sign(side,txt){
+  var x=(side==='left')?62:214, y=30;
+  var w=txt.length*17+16, h=28;
   var s='';
-  s+='<rect x="'+(x-w/2-3)+'" y="'+(y-3)+'" width="'+(w+6)+'" height="30" rx="4" fill="#ff4d3d" opacity=".22"/>';
-  s+='<rect x="'+(x-w/2)+'" y="'+y+'" width="'+w+'" height="24" rx="3" fill="#c9241c" stroke="#ff6b5a" stroke-width="1.5"/>';
-  s+='<text x="'+x+'" y="'+(y+17)+'" fill="#fff3e0" font-size="14" text-anchor="middle">'+txt+'</text>';
-  s+='<line x1="'+x+'" y1="'+(y+24)+'" x2="'+x+'" y2="'+(y+40)+'" stroke="#39404c" stroke-width="2.5"/>';
-  s+='<ellipse cx="'+x+'" cy="'+(y+12)+'" rx="'+(w/2+16)+'" ry="20" fill="#ff5540" opacity=".10"/>';
+  s+='<line x1="'+x+'" y1="'+(y+h)+'" x2="'+x+'" y2="96" stroke="#2e3642" stroke-width="3"/>';
+  s+='<ellipse cx="'+x+'" cy="'+(y+h/2)+'" rx="'+(w/2+26)+'" ry="30" fill="#ff5033" opacity=".13"/>';
+  s+='<ellipse cx="'+x+'" cy="'+(y+h/2)+'" rx="'+(w/2+12)+'" ry="20" fill="#ff5540" opacity=".18"/>';
+  s+='<rect x="'+(x-w/2-4)+'" y="'+(y-4)+'" width="'+(w+8)+'" height="'+(h+8)+'" rx="4" fill="#ff6a4a" opacity=".30"/>';
+  s+='<rect x="'+(x-w/2)+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="#d42a1e" stroke="#ffb3a0" stroke-width="2"/>';
+  s+='<text x="'+x+'" y="'+(y+20)+'" fill="#fff6ea" font-size="17" text-anchor="middle" font-weight="600">'+txt+'</text>';
+  s+='<circle cx="'+(x-w/2+5)+'" cy="'+(y+h+7)+'" r="2" fill="#ffd9a0" opacity=".8"/>';
+  s+='<circle cx="'+(x+w/2-5)+'" cy="'+(y+h+7)+'" r="2" fill="#ffd9a0" opacity=".8"/>';
   return s;
 }
 
-function scene(pt,lm){
-  var hx={left:14,right:126,straight:74}[pt];
-  var hy={left:88,right:88,straight:56}[pt];
+function scene(pt,lm,lmSide,asking){
   var s='<svg viewBox="0 0 280 170" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
 
+  /* --- through the windscreen --- */
   s+='<rect x="26" y="16" width="228" height="88" rx="5" fill="#141b26"/>';
   s+='<rect x="26" y="72" width="228" height="32" fill="#2a2118"/>';
   s+='<path d="M112 104 L130 74 h20 l18 30 z" fill="#3d3226"/>';
   s+='<line x1="140" y1="104" x2="140" y2="86" stroke="#c9b27a" stroke-width="2.5" opacity=".55"/>';
+  s+='<circle cx="42" cy="28" r="10" fill="#e8b830" opacity=".14"/>';
+  s+='<circle cx="42" cy="28" r="3.5" fill="#f0c94a" opacity=".5"/>';
+  s+='<circle cx="238" cy="24" r="8" fill="#e8b830" opacity=".12"/>';
+  s+='<circle cx="238" cy="24" r="3" fill="#f0c94a" opacity=".45"/>';
+  s+='<rect x="132" y="62" width="5" height="8" fill="#ff6b4a" opacity=".6"/>';
+  s+='<rect x="143" y="62" width="5" height="8" fill="#ff6b4a" opacity=".6"/>';
 
-  s+='<circle cx="58" cy="30" r="11" fill="#e8b830" opacity=".16"/>';
-  s+='<circle cx="58" cy="30" r="4" fill="#f0c94a" opacity=".55"/>';
-  s+='<circle cx="222" cy="26" r="9" fill="#e8b830" opacity=".13"/>';
-  s+='<circle cx="222" cy="26" r="3" fill="#f0c94a" opacity=".5"/>';
-  s+='<rect x="188" y="60" width="5" height="9" fill="#ff6b4a" opacity=".7"/>';
-  s+='<rect x="198" y="60" width="5" height="9" fill="#ff6b4a" opacity=".7"/>';
+  if(lm) s+=sign(lmSide,lm);
 
-  if(lm) s+=sign(206,34,lm,'right');
-
+  /* --- cabin frame, over the view --- */
   s+='<rect x="0" y="0" width="26" height="170" fill="#0f141b"/>';
   s+='<rect x="254" y="0" width="26" height="170" fill="#0f141b"/>';
   s+='<rect x="0" y="0" width="280" height="16" fill="#0f141b"/>';
   s+='<rect x="106" y="16" width="68" height="17" rx="3" fill="#161c25" stroke="#242c38" stroke-width="1"/>';
   s+='<circle cx="127" cy="25" r="1.8" fill="#5a6472"/>';
   s+='<circle cx="153" cy="25" r="1.8" fill="#5a6472"/>';
-
   s+='<path d="M0 104 H280 V170 H0 Z" fill="#121820"/>';
   s+='<rect x="0" y="104" width="280" height="5" fill="#1b2330"/>';
-  s+='<rect x="196" y="118" width="58" height="26" rx="4" fill="#0d1218" stroke="#232b36" stroke-width="1"/>';
-  s+='<text x="225" y="136" fill="#3ad17a" font-size="13" text-anchor="middle" font-family="monospace">'+
-     (12+S.mins*2)+'.0</text>';
+  s+='<rect x="200" y="120" width="56" height="24" rx="4" fill="#0d1218" stroke="#232b36" stroke-width="1"/>';
+  s+='<text x="228" y="137" fill="#3ad17a" font-size="12" text-anchor="middle" font-family="monospace">'+
+     (12+Math.round(S.mins)*2)+'.0</text>';
 
-  s+='<ellipse cx="56" cy="152" rx="40" ry="32" fill="#161d27"/>';
+  /* --- driver --- */
+  s+='<ellipse cx="52" cy="156" rx="42" ry="34" fill="#161d27"/>';
   s+='<circle cx="56" cy="112" r="19" fill="#1b232e"/>';
   s+='<path d="M40 100 a17 12 0 0 1 32 0 z" fill="#111720"/>';
-  s+=hand(hx,hy,pt);
+  if(asking) s+=hand(pt);
   return s+'</svg>';
 }
 
@@ -344,19 +364,26 @@ function drive(){
   for(var d in n.go)opts.push({dir:d,ok:true});
   for(var d2 in (n.dead||{}))opts.push({dir:d2,ok:false});
   opts.sort(function(){return Math.random()-.5});
-  say('哪边');
+  var asking=curAsk();
+  if(asking)say('哪边');
   var h='<div class="screen" style="gap:10px"><div class="hud"><span class="strikes">'+
     (S.strikes?'✕'.repeat(S.strikes):'')+'</span><span>'+clockStr()+' — 关门 22:30'+
     (minsLeft()<=12?' <b style="color:#e0765a">('+Math.max(0,Math.round(minsLeft()))+')</b>':'')+
     '</span></div>'+
-    map()+scene(curPt(),n.lm)+
-    L('哪边？','nǎbiān?')+'<div class="cards">';
+    map()+scene(curPt(),n.lm,curSide(),asking)+
+    (asking
+      ? L('哪边？','nǎbiān?')
+      : '<div class="quiet">The car slows at the junction.<br>He is waiting for you to say something.</div>')+
+    '<div class="cards">';
   S.cards={};
   if(n.lm)S.seen[n.lm]=(S.seen[n.lm]||0)+1;
   for(var i=0;i<opts.length;i++){
     var o=opts[i];
-    var pre=(o.dir===curPt())?agreeZh():'不是';
-    var txt=pre+'，'+dirZh(o.dir);
+    /* If he asked, you agree or correct him. If he didn't, there is
+       nothing to agree with — you just say the direction. */
+    var txt=asking
+      ? ((o.dir===curPt())?agreeZh():'不是')+'，'+dirZh(o.dir)
+      : dirZh(o.dir);
     S.cards[o.dir]=txt;
     h+='<div class="card" onclick="answer(\''+o.dir+'\','+o.ok+',this)">'+txt+'</div>';
   }
