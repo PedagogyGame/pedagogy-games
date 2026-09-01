@@ -18,7 +18,7 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzs`, next class is `.game-154`. Three pieces must match: folder name, `href`, CSS class.
+To add more later: next folder is `game-zzzzzzzzt`, next class is `.game-155`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
@@ -27,3 +27,5 @@ Live: `game-zzzzzzzzp/` / `.game-151` — Balloon Current Command.
 Live: `game-zzzzzzzzq/` / `.game-152` — Field to Finish (taxidermy glossary).
 
 Live: `game-zzzzzzzzr/` / `.game-153` — Ten Miles (Jinshanling walk).
+
+Live: `game-zzzzzzzzs/` / `.game-154` — The Shed (boatbuilding).

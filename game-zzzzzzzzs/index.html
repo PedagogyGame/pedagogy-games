@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Shed</title>
+<style>
+  :root {
+    --paper: #f3eee4;
+    --ink: #3c352c;
+    --ink-soft: #5c5348;
+    --copper: #9a5c38;
+    --rule: #d4cbb8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    font-size: 18px;
+    line-height: 1.55;
+    letter-spacing: 0.01em;
+  }
+  #app { min-height: 100%; display: flex; flex-direction: column; }
+  .stage {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1.4fr minmax(16rem, 22rem);
+    min-height: 100vh;
+  }
+  .stage.plate, .stage.card, .stage.title {
+    grid-template-columns: 1fr;
+  }
+  .frame {
+    background: #e8e0d2;
+    min-height: 100vh;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+  }
+  .frame img {
+    width: 100%;
+    height: 100vh;
+    object-fit: cover;
+    display: block;
+  }
+  .stage.plate .frame {
+    background: var(--paper);
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 3rem 0;
+    min-height: auto;
+    height: 72vh;
+  }
+  .stage.plate .frame img {
+    height: 72vh;
+    object-fit: contain;
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  .col {
+    padding: 3.2rem 2.2rem 4rem;
+    border-left: 1px solid var(--rule);
+    background: var(--paper);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .stage.plate .col, .stage.card .col, .stage.title .col {
+    border-left: none;
+    max-width: 38rem;
+    margin: 0 auto;
+    padding-top: 1.4rem;
+    text-align: left;
+  }
+  .kicker {
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 1.1rem;
+  }
+  h1 {
+    font-weight: 400;
+    font-size: 2.4rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1.15;
+    margin-bottom: 1.2rem;
+  }
+  .col p { margin: 0 0 0.9rem; max-width: 38rem; }
+  .col p:last-of-type { margin-bottom: 0; }
+  .caption {
+    font-size: 0.92rem;
+    font-style: italic;
+    color: var(--ink-soft);
+  }
+  .continue {
+    margin-top: 1.8rem;
+    color: var(--copper);
+    font-size: 0.95rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    font-family: inherit;
+    padding: 0;
+    text-align: left;
+  }
+  .continue:hover { text-decoration: underline; }
+  .choices { margin-top: 1.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .choices button {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--copper);
+    cursor: pointer;
+    text-align: left;
+    padding: 0;
+  }
+  .choices button:hover { text-decoration: underline; }
+  #ledger {
+    position: fixed;
+    top: 1.1rem;
+    right: 1.4rem;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .card-bg {
+    position: relative;
+    min-height: 100vh;
+    background: var(--paper);
+  }
+  .card-bg .ghost {
+    position: absolute;
+    inset: 0;
+    opacity: 0.12;
+    object-fit: cover;
+    width: 100%;
+    height: 100%;
+  }
+  .card-inner {
+    position: relative;
+    max-width: 28rem;
+    margin: 0 auto;
+    padding: 22vh 2rem 4rem;
+  }
+  .card-inner .daybig {
+    font-size: 3rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 1rem;
+  }
+  .title-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2rem;
+  }
+  .title-wrap h1 { letter-spacing: 0.42em; font-size: 3rem; margin-bottom: 1rem; }
+  .title-wrap p { color: var(--ink-soft); }
+  @media (max-width: 860px) {
+    .stage { grid-template-columns: 1fr; }
+    .frame img { height: 46vh; }
+    .stage.plate .frame, .stage.plate .frame img { height: 48vh; }
+    .col { border-left: none; border-top: 1px solid var(--rule); padding: 1.6rem 1.4rem 3rem; }
+    #ledger { right: 1rem; top: 0.7rem; }
+  }
+</style>
+</head>
+<body>
+<div id="ledger"></div>
+<div id="app"></div>
+<script>
+const pages = [
+  {
+    kind: "title",
+    day: "",
+    html: `<div class="title-wrap"><div>
+      <h1>The Shed</h1>
+      <p>A twelve-foot dinghy. North light. Seventy-eight days.</p>
+      <p style="margin-top:2.2rem;color:#9a5c38;cursor:pointer" data-next>Stand in the doorway</p>
+    </div></div>`
+  },
+  {
+    kind: "shed",
+    img: "img/01-standing.jpg",
+    kicker: "Stage one",
+    day: "Day 1",
+    paras: [
+      "The first frame is empty of boat. He is at the far end, looking.",
+      "Larch and oak in the rafters. A steam box that will do nothing for a long time. North light, even, never dramatic.",
+      "This is the room. The months will happen in it."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/02-lofting.jpg",
+    kicker: "Stage two",
+    day: "Day 4",
+    paras: [
+      "The floor takes emulsion the colour of wet slate.",
+      "A batten is a thin lie-detector. If it kinks, the line is wrong, not the wood.",
+      "You do not start with timber. You start by making the boat exist at one-to-one, in chalk."
+    ]
+  },
+  {
+    kind: "plate",
+    img: "img/fig-03-body.jpg",
+    kicker: "Plate",
+    day: "Day 6",
+    paras: [
+      "He lofts sixteen stations on the dark floor. He will only stand seven up.",
+      "The extra lines are for the truth of the batten. The air only needs seven shadows."
+    ],
+    caption: "Fig. 3. Body plan. Stations from the 1913 lines. Moulds taken from seven of these sections."
+  },
+  {
+    kind: "plate",
+    img: "img/sheet-1-1913.jpg",
+    kicker: "Plate",
+    day: "Day 6",
+    paras: [
+      "The drawing on the wall is the drawing. June 1913. Twelve feet by four-foot-eight. Six hundred and forty pounds, designed waterline.",
+      "All lines to the outside of the planking. He will subtract the skin when he cuts the moulds."
+    ],
+    caption: "Fig. 4. Sheet No. 1, Boat Racing Association, “A” Class One-Design Dinghy. Scale 1½ in. = 1 ft."
+  },
+  {
+    kind: "shed",
+    img: "img/01-standing.jpg",
+    kicker: "Stage three",
+    day: "Day 12",
+    paras: [
+      "Seven shapes in cheap softwood, sawn from the body plan. Flat, a bit crude. Pencil still on them from the floor.",
+      "They are not the boat. They are the boat’s shadows, cut out. They will come out again, later, without ceremony."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/05-moulds.jpg",
+    kicker: "Stage four",
+    day: "Day 18",
+    paras: [
+      "Keel, stem, transom. Oak for the parts that take fastenings and last.",
+      "The centreboard case goes on before there is a hull: a narrow box on the spine, a slot a thousand millimetres long. A sailing dinghy without that box is not this boat."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/05-moulds.jpg",
+    kicker: "Stage five",
+    day: "Day 24",
+    paras: [
+      "The backbone inverted. Seven moulds standing in air, braced to the roof.",
+      "Nothing between them. The hull exists only as the surface the eye stretches over their edges.",
+      "He walks to this end of the shed and looks. Hold that."
+    ]
+  },
+  {
+    kind: "plate",
+    img: "img/fig-07-cutaway.jpg",
+    kicker: "Plate",
+    day: "Day 24",
+    paras: [
+      "This is what the air is becoming. Not yet. Soon."
+    ],
+    caption: "Fig. 7. Longitudinal section, looking to port. All lines to outside of planking."
+  },
+  {
+    kind: "shed",
+    img: "img/05-moulds.jpg",
+    kicker: "Stage six",
+    day: "Day 27",
+    paras: [
+      "Ribbands along the moulds. A thin batten will tell you if station four is proud.",
+      "The drawing wants twelve strakes a side. Fairness first. Widths after."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/08-garboard.jpg",
+    kicker: "Stage seven",
+    day: "Day 30",
+    paras: [
+      "A groove in the keel and into the stem. The first plank does not rest on the keel. It sits in it.",
+      "If the fit is poor, water has a place to live."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/08-garboard.jpg",
+    kicker: "Stage eight",
+    day: "Day 34",
+    paras: [
+      "The garboard. The forward end has to rotate to meet the stem while the after body still lies flatter against the keel.",
+      "This is the slowest thing in the room. The wood is being asked something it would rather not do.",
+      "At station B it must not run wider than four and a third inches."
+    ]
+  },
+  {
+    kind: "plate",
+    img: "img/fig-09-land.jpg",
+    kicker: "Plate",
+    day: "Day 36",
+    paras: [
+      "Nail through, rove on, snug, peen. Copper, because it holds and it does not rot the oak.",
+      "The name of the overlap, if it arrives, arrives now: the land."
+    ],
+    caption: "Fig. 9. The land. ⁵⁄₁₆ in. planking, ¾ in. lap. Two fastenings between timbers besides the timber nail."
+  },
+  {
+    kind: "card",
+    img: "img/08-garboard.jpg",
+    day: "Day 47",
+    paras: [
+      "Eleven more strakes a side. The same job, twenty-two times.",
+      "The lands closed. Copper in every lap."
+    ],
+    choices: [
+      { label: "Let the days pass", to: "steam" },
+      { label: "Watch one more land", to: "watchland" }
+    ]
+  },
+  {
+    id: "watchland",
+    kind: "shed",
+    img: "img/08-garboard.jpg",
+    kicker: "Stage eight, still",
+    day: "Day 48",
+    paras: [
+      "Another land. The hood end at the stem fights, then takes the twist.",
+      "That is enough. The rest is the same work."
+    ]
+  },
+  {
+    id: "steam",
+    kind: "shed",
+    img: "img/09-steam.jpg",
+    kicker: "Stage nine",
+    day: "Day 52",
+    paras: [
+      "The box at the far end has been in every frame since the beginning. Now the composition gives it to us.",
+      "Steam is heat, not pressure. Oak will not take this bend cold.",
+      "Nineteen timbers, gunwale to gunwale, on seven-inch centres. Out of the box and into the boat before the heat leaves."
+    ]
+  },
+  {
+    kind: "plate",
+    img: "img/fig-11-timber.jpg",
+    kicker: "Plate",
+    day: "Day 56",
+    paras: [
+      "As the ribs go in, the moulds become unnecessary. The cheap softwood leaving the boat is a small unremarked funeral for stage three.",
+      "The moulds were never the structure. The ribs are."
+    ],
+    caption: "Fig. 11. Timbering. Nineteen ribs, seven-inch centres."
+  },
+  {
+    kind: "shed",
+    img: "img/10-turn.jpg",
+    kicker: "Stage ten",
+    day: "Day 61",
+    paras: [
+      "Gunwale along the sheer, locking the frame heads.",
+      "Then the turn. The hull has been upside down since stage five. It rolls through a position where it is only a shape in the air, slightly undignified, then down, right way up.",
+      "For the first time the room is looking into a boat."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/10-turn.jpg",
+    kicker: "Stage eleven",
+    day: "Day 67",
+    paras: [
+      "Mast bench. The hole sits four hundred and twenty millimetres from the stem.",
+      "Rowlocks, because the brief said it had to row as well as sail. Knees. Floorboards. A breasthook in the bow.",
+      "The hull was the argument. This is how a person occupies it."
+    ]
+  },
+  {
+    kind: "plate",
+    img: "img/fig-14-rudder.jpg",
+    kicker: "The fifth sheet",
+    day: "Day 71",
+    paras: [
+      "The drawings are on the bench. Four sheets. June 1913.",
+      "The fifth is not among them. Sheet No. 5, the rudder and tiller, is lost.",
+      "What he has is a later hand: an Admiralty reconstruction, 16 December 2018, taken off surviving rudders. It is not Cockshott’s drawing. It must not be lofted as if it were.",
+      "He looks at the sternpost, the transom, the waterline, and the estimate, and he makes a rudder that will hang.",
+      "Boats outlast their drawings. The work still gets done."
+    ],
+    caption: "Fig. 14. Rudder and tiller. Original Sheet No. 5 is lost. Reconstruction, not the 1913 sheet."
+  },
+  {
+    kind: "shed",
+    img: "img/10-turn.jpg",
+    kicker: "Stage twelve",
+    day: "Day 74",
+    paras: [
+      "Paint, if he wants it. The 1913 specification already allowed the owner that. Withheld until now so that colour, still not much, reads as an event.",
+      "A muted topside. Copper left as copper. Interior quieter than the outside."
+    ]
+  },
+  {
+    kind: "shed",
+    img: "img/12-empty.jpg",
+    kicker: "Coda",
+    day: "Day 78",
+    paras: [
+      "The doors. The boat leaving, by the means this shed allows. Do not cut to a lake. You were never promised the water.",
+      "Last frame: the shed without the boat. He is standing, looking. Same spot as day one.",
+      "The floor is worn where the strongback was. Chalk ghost in the grain."
+    ]
+  },
+  {
+    kind: "title",
+    day: "Day 78",
+    html: `<div class="title-wrap"><div>
+      <h1>The Shed</h1>
+      <p>Day 78.</p>
+      <p style="margin-top:1.4rem;color:#5c5348">The standing around was never empty.</p>
+      <p style="margin-top:2.2rem;color:#9a5c38;cursor:pointer" data-next>From the doorway again</p>
+    </div></div>`
+  }
+];
+
+const app = document.getElementById("app");
+const ledger = document.getElementById("ledger");
+let i = 0;
+
+function findId(id) {
+  return pages.findIndex(p => p.id === id);
+}
+
+function render() {
+  const p = pages[i];
+  ledger.textContent = p.day || "";
+  if (p.kind === "title") {
+    app.innerHTML = p.html;
+    app.querySelector("[data-next]")?.addEventListener("click", (e) => { e.stopPropagation(); next(); });
+    return;
+  }
+  if (p.kind === "card") {
+    app.innerHTML = `<div class="card-bg">
+      <img class="ghost" src="${p.img}" alt="">
+      <div class="card-inner">
+        <div class="daybig">${p.day}</div>
+        ${p.paras.map(t => `<p>${t}</p>`).join("")}
+        <div class="choices">
+          ${p.choices.map(c => `<button data-to="${c.to}">${c.label}</button>`).join("")}
+        </div>
+      </div>
+    </div>`;
+    app.querySelectorAll("[data-to]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const idx = findId(btn.getAttribute("data-to"));
+        if (idx >= 0) { i = idx; render(); }
+      });
+    });
+    return;
+  }
+  const paras = (p.paras || []).map(t => `<p>${t}</p>`).join("");
+  const cap = p.caption ? `<p class="caption">${p.caption}</p>` : "";
+  app.innerHTML = `<div class="stage ${p.kind}">
+    <div class="frame"><img src="${p.img}" alt=""></div>
+    <div class="col">
+      <div class="kicker">${p.kicker || ""}</div>
+      ${paras}
+      ${cap}
+      <button class="continue" type="button">Continue</button>
+    </div>
+  </div>`;
+  app.querySelector(".continue")?.addEventListener("click", (e) => { e.stopPropagation(); next(); });
+}
+
+function next() {
+  const p = pages[i];
+  if (p.kind === "card") return;
+  if (p.id === "watchland") {
+    i = findId("steam");
+    render();
+    return;
+  }
+  i = (i + 1) % pages.length;
+  render();
+}
+function prev() {
+  i = (i + pages.length - 1) % pages.length;
+  render();
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("button, [data-next], [data-to]")) return;
+  next();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" || e.key === " " || e.key === "Enter") { e.preventDefault(); next(); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+});
+
+render();
+</script>
+</body>
+</html>
