@@ -164,6 +164,35 @@
   }
   .title-wrap h1 { letter-spacing: 0.42em; font-size: 3rem; margin-bottom: 1rem; }
   .title-wrap p { color: var(--ink-soft); }
+
+  #tools-btn {
+    position: fixed;
+    top: 1.1rem;
+    left: 1.4rem;
+    z-index: 6;
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--copper);
+    cursor: pointer;
+    letter-spacing: 0.04em;
+  }
+  #tools-btn.hidden { display: none; }
+  #tools-btn:hover { text-decoration: underline; }
+  button.look {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: var(--copper);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    margin-top: 1.1rem;
+    display: block;
+  }
+  button.look:hover { text-decoration: underline; }
   @media (max-width: 860px) {
     .stage { grid-template-columns: 1fr; }
     .frame img { height: 46vh; }
@@ -175,7 +204,10 @@
 </head>
 <body>
 <div id="ledger"></div>
+<button id="tools-btn" class="hidden" type="button">Tools</button>
 <div id="app"></div>
+<script src="explore.js"></script>
+<script src="tools.js"></script>
 <script>
 const pages = [
   {
@@ -263,6 +295,17 @@ const pages = [
     ]
   },
   {
+    kind: "explore-gate",
+    mode: "skeleton",
+    img: "img/05-moulds.jpg",
+    kicker: "Look around",
+    day: "Day 24",
+    paras: [
+      "The hull exists only as the surface the eye stretches over their edges.",
+      "You may leave the doorway."
+    ]
+  },
+  {
     kind: "plate",
     img: "img/fig-07-cutaway.jpg",
     kicker: "Plate",
@@ -323,7 +366,7 @@ const pages = [
       "The lands closed. Copper in every lap."
     ],
     choices: [
-      { label: "Let the days pass", to: "steam" },
+      { label: "Let the days pass", to: "skin" },
       { label: "Watch one more land", to: "watchland" }
     ]
   },
@@ -336,6 +379,18 @@ const pages = [
     paras: [
       "Another land. The hood end at the stem fights, then takes the twist.",
       "That is enough. The rest is the same work."
+    ]
+  },
+  {
+    id: "skin",
+    kind: "explore-gate",
+    mode: "planked",
+    img: "img/08-garboard.jpg",
+    kicker: "Look around",
+    day: "Day 47",
+    paras: [
+      "Twelve strakes a side. The lands closed.",
+      "The form is a hull now. You may walk it."
     ]
   },
   {
@@ -370,6 +425,17 @@ const pages = [
       "Gunwale along the sheer, locking the frame heads.",
       "Then the turn. The hull has been upside down since stage five. It rolls through a position where it is only a shape in the air, slightly undignified, then down, right way up.",
       "For the first time the room is looking into a boat."
+    ]
+  },
+  {
+    kind: "explore-gate",
+    mode: "upright",
+    img: "img/10-turn.jpg",
+    kicker: "Look around",
+    day: "Day 61",
+    paras: [
+      "For the first time the room is looking into a boat.",
+      "You may look in too."
     ]
   },
   {
@@ -432,7 +498,12 @@ const pages = [
 
 const app = document.getElementById("app");
 const ledger = document.getElementById("ledger");
+const toolsBtn = document.getElementById("tools-btn");
 let i = 0;
+
+function blocked() {
+  return (window.ShedExplore && ShedExplore.isOpen()) || (window.ShedTools && ShedTools.isOpen());
+}
 
 function findId(id) {
   return pages.findIndex(p => p.id === id);
@@ -444,6 +515,7 @@ function render() {
   if (p.kind === "title") {
     app.innerHTML = p.html;
     app.querySelector("[data-next]")?.addEventListener("click", (e) => { e.stopPropagation(); next(); });
+    toolsBtn.classList.toggle("hidden", true);
     return;
   }
   if (p.kind === "card") {
@@ -464,27 +536,37 @@ function render() {
         if (idx >= 0) { i = idx; render(); }
       });
     });
+    toolsBtn.classList.toggle("hidden", false);
     return;
   }
   const paras = (p.paras || []).map(t => `<p>${t}</p>`).join("");
   const cap = p.caption ? `<p class="caption">${p.caption}</p>` : "";
+  const look = p.kind === "explore-gate"
+    ? `<button class="look" type="button">Walk the shed</button>`
+    : "";
   app.innerHTML = `<div class="stage ${p.kind}">
     <div class="frame"><img src="${p.img}" alt=""></div>
     <div class="col">
       <div class="kicker">${p.kicker || ""}</div>
       ${paras}
       ${cap}
+      ${look}
       <button class="continue" type="button">Continue</button>
     </div>
   </div>`;
+  app.querySelector(".look")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    window.ShedExplore.open(p.mode);
+  });
   app.querySelector(".continue")?.addEventListener("click", (e) => { e.stopPropagation(); next(); });
+  toolsBtn.classList.toggle("hidden", p.kind === "title");
 }
 
 function next() {
   const p = pages[i];
   if (p.kind === "card") return;
   if (p.id === "watchland") {
-    i = findId("steam");
+    i = findId("skin");
     render();
     return;
   }
@@ -496,11 +578,18 @@ function prev() {
   render();
 }
 
+toolsBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  ShedTools.open();
+});
+
 document.addEventListener("click", (e) => {
+  if (blocked()) return;
   if (e.target.closest("button, [data-next], [data-to]")) return;
   next();
 });
 document.addEventListener("keydown", (e) => {
+  if (blocked()) return;
   if (e.key === "ArrowRight" || e.key === " " || e.key === "Enter") { e.preventDefault(); next(); }
   if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
 });
