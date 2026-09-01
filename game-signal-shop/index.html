@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Signal Shop</title>
+<style>
+:root{
+  --bg:#0c1014; --panel:#151b22; --line:#2a3340; --ink:#e6e0d4;
+  --dim:#8a8376; --amber:#ffbe68; --good:#3d9a6a; --bad:#c45a4a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg);color:var(--ink);
+  font-family:system-ui,Segoe UI,Roboto,sans-serif}
+body{display:flex;justify-content:center}
+#app{width:100%;max-width:520px;min-height:100vh;padding:18px 16px 28px;display:flex;flex-direction:column;gap:14px}
+h1{font-size:28px;font-weight:600;letter-spacing:.08em;color:var(--amber)}
+.sub{color:var(--dim);font-size:14px;line-height:1.55}
+.hud{display:flex;justify-content:space-between;font-size:13px;color:var(--dim)}
+.meter{background:#0a0e12;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#7ee0a0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;cursor:pointer;font-size:16px;transition:background .12s,border-color .12s}
+.card:hover{background:#1c2430;border-color:#4a5568}
+.card.right{background:#163024;border-color:var(--good)}
+.card.wrong{background:#2a1614;border-color:var(--bad)}
+.prompt{background:#12181f;border-left:3px solid var(--amber);padding:14px 14px;font-size:17px;line-height:1.45}
+.btn{background:#1c2430;border:1px solid #3a4556;color:var(--ink);padding:13px 16px;border-radius:8px;font-size:16px;cursor:pointer;font-family:inherit;text-align:center}
+.btn:hover{background:#252e3c}
+.stack{display:flex;flex-direction:column;gap:8px}
+.big{font-size:42px;color:var(--amber);text-align:center;padding:18px 0}
+.mid{text-align:center;color:var(--dim);line-height:1.6}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+var TERMS=[
+  {t:"dBmV", d:"The usual CATV level unit: decibels relative to one millivolt across 75 ohms."},
+  {t:"MER", d:"Modulation error ratio. How clean a QAM constellation is, in dB."},
+  {t:"BER", d:"Bit error rate. How often the demodulator guesses a bit wrong."},
+  {t:"QAM", d:"Quadrature amplitude modulation — the digital packing used on most cable channels."},
+  {t:"F-connector", d:"The threaded 75-ohm connector on RG-6 drops and wall plates."},
+  {t:"Splitter", d:"A passive that divides one RF path into two or more, with insertion loss."},
+  {t:"Tap", d:"A directional device that peels a small drop off a hardline while the through-path continues."},
+  {t:"Return path", d:"The upstream band, typically 5–42 or 5–85 MHz, from the house back to the headend."},
+  {t:"Ingress", d:"Off-air junk leaking INTO the plant through a bad shield or loose fitting."},
+  {t:"Egress / leak", d:"Plant signal leaking OUT. CLI trucks hunt this."},
+  {t:"Tilt", d:"The slope of levels across the band, compensating cable loss that rises with frequency."},
+  {t:"Sweep", d:"A test signal run across the spectrum so the tech can see response, suck-outs, and roll-off."},
+  {t:"SNR", d:"Signal-to-noise ratio. How far the carrier sits above the noise floor."},
+  {t:"RG-6", d:"The standard 75-ohm drop cable with foil plus braid."},
+  {t:"Attenuator", d:"A pad that knocks level down a set number of dB without changing the match much."},
+  {t:"Equalizer", d:"A plug-in that restores flatness by adding more loss at the low end than the high."},
+  {t:"LNB", d:"Low-noise block downconverter on a dish. Converts the satellite band to IF."},
+  {t:"VSWR", d:"Voltage standing-wave ratio. A mismatch score; 1:1 is perfect."},
+  {t:"Return loss", d:"How many dB down the reflected wave is. Higher is a better match."},
+  {t:"Pilot", d:"A continuous carrier the plant uses as a level and AGC reference."},
+  {t:"Combiner", d:"Mixes several sources onto one trunk without letting them beat each other up."},
+  {t:"Trap", d:"A filter that knocks out a channel or a leaky amateur band."},
+  {t:"Hardline", d:"Semi-rigid aluminum trunk cable, not the drop."},
+  {t:"CLI", d:"Cumulative leakage index. The plant-wide leak score the FCC cares about."}
+];
+
+var app=document.getElementById("app");
+var S={};
+
+function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var x=a[i];a[i]=a[j];a[j]=x;}return a;}
+function pick(n,except){
+  var pool=TERMS.filter(function(x){return x.t!==except;});
+  return shuffle(pool).slice(0,n);
+}
+
+function title(){
+  app.innerHTML=
+    "<h1>SIGNAL SHOP</h1>"+
+    "<div class='sub'>Back room of a cable plant, 2 a.m. The sweep box is warm. The drop is noisy. You have to name the thing on the bench before the truck rolls.</div>"+
+    "<div class='meter'>75 Ω · 5–1002 MHz · CLI watch</div>"+
+    "<div class='btn' onclick='start()'>Clock in</div>";
+}
+
+function start(){
+  S={q:0,ok:0,busy:false,deck:shuffle(TERMS).slice(0,12)};
+  ask();
+}
+
+function ask(){
+  if(S.q>=S.deck.length) return done();
+  var item=S.deck[S.q];
+  var opts=shuffle([item].concat(pick(3,item.t)));
+  var h="<div class='hud'><span>Ticket "+(S.q+1)+" / "+S.deck.length+"</span><span>"+S.ok+" clean</span></div>";
+  h+="<div class='meter'>BENCH · looking at the plant</div>";
+  h+="<div class='prompt'>"+item.d+"</div><div class='stack'>";
+  opts.forEach(function(o){
+    h+="<div class='card' onclick='answer(this,"+JSON.stringify(o.t)+","+JSON.stringify(item.t)+")'>"+o.t+"</div>";
+  });
+  h+="</div>";
+  app.innerHTML=h;
+}
+
+function answer(el,guess,right){
+  if(S.busy)return;S.busy=true;
+  var cards=document.querySelectorAll(".card");
+  cards.forEach(function(c){
+    if(c.textContent===right)c.classList.add("right");
+    if(c===el && guess!==right)c.classList.add("wrong");
+  });
+  if(guess===right)S.ok++;
+  setTimeout(function(){S.busy=false;S.q++;ask();},700);
+}
+
+function done(){
+  var late=S.ok<8;
+  app.innerHTML=
+    "<div class='big'>"+(late?"NO-GO":"CLEAN")+"</div>"+
+    "<div class='mid'>"+(late
+      ?"The truck leaves without you. Sweep is still dirty."
+      :"Plant is flat. The drop is quiet. Coffee is still hot.")+"</div>"+
+    "<div class='hud'><span>"+S.ok+" / "+S.deck.length+"</span><span>75 Ω</span></div>"+
+    "<div class='btn' onclick='start()'>Next truck</div>"+
+    "<div class='btn' onclick='title()'>Clock out</div>";
+}
+
+title();
+</script>
+</body>
+</html>
