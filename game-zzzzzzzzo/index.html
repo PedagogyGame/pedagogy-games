@@ -22,6 +22,17 @@ h1{font-size:34px;font-weight:500;letter-spacing:2px}
 .hud{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#8b8577;padding:0 2px}
 .strikes{letter-spacing:4px;color:#c96a5a}
 .quiet{color:#6f6a5e;font-size:13px;line-height:1.6;padding:10px 4px;text-align:center;font-style:italic}
+@keyframes scrollx{from{transform:translateX(-280px)}to{transform:translateX(0)}}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(-360deg)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-.5px)}}
+@keyframes pointin{0%{transform:rotate(30deg);opacity:0}35%{opacity:1}100%{transform:rotate(0);opacity:1}}
+@keyframes sway{0%,100%{transform:rotate(0)}50%{transform:rotate(-1.4deg)}}
+@keyframes flick{0%,100%{opacity:.85}50%{opacity:1}}
+.wheel{animation:spin .42s linear infinite;transform-box:fill-box;transform-origin:center}
+.car{animation:bob .5s ease-in-out infinite}
+.arm{animation:pointin .55s cubic-bezier(.22,.9,.28,1) both}
+.armsway{animation:sway 3.4s ease-in-out infinite;transform-box:fill-box}
+.skipnote{font-size:11px;color:#5c5749;text-align:center;letter-spacing:.5px}
 .line{background:#151920;border-left:2px solid #4a5568;padding:12px 14px;font-size:22px;letter-spacing:1px}
 .line .py{display:block;font-size:12px;color:#7a7466;letter-spacing:.5px;margin-top:5px}
 .gate{display:flex;flex-direction:column;gap:8px}
@@ -39,17 +50,52 @@ select{background:#1b1f27;border:1px solid #3a3f4a;color:#e8e4d9;padding:13px;bo
 var app=document.getElementById('app');
 var pinyinOn=false;
 
-function say(t){
+/* Browser voices vary wildly by machine. Rank every installed Chinese
+   voice and keep the best one, preferring named neural/premium voices
+   over the tinny "compact" fallbacks. */
+var VOICE=null,ZHV=[];
+function rankVoice(v){
+  var n=(v.name||'').toLowerCase(),l=(v.lang||'').replace('_','-').toLowerCase(),s=0;
+  var PREF=['xiaoxiao','yunxi','yunyang','xiaoyi','tingting','ting-ting','yaoyao',
+            'huihui','kangkang','mei-jia','meijia','sinji','google 普通话',
+            'google mandarin','google chinese','普通话','中文'];
+  for(var i=0;i<PREF.length;i++){if(n.indexOf(PREF[i])>=0){s+=120-i*4;break;}}
+  if(/(neural|natural|premium|enhanced|siri)/.test(n))s+=70;
+  if(l.indexOf('zh-cn')===0)s+=45;else if(l.indexOf('zh')===0)s+=10;
+  if(!v.localService)s+=25;
+  if(n.indexOf('compact')>=0)s-=60;
+  return s;
+}
+function pickVoice(){
+  var all=[];
+  try{all=speechSynthesis.getVoices()||[];}catch(e){return;}
+  ZHV=all.filter(function(v){return v.lang&&v.lang.replace('_','-').toLowerCase().indexOf('zh')===0;});
+  ZHV.sort(function(a,b){return rankVoice(b)-rankVoice(a);});
+  if(ZHV.length&&(!VOICE||ZHV.indexOf(VOICE)<0))VOICE=ZHV[0];
+}
+function setVoice(i){VOICE=ZHV[+i]||VOICE;say('你好');}
+/* say(text, slow, done) — `done` fires when the voice has actually finished.
+   Screens used to advance on a fixed timer, so any sentence longer than the
+   timer got cut off mid-word by the next screen's speechSynthesis.cancel().
+   The fallback timer only exists for browsers that never report onend, and
+   is short when there is no Chinese voice installed at all. */
+function say(t,slow,done){
+  var fired=false,tm=null;
+  function fin(){if(fired)return;fired=true;if(tm)clearTimeout(tm);if(done)done();}
   try{
+    if(!VOICE)pickVoice();
     speechSynthesis.cancel();
     var u=new SpeechSynthesisUtterance(t);
-    u.lang='zh-CN';u.rate=.8;
-    var vs=speechSynthesis.getVoices();
-    for(var i=0;i<vs.length;i++){if(vs[i].lang&&vs[i].lang.indexOf('zh')===0){u.voice=vs[i];break;}}
+    u.lang='zh-CN';
+    u.rate=slow?0.62:0.82;
+    u.pitch=1.0;u.volume=1;
+    if(VOICE)u.voice=VOICE;
+    if(done){u.onend=fin;u.onerror=fin;}
     speechSynthesis.speak(u);
-  }catch(e){}
+    if(done)tm=setTimeout(fin,VOICE?(900+t.length*430):420);
+  }catch(e){if(done)tm=setTimeout(fin,420);}
 }
-if(window.speechSynthesis)speechSynthesis.getVoices();
+if(window.speechSynthesis){speechSynthesis.getVoices();pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}
 
 var DIR={
   left:{zh:['左转','左拐'],py:['zuǒ zhuǎn','zuǒ guǎi']},
@@ -60,6 +106,9 @@ var DIR={
 /* 转 is standard everywhere; 拐 is colloquial and leans northern.
    Oscillate rather than fix, so the player meets both registers. */
 function dirZh(d){var a=DIR[d].zh;return a[Math.floor(Math.random()*a.length)];}
+/* keep characters and pinyin on the same register — showing 右拐 under
+   yòu zhuǎn would be teaching the wrong thing */
+function dirPair(d){var i=Math.floor(Math.random()*DIR[d].zh.length);return [DIR[d].zh[i],DIR[d].py[i]];}
 /* agreement: 对 and 是 both mean yes here. 不是 is the refusal. */
 var AGREE=['对','是'];
 function agreeZh(){return AGREE[Math.floor(Math.random()*AGREE.length)];}
@@ -97,7 +146,7 @@ var NODES={
 
 var S={};
 function reset(){
-  S={name:'',country:null,at:'start',strikes:0,mins:0,busy:false,cards:{},pt:{},ask:{},side:{},seen:{}};
+  S={name:'',country:null,at:'start',strikes:0,mins:0,busy:false,cards:{},pt:{},ask:{},side:{},seed:{},seen:{},order:null,dest:null,driveT:null};
   rollPointing();
 }
 /* The driver is a real driver: mostly right, sometimes wrong, and never
@@ -106,7 +155,7 @@ function reset(){
 var RIGHT_RATE=0.62;
 var ASK_RATE=0.40;   /* he only speaks up when he actually has a doubt */
 function rollPointing(){
-  S.pt={};S.ask={};S.side={};
+  S.pt={};S.ask={};S.side={};S.seed={};
   for(var id in NODES){
     var n=NODES[id];
     if(!n.pt)continue;
@@ -118,10 +167,12 @@ function rollPointing(){
     S.pt[id]=pool[Math.floor(Math.random()*pool.length)];
     S.ask[id]=Math.random()<ASK_RATE;
     S.side[id]=Math.random()<0.5?'left':'right';
+    S.seed[id]=1+Math.floor(Math.random()*2000000);
   }
 }
 function curAsk(){return !!S.ask[S.at];}
 function curSide(){return S.side[S.at]||'right';}
+function curSeed(){return S.seed[S.at]||7;}
 function curPt(){return S.pt[S.at]||NODES[S.at].pt;}
 reset();
 
@@ -149,76 +200,279 @@ function L(zh,py){
 }
 
 /* ---------- title ---------- */
+/* Voice quality is entirely down to what the machine has installed,
+   so let the player audition them rather than guessing for them. */
+function voicePicker(){
+  pickVoice();
+  if(ZHV.length<2)return ZHV.length
+    ? '<div class="tog" onclick="say(\'你好\')">voice: '+esc(ZHV[0].name)+' — tap to test</div>'
+    : '<div class="tog">no Chinese voice installed — see note below</div>';
+  var h='<div class="gate" style="gap:6px"><select id="vc" onchange="setVoice(this.value)">';
+  for(var i=0;i<ZHV.length;i++)
+    h+='<option value="'+i+'"'+(ZHV[i]===VOICE?' selected':'')+'>'+esc(ZHV[i].name)+'</option>';
+  return h+'</select><div class="tog" onclick="say(\'哪边\')">tap to hear 哪边</div></div>';
+}
+
 function title(){
   app.innerHTML='<div class="screen" style="justify-content:center;gap:22px">'+
    '<h1 style="text-align:center">哪边</h1>'+
-   '<div class="mid">Beijing, 2010. A taxi. A restaurant that closes at 22:30.<br>You do not speak Chinese.</div>'+
+   '<div class="mid">Beijing, 2010. A taxi. Somewhere across the city<br>that shuts at 22:30. You do not speak Chinese.</div>'+
    '<div class="sub" style="text-align:center">Every answer is in characters. The map shows you where to go — the words are how you say it. Those are the same problem.</div>'+
    '<div class="btn" onclick="reset();gate(0)">开始</div>'+
+   voicePicker()+
    '<div class="tog" onclick="pinyinOn=!pinyinOn;title()">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
 }
 
-function cab(step){
-  var s='<svg viewBox="0 0 280 130" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
-  s+='<rect x="0" y="96" width="280" height="34" fill="#15191f"/>';
-  s+='<rect x="0" y="96" width="280" height="2" fill="#252b33"/>';
-  for(var i=0;i<7;i++) s+='<rect x="'+(8+i*42)+'" y="112" width="22" height="3" fill="#2b323b"/>';
-  s+='<circle cx="34" cy="20" r="14" fill="#e8b830" opacity=".14"/>';
-  s+='<circle cx="34" cy="20" r="4" fill="#f0c94a" opacity=".5"/>';
-  s+='<rect x="152" y="18" width="112" height="62" fill="#12171e"/>';
-  for(var r=0;r<3;r++)for(var c2=0;c2<4;c2++){
-    var lit=((r*4+c2)%3!==1);
-    s+='<rect x="'+(160+c2*26)+'" y="'+(26+r*20)+'" width="14" height="11" fill="'+(lit?'#c9a94a':'#1b2129')+'" opacity="'+(lit?'.5':'1')+'"/>';
+/* ---------- the car ----------
+   Drawn once in local coordinates: 82 long, roof at y=0, tyres touching
+   y=38.5. Both the kerbside scene and the driving scene place it from
+   here, so there is only ever one car to improve. */
+function taxi(ox,oy,sc,opt){
+  opt=opt||{};
+  var s='<g transform="translate('+ox+','+oy+') scale('+sc+')"'+(opt.bob?' class="car"':'')+'>';
+  s+='<ellipse cx="41" cy="39.5" rx="43" ry="4" fill="#000" opacity=".5"/>';
+  /* headlight throw */
+  if(opt.lights)
+    s+='<path d="M-1 18.5 L-40 11 L-44 20 L-40 29 L-1 22.5 Z" fill="url(#beam)"/>';
+  /* body shell */
+  s+='<path d="M0 26 Q0 18 6 16 L23 14 L35 0 L61 0 L71 13 L77 16 Q82 18 82 26 L82 30 L0 30 Z" fill="#1f6b52"/>';
+  s+='<path d="M35 0 L61 0 L64 2 L33 2 Z" fill="#287d61"/>';
+  /* champagne lower body — the Beijing two-tone */
+  s+='<path d="M1 21 L81 21 L81 30 L1 30 Z" fill="#e8dcc0"/>';
+  s+='<rect x="1" y="20.4" width="80" height="1.2" fill="#f7efdb" opacity=".8"/>';
+  s+='<rect x="1" y="27.4" width="80" height="1" fill="#cfc3a6" opacity=".7"/>';
+  /* glasshouse */
+  s+='<path d="M37 2 L60 2 L69 12 L27 12 Z" fill="#0d1a19"/>';
+  s+='<path d="M37 2 L60 2 L69 12 L27 12 Z" fill="none" stroke="#3f8f74" stroke-width=".8"/>';
+  s+='<path d="M39 3.4 L47 3.4 L41 10.6 L31.5 10.6 Z" fill="#173129" opacity=".85"/>';
+  s+='<rect x="47" y="2" width="2" height="10" fill="#1f6b52"/>';
+  s+='<path d="M62 3 L67.5 11 L58 11 L58 3 Z" fill="#12241f"/>';
+  /* people inside */
+  if(opt.driver) s+='<circle cx="38" cy="8" r="2.6" fill="#2c3742"/>';
+  if(opt.rider)  s+='<circle cx="60" cy="8" r="2.6" fill="#33404f"/>';
+  /* trim, seams, handles */
+  s+='<rect x="27" y="12" width="42" height="1" fill="#9fb3aa" opacity=".45"/>';
+  s+='<line x1="47" y1="13" x2="47" y2="30" stroke="#18523f" stroke-width="1.1"/>';
+  s+='<line x1="24" y1="14.5" x2="24" y2="21" stroke="#18523f" stroke-width=".9"/>';
+  s+='<rect x="40" y="16" width="6.5" height="1.8" rx=".9" fill="#cbbf9f"/>';
+  s+='<rect x="51" y="16" width="6.5" height="1.8" rx=".9" fill="#cbbf9f"/>';
+  s+='<path d="M33 12.5 l-4.5 1.5 l0 2.4 l4.5 -1.6 z" fill="#1a5a45"/>';   /* wing mirror */
+  s+='<line x1="58" y1="1" x2="62" y2="-6" stroke="#2a3a34" stroke-width=".8"/>'; /* aerial */
+  /* checker band + fleet decal */
+  for(var q=0;q<11;q++)
+    s+='<rect x="'+(26+q*3.2)+'" y="24.6" width="1.6" height="1.8" fill="'+(q%2?'#1f6b52':'#b8ab8c')+'"/>';
+  s+='<rect x="52" y="22.6" width="15" height="1.4" rx=".5" fill="#b8ab8c" opacity=".6"/>';
+  /* lamps + plates */
+  s+='<rect x="-.5" y="17" width="4.5" height="4.6" rx="1.6" fill="#ffe6a8" opacity=".92"/>';
+  s+='<rect x="78" y="17" width="4" height="4.6" rx="1.5" fill="#ff6b4a" opacity=".92"/>';
+  s+='<rect x="72" y="25" width="7.5" height="3" rx=".6" fill="#e6d68f"/>';
+  s+='<rect x="2" y="25" width="7.5" height="3" rx=".6" fill="#e6d68f" opacity=".75"/>';
+  s+='<rect x="0" y="22.5" width="6" height="1.4" fill="#7d8f86" opacity=".5"/>';
+  /* arches cut, then wheels dropped in */
+  var W1=14,W2=66;
+  s+='<path d="M'+(W1-11)+' 31 a11 11 0 0 1 22 0 z" fill="'+(opt.bg||'#0a0c10')+'"/>';
+  s+='<path d="M'+(W2-11)+' 31 a11 11 0 0 1 22 0 z" fill="'+(opt.bg||'#0a0c10')+'"/>';
+  s+='<path d="M'+(W1-11)+' 31 a11 11 0 0 1 22 0" fill="none" stroke="#17553f" stroke-width="1.5"/>';
+  s+='<path d="M'+(W2-11)+' 31 a11 11 0 0 1 22 0" fill="none" stroke="#17553f" stroke-width="1.5"/>';
+  for(var k=0;k<2;k++){
+    var cx=k?W2:W1;
+    s+='<circle cx="'+cx+'" cy="30" r="8.5" fill="#11151b"/>';
+    s+='<circle cx="'+cx+'" cy="30" r="4.6" fill="#2b333d"/>';
+    s+='<g'+(opt.spin?' class="wheel"':'')+'>';
+    s+='<circle cx="'+cx+'" cy="30" r="4.6" fill="none" stroke="#49525f" stroke-width=".8"/>';
+    for(var a=0;a<4;a++){
+      var th=a*Math.PI/4;
+      s+='<line x1="'+(cx-4.2*Math.cos(th)).toFixed(2)+'" y1="'+(30-4.2*Math.sin(th)).toFixed(2)+
+         '" x2="'+(cx+4.2*Math.cos(th)).toFixed(2)+'" y2="'+(30+4.2*Math.sin(th)).toFixed(2)+
+         '" stroke="#49525f" stroke-width=".7"/>';
+    }
+    s+='</g>';
+    s+='<circle cx="'+cx+'" cy="30" r="1.5" fill="#5d6672"/>';
   }
-  s+='<rect x="24" y="52" width="118" height="40" rx="7" fill="#1f6b52"/>';
-  s+='<rect x="24" y="52" width="118" height="13" rx="6" fill="#e8dcc0"/>';
-  s+='<rect x="38" y="58" width="30" height="20" rx="3" fill="#0f1a18"/>';
-  s+='<rect x="80" y="58" width="34" height="20" rx="3" fill="#0f1a18"/>';
-  s+='<circle cx="48" cy="94" r="9" fill="#14181e"/>';
-  s+='<circle cx="122" cy="94" r="9" fill="#14181e"/>';
-  s+='<rect x="30" y="40" width="40" height="12" rx="3" fill="#f0c94a"/>';
-  s+='<text x="50" y="49" fill="#3a2f10" font-size="8" text-anchor="middle">TAXI</text>';
-  if(step>=1) s+='<circle cx="60" cy="70" r="6" fill="#2b333f"/>';
-  s+='<rect x="200" y="46" width="46" height="20" rx="3" fill="#c9241c" stroke="#ff6b5a" stroke-width="1.2"/>';
-  s+='<text x="223" y="61" fill="#fff3e0" font-size="12" text-anchor="middle">饭馆</text>';
-  s+='<ellipse cx="223" cy="56" rx="40" ry="16" fill="#ff5540" opacity=".10"/>';
+  /* roof sign */
+  s+='<ellipse cx="51" cy="-4" rx="20" ry="7" fill="#f0c94a" opacity=".12"/>';
+  s+='<rect x="38" y="-8" width="26" height="8" rx="2" fill="#f0c94a"/>';
+  s+='<rect x="38" y="-8" width="26" height="2.6" rx="1.2" fill="#ffe38a"/>';
+  s+='<text x="51" y="-1.8" fill="#3a2f10" font-size="5.6" text-anchor="middle" font-weight="700">TAXI</text>';
+  if(opt.fumes)
+    s+='<circle cx="86" cy="28" r="3" fill="#8fa39a" opacity=".16"/><circle cx="92" cy="26" r="4.5" fill="#8fa39a" opacity=".09"/>';
+  return s+'</g>';
+}
+
+function cab(step){
+  var d=dest(),r=rnd(4471);
+  var s='<svg viewBox="0 0 280 132" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
+  s+='<defs>'+
+     '<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'+
+       '<stop offset="0" stop-color="#0a0e15"/><stop offset=".62" stop-color="#111823"/>'+
+       '<stop offset="1" stop-color="#1d2a33"/></linearGradient>'+
+     '<radialGradient id="lampg"><stop offset="0" stop-color="#ffcf8a" stop-opacity=".34"/>'+
+       '<stop offset="1" stop-color="#ffcf8a" stop-opacity="0"/></radialGradient>'+
+     '<radialGradient id="signg"><stop offset="0" stop-color="#ff5540" stop-opacity=".34"/>'+
+       '<stop offset="1" stop-color="#ff5540" stop-opacity="0"/></radialGradient>'+
+     '<radialGradient id="moong"><stop offset="0" stop-color="#e8b830" stop-opacity=".26"/>'+
+       '<stop offset="1" stop-color="#e8b830" stop-opacity="0"/></radialGradient>'+
+     '<linearGradient id="beam" x1="1" y1="0" x2="0" y2="0">'+
+       '<stop offset="0" stop-color="#ffe0a0" stop-opacity=".26"/>'+
+       '<stop offset="1" stop-color="#ffe0a0" stop-opacity="0"/></linearGradient>'+
+     '</defs>';
+  s+='<rect x="0" y="0" width="280" height="98" fill="url(#sky)"/>';
+  s+='<circle cx="30" cy="17" r="20" fill="url(#moong)"/>';
+  s+='<circle cx="30" cy="17" r="3.6" fill="#f0c94a" opacity=".5"/>';
+  /* --- shop row behind, with lit frontages and hanging signboards --- */
+  var bx=104;
+  while(bx<280){
+    var bw=24+Math.floor(r()*22),bh=34+Math.floor(r()*38);
+    if(bx+bw>280)bw=280-bx;
+    s+='<rect x="'+bx+'" y="'+(88-bh)+'" width="'+bw+'" height="'+bh+'" fill="#111821"/>';
+    s+='<rect x="'+bx+'" y="'+(88-bh)+'" width="'+bw+'" height="1.4" fill="#242f3c"/>';
+    for(var wy=88-bh+6;wy<76;wy+=8)
+      for(var wx=bx+4;wx<bx+bw-5;wx+=8)
+        if(r()<0.55)s+='<rect x="'+wx+'" y="'+wy+'" width="3.6" height="4.4" fill="#dcb75e" opacity="'+(0.28+r()*0.5).toFixed(2)+'"/>';
+    s+='<rect x="'+(bx+2)+'" y="79" width="'+(bw-4)+'" height="9" fill="#1d1611"/>';
+    s+='<rect x="'+(bx+2)+'" y="79" width="'+(bw-4)+'" height="9" fill="#e8a850" opacity=".16"/>';
+    s+='<rect x="'+(bx+2)+'" y="78.4" width="'+(bw-4)+'" height="1.2" fill="#f0b968" opacity=".5"/>';
+    if(r()<0.45){
+      var sh=10+Math.floor(r()*12);
+      s+='<rect x="'+(bx+bw-7)+'" y="'+(74-sh)+'" width="5" height="'+sh+'" rx="1" fill="#8c2c22" opacity=".8"/>';
+    }
+    bx+=bw+3;
+  }
+  /* the destination, glowing down the street */
+  s+='<ellipse cx="214" cy="54" rx="50" ry="22" fill="url(#signg)"/>';
+  s+='<line x1="214" y1="70" x2="214" y2="88" stroke="#2e3642" stroke-width="2"/>';
+  s+='<rect x="'+(214-(d[0].length*8+9))+'" y="42" width="'+(d[0].length*16+18)+'" height="24" rx="3" fill="#c9241c" stroke="#ff8a78" stroke-width="1.4"/>';
+  s+='<text x="214" y="59" fill="#fff3e0" font-size="14" text-anchor="middle">'+d[0]+'</text>';
+  /* --- street lamp --- */
+  s+='<line x1="96" y1="88" x2="96" y2="12" stroke="#252d38" stroke-width="2.5"/>';
+  s+='<path d="M96 12 q0 -5 9 -5 l7 0" fill="none" stroke="#252d38" stroke-width="2.5"/>';
+  s+='<ellipse cx="112" cy="9" rx="5" ry="2.4" fill="#ffdc9a"/>';
+  s+='<ellipse cx="112" cy="20" rx="16" ry="20" fill="url(#lampg)"/>';
+  /* --- pavement, kerb, road --- */
+  s+='<rect x="0" y="88" width="280" height="10" fill="#191f27"/>';
+  s+='<rect x="0" y="88" width="280" height="1.5" fill="#2a333e"/>';
+  s+='<rect x="0" y="97" width="280" height="35" fill="#1b1a17"/>';
+  s+='<rect x="0" y="97" width="280" height="2" fill="#2b2a25"/>';
+  for(var i=0;i<7;i++) s+='<rect x="'+(6+i*42)+'" y="120" width="24" height="2.5" fill="#3a382f" opacity=".8"/>';
+  s+='<rect x="150" y="92" width="14" height="4" rx="1" fill="#0d1116"/>';
+  /* --- bicycles leaning by the kerb --- */
+  for(var b=0;b<2;b++){
+    var px=32+b*22;
+    s+='<circle cx="'+px+'" cy="84" r="4.5" fill="none" stroke="#2c3540" stroke-width="1.2"/>';
+    s+='<circle cx="'+(px+11)+'" cy="84" r="4.5" fill="none" stroke="#2c3540" stroke-width="1.2"/>';
+    s+='<path d="M'+px+' 84 L'+(px+5)+' 78 L'+(px+11)+' 84 M'+(px+5)+' 78 L'+(px+8)+' 78" fill="none" stroke="#2c3540" stroke-width="1.2"/>';
+  }
+  /* --- the taxi at the kerb --- */
+  s+=taxi(96,58,1,{driver:true,rider:step>=1,bg:'#1b1a17',fumes:step>=1});
+  /* --- you, on the pavement, until you get in --- */
+  if(step<1){
+    s+='<ellipse cx="74" cy="88" rx="7" ry="2" fill="#000" opacity=".45"/>';
+    s+='<line x1="72" y1="80" x2="71" y2="88" stroke="#222a35" stroke-width="2.4"/>';
+    s+='<line x1="76" y1="80" x2="78" y2="88" stroke="#222a35" stroke-width="2.4"/>';
+    s+='<path d="M70 68 q4 -2 8 0 l1.5 13 l-11 0 z" fill="#2e3845"/>';
+    s+='<line x1="79" y1="72" x2="83" y2="79" stroke="#2e3845" stroke-width="2.2" stroke-linecap="round"/>';
+    s+='<circle cx="74" cy="64.5" r="4.2" fill="#3b4653"/>';
+  }
   return s+'</svg>';
 }
 
 /* ---------- gate ---------- */
-var GATE=[
- {q:'The driver waits. What is this vehicle called?',zh:'出租车',py:'chūzūchē',en:'taxi'},
- {q:'Greet him.',zh:'你好',py:'nǐ hǎo',en:'hello'},
- {q:'Tell him your name.',zh:'我叫',py:'wǒ jiào',en:'my name is…',name:true},
- {q:'Tell him where you are from.',zh:'我是',py:'wǒ shì … rén',en:'I am from…',country:true},
- {q:'Tell him where you need to go.',zh:'我要去饭馆',py:'wǒ yào qù fànguǎn',en:'I need to go to the restaurant'}
+/* You choose where you are going. All four are real destinations and the
+   game takes you to whichever one you name. They are chosen to share
+   characters: 饭馆 and 旅馆 differ by one, 火车站 carries the 车 from the
+   first question and the 站 you will pass on the road. */
+var DESTS=[
+ ['饭馆','fànguǎn','the restaurant','厨房关门','Six tables, one fluorescent tube, plastic stools.<br>The knife-cut noodles are still going.','The shutter is down. The red sign is off.'],
+ ['旅馆','lǚguǎn','the guesthouse','前台关门','A narrow lobby, a thermos of hot water,<br>and a key on a wooden fob.','The desk is dark. Nobody answers the bell.'],
+ ['火车站','huǒchēzhàn','the railway station','末班车','The concourse is still lit. There is a train<br>on the board and time to buy a ticket.','The last train has gone. The gates are chained.'],
+ ['机场','jīchǎng','the airport','值机关闭','Departures is quiet but open.<br>The desk takes your bag without a word.','Check-in closed while you were on the ring road.']
 ];
+function dest(){return S.dest||DESTS[0];}
 
+/* Every step is a real choice. Distractors are near-misses, not noise:
+   the wrong vehicles all contain 车, the wrong verbs all start 我,
+   and 我要去车站 is a place you will meet again out on the road. */
+var GATE=[
+ {q:'The driver waits by the kerb. What is this vehicle called?',zh:'出租车',
+  opts:[['出租车','chūzūchē','taxi'],['公共汽车','gōnggòng qìchē','bus'],
+        ['自行车','zìxíngchē','bicycle'],['火车','huǒchē','train']]},
+ {q:'Greet him.',zh:'你好',
+  opts:[['你好','nǐ hǎo','hello'],['再见','zàijiàn','goodbye'],
+        ['谢谢','xièxie','thank you'],['对不起','duìbuqǐ','sorry']]},
+ {q:'You are about to tell him your name. Which one opens that sentence?',zh:'我叫',name:true,
+  opts:[['我叫','wǒ jiào','my name is'],['我是','wǒ shì','I am'],
+        ['我要','wǒ yào','I want'],['我去','wǒ qù','I go']]},
+ {q:'Now tell him where you are from.',zh:'我是',country:true,
+  opts:[['我是…人','wǒ shì … rén','I am a … person'],['我叫…人','wǒ jiào … rén','—'],
+        ['我去…人','wǒ qù … rén','—'],['我要…人','wǒ yào … rén','—']]},
+ {q:'Where do you want to go tonight? Tell him. Whichever you name is where he will take you.',dest:true,zh:'我要去',
+  opts:DESTS.map(function(d){return ['我要去'+d[0],'wǒ yào qù '+d[1],d[2]];})}
+];
+function gateHead(i){
+  return '<div class="hud"><span>'+(i+1)+' / 5</span><span>'+clockStr()+'</span></div>'+cab(i);
+}
 function gate(i){
   if(i>=GATE.length)return knowWay();
   var g=GATE[i];
-  say(g.zh);
-  var body='<div class="screen"><div class="hud"><span>'+(i+1)+' / 5</span><span>'+clockStr()+'</span></div>'+
-    cab(i)+'<div class="sub">'+g.q+'</div><div class="big">'+g.zh+(g.name?'…':'')+'</div>'+
-    '<div class="pin">'+(pinyinOn?g.py+' — ':'')+g.en+'</div><div class="gate">';
-  if(g.name){
-    body+='<input id="nm" class="btn" style="text-align:left" placeholder="your name" value="'+esc(S.name)+'">'+
-      '<div class="btn" onclick="S.name=(document.getElementById(\'nm\').value||\'Ben\');say(\'我叫\'+S.name);setTimeout(function(){gate('+(i+1)+')},700)">说</div>';
-  }else if(g.country){
-    body+='<select id="ct">';
-    for(var k=0;k<COUNTRIES.length;k++)body+='<option value="'+k+'">'+COUNTRIES[k][0]+' — '+COUNTRIES[k][2]+'</option>';
-    body+='</select><div class="btn" onclick="pickCountry('+(i+1)+')">说</div>';
-  }else{
-    body+='<div class="card" onclick="say(\''+g.zh+'\');setTimeout(function(){gate('+(i+1)+')},700)">'+g.zh+'</div>';
+  if(!S.order)S.order={};
+  if(!S.order[i]){
+    var idx=g.opts.map(function(_,k){return k;});
+    idx.sort(function(){return Math.random()-.5});
+    S.order[i]=idx;
   }
-  body+='</div><div class="tog" onclick="pinyinOn=!pinyinOn;gate('+i+')">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
+  var body='<div class="screen">'+gateHead(i)+
+    '<div class="sub">'+g.q+'</div><div class="cards">';
+  for(var j=0;j<S.order[i].length;j++){
+    var o=g.opts[S.order[i][j]];
+    body+='<div class="card" onclick="gatePick('+i+','+S.order[i][j]+',this)">'+o[0]+
+      (pinyinOn?'<div class="pin" style="margin:3px 0 0">'+o[1]+'</div>':'')+'</div>';
+  }
+  body+='</div><div class="pin" id="gt"></div>'+
+    '<div class="tog" onclick="pinyinOn=!pinyinOn;gate('+i+')">pinyin: '+(pinyinOn?'on':'off')+'</div></div>';
+  app.innerHTML=body;
+}
+function gatePick(i,k,el){
+  if(S.busy)return;
+  var g=GATE[i],o=g.opts[k];
+  var correct=g.dest?true:(o[0].indexOf(g.zh)===0);
+  if(g.dest)S.dest=DESTS[k];
+  if(!correct){
+    say(o[0].replace('…',''));
+    el.className='card wrong';
+    document.getElementById('gt').textContent=o[0]+' — '+o[1]+' — '+o[2];
+    setTimeout(function(){el.className='card';},900);
+    return;
+  }
+  S.busy=true;el.className='card right';
+  document.getElementById('gt').textContent=o[0]+' — '+o[1]+' — '+o[2];
+  say(o[0].replace('…',''),false,function(){
+    setTimeout(function(){
+      S.busy=false;
+      if(g.name)return gateName(i);
+      if(g.country)return gateCountry(i);
+      gate(i+1);
+    },260);
+  });
+}
+function gateName(i){
+  app.innerHTML='<div class="screen">'+gateHead(i)+
+    '<div class="sub">Say it.</div><div class="big">我叫…</div>'+
+    '<div class="pin">'+(pinyinOn?'wǒ jiào … — ':'')+'my name is…</div>'+
+    '<div class="gate"><input id="nm" class="btn" style="text-align:left" placeholder="your name" value="'+esc(S.name)+'">'+
+    '<div class="btn" onclick="S.name=(document.getElementById(\'nm\').value||\'Ben\');say(\'我叫\'+S.name,false,function(){gate('+(i+1)+')})">说</div></div></div>';
+}
+function gateCountry(i){
+  var body='<div class="screen">'+gateHead(i)+
+    '<div class="sub">Which country?</div><div class="big">我是…人</div>'+
+    '<div class="pin">'+(pinyinOn?'wǒ shì … rén — ':'')+'I am from…</div><div class="gate"><select id="ct">';
+  for(var k=0;k<COUNTRIES.length;k++)body+='<option value="'+k+'">'+COUNTRIES[k][0]+' — '+COUNTRIES[k][2]+'</option>';
+  body+='</select><div class="btn" onclick="pickCountry('+(i+1)+')">说</div></div></div>';
   app.innerHTML=body;
 }
 function pickCountry(n){
   var k=+document.getElementById('ct').value;
   S.country=COUNTRIES[k];
-  say('我是'+S.country[0]+'人');
-  setTimeout(function(){gate(n)},900);
+  say('我是'+S.country[0]+'人',false,function(){gate(n);});
 }
 
 /* ---------- the trap ---------- */
@@ -228,7 +482,7 @@ function knowWay(){
     cab(5)+L('你知道路吗？','nǐ zhīdào lù ma?')+
     '<div class="sub">He is waiting for an answer before he pulls away.</div>'+
     '<div class="cards" style="margin-top:auto">'+
-    '<div class="card" onclick="say(\'知道\');setTimeout(drive,800)">知道</div>'+
+    '<div class="card" onclick="say(\'知道\',false,drive)">知道</div>'+
     '<div class="card" id="no" onclick="refuse()">不知道</div></div>'+
     '<div class="pin" id="nt"></div></div>';
 }
@@ -269,7 +523,7 @@ function map(){
   var g=NODES.goal.p;
   s+='<circle cx="'+g[0]+'" cy="'+g[1]+'" r="11" fill="#e05a3a" opacity=".16"/>';
   s+='<circle cx="'+g[0]+'" cy="'+g[1]+'" r="5" fill="#e05a3a"/>';
-  s+='<text x="'+(g[0]-10)+'" y="'+(g[1]-9)+'" fill="#e8a08a" font-size="10">饭馆</text>';
+  s+='<text x="'+(g[0]-15)+'" y="'+(g[1]-9)+'" fill="#e8a08a" font-size="10">'+dest()[0]+'</text>';
   var c=NODES[S.at].p;
   s+='<circle cx="'+c[0]+'" cy="'+c[1]+'" r="5" fill="#f5d90a"/>';
   s+='<path d="M'+c[0]+' '+(c[1]-8)+' l4 6 h-8 z" fill="#f5d90a"/>';
@@ -280,48 +534,127 @@ function map(){
 }
 
 /* ---------- scene ---------- */
-/* Arm from the driver's right shoulder, jointed at the elbow, with a
-   real hand on the end: closed fist, one finger out. Drawn last so it
-   sits in front of the cabin, which is why it looked broken before. */
+/* His right arm, seen from the back seat. The arm is one eased curve from
+   shoulder to wrist; the hand is a closed fist with a SHORT index finger.
+   The finger used to be sixty per cent the length of the whole arm, which
+   is why it read as a tentacle rather than a hand. */
 function hand(dir){
-  var SX=74, SY=118;                       /* shoulder */
-  var E={left:[104,102],right:[112,96],straight:[100,88]}[dir];
-  var H={left:[136,86], right:[152,74], straight:[122,52]}[dir];
-  var F={left:[168,74], right:[196,56], straight:[122,26]}[dir];
-  var s='';
-  s+='<line x1="'+SX+'" y1="'+SY+'" x2="'+E[0]+'" y2="'+E[1]+'" stroke="#0c1016" stroke-width="17" stroke-linecap="round"/>';
-  s+='<line x1="'+E[0]+'" y1="'+E[1]+'" x2="'+H[0]+'" y2="'+H[1]+'" stroke="#0c1016" stroke-width="15" stroke-linecap="round"/>';
-  s+='<line x1="'+SX+'" y1="'+SY+'" x2="'+E[0]+'" y2="'+E[1]+'" stroke="#252e3a" stroke-width="13" stroke-linecap="round"/>';
-  s+='<line x1="'+E[0]+'" y1="'+E[1]+'" x2="'+H[0]+'" y2="'+H[1]+'" stroke="#2d3745" stroke-width="11" stroke-linecap="round"/>';
-  s+='<circle cx="'+E[0]+'" cy="'+E[1]+'" r="6" fill="#252e3a"/>';
-  s+='<circle cx="'+H[0]+'" cy="'+H[1]+'" r="7.5" fill="#c9a184"/>';   /* fist */
-  s+='<line x1="'+H[0]+'" y1="'+H[1]+'" x2="'+F[0]+'" y2="'+F[1]+'" stroke="#c9a184" stroke-width="5.5" stroke-linecap="round"/>';
-  s+='<circle cx="'+F[0]+'" cy="'+F[1]+'" r="2.8" fill="#d9b294"/>';   /* fingertip */
+  var A={
+    left:    {c:'C 97 93, 95 76, 91 66', wx:91,  wy:66, a:-140},
+    right:   {c:'C 106 100, 122 92, 138 82', wx:138, wy:82, a:-26},
+    straight:{c:'C 99 96, 109 83, 115 72', wx:115, wy:72, a:-64}
+  }[dir];
+  var th=A.a*Math.PI/180;
+  var ux=Math.cos(th), uy=Math.sin(th);
+  var fx=A.wx+ux*5.5, fy=A.wy+uy*5.5;          /* knuckles */
+  var tx=A.wx+ux*15.5, ty=A.wy+uy*15.5;        /* fingertip — short */
+  var thx=A.wx-uy*4.2, thy=A.wy+ux*4.2;        /* thumb, across the fist */
+  var d='M88 104 '+A.c;
+  var s='<g class="arm" style="transform-box:view-box;transform-origin:88px 104px">';
+  s+='<g class="armsway" style="transform-box:view-box;transform-origin:88px 104px">';
+  /* sleeve, dark edge under a lighter top so the arm has a little roundness */
+  s+='<path d="'+d+'" fill="none" stroke="#0a0e14" stroke-width="11.5" stroke-linecap="round"/>';
+  s+='<path d="'+d+'" fill="none" stroke="#2b3644" stroke-width="8.5" stroke-linecap="round"/>';
+  s+='<path d="'+d+'" fill="none" stroke="#3a4757" stroke-width="3.4" stroke-linecap="round" opacity=".5"/>';
+  /* wrist */
+  s+='<circle cx="'+A.wx.toFixed(1)+'" cy="'+A.wy.toFixed(1)+'" r="3.6" fill="#a9825f"/>';
+  /* fist */
+  s+='<ellipse cx="'+((A.wx+fx)/2).toFixed(1)+'" cy="'+((A.wy+fy)/2).toFixed(1)+
+     '" rx="5.6" ry="4.9" fill="#c49a7c" transform="rotate('+A.a.toFixed(0)+' '+
+     ((A.wx+fx)/2).toFixed(1)+' '+((A.wy+fy)/2).toFixed(1)+')"/>';
+  s+='<circle cx="'+thx.toFixed(1)+'" cy="'+thy.toFixed(1)+'" r="2.4" fill="#b88d6e"/>';
+  /* index finger, short */
+  s+='<line x1="'+fx.toFixed(1)+'" y1="'+fy.toFixed(1)+'" x2="'+tx.toFixed(1)+'" y2="'+ty.toFixed(1)+
+     '" stroke="#c9a184" stroke-width="3.6" stroke-linecap="round"/>';
+  s+='<circle cx="'+tx.toFixed(1)+'" cy="'+ty.toFixed(1)+'" r="1.8" fill="#dcb69a"/>';
+  /* two knuckle creases so the fist reads as a fist */
+  s+='<circle cx="'+(fx-ux*1.6-uy*2.2).toFixed(1)+'" cy="'+(fy-uy*1.6+ux*2.2).toFixed(1)+'" r="1.15" fill="#a9825f" opacity=".75"/>';
+  s+='<circle cx="'+(fx-ux*1.6+uy*2.2).toFixed(1)+'" cy="'+(fy-uy*1.6-ux*2.2).toFixed(1)+'" r="1.15" fill="#a9825f" opacity=".75"/>';
+  return s+'</g></g>';
+}
+
+/* A deterministic little RNG so a junction looks the same every time you
+   re-render it (the pinyin toggle redraws the scene) but different from
+   its neighbours. */
+function rnd(seed){
+  var s=(seed||1)%2147483647; if(s<=0)s+=2147483646;
+  var f=function(){s=s*16807%2147483647;return (s-1)/2147483646;};
+  f();f();f();f();          /* warm up: the first draws off a small seed are correlated */
+  return f;
+}
+
+/* Buildings down both sides of the road. Each side independently rolls a
+   chance of being open ground instead — a hoarded-off lot or a low wall —
+   because a city that is built up everywhere reads as false, and the
+   empty stretches are what make the dense ones feel like somewhere. */
+function skyline(seed){
+  var r=rnd(seed),HOR=72,s='';
+  s+='<rect x="26" y="44" width="228" height="28" fill="#1a222d" opacity=".40"/>';   /* smog */
+  /* far blocks closing off the end of the street, so the road runs into a
+     city rather than into nothing */
+  for(var fx=104;fx<178;){
+    var fw=7+Math.floor(r()*11),fh=7+Math.floor(r()*13);
+    s+='<rect x="'+fx+'" y="'+(HOR-fh)+'" width="'+fw+'" height="'+fh+'" fill="#131a24"/>';
+    if(r()<0.5)s+='<rect x="'+(fx+2)+'" y="'+(HOR-fh+3)+'" width="2" height="2.5" fill="#e0bd68" opacity=".45"/>';
+    fx+=fw+2;
+  }
+  var bands=[[27,112],[168,253]];
+  for(var b=0;b<bands.length;b++){
+    var x0=bands[b][0],x1=bands[b][1];
+    if(r()<0.20){                                   /* open ground */
+      s+='<rect x="'+x0+'" y="'+(HOR-7)+'" width="'+(x1-x0)+'" height="7" fill="#141b25"/>';
+      for(var f=x0+2;f<x1-5;f+=10)
+        s+='<rect x="'+f+'" y="'+(HOR-13)+'" width="7" height="6" fill="#1d2733"/>';
+      if(r()<0.5){
+        var cx=x0+10+r()*(x1-x0-24);
+        s+='<rect x="'+cx.toFixed(1)+'" y="'+(HOR-30)+'" width="3" height="23" fill="#1a222d"/>';
+        s+='<rect x="'+(cx-7).toFixed(1)+'" y="'+(HOR-32)+'" width="17" height="3" fill="#1a222d"/>';
+      }
+      continue;
+    }
+    var x=x0;
+    while(x<x1-9){
+      var w=10+Math.floor(r()*16); if(x+w>x1)w=x1-x;
+      var h=13+Math.floor(r()*40),y=HOR-h;
+      var shade=['#0d131c','#111925','#151e2a'][Math.floor(r()*3)];
+      s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+shade+'"/>';
+      s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="1.5" fill="#242f3d"/>';
+      for(var wy=y+4;wy<HOR-4;wy+=6)
+        for(var wx=x+3;wx<x+w-3;wx+=6)
+          if(r()<0.40)
+            s+='<rect x="'+wx+'" y="'+wy+'" width="2.5" height="3" fill="#f0c96a" opacity="'+(0.3+r()*0.5).toFixed(2)+'"/>';
+      if(h>40&&r()<0.45)
+        s+='<circle cx="'+(x+w/2)+'" cy="'+(y-3)+'" r="1.6" fill="#ff5a4a" opacity=".8"/>';
+      x+=w+1+Math.floor(r()*3);
+    }
+  }
   return s;
 }
 
 /* Landmark signs: big, lit, unmissable. Left or right of the road so the
    pointing finger has something to point AT. */
 function sign(side,txt){
-  var x=(side==='left')?62:214, y=30;
-  var w=txt.length*17+16, h=28;
+  var x=(side==='left')?70:214, y=19;
+  var w=txt.length*16+14, h=25;
   var s='';
-  s+='<line x1="'+x+'" y1="'+(y+h)+'" x2="'+x+'" y2="96" stroke="#2e3642" stroke-width="3"/>';
+  s+='<line x1="'+x+'" y1="'+(y+h)+'" x2="'+x+'" y2="94" stroke="#2e3642" stroke-width="2.5"/>';
   s+='<ellipse cx="'+x+'" cy="'+(y+h/2)+'" rx="'+(w/2+26)+'" ry="30" fill="#ff5033" opacity=".13"/>';
   s+='<ellipse cx="'+x+'" cy="'+(y+h/2)+'" rx="'+(w/2+12)+'" ry="20" fill="#ff5540" opacity=".18"/>';
   s+='<rect x="'+(x-w/2-4)+'" y="'+(y-4)+'" width="'+(w+8)+'" height="'+(h+8)+'" rx="4" fill="#ff6a4a" opacity=".30"/>';
   s+='<rect x="'+(x-w/2)+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="3" fill="#d42a1e" stroke="#ffb3a0" stroke-width="2"/>';
-  s+='<text x="'+x+'" y="'+(y+20)+'" fill="#fff6ea" font-size="17" text-anchor="middle" font-weight="600">'+txt+'</text>';
+  s+='<text x="'+x+'" y="'+(y+18)+'" fill="#fff6ea" font-size="16" text-anchor="middle" font-weight="600">'+txt+'</text>';
   s+='<circle cx="'+(x-w/2+5)+'" cy="'+(y+h+7)+'" r="2" fill="#ffd9a0" opacity=".8"/>';
   s+='<circle cx="'+(x+w/2-5)+'" cy="'+(y+h+7)+'" r="2" fill="#ffd9a0" opacity=".8"/>';
   return s;
 }
 
-function scene(pt,lm,lmSide,asking){
+function scene(pt,lm,lmSide,asking,seed){
+  seed=seed||curSeed();
   var s='<svg viewBox="0 0 280 170" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
 
   /* --- through the windscreen --- */
   s+='<rect x="26" y="16" width="228" height="88" rx="5" fill="#141b26"/>';
+  s+=skyline(seed);
   s+='<rect x="26" y="72" width="228" height="32" fill="#2a2118"/>';
   s+='<path d="M112 104 L130 74 h20 l18 30 z" fill="#3d3226"/>';
   s+='<line x1="140" y1="104" x2="140" y2="86" stroke="#c9b27a" stroke-width="2.5" opacity=".55"/>';
@@ -348,11 +681,378 @@ function scene(pt,lm,lmSide,asking){
      (12+Math.round(S.mins)*2)+'.0</text>';
 
   /* --- driver --- */
-  s+='<ellipse cx="52" cy="156" rx="42" ry="34" fill="#161d27"/>';
-  s+='<circle cx="56" cy="112" r="19" fill="#1b232e"/>';
-  s+='<path d="M40 100 a17 12 0 0 1 32 0 z" fill="#111720"/>';
+  /* Seen from the back seat he blocks the lower left of the windscreen:
+     seat back, headrest, the back of his head. */
+  s+='<rect x="24" y="94" width="72" height="76" rx="9" fill="#182029"/>';
+  s+='<rect x="24" y="94" width="72" height="4" rx="2" fill="#212b36"/>';
+  s+='<rect x="38" y="70" width="46" height="28" rx="8" fill="#1c2531"/>';
+  s+='<circle cx="61" cy="62" r="15" fill="#28313d"/>';
+  s+='<path d="M46 56 a15 11 0 0 1 30 0 z" fill="#141a23"/>';
+  s+='<ellipse cx="61" cy="55" rx="15.5" ry="3" fill="#0f151d"/>';
   if(asking) s+=hand(pt);
   return s+'</svg>';
+}
+
+/* ---------- the drive between junctions ----------
+   Every street in the network gets its own city, generated from a hash of
+   the edge you took, so the same turn always looks the same and no two
+   look alike. Four layers move at four speeds; the car stays put and the
+   world slides past it. */
+function hashSeed(str){
+  var h=2166136261;
+  for(var i=0;i<str.length;i++){h^=str.charCodeAt(i);h=(h*16777619)>>>0;}
+  return (h%1900000)+1;
+}
+function loop(content,dur){
+  return '<g style="animation:scrollx '+dur+'s linear infinite">'+content+
+         '<g transform="translate(280,0)">'+content+'</g></g>';
+}
+/* ---------- the pieces a Beijing street is made of ----------
+   Each returns [svg, width]. Streets are assembled from these according to
+   an archetype, so two streets differ in kind and not merely in the width
+   of their boxes. `lt` is how late it is, 0..1 — the city shutters as the
+   evening runs out, which is the same clock that decides whether you eat. */
+
+function win_(r,x,y,w,h,lt,p){
+  var s='';
+  for(var wy=y;wy<y+h;wy+=7)
+    for(var wx=x;wx<x+w;wx+=7){
+      /* both draws happen whether or not the light is on, so a street keeps
+         its exact shape as the evening goes and only goes dark */
+      var op=(0.24+r()*0.5).toFixed(2), on=r()<(p||0.5)*(1-0.42*lt);
+      if(on) s+='<rect x="'+wx.toFixed(1)+'" y="'+wy.toFixed(1)+'" width="3.2" height="4" fill="#dcb75e" opacity="'+op+'"/>';
+    }
+  return s;
+}
+/* a shophouse: lit frontage, signboard, shutters once it is late */
+function elShop(r,x,b,lt){
+  var w=20+Math.floor(r()*26),h=26+Math.floor(r()*40),s='';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="'+h+'" fill="#141c26"/>';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="1.4" fill="#26313f"/>';
+  s+=win_(r,x+4,b-h+5,w-9,h-18,lt,0.5);
+  /* every random is drawn before the branch: the same street must look
+     like the same street later on, only darker */
+  var openRoll=r(), lanternRoll=r(), signRoll=r(), signH=r(), signCol=r();
+  var open=openRoll<0.66*(1-0.55*lt);
+  if(open){
+    s+='<rect x="'+(x+1.5)+'" y="'+(b-11)+'" width="'+(w-3)+'" height="11" fill="#1d1611"/>';
+    s+='<rect x="'+(x+1.5)+'" y="'+(b-11)+'" width="'+(w-3)+'" height="11" fill="#e8a850" opacity=".18"/>';
+    s+='<rect x="'+(x+1.5)+'" y="'+(b-11.6)+'" width="'+(w-3)+'" height="1.2" fill="#f0b968" opacity=".55"/>';
+    if(lanternRoll<0.4)for(var q=0;q<2;q++)
+      s+='<circle cx="'+(x+5+q*(w-10))+'" cy="'+(b-13)+'" r="2.4" fill="#d8402c" opacity=".85"/>';
+  }else{
+    s+='<rect x="'+(x+1.5)+'" y="'+(b-11)+'" width="'+(w-3)+'" height="11" fill="#10161d"/>';
+    for(var sy=b-10;sy<b;sy+=2.2)
+      s+='<rect x="'+(x+2)+'" y="'+sy.toFixed(1)+'" width="'+(w-4)+'" height="1.1" fill="#1a222b"/>';
+  }
+  if(signRoll<0.55){
+    var sh=9+Math.floor(signH*15);
+    s+='<rect x="'+(x+w-6.5)+'" y="'+(b-13-sh)+'" width="5" height="'+sh+'" rx="1" fill="'+(signCol<0.5?'#8c2c22':'#1f5a4a')+'" opacity="'+(0.55+0.35*(1-lt)).toFixed(2)+'"/>';
+  }
+  return [s,w+2+r()*7];
+}
+/* a residential slab: balconies, air-con boxes, washing on the line */
+function elSlab(r,x,b,lt){
+  var w=40+Math.floor(r()*30),h=44+Math.floor(r()*30),s='';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="'+h+'" fill="#161d27"/>';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="1.6" fill="#28323f"/>';
+  for(var fy=b-h+7;fy<b-6;fy+=9){
+    s+='<rect x="'+(x+2)+'" y="'+fy.toFixed(1)+'" width="'+(w-4)+'" height="1" fill="#0f151d"/>';
+    for(var fx=x+4;fx<x+w-6;fx+=10){
+      var fop=(0.22+r()*0.45).toFixed(2);
+      if(r()<0.62*(1-0.4*lt))
+        s+='<rect x="'+fx.toFixed(1)+'" y="'+(fy-5).toFixed(1)+'" width="5.5" height="5" fill="#dcb75e" opacity="'+fop+'"/>';
+      if(r()<0.3)
+        s+='<rect x="'+(fx+6).toFixed(1)+'" y="'+(fy-4).toFixed(1)+'" width="3" height="3" fill="#2b3540"/>';
+    }
+  }
+  return [s,w+2+r()*5];
+}
+/* a hutong wall: grey brick, tiled ridge, a gate with a lamp over it */
+function elHutong(r,x,b,lt){
+  var w=34+Math.floor(r()*36),h=15+Math.floor(r()*6),s='';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="'+h+'" fill="#1a1f26"/>';
+  s+='<rect x="'+x+'" y="'+(b-h-2.4)+'" width="'+w+'" height="2.6" fill="#2b323b"/>';
+  for(var t=x;t<x+w;t+=4)
+    s+='<rect x="'+t.toFixed(1)+'" y="'+(b-h-3.6)+'" width="2.4" height="1.6" rx=".7" fill="#333b45"/>';
+  var gx=x+6+r()*(w-20);
+  s+='<rect x="'+gx.toFixed(1)+'" y="'+(b-13)+'" width="12" height="13" fill="#20262e"/>';
+  s+='<rect x="'+gx.toFixed(1)+'" y="'+(b-14.6)+'" width="12" height="2" fill="#3a2320"/>';
+  s+='<rect x="'+(gx+5.4).toFixed(1)+'" y="'+(b-13)+'" width="1.2" height="13" fill="#12171d"/>';
+  if(r()<0.6){
+    s+='<circle cx="'+(gx+6).toFixed(1)+'" cy="'+(b-17)+'" r="2.2" fill="#d8402c" opacity=".8"/>';
+    s+='<ellipse cx="'+(gx+6).toFixed(1)+'" cy="'+(b-16)+'" rx="9" ry="7" fill="#ff6a4a" opacity=".07"/>';
+  }
+  if(r()<0.45)
+    s+='<ellipse cx="'+(x+w*0.5).toFixed(1)+'" cy="'+(b-h-11)+'" rx="11" ry="9" fill="#16241f"/>';
+  return [s,w+2+r()*6];
+}
+/* a work-unit wall: long, blank, one gate, a red banner */
+function elDanwei(r,x,b,lt){
+  var w=44+Math.floor(r()*34),s='';
+  s+='<rect x="'+x+'" y="'+(b-20)+'" width="'+w+'" height="20" fill="#181e26"/>';
+  s+='<rect x="'+x+'" y="'+(b-20.6)+'" width="'+w+'" height="1.6" fill="#29323d"/>';
+  for(var pz=x+4;pz<x+w-3;pz+=11)
+    s+='<rect x="'+pz.toFixed(1)+'" y="'+(b-19)+'" width="1.4" height="19" fill="#121820"/>';
+  if(r()<0.7){
+    s+='<rect x="'+(x+w*0.35).toFixed(1)+'" y="'+(b-26)+'" width="'+(w*0.42).toFixed(1)+'" height="6" fill="#8c2c22" opacity=".85"/>';
+    s+='<rect x="'+(x+w*0.35).toFixed(1)+'" y="'+(b-26)+'" width="'+(w*0.42).toFixed(1)+'" height="1" fill="#c9564a" opacity=".7"/>';
+  }
+  s+='<rect x="'+(x+w-16).toFixed(1)+'" y="'+(b-24)+'" width="3" height="24" fill="#232b35"/>';
+  s+='<rect x="'+(x+w-5).toFixed(1)+'" y="'+(b-24)+'" width="3" height="24" fill="#232b35"/>';
+  return [s,w+2+r()*6];
+}
+/* an office tower: glass grid, a lit lobby, a corporate crown */
+function elTower(r,x,b,lt){
+  var w=24+Math.floor(r()*16),h=58+Math.floor(r()*34),s='';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="'+h+'" fill="#121a25"/>';
+  s+='<rect x="'+x+'" y="'+(b-h)+'" width="'+w+'" height="2" fill="#2b3triangle"/>'.replace('3triangle','642');
+  for(var gy=b-h+6;gy<b-14;gy+=6){
+    s+='<rect x="'+(x+2)+'" y="'+gy.toFixed(1)+'" width="'+(w-4)+'" height="4.4" fill="#0e1721"/>';
+    for(var gx2=x+3;gx2<x+w-4;gx2+=6){
+      var gop=(0.16+r()*0.3).toFixed(2);
+      if(r()<0.34*(1-0.4*lt))
+        s+='<rect x="'+gx2.toFixed(1)+'" y="'+gy.toFixed(1)+'" width="4" height="4.4" fill="#9fc4d8" opacity="'+gop+'"/>';
+    }
+  }
+  s+='<rect x="'+(x+2)+'" y="'+(b-13)+'" width="'+(w-4)+'" height="13" fill="#1a2a33"/>';
+  s+='<rect x="'+(x+2)+'" y="'+(b-13)+'" width="'+(w-4)+'" height="13" fill="#8fd0e0" opacity=".12"/>';
+  s+='<circle cx="'+(x+w/2)+'" cy="'+(b-h-3)+'" r="1.5" fill="#ff5a4a" opacity=".85"/>';
+  return [s,w+2+r()*5];
+}
+/* open ground: hoarding, sometimes a crane, sometimes the demolition mark */
+function elLot(r,x,b,lt){
+  var w=30+Math.floor(r()*48),s='';
+  s+='<rect x="'+x+'" y="'+(b-11)+'" width="'+w+'" height="11" fill="#12181f"/>';
+  for(var f=x+2;f<x+w-4;f+=9)
+    s+='<rect x="'+f.toFixed(1)+'" y="'+(b-16)+'" width="6.5" height="16" fill="#1b2531"/>';
+  if(r()<0.3){
+    s+='<rect x="'+(x+w/2-9).toFixed(1)+'" y="'+(b-15)+'" width="18" height="14" fill="#233040"/>';
+    s+='<circle cx="'+(x+w/2).toFixed(1)+'" cy="'+(b-8)+'" r="5" fill="none" stroke="#c9b071" stroke-width="1"/>';
+    s+='<text x="'+(x+w/2).toFixed(1)+'" y="'+(b-5.6)+'" fill="#c9b071" font-size="6.4" text-anchor="middle">拆</text>';
+  }
+  if(r()<0.42){
+    var cx2=x+8+r()*(w-18);
+    s+='<rect x="'+cx2.toFixed(1)+'" y="'+(b-52)+'" width="2" height="52" fill="#1d2733"/>';
+    s+='<rect x="'+(cx2-14).toFixed(1)+'" y="'+(b-54)+'" width="32" height="2" fill="#1d2733"/>';
+    s+='<line x1="'+(cx2+12).toFixed(1)+'" y1="'+(b-52)+'" x2="'+(cx2+12).toFixed(1)+'" y2="'+(b-40)+'" stroke="#1d2733" stroke-width="1"/>';
+    s+='<circle cx="'+(cx2+1).toFixed(1)+'" cy="'+(b-55)+'" r="1.3" fill="#ff5a4a" opacity=".8"/>';
+  }
+  if(r()<0.3){
+    var px=x+6+r()*(w-14);
+    s+='<rect x="'+px.toFixed(1)+'" y="'+(b-26)+'" width="9" height="15" fill="#161d26"/>';
+  }
+  return [s,w+3];
+}
+/* a market run: awnings, crates, a bare bulb over each stall */
+function elMarket(r,x,b,lt){
+  var w=30+Math.floor(r()*26),s='';
+  s+='<rect x="'+x+'" y="'+(b-24)+'" width="'+w+'" height="24" fill="#151b23"/>';
+  var open=r()<0.7*(1-0.6*lt);
+  for(var a=0;a<3;a++){
+    var ax=x+2+a*(w-4)/3, aw=(w-4)/3-1.5;
+    s+='<path d="M'+ax.toFixed(1)+' '+(b-13)+' l'+aw.toFixed(1)+' 0 l-2 5 l-'+(aw-4).toFixed(1)+' 0 z" fill="'+(a%2?'#7a2b22':'#2b5a4a')+'" opacity=".8"/>';
+    if(open){
+      s+='<circle cx="'+(ax+aw/2).toFixed(1)+'" cy="'+(b-15)+'" r="1.4" fill="#ffe0a0"/>';
+      s+='<ellipse cx="'+(ax+aw/2).toFixed(1)+'" cy="'+(b-9)+'" rx="7" ry="8" fill="#ffd08a" opacity=".10"/>';
+      for(var cz=0;cz<2;cz++)
+        s+='<rect x="'+(ax+1+cz*4).toFixed(1)+'" y="'+(b-5)+'" width="3.4" height="4.6" fill="#3a3226"/>';
+    }
+  }
+  return [s,w+2+r()*5];
+}
+/* a bus shelter on the frontage */
+function elStop(r,x,b,lt){
+  var s='';
+  s+='<rect x="'+x+'" y="'+(b-15)+'" width="26" height="1.8" fill="#2a3440"/>';
+  s+='<rect x="'+x+'" y="'+(b-15)+'" width="1.6" height="15" fill="#2a3440"/>';
+  s+='<rect x="'+(x+24)+'" y="'+(b-15)+'" width="1.6" height="15" fill="#2a3440"/>';
+  s+='<rect x="'+(x+3)+'" y="'+(b-12)+'" width="9" height="7" fill="#1d5a6a" opacity=".55"/>';
+  s+='<rect x="'+(x+6)+'" y="'+(b-5)+'" width="14" height="1.6" fill="#2a3440"/>';
+  return [s,30+r()*8];
+}
+
+var MIX={
+  hutong:      [elHutong,elHutong,elHutong,elShop,elLot,elDanwei],
+  commercial:  [elShop,elShop,elShop,elMarket,elTower,elStop],
+  residential: [elSlab,elSlab,elShop,elDanwei,elLot,elStop],
+  construction:[elLot,elLot,elLot,elDanwei,elSlab,elShop],
+  arterial:    [elTower,elSlab,elDanwei,elLot,elTower,elShop],
+  market:      [elMarket,elMarket,elShop,elShop,elHutong,elLot]
+};
+var ARCH=['hutong','commercial','residential','construction','arterial','market'];
+
+function stripMid(r,base,arch,lt){
+  var mix=MIX[arch]||MIX.commercial,s='',x=-8;
+  while(x<284){
+    var f=mix[Math.floor(r()*mix.length)];
+    var out=f(r,x,base,lt);
+    s+=out[0]; x+=out[1];
+  }
+  return s;
+}
+
+/* far skyline: towers, chimneys, a pagoda roof, the odd distant crane */
+function stripFar(r,base,arch,lt){
+  var s='',x=-6;
+  while(x<284){
+    var k=r();
+    if(k<0.18){x+=12+r()*30;continue;}
+    if(k<0.26){
+      var ch=30+Math.floor(r()*22);
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-ch)+'" width="5" height="'+ch+'" fill="#131b25"/>';
+      s+='<ellipse cx="'+(x+2.5).toFixed(1)+'" cy="'+(base-ch-6)+'" rx="7" ry="5" fill="#1b242f" opacity=".7"/>';
+      s+='<ellipse cx="'+(x+7).toFixed(1)+'" cy="'+(base-ch-12)+'" rx="10" ry="6" fill="#1b242f" opacity=".45"/>';
+      x+=14+r()*12;continue;
+    }
+    if(k<0.33){
+      var pw=26+Math.floor(r()*12);
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-13)+'" width="'+pw+'" height="13" fill="#131b25"/>';
+      s+='<path d="M'+(x-4).toFixed(1)+' '+(base-13)+' L'+(x+pw/2).toFixed(1)+' '+(base-23)+' L'+(x+pw+4).toFixed(1)+' '+(base-13)+' Z" fill="#182230"/>';
+      x+=pw+4+r()*10;continue;
+    }
+    var w=13+Math.floor(r()*24),h=16+Math.floor(r()*38);
+    s+='<rect x="'+x.toFixed(1)+'" y="'+(base-h)+'" width="'+w+'" height="'+h+'" fill="#131b25"/>';
+    if(h>36&&r()<0.5)s+='<circle cx="'+(x+w/2).toFixed(1)+'" cy="'+(base-h-2)+'" r="1.3" fill="#ff5a4a" opacity=".65"/>';
+    s+=win_(r,x+3,base-h+4,w-6,h-8,lt,0.22);
+    x+=w+2+r()*8;
+  }
+  return s;
+}
+
+/* the near verge, whipping past: lamps, trees, carts, parked cars, people */
+function stripNear(r,base,arch,lt){
+  var s='',x=0;
+  while(x<284){
+    var k=r();
+    if(k<0.20){
+      s+='<line x1="'+x.toFixed(1)+'" y1="'+base+'" x2="'+x.toFixed(1)+'" y2="'+(base-40)+'" stroke="#1c2531" stroke-width="2.4"/>';
+      s+='<path d="M'+x.toFixed(1)+' '+(base-40)+' q0 -4 7 -4 l5 0" fill="none" stroke="#1c2531" stroke-width="2.4"/>';
+      s+='<ellipse cx="'+(x+12).toFixed(1)+'" cy="'+(base-43)+'" rx="3.6" ry="1.8" fill="#ffdc9a" opacity=".9"/>';
+      s+='<ellipse cx="'+(x+12).toFixed(1)+'" cy="'+(base-33)+'" rx="12" ry="15" fill="url(#lg2)"/>';
+      x+=44+r()*40;
+    } else if(k<0.42){
+      var th=10+r()*6;
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-th)+'" width="2.4" height="'+th.toFixed(1)+'" fill="#141c25"/>';
+      if(r()<0.5){
+        s+='<ellipse cx="'+(x+1.2).toFixed(1)+'" cy="'+(base-th-6)+'" rx="8" ry="8.5" fill="#16241f"/>';
+        s+='<ellipse cx="'+(x-2).toFixed(1)+'" cy="'+(base-th-10)+'" rx="5.5" ry="5.5" fill="#1a2b24"/>';
+      } else {
+        s+='<path d="M'+(x+1.2).toFixed(1)+' '+(base-th-16)+' q7 6 1 16 q-8 -6 -1 -16 z" fill="#182a22"/>';
+      }
+      x+=24+r()*28;
+    } else if(k<0.56){
+      for(var g=0;g<5;g++)
+        s+='<rect x="'+(x+g*5).toFixed(1)+'" y="'+(base-9)+'" width="1.6" height="9" fill="#1b232e"/>';
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-9.6)+'" width="22" height="1.6" fill="#1b232e"/>';
+      x+=28+r()*26;
+    } else if(k<0.68){
+      s+='<circle cx="'+x.toFixed(1)+'" cy="'+(base-4)+'" r="4" fill="none" stroke="#1e2833" stroke-width="1.2"/>';
+      s+='<circle cx="'+(x+10).toFixed(1)+'" cy="'+(base-4)+'" r="4" fill="none" stroke="#1e2833" stroke-width="1.2"/>';
+      s+='<path d="M'+x.toFixed(1)+' '+(base-4)+' l4.5 -5 l5.5 5" fill="none" stroke="#1e2833" stroke-width="1.2"/>';
+      x+=30+r()*30;
+    } else if(k<0.80){
+      /* a parked car, seen as a low dark shape */
+      var cw=30+r()*10;
+      s+='<path d="M'+x.toFixed(1)+' '+base+' l0 -6 q2 -6 9 -7 l'+(cw*0.4).toFixed(1)+' -1 q7 1 10 8 l0 6 z" fill="#141b24"/>';
+      s+='<circle cx="'+(x+8).toFixed(1)+'" cy="'+base+'" r="3.4" fill="#0d1118"/>';
+      s+='<circle cx="'+(x+cw-6).toFixed(1)+'" cy="'+base+'" r="3.4" fill="#0d1118"/>';
+      s+='<rect x="'+(x+cw-3).toFixed(1)+'" y="'+(base-9)+'" width="2.4" height="2" fill="#8c3226" opacity=".8"/>';
+      x+=cw+10+r()*20;
+    } else if(k<0.90){
+      /* a food cart, steaming */
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-9)+'" width="17" height="9" fill="#1b232e"/>';
+      s+='<rect x="'+(x-1).toFixed(1)+'" y="'+(base-11)+'" width="19" height="2.2" fill="#2a3440"/>';
+      s+='<circle cx="'+(x+4).toFixed(1)+'" cy="'+base+'" r="2.4" fill="#0d1118"/>';
+      s+='<circle cx="'+(x+13).toFixed(1)+'" cy="'+base+'" r="2.4" fill="#0d1118"/>';
+      s+='<circle cx="'+(x+8).toFixed(1)+'" cy="'+(base-15)+'" r="4" fill="#b8c6c0" opacity=".13"/>';
+      s+='<circle cx="'+(x+11).toFixed(1)+'" cy="'+(base-21)+'" r="5.5" fill="#b8c6c0" opacity=".08"/>';
+      if(lt<0.72) s+='<circle cx="'+(x+2).toFixed(1)+'" cy="'+(base-14)+'" r="1.6" fill="#ffe0a0" opacity=".7"/>';
+      x+=26+r()*24;
+    } else {
+      /* somebody on the pavement */
+      var ph=13+r()*3;
+      s+='<line x1="'+(x-1).toFixed(1)+'" y1="'+(base-6)+'" x2="'+(x-2).toFixed(1)+'" y2="'+base+'" stroke="#1a222c" stroke-width="1.8"/>';
+      s+='<line x1="'+(x+1).toFixed(1)+'" y1="'+(base-6)+'" x2="'+(x+2).toFixed(1)+'" y2="'+base+'" stroke="#1a222c" stroke-width="1.8"/>';
+      s+='<path d="M'+(x-3).toFixed(1)+' '+(base-ph)+' q3 -2 6 0 l1 '+(ph-6).toFixed(1)+' l-8 0 z" fill="#1f2833"/>';
+      s+='<circle cx="'+x.toFixed(1)+'" cy="'+(base-ph-2.6)+'" r="2.8" fill="#28323d"/>';
+      x+=18+r()*30;
+    }
+  }
+  return s;
+}
+
+function street(from,dir){
+  var seed=hashSeed(from+'>'+dir);
+  var pick=rnd(seed+31337);
+  var arch=ARCH[Math.floor(pick()*ARCH.length)];
+  /* how late it is, 0..1 — the city shutters as your evening runs out */
+  var lt=Math.max(0,Math.min(1,S.mins/(CLOSE_MIN-OPEN_MIN)));
+  var haze=0.16+pick()*0.30;                  /* some nights you can see further */
+  var wires=pick()<0.45, cross=pick()<0.3;
+
+  var far=stripFar(rnd(seed),96,arch,lt);
+  var mid=stripMid(rnd(seed+7919),108,arch,lt);
+  var near=stripNear(rnd(seed+104729),116,arch,lt);
+  var dash='';
+  for(var i=0;i<10;i++) dash+='<rect x="'+(i*28)+'" y="131" width="16" height="2.6" rx="1" fill="#4a463a" opacity=".85"/>';
+
+  var s='<svg viewBox="0 0 280 150" style="width:100%;height:auto;background:#0a0c10;border:1px solid #262b34;border-radius:8px">';
+  s+='<defs>'+
+     '<linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">'+
+       '<stop offset="0" stop-color="#090d14"/><stop offset=".6" stop-color="#101823"/>'+
+       '<stop offset="1" stop-color="#1e2b35"/></linearGradient>'+
+     '<linearGradient id="haze2" x1="0" y1="0" x2="0" y2="1">'+
+       '<stop offset="0" stop-color="#26323f" stop-opacity="0"/>'+
+       '<stop offset="1" stop-color="#26323f" stop-opacity="'+haze.toFixed(2)+'"/></linearGradient>'+
+     '<radialGradient id="lg2"><stop offset="0" stop-color="#ffcf8a" stop-opacity=".30"/>'+
+       '<stop offset="1" stop-color="#ffcf8a" stop-opacity="0"/></radialGradient>'+
+     '<linearGradient id="beam" x1="1" y1="0" x2="0" y2="0">'+
+       '<stop offset="0" stop-color="#ffe0a0" stop-opacity=".26"/>'+
+       '<stop offset="1" stop-color="#ffe0a0" stop-opacity="0"/></linearGradient>'+
+     '</defs>';
+  s+='<rect x="0" y="0" width="280" height="116" fill="url(#sky2)"/>';
+  s+='<g opacity=".8">'+loop(far,15)+'</g>';
+  s+='<rect x="0" y="48" width="280" height="60" fill="url(#haze2)"/>';   /* smog eats the far layer */
+  s+=loop(mid,5.4);
+  /* overhead cabling, the thing every photograph of this city has in it */
+  if(wires){
+    var wv='<path d="M-10 30 Q70 38 150 30 T310 30" fill="none" stroke="#0d131a" stroke-width="1"/>'+
+           '<path d="M-10 35 Q70 45 150 35 T310 35" fill="none" stroke="#0d131a" stroke-width=".8"/>';
+    s+='<g opacity=".85">'+loop(wv,5.4)+'</g>';
+  }
+  s+='<rect x="0" y="108" width="280" height="8" fill="#171e27"/>';
+  s+='<rect x="0" y="108" width="280" height="1.4" fill="#28323e"/>';
+  s+='<rect x="0" y="116" width="280" height="34" fill="#1b1a17"/>';
+  s+='<rect x="0" y="116" width="280" height="2" fill="#2c2b25"/>';
+  /* a cycle lane divider on the wider roads */
+  if(arch==='arterial'||arch==='residential')
+    s+=loop('<rect x="0" y="121" width="280" height="1" fill="#3a382f" opacity=".5"/>',5.4);
+  s+=loop(near,2.5);
+  /* road furniture that scrolls with the tarmac */
+  var rf='';
+  if(cross){ for(var c=0;c<6;c++) rf+='<rect x="'+(190+c*7)+'" y="118" width="4" height="30" fill="#4a463a" opacity=".5"/>'; }
+  rf+='<circle cx="64" cy="140" r="4" fill="#141310" opacity=".8"/>';
+  rf+='<circle cx="222" cy="127" r="3.2" fill="#141310" opacity=".7"/>';
+  s+=loop(rf,0.95);
+  s+=loop(dash,0.95);
+  s+=taxi(91,96,1.2,{spin:true,bob:true,lights:true,driver:true,rider:true,fumes:true,bg:'#1b1a17'});
+  s+='<rect x="0" y="146" width="280" height="4" fill="#141310" opacity=".8"/>';
+  return s+'</svg>';
+}
+function driveScene(from,dir){
+  var h='<div class="screen" style="gap:10px" onclick="skipDrive()">'+
+    '<div class="hud"><span class="strikes">'+(S.strikes?'✕'.repeat(S.strikes):'')+
+    '</span><span>'+clockStr()+' — '+dest()[3]+' 22:30</span></div>'+
+    street(from,dir)+
+    (function(){var pr=dirPair(dir);return L(pr[0],pr[1]);})()+
+    '<div class="skipnote">tap to skip</div></div>';
+  app.innerHTML=h;
+  if(S.driveT)clearTimeout(S.driveT);
+  S.driveT=setTimeout(function(){S.driveT=null;drive();},2600);
+}
+function skipDrive(){
+  if(S.driveT){clearTimeout(S.driveT);S.driveT=null;drive();}
 }
 
 /* ---------- drive ---------- */
@@ -367,10 +1067,10 @@ function drive(){
   var asking=curAsk();
   if(asking)say('哪边');
   var h='<div class="screen" style="gap:10px"><div class="hud"><span class="strikes">'+
-    (S.strikes?'✕'.repeat(S.strikes):'')+'</span><span>'+clockStr()+' — 关门 22:30'+
+    (S.strikes?'✕'.repeat(S.strikes):'')+'</span><span>'+clockStr()+' — '+dest()[3]+' 22:30'+
     (minsLeft()<=12?' <b style="color:#e0765a">('+Math.max(0,Math.round(minsLeft()))+')</b>':'')+
     '</span></div>'+
-    map()+scene(curPt(),n.lm,curSide(),asking)+
+    map()+scene(curPt(),n.lm,curSide(),asking,curSeed())+
     (asking
       ? L('哪边？','nǎbiān?')
       : '<div class="quiet">The car slows at the junction.<br>He is waiting for you to say something.</div>')+
@@ -394,17 +1094,16 @@ function drive(){
 function answer(dir,ok,el){
   if(S.busy)return;S.busy=true;
   var n=NODES[S.at];
-  say((S.cards&&S.cards[dir])||dirZh(dir));
   el.className='card '+(ok?'right':'wrong');
-  setTimeout(function(){
+  say((S.cards&&S.cards[dir])||dirZh(dir),false,function(){
     S.busy=false;
-    if(ok){S.mins+=blockTime();S.at=n.go[dir];drive();}
+    if(ok){S.mins+=blockTime();var f=S.at;S.at=n.go[dir];driveScene(f,dir);}
     else{
       S.strikes++;S.mins+=DEAD_MIN;
       if(S.strikes>=2)return over();
       deadEnd();
     }
-  },900);
+  });
 }
 
 function deadEnd(){
@@ -432,6 +1131,8 @@ function review(){
          ['右转','yòu zhuǎn','right'],['右拐','yòu guǎi','right, colloquial'],
          ['一直走','yìzhí zǒu','straight on'],
          ['对','duì','right / correct'],['是','shì','yes'],['不是','bú shì','no — never said alone']];
+  var d=dest();
+  V.push([d[0],d[1],d[2]+' — where you asked to go']);
   var h='<div style="border-top:1px solid #262b34;margin-top:6px;padding-top:12px">'+
         '<div class="you" style="text-align:center;margin-bottom:8px">tonight\'s words</div>';
   for(var i=0;i<V.length;i++){
@@ -447,13 +1148,15 @@ function review(){
 }
 
 function win(){
-  var late=isLate();
+  var late=isLate(),d=dest();
   say(late?'关门了':'到了');
+  var mins=Math.max(1,Math.round(-minsLeft()));
   app.innerHTML='<div class="screen" style="justify-content:center;gap:18px">'+
     '<div class="big">'+(late?'关门了':'到了')+'</div>'+
+    '<div class="sub" style="text-align:center">'+d[0]+' — '+d[2]+'</div>'+
     '<div class="mid">'+(late
-      ? 'The shutter is down. The red sign is off.<br>You were eleven minutes late.'
-      : 'Six tables, one fluorescent tube, plastic stools.<br>The knife-cut noodles are still going.')+'</div>'+
+      ? d[5]+'<br>You were '+mins+' minute'+(mins===1?'':'s')+' late.'
+      : d[4])+'</div>'+
     '<div class="sub" style="text-align:center">'+clockStr()+' · '+S.strikes+' strike'+(S.strikes===1?'':'s')+'</div>'+
     '<div class="btn" onclick="title()">再来</div>'+review()+'</div>';
 }
