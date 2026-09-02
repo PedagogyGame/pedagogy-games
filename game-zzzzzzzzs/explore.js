@@ -45,7 +45,15 @@
     knee: "The thwart does not trust the planking alone.",
     thwart: "Because a person has to sit.",
     "mast bench": "The hole sits four hundred and twenty millimetres from the stem.",
-    breasthook: "The bow, closed."
+    breasthook: "The bow, closed.",
+    hog: "A second oak longitudinal on the inboard face of the keel. The keelson, if you are being formal.",
+    apron: "The inner stem. Sister to the face, taking the hood ends from inside.",
+    scarf: "Where stem and keel agree to be one piece. A stopwater at the step, because water will try.",
+    "transom knee": "Transom to keel. The after end would walk off without it.",
+    sheer: "The top strake. The gunwale is the cap; this is the plank that makes the sheer.",
+    rowlock: "The brief said it had to row as well as sail.",
+    limber: "Water has to travel. The heel is not a dam.",
+    spec: "June 1913. The numbers on the wall, now in the room."
   };
   var PLATE_SRC = {
     mould: "img/joint-mould.jpg",
@@ -57,9 +65,15 @@
     "hood end": "img/joint-hood.jpg",
     stem: "img/joint-hood.jpg",
     timber: "img/joint-timber.jpg",
-    knee: "img/joint-timber.jpg"
+    knee: "img/joint-timber.jpg",
+    hog: "img/joint-rabbet.jpg",
+    apron: "img/joint-hood.jpg",
+    scarf: "img/joint-hood.jpg",
+    "transom knee": "img/joint-timber.jpg",
+    sheer: "img/joint-land.jpg",
+    limber: "img/joint-timber.jpg"
   };
-  var HINT = "Walk up to a meeting — land, rabbet, mould, hood end.";
+  var HINT = "The near side is drawn. Walk around for the other. Hover a name.";
   var W_OAK = 1.7;
   var W_LARCH = 1.05;
   var W_LAND = 1.45;
@@ -82,6 +96,8 @@
   var mouse = { x: -9999, y: -9999 };
   var lastT = 0;
   var geom = [];
+  var tags = [];
+  var tagHits = [];
   var hoverDrawn = [];
   var cssW = 1;
   var cssH = 1;
@@ -91,6 +107,24 @@
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function lerp(a, b, t) { return a + (b - a) * t; }
+  function mixHex(a, b, t) {
+    t = clamp(t, 0, 1);
+    function hex(c) {
+      c = String(c).replace("#", "");
+      return [parseInt(c.slice(0, 2), 16), parseInt(c.slice(2, 4), 16), parseInt(c.slice(4, 6), 16)];
+    }
+    var A = hex(a), B = hex(b);
+    var r = Math.round(A[0] + (B[0] - A[0]) * t);
+    var g = Math.round(A[1] + (B[1] - A[1]) * t);
+    var bl = Math.round(A[2] + (B[2] - A[2]) * t);
+    function to(n) { var h = n.toString(16); return h.length < 2 ? "0" + h : h; }
+    return "#" + to(r) + to(g) + to(bl);
+  }
+  function isFarSide(x) {
+    if (Math.abs(cam.x) < 0.28 && x < -0.025) return true;
+    if (cam.x * x < -0.008) return true;
+    return false;
+  }
   function lerpArr(arr, s) {
     var x = clamp(s, 0, 1) * 7;
     var i = Math.min(6, Math.floor(x));
@@ -125,7 +159,8 @@
       lod: !!extra.lod,
       w: extra.w == null ? 1 : extra.w,
       sparse: !!extra.sparse,
-      si: extra.si || 0
+      si: extra.si || 0,
+      layer: extra.layer || "boat"
     });
   }
   function poly(pts, color, label, extra) {
@@ -200,34 +235,33 @@
 
   function buildShed() {
     var x0 = -2.15, x1 = 2.15, yT = 0, yE = 2.72, yR = 3.15, z0 = 0, z1 = 9.2;
-    var z, x, extraLod = { lod: true, w: 1 };
-    for (z = 0; z <= z1 + 0.001; z += 0.18) {
-      add(x0, 0, z, x1, 0, z, INK, null, extraLod);
+    var z, extraLod = { lod: true, w: 1, layer: "shed" };
+    var shed = { layer: "shed" };
+    for (z = 0; z <= z1 + 0.001; z += 0.55) {
+      add(x0, 0, z, x1, 0, z, PALE, null, extraLod);
     }
-    for (x = -1.65; x <= 1.66; x += 0.55) {
-      add(x, 0, z0, x, 0, z1, INK, null, extraLod);
-    }
-    add(x0, 0, z0, x0, yE, z0, INK);
-    add(x1, 0, z0, x1, yE, z0, INK);
-    add(x0, 0, z1, x0, yE, z1, INK);
-    add(x1, 0, z1, x1, yE, z1, INK);
-    add(x0, 0, z0, x0, 0, z1, INK);
-    add(x1, 0, z0, x1, 0, z1, INK);
-    add(x0, 0, z1, x1, 0, z1, INK);
-    add(x0, yE, z0, x0, yE, z1, INK);
-    add(x1, yE, z0, x1, yE, z1, INK);
-    add(x0, yE, z1, x1, yE, z1, INK);
-    add(x0, yE, z0, x1, yE, z0, INK);
-    add(x0, 0, z0, -0.58, 0, z0, INK);
-    add(0.58, 0, z0, x1, 0, z0, INK);
-    add(-0.58, 0, z0, -0.58, 2.15, z0, INK);
-    add(0.58, 0, z0, 0.58, 2.15, z0, INK);
-    add(-0.58, 2.15, z0, 0.58, 2.15, z0, INK);
-    add(x0, yE, z0, x0, 0, z0, INK);
-    add(x1, yE, z0, x1, 0, z0, INK);
+    add(0, 0, z0, 0, 0, z1, PALE, null, extraLod);
+    add(x0, 0, z0, x0, yE, z0, INK, null, shed);
+    add(x1, 0, z0, x1, yE, z0, INK, null, shed);
+    add(x0, 0, z1, x0, yE, z1, INK, null, shed);
+    add(x1, 0, z1, x1, yE, z1, INK, null, shed);
+    add(x0, 0, z0, x0, 0, z1, INK, null, shed);
+    add(x1, 0, z0, x1, 0, z1, INK, null, shed);
+    add(x0, 0, z1, x1, 0, z1, INK, null, shed);
+    add(x0, yE, z0, x0, yE, z1, INK, null, shed);
+    add(x1, yE, z0, x1, yE, z1, INK, null, shed);
+    add(x0, yE, z1, x1, yE, z1, INK, null, shed);
+    add(x0, yE, z0, x1, yE, z0, INK, null, shed);
+    add(x0, 0, z0, -0.58, 0, z0, INK, null, shed);
+    add(0.58, 0, z0, x1, 0, z0, INK, null, shed);
+    add(-0.58, 0, z0, -0.58, 2.15, z0, INK, null, shed);
+    add(0.58, 0, z0, 0.58, 2.15, z0, INK, null, shed);
+    add(-0.58, 2.15, z0, 0.58, 2.15, z0, INK, null, shed);
+    add(x0, yE, z0, x0, 0, z0, INK, null, shed);
+    add(x1, yE, z0, x1, 0, z0, INK, null, shed);
     var wins = [1.55, 4.15, 6.75];
     var wi, w, zs, ze, ys, ye, c, gz, gy;
-    var pale = { w: 1 };
+    var pale = { w: 1, layer: "shed" };
     for (wi = 0; wi < wins.length; wi++) {
       w = wins[wi];
       zs = w - 0.62; ze = w + 0.62;
@@ -244,29 +278,29 @@
       add(x0, gy, zs, x0, gy, ze, PALE, null, pale);
     }
     var dw = 0.82, dh = 2.18, gap = 0.04;
-    box(-gap - dw, 0, z1, -gap, dh, z1, INK);
-    box(gap, 0, z1, gap + dw, dh, z1, INK);
-    add(-gap - dw * 0.5, 1.05, z1, -gap - dw * 0.5, 1.12, z1 - 0.02, INK);
-    add(gap + dw * 0.5, 1.05, z1, gap + dw * 0.5, 1.12, z1 - 0.02, INK);
+    box(-gap - dw, 0, z1, -gap, dh, z1, INK, null, shed);
+    box(gap, 0, z1, gap + dw, dh, z1, INK, null, shed);
+    add(-gap - dw * 0.5, 1.05, z1, -gap - dw * 0.5, 1.12, z1 - 0.02, INK, null, shed);
+    add(gap + dw * 0.5, 1.05, z1, gap + dw * 0.5, 1.12, z1 - 0.02, INK, null, shed);
     for (z = 0.35; z <= 8.95; z += 1.1) {
-      add(x0, yE, z, 0, yR, z, INK);
-      add(0, yR, z, x1, yE, z, INK);
-      add(x0, 2.48, z, x1, 2.48, z, INK);
+      add(x0, yE, z, 0, yR, z, INK, null, shed);
+      add(0, yR, z, x1, yE, z, INK, null, shed);
+      add(x0, 2.48, z, x1, 2.48, z, INK, null, shed);
     }
-    add(0, yR, 0.2, 0, yR, 9.0, INK);
-    box(-1.95, 0, 6.95, -1.45, 0.5, 9.15, INK);
-    add(-1.95, 0.5, 6.95, -1.45, 0.42, 6.95, INK);
-    box(1.45, 0, 1.15, 2.15, 0.85, 2.95, INK);
-    add(1.45, 0.85, 1.15, 1.45, 0.85, 2.95, INK);
-    add(1.55, 0.85, 1.35, 2.05, 0.85, 1.35, INK);
-    add(1.55, 0.85, 2.75, 2.05, 0.85, 2.75, INK);
+    add(0, yR, 0.2, 0, yR, 9.0, INK, null, shed);
+    box(-1.95, 0, 6.95, -1.45, 0.5, 9.15, INK, null, shed);
+    add(-1.95, 0.5, 6.95, -1.45, 0.42, 6.95, INK, null, shed);
+    box(1.45, 0, 1.15, 2.15, 0.85, 2.95, INK, null, shed);
+    add(1.45, 0.85, 1.15, 1.45, 0.85, 2.95, INK, null, shed);
+    add(1.55, 0.85, 1.35, 2.05, 0.85, 1.35, INK, null, shed);
+    add(1.55, 0.85, 2.75, 2.05, 0.85, 2.75, INK, null, shed);
     if (mode !== "upright") {
-      box(0.22, 0.79, 2.4, 0.34, 0.91, 7.6, INK);
-      box(-0.34, 0.79, 2.4, -0.22, 0.91, 7.6, INK);
+      box(0.22, 0.79, 2.4, 0.34, 0.91, 7.6, INK, null, shed);
+      box(-0.34, 0.79, 2.4, -0.22, 0.91, 7.6, INK, null, shed);
       for (z = 2.7; z <= 7.4; z += 0.82) {
-        add(-0.28, 0.85, z, 0.28, 0.85, z, INK);
-        add(-0.28, 0.79, z, -0.28, 0.91, z, INK);
-        add(0.28, 0.79, z, 0.28, 0.91, z, INK);
+        add(-0.28, 0.85, z, 0.28, 0.85, z, INK, null, shed);
+        add(-0.28, 0.79, z, -0.28, 0.91, z, INK, null, shed);
+        add(0.28, 0.79, z, 0.28, 0.91, z, INK, null, shed);
       }
     }
   }
@@ -525,17 +559,25 @@
     add(px, py, pz, px + nrm.x * 0.008, py + nrm.y * 0.008, pz, COPPER, "copper", extra);
     var cx = px + nrm.x * 0.008, cy = py + nrm.y * 0.008;
     add(cx, cy, pz - 0.003, cx, cy, pz + 0.003, COPPER, "copper", extra);
+    if (!sparse) {
+      var ox = px - nrm.x * 0.0006, oy = py - nrm.y * 0.0006, oz = pz;
+      var hx = -nrm.y * 0.002, hy = nrm.x * 0.002, hz = 0.002;
+      add(ox, oy, oz - hz, ox + hx, oy + hy, oz, COPPER, "copper", extra);
+      add(ox + hx, oy + hy, oz, ox, oy, oz + hz, COPPER, "copper", extra);
+      add(ox, oy, oz + hz, ox - hx, oy - hy, oz, COPPER, "copper", extra);
+      add(ox - hx, oy - hy, oz, ox, oy, oz - hz, COPPER, "copper", extra);
+    }
   }
 
   function buildPlanking() {
-    var k, side, i, s, t, tLand, n = 15, ptsIn, ptsOut, p;
+    var k, side, i, s, t, tLand, n = 14, ptsIn, ptsOut, p;
     var larch = { w: W_LARCH };
     var landEx = { w: W_LAND };
     var hatchEx = { w: W_LAND, lod: true };
     var STRAKE_DT = 0.022;
     for (k = 0; k < 12; k++) {
       t = k / 12;
-      var labEdge = k === 0 ? "garboard" : null;
+      var labEdge = k === 0 ? "garboard" : (k === 11 ? "sheer" : null);
       for (side = -1; side <= 1; side += 2) {
         ptsIn = [];
         ptsOut = [];
@@ -564,7 +606,7 @@
         }
         poly(a, LAND, "land", landEx);
         poly(b, LAND, "land", landEx);
-        for (s = 0.06; s <= 0.96; s += 0.12) {
+        for (s = 0.06; s <= 0.96; s += 0.24) {
           p = alongT(s, tLand, side, -0.004);
           var q = alongT(s, tLand, side, 0.004);
           add(p[0], p[1], p[2], q[0], q[1], q[2], LAND, "land", hatchEx);
@@ -595,7 +637,7 @@
         add(p1[0], p1[1], p1[2], sp[0], sp[1], sp[2], LARCH, "hood end", extra);
         var p2 = stemPoint(Math.min(1, t + 0.03), side * 0.006);
         add(sp[0], sp[1], sp[2], p2[0], p2[1], p2[2], LARCH, "hood end", extra);
-        addCopperT(0.055, t, side, false);
+        addCopperT(0.055, t, side, (k % 4) !== 0);
         add(sp[0], sp[1], sp[2], sp[0] + side * 0.008, sp[1], sp[2], COPPER, "copper", cop);
 
         h = hullXY(0.96, t);
@@ -620,16 +662,19 @@
   }
 
   function buildTimbers() {
-    var i, dist, s, t, k, n = 12, ptsA, ptsB, p, extra = { w: 1.25 };
+    var i, dist, s, t, k, n = 10, ptsA, ptsB, p, extra = { w: 1.25 };
+    var slot0 = 1.1 / LOA, slot1 = 2.1 / LOA;
     for (i = 0; i < 19; i++) {
       dist = 0.16 + i * 0.178;
       if (dist > LOA - 0.1) continue;
       s = dist / LOA;
+      var t0 = 0.035;
+      if (s > slot0 && s < slot1) t0 = 0.09;
       function rib(sideSign) {
         ptsA = [];
         ptsB = [];
         for (k = 0; k <= n; k++) {
-          t = k / n;
+          t = t0 + (1 - t0) * (k / n);
           p = ptIn(s, t, sideSign, timberDist(t));
           ptsA.push(p);
           ptsB.push(ptIn(s, t, sideSign, timberDist(t) + 0.016));
@@ -640,6 +685,12 @@
       }
       rib(-1);
       rib(1);
+      if (i === 9) {
+        var pH = ptIn(s, t0, 1, timberDist(t0));
+        var pG = ptIn(s, t0, 1, timberDist(t0) + 0.008);
+        add(pH[0], pH[1], pH[2], pG[0], pG[1], pG[2], OAK, "limber", extra);
+        add(pH[0], pH[1], pH[2] - 0.008, pH[0], pH[1], pH[2] + 0.008, OAK, "limber", extra);
+      }
     }
   }
 
@@ -759,11 +810,192 @@
     box(-0.12, 0, bz(0.72) - 0.08, 0.12, KEEL_UP, bz(0.72) + 0.08, INK);
   }
 
+  function buildHogApronScarf() {
+    var i, s, z, oak = { w: W_OAK };
+    var hw = 0.02;
+    var hogH = 0.028;
+    var y0 = by(KEEL_H);
+    var y1 = by(KEEL_H + hogH);
+    var nL = 10;
+    var port = [], stbd = [], topP = [], topS = [];
+    for (i = 0; i <= nL; i++) {
+      s = 0.03 + 0.94 * (i / nL);
+      z = bz(s);
+      port.push([-hw, y0, z]);
+      stbd.push([hw, y0, z]);
+      topP.push([-hw, y1, z]);
+      topS.push([hw, y1, z]);
+    }
+    poly(port, OAK, "hog", oak);
+    poly(stbd, OAK, "hog", oak);
+    poly(topP, OAK, "hog", oak);
+    poly(topS, OAK, "hog", oak);
+    for (i = 0; i <= nL; i += 4) {
+      s = 0.03 + 0.94 * (i / nL);
+      z = bz(s);
+      add(-hw, y0, z, hw, y0, z, OAK, "hog", oak);
+      add(-hw, y1, z, hw, y1, z, OAK, "hog", oak);
+      add(-hw, y0, z, -hw, y1, z, OAK, "hog", oak);
+      add(hw, y0, z, hw, y1, z, OAK, "hog", oak);
+    }
+
+    var faceL = [], faceR = [];
+    var stemT, sl, sr;
+    for (i = 0; i <= 12; i++) {
+      stemT = i / 12;
+      sl = stemPoint(stemT, -0.014);
+      sr = stemPoint(stemT, 0.014);
+      faceL.push([sl[0], sl[1], sl[2] - 0.02]);
+      faceR.push([sr[0], sr[1], sr[2] - 0.02]);
+    }
+    poly(faceL, OAK, "apron", oak);
+    poly(faceR, OAK, "apron", oak);
+    for (i = 0; i <= 12; i += 3) {
+      add(faceL[i][0], faceL[i][1], faceL[i][2], faceR[i][0], faceR[i][1], faceR[i][2], OAK, "apron", oak);
+    }
+
+    var xS = 0.024;
+    var zs = [bz(0.035), bz(0.05), bz(0.05), bz(0.065), bz(0.065), bz(0.08)];
+    var ys = [by(0), by(0), by(KEEL_H * 0.45), by(KEEL_H * 0.45), by(KEEL_H + hogH), by(KEEL_H + hogH)];
+    var scarfEx = { w: W_OAK };
+    var side, j;
+    for (side = -1; side <= 1; side += 2) {
+      for (j = 1; j < zs.length; j++) {
+        add(side * xS, ys[j - 1], zs[j - 1], side * xS, ys[j], zs[j], OAK, "scarf", scarfEx);
+      }
+    }
+    var zsw = bz(0.057);
+    var ysw = by(KEEL_H * 0.45);
+    add(-0.01, ysw, zsw, 0.01, ysw, zsw, COPPER, "scarf", { w: W_COP });
+    add(0, ysw - 0.006, zsw, 0, ysw + 0.006, zsw, COPPER, "scarf", { w: W_COP });
+  }
+
+  function buildTransomKnee() {
+    var extra = { w: mode === "upright" ? W_OAK : 0.9 };
+    var zt = bz(1);
+    var yk = by(0);
+    var yTop = by(0.20);
+    var zFwd = bz(0.90);
+    var lab = "transom knee";
+    var x = 0.012;
+    add(x, yk, zt, x, yTop, zt, OAK, lab, extra);
+    add(x, yk, zt, x, yk, zFwd, OAK, lab, extra);
+    add(x, yTop, zt, x, yk, zFwd, OAK, lab, extra);
+    if (mode === "upright") {
+      add(-x, yk, zt, -x, yTop, zt, OAK, lab, extra);
+      add(-x, yk, zt, -x, yk, zFwd, OAK, lab, extra);
+      add(-x, yTop, zt, -x, yk, zFwd, OAK, lab, extra);
+      add(x, yTop, zt, -x, yTop, zt, OAK, lab, extra);
+      add(x, yk, zFwd, -x, yk, zFwd, OAK, lab, extra);
+      var zt2 = zt - 0.02;
+      add(x, yTop, zt, x, yTop, zt2, OAK, lab, extra);
+      add(-x, yTop, zt, -x, yTop, zt2, OAK, lab, extra);
+    }
+  }
+
+  function buildRowlocks() {
+    var extra = { w: 1.35 };
+    var ss = [0.38, 0.62];
+    var si, side, s, p, up, out, x, y, z;
+    for (si = 0; si < ss.length; si++) {
+      s = ss[si];
+      for (side = -1; side <= 1; side += 2) {
+        p = pt(s, 1, side);
+        up = inverted() ? -0.018 : 0.018;
+        out = side * 0.012;
+        x = p[0]; y = p[1]; z = p[2];
+        add(x, y, z - 0.012, x + out, y, z - 0.012, INK, "rowlock", extra);
+        add(x, y, z + 0.012, x + out, y, z + 0.012, INK, "rowlock", extra);
+        add(x + out, y, z - 0.012, x + out, y + up, z - 0.012, INK, "rowlock", extra);
+        add(x + out, y, z + 0.012, x + out, y + up, z + 0.012, INK, "rowlock", extra);
+        add(x + out, y + up, z - 0.012, x + out, y + up, z + 0.012, INK, "rowlock", extra);
+      }
+    }
+  }
+
+  function buildSpecDimensions() {
+    var extra = { w: 0.8 };
+    var tick = 0.018;
+    function specAdd(x0, y0, z0, x1, y1, z1) {
+      add(x0, y0, z0, x1, y1, z1, INK, "spec", extra);
+    }
+    var xL = KW + 0.05;
+    var yL = by(-0.02);
+    var zStem = bz(0);
+    var zTr = bz(1);
+    specAdd(xL, yL, zStem, xL, yL, zTr);
+    specAdd(xL, yL - tick, zStem, xL, yL + tick, zStem);
+    specAdd(xL, yL - tick, zTr, xL, yL + tick, zTr);
+    tag(xL + 0.02, yL, bz(0.5), "12′–0″ LOA", "spec");
+
+    var sB = 0.55;
+    var hB = hullXY(sB, 1);
+    var yB = by(hB.yOff);
+    var zB = bz(sB);
+    specAdd(0.02, yB, zB, hB.x, yB, zB);
+    specAdd(0.02, yB - tick, zB, 0.02, yB + tick, zB);
+    specAdd(hB.x, yB - tick, zB, hB.x, yB + tick, zB);
+    tag(hB.x * 0.55, yB, zB, "4′–8″ beam", "spec");
+
+    var sD = 0.5;
+    var hD = hullXY(sD, 1);
+    var xD = hD.x + 0.04;
+    specAdd(xD, by(0), bz(sD), xD, by(hD.yOff), bz(sD));
+    specAdd(xD - tick, by(0), bz(sD), xD + tick, by(0), bz(sD));
+    specAdd(xD - tick, by(hD.yOff), bz(sD), xD + tick, by(hD.yOff), bz(sD));
+    tag(xD + 0.03, by(hD.yOff * 0.5), bz(sD), "1′–8½″", "spec");
+
+    var s0 = 1.1 / LOA, s1 = 2.1 / LOA;
+    var yC = by(0.30);
+    specAdd(0.06, yC, bz(s0), 0.06, yC, bz(s1));
+    specAdd(0.06 - tick * 0.6, yC, bz(s0), 0.06 + tick * 0.6, yC, bz(s0));
+    specAdd(0.06 - tick * 0.6, yC, bz(s1), 0.06 + tick * 0.6, yC, bz(s1));
+    tag(0.08, yC, bz((s0 + s1) * 0.5), "slot 1000 mm", "spec");
+
+    var sM = 0.42 / LOA;
+    var yM = by(-0.045);
+    specAdd(xL, yM, bz(0), xL, yM, bz(sM));
+    specAdd(xL, yM - tick * 0.7, bz(0), xL, yM + tick * 0.7, bz(0));
+    specAdd(xL, yM - tick * 0.7, bz(sM), xL, yM + tick * 0.7, bz(sM));
+    tag(xL + 0.03, yM, bz(sM * 0.5), "420 mm from stem", "spec");
+
+    if (mode === "upright") {
+      var d0 = 0.16 + 9 * 0.178;
+      var d1 = d0 + 0.178;
+      var sT0 = d0 / LOA, sT1 = d1 / LOA;
+      var hT = hullXY((sT0 + sT1) * 0.5, 0.55);
+      var xT = hT.x + 0.03;
+      var yT = by(hT.yOff);
+      specAdd(xT, yT, bz(sT0), xT, yT, bz(sT1));
+      specAdd(xT, yT - tick * 0.5, bz(sT0), xT, yT + tick * 0.5, bz(sT0));
+      specAdd(xT, yT - tick * 0.5, bz(sT1), xT, yT + tick * 0.5, bz(sT1));
+      tag(xT + 0.02, yT, bz((sT0 + sT1) * 0.5), "7″ centres", "spec");
+    }
+    if (mode === "planked" || mode === "upright") {
+      var tLand = 5 / 12;
+      var pL0 = alongT(0.48, tLand, 1, -0.0095);
+      var pL1 = alongT(0.48, tLand, 1, 0.0095);
+      specAdd(pL0[0], pL0[1], pL0[2], pL1[0], pL1[1], pL1[2]);
+      specAdd(pL0[0], pL0[1], pL0[2] - 0.008, pL0[0], pL0[1], pL0[2] + 0.008);
+      specAdd(pL1[0], pL1[1], pL1[2] - 0.008, pL1[0], pL1[1], pL1[2] + 0.008);
+      tag((pL0[0] + pL1[0]) * 0.5 + 0.02, (pL0[1] + pL1[1]) * 0.5, pL0[2], "¾″ land", "spec");
+
+      var pP0 = alongT(0.52, 6 / 12, 1, 0);
+      var pP1 = alongT(0.52, 6 / 12, 1, 0.008);
+      specAdd(pP0[0], pP0[1], pP0[2], pP1[0], pP1[1], pP1[2]);
+      specAdd(pP0[0], pP0[1], pP0[2] - 0.006, pP0[0], pP0[1], pP0[2] + 0.006);
+      specAdd(pP1[0], pP1[1], pP1[2] - 0.006, pP1[0], pP1[1], pP1[2] + 0.006);
+      tag((pP0[0] + pP1[0]) * 0.5 + 0.02, (pP0[1] + pP1[1]) * 0.5, pP0[2], "⁵⁄₁₆″ plank", "spec");
+    }
+  }
+
   function buildBoat() {
     copperI = 0;
     var withRabbet = mode !== "skeleton";
     buildKeelStemTransom(withRabbet);
+    buildHogApronScarf();
     buildCase();
+    buildTransomKnee();
     if (mode === "skeleton") {
       buildMoulds(false);
       buildRibbands();
@@ -774,15 +1006,102 @@
       buildPlanking();
       buildTimbers();
       buildGunwale();
+      buildRowlocks();
       buildInterior();
       buildChocks();
+    }
+    buildSpecDimensions();
+  }
+
+  function tagKind(text, kind) {
+    if (kind === null) return null;
+    if (text.indexOf("mould") === 0) return "mould";
+    if (text.indexOf("strake") === 0) return "land";
+    if (text.indexOf("timber") === 0) return "timber";
+    if (text.indexOf("copper") === 0) return "copper";
+    if (text.indexOf("strongback") === 0) return null;
+    return kind === undefined ? text : kind;
+  }
+  function tag(x, y, z, text, kind) {
+    tags.push({ x: x, y: y, z: z, text: text, kind: tagKind(text, kind) });
+  }
+  function strakeT(k) { return (k + 0.5) / 12; }
+  function placeTags() {
+    var p, mi, k, i, s, dist, h, ks, tims, ti;
+    tag(0, keelY(), bz(0.5), "keel");
+    p = stemPoint(0.55, 0.04);
+    tag(p[0], p[1], p[2], "stem");
+    tag(0.2, by(0.25), bz(1), "transom");
+    tag(0.08, by(0.14), bz(1.6 / LOA), "centreboard case");
+    tag(KW + 0.02, by(0.015), bz(0.45), "rabbet");
+    tag(0.03, by(KEEL_H + 0.012), bz(0.45), "hog");
+    p = stemPoint(0.42, 0.04);
+    tag(p[0], p[1], p[2] - 0.03, "apron");
+    tag(0.04, by(KEEL_H * 0.4), bz(0.06), "scarf");
+    tag(0.04, by(0.14), bz(0.94), "transom knee");
+    if (mode === "skeleton") {
+      for (mi = 1; mi <= 7; mi++) {
+        p = pt(mi / 8, 1, 1);
+        tag(p[0] + 0.05, p[1], p[2], "mould " + mi + " · sta. " + (2 * mi), "mould");
+      }
+      p = pt(0.5, 1.0, 1);
+      tag(p[0] + 0.04, p[1], p[2], "ribband");
+    }
+    if (inverted()) {
+      tag(0.4, 0.85, 4.2, "strongback", null);
+    }
+    if (mode === "planked" || mode === "upright") {
+      p = pt(0.45, strakeT(0), 1);
+      tag(p[0] + 0.03, p[1], p[2], "garboard");
+      p = pt(0.5, strakeT(4), 1);
+      tag(p[0] + 0.03, p[1], p[2], "land");
+      ks = [2, 5, 8, 11];
+      for (i = 0; i < ks.length; i++) {
+        k = ks[i];
+        p = pt(0.42, strakeT(k), 1);
+        tag(p[0] + 0.03, p[1], p[2], "strake " + (k + 1), "land");
+      }
+      p = pt(0.04, 0.35, 1);
+      tag(p[0] + 0.03, p[1], p[2], "hood end");
+      p = pt(0.5, 1, 1);
+      tag(p[0] + 0.04, p[1], p[2], "sheer strake", "sheer");
+      p = pt(0.5, 5 / 12, 1);
+      tag(p[0] + 0.02, p[1], p[2], "No. 14 copper", "copper");
+    }
+    if (mode === "upright") {
+      tims = [1, 6, 10, 15, 19];
+      for (i = 0; i < tims.length; i++) {
+        ti = tims[i];
+        dist = 0.16 + (ti - 1) * 0.178;
+        if (dist > LOA - 0.1) continue;
+        s = dist / LOA;
+        p = ptIn(s, 0.5, 1, timberDist(0.5));
+        tag(p[0] + 0.03, p[1], p[2], "timber " + ti, "timber");
+      }
+      p = pt(0.38, 1, 1);
+      tag(p[0] + 0.03, p[1], p[2], "rowlock");
+      p = ptIn((0.16 + 9 * 0.178) / LOA, 0.04, 1, timberDist(0.04));
+      tag(p[0] + 0.02, p[1], p[2], "limber");
+      p = pt(0.5, 1, 1);
+      tag(p[0] + 0.04, p[1], p[2], "gunwale");
+      s = 0.42 / LOA;
+      h = hullXY(s, 0.78);
+      tag(h.x * 0.45, by(h.yOff), bz(s), "mast bench");
+      h = hullXY(0.40, 0.82);
+      tag(h.x * 0.35, by(h.yOff), bz(0.40), "thwart");
+      tag(h.x * 0.92, by(h.yOff), bz(0.40), "knee");
+      h = hullXY(0.07, 0.88);
+      tag(0.08, by(h.yOff), bz(0.05), "breasthook");
+      tag(0.22, by(0.05), bz(0.5), "floorboards");
     }
   }
 
   function buildGeom() {
     geom = [];
+    tags = [];
     buildShed();
     buildBoat();
+    placeTags();
   }
 
   function toCam(x, y, z) {
@@ -864,10 +1183,11 @@
       .replace(/>/g, "&gt;");
   }
 
-  function setCallout(label) {
+  function setCallout(label, displayText) {
     if (!calloutEl) return;
-    if (label === lastHover) return;
-    lastHover = label;
+    var key = label ? label + "\t" + (displayText || "") : "";
+    if (key === lastHover) return;
+    lastHover = key;
     if (!label) {
       calloutEl.style.opacity = "0.55";
       calloutEl.innerHTML =
@@ -877,11 +1197,12 @@
     calloutEl.style.opacity = "1";
     var src = PLATE_SRC[label];
     var copy = COPY[label] || "";
+    var kicker = displayText || label;
     var html = "";
     if (src) {
       html += '<img src="' + src + '" alt="" style="display:block;width:100%;max-width:280px;height:auto;object-fit:contain;border:1px solid #d4cbb8;margin:0 0 0.75rem;">';
     }
-    html += '<div style="font-size:0.72rem;letter-spacing:0.16em;text-transform:uppercase;color:#5c5348;margin-bottom:0.45rem;">' + escapeHtml(label) + "</div>";
+    html += '<div style="font-size:0.72rem;letter-spacing:0.16em;text-transform:uppercase;color:#5c5348;margin-bottom:0.45rem;">' + escapeHtml(kicker) + "</div>";
     html += '<div style="font-size:0.95rem;line-height:1.5;color:#3c352c;">' + escapeHtml(copy) + "</div>";
     calloutEl.innerHTML = html;
   }
@@ -910,7 +1231,13 @@
         p1 = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: NEAR };
       }
       depth = (p0.z + p1.z) * 0.5;
-      if (g.lod && depth > 5) continue;
+      var mx = (g.x0 + g.x1) / 2, my = (g.y0 + g.y1) / 2, mz = (g.z0 + g.z1) / 2;
+      var layer = g.layer || "boat";
+      if (layer === "boat" && isFarSide(mx)) continue;
+      if (layer === "shed") {
+        if (g.lod && depth > 3.5) continue;
+        if (!g.lod && depth > 8) continue;
+      } else if (g.lod && depth > 5) continue;
       if (g.sparse && depth > 3.2 && (g.si % 4)) continue;
       f0 = foc0 / p0.z;
       f1 = foc0 / p1.z;
@@ -920,44 +1247,158 @@
       sy1 = cy - p1.y * f1;
       drawn.push({
         sx0: sx0, sy0: sy0, sx1: sx1, sy1: sy1,
-        depth: depth, color: g.color, label: g.label, w: g.w
+        depth: depth, color: g.color, label: g.label, w: g.w,
+        mx: mx, my: my, mz: mz, layer: layer
       });
     }
     drawn.sort(function (p, q) { return q.depth - p.depth; });
     hoverDrawn = drawn;
-    var lastC = "", lastW = -1;
+    var lastC = "", lastW = -1, col, lw, fade;
+    ctx.globalAlpha = 1;
     for (i = 0; i < drawn.length; i++) {
       g = drawn[i];
-      if (g.color !== lastC) {
-        ctx.strokeStyle = g.color;
-        lastC = g.color;
+      fade = clamp(g.depth / 9, 0, 0.65);
+      col = mixHex(g.color, PAPER, fade);
+      lw = g.w;
+      if (g.layer === "shed") {
+        col = mixHex(col, PAPER, 0.55);
+        lw = g.w * 0.7;
       }
-      if (g.w !== lastW) {
-        ctx.lineWidth = g.w;
-        lastW = g.w;
+      if (col !== lastC) {
+        ctx.strokeStyle = col;
+        lastC = col;
+      }
+      if (lw !== lastW) {
+        ctx.lineWidth = lw;
+        lastW = lw;
       }
       ctx.beginPath();
       ctx.moveTo(g.sx0, g.sy0);
       ctx.lineTo(g.sx1, g.sy1);
       ctx.stroke();
     }
-    var lab = null;
+    ctx.globalAlpha = 1;
+    drawTags();
+    var lab = null, labText = null;
     if (!dragging && mouse.x > 0) {
-      var best = 16, d;
-      for (i = 0; i < drawn.length; i++) {
-        g = drawn[i];
-        if (!g.label) continue;
-        d = distToSeg(mouse.x, mouse.y, g.sx0, g.sy0, g.sx1, g.sy1);
-        if (d < best) { best = d; lab = g.label; }
+      var best = 16, d, hit;
+      for (i = 0; i < tagHits.length; i++) {
+        hit = tagHits[i];
+        if (!hit.kind) continue;
+        d = distToRect(mouse.x, mouse.y, hit.chipX, hit.chipY, hit.chipW, hit.chipH);
+        if (d < 14 && d < best) {
+          best = d;
+          lab = hit.kind;
+          labText = hit.text;
+        }
       }
-      if (lab) {
+      if (!lab) {
+        for (i = 0; i < drawn.length; i++) {
+          g = drawn[i];
+          if (!g.label) continue;
+          d = distToSeg(mouse.x, mouse.y, g.sx0, g.sy0, g.sx1, g.sy1);
+          if (d < best) { best = d; lab = g.label; labText = g.label; }
+        }
+      }
+      if (labText) {
         ctx.font = '13px Palatino, "Palatino Linotype", Georgia, serif';
         ctx.fillStyle = INK;
         ctx.textBaseline = "bottom";
-        ctx.fillText(lab, mouse.x + 12, mouse.y - 6);
+        ctx.textAlign = "left";
+        ctx.fillText(labText, mouse.x + 12, mouse.y - 6);
       }
     }
-    if (!dragging) setCallout(lab);
+    if (!dragging) setCallout(lab, labText);
+  }
+
+  function distToRect(px, py, x, y, w, h) {
+    var dx = 0, dy = 0;
+    if (px < x) dx = x - px;
+    else if (px > x + w) dx = px - (x + w);
+    if (py < y) dy = y - py;
+    else if (py > y + h) dy = py - (y + h);
+    return Math.hypot(dx, dy);
+  }
+
+  function roundishRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawTags() {
+    var foc0 = 0.72 * Math.min(cssW, cssH);
+    var cx = cssW * 0.5, cy = cssH * 0.5;
+    var vis = [], i, j, t, c, f, sx, sy, ok, dx, dy, v, text, tw, padX, padY, chipX, chipY, chipW, chipH;
+    tagHits = [];
+    for (i = 0; i < tags.length; i++) {
+      t = tags[i];
+      if (isFarSide(t.x)) continue;
+      c = toCam(t.x, t.y, t.z);
+      if (c.z < 0.4 || c.z > 6.8) continue;
+      f = foc0 / c.z;
+      sx = cx + c.x * f;
+      sy = cy - c.y * f;
+      vis.push({ tag: t, sx: sx, sy: sy, z: c.z });
+    }
+    vis.sort(function (a, b) { return a.z - b.z; });
+    var kept = [];
+    for (i = 0; i < vis.length; i++) {
+      ok = true;
+      for (j = 0; j < kept.length; j++) {
+        dx = vis[i].sx - kept[j].sx;
+        dy = vis[i].sy - kept[j].sy;
+        if (dx * dx + dy * dy < 22 * 22) { ok = false; break; }
+      }
+      if (ok) kept.push(vis[i]);
+      if (kept.length >= 18) break;
+    }
+    kept.sort(function (a, b) { return b.z - a.z; });
+    ctx.font = '12px Palatino, "Palatino Linotype", Georgia, serif';
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    for (i = 0; i < kept.length; i++) {
+      v = kept[i];
+      text = v.tag.text;
+      tw = ctx.measureText(text).width;
+      padX = 5;
+      padY = 4;
+      chipW = tw + padX * 2;
+      chipH = 12 + padY * 2;
+      chipX = v.sx + 10;
+      chipY = v.sy - chipH * 0.5;
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = COPPER;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(v.sx, v.sy);
+      ctx.lineTo(chipX, v.sy);
+      ctx.stroke();
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = PAPER;
+      roundishRect(chipX, chipY, chipW, chipH, 3);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "#d4cbb8";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = "#3c352c";
+      ctx.fillText(text, chipX + padX, chipY + chipH * 0.5);
+      tagHits.push({
+        kind: v.tag.kind,
+        text: v.tag.text,
+        chipX: chipX,
+        chipY: chipY,
+        chipW: chipW,
+        chipH: chipH,
+        z: v.z
+      });
+    }
+    ctx.globalAlpha = 1;
   }
 
   function keyOf(e) {
@@ -1076,7 +1517,7 @@
     if (overlay) close();
     mode = (m === "planked" || m === "upright") ? m : "skeleton";
     onCloseCb = typeof onClose === "function" ? onClose : null;
-    cam = { x: 0, y: 1.55, z: 0.35, yaw: 0, pitch: -0.04 };
+    cam = { x: 0.55, y: 1.42, z: 2.55, yaw: 0.18, pitch: -0.08 };
     down = {};
     lastT = 0;
     lastHover = "__init__";
