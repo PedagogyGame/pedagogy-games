@@ -2,7 +2,7 @@
   const DATA = window.PLAYABLE;
   const SPECIES = (DATA && DATA.species) || [];
   const N = SPECIES.length;
-  const LETTERS = "ABCDEFG".split("");
+  const LETTERS = "ABCD".split("");
 
   const PART_LABEL = {
     bark: "bark",
@@ -29,12 +29,6 @@
     pick: null,
   };
 
-  function $(html) {
-    const t = document.createElement("template");
-    t.innerHTML = html.trim();
-    return t.content.firstElementChild;
-  }
-
   function shuffle(arr) {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -53,79 +47,25 @@
 
   function plateOf(sp) {
     const plates = sp.plates || [];
-    const preferred = ["leaves", "needles", "bark", "cones", "fruit", "acorns", "samaras", "fronds", "habit", "flowers"];
-    const ranked = preferred
-      .map((p) => plates.find((x) => x.part === p))
-      .filter(Boolean);
-    const all = ranked.concat(plates.filter((p) => !ranked.includes(p)));
-    if (!all.length) return null;
-    return all[Math.floor(Math.random() * Math.min(all.length, 3))] || all[0];
+    if (!plates.length) return null;
+    return plates[Math.floor(Math.random() * plates.length)];
   }
 
   function imgSrc(plate) {
     return (plate && (plate.path || plate.fileUrl)) || "";
   }
 
-  function marksText(sp) {
-    const f = sp.idFeatures || {};
-    const bits = [];
-    if (f.bark) bits.push("Bark: " + f.bark);
-    if (f.needles) bits.push("Needles: " + f.needles);
-    else if (f.leaves) bits.push("Leaves: " + f.leaves);
-    else if (f.fronds) bits.push("Fronds: " + f.fronds);
-    if (f.cones) bits.push("Cones: " + f.cones);
-    else if (f.fruit) bits.push("Fruit: " + f.fruit);
-    else if (f.acorns) bits.push("Acorns: " + f.acorns);
-    else if (f.samaras) bits.push("Samaras: " + f.samaras);
-    return bits.slice(0, 3).join(" ");
-  }
-
-  function originText(sp) {
-    return [sp.nativeRange, sp.biome, sp.whyCommon].filter(Boolean).join(" · ");
-  }
-
   function buildRound() {
     const size = state.short ? Math.min(20, N) : N;
     const picked = shuffle(SPECIES).slice(0, size);
-    const types = ["photo", "marks", "origin"];
-    state.queue = picked.map((sp, idx) => {
-      const kind = types[idx % 3];
-      const plate = plateOf(sp);
-      if (kind === "photo") {
-        const opts = shuffle([sp, ...others(sp, 3)]);
-        return {
-          kind,
-          sp,
-          plate,
-          question: "Identify this tree.",
-          help: "Study the photograph, then select its common name.",
-          kicker: "SELECT THE MATCHING TREE NAME",
-          options: opts.map((s) => ({ id: s.id, text: s.commonName })),
-        };
-      }
-      if (kind === "marks") {
-        const distractors = others(sp, 3).map((s) => ({ id: s.id, text: marksText(s) }));
-        const opts = shuffle([{ id: sp.id, text: marksText(sp) }, ...distractors]);
-        return {
-          kind,
-          sp,
-          plate,
-          question: sp.commonName,
-          help: "Which clearly distinct profile matches this tree’s field marks?",
-          kicker: "SELECT THE MATCHING FIELD MARKS",
-          options: opts,
-        };
-      }
-      const distractors = others(sp, 3).map((s) => ({ id: s.id, text: originText(s) }));
-      const opts = shuffle([{ id: sp.id, text: originText(sp) }, ...distractors]);
+    state.queue = picked.map(function (sp) {
+      const opts = shuffle([sp].concat(others(sp, 3)));
       return {
-        kind,
-        sp,
-        plate,
-        question: sp.commonName,
-        help: "Which historical range or ecological role is correct for this tree?",
-        kicker: "SELECT THE CORRECT RANGE OR ROLE",
-        options: opts,
+        sp: sp,
+        plate: plateOf(sp),
+        options: opts.map(function (s) {
+          return { id: s.id, text: s.commonName };
+        }),
       };
     });
     state.i = 0;
@@ -138,9 +78,10 @@
   }
 
   function statsBar(qIndex, total) {
+    const q = state.view === "quiz" ? qIndex + 1 + "/" + total : "—";
     return (
       '<div class="stats">' +
-      chip("QUESTION", (qIndex + 1) + "/" + total) +
+      chip("QUESTION", q) +
       chip("CORRECT", String(state.correct)) +
       chip("STREAK", String(state.streak)) +
       chip("KNOWN", state.known.size + "/" + N) +
@@ -158,28 +99,94 @@
       '<p class="kicker">FOREST FIELD STATION // ' + N + "</p>" +
       "<h1>Grove Bench</h1>" +
       '<p class="subtitle">' +
-      (sub ||
-        "Identify the world’s most common trees. Photograph first, then the tree’s range, traits, and field marks.") +
+      (sub || "Study the photograph, pick the common name. Range and field marks come after you answer.") +
       "</p></div>" +
-      (state.view === "quiz" ? statsBar(state.i, state.queue.length) : statsBar(-1 + 1, state.queue.length || N)) +
+      statsBar(state.i, state.queue.length || N) +
       "</header>"
+    );
+  }
+
+  function footer() {
+    return (
+      "<footer>Photographs from <a href=\"https://commons.wikimedia.org/\">Wikimedia Commons</a> contributors, used under their stated licenses (typically CC0, Public Domain, CC BY, or CC BY-SA). Grove Bench is for identification practice.</footer>"
+    );
+  }
+
+  function identityHtml(item, revealed) {
+    if (!revealed) {
+      return (
+        '<div class="identity"><h2>Specimen identity</h2>' +
+        '<p class="placeholder">Choose a name. The range, role, and field marks appear next.</p></div>'
+      );
+    }
+    const sp = item.sp;
+    const f = sp.idFeatures || {};
+    const rows = [];
+    if (sp.nativeRange) rows.push(["Range", sp.nativeRange]);
+    if (sp.biome) rows.push(["Biome", sp.biome]);
+    if (sp.whyCommon) rows.push(["Why it is common", sp.whyCommon]);
+    if (f.bark) rows.push(["Bark", f.bark]);
+    if (f.needles) rows.push(["Needles", f.needles]);
+    else if (f.leaves) rows.push(["Leaves", f.leaves]);
+    else if (f.fronds) rows.push(["Fronds", f.fronds]);
+    if (f.cones) rows.push(["Cones", f.cones]);
+    if (f.fruit) rows.push(["Fruit", f.fruit]);
+    if (f.acorns) rows.push(["Acorns", f.acorns]);
+    if (f.samaras) rows.push(["Samaras", f.samaras]);
+    if (f.habit) rows.push(["Form", f.habit]);
+    const body = rows
+      .map(function (pair) {
+        return (
+          "<p><strong>" +
+          escapeHtml(pair[0]) +
+          ".</strong> " +
+          escapeHtml(pair[1]) +
+          "</p>"
+        );
+      })
+      .join("");
+    const pl = item.plate || {};
+    const credit = [pl.artist, pl.license].filter(Boolean).join(" · ");
+    const link = pl.pageUrl
+      ? '<div class="attrib"><a href="' +
+        pl.pageUrl +
+        '" target="_blank" rel="noopener">Commons file</a>' +
+        (credit ? " · " + escapeHtml(credit) : "") +
+        "</div>"
+      : credit
+      ? '<div class="attrib">' + escapeHtml(credit) + "</div>"
+      : "";
+    const ok = state.pick === sp.id;
+    return (
+      '<div class="identity"><h2>Specimen identity</h2>' +
+      '<p class="verdict-line">' +
+      (ok ? "Correct." : "The tree is " + escapeHtml(sp.commonName) + ".") +
+      "</p>" +
+      '<p class="name">' +
+      escapeHtml(sp.commonName) +
+      "</p>" +
+      '<p class="sci">' +
+      escapeHtml(sp.scientificName) +
+      (sp.family ? " · " + escapeHtml(sp.family) : "") +
+      "</p>" +
+      body +
+      link +
+      "</div>"
     );
   }
 
   function renderHome() {
     const app = document.getElementById("app");
     app.innerHTML =
-      header("Identify the world’s most common trees. Photograph first, then the tree’s range, traits, and field marks.") +
+      header() +
       '<section class="panel">' +
       "<p>A bench of " +
       N +
-      " trees with confirmed photographs — bark, leaves, needles, cones, and fruit. Sixteen species with no usable plates were left off.</p>" +
+      " trees. Each question is a photograph: pick the common name. After you answer, you get the range, role, and field marks, then Next.</p>" +
       '<div class="home-actions">' +
       '<button class="primary go" id="full">Take the bench →</button>' +
       '<button class="ghost" id="short">Short bench (20)</button>' +
-      "</div>" +
-      '<p class="home-note">Commons photographs, checked for the right organ and species. Watermarked or mislabeled plates were dropped.</p>' +
-      "</section>" +
+      "</div></section>" +
       footer();
     document.getElementById("full").onclick = function () {
       state.short = false;
@@ -193,54 +200,6 @@
     };
   }
 
-  function footer() {
-    return (
-      "<footer>Photographs from <a href=\"https://commons.wikimedia.org/\">Wikimedia Commons</a> contributors, used under their stated licenses (typically CC0, Public Domain, CC BY, or CC BY-SA). Grove Bench is for identification practice.</footer>"
-    );
-  }
-
-  function identityHtml(item, revealed) {
-    if (!revealed) {
-      return (
-        '<div class="identity"><h2>Specimen identity</h2>' +
-        '<p class="placeholder">Choose a name to reveal the tree’s identity, then go on to the next specimen.</p></div>'
-      );
-    }
-    const sp = item.sp;
-    const f = sp.idFeatures || {};
-    const notes = [f.bark, f.needles || f.leaves || f.fronds, f.cones || f.fruit || f.acorns || f.samaras]
-      .filter(Boolean)
-      .slice(0, 3)
-      .map((t) => "<p>" + escapeHtml(t) + "</p>")
-      .join("");
-    const pl = item.plate || {};
-    const credit = [pl.artist, pl.license, pl.commonsTitle].filter(Boolean).join(" · ");
-    const link = pl.pageUrl
-      ? '<div class="attrib"><a href="' + pl.pageUrl + '" target="_blank" rel="noopener">Commons file</a> · ' +
-        escapeHtml(credit) +
-        "</div>"
-      : credit
-      ? '<div class="attrib">' + escapeHtml(credit) + "</div>"
-      : "";
-    return (
-      '<div class="identity"><h2>Specimen identity</h2>' +
-      '<p class="name">' +
-      escapeHtml(sp.commonName) +
-      "</p>" +
-      '<p class="sci">' +
-      escapeHtml(sp.scientificName) +
-      " · " +
-      escapeHtml(sp.family || "") +
-      "</p>" +
-      "<p>" +
-      escapeHtml([sp.type, sp.biome, sp.nativeRange].filter(Boolean).join(" · ")) +
-      "</p>" +
-      notes +
-      link +
-      "</div>"
-    );
-  }
-
   function renderQuiz() {
     const item = state.queue[state.i];
     if (!item) {
@@ -250,13 +209,13 @@
     }
     const total = state.queue.length;
     const src = imgSrc(item.plate);
+    const part = item.plate && item.plate.part;
+    const partHint = part
+      ? "This plate shows " + (PART_LABEL[part] || part) + "."
+      : "Study the photograph, then select its common name.";
     const alt = state.answered
-      ? ((item.plate && PART_LABEL[item.plate.part]) || "specimen")
+      ? item.sp.commonName + (part ? " " + (PART_LABEL[part] || part) : "")
       : "Unidentified tree specimen";
-    const partHint =
-      item.kind === "photo" && item.plate
-        ? "This plate shows " + (PART_LABEL[item.plate.part] || item.plate.part) + "."
-        : item.help;
 
     const choices = item.options
       .map(function (opt, idx) {
@@ -280,19 +239,14 @@
       })
       .join("");
 
-    const photoLeft = item.kind === "photo" && false;
     const qPanel =
       '<section class="panel">' +
       '<p class="q-kicker">SPECIMEN ' +
       (state.i + 1) +
       " OF " +
       total +
-      " · " +
-      item.kicker +
-      "</p>" +
-      '<h2 class="q-title">' +
-      (item.kind === "photo" ? item.question : escapeHtml(item.question)) +
-      "</h2>" +
+      " · IDENTIFY THIS TREE</p>" +
+      '<h2 class="q-title">Identify this tree.</h2>' +
       '<p class="q-help">' +
       escapeHtml(partHint) +
       "</p>" +
@@ -315,16 +269,10 @@
 
     const app = document.getElementById("app");
     app.innerHTML =
-      '<header class="top"><div>' +
-      '<p class="kicker">FOREST FIELD STATION // ' +
-      N +
-      "</p>" +
-      "<h1>Grove Bench</h1>" +
-      '<p class="subtitle">Identify the world’s most common trees. Photograph first, then the tree’s range, traits, and field marks.</p></div>' +
-      statsBar(state.i, total) +
-      "</header>" +
+      header() +
       '<div class="bench">' +
-      (photoLeft ? photoPanel + qPanel : qPanel + photoPanel) +
+      qPanel +
+      photoPanel +
       "</div>" +
       footer();
 
@@ -370,7 +318,7 @@
       " of " +
       total +
       "</h2>" +
-      "<p class=\"q-help\">Known this sitting: " +
+      '<p class="q-help">Known this sitting: ' +
       state.known.size +
       " of " +
       N +
