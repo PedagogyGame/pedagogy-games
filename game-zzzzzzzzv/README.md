@@ -1,8 +1,10 @@
 # Grove Bench
 
-Unzip, then open `index.html` (or `python3 -m http.server` in this folder).
+Unzip this folder. Delete any older Grove Bench unzip first. Then open `index.html`.
 
-Each question is a photograph: pick the common name (A–D). After you answer, the identity card shows range, role, and field marks. Then Next.
+Every question is the same: a photograph, four **tree names**. After you pick, the identity card shows range, role, and field marks. Then Next.
 
-- Full bench: 84 trees
-- Short bench: 20 questions
+There are no field-mark or range multiple-choice questions.
+
+- Full bench: 84
+- Short bench: 20
