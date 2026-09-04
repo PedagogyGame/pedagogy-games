@@ -18,7 +18,7 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzw`, next class is `.game-158`. Three pieces must match: folder name, `href`, CSS class.
+To add more later: next folder is `game-zzzzzzzzx`, next class is `.game-159`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
@@ -35,3 +35,5 @@ Live: `game-zzzzzzzzt/` / `.game-155` — The Beijing Table.
 Live: `game-zzzzzzzzu/` / `.game-156` — Hall of Arms (heraldry).
 
 Live: `game-zzzzzzzzv/` / `.game-157` — Grove Bench (84 trees).
+
+Live: `game-zzzzzzzzw/` / `.game-158` — Jungle Run (Mandarin verb drill).
