@@ -46,8 +46,11 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   will-change:transform;backface-visibility:hidden}
 .band-far{bottom:22%;height:46%;opacity:.55;animation:pan 46s linear infinite}
 .band-mid{bottom:19%;height:58%;opacity:.9;animation:pan 22s linear infinite}
-.band-fore{bottom:0;height:34%;opacity:.85;z-index:6;pointer-events:none;
+.band-fore{bottom:0;height:32%;opacity:.8;z-index:5;pointer-events:none;
   animation:pan 5s linear infinite}
+/* a low fringe that does pass in front — kept below his boots */
+.band-fringe{bottom:0;height:15%;opacity:.95;z-index:9;pointer-events:none;
+  animation:pan 3.4s linear infinite}
 .ground{position:absolute;left:0;bottom:0;width:100%;height:21%;
   border-top:3px solid #1E5B48;
   background:linear-gradient(180deg,#123A2F 0%,#0B231D 55%,#071A16 100%)}
@@ -73,18 +76,21 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   border:1px solid rgba(237,227,202,.28);color:var(--parchment-2)}
 
 /* ---- runner ---- */
-.runner-lane{position:absolute;inset:0;z-index:5}
-.hero-shadow{position:absolute;left:16%;bottom:19%;width:88px;height:14px;
+.runner-lane{position:absolute;inset:0;z-index:6}
+/* the runner sits above the foliage so his legs are never swallowed by it */
+.hero-layer{position:absolute;inset:0;z-index:8;pointer-events:none}
+.hero-shadow{position:absolute;left:16%;bottom:19%;width:96px;height:14px;
   margin-bottom:-7px;z-index:6;pointer-events:none;
   background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,.55),rgba(0,0,0,0) 72%);
   animation:shadowPulse .42s ease-in-out infinite alternate;will-change:transform,opacity}
 @keyframes shadowPulse{from{transform:scale(1,1);opacity:.85}to{transform:scale(.86,1);opacity:.6}}
-.hero{position:absolute;left:16%;bottom:19%;width:88px;height:119px;
+.hero{position:absolute;left:16%;bottom:19%;width:96px;height:112px;
   transform-origin:50% 100%;z-index:7;will-change:transform;backface-visibility:hidden}
 .hero svg{width:100%;height:100%;display:block}
-.leg-a,.leg-b,.arm-a,.arm-b{transform-origin:50% 12%}
-.head{transform-origin:50% 37%}
-.foot{transform-origin:20% 78%}
+.leg-a,.leg-b,.arm-a,.arm-b{transform-origin:0px 0px}
+.head{transform-origin:45px 43px}
+.foot{transform-origin:0px 14px}
+.scarf{transform-origin:38px 46px}
 .running .leg-a .foot{animation:footA .42s linear infinite}
 .running .leg-b .foot{animation:footB .42s linear infinite}
 @keyframes footA{0%{transform:rotate(-14deg)}50%{transform:rotate(16deg)}100%{transform:rotate(-14deg)}}
@@ -345,7 +351,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   100%{transform:translate(0,0) rotate(0)}}
 
 /* secondary motion: the scarf lags behind the body */
-.scarf{transform-origin:14% 30%;animation:scarfWave .62s ease-in-out infinite alternate}
+.scarf{animation:scarfWave .62s ease-in-out infinite alternate}
 @keyframes scarfWave{from{transform:rotate(-7deg) skewX(4deg)}to{transform:rotate(9deg) skewX(-6deg)}}
 
 .obstacle{position:absolute;bottom:19%;left:100%;z-index:6;
@@ -585,8 +591,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 }
 @media (max-width:560px){
   .cue{top:13vh;padding:16px 14px 12px}
-  .hero{width:66px;height:90px;left:12%}
-  .hero-shadow{width:66px;left:12%}
+  .hero{width:72px;height:84px;left:12%}
+  .hero-shadow{width:72px;left:12%}
   .chamber-mid{gap:14px}
   .chamber{padding-top:52px}
 }
@@ -643,12 +649,15 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
     <div class="ground" id="groundBand"></div>
     <div class="shafts"></div>
     <div class="runner-lane">
-      <div class="hero-shadow" id="heroShadow"></div>
-      <div class="hero running" id="hero"></div>
       <div id="obstacleHost"></div>
     </div>
     <div class="haze"></div>
     <div class="band band-fore" id="bandFore"></div>
+    <div class="hero-layer">
+      <div class="hero-shadow" id="heroShadow"></div>
+      <div class="hero running" id="hero"></div>
+    </div>
+    <div class="band band-fringe" id="bandFringe"></div>
     <div class="vignette"></div>
   </section>
 
@@ -831,15 +840,21 @@ const canopyTex = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="
 <g fill="#0A2C23">${Array.from({length:40},(_,i)=>`<ellipse cx="${i*41+((i*53)%29)}" cy="${8+((i*31)%22)}" rx="${26+((i*11)%18)}" ry="14"/>`).join("")}
 </g></svg>`;
 
-const heroSVG = `<svg viewBox="0 0 90 122" xmlns="http://www.w3.org/2000/svg">
-<g class="arm-b" transform="translate(46,50)"><rect x="-5" y="0" width="10" height="34" rx="5" fill="url(#gBodyBack)"/>
-  <circle cx="0" cy="33" r="5.4" fill="#0A2620"/></g>
-<g class="leg-b" transform="translate(41,74)"><rect x="-5.5" y="0" width="11" height="40" rx="5.5" fill="url(#gBodyBack)"/>
+const heroSVG = `<svg viewBox="0 0 90 105" xmlns="http://www.w3.org/2000/svg">
+<!-- each limb is a rotating group INSIDE a positioning wrapper, so the CSS
+     transform that animates it can never clobber the translate that places it -->
+<g transform="translate(46,52)"><g class="arm-b">
+  <rect x="-4.6" y="0" width="9.2" height="27" rx="4.6" fill="url(#gBodyBack)"/>
+  <circle cx="0" cy="26" r="5" fill="#0A2620"/>
+</g></g>
+<g transform="translate(40,76)"><g class="leg-b">
+  <rect x="-5.5" y="0" width="11" height="20" rx="5.5" fill="url(#gBodyBack)"/>
   <g class="foot">
-    <path d="M-5.5 32 h11 v4.6 h3.9 a2.7 2.7 0 0 1 2.7 2.7 v1.3 h-17.6 z" fill="#061A15"/>
-    <rect x="-6.2" y="40.6" width="18.4" height="2.5" rx="1.25" fill="#03100C"/>
-    <rect x="-4.2" y="33.7" width="8.2" height="1.5" rx=".75" fill="#6E560F" opacity=".75"/>
-  </g></g>
+    <path d="M-5.5 13 h11 v4.4 h3.7 a2.6 2.6 0 0 1 2.6 2.6 v1.2 h-17.3 z" fill="#061A15"/>
+    <rect x="-6.2" y="21.2" width="18" height="2.4" rx="1.2" fill="#03100C"/>
+    <rect x="-4.2" y="14.6" width="8.2" height="1.4" rx=".7" fill="#6E560F" opacity=".75"/>
+  </g>
+</g></g>
 <g class="scarf"><path d="M38 42 C 24 48, 12 54, 1 49 C 9 60, 26 60, 40 52 Z" fill="url(#gScarf)"/>
   <path d="M38 44 C 27 49, 17 53, 8 51 C 16 56, 28 55, 39 49 Z" fill="#EFA48C" opacity=".35"/></g>
 <rect x="34" y="44" width="24" height="36" rx="9" fill="url(#gBody)"/>
@@ -856,19 +871,23 @@ const heroSVG = `<svg viewBox="0 0 90 122" xmlns="http://www.w3.org/2000/svg">
   <path d="M33 14 h7 v14 h-7 z" fill="#F2DC8A" opacity=".3"/>
   <path d="M33 24 h24 v4 h-24 z" fill="#6E560F" opacity=".55"/>
 </g>
-<g class="leg-a" transform="translate(45,74)"><rect x="-6" y="0" width="12" height="44" rx="6" fill="url(#gBody)"/>
-  <rect x="1" y="2" width="3" height="36" rx="1.5" fill="#3E7C66" opacity=".45"/>
+<g transform="translate(47,76)"><g class="leg-a">
+  <rect x="-6" y="0" width="12" height="22" rx="6" fill="url(#gBody)"/>
+  <rect x="1" y="2" width="3" height="13" rx="1.5" fill="#3E7C66" opacity=".45"/>
   <g class="foot">
-    <path d="M-6 34 h12 v5.5 h4.6 a3 3 0 0 1 3 3 v1.5 h-19.6 z" fill="#12352C"/>
-    <path d="M-6 34 h3.6 v5.5 h-3.6 z" fill="#357C64" opacity=".5"/>
-    <rect x="-6.8" y="44" width="20.8" height="2.8" rx="1.4" fill="#061A15"/>
-    <rect x="-4.8" y="36" width="9.6" height="1.7" rx=".85" fill="url(#gBrass)" opacity=".9"/>
-    <circle cx="0" cy="36.85" r="1.15" fill="#F2DC8A"/>
-  </g></g>
-<g class="arm-a" transform="translate(44,50)"><rect x="-5" y="0" width="10" height="36" rx="5" fill="url(#gBody)"/>
-  <rect x="1" y="2" width="2.6" height="30" rx="1.3" fill="#3E7C66" opacity=".45"/>
-  <circle cx="0" cy="35" r="5.6" fill="#0C2B23"/>
-  <circle cx="-1.4" cy="33.6" r="2" fill="#4E8F77" opacity=".5"/></g>
+    <path d="M-6 14 h12 v5.2 h4.4 a2.9 2.9 0 0 1 2.9 2.9 v1.4 h-19.3 z" fill="#12352C"/>
+    <path d="M-6 14 h3.6 v5.2 h-3.6 z" fill="#357C64" opacity=".5"/>
+    <rect x="-6.8" y="23.5" width="20.4" height="2.8" rx="1.4" fill="#061A15"/>
+    <rect x="-4.8" y="15.8" width="9.6" height="1.7" rx=".85" fill="url(#gBrass)" opacity=".9"/>
+    <circle cx="0" cy="16.65" r="1.15" fill="#F2DC8A"/>
+  </g>
+</g></g>
+<g transform="translate(44,52)"><g class="arm-a">
+  <rect x="-5" y="0" width="10" height="29" rx="5" fill="url(#gBody)"/>
+  <rect x="1" y="2" width="2.6" height="23" rx="1.3" fill="#3E7C66" opacity=".45"/>
+  <circle cx="0" cy="28" r="5.2" fill="#0C2B23"/>
+  <circle cx="-1.3" cy="26.7" r="1.9" fill="#4E8F77" opacity=".5"/>
+</g></g>
 </svg>`;
 
 const birdSVG = `<svg viewBox="0 0 140 110" xmlns="http://www.w3.org/2000/svg"><g>
@@ -1040,6 +1059,7 @@ const el = {
 $("bandFar").style.backgroundImage  = svgURL(farTrees);
 $("bandMid").style.backgroundImage  = svgURL(midTrees);
 $("bandFore").style.backgroundImage = svgURL(foreFronds);
+$("bandFringe").style.backgroundImage = svgURL(foreFronds);
 $("cloudBand").style.backgroundImage = svgURL(cloudBandArt);
 const texStyle = document.createElement("style");
 texStyle.textContent = `.ground::after{background-image:${svgURL(groundTex)}}
