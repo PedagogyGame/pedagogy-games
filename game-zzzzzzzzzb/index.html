@@ -25,7 +25,9 @@
      text-shadow:0 3px 0 #7a4a00, 0 0 26px rgba(255,207,92,.35);}
   h2{margin:0 0 14px;font-size:20px;color:var(--gold);letter-spacing:1px}
   .sub{color:var(--dim);font-size:14px;margin:0 0 20px;line-height:1.55}
-  .modes{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+  .modes button{font-size:13.5px;padding:10px 6px}
+  .note{min-height:34px}
   button{font-family:inherit;font-size:14px;padding:9px 14px;border-radius:9px;cursor:pointer;
     background:#1b2333;color:var(--ink);border:1px solid #34405a;transition:.12s;}
   button:hover{background:#25314a;border-color:#4a5b7d}
@@ -341,7 +343,7 @@ const lerp  = (a,b,t) => a + (b - a) * t;
 
 /* -------------------------------- STATE --------------------------------- */
 const game = {
-  mode: "recognition",         // recognition | pinyin | listening | choice
+  mode: "hz_en",               // see MODES — prompt direction → answer direction
   screen: "title",             // title | play | pause | over
   t: 0, dt: 0,
   score: 0, hearts: 3, maxHearts: 3,
@@ -350,7 +352,7 @@ const game = {
   smashed: 0, jumped: 0, missed: 0,
   learned: [],                 // words killed for the first time this run
   barrels: [], parts: [], floats: [], steam: [],
-  spawnTimer: 3.0, grace: 2.0,
+  spawnTimer: 3.0, grace: 2.0, spawnCount: 0,
   checkpoint: 0, lastSectionShown: -1,
   sectionBanner: null,
   buffer: "", flashBad: 0,
@@ -375,6 +377,8 @@ addEventListener("keydown", e => {
   if (MOVE_KEYS[e.code]) e.preventDefault();
 
   if (e.code === "Escape"){
+    // first Escape wipes a half-typed word with no penalty; a second one pauses
+    if (game.screen === "play" && game.buffer){ game.buffer = ""; return; }
     if (game.screen === "play"){ pauseGame(); }
     else if (game.screen === "pause"){ resumeGame(); }
     return;
@@ -387,16 +391,17 @@ addEventListener("keydown", e => {
   if (e.code === "Enter"){ submitGuess(); return; }
   if (e.code === "Slash"){ e.preventDefault(); if (game.target) speak(game.target.word); return; }
 
-  if (game.mode === "choice"){
+  if (M().answer === "mc"){
     const n = "Digit1 Digit2 Digit3 Digit4".split(" ").indexOf(e.code);
     if (n >= 0) answerChoice(n);
     return;
   }
+  if (e.repeat) return;                 // holding a key must not stutter letters in
   if (/^Key[A-Z]$/.test(e.code) || /^Digit[0-9]$/.test(e.code)){
-    if (game.buffer.length < 18){
-      game.buffer += e.key.toLowerCase();
-      autoResolve();
-    }
+    if (game.buffer.length >= 20) game.buffer = "";
+    const prev = game.buffer;
+    game.buffer += e.key.toLowerCase();
+    autoResolve(prev);
   }
 });
 addEventListener("keyup", e => { keys[e.code] = false; });
@@ -424,22 +429,81 @@ function speak(w){
 }
 
 /* ------------------------------- ANSWERS -------------------------------- */
-function accepted(word){
-  if (game.mode === "pinyin") return [word.plain];
-  return word.en.map(s => s.replace(/[^a-z0-9]/g,""));
-}
-function normBuf(){ return game.buffer.replace(/[^a-z0-9]/g,""); }
+/* ------------------------------ MODE MATRIX ------------------------------
+   Every mode is a direction: what the barrel shows → what you type.
+   The arcade layer is identical in all of them; only the prompt and the
+   accepted answers change, so the tower never has to know which one is on.
+------------------------------------------------------------------------- */
+const MODES = {
+  hz_en:  {label:"汉字 → English", show:w => w.hz,     kind:"hz",   answer:"en", mult:1.00,
+           note:"The character rolls at you — type what it means. The default climb."},
+  hz_py:  {label:"汉字 → pinyin",  show:w => w.hz,     kind:"hz",   answer:"py", mult:1.15,
+           note:"The character rolls at you — type the sound. Tones are never required: chi, xuyao, pengyou all count."},
+  py_en:  {label:"pinyin → English", show:w => w.py,   kind:"lat",  answer:"en", mult:0.85,
+           note:"No characters at all — the barrel is romanized, you type the meaning. Easiest way in, worth the least."},
+  en_py:  {label:"English → pinyin", show:w => w.en[0], kind:"lat", answer:"py", mult:1.40,
+           note:"Recall, not recognition: the barrel shows English and you have to produce the Chinese. The hardest climb, worth the most."},
+  listen: {label:"Listen → English", show:() => "🔊",  kind:"icon", answer:"en", mult:1.20,
+           note:"The barrel speaks instead of showing text. Needs a Chinese voice in your browser; press / to hear it again."},
+  choice: {label:"Multiple choice",  show:w => w.hz,   kind:"hz",   answer:"mc", mult:0.55,
+           note:"Four options along the bottom, answered with keys 1–4. Good for a first climb; worth the least."}
+};
+const M = () => MODES[game.mode];
 
-function autoResolve(){                 // exact match destroys instantly, no Enter needed
-  const b = normBuf();
+function norm(s){                        // tones are never required — ī and i are the same key
+  let out = "";
+  for (const ch of String(s).toLowerCase()) out += (TONE_MAP[ch] !== undefined ? TONE_MAP[ch] : ch);
+  return out.replace(/[^a-z0-9]/g,"");
+}
+function accepted(word){
+  if (M().answer === "py"){
+    const a = [word.plain];
+    if (word.plain.includes("v")) a.push(word.plain.replace(/v/g,"u"));   // nv / nu
+    return a;
+  }
+  return word.en.map(norm);
+}
+function normBuf(){ return norm(game.buffer); }
+function liveAnswers(){
+  const out = [];
+  for (const br of game.barrels) if (!br.dead) out.push(...accepted(br.word));
+  return out;
+}
+function tryHit(br, b, isTarget){
+  if (!br || br.dead) return false;
+  for (const a of accepted(br.word)){
+    // whole buffer, or its tail — so a stray keystroke earlier doesn't poison the word
+    if (b === a || (a.length >= 3 && b.endsWith(a))){
+      destroyBarrel(br, isTarget); game.buffer = ""; return true;
+    }
+  }
+  return false;
+}
+function autoResolve(prev){             // exact match destroys instantly, no Enter needed
+  let b = normBuf();
   if (!b) return;
-  if (game.target && accepted(game.target.word).includes(b)){
-    destroyBarrel(game.target, true); game.buffer = ""; return;
+  if (tryHit(game.target, b, true)) return;
+  for (const br of game.barrels) if (tryHit(br, b, false)) return;   // off-target, half value
+
+  // A doubled key ("waater") is a stutter, not a different word — swallow it.
+  // Everything else stays in the buffer: a genuinely wrong guess must survive
+  // long enough for Enter to judge it, or the gloss never fires.
+  const live = liveAnswers();
+  const p = norm(prev || "");
+  if (p && b.length === p.length + 1 && b[b.length-1] === b[b.length-2] &&
+      !live.some(a => a.startsWith(b)) && anySuffixIsPrefix(p, live)){
+    game.buffer = prev;
   }
-  for (const br of game.barrels){       // off-target hit still counts, at half value
-    if (br.dead) continue;
-    if (accepted(br.word).includes(b)){ destroyBarrel(br, false); game.buffer = ""; return; }
-  }
+}
+function anySuffixIsPrefix(b, list){
+  for (let i = 0; i < b.length; i++)
+    if (list.some(a => a.startsWith(b.slice(i)))) return true;
+  return false;
+}
+function bufferOnTrack(){
+  const b = normBuf();
+  if (!b || !game.target) return false;
+  return anySuffixIsPrefix(b, accepted(game.target.word));
 }
 function submitGuess(){
   const b = normBuf();
@@ -491,16 +555,23 @@ function spawnBarrel(offset, prog){
   const hi = lowEndX(f) === X1 ? X0 + 14 : X1 - 14;  // start at the high end
   const x = prog ? lerp(hi, lowEndX(f), prog) : hi;
   const base = 148 + Math.min(78, game.maxFloor * 2.2);
+  // Every 7th, every 11th and every other 13th barrel takes the ladders.
+  // Coprime counters, so they interleave without ever settling into a rhythm
+  // you can read — roughly one barrel in four comes down the stairs.
+  const n = ++game.spawnCount;
+  const stairs = (n % 7 === 0) || (n % 11 === 0) ||
+                 (n % 13 === 0 && Math.floor(n / 13) % 2 === 1);
   const br = {
     word, kind, r: k.r, floor: f, x,
     y: surfaceY(f, x) - k.r,
     vy: 0, state: "roll",
     speed: base * k.speed,
     rot: 0, dead: false, deadT: 0,
+    takesLadders: stairs, startX: x, ladderFloor: -1, ladderTargetY: 0,
     tVis: -1, tEngage: -1, revealUntil: -1, wasWrong: false,
     opts: null, correctIdx: -1
   };
-  if (game.mode === "choice") buildChoices(br);
+  if (M().answer === "mc") buildChoices(br);
   game.barrels.push(br);
 }
 function buildChoices(br){
@@ -511,8 +582,8 @@ function buildChoices(br){
     const w = p.splice(i,1)[0];
     if (!picks.some(q => q.en[0] === w.en[0]) && w.en[0] !== br.word.en[0]) picks.push(w);
   }
-  const labels = picks.map(w => game.mode === "pinyin" ? w.py : w.en[0]);
-  const right  = game.mode === "pinyin" ? br.word.py : br.word.en[0];
+  const labels = picks.map(w => w.en[0]);
+  const right  = br.word.en[0];
   const idx = (Math.random() * 4) | 0;
   labels.splice(idx, 0, right);
   br.opts = labels; br.correctIdx = idx;
@@ -534,8 +605,7 @@ function destroyBarrel(br, wasTarget){
 
   // scoring
   let pts = 100 * KIND[br.kind].mul;
-  pts *= (game.mode === "choice" ? 0.55 : 1);
-  pts *= (game.mode === "pinyin" ? 1.15 : 1);
+  pts *= M().mult;
   pts *= seen < 2.4 ? 1.5 : (seen < 4.5 ? 1.2 : 1.0);
   pts *= wasTarget ? 1 : 0.5;
   if (br.wasWrong) pts += 150;                       // redemption
@@ -550,7 +620,7 @@ function destroyBarrel(br, wasTarget){
   burst(br.x, br.y, KIND[br.kind].rim, br.kind === "steel" ? 26 : 18);
   float(br.x, br.y - 26, "+" + pts, "#ffd76a", 20);
   float(br.x, br.y - 50,
-        game.mode === "pinyin" ? br.word.py : br.word.en[0].toUpperCase(), "#8fd14f", 16);
+        M().answer === "py" ? br.word.py : br.word.en[0].toUpperCase(), "#8fd14f", 16);
   if (game.streak >= 3 && game.streak % 3 === 0)
     float(player.x, player.y - 78, game.streak + " WORD STREAK", "#ffcf5c", 18);
   game.shake = Math.max(game.shake, br.kind === "steel" ? 7 : 4);
@@ -587,7 +657,7 @@ function startRun(fromCheckpoint){
   game.iframes = 0; game.shake = 0; game.sectionBanner = null;
   if (!fromCheckpoint){
     game.smashed = game.jumped = game.missed = 0;
-    game.bestStreak = 0; game.learned = []; game.maxFloor = 0;
+    game.bestStreak = 0; game.learned = []; game.maxFloor = 0; game.spawnCount = 0;
     game.checkpoint = 0; game.lastSectionShown = -1;
     for (const k in MEM) MEM[k].firstKill = false;
   }
@@ -687,13 +757,38 @@ function updateBarrels(dt){
 
     if (br.state === "roll"){
       const d = dirOf(br.floor);
+      const prevX = br.x;
       br.x += d * br.speed * dt;
       br.rot += (br.speed / br.r) * dt * d;
-      const end = lowEndX(br.floor);
-      if ((d === 1 && br.x >= end) || (d === -1 && br.x <= end)){
-        br.x = end; br.state = "fall"; br.vy = 0;
-      } else {
-        br.y = surfaceY(br.floor, br.x) - br.r;
+
+      // Some barrels take the stairs. They peel off mid-platform and come down
+      // a ladder instead of running to the far end — so a floor is never safe
+      // just because the drop point is behind you, and a ladder you are on can
+      // suddenly have something coming down it.
+      if (br.takesLadders && br.floor >= 1 && br.ladderFloor !== br.floor &&
+          Math.abs(br.x - br.startX) > 70){
+        for (const lx of laddersOn(br.floor - 1)){
+          if ((prevX - lx) * (br.x - lx) <= 0){
+            br.ladderFloor = br.floor;
+            br.x = lx; br.state = "ladder";
+            br.ladderTargetY = surfaceY(br.floor - 1, lx) - br.r;
+            break;
+          }
+        }
+      }
+      if (br.state === "roll"){
+        const end = lowEndX(br.floor);
+        if ((d === 1 && br.x >= end) || (d === -1 && br.x <= end)){
+          br.x = end; br.state = "fall"; br.vy = 0;
+        } else {
+          br.y = surfaceY(br.floor, br.x) - br.r;
+        }
+      }
+    } else if (br.state === "ladder"){
+      br.y += br.speed * 0.60 * dt;
+      br.rot += dt * 2.4;
+      if (br.y >= br.ladderTargetY){
+        br.y = br.ladderTargetY; br.floor--; br.state = "roll"; br.startX = br.x;
       }
     } else {
       br.vy += BARREL_G * dt;
@@ -701,7 +796,9 @@ function updateBarrels(dt){
       br.rot += dt * 3;
       if (br.floor - 1 >= 0){
         const land = surfaceY(br.floor - 1, br.x) - br.r;
-        if (br.y >= land){ br.y = land; br.vy = 0; br.floor--; br.state = "roll"; }
+        if (br.y >= land){
+          br.y = land; br.vy = 0; br.floor--; br.state = "roll"; br.startX = br.x;
+        }
       }
     }
 
@@ -763,7 +860,7 @@ function updateTarget(){
   }
   if (best !== game.target){
     game.target = best;
-    if (game.mode === "listening" && best) speak(best.word);
+    if (M().kind === "icon" && best) speak(best.word);
   }
 }
 
@@ -1040,7 +1137,8 @@ function drawBarrel(br){
     ctx.globalAlpha = 1 - p;
   }
   ctx.save();
-  ctx.translate(br.x, br.y);
+  // a little clunk from rung to rung, purely cosmetic — collision uses br.x
+  ctx.translate(br.x + (br.state === "ladder" ? Math.sin(game.t * 15) * 2.6 : 0), br.y);
 
   // shadow
   ctx.globalAlpha *= .28; ctx.fillStyle = "#000";
@@ -1077,9 +1175,11 @@ function drawBarrel(br){
 
   // upright label plaque — never spins with the barrel
   const isTarget = game.target === br;
-  const label = game.mode === "listening" ? "🔊" : br.word.hz;
-  const fs = label.length > 1 ? 25 : 30;
-  ctx.font = `bold ${fs}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
+  const label = M().show(br.word);
+  const latin = M().kind === "lat";
+  const fs = latin ? (label.length > 8 ? 19 : 22) : (label.length > 1 ? 25 : 30);
+  ctx.font = latin ? `bold ${fs}px "Trebuchet MS",Verdana,sans-serif`
+                   : `bold ${fs}px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif`;
   const tw = ctx.measureText(label).width;
   const px = br.x, py = br.y - br.r - 24;
   const pw = tw + 22, ph = 38;
@@ -1224,20 +1324,21 @@ function drawHUD(P){
   ctx.font = 'bold 13px ui-monospace,Menlo,monospace'; ctx.fillStyle = "#9fb0c8";
   ctx.fillText("FLOOR " + player.floor + "   ·   " + P.name, 236, 30);
 
+  // right cluster: status takes the corner, streak steps aside when both are on
+  const status = game.grace > 0
+    ? ["SAFE — " + Math.ceil(game.grace) + "s", "#8fd14f"]
+    : game.bossWave > 0
+    ? ["PRESSURE WAVE — " + Math.ceil(game.bossWave) + "s", "#ff6a4a"] : null;
+  ctx.textAlign = "right";
+  if (status){
+    ctx.font = 'bold 15px "Trebuchet MS",sans-serif';
+    ctx.fillStyle = status[1]; ctx.fillText(status[0], W - 20, 30);
+  }
   if (game.streak >= 3){
-    ctx.textAlign = "right"; ctx.font = 'bold 17px "Trebuchet MS",sans-serif';
+    ctx.font = 'bold 17px "Trebuchet MS",sans-serif';
     ctx.fillStyle = game.streak >= 10 ? "#ff9d3c" : "#8fd14f";
-    ctx.fillText(game.streak + "× STREAK", W - 20, 30);
-  }
-  if (game.bossWave > 0){
-    ctx.textAlign = "center"; ctx.font = 'bold 15px "Trebuchet MS",sans-serif';
-    ctx.fillStyle = "#ff6a4a";
-    ctx.fillText("PRESSURE WAVE — " + Math.ceil(game.bossWave) + "s", W/2, 30);
-  }
-  if (game.grace > 0){
-    ctx.textAlign = "center"; ctx.font = 'bold 15px "Trebuchet MS",sans-serif';
-    ctx.fillStyle = "#8fd14f";
-    ctx.fillText("SAFE — " + Math.ceil(game.grace) + "s", W/2, 30);
+    if (status){ ctx.textAlign = "center"; ctx.fillText(game.streak + "×", W/2 + 130, 30); }
+    else ctx.fillText(game.streak + "× STREAK", W - 20, 30);
   }
 
   drawAnswerBar();
@@ -1268,7 +1369,7 @@ function drawAnswerBar(){
     return;
   }
 
-  if (game.mode === "choice" && tgt.opts){
+  if (M().answer === "mc" && tgt.opts){
     const bw = 200, gap = 12, total = 4*bw + 3*gap;
     let x = (W - total) / 2;
     for (let i = 0; i < 4; i++){
@@ -1288,20 +1389,32 @@ function drawAnswerBar(){
   ctx.textAlign = "center";
   ctx.font = 'bold 26px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
   ctx.fillStyle = "#cdd6e6";
-  ctx.fillText(game.mode === "listening" ? "🔊  ( / to replay )" : tgt.word.hz, W/2, barY + 30);
+  ctx.font = M().kind === "lat"
+    ? 'bold 24px "Trebuchet MS",Verdana,sans-serif'
+    : 'bold 26px "PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+  ctx.fillText(M().kind === "icon" ? "🔊  ( / to replay )" : M().show(tgt.word), W/2, barY + 30);
 
   // typed buffer
   const bad = game.flashBad > 0;
-  const txt = game.buffer || (game.mode === "pinyin" ? "type the pinyin…" : "type the meaning…");
+  const track = bufferOnTrack();
+  const txt = game.buffer ||
+    (M().answer === "py" ? "type the pinyin — tones not needed" : "type the meaning…");
   ctx.font = 'bold 30px ui-monospace,Menlo,Consolas,monospace';
   const tw = ctx.measureText(txt).width;
   const bw2 = Math.max(300, tw + 46);
-  ctx.fillStyle = bad ? "rgba(160,30,20,.7)" : "rgba(255,255,255,.05)";
+  ctx.fillStyle = bad ? "rgba(160,30,20,.7)"
+                : track ? "rgba(80,150,50,.22)" : "rgba(255,255,255,.05)";
   roundRect(W/2 - bw2/2, barY + 38, bw2, 30, 7); ctx.fill();
-  ctx.strokeStyle = bad ? "#ff6a4a" : "rgba(255,255,255,.16)"; ctx.lineWidth = 1.5;
+  ctx.strokeStyle = bad ? "#ff6a4a" : track ? "#8fd14f" : "rgba(255,255,255,.16)";
+  ctx.lineWidth = 1.5;
   roundRect(W/2 - bw2/2, barY + 38, bw2, 30, 7); ctx.stroke();
-  ctx.fillStyle = game.buffer ? "#ffe9ac" : "#4e5a6d";
+  ctx.fillStyle = game.buffer ? (track ? "#c9f0a0" : "#ffe9ac") : "#4e5a6d";
   ctx.fillText(txt, W/2, barY + 62);
+  if (game.buffer){
+    ctx.textAlign = "right"; ctx.font = '11px "Trebuchet MS",sans-serif';
+    ctx.fillStyle = "#5d6a7e"; ctx.fillText("Esc clears", W - 18, barY + 62);
+    ctx.textAlign = "center";
+  }
   if (game.buffer && Math.floor(game.t * 2.4) % 2 === 0){
     ctx.fillStyle = "#ffcf5c";
     ctx.fillRect(W/2 + tw/2 + 5, barY + 42, 3, 22);
@@ -1366,24 +1479,17 @@ function pauseGame(){
 }
 function resumeGame(){ game.screen = "play"; game.buffer = ""; showScreen(null); }
 
-const MODES = [
-  ["recognition", "Recognition", "汉字 on the barrel — type the English meaning."],
-  ["pinyin",      "Pinyin",      "汉字 on the barrel — type the pinyin, tones optional. Worth more."],
-  ["choice",      "Multiple choice", "Four options along the bottom — answer with keys 1–4. Worth less, good for a first climb."],
-  ["listening",   "Listening",   "The barrel speaks instead of showing text — type the English. Needs a Chinese voice installed in your browser; press / to replay."]
-];
 const modeBtns = document.getElementById("modeBtns");
-MODES.forEach(([id, label]) => {
+Object.entries(MODES).forEach(([id, m]) => {
   const b = document.createElement("button");
-  b.textContent = label; b.dataset.mode = id;
+  b.textContent = m.label; b.dataset.mode = id;
   b.onclick = () => { game.mode = id; syncModes(); };
   modeBtns.appendChild(b);
 });
 function syncModes(){
   [...modeBtns.children].forEach(b => b.classList.toggle("on", b.dataset.mode === game.mode));
-  const m = MODES.find(m => m[0] === game.mode);
-  let note = m[2];
-  if (game.mode === "listening" && voicesReady && !zhVoice)
+  let note = M().note;
+  if (M().kind === "icon" && voicesReady && !zhVoice)
     note += "  ⚠ No Chinese voice detected in this browser — the barrel will stay silent.";
   document.getElementById("modeNote").textContent = note;
 }
