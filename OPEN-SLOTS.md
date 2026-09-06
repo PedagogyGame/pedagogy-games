@@ -18,7 +18,7 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzzb`, next class is `.game-163`. Three pieces must match: folder name, `href`, CSS class.
+To add more later: next folder is `game-zzzzzzzzzc`, next class is `.game-164`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
@@ -45,3 +45,5 @@ Live: `game-zzzzzzzzy/` / `.game-160` — Mandarin Mech (vocabulary arena).
 Live: `game-zzzzzzzzz/` / `.game-161` — Mansion of the Unseen (3D cutaway glossary).
 
 Live: `game-zzzzzzzzza/` / `.game-162` — 饿河马 Hungry Hippos (HSK 3–4 vocab race).
+
+Live: `game-zzzzzzzzzb/` / `.game-163` — Word Climber (barrel vocab tower).
