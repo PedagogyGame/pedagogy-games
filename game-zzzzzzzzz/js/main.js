@@ -18,6 +18,7 @@ const layerMeta = document.getElementById("layer-meta");
 const sliceSlider = document.getElementById("slice-slider");
 const objectTitle = document.getElementById("object-title");
 const strataList = document.getElementById("strata-list");
+const layerLooking = document.getElementById("layer-looking");
 
 let mode = "title"; // title | roam | inspect
 let hoverTarget = null;
@@ -30,6 +31,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.localClippingEnabled = true;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0908);
@@ -142,7 +144,7 @@ function buildStrata(def) {
     li.type = "button";
     li.className = "strata-item";
     li.style.setProperty("--swatch", "#" + L.color.toString(16).padStart(6, "0"));
-    li.textContent = L.term;
+    li.textContent = L.hint ? `${i + 1}. ${L.term} (${L.hint})` : `${i + 1}. ${L.term}`;
     li.addEventListener("click", () => {
       slice.setIndex(i);
       syncSliceUI();
@@ -156,10 +158,15 @@ function syncSliceUI() {
   if (!L) return;
   layerTerm.textContent = L.term;
   layerDef.textContent = L.def;
-  layerMeta.textContent = `Layer ${L.index + 1} of ${L.total} · ${L.objectName}`;
+  const hint = L.hint ? ` · ${L.hint}` : "";
+  layerMeta.textContent = `Layer ${L.index + 1} of ${L.total} · Outside → in${hint}`;
+  if (layerLooking) layerLooking.textContent = `You are looking at: ${L.term}`;
+  sliceSlider.max = String(L.total - 1);
   sliceSlider.value = String(L.index);
   [...strataList.children].forEach((el, i) => {
-    el.classList.toggle("active", i === L.index);
+    const on = i === L.index;
+    el.classList.toggle("active", on);
+    if (on) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
 }
 

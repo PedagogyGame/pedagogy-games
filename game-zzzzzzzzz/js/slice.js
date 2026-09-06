@@ -1,4 +1,13 @@
 import * as THREE from "three";
+import { SHARED_CLIP_PLANE } from "./meshes.js";
+
+function eachMaterial(layer, fn) {
+  layer.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) fn(m, o);
+  });
+}
 
 export class SliceSystem {
   constructor() {
@@ -8,6 +17,7 @@ export class SliceSystem {
     this.particles = null;
     this.rimLight = null;
     this.onLayerChange = null;
+    this._baseOpacity = new WeakMap();
   }
 
   attach(object3d, scene) {
@@ -15,6 +25,14 @@ export class SliceSystem {
     this.object = object3d;
     this.def = object3d.userData.def;
     this.index = 0;
+    // remember original opacities
+    for (const layer of object3d.userData.layers || []) {
+      eachMaterial(layer, (m) => {
+        if (!this._baseOpacity.has(m)) this._baseOpacity.set(m, m.opacity ?? 1);
+        m.clippingPlanes = [SHARED_CLIP_PLANE];
+        m.clipShadows = true;
+      });
+    }
     this._apply();
     this._spawnVFX(scene);
     return this.currentLayer();
@@ -22,12 +40,19 @@ export class SliceSystem {
 
   detach(scene) {
     if (this.object && this.object.userData.layers) {
-      for (const m of this.object.userData.layers) {
-        m.visible = true;
-        if (m.material) {
-          m.material.emissive?.setHex(0x000000);
-          m.material.emissiveIntensity = 0;
-        }
+      for (const layer of this.object.userData.layers) {
+        layer.visible = true;
+        eachMaterial(layer, (m) => {
+          if (m.emissive) {
+            m.emissive.setHex(0x000000);
+            m.emissiveIntensity = 0;
+          }
+          const base = this._baseOpacity.get(m);
+          if (base != null) {
+            m.opacity = base;
+            m.transparent = base < 1;
+          }
+        });
       }
     }
     if (this.particles && scene) {
@@ -58,27 +83,54 @@ export class SliceSystem {
 
   currentLayer() {
     if (!this.def) return null;
-    return { ...this.def.layers[this.index], index: this.index, total: this.def.layers.length, objectName: this.def.name };
+    const L = this.def.layers[this.index];
+    return {
+      ...L,
+      index: this.index,
+      total: this.def.layers.length,
+      objectName: this.def.name,
+      hint: L.hint || "",
+    };
   }
 
   _apply() {
     const layers = this.object.userData.layers;
+    // Soften clip as we peel deeper (slight offset so inner faces read clearly)
+    SHARED_CLIP_PLANE.constant = 0.02 + this.index * 0.01;
+
     for (let i = 0; i < layers.length; i++) {
-      const m = layers[i];
-      // Onion peel: hide shells outside current depth
-      m.visible = i >= this.index;
-      if (m.material && m.material.emissive) {
-        if (i === this.index) {
-          m.material.emissive.setHex(0xffd54f);
-          m.material.emissiveIntensity = 0.35;
-          m.material.transparent = true;
-          m.material.opacity = 0.92;
-        } else {
-          m.material.emissive.setHex(0x000000);
-          m.material.emissiveIntensity = 0;
-          m.material.opacity = i === this.index + 1 ? 0.85 : 1;
+      const layer = layers[i];
+      layer.visible = true; // keep cutaway context — fade outers instead of hiding
+      const isActive = i === this.index;
+      const isOuter = i < this.index;
+      const isInner = i > this.index;
+
+      eachMaterial(layer, (m) => {
+        const base = this._baseOpacity.get(m) ?? 1;
+        if (m.emissive) {
+          if (isActive) {
+            m.emissive.setHex(0xffd54f);
+            m.emissiveIntensity = 0.4;
+          } else {
+            m.emissive.setHex(0x000000);
+            m.emissiveIntensity = 0;
+          }
         }
-      }
+        if (isOuter) {
+          // ghost outer shells so the section stack still reads
+          m.transparent = true;
+          m.opacity = Math.min(base, 0.2);
+          m.depthWrite = false;
+        } else if (isActive) {
+          m.transparent = true;
+          m.opacity = Math.min(base, 0.95);
+          m.depthWrite = true;
+        } else if (isInner) {
+          m.transparent = base < 1;
+          m.opacity = i === this.index + 1 ? Math.min(base, 0.85) : base;
+          m.depthWrite = true;
+        }
+      });
     }
   }
 
