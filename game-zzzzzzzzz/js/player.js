@@ -12,6 +12,8 @@ export class Player {
     this.speed = 6.5;
     this.eyeHeight = 1.6;
     this.radius = 0.35;
+    this.floorY = 0;
+    this.getFloorY = null; // set by main: (x,z) => number
     this._onKey = this._onKey.bind(this);
     document.addEventListener("keydown", this._onKey);
     document.addEventListener("keyup", this._onKey);
@@ -52,7 +54,9 @@ export class Player {
   }
 
   setPosition(x, y, z) {
-    this.controls.getObject().position.set(x, y ?? this.eyeHeight, z);
+    const fy = this.getFloorY ? this.getFloorY(x, z) : 0;
+    this.floorY = fy;
+    this.controls.getObject().position.set(x, (y ?? fy + this.eyeHeight), z);
   }
 
   get position() {
@@ -77,10 +81,18 @@ export class Player {
     const before = obj.position.clone();
     this.controls.moveRight(-this.velocity.x * dt);
     this.controls.moveForward(-this.velocity.z * dt);
-    obj.position.y = this.eyeHeight;
+
+    // Multi-floor grounding: sample floor under feet
+    const sampleY = this.getFloorY ? this.getFloorY(obj.position.x, obj.position.z) : 0;
+    // Smooth lightly on stairs so steps don't jitter
+    const targetEye = sampleY + this.eyeHeight;
+    obj.position.y = THREE.MathUtils.lerp(obj.position.y, targetEye, Math.min(1, dt * 14));
+    this.floorY = sampleY;
 
     if (colliders && colliders.length) {
       for (const box of colliders) {
+        // Only collide with wall boxes near our elevation
+        if (obj.position.y + 0.5 < box.min.y || obj.position.y - 1.8 > box.max.y) continue;
         if (this._hits(obj.position, box)) {
           obj.position.x = before.x;
           if (this._hits(obj.position, box)) {
@@ -89,7 +101,8 @@ export class Player {
           }
           if (this._hits(obj.position, box)) {
             obj.position.copy(before);
-            obj.position.y = this.eyeHeight;
+            const fy = this.getFloorY ? this.getFloorY(obj.position.x, obj.position.z) : this.floorY;
+            obj.position.y = fy + this.eyeHeight;
           }
         }
       }

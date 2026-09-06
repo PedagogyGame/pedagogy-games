@@ -34,20 +34,24 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.localClippingEnabled = true;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0908);
-scene.fog = new THREE.FogExp2(0x1a120e, 0.028);
+scene.background = new THREE.Color(0x0a1628);
+scene.fog = new THREE.FogExp2(0x152238, 0.0085);
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 80);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 220);
 const player = new Player(camera, document.body);
-player.setPosition(0, 1.6, 3);
-
-const hemi = new THREE.HemisphereLight(0xffe8d6, 0x1a120e, 0.55);
+const hemi = new THREE.HemisphereLight(0xc5d8f0, 0x1a2a18, 0.55);
 scene.add(hemi);
-const moon = new THREE.DirectionalLight(0xb0c4de, 0.25);
-moon.position.set(-10, 20, 8);
+const moon = new THREE.DirectionalLight(0xd0e4ff, 0.55);
+moon.position.set(-18, 35, 12);
+moon.castShadow = true;
 scene.add(moon);
+const moonFill = new THREE.DirectionalLight(0x6a8caf, 0.18);
+moonFill.position.set(20, 12, -10);
+scene.add(moonFill);
 
 const mansion = new Mansion(scene);
+player.getFloorY = (x, z) => mansion.getFloorY(x, z);
+player.setPosition(0, undefined, 8);
 const inspect = new InspectMode(camera, canvas);
 const slice = new SliceSystem();
 
@@ -171,14 +175,9 @@ function syncSliceUI() {
 }
 
 function currentRoomName(pos) {
-  for (const room of Object.values(ROOMS)) {
-    const [w, , d] = room.size;
-    const [cx, , cz] = room.pos;
-    if (pos.x > cx - w / 2 && pos.x < cx + w / 2 && pos.z > cz - d / 2 && pos.z < cz + d / 2) {
-      return room.name;
-    }
-  }
-  return "Mansion";
+  const room = mansion.getRoomAt(pos.x, pos.y, pos.z);
+  if (room) return `${room.floor} · ${room.name}`;
+  return "Mansion of the Unseen";
 }
 
 function updateHover() {
@@ -205,7 +204,7 @@ function updateHover() {
     promptEl.classList.add("lit");
   } else {
     hoverTarget = null;
-    promptEl.textContent = "Explore the mansion · Walk to a pedestal";
+    promptEl.textContent = "Explore the mansion & gardens · Walk to a curiosity";
     promptEl.classList.remove("lit");
   }
 }
@@ -225,9 +224,12 @@ function tick() {
     player.update(dt, mansion.getColliders());
     updateHover();
     roomBadge.textContent = currentRoomName(player.position);
+    mansion.updateFireflies(t);
   } else if (mode === "inspect") {
     inspect.update();
     slice.update(t);
+  } else {
+    mansion.updateFireflies(t);
   }
   renderer.render(scene, camera);
 }

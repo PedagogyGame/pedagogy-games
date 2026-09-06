@@ -1338,6 +1338,824 @@ function buildGeneric(def) {
   return finish(root, def, layers);
 }
 
+
+/** Concentric sphere onion — used by many organic curios */
+function buildOnionSphere(def, radiiScale = 1) {
+  const root = new THREE.Group();
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    const t = 1 - i / (n + 0.2);
+    const r = (0.18 + t * 0.4) * radiiScale;
+    add(new THREE.Mesh(sph(r, 20, 14), mat(def.layers[i].color, { roughness: 0.5 + (i % 3) * 0.1 })), g);
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildOnionCyl(def, h = 1.0, r0 = 0.32) {
+  const root = new THREE.Group();
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    const t = 1 - i / (n + 0.15);
+    const r = r0 * t;
+    add(new THREE.Mesh(cyl(r, r * 0.98, h * (0.85 + t * 0.15), 22), mat(def.layers[i].color, { roughness: 0.45, metalness: i === 0 ? 0.35 : 0.1 })), g);
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildOnionBox(def, sx = 0.7, sy = 0.5, sz = 0.55) {
+  const root = new THREE.Group();
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    const t = 1 - i / (n + 0.2);
+    add(new THREE.Mesh(box(sx * t, sy * t, sz * t), mat(def.layers[i].color, { roughness: 0.55 })), g);
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildBarnacle(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    add(new THREE.Mesh(cyl(0.35, 0.45, 0.35, 8), mat(c[0], { roughness: 0.9 })), g);
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    add(new THREE.Mesh(cyl(0.22, 0.22, 0.08, 8), mat(c[1], { roughness: 0.7 })), g);
+    g.children[0].position.y = 0.18;
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    add(new THREE.Mesh(cyl(0.28, 0.3, 0.22, 12), mat(c[2], { roughness: 0.6, opacity: 0.7, transparent: true })), g);
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 8; i++) {
+      const leg = new THREE.Mesh(cyl(0.015, 0.008, 0.35, 5), mat(c[3], { roughness: 0.5 }));
+      const a = (i / 8) * Math.PI; // half
+      leg.position.set(Math.cos(a) * 0.08, 0.25, Math.sin(a) * 0.08);
+      leg.rotation.z = 0.4;
+      add(leg, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    add(new THREE.Mesh(sph(0.12, 12, 10, false), mat(c[4], { roughness: 0.55 })), g);
+    g.children[0].position.y = 0.05;
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term);
+    add(new THREE.Mesh(cyl(0.4, 0.42, 0.06, 12), mat(c[5], { roughness: 0.95 })), g);
+    g.children[0].position.y = -0.2;
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildStarfish(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    add(new THREE.Mesh(cyl(0.08, 0.08, 0.04, 10), mat(c[0], { roughness: 0.7 })), g);
+    g.children[0].position.set(0.12, 0.12, 0);
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    add(new THREE.Mesh(cyl(0.03, 0.03, 0.2, 6), mat(c[1], { roughness: 0.5 })), g);
+    g.children[0].rotation.z = Math.PI / 2; g.children[0].position.set(0.05, 0.05, 0);
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    add(new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.035, 8, 20), mat(c[2], { roughness: 0.55 })), g);
+    g.children[0].rotation.x = Math.PI / 2;
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 5; i++) {
+      const arm = new THREE.Mesh(box(0.5, 0.06, 0.12), mat(c[3], { roughness: 0.65 }));
+      const a = (i / 5) * Math.PI * 2;
+      arm.position.set(Math.cos(a) * 0.22, 0, Math.sin(a) * 0.22);
+      arm.rotation.y = -a;
+      add(arm, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI;
+      const b = new THREE.Mesh(sph(0.035, 8, 6, false), mat(c[4], { roughness: 0.4 }));
+      b.position.set(Math.cos(a) * 0.25, -0.05, Math.sin(a) * 0.15);
+      add(b, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI;
+      const f = new THREE.Mesh(cyl(0.02, 0.01, 0.12, 5), mat(c[5], { roughness: 0.5 }));
+      f.position.set(Math.cos(a) * 0.3, -0.1, Math.sin(a) * 0.2);
+      add(f, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildCuttlebone(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); const m = new THREE.Mesh(box(0.9, 0.12, 0.35), mat(c[0], { roughness: 0.85 })); add(m, g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(box(0.75, 0.18, 0.28), mat(c[1], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 6; i++) {
+      const s = new THREE.Mesh(box(0.7, 0.015, 0.25), mat(c[2], { roughness: 0.6 }));
+      s.position.y = -0.08 + i * 0.035;
+      add(s, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(box(0.65, 0.14, 0.22), mat(c[3], { roughness: 0.4, opacity: 0.55, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.03, 0.03, 0.7, 8), mat(c[4], { roughness: 0.45 })), g); g.children[0].rotation.z = Math.PI / 2; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildOyster(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); const sh = new THREE.Mesh(sph(0.45, 20, 12), mat(c[0], { roughness: 0.25, metalness: 0.35 })); sh.scale.set(1.2, 0.35, 1); add(sh, g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); const m = new THREE.Mesh(sph(0.38, 16, 10), mat(c[1], { roughness: 0.6 })); m.scale.set(1.1, 0.3, 0.9); add(m, g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 5; i++) {
+      const gi = new THREE.Mesh(box(0.35, 0.02, 0.08), mat(c[2], { roughness: 0.5 }));
+      gi.position.set(0, -0.02 + i * 0.025, 0.05);
+      add(gi, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.08, 0.08, 0.15, 10), mat(c[3], { roughness: 0.55 })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(box(0.15, 0.04, 0.1), mat(c[4], { roughness: 0.5 })), g); g.children[0].position.set(0.15, 0, 0); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildHoneycomb(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(box(0.05, 0.5, 0.6), mat(c[0], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    for (let row = 0; row < 4; row++) for (let col = 0; col < 3; col++) {
+      const cell = new THREE.Mesh(cyl(0.06, 0.06, 0.12, 6), mat(c[1], { roughness: 0.55 }));
+      cell.position.set(0.08, -0.18 + row * 0.12, -0.2 + col * 0.14 + (row % 2) * 0.07);
+      cell.rotation.z = Math.PI / 2;
+      add(cell, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 4; i++) {
+      const cell = new THREE.Mesh(cyl(0.08, 0.08, 0.12, 6), mat(c[2], { roughness: 0.55 }));
+      cell.position.set(-0.1, -0.1 + i * 0.12, 0.15); cell.rotation.z = Math.PI / 2;
+      add(cell, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(box(0.2, 0.35, 0.25), mat(c[3], { roughness: 0.3, opacity: 0.7, transparent: true })), g); g.children[0].position.x = 0.15; root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 6; i++) {
+      const cap = new THREE.Mesh(cyl(0.05, 0.05, 0.02, 6), mat(c[4], { roughness: 0.4 }));
+      cap.position.set(0.2, -0.15 + i * 0.08, 0); cap.rotation.z = Math.PI / 2;
+      add(cap, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term); add(new THREE.Mesh(sph(0.08, 10, 8, false), mat(c[5], { roughness: 0.6 })), g); g.children[0].position.set(-0.05, 0, -0.1); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildFeather(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.04, 0.03, 0.25, 8), mat(c[0], { roughness: 0.4 })), g); g.children[0].position.y = -0.4; root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.025, 0.02, 0.9, 8), mat(c[1], { roughness: 0.5 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 14; i++) {
+      const barb = new THREE.Mesh(box(0.28, 0.01, 0.02), mat(c[2], { roughness: 0.6 }));
+      barb.position.set(0.12, -0.3 + i * 0.05, 0);
+      add(barb, g);
+      const barb2 = barb.clone(); barb2.position.x = -0.12; add(barb2, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 8; i++) {
+      const b = new THREE.Mesh(box(0.08, 0.005, 0.008), mat(c[3], { roughness: 0.5 }));
+      b.position.set(0.2, -0.2 + i * 0.06, 0.02);
+      add(b, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 6; i++) {
+      const h = new THREE.Mesh(cyl(0.008, 0.004, 0.04, 4), mat(c[4], { roughness: 0.4 }));
+      h.position.set(0.18, -0.15 + i * 0.07, 0);
+      add(h, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term); add(new THREE.Mesh(box(0.5, 0.7, 0.02), mat(c[5], { roughness: 0.55, opacity: 0.5, transparent: true })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildSponge(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    const body = new THREE.Mesh(cyl(0.35, 0.4, 0.7, 10), mat(c[0], { roughness: 0.95 }));
+    add(body, g);
+    for (let i = 0; i < 16; i++) {
+      const pore = new THREE.Mesh(cyl(0.03, 0.03, 0.05, 6), mat(0x402030, { roughness: 0.8 }));
+      const a = (i / 16) * Math.PI;
+      pore.position.set(Math.cos(a) * 0.36, -0.2 + (i % 5) * 0.1, Math.sin(a) * 0.2);
+      pore.rotation.z = Math.PI / 2;
+      add(pore, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.28, 0.3, 0.55, 10), mat(c[1], { roughness: 0.8 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 5; i++) {
+      const ch = new THREE.Mesh(sph(0.08, 10, 8, false), mat(c[2], { roughness: 0.5 }));
+      ch.position.set((i - 2) * 0.08, (i % 2) * 0.1, 0);
+      add(ch, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.15, 0.15, 0.5, 12), mat(c[3], { roughness: 0.4, opacity: 0.5, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.12, 0.14, 0.08, 12), mat(c[4], { roughness: 0.5 })), g); g.children[0].position.y = 0.35; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildFig(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); const m = new THREE.Mesh(sph(0.42, 18, 14), mat(c[0], { roughness: 0.6 })); m.scale.set(0.9, 1.1, 0.9); add(m, g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.06, 0.04, 0.08, 8), mat(c[1], { roughness: 0.5 })), g); g.children[0].position.y = 0.4; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 5; i++) {
+      const br = new THREE.Mesh(box(0.08, 0.02, 0.04), mat(c[2], { roughness: 0.6 }));
+      const a = (i / 5) * Math.PI;
+      br.position.set(Math.cos(a) * 0.05, 0.38, Math.sin(a) * 0.05);
+      add(br, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 12; i++) {
+      const fl = new THREE.Mesh(sph(0.04, 6, 6, false), mat(c[3], { roughness: 0.5 }));
+      fl.position.set((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, Math.random() * 0.15);
+      add(fl, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 8; i++) {
+      const s = new THREE.Mesh(sph(0.025, 6, 5, false), mat(c[4], { roughness: 0.4 }));
+      s.position.set((i % 4 - 1.5) * 0.08, (Math.floor(i / 4) - 0.5) * 0.1, 0.05);
+      add(s, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildArtichoke(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (let i = 0; i < 16; i++) {
+      const br = new THREE.Mesh(box(0.18, 0.35, 0.04), mat(c[0], { roughness: 0.7 }));
+      const a = (i / 16) * Math.PI * 2;
+      br.position.set(Math.cos(a) * 0.28, 0.05, Math.sin(a) * 0.28);
+      br.rotation.y = -a; br.rotation.x = 0.3;
+      add(br, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.22, 0.18, 0.2, 14), mat(c[1], { roughness: 0.55 })), g); g.children[0].position.y = -0.05; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(sph(0.15, 12, 10, false), mat(c[2], { roughness: 0.9 })), g); g.children[0].position.y = 0.12; root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 8; i++) {
+      const fl = new THREE.Mesh(cyl(0.02, 0.01, 0.2, 5), mat(c[3], { roughness: 0.5 }));
+      const a = (i / 8) * Math.PI;
+      fl.position.set(Math.cos(a) * 0.08, 0.25, Math.sin(a) * 0.08);
+      add(fl, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.08, 0.1, 0.35, 10), mat(c[4], { roughness: 0.65 })), g); g.children[0].position.y = -0.35; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildSunflower(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (let i = 0; i < 12; i++) {
+      const br = new THREE.Mesh(box(0.1, 0.2, 0.03), mat(c[0], { roughness: 0.7 }));
+      const a = (i / 12) * Math.PI * 2;
+      br.position.set(Math.cos(a) * 0.4, -0.15, Math.sin(a) * 0.4);
+      br.rotation.y = -a;
+      add(br, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.35, 0.35, 0.08, 20), mat(c[1], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 16; i++) {
+      const ray = new THREE.Mesh(box(0.28, 0.02, 0.1), mat(c[2], { roughness: 0.45 }));
+      const a = (i / 16) * Math.PI * 2;
+      ray.position.set(Math.cos(a) * 0.42, 0.02, Math.sin(a) * 0.42);
+      ray.rotation.y = -a;
+      add(ray, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 30; i++) {
+      const d = new THREE.Mesh(cyl(0.025, 0.025, 0.06, 6), mat(c[3], { roughness: 0.6 }));
+      const a = i * 1.2; const r = 0.05 + (i % 8) * 0.03;
+      d.position.set(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+      add(d, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 20; i++) {
+      const s = new THREE.Mesh(box(0.04, 0.03, 0.02), mat(c[4], { roughness: 0.5 }));
+      const a = i * 0.9; const r = 0.08 + (i % 5) * 0.04;
+      s.position.set(Math.cos(a) * r, 0.06, Math.sin(a) * r);
+      add(s, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildPomegranate(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(sph(0.48, 22, 16), mat(c[0], { roughness: 0.55 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(sph(0.42, 18, 14), mat(c[1], { roughness: 0.85 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Mesh(box(0.02, 0.5, 0.35), mat(c[2], { roughness: 0.6 }));
+      s.rotation.y = (i / 4) * Math.PI;
+      add(s, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(sph(0.28, 14, 10), mat(c[3], { roughness: 0.5, opacity: 0.4, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 18; i++) {
+      const aril = new THREE.Mesh(sph(0.05, 8, 6, false), mat(c[4], { roughness: 0.3 }));
+      const phi = Math.acos(2 * (i / 18) - 1);
+      const th = i * 1.7;
+      aril.position.setFromSphericalCoords(0.22, phi * 0.5, th);
+      add(aril, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildOrange(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(sph(0.5, 24, 16), mat(c[0], { roughness: 0.4 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(sph(0.47, 22, 14), mat(c[1], { roughness: 0.55 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(sph(0.42, 18, 12), mat(c[2], { roughness: 0.9 })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (let i = 0; i < 6; i++) {
+      const w = new THREE.Mesh(box(0.02, 0.55, 0.3), mat(c[3], { roughness: 0.5 }));
+      w.rotation.y = (i / 6) * Math.PI;
+      add(w, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (let i = 0; i < 16; i++) {
+      const v = new THREE.Mesh(sph(0.06, 8, 6, false), mat(c[4], { roughness: 0.25, opacity: 0.8, transparent: true }));
+      const a = (i / 16) * Math.PI; const r = 0.15 + (i % 3) * 0.05;
+      v.position.set(Math.cos(a) * r, (i % 5 - 2) * 0.06, Math.sin(a) * r * 0.5);
+      add(v, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term);
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Mesh(sph(0.04, 8, 6, false), mat(c[5], { roughness: 0.5 }));
+      s.position.set((i - 1.5) * 0.06, 0, 0.05);
+      add(s, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildCoffee(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); const m = new THREE.Mesh(sph(0.4, 18, 14), mat(c[0], { roughness: 0.5 })); m.scale.set(0.85, 1, 0.85); add(m, g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(sph(0.34, 16, 12), mat(c[1], { roughness: 0.6 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(sph(0.28, 14, 10), mat(c[2], { roughness: 0.3, opacity: 0.6, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(sph(0.2, 12, 10), mat(c[3], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(sph(0.16, 12, 10), mat(c[4], { roughness: 0.4, metalness: 0.2 })), g); root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term); const bean = new THREE.Mesh(sph(0.12, 12, 10, false), mat(c[5], { roughness: 0.55 })); bean.scale.set(0.7, 1, 0.5); add(bean, g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildPineapple(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (let i = 0; i < 8; i++) {
+      const leaf = new THREE.Mesh(box(0.06, 0.4, 0.02), mat(c[0], { roughness: 0.6 }));
+      const a = (i / 8) * Math.PI * 2;
+      leaf.position.set(Math.cos(a) * 0.08, 0.55, Math.sin(a) * 0.08);
+      leaf.rotation.z = Math.cos(a) * 0.3; leaf.rotation.x = Math.sin(a) * 0.3;
+      add(leaf, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    const body = new THREE.Mesh(cyl(0.32, 0.28, 0.7, 10), mat(c[1], { roughness: 0.75 }));
+    add(body, g);
+    for (let i = 0; i < 20; i++) {
+      const eye = new THREE.Mesh(box(0.08, 0.08, 0.02), mat(c[1], { roughness: 0.8 }));
+      const a = (i / 10) * Math.PI; const y = -0.25 + (i % 5) * 0.12;
+      eye.position.set(Math.cos(a) * 0.32, y, Math.sin(a) * 0.15);
+      add(eye, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.26, 0.22, 0.6, 12), mat(c[2], { roughness: 0.55 })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.18, 0.16, 0.5, 10), mat(c[3], { roughness: 0.5, opacity: 0.5, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.08, 0.08, 0.65, 10), mat(c[4], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildBinoculars(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (const x of [-0.18, 0.18]) {
+      const o = new THREE.Mesh(cyl(0.12, 0.12, 0.15, 14), mat(c[0], { roughness: 0.3, metalness: 0.4 }));
+      o.rotation.z = Math.PI / 2; o.position.set(x, 0, 0.25);
+      add(o, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    for (const x of [-0.18, 0.18]) {
+      const p = new THREE.Mesh(box(0.14, 0.14, 0.2), mat(c[1], { roughness: 0.2, metalness: 0.3, opacity: 0.7, transparent: true }));
+      p.position.set(x, 0, 0);
+      add(p, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (const x of [-0.18, 0.18]) {
+      const e = new THREE.Mesh(cyl(0.08, 0.08, 0.12, 12), mat(c[2], { roughness: 0.35, metalness: 0.4 }));
+      e.rotation.z = Math.PI / 2; e.position.set(x, 0, -0.25);
+      add(e, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.06, 0.06, 0.08, 12), mat(c[3], { roughness: 0.4 })), g); g.children[0].position.y = 0.12; root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(box(0.36, 0.06, 0.08), mat(c[4], { roughness: 0.5, metalness: 0.5 })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildReel(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.28, 0.28, 0.2, 20), mat(c[0], { metalness: 0.6, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); const bail = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.015, 6, 20, Math.PI), mat(c[1], { metalness: 0.7, roughness: 0.3 })); bail.rotation.x = Math.PI / 2; add(bail, g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 4; i++) {
+      const w = new THREE.Mesh(cyl(0.1, 0.1, 0.02, 12), mat(c[2], { roughness: 0.5 }));
+      w.position.y = -0.05 + i * 0.03;
+      add(w, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.05, 0.05, 0.08, 10), mat(c[3], { metalness: 0.5, roughness: 0.4 })), g); g.children[0].position.set(0.15, 0, 0); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.12, 0.12, 0.04, 16), mat(c[4], { metalness: 0.55, roughness: 0.4 })), g); g.children[0].position.set(0.15, 0, 0); g.children[0].rotation.z = Math.PI / 2; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildGyroscope(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 10, 24), mat(c[0], { metalness: 0.6, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    const gim1 = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.025, 8, 24), mat(c[1], { metalness: 0.5, roughness: 0.4 }));
+    const gim2 = gim1.clone(); gim2.rotation.y = Math.PI / 2;
+    add(gim1, g); add(gim2, g);
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.08, 0.12, 0.15, 10), mat(c[2], { roughness: 0.5 })), g); g.children[0].position.y = -0.4; root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (const y of [-0.25, 0.25]) {
+      const b = new THREE.Mesh(sph(0.04, 8, 6, false), mat(c[3], { metalness: 0.6, roughness: 0.3 }));
+      b.position.y = y; add(b, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.02, 0.02, 0.7, 8), mat(c[4], { metalness: 0.7, roughness: 0.3 })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildEtch(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(box(0.7, 0.55, 0.04), mat(c[0], { roughness: 0.15, opacity: 0.45, transparent: true, metalness: 0.1 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(box(0.68, 0.52, 0.02), mat(c[1], { roughness: 0.4, metalness: 0.6 })), g); g.children[0].position.z = -0.02; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.02, 0.02, 0.08, 6), mat(c[2], { roughness: 0.4 })), g); g.children[0].position.set(0.1, 0.05, -0.05); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    add(new THREE.Mesh(box(0.65, 0.02, 0.02), mat(c[3], { metalness: 0.5, roughness: 0.4 })), g);
+    add(new THREE.Mesh(box(0.02, 0.5, 0.02), mat(c[3], { metalness: 0.5, roughness: 0.4 })), g);
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term);
+    for (const y of [-0.15, 0.15]) {
+      const cable = new THREE.Mesh(cyl(0.008, 0.008, 0.5, 5), mat(c[4], { roughness: 0.6 }));
+      cable.rotation.z = Math.PI / 2; cable.position.y = y; cable.position.z = -0.06;
+      add(cable, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term);
+    for (const x of [-0.25, 0.25]) {
+      const knob = new THREE.Mesh(cyl(0.08, 0.08, 0.06, 12), mat(c[5], { roughness: 0.4 }));
+      knob.position.set(x, -0.38, 0);
+      add(knob, g);
+    }
+    // red frame
+    const frame = new THREE.Mesh(box(0.8, 0.7, 0.08), mat(0xc04040, { roughness: 0.5 }));
+    frame.position.z = -0.08;
+    add(frame, g);
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildNerf(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.12, 0.12, 0.45, 12), mat(c[0], { roughness: 0.5 })), g); g.children[0].rotation.z = Math.PI / 2; root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.05, 0.05, 0.35, 10), mat(c[1], { metalness: 0.5, roughness: 0.35 })), g); g.children[0].rotation.z = Math.PI / 2; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(box(0.08, 0.1, 0.06), mat(c[2], { roughness: 0.45 })), g); g.children[0].position.set(-0.05, -0.12, 0); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.04, 0.03, 0.08, 8), mat(c[3], { roughness: 0.5 })), g); g.children[0].rotation.z = Math.PI / 2; g.children[0].position.x = 0.15; root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.07, 0.07, 0.5, 12), mat(c[4], { roughness: 0.45 })), g); g.children[0].rotation.z = Math.PI / 2; g.children[0].position.x = 0.35; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildBattery9v(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(box(0.35, 0.55, 0.2), mat(c[0], { metalness: 0.4, roughness: 0.4 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    for (let i = 0; i < 6; i++) {
+      const cell = new THREE.Mesh(cyl(0.04, 0.04, 0.4, 8), mat(c[1], { roughness: 0.5 }));
+      cell.position.set(-0.1 + (i % 3) * 0.1, 0, -0.04 + Math.floor(i / 3) * 0.08);
+      add(cell, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.035, 0.035, 0.38, 8), mat(c[2], { metalness: 0.5, roughness: 0.4 })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.03, 0.03, 0.3, 8), mat(c[3], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.025, 0.025, 0.28, 8), mat(c[4], { roughness: 0.6 })), g); root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term); add(new THREE.Mesh(cyl(0.018, 0.018, 0.25, 8), mat(c[5], { roughness: 0.5 })), g); root.add(g); layers.push(g); }
+  { const g = L(6, def.layers[6].term);
+    const t1 = new THREE.Mesh(cyl(0.04, 0.04, 0.04, 8), mat(c[6], { metalness: 0.8, roughness: 0.3 }));
+    t1.position.set(-0.06, 0.3, 0);
+    const t2 = new THREE.Mesh(box(0.06, 0.04, 0.06), mat(c[6], { metalness: 0.8, roughness: 0.3 }));
+    t2.position.set(0.06, 0.3, 0);
+    add(t1, g); add(t2, g);
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildGlowstick(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.08, 0.08, 1.0, 14), mat(c[0], { roughness: 0.3, opacity: 0.55, transparent: true, emissive: c[0], emissiveIntensity: 0.25 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.035, 0.035, 0.7, 10), mat(c[1], { roughness: 0.15, opacity: 0.5, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.028, 0.028, 0.6, 8), mat(c[2], { roughness: 0.2, opacity: 0.6, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.06, 0.06, 0.9, 12), mat(c[3], { roughness: 0.3, opacity: 0.4, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.05, 0.05, 0.85, 12), mat(c[4], { roughness: 0.3, emissive: c[4], emissiveIntensity: 0.4 })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildThermos(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.28, 0.28, 0.9, 20), mat(c[0], { metalness: 0.55, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.24, 0.24, 0.85, 18), mat(c[1], { roughness: 0.2, opacity: 0.25, transparent: true })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.22, 0.22, 0.8, 18), mat(c[2], { metalness: 0.9, roughness: 0.15 })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.2, 0.2, 0.75, 16), mat(c[3], { metalness: 0.5, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.18, 0.2, 0.15, 14), mat(c[4], { roughness: 0.6 })), g); g.children[0].position.y = 0.5; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildHdd(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (let i = 0; i < 3; i++) {
+      const p = new THREE.Mesh(cyl(0.35, 0.35, 0.02, 28), mat(c[0], { metalness: 0.7, roughness: 0.25 }));
+      p.position.y = -0.06 + i * 0.06;
+      add(p, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.05, 0.05, 0.2, 10), mat(c[1], { metalness: 0.6, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(box(0.45, 0.04, 0.08), mat(c[2], { metalness: 0.5, roughness: 0.4 })), g); g.children[0].position.set(0.15, 0.08, 0); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(box(0.08, 0.02, 0.06), mat(c[3], { metalness: 0.6, roughness: 0.3 })), g); g.children[0].position.set(0.32, 0.08, 0); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.06, 0.06, 0.04, 12), mat(c[4], { metalness: 0.5, roughness: 0.4 })), g); g.children[0].position.set(-0.05, 0.1, 0); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildOilfilter(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.28, 0.28, 0.7, 20), mat(c[0], { metalness: 0.65, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term);
+    for (let i = 0; i < 12; i++) {
+      const pleat = new THREE.Mesh(box(0.02, 0.55, 0.18), mat(c[1], { roughness: 0.8 }));
+      const a = (i / 12) * Math.PI;
+      pleat.position.set(Math.cos(a) * 0.18, 0, Math.sin(a) * 0.1);
+      pleat.rotation.y = -a;
+      add(pleat, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.08, 0.08, 0.6, 12), mat(c[2], { metalness: 0.5, roughness: 0.4 })), g); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(cyl(0.2, 0.2, 0.04, 16), mat(c[3], { roughness: 0.7 })), g); g.children[0].position.y = 0.28; root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.06, 0.06, 0.08, 10), mat(c[4], { roughness: 0.5 })), g); g.children[0].position.y = -0.3; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildPolaroid(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    const t = 1 - i * 0.02;
+    add(new THREE.Mesh(box(0.55 * t, 0.65 * t, 0.025), mat(c[i], { roughness: 0.4 + (i % 3) * 0.1, metalness: i === 3 ? 0.4 : 0.05 })), g);
+    g.children[0].position.z = -i * 0.02;
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildTetrapak(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    const shrink = 1 - i * 0.04;
+    add(new THREE.Mesh(box(0.4 * shrink, 0.7 * shrink, 0.25 * shrink), mat(c[i], { roughness: i === 3 ? 0.2 : 0.65, metalness: i === 3 ? 0.7 : 0.05 })), g);
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildDeck(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  const n = def.layers.length;
+  for (let i = 0; i < n; i++) {
+    const g = L(i, def.layers[i].term);
+    add(new THREE.Mesh(box(0.9, 0.035, 0.28), mat(c[i], { roughness: 0.7 })), g);
+    g.children[0].position.y = 0.12 - i * 0.035;
+    root.add(g); layers.push(g);
+  }
+  return finish(root, def, layers);
+}
+
+function buildValve(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.14, 0.14, 0.55, 16), mat(c[0], { metalness: 0.7, roughness: 0.3 })), g); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.11, 0.11, 0.5, 14), mat(c[1], { metalness: 0.65, roughness: 0.32 })), g); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (const y of [-0.12, 0.05, 0.2]) {
+      const p = new THREE.Mesh(cyl(0.05, 0.05, 0.06, 10), mat(c[2], { roughness: 0.4 }));
+      p.rotation.z = Math.PI / 2; p.position.y = y;
+      add(p, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term);
+    for (const y of [-0.25, 0.28]) {
+      const f = new THREE.Mesh(cyl(0.12, 0.12, 0.03, 12), mat(c[3], { roughness: 0.85 }));
+      f.position.y = y; add(f, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.04, 0.04, 0.3, 10), mat(c[4], { metalness: 0.5, roughness: 0.35 })), g); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildSpeaker(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(cyl(0.35, 0.35, 0.2, 20), mat(c[0], { metalness: 0.4, roughness: 0.5 })), g); g.children[0].position.z = -0.2; g.children[0].rotation.x = Math.PI / 2; root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(cyl(0.12, 0.18, 0.15, 14), mat(c[1], { metalness: 0.6, roughness: 0.35 })), g); g.children[0].rotation.x = Math.PI / 2; g.children[0].position.z = -0.1; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(cyl(0.08, 0.08, 0.12, 12), mat(c[2], { metalness: 0.5, roughness: 0.4 })), g); g.children[0].rotation.x = Math.PI / 2; root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 8, 20), mat(c[3], { roughness: 0.7 })), g); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); const cone = new THREE.Mesh(cyl(0.4, 0.1, 0.25, 20), mat(c[4], { roughness: 0.65 })); cone.rotation.x = Math.PI / 2; cone.position.z = 0.15; add(cone, g); root.add(g); layers.push(g); }
+  { const g = L(5, def.layers[5].term); add(new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.04, 8, 24), mat(c[5], { roughness: 0.8 })), g); g.children[0].position.z = 0.25; root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildRecorder(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term); add(new THREE.Mesh(box(0.12, 0.1, 0.18), mat(c[0], { roughness: 0.65 })), g); g.children[0].position.set(0, 0.35, 0); root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(box(0.08, 0.04, 0.2), mat(c[1], { roughness: 0.5 })), g); g.children[0].position.set(0, 0.38, 0.05); root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term); add(new THREE.Mesh(box(0.1, 0.02, 0.08), mat(c[2], { roughness: 0.45 })), g); g.children[0].position.set(0, 0.32, 0.12); root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(box(0.1, 0.08, 0.02), mat(c[3], { roughness: 0.5 })), g); g.children[0].position.set(0, 0.28, 0.14); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(cyl(0.07, 0.06, 0.9, 14), mat(c[4], { roughness: 0.6 })), g); g.children[0].position.y = -0.15;
+    for (let i = 0; i < 6; i++) {
+      const hole = new THREE.Mesh(cyl(0.02, 0.02, 0.03, 8), mat(0x202020, { roughness: 0.8 }));
+      hole.rotation.z = Math.PI / 2; hole.position.set(0.07, 0.1 - i * 0.08, 0);
+      add(hole, g);
+    }
+    root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+function buildReedblock(def) {
+  const root = new THREE.Group();
+  const c = colors(def);
+  const layers = [];
+  { const g = L(0, def.layers[0].term);
+    for (let i = 0; i < 5; i++) {
+      const fold = new THREE.Mesh(box(0.5, 0.08, 0.35), mat(c[0], { roughness: 0.7 }));
+      fold.position.y = -0.2 + i * 0.1;
+      add(fold, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(1, def.layers[1].term); add(new THREE.Mesh(box(0.4, 0.25, 0.2), mat(c[1], { roughness: 0.65 })), g); g.children[0].position.y = 0.25; root.add(g); layers.push(g); }
+  { const g = L(2, def.layers[2].term);
+    for (let i = 0; i < 6; i++) {
+      const reed = new THREE.Mesh(box(0.12, 0.01, 0.03), mat(c[2], { metalness: 0.6, roughness: 0.35 }));
+      reed.position.set(-0.12 + i * 0.05, 0.28, 0.05);
+      add(reed, g);
+    }
+    root.add(g); layers.push(g); }
+  { const g = L(3, def.layers[3].term); add(new THREE.Mesh(box(0.15, 0.04, 0.08), mat(c[3], { roughness: 0.55 })), g); g.children[0].position.set(0, 0.35, -0.05); root.add(g); layers.push(g); }
+  { const g = L(4, def.layers[4].term); add(new THREE.Mesh(box(0.12, 0.02, 0.06), mat(c[4], { roughness: 0.85 })), g); g.children[0].position.set(0, 0.32, -0.08); root.add(g); layers.push(g); }
+  return finish(root, def, layers);
+}
+
+
+// ── Auto-added builders for estate expansion ──
+function build_thunderegg(def) { return buildOnionSphere(def, 1.0); }
+function build_ammonite(def) { return buildOnionSphere(def, 1.0); }
+function build_oak_gall(def) { return buildOnionSphere(def, 1.0); }
+function build_mermaid_purse(def) { return buildOnionBox(def, 0.7, 0.5, 0.55); }
+function build_coral_colony(def) { return buildOnionSphere(def, 1.0); }
+function build_abalone(def) { return buildOnionSphere(def, 1.0); }
+function build_pearl(def) { return buildOnionSphere(def, 1.0); }
+function build_tree_cookie(def) { return buildOnionBox(def, 0.9, 0.15, 0.9); }
+function build_papaya(def) { return buildOnionSphere(def, 1.0); }
+function build_kiwi(def) { return buildOnionSphere(def, 1.0); }
+function build_tomato(def) { return buildOnionSphere(def, 1.0); }
+function build_avocado(def) { return buildOnionSphere(def, 1.0); }
+function build_cacao_pod(def) { return buildOnionSphere(def, 1.0); }
+function build_walnut_husk(def) { return buildOnionSphere(def, 1.0); }
+function build_passion_fruit(def) { return buildOnionSphere(def, 1.0); }
+function build_lotus_pod(def) { return buildOnionSphere(def, 1.0); }
+function build_aloe_leaf(def) { return buildOnionCyl(def, 1.2, 0.2); }
+function build_carrot(def) { return buildOnionCyl(def, 1.1, 0.18); }
+function build_grape(def) { return buildOnionSphere(def, 1.0); }
+function build_cow_eye(def) { return buildOnionSphere(def, 1.0); }
+function build_tooth_model(def) { return buildOnionCyl(def, 0.9, 0.2); }
+function build_long_bone(def) { return buildOnionCyl(def, 1.2, 0.16); }
+function build_artery_model(def) { return buildOnionCyl(def, 1.0, 0.25); }
+function build_croissant(def) { return buildOnionBox(def, 0.7, 0.3, 0.45); }
+function build_mm_candy(def) { return buildOnionSphere(def, 1.0); }
+function build_baklava(def) { return buildOnionBox(def, 0.7, 0.5, 0.55); }
+function build_kitkat(def) { return buildOnionBox(def, 0.7, 0.25, 0.35); }
+function build_formica_sample(def) { return buildOnionBox(def, 0.8, 0.08, 0.55); }
+function build_mlcc_chip(def) { return buildOnionBox(def, 0.4, 0.2, 0.3); }
+function build_color_film(def) { return buildOnionBox(def, 0.7, 0.5, 0.55); }
+function build_coax_cable(def) { return buildOnionCyl(def, 1.0, 0.22); }
+function build_golf_ball_5piece(def) { return buildOnionSphere(def, 1.0); }
+function build_fountain_pen(def) { return buildOnionCyl(def, 1.15, 0.1); }
+function build_sewing_machine(def) { return buildOnionBox(def, 0.8, 0.55, 0.5); }
+function build_combination_lock(def) { return buildOnionBox(def, 0.7, 0.5, 0.55); }
+function build_walkman(def) { return buildOnionBox(def, 0.7, 0.5, 0.55); }
+function build_clarinet(def) { return buildOnionCyl(def, 1.3, 0.12); }
+function build_acoustic_guitar(def) { return buildOnionBox(def, 0.45, 1.1, 0.2); }
+function build_tape_measure(def) { return buildOnionCyl(def, 0.55, 0.32); }
+function build_slr_camera(def) { return buildOnionBox(def, 0.7, 0.45, 0.4); }
+function build_super_soaker(def) { return buildOnionCyl(def, 1.1, 0.22); }
+function build_credit_card(def) { return buildOnionBox(def, 0.85, 0.06, 0.55); }
+function build_solar_cell(def) { return buildOnionBox(def, 0.8, 0.08, 0.6); }
+
+
 const BUILDERS = {
   alkaline_aa: buildAlkalineAA,
   baseball: buildBaseball,
@@ -1360,6 +2178,80 @@ const BUILDERS = {
   spark_plug: buildSparkPlug,
   venus_flytrap: buildVenusFlytrap,
   violin: buildViolin,
+  barnacle: buildBarnacle,
+  starfish: buildStarfish,
+  cuttlebone: buildCuttlebone,
+  oyster: buildOyster,
+  honeycomb: buildHoneycomb,
+  feather: buildFeather,
+  sponge: buildSponge,
+  fig: buildFig,
+  artichoke: buildArtichoke,
+  sunflower_head: buildSunflower,
+  pomegranate: buildPomegranate,
+  orange: buildOrange,
+  coffee_cherry: buildCoffee,
+  pineapple: buildPineapple,
+  binoculars: buildBinoculars,
+  spinning_reel: buildReel,
+  gyroscope: buildGyroscope,
+  etch_a_sketch: buildEtch,
+  nerf_blaster: buildNerf,
+  battery_9v: buildBattery9v,
+  glow_stick: buildGlowstick,
+  thermos: buildThermos,
+  hard_drive: buildHdd,
+  oil_filter: buildOilfilter,
+  polaroid_film: buildPolaroid,
+  tetra_pak: buildTetrapak,
+  skateboard_deck: buildDeck,
+  trumpet_valve: buildValve,
+  speaker_driver: buildSpeaker,
+  recorder: buildRecorder,
+  accordion_reed: buildReedblock,
+thunderegg: build_thunderegg,
+  ammonite: build_ammonite,
+  oak_gall: build_oak_gall,
+  mermaid_purse: build_mermaid_purse,
+  coral_colony: build_coral_colony,
+  abalone: build_abalone,
+  pearl: build_pearl,
+  tree_cookie: build_tree_cookie,
+  papaya: build_papaya,
+  kiwi: build_kiwi,
+  tomato: build_tomato,
+  avocado: build_avocado,
+  cacao_pod: build_cacao_pod,
+  walnut_husk: build_walnut_husk,
+  passion_fruit: build_passion_fruit,
+  lotus_pod: build_lotus_pod,
+  aloe_leaf: build_aloe_leaf,
+  carrot: build_carrot,
+  grape: build_grape,
+  cow_eye: build_cow_eye,
+  tooth_model: build_tooth_model,
+  long_bone: build_long_bone,
+  artery_model: build_artery_model,
+  croissant: build_croissant,
+  mm_candy: build_mm_candy,
+  baklava: build_baklava,
+  kitkat: build_kitkat,
+  formica_sample: build_formica_sample,
+  mlcc_chip: build_mlcc_chip,
+  color_film: build_color_film,
+  coax_cable: build_coax_cable,
+  golf_ball_5piece: build_golf_ball_5piece,
+  fountain_pen: build_fountain_pen,
+  sewing_machine: build_sewing_machine,
+  combination_lock: build_combination_lock,
+  walkman: build_walkman,
+  clarinet: build_clarinet,
+  acoustic_guitar: build_acoustic_guitar,
+  tape_measure: build_tape_measure,
+  slr_camera: build_slr_camera,
+  super_soaker: build_super_soaker,
+  credit_card: build_credit_card,
+  solar_cell: build_solar_cell,
 };
 
 export function buildLayerShells(def) {
