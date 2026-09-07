@@ -1,16 +1,21 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+/**
+ * Inspect orbit — soft ease into framing, calm damping for leisurely look-around.
+ */
 export class InspectMode {
   constructor(camera, domElement) {
     this.camera = camera;
     this.controls = new OrbitControls(camera, domElement);
     this.controls.enabled = false;
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
+    this.controls.dampingFactor = 0.1;
     this.controls.minDistance = 0.6;
     this.controls.maxDistance = 8;
     this.controls.enablePan = false;
+    this.controls.rotateSpeed = 0.72;
+    this.controls.zoomSpeed = 0.85;
     this.active = false;
     this.targetObject = null;
     this._savedPos = new THREE.Vector3();
@@ -20,6 +25,12 @@ export class InspectMode {
     this._box = new THREE.Box3();
     this._size = new THREE.Vector3();
     this._center = new THREE.Vector3();
+    this._easeFrom = new THREE.Vector3();
+    this._easeTo = new THREE.Vector3();
+    this._easeTargetFrom = new THREE.Vector3();
+    this._easeTargetTo = new THREE.Vector3();
+    this._easeT = 1;
+    this._easeDur = 0.48;
   }
 
   enter(object3d, scene) {
@@ -33,18 +44,21 @@ export class InspectMode {
     const radius = Math.max(this._size.length() * 0.5, 0.35);
     const fitDist = Math.max(radius / Math.sin((this.camera.fov * Math.PI) / 360) * 0.55, 1.2);
 
-    this.controls.target.copy(this._center);
-    this.camera.position.set(
+    this._easeFrom.copy(this.camera.position);
+    this._easeTargetFrom.copy(this.controls.target);
+    this._easeTargetTo.copy(this._center);
+    this._easeTo.set(
       this._center.x + fitDist * 0.72,
       this._center.y + fitDist * 0.38,
       this._center.z + fitDist * 0.72
     );
-    this.camera.lookAt(this._center);
+    this._easeT = 0;
+
+    this.controls.target.copy(this._center);
     this.controls.minDistance = Math.max(radius * 0.9, 0.5);
     this.controls.maxDistance = Math.max(fitDist * 2.8, 4);
     this.controls.enabled = true;
     this.active = true;
-    this.controls.update();
 
     if (scene) this._addLights(scene, this._center, radius);
   }
@@ -76,12 +90,25 @@ export class InspectMode {
     this.controls.enabled = false;
     this.active = false;
     this.targetObject = null;
+    this._easeT = 1;
     this.camera.position.copy(this._savedPos);
     this.camera.quaternion.copy(this._savedQuat);
     if (scene) this._removeLights(scene);
   }
 
-  update() {
-    if (this.active) this.controls.update();
+  update(dt = 1 / 60) {
+    if (!this.active) return;
+    if (this._easeT < 1) {
+      this._easeT = Math.min(1, this._easeT + dt / this._easeDur);
+      // Smoothstep ease-in-out for a tangible settle into orbit
+      const u = this._easeT;
+      const s = u * u * (3 - 2 * u);
+      this.camera.position.lerpVectors(this._easeFrom, this._easeTo, s);
+      this.controls.target.lerpVectors(this._easeTargetFrom, this._easeTargetTo, s);
+      this.camera.lookAt(this.controls.target);
+      this.controls.update();
+      return;
+    }
+    this.controls.update();
   }
 }

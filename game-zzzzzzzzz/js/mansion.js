@@ -37,6 +37,13 @@ export class Mansion {
     });
   }
 
+  /** MeshStandardMaterial that omits null/undefined map (never pass map: null). */
+  _stdMat(opts) {
+    const o = { ...opts };
+    if (o.map == null) delete o.map;
+    return new THREE.MeshStandardMaterial(o);
+  }
+
   _makeCanvas(w, h) {
     if (typeof document !== "undefined" && document.createElement) {
       const c = document.createElement("canvas");
@@ -308,7 +315,7 @@ export class Mansion {
     if (!tex) return this._mat(hex, rough, metal);
     const t = tex.clone();
     t.repeat.set(2.2, 2.2);
-    return new THREE.MeshStandardMaterial({
+    return this._stdMat({
       map: t, color: 0xffffff, roughness: rough, metalness: metal,
     });
   }
@@ -317,7 +324,7 @@ export class Mansion {
     const tex = this._plankTex(hex);
     if (!tex) return this._mat(hex, rough, 0.04);
     tex.repeat.set(4, 4);
-    return new THREE.MeshStandardMaterial({
+    return this._stdMat({
       map: tex, color: 0xffffff, roughness: rough, metalness: 0.04,
     });
   }
@@ -480,7 +487,7 @@ export class Mansion {
     // House center ~ (0,0,-8), extends roughly x±24, z from -40 to +14
     const stoneTex = this._stoneTex();
     const stone = stoneTex
-      ? new THREE.MeshStandardMaterial({
+      ? this._stdMat({
           map: (() => { const t = stoneTex.clone(); t.repeat.set(3, 4); return t; })(),
           color: 0xffffff, roughness: 0.88, metalness: 0.06,
         })
@@ -1071,8 +1078,9 @@ export class Mansion {
     if (w > 5 && d > 5) {
       const rw = Math.min(w * 0.48, 9);
       const rd = Math.min(d * 0.42, 7);
-      const rugMat = new THREE.MeshStandardMaterial({
-        map: this._rugTex(p.trim, p.wall) || null,
+      const rugTex = this._rugTex(p.trim, p.wall);
+      const rugMat = this._stdMat({
+        ...(rugTex ? { map: rugTex } : { color: p.trim || 0x6d4c41 }),
         roughness: 0.95,
         metalness: 0.02,
       });
@@ -1251,7 +1259,7 @@ export class Mansion {
     const [cx, cy, cz] = room.pos;
     const tex = this._wallpaperTex(p.wall, p.trim);
     if (!tex) return;
-    const mat = new THREE.MeshStandardMaterial({
+    const mat = this._stdMat({
       map: (() => { const t = tex.clone(); t.repeat.set(3, 2); return t; })(),
       color: 0xffffff, roughness: 0.86, metalness: 0.02,
     });
@@ -1277,9 +1285,8 @@ export class Mansion {
     const [cx, cy, cz] = room.pos;
     if (w < 6 || d < 6) return;
     const tex = this._medallionTex(p.trim);
-    const mat = new THREE.MeshStandardMaterial({
-      map: tex || undefined,
-      color: tex ? 0xffffff : p.trim,
+    const mat = this._stdMat({
+      ...(tex ? { map: tex, color: 0xffffff } : { color: p.trim }),
       roughness: 0.45, metalness: 0.35,
     });
     const r = Math.min(1.1, Math.min(w, d) * 0.12);
@@ -2374,8 +2381,9 @@ export class Mansion {
     // Abstract art paintings with CanvasTexture gradients
     for (let i = 0; i < 3; i++) {
       const seed = (room.id.charCodeAt(0) + i * 3) % 6;
-      const artMat = new THREE.MeshStandardMaterial({
-        map: this._artTex(seed) || undefined,
+      const artTex = this._artTex(seed);
+      const artMat = this._stdMat({
+        ...(artTex ? { map: artTex } : { color: 0x5d4037 }),
         roughness: 0.65,
         metalness: 0.05,
       });

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { SHARED_CLIP_PLANE, isConcentricDef } from "./meshes.js";
 
-const TRANSITION_MS = 180;
+const TRANSITION_MS = 280;
 const PEEL_OUTER = 0.16;
 const GHOST_OUTER = 0.15;
 const SECTION_OUTER = 0.06;
@@ -324,7 +324,7 @@ export class SliceSystem {
       // Section: hide outer shells (cut faces remain); peel/ghost keep ghosts
       layer.visible = !(mode === "section" && isOuter);
 
-      this._layerScaleTarget.set(layer, isActive ? baseS * 1.02 : baseS);
+      this._layerScaleTarget.set(layer, isActive ? baseS * 1.035 : baseS);
 
       // Exploded offset along local +X for outer parts when peeling non-concentric
       let ox = 0;
@@ -353,7 +353,7 @@ export class SliceSystem {
             depthWrite = false;
           } else if (isActive) {
             opacity = Math.min(base, 0.95);
-            emissiveIntensity = 0.45;
+            emissiveIntensity = 0.52;
           } else if (isInner) {
             opacity = i === this.index + 1 ? Math.min(base, 0.85) : base;
           }
@@ -364,7 +364,7 @@ export class SliceSystem {
             depthWrite = false;
           } else if (isActive) {
             opacity = Math.min(base, 0.98);
-            emissiveIntensity = 0.5;
+            emissiveIntensity = 0.58;
             wireframe = false;
           } else {
             opacity = base;
@@ -377,7 +377,7 @@ export class SliceSystem {
             depthWrite = false;
           } else if (isActive) {
             opacity = Math.min(base, 1);
-            emissiveIntensity = 0.55;
+            emissiveIntensity = 0.62;
           } else {
             opacity = base;
           }

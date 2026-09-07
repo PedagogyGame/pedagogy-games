@@ -15,52 +15,52 @@ export const VEHICLE_PRESETS = {
   car: {
     id: "car",
     label: "Car",
-    blurb: "Balanced · precise",
-    maxSpeed: 1.85,
-    boostMax: 2.55,
-    accel: 8.2,
-    brake: 16,
-    friction: 7.2,
-    steerRate: 6.4,
+    blurb: "Balanced · precise tour",
+    maxSpeed: 1.72,
+    boostMax: 2.4,
+    accel: 7.2,
+    brake: 15,
+    friction: 7.6,
+    steerRate: 5.4,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
   suv: {
     id: "suv",
     label: "SUV",
-    blurb: "Taller · stabler",
-    maxSpeed: 1.65,
-    boostMax: 2.25,
-    accel: 7.0,
-    brake: 15,
-    friction: 8.0,
-    steerRate: 5.2,
+    blurb: "Taller · calm cruise",
+    maxSpeed: 1.55,
+    boostMax: 2.15,
+    accel: 6.2,
+    brake: 14.5,
+    friction: 8.4,
+    steerRate: 4.5,
     bodyColor: 0x1565c0,
     accent: 0xeceff1,
   },
   jeep: {
     id: "jeep",
     label: "Jeep",
-    blurb: "Chunky · grippy",
-    maxSpeed: 1.55,
-    boostMax: 2.15,
-    accel: 7.4,
-    brake: 17,
-    friction: 9.0,
-    steerRate: 5.6,
+    blurb: "Chunky · grippy stroll",
+    maxSpeed: 1.48,
+    boostMax: 2.05,
+    accel: 6.6,
+    brake: 16,
+    friction: 9.2,
+    steerRate: 4.8,
     bodyColor: 0x2e7d32,
     accent: 0xfff59d,
   },
   convertible: {
     id: "convertible",
     label: "Convertible",
-    blurb: "Open-top · quick steer",
-    maxSpeed: 1.95,
-    boostMax: 2.7,
-    accel: 8.8,
-    brake: 15,
-    friction: 6.6,
-    steerRate: 7.6,
+    blurb: "Open-top · nimble look",
+    maxSpeed: 1.82,
+    boostMax: 2.55,
+    accel: 7.6,
+    brake: 14.5,
+    friction: 7.0,
+    steerRate: 6.2,
     bodyColor: 0xf9a825,
     accent: 0x212121,
   },
@@ -77,12 +77,12 @@ export class RCCar {
     this.yaw = Math.PI;
     this.vy = 0;
     this.vehicleId = "car";
-    this.maxSpeed = 1.85;
-    this.boostMax = 2.55;
-    this.accel = 8.2;
+    this.maxSpeed = 1.72;
+    this.boostMax = 2.4;
+    this.accel = 7.2;
     this.brake = 16;
-    this.friction = 7.2;
-    this.steerRate = 6.4;
+    this.friction = 7.6;
+    this.steerRate = 5.4;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -464,7 +464,7 @@ export class RCCar {
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 22 * dt));
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 10.5 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);

@@ -843,23 +843,150 @@ export class TrackSystem {
     if (dir.lengthSq() < 1e-6) return;
     dir.normalize();
     const yaw = Math.atan2(dir.x, dir.z);
+    if (!this._rampArrowMats) this._rampArrowMats = [];
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xffeb3b, emissive: 0xffc107, emissiveIntensity: 1.35, roughness: 0.35,
+      color: 0xffeb3b, emissive: 0xffc107, emissiveIntensity: 1.45, roughness: 0.35,
     });
-    // Chevron arrow pointing along ramp
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.18), mat);
-    shaft.position.set(from.x, from.y + 0.1, from.z);
-    shaft.rotation.y = yaw;
-    this.root.add(shaft);
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.11, 3), mat);
-    head.position.set(
-      from.x + dir.x * 0.14,
-      from.y + 0.1,
-      from.z + dir.z * 0.14
-    );
-    head.rotation.y = yaw;
-    head.rotation.x = Math.PI / 2;
-    this.root.add(head);
+    this._rampArrowMats.push(mat);
+    // Dual chevrons — readable on-ramp invitation without neon spam
+    for (const step of [0, 0.22]) {
+      const ox = from.x + dir.x * step;
+      const oz = from.z + dir.z * step;
+      const oy = from.y + 0.11 + step * 0.02;
+      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.018, 0.16), mat);
+      shaft.position.set(ox, oy, oz);
+      shaft.rotation.y = yaw;
+      this.root.add(shaft);
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.1, 3), mat);
+      head.position.set(ox + dir.x * 0.12, oy, oz + dir.z * 0.12);
+      head.rotation.y = yaw;
+      head.rotation.x = Math.PI / 2;
+      this.root.add(head);
+    }
+  }
+
+  /**
+   * Brass posts + lit banner flaps along cornice/balcony; start/finish stripe on main circuit.
+   * Samples sparsely to keep mesh count reasonable. Safe when canvas textures are null (Node).
+   */
+  _addCorniceShowcase(pts, width, path) {
+    if (!pts || pts.length < 3) return;
+    let pathLen = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      pathLen += pts[i].distanceTo(pts[i + 1]);
+    }
+    if (path && path.closed) pathLen += pts[pts.length - 1].distanceTo(pts[0]);
+    if (pathLen < 2.5) return;
+
+    const brassMat = new THREE.MeshStandardMaterial({
+      color: 0xc9a227, roughness: 0.32, metalness: 0.85,
+      emissive: 0x8a6a1a, emissiveIntensity: 0.18,
+    });
+    const bannerMat = new THREE.MeshStandardMaterial({
+      color: 0x8b1538, emissive: 0xff5252, emissiveIntensity: 0.95,
+      roughness: 0.5, metalness: 0.08,
+      transparent: true, opacity: 0.9, side: THREE.DoubleSide,
+    });
+    if (!this._bannerMats) this._bannerMats = [];
+    this._bannerMats.push(bannerMat);
+
+    const step = Math.max(2, Math.floor(pts.length / 10));
+    const postH = 0.22 + Math.min(0.12, width * 0.35);
+    const sideOff = width * 0.52 + 0.02;
+
+    for (let i = 0; i < pts.length; i += step) {
+      const p = pts[i];
+      let yaw = 0;
+      if (i < pts.length - 1) {
+        yaw = Math.atan2(pts[i + 1].x - p.x, pts[i + 1].z - p.z);
+      } else if (i > 0) {
+        yaw = Math.atan2(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
+      }
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+
+      for (const side of [-1, 1]) {
+        const ox = right.x * side * sideOff;
+        const oz = right.z * side * sideOff;
+        const post = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.016, postH, 6),
+          brassMat
+        );
+        post.position.set(p.x + ox, p.y + postH * 0.5 + 0.02, p.z + oz);
+        post.frustumCulled = true;
+        this.root.add(post);
+
+        // Lit banner flap hanging from a short brass arm
+        const arm = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.01, 0.01),
+          brassMat
+        );
+        arm.position.set(p.x + ox, p.y + postH + 0.02, p.z + oz);
+        arm.rotation.y = yaw;
+        this.root.add(arm);
+
+        const flap = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.07, 0.1),
+          bannerMat
+        );
+        flap.position.set(
+          p.x + ox + right.x * side * 0.03,
+          p.y + postH - 0.02,
+          p.z + oz + right.z * side * 0.03
+        );
+        flap.rotation.y = yaw + (side > 0 ? 0.35 : -0.35);
+        flap.frustumCulled = true;
+        this.root.add(flap);
+      }
+
+      // Small brass finial on centerline every other sample
+      if ((i / step) % 2 === 0) {
+        const tip = new THREE.Mesh(
+          new THREE.SphereGeometry(0.018, 6, 6),
+          brassMat
+        );
+        tip.position.set(p.x, p.y + 0.06, p.z);
+        this.root.add(tip);
+      }
+    }
+
+    const id = (path && path.id) || "";
+    const wantSF = !!(path && (path.startFinish || path.fancy
+      || id.includes("foyer") || id.includes("circuit") || id.startsWith("cornice_main")));
+    if (wantSF) {
+      const a = pts[0];
+      const b = pts[Math.min(1, pts.length - 1)];
+      const dir = new THREE.Vector3().subVectors(b, a);
+      if (dir.lengthSq() < 1e-8 && pts.length > 2) {
+        dir.subVectors(pts[2], a);
+      }
+      if (dir.lengthSq() > 1e-8) {
+        dir.normalize();
+        const yaw = Math.atan2(dir.x, dir.z);
+        const stripeW = Math.max(width * 1.15, 0.28);
+        const opts = {
+          color: 0xffffff, roughness: 0.55, metalness: 0.05,
+          emissive: 0x222222, emissiveIntensity: 0.12,
+        };
+        if (this._startFinish) {
+          opts.map = this._startFinish;
+        } else {
+          opts.color = 0xf5f5f5;
+        }
+        const mat = new THREE.MeshStandardMaterial(opts);
+        const stripe = new THREE.Mesh(
+          new THREE.BoxGeometry(stripeW, 0.012, Math.max(0.16, width * 0.55)),
+          mat
+        );
+        stripe.position.set(
+          a.x + dir.x * 0.08,
+          a.y + 0.04,
+          a.z + dir.z * 0.08
+        );
+        stripe.rotation.y = yaw;
+        stripe.receiveShadow = true;
+        this.root.add(stripe);
+      }
+    }
   }
 
   _addTunnelArches(pts, width) {
@@ -1001,6 +1128,8 @@ export class TrackSystem {
         const isFloor = FLOOR_KINDS.has(seg.kind);
         // Off asphalt but near ground road → carpet crawl (still driveable, no fall)
         const carpet = isFloor && !onTrack && py < 0.5;
+        const lateral = steep ? dist3 : dist;
+        const edgeMargin = halfW - lateral; // >0 = inside track; small = near rim
         best = {
           x: px, y: (carpet ? 0.045 : py + 0.03), z: pz,
           yaw, bank,
@@ -1015,6 +1144,8 @@ export class TrackSystem {
           wasElevated: elev,
           steep: !!steep,
           tube,
+          halfW,
+          edgeMargin,
         };
       }
     }
@@ -1032,6 +1163,7 @@ export class TrackSystem {
         onTrack: false, supported: true, softPull: false,
         carpet: true, dist: 0, kind: "floor", pathId: null, label: null,
         wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+        edgeMargin: 1, halfW: 1,
       };
     }
 
@@ -1042,6 +1174,7 @@ export class TrackSystem {
       onTrack: false, supported: false, softPull: false,
       carpet: false, dist: 99, kind: "void", pathId: null, label: null,
       wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+      edgeMargin: -1, halfW: 0,
     };
   }
 
@@ -1082,6 +1215,10 @@ export class TrackSystem {
     const glow = 0.9 + 0.45 * Math.sin(t * 2.8);
     for (const m of this._bannerMats || []) {
       if (m.emissiveIntensity != null) m.emissiveIntensity = glow;
+    }
+    const rampGlow = 1.15 + 0.55 * Math.sin(t * 2.4);
+    for (const m of this._rampArrowMats || []) {
+      if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
     }
     for (const p of this.portals) {
       if (p.mesh) {

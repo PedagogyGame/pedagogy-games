@@ -27,9 +27,12 @@ export class DriveMode {
     this._labelCooldown = 0;
     this._hintCooldown = 0;
     this._lastHint = "";
+    this._edgeWarn = 0; // 0..1 soft near-edge amount (elevated tracks)
+    this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
-    this._driveFov = 74;
-    this._wallFov = 56; // tighter echo-y FOV in walls
+    this._driveFov = 68; // calmer tour FOV (was arcade-wide 74)
+    this._wallFov = 54; // tighter echo-y FOV in walls
+    this._leisureFov = 62; // slower = slightly tighter / more cinematic
     this._fov = this._baseFov;
     this._tunnelDark = 0;
     this._time = 0;
@@ -119,7 +122,7 @@ export class DriveMode {
     this.car.setLightsSubtle(wasSubtle);
     if (this.onHud) {
       const p = VEHICLE_PRESETS[id];
-      this.onHud({ mode: "manual", text: `${p.label} — don't fall!` });
+      this.onHud({ mode: "manual", text: `${p.label} — leisurely cruise` });
     }
   }
 
@@ -135,6 +138,8 @@ export class DriveMode {
     this._inputsFrozen = false;
     this._flash = 0;
     this._fade = 0;
+    this._edgeWarn = 0;
+    this._applyFlashFade();
   }
 
   _onKey(e) {
@@ -203,13 +208,15 @@ export class DriveMode {
     this._fade = 0;
     this._lastLabel = "";
     this._lastHint = "";
+    this._edgeWarn = 0;
+    this._edgeHintCd = 0;
     if (typeof document !== "undefined") {
       document.addEventListener("keydown", this._onKey);
       document.addEventListener("keyup", this._onKey);
     }
     this._snapCamera(true);
-    if (this.onHud) this.onHud({ mode: "manual", text: "Manual — don't fall!" });
-    if (this.onHint) this.onHint("Reach holes and balcony without falling");
+    if (this.onHud) this.onHud({ mode: "manual", text: "Toy tour — cruise the house" });
+    if (this.onHint) this.onHint("Cornice circuit tours the rooms below — find glowing ramps");
   }
 
   exit() {
@@ -238,7 +245,8 @@ export class DriveMode {
     this._fade = 0;
     this._camVel.set(0, 0, 0);
     this._snapCamera(true);
-    if (this.onHud) this.onHud({ mode: "manual", text: "Manual — don't fall!" });
+    this._edgeWarn = 0;
+    if (this.onHud) this.onHud({ mode: "manual", text: "Toy tour — cruise the house" });
   }
 
   _beginCrash() {
@@ -290,17 +298,20 @@ export class DriveMode {
     const yaw = this.car.yaw;
     const spd = Math.abs(this.car.speed);
     const inWall = this._tunnelDark > 0.4;
-    const back = (inWall ? 0.28 : 0.38) + Math.min(0.32, spd * 0.08);
-    const up = (inWall ? 0.1 : 0.13) + Math.min(0.09, spd * 0.025);
+    // Leisure factor: slow sightseeing → higher / farther cinematic chase
+    const leisure = 1 - THREE.MathUtils.smoothstep(spd, 0.15, 1.35);
+    const back = (inWall ? 0.26 : 0.4 + leisure * 0.22) + Math.min(0.28, spd * 0.07);
+    const up = (inWall ? 0.095 : 0.14 + leisure * 0.1) + Math.min(0.08, spd * 0.022);
     const cx = p.x - Math.sin(yaw) * back;
     const cy = p.y + up;
     const cz = p.z - Math.cos(yaw) * back;
     this._camPos.set(cx, cy, cz);
 
-    const ahead = 0.28 + Math.min(0.45, spd * 0.1);
+    // Look farther down the track when cruising slowly so the path reads
+    const ahead = (inWall ? 0.22 : 0.32 + leisure * 0.28) + Math.min(0.4, spd * 0.09);
     this._lookAhead.set(
       p.x + Math.sin(yaw) * ahead,
-      p.y + 0.05 + Math.min(0.035, spd * 0.008),
+      p.y + 0.04 + leisure * 0.03 + Math.min(0.03, spd * 0.007),
       p.z + Math.cos(yaw) * ahead
     );
     this._camTarget.copy(this._lookAhead);
@@ -466,8 +477,10 @@ export class DriveMode {
 
     this._snapCamera(false);
 
-    const spring = 14.5;
-    const damp = 4.8;
+    const spdAbs = Math.abs(this.car.speed);
+    const leisureCam = 1 - THREE.MathUtils.smoothstep(spdAbs, 0.15, 1.3);
+    const spring = 10.5 + leisureCam * 3.5; // softer follow when touring slowly
+    const damp = 4.2 + leisureCam * 0.8;
     const dx = this._camPos.x - this.camera.position.x;
     const dy = this._camPos.y - this.camera.position.y;
     const dz = this._camPos.z - this.camera.position.z;
@@ -484,9 +497,11 @@ export class DriveMode {
       || snap?.kind === "tunnel" || snap?.kind === "chute";
     this._tunnelDark = THREE.MathUtils.lerp(this._tunnelDark, inDark ? 1 : 0, Math.min(1, 3.5 * dt));
 
-    // Echo-y tighter FOV in walls; wider outside; boost stretch
-    let wantFov = this._driveFov - this._tunnelDark * (this._driveFov - this._wallFov);
-    if (this.keys.boost && Math.abs(this.car.speed) > 1.6) wantFov += 3.5;
+    // Echo-y tighter FOV in walls; leisurely cruise uses calmer FOV; boost is a treat
+    const leisureF = 1 - THREE.MathUtils.smoothstep(Math.abs(this.car.speed), 0.2, 1.4);
+    let wantFov = THREE.MathUtils.lerp(this._driveFov, this._leisureFov, leisureF * 0.85);
+    wantFov -= this._tunnelDark * (wantFov - this._wallFov);
+    if (this.keys.boost && Math.abs(this.car.speed) > 1.5) wantFov += 2.8;
     this._fov = THREE.MathUtils.lerp(this._fov, wantFov, Math.min(1, 2.8 * dt));
     if (Math.abs(this.camera.fov - this._fov) > 0.08) {
       this.camera.fov = this._fov;
@@ -524,6 +539,22 @@ export class DriveMode {
       }
     }
 
+
+    // Soft near-edge hint on elevated tracks (still hard crash if you fall)
+    this._edgeHintCd = Math.max(0, this._edgeHintCd - dt);
+    let edgeAmt = 0;
+    if (snap && snap.onTrack && snap.elevated && typeof snap.edgeMargin === "number") {
+      // edgeMargin: distance inside half-width; small = near rim
+      if (snap.edgeMargin < 0.075) {
+        edgeAmt = THREE.MathUtils.clamp(1 - snap.edgeMargin / 0.075, 0, 1);
+      }
+    }
+    this._edgeWarn = THREE.MathUtils.lerp(this._edgeWarn, edgeAmt, Math.min(1, 6 * dt));
+    if (this._edgeWarn > 0.45 && this._edgeHintCd <= 0 && !this._crashPhase) {
+      this._edgeHintCd = 2.8;
+      if (this.onHint) this.onHint("Near the edge — ease back toward the track");
+    }
+
     this._applyFlashFade();
   }
 
@@ -531,18 +562,30 @@ export class DriveMode {
     // Expose flash/fade via CSS variables on document if present
     if (typeof document === "undefined") return;
     const overlay = document.getElementById("drive-crash-overlay");
-    if (!overlay) return;
-    if (this._flash > 0.02 || this._fade > 0.02) {
-      overlay.classList.add("show");
-      const flashA = Math.min(0.85, this._flash * 0.85);
-      const fadeA = this._fade * 0.92;
-      overlay.style.background =
-        this._fade > 0.05
-          ? `rgba(8,4,2,${fadeA})`
-          : `rgba(255,220,180,${flashA})`;
-    } else {
-      overlay.classList.remove("show");
-      overlay.style.background = "transparent";
+    if (overlay) {
+      if (this._flash > 0.02 || this._fade > 0.02) {
+        overlay.classList.add("show");
+        const flashA = Math.min(0.85, this._flash * 0.85);
+        const fadeA = this._fade * 0.92;
+        overlay.style.background =
+          this._fade > 0.05
+            ? `rgba(8,4,2,${fadeA})`
+            : `rgba(255,220,180,${flashA})`;
+      } else {
+        overlay.classList.remove("show");
+        overlay.style.background = "transparent";
+      }
+    }
+    const edge = document.getElementById("drive-edge-vignette");
+    if (edge) {
+      const a = this.active ? Math.min(0.55, this._edgeWarn * 0.55) : 0;
+      if (a > 0.04) {
+        edge.classList.add("show");
+        edge.style.opacity = String(a);
+      } else {
+        edge.classList.remove("show");
+        edge.style.opacity = "0";
+      }
     }
   }
 
