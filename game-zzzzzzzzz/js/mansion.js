@@ -136,6 +136,86 @@ export class Mansion {
     return tex;
   }
 
+  /** Subtle plaster / paint noise for interior walls. */
+  _plasterTex(hex) {
+    const key = `plaster_${hex}`;
+    if (this._texCache[key]) return this._texCache[key];
+    const c = this._makeCanvas(256, 256);
+    if (!c) return null;
+    const ctx = c.getContext("2d");
+    const base = "#" + (hex >>> 0).toString(16).padStart(6, "0");
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 256, 256);
+    // fine plaster grain
+    for (let i = 0; i < 2800; i++) {
+      const v = (Math.random() - 0.5) * 28;
+      const r = Math.max(0, Math.min(255, ((hex >> 16) & 255) + v));
+      const g = Math.max(0, Math.min(255, ((hex >> 8) & 255) + v));
+      const b = Math.max(0, Math.min(255, (hex & 255) + v * 0.85));
+      ctx.fillStyle = `rgba(${r|0},${g|0},${b|0},0.22)`;
+      ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+    }
+    // soft mottling
+    for (let i = 0; i < 40; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.015 + Math.random() * 0.03})`;
+      ctx.beginPath();
+      ctx.ellipse(Math.random() * 256, Math.random() * 256, 12 + Math.random() * 30, 8 + Math.random() * 18, Math.random(), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this._texCache[key] = tex;
+    return tex;
+  }
+
+  /** Exterior stone / brick suggestion. */
+  _stoneTex() {
+    const key = "stone_facade";
+    if (this._texCache[key]) return this._texCache[key];
+    const c = this._makeCanvas(256, 256);
+    if (!c) return null;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#4a3728";
+    ctx.fillRect(0, 0, 256, 256);
+    const brickH = 22;
+    const brickW = 48;
+    for (let y = 0, row = 0; y < 256; y += brickH, row++) {
+      const ox = (row % 2) * (brickW / 2);
+      for (let x = -brickW; x < 256 + brickW; x += brickW) {
+        const shade = 55 + Math.random() * 35;
+        ctx.fillStyle = `rgb(${shade + 20},${shade},${shade - 8})`;
+        ctx.fillRect(x + ox + 1, y + 1, brickW - 2, brickH - 2);
+        // mortar
+        ctx.fillStyle = "rgba(180,170,150,0.35)";
+        ctx.fillRect(x + ox, y, brickW, 1);
+        ctx.fillRect(x + ox, y, 1, brickH);
+      }
+    }
+    // stone speckles
+    for (let i = 0; i < 400; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.08})`;
+      ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 1);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this._texCache[key] = tex;
+    return tex;
+  }
+
+  _wallMat(hex, rough = 0.78, metal = 0.04) {
+    const tex = this._plasterTex(hex);
+    if (!tex) return this._mat(hex, rough, metal);
+    const t = tex.clone();
+    t.repeat.set(2.2, 2.2);
+    return new THREE.MeshStandardMaterial({
+      map: t, color: 0xffffff, roughness: rough, metalness: metal,
+    });
+  }
+
   _floorMat(hex, rough = 0.82) {
     const tex = this._plankTex(hex);
     if (!tex) return this._mat(hex, rough, 0.04);
@@ -301,8 +381,14 @@ export class Mansion {
     g.name = "exterior_facade";
     // Approximate house footprint covering indoor rooms on ground floor
     // House center ~ (0,0,-8), extends roughly x±24, z from -40 to +14
-    const stone = this._mat(0x4a3728, 0.85, 0.05);
-    const trim = this._mat(0xc9a227, 0.4, 0.45);
+    const stoneTex = this._stoneTex();
+    const stone = stoneTex
+      ? new THREE.MeshStandardMaterial({
+          map: (() => { const t = stoneTex.clone(); t.repeat.set(3, 4); return t; })(),
+          color: 0xffffff, roughness: 0.88, metalness: 0.06,
+        })
+      : this._mat(0x4a3728, 0.85, 0.05);
+    const trim = this._mat(0xc9a227, 0.35, 0.55);
     const facadeH = 9.5; // up toward attic eaves
 
     // Outer shell walls (outside the indoor walls) — slightly larger
@@ -409,13 +495,26 @@ export class Mansion {
         const t = count === 1 ? 0 : (i / (count - 1) - 0.5) * 0.75;
         const wx = horizontal ? px + t * sx : px;
         const wz = horizontal ? pz : pz + t * (sz * 0.7);
-        // Frame
+        // Deep stone sill + frame trim
+        const sill = new THREE.Mesh(
+          new THREE.BoxGeometry(horizontal ? 1.55 : 0.28, 0.12, horizontal ? 0.32 : 1.55),
+          this._mat(0xd7ccc8, 0.7, 0.15)
+        );
+        sill.position.set(wx, fy - 0.95, wz + (horizontal ? 0.08 : 0));
+        group.add(sill);
         const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(horizontal ? 1.45 : 0.2, 1.85, horizontal ? 0.2 : 1.45),
-          this._mat(0xc9a227, 0.35, 0.55)
+          new THREE.BoxGeometry(horizontal ? 1.45 : 0.28, 1.85, horizontal ? 0.28 : 1.45),
+          this._mat(0xc9a227, 0.32, 0.62)
         );
         frame.position.set(wx, fy, wz);
         group.add(frame);
+        // Outer molding depth
+        const mold = new THREE.Mesh(
+          new THREE.BoxGeometry(horizontal ? 1.6 : 0.12, 2.0, horizontal ? 0.12 : 1.6),
+          this._mat(0x5d4037, 0.55, 0.2)
+        );
+        mold.position.set(wx, fy, wz);
+        group.add(mold);
         // Warm glowing pane
         const pane = new THREE.Mesh(
           new THREE.BoxGeometry(horizontal ? 1.05 : 0.08, 1.4, horizontal ? 0.08 : 1.05),
@@ -911,7 +1010,7 @@ export class Mansion {
       if (doorways[wall.side]) {
         this._addWallWithDoor(g, wall, p.wall, thick, p.trim);
       } else {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), this._mat(p.wall, 0.78, 0.04));
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), this._wallMat(p.wall, 0.78, 0.04));
         mesh.position.set(...wall.pos);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -926,16 +1025,49 @@ export class Mansion {
       }
     }
 
-    const bbH = 0.18;
+    // Sophisticated baseboard + chair rail matching cornice brass/wood
+    const bbH = 0.22;
+    const chairY = cy + 0.92;
+    const woodTrim = this._mat(0x3e2723, 0.55, 0.12);
+    const brassTrim = this._brass(p.trim);
     for (const wall of walls) {
       const [sx, , sz] = wall.size;
       const [px, , pz] = wall.pos;
+      const horiz = sx > sz;
+      // Tall baseboard
       const bb = new THREE.Mesh(
-        new THREE.BoxGeometry(sx > sz ? sx - 0.2 : 0.08, bbH, sx > sz ? 0.08 : sz - 0.2),
-        this._mat(p.trim, 0.45, 0.35)
+        new THREE.BoxGeometry(horiz ? sx - 0.15 : 0.1, bbH, horiz ? 0.1 : sz - 0.15),
+        woodTrim
       );
       bb.position.set(px, cy + bbH / 2, pz);
       g.add(bb);
+      // Cap molding on baseboard
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(horiz ? sx - 0.12 : 0.12, 0.04, horiz ? 0.12 : sz - 0.12),
+        brassTrim
+      );
+      cap.position.set(px, cy + bbH + 0.015, pz);
+      g.add(cap);
+      // Chair rail
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(horiz ? sx - 0.2 : 0.07, 0.06, horiz ? 0.07 : sz - 0.2),
+        brassTrim
+      );
+      rail.position.set(px, chairY, pz);
+      g.add(rail);
+      // Wainscot panel field (below chair rail)
+      const wainH = chairY - cy - bbH - 0.08;
+      if (wainH > 0.3) {
+        const wain = new THREE.Mesh(
+          new THREE.BoxGeometry(horiz ? sx - 0.45 : 0.05, wainH, horiz ? 0.05 : sz - 0.45),
+          this._mat(
+            ((p.wall >> 1) & 0x7f7f7f) | 0x101010,
+            0.72, 0.05
+          )
+        );
+        wain.position.set(px, cy + bbH + 0.04 + wainH / 2, pz);
+        g.add(wain);
+      }
     }
 
     const reach = Math.max(w, d) * 0.7;
@@ -986,26 +1118,34 @@ export class Mansion {
   _addCornice(group, room, p) {
     const [w, h, d] = room.size;
     const [cx, cy, cz] = room.pos;
-    const mat = this._brass(p.trim);
-    const thick = 0.1;
-    const strips = [
-      { s: [w - 0.2, 0.12, thick], p: [cx, cy + h - 0.1, cz - d / 2 + 0.18] },
-      { s: [w - 0.2, 0.12, thick], p: [cx, cy + h - 0.1, cz + d / 2 - 0.18] },
-      { s: [thick, 0.12, d - 0.2], p: [cx - w / 2 + 0.18, cy + h - 0.1, cz] },
-      { s: [thick, 0.12, d - 0.2], p: [cx + w / 2 - 0.18, cy + h - 0.1, cz] },
+    const brass = this._brass(p.trim);
+    const wood = this._mat(0x3e2723, 0.5, 0.15);
+    // Multi-step crown matching driveable cornice ledge look
+    const layers = [
+      { t: 0.16, y: 0.06, out: 0.14, mat: wood },
+      { t: 0.12, y: 0.14, out: 0.2, mat: brass },
+      { t: 0.08, y: 0.22, out: 0.26, mat: wood },
     ];
-    for (const s of strips) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), mat);
-      m.position.set(...s.p);
-      m.frustumCulled = true;
-      group.add(m);
+    for (const L of layers) {
+      const strips = [
+        { s: [w - 0.15, L.t, 0.1], p: [cx, cy + h - L.y, cz - d / 2 + L.out] },
+        { s: [w - 0.15, L.t, 0.1], p: [cx, cy + h - L.y, cz + d / 2 - L.out] },
+        { s: [0.1, L.t, d - 0.15], p: [cx - w / 2 + L.out, cy + h - L.y, cz] },
+        { s: [0.1, L.t, d - 0.15], p: [cx + w / 2 - L.out, cy + h - L.y, cz] },
+      ];
+      for (const s of strips) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), L.mat);
+        m.position.set(...s.p);
+        m.frustumCulled = true;
+        group.add(m);
+      }
     }
-    // Upper crown ledge
+    // Drive-ledge visual ring (matches track height feel)
     const ledge = new THREE.Mesh(
-      new THREE.BoxGeometry(w - 0.4, 0.06, d - 0.4),
-      this._mat(p.trim, 0.45, 0.4)
+      new THREE.BoxGeometry(w - 0.35, 0.07, d - 0.35),
+      brass
     );
-    ledge.position.set(cx, cy + h - 0.2, cz);
+    ledge.position.set(cx, cy + h - 0.28, cz);
     group.add(ledge);
   }
 

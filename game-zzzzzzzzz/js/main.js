@@ -4,6 +4,7 @@ import { Mansion } from "./mansion.js";
 import { InspectMode } from "./inspect.js";
 import { SliceSystem } from "./slice.js";
 import { DriveMode } from "./drive/driveMode.js";
+import { VEHICLE_PRESETS } from "./drive/car.js";
 import { OBJECTS } from "./data/objects.js";
 import { ROOMS } from "./data/rooms.js";
 
@@ -35,6 +36,8 @@ const driveHud = document.getElementById("drive-hud");
 const speedoEl = document.getElementById("speedo");
 const driveToast = document.getElementById("drive-toast");
 const driveBadge = document.getElementById("drive-badge");
+const driveModeLabel = document.getElementById("drive-mode-label");
+const driveCrashBanner = document.getElementById("drive-crash-banner");
 
 /** @type {'explore' | 'drive'} */
 let playMode = "explore";
@@ -112,6 +115,62 @@ drive.onHint = (hint) => {
     driveToast.classList.remove("show", "hint", "shortcut");
   }, 1800);
 };
+drive.onCrash = ({ phase, message }) => {
+  if (!driveCrashBanner) return;
+  if (phase === "crash") {
+    driveCrashBanner.textContent = message || "CRASH";
+    driveCrashBanner.classList.remove("restart");
+    driveCrashBanner.classList.add("show");
+  } else if (phase === "restarting") {
+    driveCrashBanner.textContent = message || "Crashed! Restarting…";
+    driveCrashBanner.classList.add("show", "restart");
+  } else {
+    driveCrashBanner.classList.remove("show", "restart");
+    driveCrashBanner.textContent = "";
+  }
+};
+drive.onHud = ({ mode, text }) => {
+  if (!driveModeLabel) return;
+  driveModeLabel.classList.remove("crash", "wall");
+  if (mode === "crash") {
+    driveModeLabel.textContent = text || "CRASH";
+    driveModeLabel.classList.add("crash");
+  } else if (mode === "wall") {
+    driveModeLabel.textContent = text || "Wall run";
+    driveModeLabel.classList.add("wall");
+    clearTimeout(driveModeLabel._t);
+    driveModeLabel._t = setTimeout(() => {
+      driveModeLabel.classList.remove("wall");
+      driveModeLabel.textContent = "Manual — don't fall!";
+    }, 2200);
+  } else if (mode === "restart") {
+    driveModeLabel.textContent = text || "Crashed! Restarting…";
+    driveModeLabel.classList.add("crash");
+  } else if (mode === "manual" || mode === "off") {
+    driveModeLabel.textContent = text || "Manual — don't fall!";
+  }
+};
+
+
+function syncVehicleUI(id) {
+  document.querySelectorAll("[data-vehicle]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.vehicle === id);
+  });
+}
+
+function setVehicle(id) {
+  if (!VEHICLE_PRESETS[id]) return;
+  drive.setVehicle(id);
+  syncVehicleUI(id);
+}
+
+document.querySelectorAll("[data-vehicle]").forEach((btn) => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setVehicle(btn.dataset.vehicle);
+  });
+});
 
 const raycaster = new THREE.Raycaster();
 const clock = new THREE.Clock();
@@ -140,10 +199,13 @@ function setPlayMode(next) {
     player.unlock();
     player.enabled = false;
     if (drive.active) drive.exit();
+    const vBtn = document.querySelector("#vehicle-picker .vehicle-btn.active, #drive-vehicle-picker .vehicle-btn.active");
+    if (vBtn?.dataset?.vehicle) drive.vehicleId = vBtn.dataset.vehicle;
     drive.enter();
+    syncVehicleUI(drive.vehicleId);
     playMode = "drive";
     mode = "drive";
-    promptEl.textContent = "WASD drive · Shift boost · Mouse holes & shafts are shortcuts · Explore to walk";
+    promptEl.textContent = "Manual drive — don't fall! · WASD · Shift boost · Wall runs through glowing holes";
     promptEl.classList.remove("lit", "hidden");
   } else {
     // Explore

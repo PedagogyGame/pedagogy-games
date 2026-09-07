@@ -1,6 +1,6 @@
 # The Mansion of the Unseen
 
-A children's **3D educational** WebGL game. Free-roam a multi-floor Victorian mansion **and its outer estate grounds**, inspect curiosities, and magically slice them to reveal accurate named layers with kid-friendly definitions. Or switch to **Drive** mode and pilot a tiny RC car along floor roads, wall tunnels, and furniture-top circuits. No combat, timers, or fail states — pure exploration.
+A children's **3D educational** WebGL game. Free-roam a multi-floor Victorian mansion **and its outer estate grounds**, inspect curiosities, and magically slice them to reveal accurate named layers with kid-friendly definitions. Or switch to **Drive** mode and pilot a tiny RC car along floor roads, wall tunnels, and furniture-top circuits. Explore has no fail states. Drive is true manual RC — fall off edges and you crash, then restart at spawn.
 
 **Premise:** Break open the unseen — without breaking anything.
 
@@ -21,9 +21,9 @@ Open **http://localhost:8080** in a modern desktop browser.
 | Mode | What it is |
 |------|------------|
 | **Explore** | FPS walk + inspect / slice (pointer lock) |
-| **Drive** | Chase-cam RC car on painted roads, cornice highways, balcony, ramps, tunnels, furniture rails |
+| **Drive** | Mouse-eye chase-cam RC toy (~0.11 m) on skirting/perimeter tracks, cornice, balcony, ramps, mouse tubes, furniture tops |
 
-Toggle with the **Explore | Drive** control on the title screen or in-HUD, or keys **1** / **2**. Switching exits inspect, unlocks the pointer, and shows/hides the car cleanly (`playMode = 'explore' | 'drive'`).
+Toggle with the **Explore | Drive** control on the title screen or in-HUD, or keys **1** / **2**. Switching exits inspect and unlocks the pointer. In **Explore** the car stays in-world (tiny, parked by foyer skirting) with tracks hidden; **Drive** reveals tracks and unlocks control (`playMode = 'explore' | 'drive'`).
 
 ## Controls
 
@@ -41,7 +41,7 @@ Toggle with the **Explore | Drive** control on the title screen or in-HUD, or ke
 | Slice modes | **Section** (default for concentric curios — visible cut faces), Peel, Ghost |
 | Leave inspect / unlock | Esc |
 
-### Drive
+### Drive (manual)
 
 | Action | Input |
 |--------|--------|
@@ -49,7 +49,9 @@ Toggle with the **Explore | Drive** control on the title screen or in-HUD, or ke
 | Boost | Shift |
 | Switch to Explore | HUD toggle or key **1** |
 
-HUD shows a speedometer, Drive badge, and room-enter toasts (“Entering Conservatory”).
+**True manual physics** — no centerline magnet. Leave balcony, cornice, furniture, or a wall tube into void and you **fall → CRASH → restart at spawn**. Floor/carpet is still crawlable. Wall hollows have studs, pipes, crack light, speed-gate rings, and exit boost pads.
+
+HUD: “Manual — don't fall!”, speedo, **CRASH** banner, “Wall run” near holes, room-enter toasts.
 
 ## Cross-section cutaways (Reveal / Learn)
 
@@ -59,22 +61,25 @@ Hero objects tuned for Section: alkaline AA, Magic 8-Ball, bird egg, coconut, ba
 
 ## Drive track map (summary)
 
-- **Floor loop:** Foyer → Hall of Echoes → Conservatory → Breakfast Parlor → back
-- **Spurs:** Hall ↔ Cabinet, Hall ↔ Armoury
-- **Outdoor loop:** Front drive → gardens path → terrace → foyer (gravel)
-- **Wall tunnels:** two incline tube corridors (hall↔cabinet, hall↔armoury) with arch frames + emissive strip lights
-- **Stair ramp:** west foyer stair climb onto Upper Landing
-- **Furniture circuits (≥4) + ramps:** foyer console, dining table, cabinet display cases, workshop bench, library bookcase tops, music sideboard, nursery toy chest
-- **Cornice highway:** continuous upper-wall ledge circuits in Foyer, Hall of Echoes (both sides), Cabinet, Armoury, Conservatory — dark wood deck + gold edge trim, doorway-header bridges, diagonal corner braces, on-ramps from stair rail / display cases / bookcase tops
-- **Balcony:** exterior balcony off the **Upper Landing** with driveable loop + return ramps; optional drop ramp to Front Drive. Explore can walk it (`getFloorY` floor region + French doors)
-- **Chandelier ring:** optional elevated loop at foyer chandelier height with cornice on-ramp
-- **Bookcase express:** library tops → nursery / study express links + cross header
+Floor roads hug **walls / skirting** (≈0.4–0.8 m inset) — no center-room highways.
 
-Suggested flow: foyer floor → **mouse hole** → wall hollow → furniture → cornice / chandelier → Upper Landing → **Balcony** → flower paths outdoors.
+- **Ground skirting:** Foyer, Hall (east+west wall runs), Conservatory, Dining, Cabinet, Armoury perimeter loops + thin doorway-edge strips
+- **First-floor skirting:** Landing, Library (east+west), Music, Workshop, Nursery, Study + mezzanine connectors
+- **Outdoor perimeter:** exterior loop around the mansion (not a driveway center spine)
+- **Wall tunnels:** two incline tube corridors (hall↔cabinet, hall↔armoury)
+- **Stair ramp:** west foyer stair climb onto Upper Landing (lands on landing edge)
+- **Furniture circuits + ramps:** foyer console, dining table, cabinet display cases, workshop bench, library bookcase tops, music sideboard, nursery toy chest
+- **Cornice highway:** upper-wall ledge circuits + doorway-header bridges + braces
+- **Balcony:** exterior balcony loop + return ramps; optional drop to Front Drive edge. Explore can still walk it
+- **Chandelier ring / bookcase express:** elevated specialty tracks
+
+**Explore park:** car (~0.11 m long) idle at west foyer skirting by the front door (`CAR_SPAWN`); tracks hidden.
+
+Suggested flow: foyer skirting → **mouse hole** → wall hollow → furniture → cornice → Upper Landing → **Balcony** → flower paths outdoors.
 
 ### Mouse shortcuts & shafts
 
-The RC car can sneak like a clever mouse:
+The RC car can sneak like a clever mouse (including long **west/east grand wall runs** foyer→hall→conservatory):
 
 | Kind | Routes |
 |------|--------|
@@ -89,13 +94,13 @@ The RC car can sneak like a clever mouse:
 
 ### Drive handling notes
 
-- Premium candy-red / cream RC mesh, chrome mirrors, glass cabin, detailed wheels, subtle underglow
-- Snappy accel with soft speed cap; high steer at low speed, stable at high; visual drift trail intensity
-- Stronger magnetic centerline on elevated / shortcut / shaft / chute; wider forgiveness on floor roads
+- Toy/mouse-scale candy-red RC (~0.11 m / `CAR_SCALE` 0.25×); subtler headlights/underglow so Explore barely notices
+- maxSpeed ~2.85, boost ~4.2; zippy steer for a mouse; soft speed cap
+- Stronger magnetic centerline on elevated / shortcut / shaft / chute; narrow floor perimeter tracks
 - Soft guard-rail push; banking follows track; landing damp after slides
-- Chase cam: cinematic look-ahead, spring-damped follow (less jitter), boost FOV, smooth dark→light recover after tunnels
+- Chase cam: **close & low** mouse-eye cinema, wider Drive FOV (~78), boost FOV kick, tunnel recover
+- Idle wheel twitch + tiny headlight blink in Drive only; Explore parked & static
 - Off-track: slow on carpet/grass/petal paths, soft pull back near track — never hard freeze
-- Optional speed lines + dust particles while boosting (emissive meshes only)
 - Prefer emissive lenses / lanterns / tunnel strips / mouse-hole glow over extra PointLights
 
 Tracks live in `js/data/tracks.js`; meshes + snap in `js/drive/tracks.js`; car in `js/drive/car.js`; mode glue in `js/drive/driveMode.js`. Balcony architecture is built in `js/mansion.js` (`_buildBalcony`).

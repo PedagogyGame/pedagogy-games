@@ -114,8 +114,72 @@ function makeHollowTexture() {
   return tex;
 }
 
+/** Premium dark-wood cornice deck with gold inlay channel. */
+function makeCorniceDeckTexture() {
+  const c = makeCanvas(256, 256);
+  if (!c) return null;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#2a1810";
+  ctx.fillRect(0, 0, 256, 256);
+  // plank grain
+  for (let y = 0; y < 256; y += 28) {
+    ctx.fillStyle = "#3e2723";
+    ctx.fillRect(0, y, 256, 26);
+    ctx.fillStyle = "rgba(20,10,6,0.45)";
+    ctx.fillRect(0, y + 25, 256, 2);
+    ctx.fillStyle = "rgba(90,60,40,0.2)";
+    for (let x = ((y / 28) % 2) * 40; x < 256; x += 80) {
+      ctx.fillRect(x, y, 2, 26);
+    }
+    // grain lines
+    ctx.strokeStyle = "rgba(60,35,20,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y + 8 + Math.sin(y) * 2);
+    ctx.lineTo(256, y + 10);
+    ctx.stroke();
+  }
+  // gold center inlay
+  const g = ctx.createLinearGradient(118, 0, 138, 0);
+  g.addColorStop(0, "#8a6a1a");
+  g.addColorStop(0.4, "#f0d060");
+  g.addColorStop(0.6, "#ffe082");
+  g.addColorStop(1, "#8a6a1a");
+  ctx.fillStyle = g;
+  ctx.fillRect(120, 0, 16, 256);
+  ctx.fillStyle = "rgba(255,236,179,0.5)";
+  ctx.fillRect(126, 0, 4, 256);
+  // edge brass rails hint
+  ctx.fillStyle = "#c9a227";
+  ctx.fillRect(6, 0, 5, 256);
+  ctx.fillRect(245, 0, 5, 256);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function makeStartFinishTexture() {
+  const c = makeCanvas(128, 64);
+  if (!c) return null;
+  const ctx = c.getContext("2d");
+  const n = 8;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < 4; j++) {
+      ctx.fillStyle = ((i + j) % 2 === 0) ? "#fafafa" : "#121212";
+      ctx.fillRect(i * 16, j * 16, 16, 16);
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 const ELEV_KINDS = new Set(["elevated", "cornice", "balcony", "ramp", "shortcut", "mouse", "shaft", "chute"]);
-const MAGNET_KINDS = new Set(["elevated", "cornice", "balcony", "ramp", "shortcut", "mouse", "shaft", "chute", "tunnel"]);
+const TUBE_KINDS = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
+const FLOOR_KINDS = new Set(["floor", "outdoor", "flower"]);
 
 /**
  * Builds road meshes from TRACK_PATHS and provides nearest-track snap queries.
@@ -135,8 +199,12 @@ export class TrackSystem {
     this._chevron = makeChevronTexture();
     this._petal = makePetalTexture();
     this._hollow = makeHollowTexture();
+    this._corniceDeck = makeCorniceDeckTexture();
+    this._startFinish = makeStartFinishTexture();
+    this._bannerMats = [];
     this._tmp = new THREE.Vector3();
     this._moteMats = [];
+    this._speedGates = [];
     this._buildAll();
   }
 
@@ -158,11 +226,11 @@ export class TrackSystem {
       const curve = new THREE.CatmullRomCurve3(pts, !!path.closed, "catmullrom", tension);
       const dense =
         kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony"
-          ? 7
+          ? (path.fancy ? 14 : 10)
           : kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute"
-            ? 5
-            : kind === "flower" || kind === "tunnel" ? 5 : 4;
-      const n = Math.max(pts.length * dense, 20);
+            ? 6
+            : kind === "flower" || kind === "tunnel" ? 6 : 4;
+      const n = Math.max(pts.length * dense, path.fancy ? 48 : 24);
       curvePts = curve.getPoints(n);
     }
 
@@ -189,7 +257,8 @@ export class TrackSystem {
       this.segments.push({
         a: a.clone(), b: b.clone(), dir: dir.clone(), len,
         kind, pathId: path.id, width, label, rail: isRail,
-        magnet: MAGNET_KINDS.has(kind),
+        elevated: ELEV_KINDS.has(kind),
+        tube: TUBE_KINDS.has(kind),
       });
 
       this._addRoadMesh(a, b, dir, len, width, kind, isRail);
@@ -225,9 +294,12 @@ export class TrackSystem {
     }
     if (kind === "ramp" || kind === "cornice") {
       // On-ramp signage: emissive arrows near first point
-      if (path.id && (path.id.startsWith("ramp_") || path.id.includes("brace"))) {
+      if (path.id && (path.id.startsWith("ramp_") || path.id.includes("brace") || path.id.includes("mouse_to"))) {
         this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
       }
+    }
+    if (kind === "cornice" || kind === "balcony") {
+      this._addCorniceShowcase(pts, width, path);
     }
   }
 
@@ -246,11 +318,11 @@ export class TrackSystem {
   _addRoadMesh(a, b, dir, len, width, kind, rail) {
     const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
     const thick =
-      kind === "elevated" || kind === "cornice" || kind === "balcony" ? 0.09
-        : kind === "ramp" || kind === "chute" ? 0.07
-          : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0.055
-            : kind === "flower" ? 0.04
-              : 0.045;
+      kind === "elevated" || kind === "cornice" || kind === "balcony" ? 0.045
+        : kind === "ramp" || kind === "chute" ? 0.035
+          : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0.028
+            : kind === "flower" ? 0.022
+              : 0.028;
     const geo = new THREE.BoxGeometry(width, thick, len);
     let mat;
     if (kind === "outdoor") {
@@ -265,13 +337,29 @@ export class TrackSystem {
       }
       mat = new THREE.MeshStandardMaterial(opts);
     } else if (kind === "cornice") {
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x3e2723, roughness: 0.55, metalness: 0.18,
-      });
+      const opts = {
+        color: 0xffffff, roughness: 0.42, metalness: 0.28,
+      };
+      if (this._corniceDeck) {
+        opts.map = this._corniceDeck.clone();
+        opts.map.repeat.set(1, Math.max(1.2, len / 0.7));
+        opts.map.needsUpdate = true;
+      } else {
+        opts.color = 0x3e2723;
+      }
+      mat = new THREE.MeshStandardMaterial(opts);
     } else if (kind === "balcony") {
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x6d4c41, roughness: 0.7, metalness: 0.08,
-      });
+      const opts = {
+        color: 0xffffff, roughness: 0.55, metalness: 0.12,
+      };
+      if (this._corniceDeck) {
+        opts.map = this._corniceDeck.clone();
+        opts.map.repeat.set(1, Math.max(1, len / 0.85));
+        opts.map.needsUpdate = true;
+      } else {
+        opts.color = 0x6d4c41;
+      }
+      mat = new THREE.MeshStandardMaterial(opts);
     } else if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
       const opts = {
         color: 0x2a2018, roughness: 0.78, metalness: 0.08,
@@ -320,14 +408,27 @@ export class TrackSystem {
     mesh.frustumCulled = true;
     this.root.add(mesh);
 
-    // Gold edge strip on cornice
-    if (kind === "cornice") {
+    // Premium gold inlay + brass edge on cornice / balcony
+    if (kind === "cornice" || kind === "balcony") {
+      const goldMat = new THREE.MeshStandardMaterial({
+        color: 0xe8c547, roughness: 0.28, metalness: 0.85,
+        emissive: 0xc9a227, emissiveIntensity: 0.22,
+      });
+      // Center gold inlay line
+      const inlay = new THREE.Mesh(
+        new THREE.BoxGeometry(0.028, 0.012, len * 0.98),
+        goldMat
+      );
+      inlay.position.copy(mid);
+      inlay.position.y += thick * 0.65;
+      inlay.quaternion.copy(mesh.quaternion);
+      this.root.add(inlay);
       for (const side of [-1, 1]) {
         const strip = new THREE.Mesh(
-          new THREE.BoxGeometry(0.04, 0.025, len),
-          new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.35, metalness: 0.7 })
+          new THREE.BoxGeometry(0.022, 0.016, len),
+          goldMat
         );
-        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.02));
+        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.018));
         strip.position.copy(mid).add(off);
         strip.position.y += thick * 0.55;
         strip.quaternion.copy(mesh.quaternion);
@@ -340,7 +441,7 @@ export class TrackSystem {
       const petalColors = [0xe91e63, 0xf48fb1, 0xffcdd2, 0xce93d8];
       for (const side of [-1, 1]) {
         const dust = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 0.015, len * 0.95),
+          new THREE.BoxGeometry(0.03, 0.01, len * 0.95),
           new THREE.MeshStandardMaterial({
             color: petalColors[(side + 1) % petalColors.length],
             roughness: 0.7, metalness: 0.05,
@@ -360,7 +461,7 @@ export class TrackSystem {
     if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
       for (const side of [-1, 1]) {
         const trim = new THREE.Mesh(
-          new THREE.BoxGeometry(0.035, 0.04, len),
+          new THREE.BoxGeometry(0.018, 0.022, len),
           new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.65, metalness: 0.1 })
         );
         const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.01));
@@ -373,7 +474,7 @@ export class TrackSystem {
 
     if ((kind === "floor" || kind === "outdoor") && !this._asphalt) {
       const line = new THREE.Mesh(
-        new THREE.BoxGeometry(0.05, 0.012, len * 0.95),
+        new THREE.BoxGeometry(0.02, 0.008, len * 0.95),
         new THREE.MeshBasicMaterial({ color: 0xf0c000 })
       );
       line.position.copy(mid);
@@ -384,36 +485,43 @@ export class TrackSystem {
 
     if (rail || ELEV_KINDS.has(kind)) {
       const railColor =
-        kind === "cornice" ? 0xc9a227
+        kind === "cornice" ? 0xe0c060
           : kind === "balcony" ? 0xd7ccc8
             : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0x8d6e63
               : kind === "chute" ? 0x90a4ae
                 : 0xffcc80;
-      const woodColor = kind === "cornice" ? 0x4e342e : 0x5d4037;
-      const railH = (kind === "shortcut" || kind === "shaft" || kind === "chute") ? 0.11 : 0.14;
+      const woodColor = kind === "cornice" ? 0x3e2723 : 0x5d4037;
+      const railH = (kind === "shortcut" || kind === "shaft" || kind === "chute") ? 0.055
+        : (kind === "cornice" || kind === "balcony") ? 0.085 : 0.07;
       const slim = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "flower";
+      const fancyRail = kind === "cornice" || kind === "balcony";
       for (const side of [-1, 1]) {
         const railMesh = new THREE.Mesh(
-          new THREE.BoxGeometry(slim ? 0.04 : 0.05, railH, len),
+          new THREE.BoxGeometry(slim ? 0.02 : fancyRail ? 0.032 : 0.028, railH, len),
           new THREE.MeshStandardMaterial({
-            color: railColor, roughness: 0.38, metalness: 0.55,
-            transparent: true, opacity: kind === "balcony" ? 0.85 : slim ? 0.55 : 0.7,
+            color: railColor,
+            roughness: fancyRail ? 0.28 : 0.38,
+            metalness: fancyRail ? 0.78 : 0.55,
+            emissive: fancyRail ? 0x8a6a1a : 0x000000,
+            emissiveIntensity: fancyRail ? 0.18 : 0,
+            transparent: true,
+            opacity: kind === "balcony" ? 0.9 : slim ? 0.55 : fancyRail ? 0.92 : 0.7,
           })
         );
-        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 + 0.03));
+        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 + 0.015));
         railMesh.position.copy(mid).add(off);
-        railMesh.position.y += 0.1;
+        railMesh.position.y += 0.05;
         railMesh.quaternion.copy(mesh.quaternion);
         this.root.add(railMesh);
 
         // Skip wood base on slim cavities to keep mesh count down
         if (!slim) {
           const base = new THREE.Mesh(
-            new THREE.BoxGeometry(0.06, 0.04, len),
+            new THREE.BoxGeometry(0.032, 0.022, len),
             new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.7, metalness: 0.1 })
           );
           base.position.copy(mid).add(off);
-          base.position.y += 0.02;
+          base.position.y += 0.012;
           base.quaternion.copy(mesh.quaternion);
           this.root.add(base);
         }
@@ -436,7 +544,7 @@ export class TrackSystem {
     }
 
     const kind = path.kind || "shortcut";
-    const r = kind === "flower" ? 0.38 : 0.42;
+    const r = kind === "flower" ? 0.18 : 0.2;
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x5d4037, roughness: 0.45, metalness: 0.25,
     });
@@ -451,12 +559,12 @@ export class TrackSystem {
     });
 
     // Circular wood-trimmed mouse hole
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.055, 8, 20), ringMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.028, 8, 20), ringMat);
     ring.position.set(p.x, p.y + r * 0.15, p.z);
     ring.rotation.y = yaw;
     this.root.add(ring);
 
-    const trim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.025, 6, 16), woodMat);
+    const trim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 6, 16), woodMat);
     trim.position.copy(ring.position);
     trim.rotation.copy(ring.rotation);
     this.root.add(trim);
@@ -491,13 +599,13 @@ export class TrackSystem {
 
   _addBoostPad(exit, path) {
     const pad = new THREE.Mesh(
-      new THREE.BoxGeometry((path.width || 0.7) * 0.9, 0.04, 0.55),
+      new THREE.BoxGeometry((path.width || 0.35) * 0.9, 0.02, 0.28),
       new THREE.MeshStandardMaterial({
         color: 0xffeb3b, emissive: 0xffc107, emissiveIntensity: 1.2,
         roughness: 0.35, metalness: 0.2,
       })
     );
-    pad.position.set(exit.x, exit.y + 0.04, exit.z);
+    pad.position.set(exit.x, exit.y + 0.02, exit.z);
     this.root.add(pad);
     this.boostPads.push({ pos: exit.clone(), pathId: path.id });
   }
@@ -506,60 +614,208 @@ export class TrackSystem {
     const plaster = new THREE.MeshStandardMaterial({
       color: 0x3e342c, roughness: 0.85, metalness: 0.05,
     });
+    const studMat = new THREE.MeshStandardMaterial({
+      color: 0x6d4c41, roughness: 0.7, metalness: 0.08,
+    });
+    const pipeMat = new THREE.MeshStandardMaterial({
+      color: 0x78909c, roughness: 0.35, metalness: 0.65,
+      emissive: 0x37474f, emissiveIntensity: 0.12,
+    });
+    const insulMat = new THREE.MeshStandardMaterial({
+      color: 0xfff3e0, roughness: 0.95, metalness: 0.0,
+      transparent: true, opacity: 0.72,
+    });
+    const cableMat = new THREE.MeshStandardMaterial({
+      color: 0x1b5e20, roughness: 0.6, metalness: 0.2,
+    });
+    const crackMat = new THREE.MeshStandardMaterial({
+      color: 0xffe0b2, emissive: 0xffb74d, emissiveIntensity: 1.35,
+      roughness: 0.4, transparent: true, opacity: 0.9,
+    });
     const moteMat = new THREE.MeshStandardMaterial({
-      color: 0xfff8e1, emissive: 0xffe0b2, emissiveIntensity: 0.85,
-      transparent: true, opacity: 0.55, roughness: 0.5,
+      color: 0xfff8e1, emissive: 0xffe0b2, emissiveIntensity: 0.95,
+      transparent: true, opacity: 0.6, roughness: 0.5,
+    });
+    const gateMat = new THREE.MeshStandardMaterial({
+      color: 0x80d8ff, emissive: 0x29b6f6, emissiveIntensity: 1.6,
+      roughness: 0.25, transparent: true, opacity: 0.55,
+      side: THREE.DoubleSide,
     });
     this._moteMats.push(moteMat);
+    this._moteMats.push(gateMat);
+    this._moteMats.push(crackMat);
 
-    // Occasional light slots + dust motes along cavity (sparse — light budget)
-    const step = Math.max(2, Math.floor(pts.length / 3));
-    for (let i = 0; i < pts.length; i += step) {
+    const n = pts.length;
+    for (let i = 0; i < n; i++) {
       const p = pts[i];
       let yaw = 0;
-      if (i < pts.length - 1) {
-        yaw = Math.atan2(pts[i + 1].x - p.x, pts[i + 1].z - p.z);
-      } else if (i > 0) {
-        yaw = Math.atan2(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
-      }
+      if (i < n - 1) yaw = Math.atan2(pts[i + 1].x - p.x, pts[i + 1].z - p.z);
+      else if (i > 0) yaw = Math.atan2(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
       const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
 
-      // Side cavity walls (short segments — suggest hollow interior)
+      // Rhythm: narrow → chamber → narrow (wider walls at chamber indices)
+      const phase = i / Math.max(1, n - 1);
+      const chamber = Math.sin(phase * Math.PI * 2.2) > 0.35;
+      const wallH = chamber ? width * 1.55 : width * 1.05;
+      const wallSep = chamber ? width * 0.72 : width * 0.52;
+
       if (kind !== "chute") {
         for (const side of [-1, 1]) {
           const wall = new THREE.Mesh(
-            new THREE.BoxGeometry(0.1, width * 1.1, 0.7),
+            new THREE.BoxGeometry(0.08, wallH, chamber ? 0.95 : 0.55),
             plaster
           );
           wall.position.set(
-            p.x + right.x * side * (width * 0.55),
-            p.y + width * 0.45,
-            p.z + right.z * side * (width * 0.55)
+            p.x + right.x * side * wallSep,
+            p.y + wallH * 0.42,
+            p.z + right.z * side * wallSep
           );
           wall.rotation.y = yaw;
           this.root.add(wall);
+
+          // Vertical timber studs ~16" OC feel
+          if (i % 2 === 0) {
+            const stud = new THREE.Mesh(
+              new THREE.BoxGeometry(0.038, wallH * 0.95, 0.038),
+              studMat
+            );
+            stud.position.set(
+              p.x + right.x * side * (wallSep - 0.02),
+              p.y + wallH * 0.4,
+              p.z + right.z * side * (wallSep - 0.02)
+            );
+            this.root.add(stud);
+            // Horizontal plaster lath hint
+            for (let ly = 0; ly < 3; ly++) {
+              const lath = new THREE.Mesh(
+                new THREE.BoxGeometry(0.01, 0.012, chamber ? 0.7 : 0.4),
+                new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.85, metalness: 0.02 })
+              );
+              lath.position.set(
+                p.x + right.x * side * (wallSep - 0.04),
+                p.y + 0.15 + ly * 0.18,
+                p.z + right.z * side * (wallSep - 0.04)
+              );
+              lath.rotation.y = yaw;
+              this.root.add(lath);
+            }
+          }
         }
       }
 
-      // Light slot (emissive strip)
-      const slot = new THREE.Mesh(
-        new THREE.BoxGeometry(width * 0.35, 0.03, 0.08),
-        new THREE.MeshStandardMaterial({
-          color: 0xffe0b2, emissive: 0xffcc80, emissiveIntensity: 1.0, roughness: 0.4,
-        })
-      );
-      slot.position.set(p.x, p.y + width * 0.95, p.z);
-      slot.rotation.y = yaw;
-      this.root.add(slot);
+      // Copper pipes + electrical conduit along ceiling
+      if (i % 3 === 1) {
+        const copper = new THREE.MeshStandardMaterial({
+          color: 0xb87333, roughness: 0.32, metalness: 0.78,
+          emissive: 0x4e342e, emissiveIntensity: 0.08,
+        });
+        const pipe = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.026, 0.026, width * 1.15, 8),
+          copper
+        );
+        pipe.position.set(p.x, p.y + wallH * 0.85, p.z);
+        pipe.rotation.z = Math.PI / 2;
+        pipe.rotation.y = yaw;
+        this.root.add(pipe);
+        // EMT conduit (grey)
+        const conduit = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.014, 0.014, width * 1.05, 6),
+          pipeMat
+        );
+        conduit.position.set(
+          p.x + right.x * 0.08,
+          p.y + wallH * 0.78,
+          p.z + right.z * 0.08
+        );
+        conduit.rotation.z = Math.PI / 2;
+        conduit.rotation.y = yaw;
+        this.root.add(conduit);
+      }
 
-      // Dust mote (single emissive speck)
-      const mote = new THREE.Mesh(new THREE.SphereGeometry(0.028, 5, 5), moteMat);
-      mote.position.set(
-        p.x + (Math.random() - 0.5) * width * 0.3,
-        p.y + 0.3 + Math.random() * 0.35,
-        p.z + (Math.random() - 0.5) * 0.25
-      );
-      this.root.add(mote);
+      // Insulation tufts
+      if (i % 4 === 2) {
+        for (const side of [-1, 1]) {
+          const tuft = new THREE.Mesh(
+            new THREE.SphereGeometry(0.045 + (i % 3) * 0.01, 6, 5),
+            insulMat
+          );
+          tuft.position.set(
+            p.x + right.x * side * wallSep * 0.7,
+            p.y + 0.12 + (i % 2) * 0.08,
+            p.z + right.z * side * wallSep * 0.7 - fwd.z * 0.05
+          );
+          tuft.scale.set(1.4, 0.7, 1.1);
+          this.root.add(tuft);
+        }
+      }
+
+      // Cable runs
+      if (i % 5 === 0) {
+        const cable = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.012, 0.012, 0.7, 6),
+          cableMat
+        );
+        cable.position.set(
+          p.x + right.x * 0.12,
+          p.y + wallH * 0.7,
+          p.z
+        );
+        cable.rotation.x = Math.PI / 2;
+        cable.rotation.y = yaw;
+        this.root.add(cable);
+      }
+
+      // Warm crack light alternating with dark
+      if (i % 2 === 0) {
+        const crack = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, wallH * 0.55, 0.02),
+          crackMat
+        );
+        const side = (i % 4 === 0) ? 1 : -1;
+        crack.position.set(
+          p.x + right.x * side * wallSep * 0.98,
+          p.y + wallH * 0.35,
+          p.z + right.z * side * wallSep * 0.98
+        );
+        crack.rotation.y = yaw;
+        this.root.add(crack);
+      }
+
+      // Dust motes
+      if (i % 2 === 0) {
+        const mote = new THREE.Mesh(new THREE.SphereGeometry(0.022, 5, 5), moteMat);
+        mote.position.set(
+          p.x + (Math.random() - 0.5) * width * 0.35,
+          p.y + 0.25 + Math.random() * 0.4,
+          p.z + (Math.random() - 0.5) * 0.2
+        );
+        this.root.add(mote);
+      }
+
+      // Speed-gate glow rings to thread (score-less feel)
+      if (i > 0 && i < n - 1 && (i % Math.max(2, Math.floor(n / 4)) === 0)) {
+        const gate = new THREE.Mesh(
+          new THREE.TorusGeometry(width * 0.55, 0.018, 6, 18),
+          gateMat
+        );
+        gate.position.set(p.x, p.y + width * 0.45, p.z);
+        gate.rotation.y = yaw;
+        this.root.add(gate);
+        if (!this._speedGates) this._speedGates = [];
+        this._speedGates.push({ mesh: gate, pos: p.clone() });
+      }
+
+      // Little bumps / banked feel via raised road nubs at chamber entries
+      if (chamber && i % 3 === 0) {
+        const bump = new THREE.Mesh(
+          new THREE.BoxGeometry(width * 0.7, 0.03, 0.12),
+          studMat
+        );
+        bump.position.set(p.x, p.y + 0.04, p.z);
+        bump.rotation.y = yaw;
+        this.root.add(bump);
+      }
     }
   }
 
@@ -573,11 +829,11 @@ export class TrackSystem {
     // Lanterns at ends
     for (const idx of [0, pts.length - 1]) {
       const p = pts[idx];
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8), postMat);
-      post.position.set(p.x + width * 0.55, p.y + 0.28, p.z);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.28, 8), postMat);
+      post.position.set(p.x + width * 0.55, p.y + 0.14, p.z);
       this.root.add(post);
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), lanternMat);
-      lamp.position.set(p.x + width * 0.55, p.y + 0.58, p.z);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), lanternMat);
+      lamp.position.set(p.x + width * 0.55, p.y + 0.3, p.z);
       this.root.add(lamp);
     }
   }
@@ -591,15 +847,15 @@ export class TrackSystem {
       color: 0xffeb3b, emissive: 0xffc107, emissiveIntensity: 1.35, roughness: 0.35,
     });
     // Chevron arrow pointing along ramp
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.35), mat);
-    shaft.position.set(from.x, from.y + 0.2, from.z);
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.18), mat);
+    shaft.position.set(from.x, from.y + 0.1, from.z);
     shaft.rotation.y = yaw;
     this.root.add(shaft);
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.22, 3), mat);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.11, 3), mat);
     head.position.set(
-      from.x + dir.x * 0.28,
-      from.y + 0.2,
-      from.z + dir.z * 0.28
+      from.x + dir.x * 0.14,
+      from.y + 0.1,
+      from.z + dir.z * 0.14
     );
     head.rotation.y = yaw;
     head.rotation.x = Math.PI / 2;
@@ -675,7 +931,8 @@ export class TrackSystem {
   }
 
   /**
-   * Find nearest track point within radius. Returns snap info with optional railPush.
+   * Surface query for MANUAL drive — NO centerline magnet / rail babysitting.
+   * Returns support under wheels, optional tube wall bounce, carpet flag.
    */
   querySnap(x, y, z, radius = 2.4) {
     let best = null;
@@ -684,7 +941,6 @@ export class TrackSystem {
       const abx = seg.b.x - seg.a.x;
       const aby = seg.b.y - seg.a.y;
       const abz = seg.b.z - seg.a.z;
-      // 3D projection for steep shafts / chutes (not just XZ)
       const apx = x - seg.a.x;
       const apy = y - seg.a.y;
       const apz = z - seg.a.z;
@@ -705,68 +961,88 @@ export class TrackSystem {
       const dist3 = Math.hypot(x - px, y - py, z - pz);
       const dy = Math.abs(y - py);
       const elev = ELEV_KINDS.has(seg.kind);
-      const heightBand = elev || seg.kind === "tunnel" ? 2.0 : 2.8;
-      const useRadius = elev ? radius * 0.95 : radius * 1.15; // wider forgiveness on floor
+      const tube = TUBE_KINDS.has(seg.kind);
+      const heightBand = elev || tube ? 1.35 : 2.8;
+      const useRadius = elev ? radius * 0.85 : (FLOOR_KINDS.has(seg.kind) ? radius * 1.45 : radius * 1.2);
       const checkDist = steep ? dist3 : dist;
       if (dy > heightBand || checkDist > useRadius) continue;
-      // Prefer magnet kinds + stick to current path (shafts/shortcuts won't drop mid-run)
-      const magnetBias = seg.magnet ? -0.18 : 0;
-      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.55 : 0;
-      const score = (steep ? dist3 : dist) + dy * (elev ? 0.42 : 0.32) + magnetBias + pathBias;
+      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.25 : 0;
+      const score = (steep ? dist3 : dist) + dy * (elev ? 0.55 : 0.28) + pathBias;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
         const yaw = Math.atan2(abx, abz);
-        const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : 0.55);
+        const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.72 : 0.45);
         const halfW = seg.width * 0.5;
-        const onTrack = (steep ? dist3 : dist) < seg.width * (elev ? 0.85 : 0.78);
-        let railPush = null;
-        if (seg.rail && dist > halfW * 0.5) {
+        // On road surface if within track width (no soft magnet radius)
+        const onTrack = (steep ? dist3 : dist) < seg.width * 0.62;
+        const supported = onTrack && dy < (elev ? 0.55 : 0.85);
+
+        // Tube wall bounce when scraping sides (stay enclosed; exit hole mid-tube = no support)
+        let wallBounce = null;
+        if (tube && dist > halfW * 0.72) {
           const pushDirX = (px - x);
           const pushDirZ = (pz - z);
           const plen = Math.hypot(pushDirX, pushDirZ) || 1;
-          const strength = Math.min(1.6, (dist - halfW * 0.5) * (elev ? 2.8 : 2.0));
-          railPush = {
-            x: (pushDirX / plen) * strength,
-            z: (pushDirZ / plen) * strength,
-          };
+          // Soft bounce only while still roughly inside tube envelope
+          if (dist < halfW * 1.35) {
+            const over = dist - halfW * 0.72;
+            const strength = Math.min(0.045, over * 0.085);
+            wallBounce = {
+              x: (pushDirX / plen) * strength,
+              z: (pushDirZ / plen) * strength,
+            };
+          }
         }
+
+        // Exiting tube sideways into void — not supported
+        const exitedTube = tube && dist > halfW * 1.25 && !steep;
+
+        const isFloor = FLOOR_KINDS.has(seg.kind);
+        // Off asphalt but near ground road → carpet crawl (still driveable, no fall)
+        const carpet = isFloor && !onTrack && py < 0.5;
         best = {
-          x: px, y: py + 0.07, z: pz,
+          x: px, y: (carpet ? 0.045 : py + 0.03), z: pz,
           yaw, bank,
-          onTrack,
-          softPull: checkDist < useRadius,
+          onTrack: onTrack && !exitedTube,
+          supported: (supported && !exitedTube) || carpet,
+          softPull: false, // no babysitting
+          carpet,
           dist: checkDist, kind: seg.kind, pathId: seg.pathId, label: seg.label,
-          railPush,
-          magnet: !!seg.magnet,
+          wallBounce,
+          magnet: false,
+          elevated: elev,
+          wasElevated: elev,
           steep: !!steep,
+          tube,
         };
       }
     }
-    if (!best) {
-      let near = null;
-      let nd = 10;
-      for (const seg of this.segments) {
-        const mx = (seg.a.x + seg.b.x) * 0.5;
-        const my = (seg.a.y + seg.b.y) * 0.5;
-        const mz = (seg.a.z + seg.b.z) * 0.5;
-        const d = Math.hypot(x - mx, z - mz);
-        const dy = Math.abs(y - my);
-        if (d < nd && dy < 4) {
-          nd = d;
-          near = {
-            x: mx, y: my + 0.07, z: mz,
-            yaw: Math.atan2(seg.b.x - seg.a.x, seg.b.z - seg.a.z),
-            bank: 0, onTrack: false, softPull: d < 4.5, dist: d,
-            kind: seg.kind, pathId: seg.pathId, railPush: null, magnet: false,
-          };
-        }
-      }
-      if (near?.pathId) this._lastPathId = near.pathId;
-      return near;
+
+    if (best) {
+      if (best.pathId) this._lastPathId = best.pathId;
+      return best;
     }
-    if (best?.pathId) this._lastPathId = best.pathId;
-    return best;
+
+    // Ground-level open floor only (upper stories rely on nearby floor segments / car carpet)
+    if (y < 0.55) {
+      return {
+        x, y: 0.045, z,
+        yaw: null, bank: 0,
+        onTrack: false, supported: true, softPull: false,
+        carpet: true, dist: 0, kind: "floor", pathId: null, label: null,
+        wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+      };
+    }
+
+    // No support — fall candidate (car tracks _lastElevated for balcony/cornice)
+    return {
+      x, y, z,
+      yaw: null, bank: 0,
+      onTrack: false, supported: false, softPull: false,
+      carpet: false, dist: 99, kind: "void", pathId: null, label: null,
+      wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+    };
   }
 
   nearestCheckpoint(x, z, maxDist = 3.5, y = null) {
@@ -790,21 +1066,34 @@ export class TrackSystem {
     return best;
   }
 
-  onBoostPad(x, z, maxDist = 1.1) {
+  onBoostPad(x, z, maxDist = 0.55) {
     for (const b of this.boostPads) {
       if (Math.hypot(x - b.pos.x, z - b.pos.z) < maxDist) return true;
     }
     return false;
   }
 
-  /** Subtle dust-mote pulse (no extra lights). */
+  /** Subtle dust-mote / gate pulse (no extra lights). */
   updateVisuals(t) {
     const pulse = 0.7 + 0.35 * Math.sin(t * 2.2);
-    for (const m of this._moteMats) m.emissiveIntensity = pulse;
+    for (const m of this._moteMats) {
+      if (m.emissiveIntensity != null) m.emissiveIntensity = pulse;
+    }
+    const glow = 0.9 + 0.45 * Math.sin(t * 2.8);
+    for (const m of this._bannerMats || []) {
+      if (m.emissiveIntensity != null) m.emissiveIntensity = glow;
+    }
     for (const p of this.portals) {
       if (p.mesh) {
         const s = 1 + 0.06 * Math.sin(t * 3.0 + p.pos.x);
         p.mesh.scale.set(s, s, s);
+      }
+    }
+    for (const g of this._speedGates || []) {
+      if (g.mesh) {
+        const s = 1 + 0.08 * Math.sin(t * 4.0 + g.pos.z);
+        g.mesh.scale.set(s, s, s);
+        g.mesh.rotation.z = t * 0.6;
       }
     }
   }

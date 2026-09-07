@@ -1,40 +1,148 @@
 import * as THREE from "three";
 
 /**
- * Premium miniature RC car (~0.42 m) — candy-red two-tone, chrome, glass,
- * detailed wheels, subtle underglow, speed-tied wheel spin + body roll.
+ * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
+ * Manual RC physics: free steer, surface support, gravity falls, crash.
+ * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
+export const CAR_SCALE = 0.25; // ~0.42 m → ~0.105 m length
+
+/** Optional whisper of road grip when wheels on surface. OFF by default. */
+export const ASSIST_MAGNET = false;
+
+/** Handling / look presets (base values; tiny-car precision). */
+export const VEHICLE_PRESETS = {
+  car: {
+    id: "car",
+    label: "Car",
+    blurb: "Balanced · precise",
+    maxSpeed: 1.85,
+    boostMax: 2.55,
+    accel: 8.2,
+    brake: 16,
+    friction: 7.2,
+    steerRate: 6.4,
+    bodyColor: 0xd32f2f,
+    accent: 0xfff3e0,
+  },
+  suv: {
+    id: "suv",
+    label: "SUV",
+    blurb: "Taller · stabler",
+    maxSpeed: 1.65,
+    boostMax: 2.25,
+    accel: 7.0,
+    brake: 15,
+    friction: 8.0,
+    steerRate: 5.2,
+    bodyColor: 0x1565c0,
+    accent: 0xeceff1,
+  },
+  jeep: {
+    id: "jeep",
+    label: "Jeep",
+    blurb: "Chunky · grippy",
+    maxSpeed: 1.55,
+    boostMax: 2.15,
+    accel: 7.4,
+    brake: 17,
+    friction: 9.0,
+    steerRate: 5.6,
+    bodyColor: 0x2e7d32,
+    accent: 0xfff59d,
+  },
+  convertible: {
+    id: "convertible",
+    label: "Convertible",
+    blurb: "Open-top · quick steer",
+    maxSpeed: 1.95,
+    boostMax: 2.7,
+    accel: 8.8,
+    brake: 15,
+    friction: 6.6,
+    steerRate: 7.6,
+    bodyColor: 0xf9a825,
+    accent: 0x212121,
+  },
+};
+
 export class RCCar {
-  constructor() {
+  constructor(vehicleId = "car") {
     this.root = new THREE.Group();
     this.root.name = "rc_car";
-    this.bodyPivot = new THREE.Group(); // rolls independently of yaw
+    this.bodyPivot = new THREE.Group();
     this.root.add(this.bodyPivot);
     this.wheels = [];
     this.speed = 0;
     this.yaw = Math.PI;
-    this.maxSpeed = 8.2;
-    this.boostMax = 12.2;
-    this.accel = 18;       // snappy start
-    this.brake = 26;
-    this.friction = 6.4;   // soft coast
-    this.steerRate = 3.05;
-    this.wheelBase = 0.22;
+    this.vy = 0;
+    this.vehicleId = "car";
+    this.maxSpeed = 1.85;
+    this.boostMax = 2.55;
+    this.accel = 8.2;
+    this.brake = 16;
+    this.friction = 7.2;
+    this.steerRate = 6.4;
+    this.wheelBase = 0.055;
     this.onTrack = true;
+    this.airborne = false;
+    this.crashed = false;
+    this._unsupportedFrames = 0;
+    this._fallStartY = 0;
+    this._lastElevated = false;
     this._steerInput = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
     this._boosting = false;
-    this._build();
+    this._idlePhase = 0;
+    this._tumble = 0;
+    this._scrape = 0;
+    this._justLanded = 0;
+    this._headMats = [];
+    this._glowMat = null;
+    this._wheelRadius = 0.048 * CAR_SCALE;
+    this.setVehicle(vehicleId);
   }
 
-  _build() {
+  get length() {
+    return 0.45 * CAR_SCALE;
+  }
+
+  /** Swap mesh + handling flavor. Keeps pose/scale. */
+  setVehicle(id) {
+    const preset = VEHICLE_PRESETS[id] || VEHICLE_PRESETS.car;
+    this.vehicleId = preset.id;
+    this.maxSpeed = preset.maxSpeed;
+    this.boostMax = preset.boostMax;
+    this.accel = preset.accel;
+    this.brake = preset.brake;
+    this.friction = preset.friction;
+    this.steerRate = preset.steerRate;
+
+    // Clear previous mesh
+    while (this.bodyPivot.children.length) {
+      const c = this.bodyPivot.children[0];
+      this.bodyPivot.remove(c);
+      if (c.geometry) c.geometry.dispose?.();
+    }
+    for (const w of this.wheels) {
+      this.root.remove(w);
+    }
+    this.wheels = [];
+    this._headMats = [];
+    this._glowMat = null;
+
+    this._build(preset);
+    this.root.scale.setScalar(CAR_SCALE);
+  }
+
+  _mats(preset) {
     const candy = new THREE.MeshStandardMaterial({
-      color: 0xd32f2f, roughness: 0.28, metalness: 0.42,
+      color: preset.bodyColor, roughness: 0.28, metalness: 0.42,
     });
     const cream = new THREE.MeshStandardMaterial({
-      color: 0xfff3e0, roughness: 0.4, metalness: 0.18,
+      color: preset.accent, roughness: 0.4, metalness: 0.18,
     });
     const glass = new THREE.MeshStandardMaterial({
       color: 0xb3e5fc, roughness: 0.08, metalness: 0.35,
@@ -54,119 +162,41 @@ export class RCCar {
       color: 0xb0bec5, roughness: 0.3, metalness: 0.8,
     });
     const headMat = new THREE.MeshStandardMaterial({
-      color: 0xfffde7, emissive: 0xffecb3, emissiveIntensity: 1.6,
+      color: 0xfffde7, emissive: 0xffecb3, emissiveIntensity: 0.35,
       roughness: 0.25,
     });
     const tailMat = new THREE.MeshStandardMaterial({
-      color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 0.85, roughness: 0.35,
+      color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 0.25, roughness: 0.35,
     });
     const underglow = new THREE.MeshStandardMaterial({
-      color: 0xff5252, emissive: 0xff1744, emissiveIntensity: 0.45,
-      transparent: true, opacity: 0.55, roughness: 0.5,
+      color: preset.bodyColor, emissive: preset.bodyColor, emissiveIntensity: 0.12,
+      transparent: true, opacity: 0.28, roughness: 0.5,
     });
+    this._headMats = [headMat, tailMat];
+    this._glowMat = underglow;
+    return { candy, cream, glass, dark, chrome, rubber, hubMat, headMat, tailMat, underglow };
+  }
 
-    const b = this.bodyPivot;
-
-    // Layered body for bevelled silhouette (lower → mid → upper taper)
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.44), candy);
-    lower.position.y = 0.055;
-    lower.castShadow = true;
-    b.add(lower);
-
-    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.40), candy);
-    mid.position.y = 0.095;
-    mid.castShadow = true;
-    b.add(mid);
-
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 0.12), candy);
-    nose.position.set(0, 0.09, -0.18);
-    b.add(nose);
-
-    // Cream racing stripe
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.012, 0.42), cream);
-    stripe.position.set(0, 0.122, -0.01);
-    b.add(stripe);
-    const stripeHood = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 0.1), cream);
-    stripeHood.position.set(0, 0.112, -0.2);
-    b.add(stripeHood);
-
-    // Cabin / windshield glass
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.07, 0.16), glass);
-    cabin.position.set(0, 0.155, -0.02);
-    b.add(cabin);
-    // Soft cabin frame
-    const cabinFrame = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.015, 0.175), dark);
-    cabinFrame.position.set(0, 0.125, -0.02);
-    b.add(cabinFrame);
-
-    // Spoiler
-    const spoilerPostL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), dark);
-    spoilerPostL.position.set(-0.07, 0.145, 0.17);
-    b.add(spoilerPostL);
-    const spoilerPostR = spoilerPostL.clone();
-    spoilerPostR.position.x = 0.07;
-    b.add(spoilerPostR);
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.055), cream);
-    spoiler.position.set(0, 0.175, 0.17);
-    b.add(spoiler);
-
-    // Chrome bumpers
-    const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.028, 0.035), chrome);
-    frontBumper.position.set(0, 0.048, -0.225);
-    b.add(frontBumper);
-    const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.028, 0.03), chrome);
-    rearBumper.position.set(0, 0.048, 0.22);
-    b.add(rearBumper);
-
-    // Chrome side mirrors
-    for (const sx of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.012), chrome);
-      arm.position.set(sx * 0.12, 0.13, -0.08);
-      b.add(arm);
-      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.028, 0.022), chrome);
-      mirror.position.set(sx * 0.145, 0.13, -0.08);
-      b.add(mirror);
-    }
-
-    // Headlight lenses (emissive — no SpotLights)
-    for (const sx of [-0.07, 0.07]) {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), headMat);
-      h.position.set(sx, 0.078, -0.225);
-      h.scale.z = 0.7;
-      b.add(h);
-    }
-    // Tail lights
-    for (const sx of [-0.07, 0.07]) {
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.022, 0.018), tailMat);
-      t.position.set(sx, 0.078, 0.225);
-      b.add(t);
-    }
-
-    // Subtle underglow panel
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.008, 0.32), underglow);
-    glow.position.y = 0.018;
-    b.add(glow);
-
-    // Detailed wheels: tire + hub + rim ring
-    const tireGeo = new THREE.CylinderGeometry(0.048, 0.048, 0.038, 14);
-    const hubGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.042, 10);
-    const rimGeo = new THREE.CylinderGeometry(0.032, 0.032, 0.04, 12);
-    for (const [x, z] of [[-0.125, -0.13], [0.125, -0.13], [-0.125, 0.13], [0.125, 0.13]]) {
+  _addWheels(m, layout, tireR = 0.048, tireW = 0.038) {
+    const tireGeo = new THREE.CylinderGeometry(tireR, tireR, tireW, 14);
+    const hubGeo = new THREE.CylinderGeometry(tireR * 0.46, tireR * 0.46, tireW + 0.004, 10);
+    const rimGeo = new THREE.CylinderGeometry(tireR * 0.67, tireR * 0.67, tireW + 0.002, 12);
+    this._wheelRadius = tireR * CAR_SCALE;
+    for (const [x, z] of layout) {
       const wheelGroup = new THREE.Group();
-      wheelGroup.position.set(x, 0.048, z);
-      const tire = new THREE.Mesh(tireGeo, rubber);
+      wheelGroup.position.set(x, tireR, z);
+      const tire = new THREE.Mesh(tireGeo, m.rubber);
       tire.rotation.z = Math.PI / 2;
       tire.castShadow = true;
       wheelGroup.add(tire);
-      const rim = new THREE.Mesh(rimGeo, chrome);
+      const rim = new THREE.Mesh(rimGeo, m.chrome);
       rim.rotation.z = Math.PI / 2;
       wheelGroup.add(rim);
-      const hub = new THREE.Mesh(hubGeo, hubMat);
+      const hub = new THREE.Mesh(hubGeo, m.hubMat);
       hub.rotation.z = Math.PI / 2;
       wheelGroup.add(hub);
-      // Spoke nubs
       for (let i = 0; i < 4; i++) {
-        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.028, 0.008), chrome);
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.006, tireR * 0.58, 0.008), m.chrome);
         spoke.rotation.z = Math.PI / 2;
         spoke.rotation.x = (i / 4) * Math.PI;
         wheelGroup.add(spoke);
@@ -176,58 +206,372 @@ export class RCCar {
     }
   }
 
+  _buildCar(m) {
+    const b = this.bodyPivot;
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.44), m.candy);
+    lower.position.y = 0.055;
+    lower.castShadow = true;
+    b.add(lower);
+    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.40), m.candy);
+    mid.position.y = 0.095;
+    mid.castShadow = true;
+    b.add(mid);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 0.12), m.candy);
+    nose.position.set(0, 0.09, -0.18);
+    b.add(nose);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.012, 0.42), m.cream);
+    stripe.position.set(0, 0.122, -0.01);
+    b.add(stripe);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.07, 0.16), m.glass);
+    cabin.position.set(0, 0.155, -0.02);
+    b.add(cabin);
+    const cabinFrame = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.015, 0.175), m.dark);
+    cabinFrame.position.set(0, 0.125, -0.02);
+    b.add(cabinFrame);
+    const spoilerPostL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), m.dark);
+    spoilerPostL.position.set(-0.07, 0.145, 0.17);
+    b.add(spoilerPostL);
+    const spoilerPostR = spoilerPostL.clone();
+    spoilerPostR.position.x = 0.07;
+    b.add(spoilerPostR);
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.055), m.cream);
+    spoiler.position.set(0, 0.175, 0.17);
+    b.add(spoiler);
+    this._addBumpersLights(m, 0.078);
+    this._addWheels(m, [[-0.125, -0.13], [0.125, -0.13], [-0.125, 0.13], [0.125, 0.13]]);
+  }
+
+  _buildSuv(m) {
+    const b = this.bodyPivot;
+    // Taller boxy cabin
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.055, 0.46), m.candy);
+    lower.position.y = 0.07;
+    lower.castShadow = true;
+    b.add(lower);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.1, 0.42), m.candy);
+    body.position.y = 0.14;
+    body.castShadow = true;
+    b.add(body);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.28), m.glass);
+    cabin.position.set(0, 0.22, 0.02);
+    b.add(cabin);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.26), m.dark);
+    roof.position.set(0, 0.275, 0.02);
+    b.add(roof);
+    // Roof rails
+    for (const sx of [-0.08, 0.08]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.02, 0.3), m.chrome);
+      rail.position.set(sx, 0.29, 0.0);
+      b.add(rail);
+    }
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.01, 0.4), m.cream);
+    stripe.position.set(0, 0.2, -0.02);
+    b.add(stripe);
+    this._addBumpersLights(m, 0.09, 0.26);
+    this._addWheels(m, [[-0.13, -0.14], [0.13, -0.14], [-0.13, 0.14], [0.13, 0.14]], 0.055, 0.045);
+  }
+
+  _buildJeep(m) {
+    const b = this.bodyPivot;
+    // Chunky short wheelbase, open cage
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.4), m.candy);
+    lower.position.y = 0.08;
+    lower.castShadow = true;
+    b.add(lower);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.36), m.candy);
+    body.position.y = 0.14;
+    body.castShadow = true;
+    b.add(body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.12), m.candy);
+    hood.position.set(0, 0.15, -0.16);
+    b.add(hood);
+    // Roll cage
+    for (const sx of [-0.1, 0.1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.12, 0.018), m.dark);
+      post.position.set(sx, 0.24, 0.05);
+      b.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.016, 0.016), m.dark);
+    bar.position.set(0, 0.3, 0.05);
+    b.add(bar);
+    const bar2 = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.016, 0.18), m.dark);
+    bar2.position.set(0, 0.3, -0.02);
+    b.add(bar2);
+    // Spare tire on back
+    const spare = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.016, 8, 14), m.rubber);
+    spare.position.set(0, 0.16, 0.22);
+    spare.rotation.y = Math.PI / 2;
+    b.add(spare);
+    // Snorkel / grill bars
+    for (let i = -1; i <= 1; i++) {
+      const g = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.05, 0.008), m.chrome);
+      g.position.set(i * 0.04, 0.14, -0.22);
+      b.add(g);
+    }
+    this._addBumpersLights(m, 0.1, 0.28);
+    this._addWheels(m, [[-0.14, -0.12], [0.14, -0.12], [-0.14, 0.12], [0.14, 0.12]], 0.058, 0.05);
+  }
+
+  _buildConvertible(m) {
+    const b = this.bodyPivot;
+    // Low sleek open-top
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.46), m.candy);
+    lower.position.y = 0.05;
+    lower.castShadow = true;
+    b.add(lower);
+    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.04, 0.4), m.candy);
+    mid.position.y = 0.085;
+    mid.castShadow = true;
+    b.add(mid);
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.14), m.candy);
+    nose.position.set(0, 0.08, -0.2);
+    b.add(nose);
+    // Open cockpit (no cabin glass roof) — windshield only
+    const wind = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.012), m.glass);
+    wind.position.set(0, 0.14, -0.08);
+    b.add(wind);
+    const windFrame = new THREE.Mesh(new THREE.BoxGeometry(0.175, 0.01, 0.02), m.chrome);
+    windFrame.position.set(0, 0.17, -0.08);
+    b.add(windFrame);
+    // Soft-top folded stack
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.08), m.dark);
+    top.position.set(0, 0.12, 0.14);
+    b.add(top);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.01, 0.38), m.cream);
+    stripe.position.set(0, 0.11, -0.02);
+    b.add(stripe);
+    // Low spoiler lip
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.012, 0.03), m.cream);
+    lip.position.set(0, 0.1, 0.2);
+    b.add(lip);
+    this._addBumpersLights(m, 0.07);
+    this._addWheels(m, [[-0.12, -0.135], [0.12, -0.135], [-0.12, 0.13], [0.12, 0.13]], 0.045, 0.036);
+  }
+
+  _addBumpersLights(m, lightY = 0.078, bumperW = 0.25) {
+    const b = this.bodyPivot;
+    const frontBumper = new THREE.Mesh(new THREE.BoxGeometry(bumperW, 0.028, 0.035), m.chrome);
+    frontBumper.position.set(0, 0.048, -0.225);
+    b.add(frontBumper);
+    const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(bumperW * 0.96, 0.028, 0.03), m.chrome);
+    rearBumper.position.set(0, 0.048, 0.22);
+    b.add(rearBumper);
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 0.012), m.chrome);
+      arm.position.set(sx * 0.12, lightY + 0.04, -0.08);
+      b.add(arm);
+      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.028, 0.022), m.chrome);
+      mirror.position.set(sx * 0.145, lightY + 0.04, -0.08);
+      b.add(mirror);
+    }
+    for (const sx of [-0.07, 0.07]) {
+      const h = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), m.headMat);
+      h.position.set(sx, lightY, -0.225);
+      h.scale.z = 0.7;
+      b.add(h);
+    }
+    for (const sx of [-0.07, 0.07]) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.022, 0.018), m.tailMat);
+      t.position.set(sx, lightY, 0.225);
+      b.add(t);
+    }
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.008, 0.32), m.underglow);
+    glow.position.y = 0.018;
+    b.add(glow);
+  }
+
+  _build(preset) {
+    const m = this._mats(preset);
+    if (preset.id === "suv") this._buildSuv(m);
+    else if (preset.id === "jeep") this._buildJeep(m);
+    else if (preset.id === "convertible") this._buildConvertible(m);
+    else this._buildCar(m);
+  }
+
+  setLightsSubtle(subtle) {
+    const head = subtle ? 0.22 : 0.85;
+    const tail = subtle ? 0.15 : 0.55;
+    const glow = subtle ? 0.06 : 0.28;
+    const glowOp = subtle ? 0.12 : 0.35;
+    if (this._headMats[0]) this._headMats[0].emissiveIntensity = head;
+    if (this._headMats[1]) this._headMats[1].emissiveIntensity = tail;
+    if (this._glowMat) {
+      this._glowMat.emissiveIntensity = glow;
+      this._glowMat.opacity = glowOp;
+    }
+  }
+
   setPose(x, y, z, yaw) {
     this.root.position.set(x, y, z);
     this.yaw = yaw;
     this.root.rotation.y = yaw;
+    this.root.rotation.x = 0;
+    this.root.rotation.z = 0;
+    this.vy = 0;
+    this.speed = 0;
+    this.airborne = false;
+    this.crashed = false;
+    this._unsupportedFrames = 0;
+    this._fallStartY = 0;
+    this._lastElevated = false;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
+    this._tumble = 0;
+    this._scrape = 0;
+    this._justLanded = 0;
+    this._boosting = false;
     this.bodyPivot.rotation.z = 0;
     this.bodyPivot.rotation.x = 0;
   }
 
+  resetBoost() {
+    this._boosting = false;
+  }
+
+  _storyFloors() {
+    return [8.46, 4.26, 0.045, -4.05];
+  }
+
+  /** Nearest walkable story floor within band, or null if mid-air between stories. */
+  _nearestStoryFloor(y) {
+    let best = null;
+    let bd = 0.55;
+    for (const f of this._storyFloors()) {
+      const d = Math.abs(y - f);
+      if (d < bd) { bd = d; best = f; }
+    }
+    return best;
+  }
+
+  /** Highest mansion floor strictly below fall start (story-aware crash landings). */
+  _landingFloorY() {
+    const start = this._fallStartY;
+    for (const f of this._storyFloors()) {
+      if (f < start - 0.35) return f;
+    }
+    return 0.045;
+  }
+
   /**
-   * Arcade step. keys: {forward,back,left,right,boost}
-   * snap: {x,y,z,yaw,onTrack,bank,railPush?,magnet?,kind?,steep?} from track system
+   * Manual RC step.
+   * snap: {x,y,z,yaw,onTrack,supported,bank,kind,wallBounce,carpet,elevated,steep?}
+   * Returns { scrape, landed, fell } flags for FX.
    */
   update(dt, keys, snap) {
+    const flags = { scrape: 0, landed: false, fell: false };
+    if (this.crashed) return flags;
+
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 14 * dt));
-    this._boosting = !!(keys.boost && Math.abs(this.speed) > 1.5);
-    const maxV = keys.boost ? this.boostMax : this.maxSpeed;
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 22 * dt));
 
-    // Acceleration curve: snappy start, soft asymptotic cap
+    const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
+    const elevated = !!(snap?.elevated);
+    const kind = snap?.kind || "";
+    const inTube = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "tunnel";
+
+    // Remember elevated runs so leaving balcony/cornice/furniture ≠ carpet
+    if (supported && (elevated || snap?.elevated)) this._lastElevated = true;
+    if (supported && snap?.carpet && !elevated) this._lastElevated = false;
+    if (supported && snap?.onTrack && snap?.kind === "floor") this._lastElevated = false;
+
+    // Support grace: N frames without surface → airborne (elevated fails faster)
+    if (supported && !this.airborne) {
+      this._unsupportedFrames = 0;
+      this._fallStartY = 0;
+    } else if (!this.airborne) {
+      this._unsupportedFrames += 1;
+      const fromElev = !!(elevated || snap?.wasElevated || this._lastElevated);
+      const limit = fromElev ? 3 : 8;
+      // Open floor of any story = carpet crawl — unless we just left an elevated run
+      const storyY = this._nearestStoryFloor(this.root.position.y);
+      const onStoryCarpet = !fromElev && storyY != null
+        && Math.abs(this.root.position.y - storyY) < 0.55;
+      if (!onStoryCarpet && this._unsupportedFrames >= limit) {
+        this.airborne = true;
+        this._fallStartY = this.root.position.y;
+        this._lastElevated = false;
+        this.vy = Math.min(this.vy, 0.15);
+        flags.fell = true;
+      } else if (onStoryCarpet && !supported) {
+        this.root.position.y = THREE.MathUtils.lerp(
+          this.root.position.y, storyY, Math.min(1, 8 * dt)
+        );
+      }
+    }
+
+    if (this.airborne) {
+      // Tumble + gravity — committed falls, little air authority
+      this.vy -= 16.8 * dt;
+      this.speed *= 1 - Math.min(1, 1.35 * dt);
+      this._tumble += dt;
+      this.root.position.x += Math.sin(this.yaw) * this.speed * dt;
+      this.root.position.z += Math.cos(this.yaw) * this.speed * dt;
+      this.root.position.y += this.vy * dt;
+      this.bodyPivot.rotation.x += 3.8 * dt;
+      this.bodyPivot.rotation.z += 5.2 * dt * Math.sign(this._steerInput || 1);
+      this.root.rotation.y = this.yaw;
+
+      const floorY = this._landingFloorY();
+      if (this.root.position.y <= floorY + 0.04 && this.vy < 0) {
+        this.root.position.y = floorY;
+        const bigFall = (this._fallStartY - floorY) > 0.7;
+        if (this._tumble > 0.18 || Math.abs(this.vy) > 2.2 || bigFall) {
+          this.crashed = true;
+          this.speed = 0;
+          this.vy = 0;
+        } else {
+          this.airborne = false;
+          this.vy = 0;
+          this._tumble = 0;
+          this._justLanded = 0.35;
+          flags.landed = true;
+          this.bodyPivot.rotation.x = 0;
+          this.bodyPivot.rotation.z = 0;
+        }
+      }
+      if (this.root.position.y < -7) {
+        this.crashed = true;
+        this.speed = 0;
+        this.vy = 0;
+      }
+      return flags;
+    }
+
+    // Grounded driving — slow precise toy feel
+    this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
+    let maxV = keys.boost ? this.boostMax : this.maxSpeed;
+    if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
+      maxV *= 0.38;
+    }
+    if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
+    const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
+    if (onRailDeck && snap?.onTrack) maxV *= 0.88;
+
+    let fric = this.friction;
+    if (snap?.onTrack) {
+      if (kind === "cornice" || kind === "balcony") fric *= 1.55;
+      else if (elevated || kind === "ramp") fric *= 1.35;
+      else fric *= 1.18;
+    }
+
     if (throttle > 0) {
       const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
-      const curve = 0.55 + 0.45 * headroom * headroom; // punchy off the line
+      const curve = 0.45 + 0.55 * headroom * headroom;
       this.speed += this.accel * throttle * curve * dt;
     } else if (throttle < 0) {
       this.speed -= this.brake * dt;
     } else {
-      if (this.speed > 0) this.speed = Math.max(0, this.speed - this.friction * dt);
-      else if (this.speed < 0) this.speed = Math.min(0, this.speed + this.friction * dt);
+      if (this.speed > 0) this.speed = Math.max(0, this.speed - fric * dt);
+      else if (this.speed < 0) this.speed = Math.min(0, this.speed + fric * dt);
     }
-    this.speed = THREE.MathUtils.clamp(this.speed, -maxV * 0.45, maxV);
+    this.speed = THREE.MathUtils.clamp(this.speed, -maxV * 0.42, maxV);
 
-    const kind = snap?.kind || "";
-    const magnet = !!(snap?.magnet || kind === "shortcut" || kind === "shaft" || kind === "chute"
-      || kind === "elevated" || kind === "cornice" || kind === "balcony" || kind === "ramp");
-
-    // Grip / off-track: slow on carpet/grass feel, never hard freeze
-    if (snap?.onTrack) {
-      if (kind === "flower" || kind === "outdoor") {
-        // soft petal / gravel — slight drag, still fun
-        this.speed *= 1 - Math.min(0.35, 0.35 * dt);
-      }
-    } else if (snap?.softPull) {
-      this.speed *= 1 - Math.min(1, 1.05 * dt);
-    } else {
-      this.speed *= 1 - Math.min(1, 2.4 * dt);
+    if (kind === "flower" || kind === "outdoor") {
+      this.speed *= 1 - Math.min(0.28, 0.28 * dt);
     }
 
-    // Landing damp after jumps / steep slides
     if (snap?.steep || kind === "chute") {
       this._landingDamp = Math.min(1, this._landingDamp + 2.5 * dt);
     } else {
@@ -237,18 +581,17 @@ export class RCCar {
       }
     }
 
-    // Steering: high at low speed, stable at high
     const absV = Math.abs(this.speed);
-    const lowBoost = 1.45 - 0.6 * THREE.MathUtils.smoothstep(absV, 0.4, 5.5);
-    const highDamp = 1 - 0.32 * THREE.MathUtils.smoothstep(absV, 5, this.boostMax);
+    const lowBoost = 1.72 - 0.48 * THREE.MathUtils.smoothstep(absV, 0.08, 1.4);
+    const highDamp = 1 - 0.38 * THREE.MathUtils.smoothstep(absV, 1.2, this.boostMax);
+    const railGrip = (onRailDeck && snap?.onTrack) ? 1.12 : 1;
     const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.2, absV / 2.0 + 0.18) * lowBoost * highDamp;
+      this._steerInput * this.steerRate * Math.min(1.35, absV / 0.45 + 0.28) * lowBoost * highDamp * railGrip;
     this.yaw += steerEff * Math.sign(this.speed || 1) * dt;
 
-    // Visual-only drift trail intensity
     this._driftTrail = THREE.MathUtils.lerp(
       this._driftTrail,
-      Math.abs(this._steerInput) * THREE.MathUtils.smoothstep(absV, 3, 8) * 0.8,
+      Math.abs(this._steerInput) * THREE.MathUtils.smoothstep(absV, 0.9, 2.2) * 0.8,
       Math.min(1, 8 * dt)
     );
 
@@ -258,59 +601,78 @@ export class RCCar {
     let z = this.root.position.z + fwdZ * this.speed * dt;
     let y = this.root.position.y;
 
-    if (snap) {
-      this.onTrack = !!snap.onTrack;
-      if (snap.onTrack || snap.softPull) {
-        // Stronger magnetic centerline on elevated / shortcut / shafts
-        const basePull = snap.onTrack ? (magnet ? 0.78 : 0.48) : (magnet ? 0.32 : 0.16);
-        const pullMul = Math.min(1, basePull * 14 * dt);
-        x = THREE.MathUtils.lerp(x, snap.x, pullMul);
-        z = THREE.MathUtils.lerp(z, snap.z, pullMul);
-        // Fast Y lock — critical so car doesn't fall out mid-shaft
-        const yLock = magnet || snap.steep ? 28 : 18;
-        y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
+    this.onTrack = !!(snap?.onTrack);
 
-        if (snap.railPush) {
-          const railMul = magnet ? 14 : 10;
-          x += snap.railPush.x * Math.min(1, railMul * dt);
-          z += snap.railPush.z * Math.min(1, railMul * dt);
-        }
-
-        if (snap.onTrack && snap.yaw != null) {
-          let dy = snap.yaw - this.yaw;
-          while (dy > Math.PI) dy -= Math.PI * 2;
-          while (dy < -Math.PI) dy += Math.PI * 2;
-          const align = (magnet ? 0.4 : 0.28) + 0.28 * THREE.MathUtils.smoothstep(absV, 2, 8);
-          this.yaw += dy * Math.min(1, 4.2 * dt) * align;
-        }
-
-        // Bank follows track; extra on chutes
-        const bank = snap.bank || 0;
-        const targetRoll = bank - this._steerInput * 0.14 * Math.min(1, absV / 4);
-        this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 11 * dt));
-      } else {
-        y = THREE.MathUtils.lerp(y, snap.y ?? y, Math.min(1, 5 * dt));
-        this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 6 * dt));
+    if (snap?.wallBounce) {
+      x += snap.wallBounce.x;
+      z += snap.wallBounce.z;
+      const scrape = Math.hypot(snap.wallBounce.x, snap.wallBounce.z);
+      if (scrape > 0.0005) {
+        this.speed *= 1 - Math.min(0.45, scrape * 18 * dt);
+        this._scrape = Math.min(1, this._scrape + scrape * 40);
+        flags.scrape = scrape;
       }
+    } else {
+      this._scrape = Math.max(0, this._scrape - 3 * dt);
     }
 
-    // NaN guard
+    // Height follow: stick to surface under wheels (NO centerline magnet)
+    if (supported && snap) {
+      const sticky = elevated || kind === "cornice" || kind === "balcony";
+      const yLock = snap.steep ? 28 : (sticky ? 26 : 18);
+      y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
+
+      if (ASSIST_MAGNET && snap.onTrack) {
+        const whisper = Math.min(1, 0.08 * 10 * dt);
+        x = THREE.MathUtils.lerp(x, snap.x, whisper);
+        z = THREE.MathUtils.lerp(z, snap.z, whisper);
+      }
+
+      const bank = snap.bank || 0;
+      const targetRoll = bank - this._steerInput * 0.14 * Math.min(1, absV / 1.2);
+      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 11 * dt));
+    } else {
+      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 6 * dt));
+    }
+
+    if (this._justLanded > 0) {
+      this._justLanded = Math.max(0, this._justLanded - dt);
+      this.speed *= 1 - Math.min(0.4, 1.2 * dt);
+    }
+
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)) {
-      return;
+      return flags;
     }
 
     this.root.position.set(x, y, z);
     this.root.rotation.y = this.yaw;
     this.bodyPivot.rotation.z = this._bodyRoll;
-    // Subtle pitch from landing damp / chute
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(
       this.bodyPivot.rotation.x,
       -(snap?.bank || 0) * 0.35 - this._landingDamp * 0.08,
       Math.min(1, 8 * dt)
     );
 
-    const spin = (this.speed * dt) / 0.048;
+    if (inTube) {
+      this.bodyPivot.rotation.z += Math.sin(this._idlePhase * 9) * 0.01 * absV;
+    }
+
+    const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
+
+    this._idlePhase += dt;
+    return flags;
+  }
+
+  idleTwitch(dt) {
+    this._idlePhase += dt;
+    if (Math.abs(this.speed) > 0.08 || this.airborne || this.crashed) return;
+    const twitch = Math.sin(this._idlePhase * 1.7) * 0.35 * dt;
+    for (const w of this.wheels) w.rotation.x += twitch;
+    if (this._headMats[0]) {
+      const blink = 0.55 + 0.35 * Math.sin(this._idlePhase * 2.4);
+      this._headMats[0].emissiveIntensity = blink;
+    }
   }
 
   get position() {
@@ -318,7 +680,7 @@ export class RCCar {
   }
 
   getSpeedKmh() {
-    return Math.abs(this.speed) * 3.6;
+    return Math.abs(this.speed) * 3.6 * 2.8;
   }
 
   get isBoosting() {
@@ -327,5 +689,9 @@ export class RCCar {
 
   get driftTrail() {
     return this._driftTrail;
+  }
+
+  get scrapeAmount() {
+    return this._scrape;
   }
 }
