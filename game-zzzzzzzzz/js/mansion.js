@@ -94,12 +94,109 @@ export class Mansion {
     ctx.strokeStyle = border;
     ctx.lineWidth = 4;
     ctx.strokeRect(18, 18, 92, 92);
-    // subtle diamond
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    // Pattern variety from hex bits — diamond / stripes / medallion dots
+    const mode = (centerHex ^ borderHex) % 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(64, 28); ctx.lineTo(100, 64); ctx.lineTo(64, 100); ctx.lineTo(28, 64);
-    ctx.closePath(); ctx.stroke();
+    if (mode === 0) {
+      ctx.beginPath();
+      ctx.moveTo(64, 28); ctx.lineTo(100, 64); ctx.lineTo(64, 100); ctx.lineTo(28, 64);
+      ctx.closePath(); ctx.stroke();
+    } else if (mode === 1) {
+      for (let y = 28; y < 100; y += 10) {
+        ctx.globalAlpha = 0.18;
+        ctx.fillRect(22, y, 84, 3);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      for (let i = 0; i < 5; i++) {
+        const r = 12 + i * 8;
+        ctx.beginPath(); ctx.arc(64, 64, r, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this._texCache[key] = tex;
+    return tex;
+  }
+
+  /** Soft damask / stripe wallpaper tint for room personality (mesh, not lights). */
+  _wallpaperTex(hex, accentHex = 0xc9a227) {
+    const key = `wallp_${hex}_${accentHex}`;
+    if (this._texCache[key]) return this._texCache[key];
+    const c = this._makeCanvas(256, 256);
+    if (!c) return null;
+    const ctx = c.getContext("2d");
+    const base = "#" + (hex >>> 0).toString(16).padStart(6, "0");
+    const accent = "#" + (accentHex >>> 0).toString(16).padStart(6, "0");
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 256, 256);
+    const mode = hex % 3;
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = accent;
+    if (mode === 0) {
+      // damask diamonds
+      for (let y = 0; y < 256; y += 48) {
+        for (let x = 0; x < 256; x += 48) {
+          ctx.globalAlpha = 0.12;
+          ctx.beginPath();
+          ctx.moveTo(x + 24, y + 6); ctx.lineTo(x + 42, y + 24);
+          ctx.lineTo(x + 24, y + 42); ctx.lineTo(x + 6, y + 24);
+          ctx.closePath(); ctx.stroke();
+        }
+      }
+    } else if (mode === 1) {
+      // vertical stripes
+      for (let x = 0; x < 256; x += 28) {
+        ctx.globalAlpha = 0.1;
+        ctx.fillRect(x, 0, 10, 256);
+      }
+    } else {
+      // small florals
+      for (let y = 16; y < 256; y += 40) {
+        for (let x = 16; x < 256; x += 40) {
+          ctx.globalAlpha = 0.14;
+          ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 0.08;
+          ctx.beginPath(); ctx.arc(x + 8, y + 6, 3, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this._texCache[key] = tex;
+    return tex;
+  }
+
+  _medallionTex(hex = 0xc9a227) {
+    const key = `medal_${hex}`;
+    if (this._texCache[key]) return this._texCache[key];
+    const c = this._makeCanvas(128, 128);
+    if (!c) return null;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#1a1410";
+    ctx.fillRect(0, 0, 128, 128);
+    const gold = "#" + (hex >>> 0).toString(16).padStart(6, "0");
+    ctx.strokeStyle = gold;
+    ctx.fillStyle = gold;
+    for (const r of [56, 42, 28, 14]) {
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(64, 64, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(64, 64);
+      ctx.lineTo(64 + Math.cos(a) * 50, 64 + Math.sin(a) * 50);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     this._texCache[key] = tex;
@@ -670,6 +767,30 @@ export class Mansion {
       g.add(back);
     }
 
+    // Stepping stones toward pond + orchard crate stacks (edge of paths)
+    for (const [x, z] of [[12, -40], [16, -42], [20, -44], [14, -46]]) {
+      const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.5, 0.12, 8), this._mat(0x9e9e9e, 0.85));
+      stone.position.set(x, 0.06, z);
+      g.add(stone);
+    }
+    for (const [x, z] of [[-38, -36], [-20, -48]]) {
+      for (let i = 0; i < 2; i++) {
+        const crate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.65), this._wood(0x8d6e63));
+        crate.position.set(x, 0.22 + i * 0.48, z + i * 0.1);
+        g.add(crate);
+      }
+    }
+    // Pond reeds cluster (extra)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const reed = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.04, 0.9, 5),
+        this._mat(0x558b2f, 0.9)
+      );
+      reed.position.set(26 + Math.cos(a) * 4.5, 0.45, -46 + Math.sin(a) * 4.5);
+      g.add(reed);
+    }
+
     this.root.add(g);
   }
 
@@ -912,6 +1033,7 @@ export class Mansion {
     g.add(tint);
 
     // Outdoor zones rely on moon/hemi — skip PointLights (perf)
+    this._addOutdoorZoneDetail(g, room, p);
 
     // Picnic / garden tables where objects need surfaces
     this._placeRoomObjects(g, room, cy, p, true);
@@ -988,6 +1110,14 @@ export class Mansion {
       );
       crown.position.set(cx, cy + h - 0.08, cz);
       g.add(crown);
+    }
+
+    // Room-specific wallpaper bands + ceiling medallion (mesh accents, no lights)
+    if (!isAttic && !room.glass) {
+      this._addWallpaperAccents(g, room, p);
+    }
+    if (!isAttic) {
+      this._addCeilingMedallion(g, room, p);
     }
 
     // Ceiling beams in hall / music / workshop
@@ -1114,6 +1244,235 @@ export class Mansion {
     this.root.add(g);
   }
 
+
+
+  _addWallpaperAccents(group, room, p) {
+    const [w, h, d] = room.size;
+    const [cx, cy, cz] = room.pos;
+    const tex = this._wallpaperTex(p.wall, p.trim);
+    if (!tex) return;
+    const mat = new THREE.MeshStandardMaterial({
+      map: (() => { const t = tex.clone(); t.repeat.set(3, 2); return t; })(),
+      color: 0xffffff, roughness: 0.86, metalness: 0.02,
+    });
+    // Upper wallpaper band above chair rail (keeps wainscot visible)
+    const bandH = Math.min(1.85, h * 0.42);
+    const bandY = cy + 1.05 + bandH / 2;
+    const strips = [
+      { s: [w - 0.6, bandH, 0.03], p: [cx, bandY, cz - d / 2 + 0.2] },
+      { s: [w - 0.6, bandH, 0.03], p: [cx, bandY, cz + d / 2 - 0.2] },
+      { s: [0.03, bandH, d - 0.6], p: [cx - w / 2 + 0.2, bandY, cz] },
+      { s: [0.03, bandH, d - 0.6], p: [cx + w / 2 - 0.2, bandY, cz] },
+    ];
+    for (const s of strips) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), mat);
+      m.position.set(...s.p);
+      m.frustumCulled = true;
+      group.add(m);
+    }
+  }
+
+  _addCeilingMedallion(group, room, p) {
+    const [w, h, d] = room.size;
+    const [cx, cy, cz] = room.pos;
+    if (w < 6 || d < 6) return;
+    const tex = this._medallionTex(p.trim);
+    const mat = new THREE.MeshStandardMaterial({
+      map: tex || undefined,
+      color: tex ? 0xffffff : p.trim,
+      roughness: 0.45, metalness: 0.35,
+    });
+    const r = Math.min(1.1, Math.min(w, d) * 0.12);
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.06, 24), mat);
+    disc.position.set(cx, cy + h - 0.08, cz);
+    disc.frustumCulled = true;
+    group.add(disc);
+    // Small plaster ring
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.85, 0.035, 6, 24),
+      this._brass(p.trim)
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(cx, cy + h - 0.1, cz);
+    group.add(ring);
+  }
+
+  /** Edge/corner outdoor props — keep path centers clear for walk + drive read. */
+  _addOutdoorZoneDetail(group, room, p) {
+    const [w, , d] = room.size;
+    const [cx, cy, cz] = room.pos;
+    const id = room.id;
+    const wood = this._wood(0x5d4037);
+    const stone = this._mat(0x90a4ae, 0.75, 0.12);
+    const green = this._mat(0x2e7d32, 0.88);
+    const addBox = (sx, sy, sz, x, y, z, mat) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+      m.position.set(x, y, z); m.frustumCulled = true; group.add(m); return m;
+    };
+    const addCyl = (rt, rb, hh, x, y, z, mat, seg = 10) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, hh, seg), mat);
+      m.position.set(x, y, z); m.frustumCulled = true; group.add(m); return m;
+    };
+
+    // Corner planters for every outdoor zone
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const x = cx + sx * (w * 0.38);
+      const z = cz + sz * (d * 0.38);
+      addCyl(0.35, 0.4, 0.45, x, cy + 0.22, z, this._mat(0x6d4c41, 0.85), 10);
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 6), green);
+      leaf.position.set(x, cy + 0.65, z);
+      leaf.frustumCulled = true;
+      group.add(leaf);
+    }
+
+    if (id === "front_drive") {
+      // Hitching posts + gravel edge stones along drive (keep center clear)
+      for (const x of [-5, 5]) {
+        for (const z of [22, 30, 38]) {
+          addCyl(0.08, 0.1, 1.1, x, cy + 0.55, z, this._mat(0x37474f, 0.5, 0.4), 8);
+          addCyl(0.14, 0.14, 0.08, x, cy + 1.15, z, this._brass(0xc9a227), 8);
+        }
+      }
+      // Low stone curb rings near fountain approach
+      for (const z of [26, 40]) {
+        addBox(10, 0.18, 0.35, cx, cy + 0.09, z, stone);
+      }
+      // Welcome urns near mansion door approach
+      for (const sx of [-3.5, 3.5]) {
+        addCyl(0.4, 0.48, 0.7, sx, cy + 0.35, 18, this._mat(0xb0bec5, 0.5, 0.25), 12);
+        const bush = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), green);
+        bush.position.set(sx, cy + 0.95, 18);
+        group.add(bush);
+      }
+    }
+
+    if (id === "rose_walk") {
+      // Trellis arches along walk edges
+      for (const z of [cz - 8, cz, cz + 8]) {
+        for (const side of [-1, 1]) {
+          const x = cx + side * 6;
+          addBox(0.1, 2.2, 0.1, x - 1.2, cy + 1.1, z, wood);
+          addBox(0.1, 2.2, 0.1, x + 1.2, cy + 1.1, z, wood);
+          addBox(2.6, 0.1, 0.1, x, cy + 2.2, z, wood);
+          for (let i = 0; i < 5; i++) {
+            const rose = new THREE.Mesh(
+              new THREE.SphereGeometry(0.12, 6, 5),
+              this._mat(i % 2 ? 0xc62828 : 0xad1457, 0.7)
+            );
+            rose.position.set(x - 1 + i * 0.5, cy + 1.6 + (i % 2) * 0.3, z);
+            group.add(rose);
+          }
+        }
+      }
+      // Garden bench mid-edge
+      addBox(1.8, 0.12, 0.5, cx - 7, cy + 0.45, cz + 2, stone);
+      for (const sx of [-0.7, 0.7]) addBox(0.12, 0.4, 0.45, cx - 7 + sx, cy + 0.2, cz + 2, stone);
+    }
+
+    if (id === "garden") {
+      // Birdbath + more flower mounds at edges
+      addCyl(0.15, 0.2, 0.9, cx + 6, cy + 0.45, cz - 4, stone, 10);
+      addCyl(0.55, 0.5, 0.12, cx + 6, cy + 0.95, cz - 4, stone, 14);
+      const water = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.4, 0.4, 0.04, 16),
+        new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.2, metalness: 0.5, transparent: true, opacity: 0.7 })
+      );
+      water.position.set(cx + 6, cy + 1.02, cz - 4);
+      group.add(water);
+      for (const [dx, dz, col] of [[-8, 4, 0xe91e63], [8, 6, 0xffeb3b], [-6, -6, 0x9c27b0], [4, -7, 0xff9800]]) {
+        addBox(1.6, 0.28, 0.7, cx + dx, cy + 0.14, cz + dz, this._mat(col, 0.85));
+      }
+    }
+
+    if (id === "orchard") {
+      // Fruit crates + ladder at edges (center rows for walking)
+      for (const [dx, dz] of [[-10, 6], [10, -6], [-8, -8]]) {
+        addBox(0.9, 0.5, 0.7, cx + dx, cy + 0.25, cz + dz, this._wood(0x8d6e63));
+        addCyl(0.12, 0.12, 0.12, cx + dx, cy + 0.58, cz + dz, this._mat(0xff9800, 0.6), 8);
+      }
+      // Ladder leaning
+      addBox(0.08, 2.4, 0.08, cx + 9, cy + 1.2, cz + 4, wood);
+      addBox(0.08, 2.4, 0.08, cx + 9.5, cy + 1.2, cz + 4, wood);
+      for (let i = 0; i < 6; i++) addBox(0.55, 0.05, 0.05, cx + 9.25, cy + 0.3 + i * 0.35, cz + 4, wood);
+    }
+
+    if (id === "terrace") {
+      // Cafe tables + urns along rim (path center clear)
+      for (const [dx, dz] of [[-8, 0], [8, 0], [-4, -4], [4, -4]]) {
+        addCyl(0.45, 0.45, 0.05, cx + dx, cy + 0.75, cz + dz, this._mat(0x455a64, 0.4, 0.6), 12);
+        addCyl(0.06, 0.08, 0.75, cx + dx, cy + 0.37, cz + dz, this._mat(0x37474f, 0.45, 0.55), 8);
+      }
+      for (const sx of [-9, 9]) {
+        addCyl(0.4, 0.48, 0.8, cx + sx, cy + 0.4, cz + 3, this._mat(0xb0bec5, 0.5, 0.2), 12);
+        const bush = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), green);
+        bush.position.set(cx + sx, cy + 1.05, cz + 3);
+        group.add(bush);
+      }
+      // Low balustrade suggestion on north rim
+      for (let i = -4; i <= 4; i++) {
+        addCyl(0.08, 0.08, 0.7, cx + i * 2.2, cy + 0.35, cz - d / 2 + 0.6, stone, 8);
+      }
+      addBox(w * 0.75, 0.08, 0.1, cx, cy + 0.72, cz - d / 2 + 0.6, stone);
+    }
+
+    if (id === "pond") {
+      // Reeds + lily pads + short dock (edge only)
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const x = cx + Math.cos(a) * 9;
+        const z = cz + Math.sin(a) * 7;
+        addCyl(0.03, 0.04, 0.9 + (i % 3) * 0.15, x, cy + 0.5, z, green, 5);
+      }
+      for (const [dx, dz] of [[-3, 2], [2, -2], [4, 3], [-5, -1]]) {
+        const pad = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.35, 0.35, 0.04, 12),
+          this._mat(0x43a047, 0.8)
+        );
+        pad.position.set(cx + dx, cy + 0.08, cz + dz);
+        group.add(pad);
+      }
+      // Dock planks from west edge
+      addBox(3.5, 0.12, 1.2, cx - 8, cy + 0.12, cz, this._wood(0x6d4c41));
+      for (const sx of [-1.4, 1.4]) addBox(0.15, 0.5, 0.15, cx - 8 + sx, cy + 0.25, cz + 0.4, wood);
+    }
+
+    if (id === "rockery") {
+      // Extra boulder cluster + driftwood
+      for (const [dx, dz, s] of [[-6, 3, 0.55], [5, -2, 0.7], [7, 4, 0.45], [-4, -4, 0.6]]) {
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), this._mat(0x78909c, 0.9));
+        rock.position.set(cx + dx, cy + s * 0.6, cz + dz);
+        rock.rotation.set(0.2 * dx, 0.3, 0.1);
+        group.add(rock);
+      }
+      addBox(1.8, 0.18, 0.25, cx + 2, cy + 0.2, cz + 5, this._wood(0x5d4037));
+      addBox(0.25, 0.18, 1.2, cx + 2.6, cy + 0.2, cz + 4.5, this._wood(0x6d4c41));
+    }
+
+    if (id === "carriage_yard") {
+      // Hay bales, barrels, spare wheel, workbench along shed wall
+      for (const [dx, dz] of [[-6, 8], [-4, 8], [6, -6]]) {
+        addCyl(0.45, 0.45, 0.7, cx + dx, cy + 0.35, cz + dz, this._mat(0xc9a227, 0.85), 12);
+      }
+      for (const [dx, dz] of [[7, 6], [8, 4]]) {
+        addCyl(0.35, 0.38, 0.75, cx + dx, cy + 0.38, cz + dz, this._wood(0x5d4037), 14);
+        addCyl(0.37, 0.37, 0.05, cx + dx, cy + 0.78, cz + dz, this._brass(0x8d6e63), 14);
+      }
+      // Wagon wheel
+      const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.08, 8, 20), this._wood(0x4e342e));
+      wheel.position.set(cx - 7, cy + 0.75, cz - 4);
+      wheel.rotation.y = Math.PI / 2;
+      group.add(wheel);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI;
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.05, 0.05), this._wood(0x6d4c41));
+        spoke.position.set(cx - 7, cy + 0.75, cz - 4);
+        spoke.rotation.set(0, Math.PI / 2, a);
+        group.add(spoke);
+      }
+      addBox(2.4, 0.12, 0.8, cx + 5, cy + 0.9, cz + 8, wood);
+      for (const sx of [-1, 1]) addBox(0.1, 0.9, 0.7, cx + 5 + sx, cy + 0.45, cz + 8, wood);
+    }
+  }
 
   _addCornice(group, room, p) {
     const [w, h, d] = room.size;
@@ -1242,34 +1601,80 @@ export class Mansion {
       group.add(m);
       return m;
     };
-    const addCyl = (rt, rb, h, x, y, z, mat, seg = 10) => {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+    const addCyl = (rt, rb, hh, x, y, z, mat, seg = 10) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, hh, seg), mat);
       m.position.set(x, y, z);
       m.frustumCulled = true;
       group.add(m);
       return m;
     };
+    const addFireplace = (x, z, facing = "south") => {
+      // Mantel against wall — keep walk center open
+      addBox(2.6, 1.5, 0.55, x, cy + 0.75, z, this._mat(0x455a64, 0.7, 0.15), true);
+      addBox(2.8, 0.18, 0.65, x, cy + 1.55, z, darkWood);
+      addBox(1.4, 0.9, 0.35, x, cy + 0.55, z, this._mat(0x1a1a1a, 0.9));
+      const glow = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 0.55, 0.12),
+        this._emissiveGlow(0xff8f00, 0.85)
+      );
+      glow.position.set(x, cy + 0.5, z + (facing === "south" ? 0.15 : facing === "north" ? -0.15 : 0));
+      group.add(glow);
+      // Andirons
+      for (const sx of [-0.35, 0.35]) addBox(0.08, 0.25, 0.25, x + sx, cy + 0.2, z, brass);
+    };
+    const addFloorLamp = (x, z) => {
+      addCyl(0.12, 0.16, 0.06, x, cy + 0.03, z, brass, 8);
+      addCyl(0.03, 0.035, 1.4, x, cy + 0.75, z, brass, 6);
+      const shade = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.28, 0.35, 10),
+        this._cloth(0xffe0b2, 0.85)
+      );
+      shade.position.set(x, cy + 1.55, z);
+      group.add(shade);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), this._emissiveGlow(0xffe0b2, 0.9));
+      bulb.position.set(x, cy + 1.45, z);
+      group.add(bulb);
+    };
+    const addSideTable = (x, z) => {
+      addBox(0.7, 0.08, 0.7, x, cy + 0.55, z, darkWood, true);
+      for (const [sx, sz] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) {
+        addBox(0.06, 0.55, 0.06, x + sx, cy + 0.27, z + sz, wood);
+      }
+    };
+    const addArmchair = (x, z, velvetHex, yaw = 0) => {
+      const g = new THREE.Group();
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.18, 0.8), this._velvet(velvetHex));
+      seat.position.set(0, 0.45, 0); g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.75, 0.14), this._velvet(velvetHex));
+      back.position.set(0, 0.85, -0.35); g.add(back);
+      for (const sx of [-0.38, 0.38]) {
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.35, 0.7), this._velvet(velvetHex));
+        arm.position.set(sx, 0.6, 0); g.add(arm);
+      }
+      for (const [sx, sz] of [[-0.3, -0.28], [0.3, -0.28], [-0.3, 0.28], [0.3, 0.28]]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.4, 0.07), wood);
+        leg.position.set(sx, 0.2, sz); g.add(leg);
+      }
+      g.position.set(x, cy, z);
+      g.rotation.y = yaw;
+      group.add(g);
+    };
 
     if (id === "foyer") {
-      // Console table against west wall (away from stairs)
+      // Console table against east wall (away from west stair / east cellar stair)
       addBox(2.4, 0.12, 0.7, cx + 5.5, cy + 0.9, cz + 4, darkWood, true);
       for (const sx of [-0.9, 0.9]) addBox(0.1, 0.9, 0.1, cx + 5.5 + sx, cy + 0.45, cz + 4, wood);
-      // Mirror frame above console
       addBox(1.6, 2.0, 0.08, cx + 5.5, cy + 2.3, cz + 4.35, brass);
       addBox(1.35, 1.75, 0.04, cx + 5.5, cy + 2.3, cz + 4.32, this._glass(0xc5e1ff, 0.45));
-      // Coat hooks rail near door
       addBox(2.2, 0.08, 0.08, cx - 4, cy + 1.7, cz + d / 2 - 0.35, brass);
       for (let i = -2; i <= 2; i++) {
         addCyl(0.03, 0.03, 0.18, cx - 4 + i * 0.4, cy + 1.55, cz + d / 2 - 0.45, brass, 6);
       }
-      // Grand foyer runner already via rug; add pedestal urns
       for (const sx of [-4, 4]) {
         addCyl(0.35, 0.4, 0.7, cx + sx, cy + 0.35, cz - 2, this._mat(0x90a4ae, 0.4, 0.3), 12);
         addCyl(0.2, 0.28, 0.35, cx + sx, cy + 0.85, cz - 2, this._mat(0x78909c, 0.35, 0.25), 10);
       }
-      // Console cloth runner
       addBox(2.2, 0.02, 0.55, cx + 5.5, cy + 0.97, cz + 4, this._cloth(0xd7ccc8, 0.9));
-      // Doorway curtains
       for (const side of [-1, 1]) {
         const curtain = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, h * 0.7, 1.1),
@@ -1278,7 +1683,6 @@ export class Mansion {
         curtain.position.set(cx + side * 2.4, cy + h * 0.38, cz + d / 2 - 0.55);
         group.add(curtain);
       }
-      // Extra wall sconce emissives (no PointLight)
       for (const sx of [-5, 5]) {
         const bulb = new THREE.Mesh(
           new THREE.SphereGeometry(0.07, 8, 6),
@@ -1287,27 +1691,36 @@ export class Mansion {
         bulb.position.set(cx + sx, cy + 2.2, cz);
         group.add(bulb);
       }
+      // Fireplace on north wall (hall entrance side, offset from center path)
+      addFireplace(cx + 5.2, cz - d / 2 + 0.4, "south");
+      // Bench near front door (south) — offset from spawn path
+      addBox(2.0, 0.12, 0.55, cx - 5, cy + 0.48, cz + 5, darkWood);
+      for (const sx of [-0.8, 0.8]) addBox(0.1, 0.48, 0.5, cx - 5 + sx, cy + 0.24, cz + 5, wood);
+      addArmchair(cx + 3.5, cz + 2, 0x5d4037, Math.PI * 0.15);
+      addSideTable(cx + 4.5, cz + 1.2);
+      addFloorLamp(cx + 6.2, cz + 2.5);
+      // Grandfather clock silhouette west of center (not on stair)
+      addBox(0.55, 2.2, 0.35, cx - 5.5, cy + 1.1, cz + 1, darkWood, true);
+      addBox(0.45, 0.4, 0.08, cx - 5.5, cy + 1.9, cz + 1.15, this._mat(0xffe0b2, 0.4));
+      addCyl(0.02, 0.02, 0.15, cx - 5.5, cy + 1.9, cz + 1.18, brass, 6);
+      // Umbrella stand
+      addCyl(0.18, 0.22, 0.55, cx - 2.5, cy + 0.28, cz + d / 2 - 0.7, this._mat(0x37474f, 0.45, 0.5), 10);
     }
 
     if (id === "cabinet") {
-      // Glass display cases
       for (const [dx, dz] of [[-6, 4], [6, 4], [-6, -4], [6, -4]]) {
         const x = cx + dx, z = cz + dz;
         addBox(2.2, 0.15, 1.2, x, cy + 0.08, z, darkWood, true);
-        // glass case
         const glass = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.6, 1.0), this._glass(0xb3e5fc, 0.28));
         glass.position.set(x, cy + 0.95, z);
         glass.frustumCulled = true;
         group.add(glass);
-        // frame posts
         for (const sx of [-0.95, 0.95]) for (const sz of [-0.45, 0.45]) {
           addBox(0.06, 1.6, 0.06, x + sx, cy + 0.95, z + sz, brass);
         }
         addBox(2.1, 0.08, 1.1, x, cy + 1.78, z, darkWood);
-        // plaque
         addBox(0.7, 0.18, 0.04, x, cy + 0.35, z + 0.65, brass);
       }
-      // Tall bookcases along north
       for (const dx of [-7, -2.5, 2.5, 7]) {
         addBox(2.0, 2.8, 0.4, cx + dx, cy + 1.4, cz - d / 2 + 0.35, darkWood, true);
         for (let r = 0; r < 5; r++) {
@@ -1317,21 +1730,29 @@ export class Mansion {
           }
         }
       }
+      // Reading chairs + lamp between cases (edges of walk aisle)
+      addArmchair(cx, cz + 5.5, 0x4e342e, Math.PI);
+      addArmchair(cx + 2.2, cz + 5.5, 0x3e2723, Math.PI);
+      addSideTable(cx + 1.1, cz + 6.5);
+      addFloorLamp(cx - 2, cz + 6);
+      // Velvet drapes on west wall
+      for (const dz of [-3, 3]) {
+        const curtain = new THREE.Mesh(new THREE.BoxGeometry(0.12, h * 0.7, 1.5), this._velvet(0x2e1a1a));
+        curtain.position.set(cx - w / 2 + 0.35, cy + h * 0.4, cz + dz);
+        group.add(curtain);
+      }
     }
 
     if (id === "armoury") {
-      // Trophy shelf
       addBox(6, 0.12, 0.45, cx, cy + 2.4, cz - d / 2 + 0.35, darkWood);
       for (const dx of [-2, 0, 2]) {
         addCyl(0.12, 0.15, 0.35, cx + dx, cy + 2.65, cz - d / 2 + 0.35, brass, 8);
         addBox(0.25, 0.08, 0.25, cx + dx, cy + 2.88, cz - d / 2 + 0.35, this._mat(0xffd54f, 0.35, 0.6));
       }
-      // Game table center
       addBox(2.4, 0.12, 2.4, cx + 2, cy + 0.85, cz + 1, this._wood(0x1b5e20, 0.55), true);
       for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         addBox(0.12, 0.85, 0.12, cx + 2 + sx, cy + 0.42, cz + 1 + sz, wood);
       }
-      // Dartboard frame (flat against wall)
       const dartOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.08, 16), this._mat(0xefebe9, 0.7));
       dartOuter.rotation.x = Math.PI / 2;
       dartOuter.position.set(cx - 6, cy + 1.8, cz - d / 2 + 0.2);
@@ -1344,19 +1765,29 @@ export class Mansion {
       dartBull.rotation.x = Math.PI / 2;
       dartBull.position.set(cx - 6, cy + 1.8, cz - d / 2 + 0.24);
       group.add(dartBull);
-      // Sofa
       addBox(3.2, 0.55, 1.1, cx - 4, cy + 0.45, cz + 4, this._velvet(0x283593), true);
       addBox(3.2, 0.7, 0.25, cx - 4, cy + 0.9, cz + 4.4, this._velvet(0x1a237e));
       for (const sx of [-1.4, 1.4]) addBox(0.3, 0.55, 1.0, cx - 4 + sx, cy + 0.7, cz + 4, this._velvet(0x1a237e));
+      // Armor stands + cue rack along east wall
+      for (const dz of [-4, 0, 4]) {
+        addCyl(0.15, 0.2, 0.15, cx + w / 2 - 0.7, cy + 0.08, cz + dz, brass, 8);
+        addCyl(0.12, 0.18, 1.4, cx + w / 2 - 0.7, cy + 0.85, cz + dz, this._mat(0xc0c0c0, 0.35, 0.7), 10);
+        addCyl(0.22, 0.2, 0.35, cx + w / 2 - 0.7, cy + 1.7, cz + dz, this._mat(0xb0bec5, 0.4, 0.65), 10);
+      }
+      addBox(0.12, 1.6, 1.8, cx + w / 2 - 0.35, cy + 1.2, cz - 5, darkWood);
+      for (let i = 0; i < 4; i++) {
+        addCyl(0.025, 0.025, 1.5, cx + w / 2 - 0.5, cy + 1.1, cz - 5.6 + i * 0.35, this._wood(0x8d6e63), 6);
+      }
+      addFireplace(cx - 2, cz - d / 2 + 0.4, "south");
+      addArmchair(cx + 5, cz + 4, 0x1a237e, -0.4);
+      addSideTable(cx + 6.2, cz + 3.2);
     }
 
     if (id === "conservatory") {
-      // Benches
       for (const [dx, dz] of [[-7, 2], [7, 2], [0, -5]]) {
         addBox(2.2, 0.12, 0.6, cx + dx, cy + 0.5, cz + dz, this._mat(0x8d6e63, 0.7), true);
         for (const sx of [-0.9, 0.9]) addBox(0.12, 0.5, 0.5, cx + dx + sx, cy + 0.25, cz + dz, this._mat(0x6d4c41, 0.75));
       }
-      // Large planters
       for (const [dx, dz] of [[-8, -6], [8, -6], [-4, 5], [4, 5]]) {
         addCyl(0.55, 0.65, 0.7, cx + dx, cy + 0.35, cz + dz, this._mat(0x6d4c41, 0.8), 12);
         addCyl(0.5, 0.5, 0.15, cx + dx, cy + 0.72, cz + dz, this._mat(0x3e2723, 0.9), 10);
@@ -1366,7 +1797,6 @@ export class Mansion {
         foliage.frustumCulled = true;
         group.add(foliage);
       }
-      // Hanging baskets
       for (const dx of [-5, 0, 5]) {
         addCyl(0.02, 0.02, 0.8, cx + dx, cy + 4.2, cz - 2, brass, 6);
         addCyl(0.28, 0.22, 0.25, cx + dx, cy + 3.7, cz - 2, this._mat(0x8d6e63, 0.75), 8);
@@ -1374,20 +1804,32 @@ export class Mansion {
         leaf.position.set(cx + dx, cy + 3.55, cz - 2);
         group.add(leaf);
       }
-      // Iron tables
       for (const [dx, dz] of [[-3, 0], [3, 0]]) {
         addCyl(0.55, 0.55, 0.06, cx + dx, cy + 0.85, cz + dz, this._mat(0x37474f, 0.4, 0.7), 12);
         addCyl(0.08, 0.1, 0.85, cx + dx, cy + 0.42, cz + dz, this._mat(0x263238, 0.45, 0.65), 8);
       }
+      // Central birdbath / fountain basin (low — walkable around)
+      addCyl(1.1, 1.2, 0.35, cx, cy + 0.2, cz + 3, this._mat(0x90a4ae, 0.5, 0.25), 20);
+      const water = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.95, 0.95, 0.06, 20),
+        new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.2, metalness: 0.55, transparent: true, opacity: 0.7 })
+      );
+      water.position.set(cx, cy + 0.4, cz + 3);
+      group.add(water);
+      // Trellis strips on west/east inward
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+          addBox(0.06, 2.4, 0.06, cx + side * (w / 2 - 0.5), cy + 1.3, cz - 5 + i * 2.5, this._mat(0xc9a227, 0.4, 0.4));
+        }
+        addBox(0.06, 0.06, 8, cx + side * (w / 2 - 0.5), cy + 2.4, cz - 1, this._mat(0xc9a227, 0.4, 0.4));
+      }
     }
 
     if (id === "dining") {
-      // Long table
       addBox(7.5, 0.14, 2.8, cx, cy + 0.88, cz, darkWood, true);
       for (const sx of [-3.2, 3.2]) for (const sz of [-1.0, 1.0]) {
         addBox(0.14, 0.88, 0.14, cx + sx, cy + 0.44, cz + sz, wood);
       }
-      // Chairs
       for (let i = -2; i <= 2; i++) {
         for (const side of [-1, 1]) {
           const x = cx + i * 1.35;
@@ -1397,19 +1839,15 @@ export class Mansion {
           for (const lx of [-0.15, 0.15]) addBox(0.06, 0.5, 0.06, x + lx, cy + 0.25, z, wood);
         }
       }
-      // Sideboard
       addBox(4.5, 1.0, 0.55, cx, cy + 0.5, cz - d / 2 + 0.5, darkWood, true);
       addBox(4.5, 0.08, 0.58, cx, cy + 1.05, cz - d / 2 + 0.5, brass);
-      // Place settings (plates + cups)
       for (let i = -2; i <= 2; i++) {
         for (const side of [-1, 1]) {
           addCyl(0.14, 0.14, 0.03, cx + i * 1.35, cy + 0.98, cz + side * 0.7, this._mat(0xfafafa, 0.4), 12);
           addCyl(0.05, 0.06, 0.1, cx + i * 1.35 + 0.22, cy + 1.02, cz + side * 0.7, this._mat(0xffe0b2, 0.35), 8);
         }
       }
-      // Tablecloth
       addBox(7.7, 0.02, 2.95, cx, cy + 0.96, cz, this._cloth(0xf5e6d3, 0.92));
-      // Side curtains
       for (const side of [-1, 1]) {
         const curtain = new THREE.Mesh(
           new THREE.BoxGeometry(0.12, h * 0.72, 1.4),
@@ -1424,35 +1862,79 @@ export class Mansion {
       );
       candle.position.set(cx + 1.5, cy + 1.25, cz - d / 2 + 0.5);
       group.add(candle);
+      // China cabinet + fireplace + candelabra
+      addBox(1.8, 2.4, 0.5, cx - w / 2 + 1.1, cy + 1.2, cz + 3, darkWood, true);
+      for (let r = 0; r < 4; r++) {
+        addBox(1.5, 0.06, 0.4, cx - w / 2 + 1.1, cy + 0.5 + r * 0.55, cz + 3, wood);
+        for (let i = 0; i < 3; i++) {
+          addCyl(0.08, 0.08, 0.12, cx - w / 2 + 0.6 + i * 0.4, cy + 0.62 + r * 0.55, cz + 3, this._mat(0xeceff1, 0.3), 8);
+        }
+      }
+      addFireplace(cx + 4, cz - d / 2 + 0.4, "south");
+      // Centerpiece candelabra (emissive)
+      addCyl(0.08, 0.12, 0.25, cx, cy + 1.15, cz, brass, 8);
+      for (const a of [0, 2.1, 4.2]) {
+        const bx = cx + Math.cos(a) * 0.25;
+        const bz = cz + Math.sin(a) * 0.25;
+        addCyl(0.02, 0.02, 0.35, bx, cy + 1.35, bz, brass, 5);
+        const flame = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), this._emissiveGlow(0xffcc80, 1.1));
+        flame.position.set(bx, cy + 1.55, bz);
+        group.add(flame);
+      }
     }
 
     if (id === "workshop" || id === "cellar") {
       addBox(8.5, 0.14, 1.4, cx, cy + 0.95, cz - d * 0.28, this._wood(0x6d4c41), true);
       for (const sx of [-3.5, 3.5]) addBox(0.15, 0.95, 1.2, cx + sx, cy + 0.47, cz - d * 0.28, wood);
-      // Tool pegboard
       addBox(3.5, 2.0, 0.08, cx - w / 2 + 0.2, cy + 1.8, cz, this._mat(0x795548, 0.75));
       for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
         addCyl(0.03, 0.03, 0.12, cx - w / 2 + 0.28, cy + 1.1 + r * 0.4, cz - 1.2 + c * 0.55, brass, 6);
       }
-      // Crates
       for (const [dx, dz] of [[3, 3], [4.5, 2.5], [-4, 4]]) {
         addBox(0.8, 0.55, 0.7, cx + dx, cy + 0.28, cz + dz, this._wood(0x8d6e63));
       }
-      // Stool
       addCyl(0.28, 0.3, 0.08, cx + 2, cy + 0.55, cz - d * 0.1, wood, 10);
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2;
         addCyl(0.04, 0.04, 0.55, cx + 2 + Math.cos(a) * 0.18, cy + 0.27, cz - d * 0.1 + Math.sin(a) * 0.18, wood, 6);
       }
+      // Tool chest + hanging lamp mesh + jar shelf
+      addBox(1.4, 0.9, 0.7, cx + w / 2 - 1.2, cy + 0.45, cz + 2, this._mat(0xffc107, 0.55, 0.35), true);
+      addBox(1.45, 0.08, 0.75, cx + w / 2 - 1.2, cy + 0.92, cz + 2, this._mat(0xffa000, 0.45, 0.4));
+      addBox(2.5, 0.1, 0.35, cx + w / 2 - 0.4, cy + 2.0, cz - 2, wood);
+      for (let i = 0; i < 5; i++) {
+        addCyl(0.08, 0.09, 0.2, cx + w / 2 - 0.4, cy + 2.15, cz - 2.8 + i * 0.4, this._glass(0x81d4fa, 0.35), 8);
+      }
+      addCyl(0.04, 0.04, 0.6, cx, cy + h - 0.5, cz - d * 0.1, brass, 6);
+      const shopLamp = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.25, 10), this._emissiveGlow(0xffe082, 0.95));
+      shopLamp.position.set(cx, cy + h - 0.85, cz - d * 0.1);
+      group.add(shopLamp);
+      if (id === "cellar") {
+        // Barrels + wine rack + furnace
+        for (const [dx, dz] of [[-6, 5], [-6, 3], [6, 5]]) {
+          addCyl(0.45, 0.48, 0.85, cx + dx, cy + 0.42, cz + dz, this._wood(0x5d4037), 14);
+          addCyl(0.48, 0.48, 0.06, cx + dx, cy + 0.88, cz + dz, this._brass(0x8d6e63), 14);
+        }
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+          addCyl(0.1, 0.1, 0.35, cx + 5.5, cy + 0.4 + r * 0.45, cz - 2 + c * 0.4, this._mat(0x4a148c, 0.5), 8);
+        }
+        addBox(1.8, 1.6, 1.0, cx - 5, cy + 0.8, cz - 4, this._mat(0x37474f, 0.55, 0.3));
+        const furnaceGlow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.1), this._emissiveGlow(0xff6d00, 1.0));
+        furnaceGlow.position.set(cx - 5, cy + 0.6, cz - 3.45);
+        group.add(furnaceGlow);
+        // Ceiling pipes
+        for (const z of [cz - 3, cz + 2]) {
+          addCyl(0.08, 0.08, w * 0.7, cx, cy + h - 0.35, z, this._mat(0x78909c, 0.4, 0.55), 8);
+          group.children[group.children.length - 1].rotation.z = Math.PI / 2;
+        }
+      }
     }
 
     if (id === "music") {
       addBox(10, 0.9, 0.55, cx, cy + 0.45, cz + d / 2 - 0.55, this._wood(0x4a148c, 0.55, 0.15), true);
-      // Music stands
       for (const dx of [-6, -2, 2, 6]) {
         addCyl(0.03, 0.04, 1.3, cx + dx, cy + 0.65, cz - 2, brass, 6);
         addBox(0.55, 0.4, 0.04, cx + dx, cy + 1.4, cz - 2, this._mat(0x212121, 0.6));
-        // sheet music plane
         const sheet = new THREE.Mesh(
           new THREE.PlaneGeometry(0.4, 0.3),
           new THREE.MeshStandardMaterial({ color: 0xfff8e1, roughness: 0.9, emissive: 0xfff8e1, emissiveIntensity: 0.05 })
@@ -1460,12 +1942,10 @@ export class Mansion {
         sheet.position.set(cx + dx, cy + 1.4, cz - 2.03);
         group.add(sheet);
       }
-      // Chairs for audience
       for (const dx of [-4, -1.5, 1.5, 4]) {
         addBox(0.5, 0.08, 0.5, cx + dx, cy + 0.48, cz + 3, wood);
         addBox(0.5, 0.5, 0.08, cx + dx, cy + 0.75, cz + 3.2, this._velvet(0x6a1b9a));
       }
-      // Curtains on sides
       for (const side of [-1, 1]) {
         const curtain = new THREE.Mesh(
           new THREE.BoxGeometry(0.15, h * 0.75, 1.8),
@@ -1474,17 +1954,22 @@ export class Mansion {
         curtain.position.set(cx + side * (w / 2 - 0.4), cy + h * 0.4, cz - d / 2 + 1.2);
         group.add(curtain);
       }
+      // Harp silhouette + sheet cabinet + piano bench
+      addBox(0.15, 1.6, 0.6, cx - 7, cy + 1.0, cz - 5, this._wood(0xc9a227, 0.45, 0.35));
+      addCyl(0.4, 0.05, 1.5, cx - 7, cy + 1.0, cz - 5.2, this._wood(0xffe082, 0.5), 8);
+      addBox(1.2, 1.4, 0.45, cx + 7, cy + 0.7, cz + 2, darkWood);
+      for (let r = 0; r < 4; r++) addBox(1.0, 0.05, 0.35, cx + 7, cy + 0.35 + r * 0.3, cz + 2, this._mat(0xfff8e1, 0.85));
+      addBox(1.0, 0.1, 0.4, cx, cy + 0.5, cz - 5.5, this._velvet(0x4a148c));
+      for (const sx of [-0.35, 0.35]) addBox(0.08, 0.45, 0.08, cx + sx, cy + 0.25, cz - 5.5, wood);
+      addFloorLamp(cx + 6, cz - 4);
     }
 
     if (id === "nursery") {
-      // Toy chest
       addBox(1.6, 0.7, 0.9, cx + 5, cy + 0.35, cz + 4, this._wood(0xe91e63, 0.7), true);
       addBox(1.65, 0.08, 0.95, cx + 5, cy + 0.74, cz + 4, brass);
-      // Small bed / crib
       addBox(2.2, 0.35, 1.2, cx - 4, cy + 0.4, cz + 3, this._wood(0xf8bbd0, 0.75), true);
       addBox(2.3, 0.7, 0.08, cx - 4, cy + 0.7, cz + 3.55, this._wood(0xf48fb1));
       addBox(2.3, 0.7, 0.08, cx - 4, cy + 0.7, cz + 2.45, this._wood(0xf48fb1));
-      // Rug toys (blocks)
       for (let i = 0; i < 5; i++) {
         const col = [0xf44336, 0x2196f3, 0xffeb3b, 0x4caf50, 0xff9800][i];
         addBox(0.25, 0.25, 0.25, cx - 1 + i * 0.4, cy + 0.15, cz - 2, this._mat(col, 0.7));
@@ -1497,28 +1982,51 @@ export class Mansion {
         curtain.position.set(cx + side * (w / 2 - 0.4), cy + h * 0.4, cz - d / 2 + 0.9);
         group.add(curtain);
       }
+      // Rocking chair + bookshelf + hanging mobile
+      addArmchair(cx + 4, cz - 4, 0xf8bbd0, 0.5);
+      addBox(1.6, 1.8, 0.4, cx - w / 2 + 0.5, cy + 0.9, cz - 3, this._wood(0xf48fb1, 0.7));
+      for (let r = 0; r < 3; r++) for (let b = 0; b < 4; b++) {
+        const col = [0xf44336, 0x2196f3, 0xffeb3b, 0x4caf50][b];
+        addBox(0.22, 0.28, 0.18, cx - w / 2 + 0.5 - 0.5 + b * 0.35, cy + 0.35 + r * 0.5, cz - 3, this._mat(col, 0.65));
+      }
+      addCyl(0.02, 0.02, 0.8, cx, cy + h - 0.5, cz + 1, brass, 5);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const star = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 5), this._mat([0xffeb3b, 0xe91e63, 0x42a5f5, 0x66bb6a, 0xff9800][i], 0.5));
+        star.position.set(cx + Math.cos(a) * 0.5, cy + h - 1.1, cz + 1 + Math.sin(a) * 0.5);
+        group.add(star);
+      }
+      addSideTable(cx + 5.5, cz - 3);
     }
 
     if (id === "study") {
       addBox(7.5, 0.14, 1.5, cx, cy + 0.95, cz + d * 0.25, darkWood, true);
       for (const sx of [-3, 3]) addBox(0.12, 0.95, 1.3, cx + sx, cy + 0.47, cz + d * 0.25, wood);
-      // Chair
       addBox(0.55, 0.1, 0.55, cx, cy + 0.55, cz + d * 0.25 + 1.2, wood);
       addBox(0.55, 0.65, 0.1, cx, cy + 0.9, cz + d * 0.25 + 1.4, this._velvet(0x37474f));
-      // Desk lamp (emissive)
       addCyl(0.04, 0.05, 0.35, cx - 2.5, cy + 1.2, cz + d * 0.25, brass, 8);
       const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), this._emissiveGlow(0xffe0b2, 1.0));
       lamp.position.set(cx - 2.5, cy + 1.45, cz + d * 0.25);
       group.add(lamp);
-      // Stacked books
       for (let i = 0; i < 4; i++) {
         const col = [0xb71c1c, 0x1a237e, 0x33691e, 0xf9a825][i];
         addBox(0.35, 0.08, 0.25, cx + 2 + (i % 2) * 0.05, cy + 1.05 + i * 0.09, cz + d * 0.25, this._mat(col, 0.7));
       }
+      // Darkroom curtain + filing cabinet + chemical bottles + armchair
+      const darkCurtain = new THREE.Mesh(new THREE.BoxGeometry(0.1, h * 0.75, 2.2), this._velvet(0x212121));
+      darkCurtain.position.set(cx - w / 2 + 0.35, cy + h * 0.4, cz - 2);
+      group.add(darkCurtain);
+      addBox(0.9, 1.2, 0.55, cx + w / 2 - 0.7, cy + 0.6, cz - 4, this._mat(0x455a64, 0.55, 0.25));
+      for (let i = 0; i < 3; i++) addBox(0.8, 0.04, 0.5, cx + w / 2 - 0.7, cy + 0.35 + i * 0.35, cz - 4, this._mat(0x90a4ae, 0.4, 0.3));
+      for (let i = 0; i < 4; i++) {
+        addCyl(0.06, 0.07, 0.22, cx - 3 + i * 0.35, cy + 1.15, cz + d * 0.25 - 0.4, this._glass([0xef9a9a, 0xa5d6a7, 0x90caf9, 0xffe082][i], 0.4), 8);
+      }
+      addArmchair(cx - 4, cz + 4, 0x37474f, 0.6);
+      addFloorLamp(cx - 5.5, cz + 3);
+      addFireplace(cx + 2, cz - d / 2 + 0.4, "south");
     }
 
     if (id === "library_hall") {
-      // Continuous bookcases both sides
       for (const side of [-1, 1]) {
         const x = cx + side * (w / 2 - 0.35);
         for (let zi = -3; zi <= 3; zi++) {
@@ -1532,21 +2040,126 @@ export class Mansion {
           }
         }
       }
+      // Reading nook table + chairs at north end (edge of hall)
+      addBox(1.4, 0.1, 1.4, cx, cy + 0.75, cz - 7, darkWood, true);
+      for (const [sx, sz] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+        addBox(0.08, 0.75, 0.08, cx + sx, cy + 0.37, cz - 7 + sz, wood);
+      }
+      addArmchair(cx - 1.3, cz - 5.5, 0x5d4037, 0.3);
+      addArmchair(cx + 1.3, cz - 5.5, 0x4e342e, -0.3);
+      // Library ladder
+      addBox(0.08, 2.4, 0.08, cx - w / 2 + 0.7, cy + 1.2, cz + 2, wood);
+      addBox(0.08, 2.4, 0.08, cx - w / 2 + 1.15, cy + 1.2, cz + 2, wood);
+      for (let i = 0; i < 7; i++) addBox(0.5, 0.05, 0.05, cx - w / 2 + 0.92, cy + 0.25 + i * 0.32, cz + 2, wood);
+      addFloorLamp(cx + 0.8, cz - 8);
     }
 
-    if (id === "landing" || id === "hall_ground" || id === "hall_east" || id === "study_annex") {
-      // Plant + painting already in decor; add console / plant pot
+    if (id === "landing") {
       addCyl(0.22, 0.28, 0.45, cx + w * 0.3, cy + 0.22, cz - d * 0.3, this._mat(0x8d6e63, 0.8), 10);
       const plant = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), this._mat(0x2e7d32, 0.88));
       plant.position.set(cx + w * 0.3, cy + 0.7, cz - d * 0.3);
       group.add(plant);
+      // Console + bench + floor lamp (keep stair west clear)
+      addBox(2.2, 0.12, 0.6, cx + 4, cy + 0.85, cz + 2, darkWood, true);
+      for (const sx of [-0.9, 0.9]) addBox(0.1, 0.85, 0.1, cx + 4 + sx, cy + 0.42, cz + 2, wood);
+      addBox(0.5, 0.7, 0.04, cx + 4, cy + 1.4, cz + 2.25, this._mat(0xd1c4e9, 0.5));
+      addBox(2.4, 0.12, 0.55, cx + 3, cy + 0.48, cz - 3, this._velvet(0x5e35b1));
+      for (const sx of [-1, 1]) addBox(0.12, 0.48, 0.5, cx + 3 + sx, cy + 0.24, cz - 3, wood);
+      addFloorLamp(cx + 5.5, cz - 2);
+      addArmchair(cx + 5, cz + 3.5, 0x4527a0, -0.5);
+      // Balcony-side curtains
+      for (const side of [-1, 1]) {
+        const curtain = new THREE.Mesh(new THREE.BoxGeometry(0.12, h * 0.65, 1.0), this._velvet(0x5e35b1));
+        curtain.position.set(cx + side * 3, cy + h * 0.38, cz + d / 2 - 0.5);
+        group.add(curtain);
+      }
     }
 
-    if (id === "attic_loft" || id === "science_attic") {
-      // Sparse crates only (LOD)
+    if (id === "hall_ground") {
+      // Consoles + benches along long walls; runner already via rug
+      for (const z of [cz - 8, cz, cz + 6]) {
+        for (const side of [-1, 1]) {
+          const x = cx + side * (w / 2 - 0.55);
+          addBox(0.45, 0.9, 1.3, x, cy + 0.45, z, darkWood, true);
+          addBox(0.5, 0.08, 1.35, x, cy + 0.92, z, brass);
+          const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.35, 8), this._mat(0x90a4ae, 0.4, 0.3));
+          vase.position.set(x, cy + 1.15, z);
+          group.add(vase);
+        }
+      }
+      for (const z of [cz - 4, cz + 3]) {
+        addBox(1.6, 0.12, 0.5, cx, cy + 0.48, z, this._velvet(0x4e342e));
+        for (const sx of [-0.6, 0.6]) addBox(0.1, 0.48, 0.45, cx + sx, cy + 0.24, z, wood);
+      }
+      addFloorLamp(cx + 2.2, cz - 10);
+      addFloorLamp(cx - 2.2, cz + 8);
+    }
+
+    if (id === "hall_east" || id === "study_annex") {
+      addCyl(0.22, 0.28, 0.45, cx + w * 0.3, cy + 0.22, cz - d * 0.3, this._mat(0x8d6e63, 0.8), 10);
+      const plant2 = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), this._mat(0x2e7d32, 0.88));
+      plant2.position.set(cx + w * 0.3, cy + 0.7, cz - d * 0.3);
+      group.add(plant2);
+      addBox(1.8, 0.12, 0.55, cx, cy + 0.85, cz + d * 0.25, darkWood, true);
+      for (const sx of [-0.7, 0.7]) addBox(0.1, 0.85, 0.1, cx + sx, cy + 0.42, cz + d * 0.25, wood);
+      addArmchair(cx - 2, cz - 2, id === "hall_east" ? 0x4e342e : 0x455a64, 0.4);
+      addSideTable(cx - 2.8, cz - 1);
+      addFloorLamp(cx + 2.5, cz - 2.5);
+      if (id === "study_annex") {
+        addBox(2.2, 0.12, 0.9, cx + 1, cy + 0.9, cz - 2, darkWood);
+        for (const sx of [-0.9, 0.9]) addBox(0.1, 0.9, 0.8, cx + 1 + sx, cy + 0.45, cz - 2, wood);
+        for (let i = 0; i < 3; i++) {
+          addBox(0.3, 0.06, 0.22, cx + 0.5 + i * 0.35, cy + 1.0, cz - 2, this._mat([0xb71c1c, 0x1a237e, 0xf9a825][i], 0.7));
+        }
+      }
+      // Pedestal busts
+      for (const side of [-1, 1]) {
+        addCyl(0.25, 0.3, 0.7, cx + side * 2.5, cy + 0.35, cz - d / 2 + 0.7, this._mat(0x90a4ae, 0.5, 0.25), 10);
+        addCyl(0.15, 0.18, 0.35, cx + side * 2.5, cy + 0.9, cz - d / 2 + 0.7, this._mat(0xeceff1, 0.45), 10);
+      }
+    }
+
+    if (id === "attic_loft") {
+      for (const [dx, dz] of [[-5, 3], [5, -3], [-7, -6], [7, 5], [-3, 7], [4, -7]]) {
+        addBox(1.0 + (dx > 0 ? 0.2 : 0), 0.7, 0.8, cx + dx, cy + 0.35, cz + dz, this._wood(0x6d4c41));
+      }
+      // Trunks + dress form + oil lamps + cobweb strings
+      for (const [dx, dz] of [[-8, 0], [8, 2]]) {
+        addBox(1.3, 0.55, 0.7, cx + dx, cy + 0.28, cz + dz, this._wood(0x5d4037));
+        addBox(1.35, 0.08, 0.75, cx + dx, cy + 0.58, cz + dz, brass);
+      }
+      addCyl(0.15, 0.25, 1.3, cx + 6, cy + 0.85, cz + 6, this._mat(0xefebe9, 0.7), 10);
+      addCyl(0.28, 0.2, 0.35, cx + 6, cy + 1.65, cz + 6, this._cloth(0xd7ccc8));
+      for (const [dx, dz] of [[-4, -4], [3, 4]]) {
+        addCyl(0.05, 0.06, 0.25, cx + dx, cy + 0.9, cz + dz, brass, 6);
+        const oil = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), this._emissiveGlow(0xffcc80, 0.85));
+        oil.position.set(cx + dx, cy + 1.1, cz + dz);
+        group.add(oil);
+      }
+      // Low attic beams already; add stacked books / hatboxes at edges
+      for (let i = 0; i < 4; i++) {
+        addCyl(0.25, 0.25, 0.2, cx - 6, cy + 0.15 + i * 0.22, cz + 8, this._mat([0xb71c1c, 0x5d4037, 0x1a237e, 0xf9a825][i], 0.7), 12);
+      }
+    }
+
+    if (id === "science_attic") {
       for (const [dx, dz] of [[-5, 3], [5, -3]]) {
         addBox(1.0, 0.7, 0.8, cx + dx, cy + 0.35, cz + dz, this._wood(0x6d4c41));
       }
+      // Lab bench + shelves + chalkboard + specimen jars
+      addBox(6, 0.12, 1.0, cx, cy + 0.9, cz + 2, this._mat(0x90a4ae, 0.45, 0.35), true);
+      for (const sx of [-2.5, 2.5]) addBox(0.12, 0.9, 0.9, cx + sx, cy + 0.45, cz + 2, this._mat(0x607d8b, 0.5, 0.3));
+      addBox(3.5, 1.8, 0.08, cx - w / 2 + 0.2, cy + 1.5, cz, this._mat(0x37474f, 0.7));
+      // chalk tray
+      addBox(3.2, 0.06, 0.12, cx - w / 2 + 0.3, cy + 0.55, cz, this._mat(0xcfd8dc, 0.5));
+      for (let i = 0; i < 6; i++) {
+        addCyl(0.08, 0.09, 0.28, cx - 2 + i * 0.7, cy + 1.12, cz + 2, this._glass([0xef9a9a, 0xa5d6a7, 0x90caf9, 0xffe082, 0xce93d8, 0x80cbc4][i], 0.4), 8);
+      }
+      addBox(2.2, 2.0, 0.35, cx + w / 2 - 0.4, cy + 1.0, cz - 2, this._mat(0x455a64, 0.6));
+      for (let r = 0; r < 4; r++) for (let b = 0; b < 3; b++) {
+        addBox(0.35, 0.12, 0.22, cx + w / 2 - 0.4, cy + 0.35 + r * 0.45, cz - 2.5 + b * 0.4, this._mat(0xb0bec5, 0.5));
+      }
+      addFloorLamp(cx + 4, cz + 3);
     }
   }
 
