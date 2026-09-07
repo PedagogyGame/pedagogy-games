@@ -229,7 +229,8 @@ export class TrackSystem {
           ? (path.fancy ? 14 : 10)
           : kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute"
             ? 6
-            : kind === "flower" || kind === "tunnel" ? 6 : 4;
+            : kind === "flower" || kind === "tunnel" ? 6
+              : kind === "floor" || kind === "outdoor" ? 8 : 5;
       const n = Math.max(pts.length * dense, path.fancy ? 48 : 24);
       curvePts = curve.getPoints(n);
     }
@@ -323,10 +324,24 @@ export class TrackSystem {
           : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0.028
             : kind === "flower" ? 0.022
               : 0.028;
-    const geo = new THREE.BoxGeometry(width, thick, len);
+    // Slight lengthwise overlap closes CatmullRom box-join gaps / light-leak tears
+    const asphaltJoin = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel";
+    const overlap = asphaltJoin
+      ? Math.min(0.09, Math.max(0.04, len * 0.14))
+      : Math.min(0.045, Math.max(0.02, len * 0.08));
+    const meshLen = len + overlap;
+    const geo = new THREE.BoxGeometry(width, thick, meshLen);
     let mat;
     if (kind === "outdoor") {
-      mat = new THREE.MeshStandardMaterial({ color: 0x5c564c, roughness: 0.92, metalness: 0.05 });
+      const opts = { color: 0xffffff, roughness: 0.88, metalness: 0.05 };
+      if (this._asphalt) {
+        opts.map = this._asphalt.clone();
+        opts.map.repeat.set(1, Math.max(1, len / 1.4));
+        opts.map.needsUpdate = true;
+      } else {
+        opts.color = 0x5c564c;
+      }
+      mat = new THREE.MeshStandardMaterial(opts);
     } else if (kind === "flower") {
       const opts = { color: 0x5d4037, roughness: 0.88, metalness: 0.04 };
       if (this._petal) {
@@ -400,12 +415,20 @@ export class TrackSystem {
       }
       mat = new THREE.MeshStandardMaterial(opts);
     }
+    // Depth bias so overlapping join strips don't z-fight / tear
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -1;
+    mat.polygonOffsetUnits = -2;
+    mat.depthWrite = true;
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(mid);
+    // Nudge asphalt slightly above shared floor planes to reduce coplanar light leaks
+    if (asphaltJoin) mesh.position.y += 0.0015;
     const xAxis = this._orientMesh(mesh, dir);
     mesh.receiveShadow = true;
     mesh.castShadow = kind === "elevated" || kind === "cornice" || kind === "balcony";
     mesh.frustumCulled = true;
+    mesh.renderOrder = asphaltJoin ? 1 : 0;
     this.root.add(mesh);
 
     // Premium gold inlay + brass edge on cornice / balcony
@@ -474,7 +497,7 @@ export class TrackSystem {
 
     if ((kind === "floor" || kind === "outdoor") && !this._asphalt) {
       const line = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.008, len * 0.95),
+        new THREE.BoxGeometry(0.02, 0.008, meshLen * 0.95),
         new THREE.MeshBasicMaterial({ color: 0xf0c000 })
       );
       line.position.copy(mid);

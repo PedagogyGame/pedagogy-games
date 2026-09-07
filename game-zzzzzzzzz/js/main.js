@@ -542,16 +542,21 @@ function updateRoomBadge(pos, opts = {}) {
       const purpose = ROOM_PURPOSES[room.id];
       if (purpose && !hoverTarget) {
         promptEl.textContent = purpose;
+        promptEl.classList.remove("whisper-out");
         promptEl.classList.add("lit", "whisper");
-        roomWhisperUntil = performance.now() * 0.001 + 4.2;
+        roomWhisperUntil = performance.now() * 0.001 + 5.0;
         clearTimeout(promptEl._whisperT);
+        clearTimeout(promptEl._whisperOutT);
         promptEl._whisperT = setTimeout(() => {
-          promptEl.classList.remove("whisper");
-          if (!hoverTarget && mode === "roam") {
-            promptEl.textContent = "Wander & wonder · Walk to a curiosity · Shift brisk walk";
-            promptEl.classList.remove("lit");
-          }
-        }, 4200);
+          promptEl.classList.add("whisper-out");
+          promptEl._whisperOutT = setTimeout(() => {
+            promptEl.classList.remove("whisper", "whisper-out");
+            if (!hoverTarget && mode === "roam") {
+              promptEl.textContent = "Wander & wonder · Walk to a curiosity · Shift brisk walk";
+              promptEl.classList.remove("lit");
+            }
+          }, 650);
+        }, 4300);
       }
     }
   } else {

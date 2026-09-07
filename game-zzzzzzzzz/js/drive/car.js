@@ -21,7 +21,7 @@ export const VEHICLE_PRESETS = {
     accel: 7.2,
     brake: 15,
     friction: 7.6,
-    steerRate: 5.4,
+    steerRate: 4.55,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -34,7 +34,7 @@ export const VEHICLE_PRESETS = {
     accel: 6.2,
     brake: 14.5,
     friction: 8.4,
-    steerRate: 4.5,
+    steerRate: 3.85,
     bodyColor: 0x1565c0,
     accent: 0xeceff1,
   },
@@ -47,7 +47,7 @@ export const VEHICLE_PRESETS = {
     accel: 6.6,
     brake: 16,
     friction: 9.2,
-    steerRate: 4.8,
+    steerRate: 4.1,
     bodyColor: 0x2e7d32,
     accent: 0xfff59d,
   },
@@ -60,7 +60,7 @@ export const VEHICLE_PRESETS = {
     accel: 7.6,
     brake: 14.5,
     friction: 7.0,
-    steerRate: 6.2,
+    steerRate: 5.2,
     bodyColor: 0xf9a825,
     accent: 0x212121,
   },
@@ -82,7 +82,7 @@ export class RCCar {
     this.accel = 7.2;
     this.brake = 16;
     this.friction = 7.6;
-    this.steerRate = 5.4;
+    this.steerRate = 4.55;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -464,7 +464,7 @@ export class RCCar {
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 10.5 * dt));
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 6.2 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
@@ -543,7 +543,7 @@ export class RCCar {
     this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
     let maxV = keys.boost ? this.boostMax : this.maxSpeed;
     if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
-      maxV *= 0.38;
+      maxV *= 0.58; // milder carpet / off-ribbon penalty (was 0.38)
     }
     if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
     const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
@@ -582,11 +582,11 @@ export class RCCar {
     }
 
     const absV = Math.abs(this.speed);
-    const lowBoost = 1.72 - 0.48 * THREE.MathUtils.smoothstep(absV, 0.08, 1.4);
+    const lowBoost = 1.55 - 0.38 * THREE.MathUtils.smoothstep(absV, 0.08, 1.4);
     const highDamp = 1 - 0.38 * THREE.MathUtils.smoothstep(absV, 1.2, this.boostMax);
-    const railGrip = (onRailDeck && snap?.onTrack) ? 1.12 : 1;
+    const railGrip = (onRailDeck && snap?.onTrack) ? 1.08 : 1;
     const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.35, absV / 0.45 + 0.28) * lowBoost * highDamp * railGrip;
+      this._steerInput * this.steerRate * Math.min(1.22, absV / 0.5 + 0.24) * lowBoost * highDamp * railGrip;
     this.yaw += steerEff * Math.sign(this.speed || 1) * dt;
 
     this._driftTrail = THREE.MathUtils.lerp(

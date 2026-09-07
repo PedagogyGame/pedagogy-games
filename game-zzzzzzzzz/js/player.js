@@ -100,8 +100,8 @@ export class Player {
 
     const moving =
       this.keys.forward || this.keys.back || this.keys.left || this.keys.right;
-    // Stronger friction when releasing keys → no floaty sliding
-    const friction = moving ? 9.5 : 18;
+    // Smooth accel while moving; still crisp stop (not floaty)
+    const friction = moving ? 7.8 : 16.5;
     const damp = 1 - Math.exp(-friction * dt);
     this.velocity.x -= this.velocity.x * damp;
     this.velocity.z -= this.velocity.z * damp;
@@ -110,7 +110,7 @@ export class Player {
     this.direction.x = Number(this.keys.right) - Number(this.keys.left);
     this.direction.normalize();
 
-    const accel = (this.keys.brisk ? 14 : 11) * this.speed;
+    const accel = (this.keys.brisk ? 11.2 : 8.6) * this.speed;
     if (this.keys.forward || this.keys.back) {
       this.velocity.z -= this.direction.z * accel * dt;
     }
@@ -136,8 +136,10 @@ export class Player {
     const sampleY = this._sampleFloor(obj.position.x, obj.position.z);
     const targetEye = sampleY + this.eyeHeight;
     const dy = Math.abs(targetEye - obj.position.y);
-    // Snap harder on stairs / story changes to avoid float
-    const lerp = dy > 1.5 ? Math.min(1, dt * 22) : Math.min(1, dt * 14);
+    // Soften floor/story eye-height blend (still snappy on big drops)
+    const lerp = dy > 2.2 ? Math.min(1, dt * 16)
+      : dy > 0.85 ? Math.min(1, dt * 11)
+        : Math.min(1, dt * 8.5);
     obj.position.y = THREE.MathUtils.lerp(obj.position.y, targetEye, lerp);
     if (!Number.isFinite(obj.position.y)) obj.position.y = targetEye;
     this.floorY = sampleY;
