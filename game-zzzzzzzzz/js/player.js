@@ -13,7 +13,8 @@ export class Player {
     this.eyeHeight = 1.6;
     this.radius = 0.35;
     this.floorY = 0;
-    this.getFloorY = null; // set by main: (x,z) => number
+    /** @type {null | ((x:number,z:number)=>number)} set by main — should pass this.floorY as story hint */
+    this.getFloorY = null;
     this._onKey = this._onKey.bind(this);
     document.addEventListener("keydown", this._onKey);
     document.addEventListener("keyup", this._onKey);
@@ -53,10 +54,17 @@ export class Player {
     return this.controls.isLocked;
   }
 
+  _sampleFloor(x, z) {
+    if (!this.getFloorY) return this.floorY;
+    const y = this.getFloorY(x, z);
+    return Number.isFinite(y) ? y : this.floorY;
+  }
+
   setPosition(x, y, z) {
-    const fy = this.getFloorY ? this.getFloorY(x, z) : 0;
+    const fy = this._sampleFloor(x, z);
     this.floorY = fy;
-    this.controls.getObject().position.set(x, (y ?? fy + this.eyeHeight), z);
+    const eye = y != null && Number.isFinite(y) && y > fy + 0.2 ? y : fy + this.eyeHeight;
+    this.controls.getObject().position.set(x, eye, z);
   }
 
   get position() {
@@ -82,11 +90,14 @@ export class Player {
     this.controls.moveRight(-this.velocity.x * dt);
     this.controls.moveForward(-this.velocity.z * dt);
 
-    // Multi-floor grounding: sample floor under feet
-    const sampleY = this.getFloorY ? this.getFloorY(obj.position.x, obj.position.z) : 0;
-    // Smooth lightly on stairs so steps don't jitter
+    // Multi-floor grounding: sample using last floorY (story-aware)
+    const sampleY = this._sampleFloor(obj.position.x, obj.position.z);
     const targetEye = sampleY + this.eyeHeight;
-    obj.position.y = THREE.MathUtils.lerp(obj.position.y, targetEye, Math.min(1, dt * 14));
+    // Snap harder on stairs / story changes to avoid float
+    const dy = Math.abs(targetEye - obj.position.y);
+    const lerp = dy > 1.5 ? Math.min(1, dt * 22) : Math.min(1, dt * 14);
+    obj.position.y = THREE.MathUtils.lerp(obj.position.y, targetEye, lerp);
+    if (!Number.isFinite(obj.position.y)) obj.position.y = targetEye;
     this.floorY = sampleY;
 
     if (colliders && colliders.length) {
@@ -101,8 +112,9 @@ export class Player {
           }
           if (this._hits(obj.position, box)) {
             obj.position.copy(before);
-            const fy = this.getFloorY ? this.getFloorY(obj.position.x, obj.position.z) : this.floorY;
+            const fy = this._sampleFloor(obj.position.x, obj.position.z);
             obj.position.y = fy + this.eyeHeight;
+            this.floorY = fy;
           }
         }
       }

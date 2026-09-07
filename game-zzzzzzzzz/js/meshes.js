@@ -29,8 +29,9 @@ function L(i, term) {
 }
 
 function add(mesh, parent) {
-  mesh.castShadow = true;
+  mesh.castShadow = false;
   mesh.receiveShadow = true;
+  mesh.frustumCulled = true;
   parent.add(mesh);
   return mesh;
 }
@@ -61,6 +62,23 @@ function finish(root, def, layers) {
   root.userData.def = def;
   root.userData.clipPlane = SHARED_CLIP_PLANE;
   root.name = def.id;
+  // Only outermost shell casts shadows — inner layers are frustum-culled only
+  if (layers[0]) {
+    layers[0].traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.frustumCulled = true;
+      }
+    });
+  }
+  for (let i = 1; i < layers.length; i++) {
+    layers[i].traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = false;
+        o.frustumCulled = true;
+      }
+    });
+  }
   return root;
 }
 
@@ -2270,8 +2288,9 @@ export function buildPedestal(color = 0x5d4037) {
   g.add(base, col, top);
   g.traverse((o) => {
     if (o.isMesh) {
-      o.castShadow = true;
+      o.castShadow = false;
       o.receiveShadow = true;
+      o.frustumCulled = true;
       if (o.material) {
         o.material.clippingPlanes = [];
       }

@@ -1,6 +1,11 @@
 import * as THREE from "three";
 import { SHARED_CLIP_PLANE } from "./meshes.js";
 
+const TRANSITION_MS = 180;
+const PEEL_OUTER = 0.16;
+const GHOST_OUTER = 0.15;
+const SECTION_OUTER = 0.06;
+
 function eachMaterial(layer, fn) {
   layer.traverse((o) => {
     if (!o.isMesh || !o.material) return;
@@ -9,15 +14,25 @@ function eachMaterial(layer, fn) {
   });
 }
 
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
 export class SliceSystem {
   constructor() {
     this.object = null;
     this.def = null;
     this.index = 0;
+    this.mode = "peel"; // peel | ghost | section
     this.particles = null;
     this.rimLight = null;
+    this.cutLight = null;
     this.onLayerChange = null;
     this._baseOpacity = new WeakMap();
+    this._baseScale = new WeakMap();
+    this._targets = new WeakMap(); // material -> { opacity, emissiveIntensity, wireframe }
+    this._layerScaleTarget = new Map(); // layer -> scale
+    this._pulseT = 0;
   }
 
   attach(object3d, scene) {
@@ -25,15 +40,35 @@ export class SliceSystem {
     this.object = object3d;
     this.def = object3d.userData.def;
     this.index = 0;
-    // remember original opacities
-    for (const layer of object3d.userData.layers || []) {
+    this.mode = this.mode || "peel";
+    this._pulseT = 0;
+
+    const meshLayers = object3d.userData.layers || [];
+    const dataLayers = this.def?.layers || [];
+    if (meshLayers.length !== dataLayers.length) {
+      console.warn(
+        `[slice] layer count mismatch for ${this.def?.id}: mesh=${meshLayers.length} def=${dataLayers.length}`
+      );
+    }
+
+    for (const layer of meshLayers) {
+      if (!this._baseScale.has(layer)) {
+        this._baseScale.set(layer, layer.scale.x || 1);
+      }
       eachMaterial(layer, (m) => {
         if (!this._baseOpacity.has(m)) this._baseOpacity.set(m, m.opacity ?? 1);
         m.clippingPlanes = [SHARED_CLIP_PLANE];
         m.clipShadows = true;
+        // seed targets so first frame doesn't flash
+        this._targets.set(m, {
+          opacity: m.opacity ?? 1,
+          emissiveIntensity: m.emissiveIntensity ?? 0,
+          wireframe: !!m.wireframe,
+          depthWrite: m.depthWrite !== false,
+        });
       });
     }
-    this._apply();
+    this._apply(true);
     this._spawnVFX(scene);
     return this.currentLayer();
   }
@@ -42,6 +77,8 @@ export class SliceSystem {
     if (this.object && this.object.userData.layers) {
       for (const layer of this.object.userData.layers) {
         layer.visible = true;
+        const baseS = this._baseScale.get(layer);
+        if (baseS != null) layer.scale.setScalar(baseS);
         eachMaterial(layer, (m) => {
           if (m.emissive) {
             m.emissive.setHex(0x000000);
@@ -52,6 +89,11 @@ export class SliceSystem {
             m.opacity = base;
             m.transparent = base < 1;
           }
+          m.wireframe = false;
+          m.depthWrite = true;
+          if (this.mode === "section") {
+            // leave clipping as meshes.js set it
+          }
         });
       }
     }
@@ -61,17 +103,29 @@ export class SliceSystem {
       this.particles.material.dispose();
     }
     if (this.rimLight && scene) scene.remove(this.rimLight);
+    if (this.cutLight && scene) {
+      scene.remove(this.cutLight.target);
+      scene.remove(this.cutLight);
+    }
     this.particles = null;
     this.rimLight = null;
+    this.cutLight = null;
     this.object = null;
     this.def = null;
     this.index = 0;
+    this._layerScaleTarget.clear();
+  }
+
+  setMode(mode) {
+    if (!["peel", "ghost", "section"].includes(mode)) return;
+    this.mode = mode;
+    this._apply(false);
   }
 
   setIndex(i) {
     if (!this.def) return null;
     this.index = Math.max(0, Math.min(this.def.layers.length - 1, i));
-    this._apply();
+    this._apply(false);
     const layer = this.currentLayer();
     if (this.onLayerChange) this.onLayerChange(layer, this.index);
     return layer;
@@ -90,45 +144,101 @@ export class SliceSystem {
       total: this.def.layers.length,
       objectName: this.def.name,
       hint: L.hint || "",
+      mode: this.mode,
     };
   }
 
-  _apply() {
+  _apply(immediate = false) {
+    if (!this.object) return;
     const layers = this.object.userData.layers;
-    // Soften clip as we peel deeper (slight offset so inner faces read clearly)
-    SHARED_CLIP_PLANE.constant = 0.02 + this.index * 0.01;
+    const mode = this.mode;
+
+    // Clip plane strength by mode
+    if (mode === "section") {
+      SHARED_CLIP_PLANE.constant = 0.0 + this.index * 0.008;
+    } else if (mode === "ghost") {
+      SHARED_CLIP_PLANE.constant = 0.04 + this.index * 0.012;
+    } else {
+      SHARED_CLIP_PLANE.constant = 0.02 + this.index * 0.01;
+    }
+
+    if (this.cutLight) {
+      this.cutLight.visible = mode === "section";
+      this.cutLight.intensity = mode === "section" ? 28 : 0;
+    }
 
     for (let i = 0; i < layers.length; i++) {
       const layer = layers[i];
-      layer.visible = true; // keep cutaway context — fade outers instead of hiding
       const isActive = i === this.index;
       const isOuter = i < this.index;
       const isInner = i > this.index;
+      const baseS = this._baseScale.get(layer) ?? 1;
+
+      // Section mode hides outer shells; peel/ghost keep them as ghosts
+      layer.visible = !(mode === "section" && isOuter);
+
+      this._layerScaleTarget.set(layer, isActive ? baseS * 1.02 : baseS);
 
       eachMaterial(layer, (m) => {
         const base = this._baseOpacity.get(m) ?? 1;
+        let opacity = base;
+        let emissiveIntensity = 0;
+        let wireframe = false;
+        let depthWrite = true;
+
         if (m.emissive) {
-          if (isActive) {
-            m.emissive.setHex(0xffd54f);
-            m.emissiveIntensity = 0.4;
+          if (isActive) m.emissive.setHex(0xffd54f);
+          else m.emissive.setHex(0x000000);
+        }
+
+        if (mode === "peel") {
+          if (isOuter) {
+            opacity = Math.min(base, PEEL_OUTER);
+            depthWrite = false;
+          } else if (isActive) {
+            opacity = Math.min(base, 0.95);
+            emissiveIntensity = 0.45;
+          } else if (isInner) {
+            opacity = i === this.index + 1 ? Math.min(base, 0.85) : base;
+          }
+        } else if (mode === "ghost") {
+          if (isOuter) {
+            opacity = Math.min(base, GHOST_OUTER);
+            wireframe = true;
+            depthWrite = false;
+          } else if (isActive) {
+            opacity = Math.min(base, 0.98);
+            emissiveIntensity = 0.5;
+            wireframe = false;
           } else {
-            m.emissive.setHex(0x000000);
-            m.emissiveIntensity = 0;
+            opacity = base;
+            wireframe = false;
+          }
+        } else {
+          // section
+          if (isOuter) {
+            opacity = Math.min(base, SECTION_OUTER);
+            depthWrite = false;
+          } else if (isActive) {
+            opacity = Math.min(base, 1);
+            emissiveIntensity = 0.55;
+          } else {
+            opacity = base;
           }
         }
-        if (isOuter) {
-          // ghost outer shells so the section stack still reads
+
+        const target = { opacity, emissiveIntensity, wireframe, depthWrite };
+        this._targets.set(m, target);
+
+        if (immediate) {
           m.transparent = true;
-          m.opacity = Math.min(base, 0.2);
-          m.depthWrite = false;
-        } else if (isActive) {
+          m.opacity = opacity;
+          m.wireframe = wireframe;
+          m.depthWrite = depthWrite;
+          if (m.emissive) m.emissiveIntensity = emissiveIntensity;
+        } else {
+          // ensure transparent while lerping
           m.transparent = true;
-          m.opacity = Math.min(base, 0.95);
-          m.depthWrite = true;
-        } else if (isInner) {
-          m.transparent = base < 1;
-          m.opacity = i === this.index + 1 ? Math.min(base, 0.85) : base;
-          m.depthWrite = true;
         }
       });
     }
@@ -160,9 +270,19 @@ export class SliceSystem {
     this.rimLight.position.copy(this.object.position);
     this.rimLight.position.y += 0.8;
     scene.add(this.rimLight);
+
+    // Thin accent along the cut face (section mode)
+    this.cutLight = new THREE.SpotLight(0xffe0a0, 0, 5, Math.PI / 5, 0.55, 1.2);
+    this.cutLight.position.copy(this.object.position);
+    this.cutLight.position.x -= 0.9;
+    this.cutLight.position.y += 0.35;
+    this.cutLight.target.position.copy(this.object.position);
+    scene.add(this.cutLight);
+    scene.add(this.cutLight.target);
+    this.cutLight.visible = this.mode === "section";
   }
 
-  update(t) {
+  update(t, dt = 1 / 60) {
     if (this.particles) {
       this.particles.rotation.y = t * 0.25;
       const arr = this.particles.geometry.attributes.position.array;
@@ -173,6 +293,43 @@ export class SliceSystem {
     }
     if (this.rimLight) {
       this.rimLight.intensity = 16 + Math.sin(t * 3) * 4;
+    }
+    if (this.cutLight && this.cutLight.visible) {
+      this.cutLight.intensity = 24 + Math.sin(t * 4) * 6;
+    }
+
+    // Smooth opacity / emissive toward targets (~180ms)
+    const alpha = 1 - Math.exp(-dt / (TRANSITION_MS / 1000));
+    if (this.object?.userData?.layers) {
+      this._pulseT = t;
+      for (const layer of this.object.userData.layers) {
+        const baseTarget = this._layerScaleTarget.get(layer);
+        if (baseTarget != null) {
+          const baseS = this._baseScale.get(layer) ?? 1;
+          const isActiveScale = Math.abs(baseTarget - baseS) > 1e-6;
+          const pulse = isActiveScale ? 1 + 0.02 * (0.5 + 0.5 * Math.sin(t * 3.2)) : 1;
+          const targetS = isActiveScale ? baseS * pulse : baseTarget;
+          const s = lerp(layer.scale.x, targetS, alpha);
+          layer.scale.setScalar(s);
+        }
+        eachMaterial(layer, (m) => {
+          const target = this._targets.get(m);
+          if (!target) return;
+          m.opacity = lerp(m.opacity ?? 1, target.opacity, alpha);
+          m.transparent = true;
+          if (m.emissive) {
+            m.emissiveIntensity = lerp(m.emissiveIntensity ?? 0, target.emissiveIntensity, alpha);
+          }
+          // snap discrete flags once close
+          if (Math.abs(m.opacity - target.opacity) < 0.02) {
+            m.wireframe = target.wireframe;
+            m.depthWrite = target.depthWrite;
+          } else if (target.wireframe) {
+            m.wireframe = true;
+            m.depthWrite = false;
+          }
+        });
+      }
     }
   }
 }

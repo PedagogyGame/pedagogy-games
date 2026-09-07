@@ -22,7 +22,7 @@ Open **http://localhost:8080** in a modern desktop browser.
 |--------|--------|
 | Look | Mouse (click canvas to lock pointer) |
 | Move | WASD / arrow keys |
-| Climb floors | Walk the staircases (foyer ↔ landing ↔ attic, foyer ↔ cellar) |
+| Climb floors | Walk the side staircases (west foyer ↔ landing ↔ attic; east foyer ↔ cellar) |
 | Exit to gardens | Walk out the **Grand Foyer front door** (south, toward the drive) or the **Conservatory garden doors** (north, onto the terrace) |
 | Inspect object | Walk up + click while crosshair highlights it |
 | Orbit in inspect | Drag mouse |
@@ -41,7 +41,16 @@ Open **http://localhost:8080** in a modern desktop browser.
 
 Outdoor zones use `outdoor: true` (no full walls). The estate includes lawn, gravel drive, stone paths, glowing facade windows, fountain, koi pond, gazebo, greenhouse, carriage shed, orchard trees, topiary, rose ring, lantern posts, and fireflies under dusk fog.
 
-Stairs use continuous **ramp floor sampling** via `mansion.getFloorY(x,z)`. Exterior ground samples at Y=0. Room badge shows `Floor · Room` (e.g. `Gardens · Rose Walk`, `First Floor · Music Room`).
+Stairs use continuous **ramp floor sampling** via `mansion.getFloorY(x, z, currentY)`. Sampling is **story-aware**: stacked rooms sharing XZ no longer steal the ground floor, and ramp regions only engage when your feet are near that stair band. Main stairs sit on the **west foyer wall** (cellar on the east; attic on the west landing) so room centers stay flat. Spawn is on the foyer near the front door (`z≈11`), not on a stair foot.
+
+**Performance:** PointLights are capped (~16), moon directional shadows are off, and only large furniture + outer shells cast shadows — keeps WebGL stable with ~95 sliceables. Lamps/chandeliers/windows use emissive meshes instead of extra lights.
+
+## Visual note (high-definition livable interior pass)
+
+Indoor rooms now include plank floor textures, wallpaper paneling, cornice/baseboards, door jambs, recessed mullioned windows, ceiling beams (halls/music/workshop), bordered rugs, multi-bulb emissive chandeliers & sconces, abstract painting canvases, and room-specific static furniture (foyer console/mirror, cabinet glass cases, armoury sofa & game table, dining place settings, workshop pegboard, nursery crib, study desk lamp, continuous library bookcases, conservatory planters, etc.). Hallways are slightly wider. Renderer uses ACES filmic tone mapping, dusk blue-violet fog, and FOV ~68 — bloom skipped for FPS (glow via emissives).
+
+
+Room badge shows `Floor · Room` (e.g. `Gardens · Rose Walk`, `First Floor · Music Room`).
 
 ## Objects (~95 unique sliceables)
 

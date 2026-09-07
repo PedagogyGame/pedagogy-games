@@ -13,13 +13,15 @@ export const ROOMS = {
     palette: { wall: 0x3e2723, floor: 0x5d4037, trim: 0xc9a227, light: 0xffe0b2 },
     exits: { north: "hall_ground", south: "front_drive", up: "landing", down: "cellar" },
     stairs: [
-      { id: "main_up", fromY: 0, toY: 4.2, x: 0, z: 8, dir: "north", width: 3.4, length: 7.5 },
-      { id: "cellar_down", fromY: 0, toY: -4.2, x: -5, z: 9, dir: "south", width: 2.6, length: 5.5 },
+      // West-wall stair: keeps foyer center flat; climbs north onto landing
+      { id: "main_up", fromY: 0, toY: 4.2, x: -7.0, z: 8, dir: "north", width: 2.4, length: 5.5 },
+      // East-wall cellar stair: short run along side wall
+      { id: "cellar_down", fromY: 0, toY: -4.2, x: 7.0, z: 3, dir: "south", width: 2.2, length: 5.0 },
     ],
   },
   hall_ground: {
     id: "hall_ground", name: "Hall of Echoes", floor: "Ground Floor",
-    size: [6, 4.2, 24], pos: [0, 0, -10],
+    size: [7.2, 4.2, 24], pos: [0, 0, -10],
     palette: { wall: 0x4e342e, floor: 0x6d4c41, trim: 0xb8860b, light: 0xffecb3 },
     exits: { south: "foyer", west: "cabinet", east: "armoury", north: "conservatory" },
   },
@@ -82,7 +84,7 @@ export const ROOMS = {
   },
   hall_east: {
     id: "hall_east", name: "East Gallery", floor: "Ground Floor",
-    size: [8, 4.2, 10], pos: [14, 0, -30],
+    size: [8.5, 4.2, 10], pos: [14, 0, -30],
     palette: { wall: 0x4e342e, floor: 0x6d4c41, trim: 0xb8860b, light: 0xffecb3 },
     exits: { west: "conservatory" },
   },
@@ -94,12 +96,13 @@ export const ROOMS = {
     palette: { wall: 0x4527a0, floor: 0x5e35b1, trim: 0xc9a227, light: 0xd1c4e9 },
     exits: { north: "library_hall", down: "foyer", up: "attic_loft" },
     stairs: [
-      { id: "attic_up", fromY: 4.2, toY: 8.4, x: 0, z: 0, dir: "north", width: 2.8, length: 8.0 },
+      // West-side attic stair: landing center stays walkable
+      { id: "attic_up", fromY: 4.2, toY: 8.4, x: -6.5, z: 6, dir: "north", width: 2.2, length: 5.5 },
     ],
   },
   library_hall: {
     id: "library_hall", name: "Library Hall", floor: "First Floor",
-    size: [6, 4.0, 20], pos: [0, 4.2, -10],
+    size: [7.2, 4.0, 20], pos: [0, 4.2, -10],
     palette: { wall: 0x3e2723, floor: 0x4e342e, trim: 0x8d6e63, light: 0xffcc80 },
     exits: { south: "landing", west: "study", east: "nursery", north: "music" },
   },
@@ -141,7 +144,7 @@ export const ROOMS = {
   },
   study_annex: {
     id: "study_annex", name: "East Mezzanine", floor: "First Floor",
-    size: [8, 4.0, 10], pos: [14, 4.2, -28],
+    size: [8.5, 4.0, 10], pos: [14, 4.2, -28],
     palette: { wall: 0x37474f, floor: 0x455a64, trim: 0xffc107, light: 0xffecb3 },
     exits: { west: "music" },
   },
