@@ -12,7 +12,7 @@ export class Mansion {
     this.ramps = [];
     this.roomLabels = [];
     this.fireflies = null;
-    this._pointLightBudget = 16;
+    this._pointLightBudget = 18;
     this._pointLightsUsed = 0;
     this._shadowSpotsLeft = 2;
     this._texCache = {};
@@ -159,10 +159,14 @@ export class Mansion {
 
   _glass(hex = 0xaaddff, opacity = 0.4) {
     return new THREE.MeshStandardMaterial({
-      color: hex, roughness: 0.12, metalness: 0.15,
-      transparent: true, opacity,
-      emissive: hex, emissiveIntensity: 0.08,
+      color: hex, roughness: 0.04, metalness: 0.28,
+      transparent: true, opacity: Math.min(opacity, 0.42),
+      emissive: hex, emissiveIntensity: 0.12,
     });
+  }
+
+  _cloth(hex, rough = 0.88) {
+    return this._mat(hex, rough, 0.02);
   }
 
   _emissiveGlow(hex, intensity = 0.85) {
@@ -185,6 +189,7 @@ export class Mansion {
       }
     }
     this._buildExteriorFacade();
+    this._buildBalcony();
     this._buildGardenFeatures();
     this._buildFireflies();
   }
@@ -302,8 +307,7 @@ export class Mansion {
 
     // Outer shell walls (outside the indoor walls) — slightly larger
     const shells = [
-      // South (front) facade facing drive — with door opening
-      { size: [30, facadeH, 0.45], pos: [0, facadeH / 2, 14.2], door: true, doorW: 3.2 },
+      // South front built separately (ground door + first-floor balcony doors)
       // North (conservatory garden) — with wide garden doors
       { size: [24, 6.2, 0.4], pos: [0, 3.1, -40.2], door: true, doorW: 4.5 },
       // West outer
@@ -311,6 +315,8 @@ export class Mansion {
       // East outer
       { size: [0.45, facadeH, 56], pos: [26.5, facadeH / 2, -12], door: false },
     ];
+
+    this._addFrontFacadeWithBalconyDoors(g, stone, trim, facadeH);
 
     for (const wall of shells) {
       if (wall.door) {
@@ -405,8 +411,8 @@ export class Mansion {
         const wz = horizontal ? pz : pz + t * (sz * 0.7);
         // Frame
         const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(horizontal ? 1.3 : 0.14, 1.7, horizontal ? 0.14 : 1.3),
-          this._mat(0xc9a227, 0.4, 0.5)
+          new THREE.BoxGeometry(horizontal ? 1.45 : 0.2, 1.85, horizontal ? 0.2 : 1.45),
+          this._mat(0xc9a227, 0.35, 0.55)
         );
         frame.position.set(wx, fy, wz);
         group.add(frame);
@@ -414,12 +420,13 @@ export class Mansion {
         const pane = new THREE.Mesh(
           new THREE.BoxGeometry(horizontal ? 1.05 : 0.08, 1.4, horizontal ? 0.08 : 1.05),
           new THREE.MeshStandardMaterial({
-            color: 0xffe0b2,
+            color: 0xffe8c8,
             emissive: 0xffb74d,
-            emissiveIntensity: 0.9,
-            roughness: 0.28,
+            emissiveIntensity: 1.05,
+            roughness: 0.08,
+            metalness: 0.15,
             transparent: true,
-            opacity: 0.48,
+            opacity: 0.52,
           })
         );
         pane.position.set(wx, fy, wz);
@@ -844,7 +851,7 @@ export class Mansion {
       const rw = Math.min(w * 0.48, 9);
       const rd = Math.min(d * 0.42, 7);
       const rugMat = new THREE.MeshStandardMaterial({
-        map: this._rugTex(p.trim, p.wall) || undefined,
+        map: this._rugTex(p.trim, p.wall) || null,
         roughness: 0.95,
         metalness: 0.02,
       });
@@ -1120,6 +1127,26 @@ export class Mansion {
         addCyl(0.35, 0.4, 0.7, cx + sx, cy + 0.35, cz - 2, this._mat(0x90a4ae, 0.4, 0.3), 12);
         addCyl(0.2, 0.28, 0.35, cx + sx, cy + 0.85, cz - 2, this._mat(0x78909c, 0.35, 0.25), 10);
       }
+      // Console cloth runner
+      addBox(2.2, 0.02, 0.55, cx + 5.5, cy + 0.97, cz + 4, this._cloth(0xd7ccc8, 0.9));
+      // Doorway curtains
+      for (const side of [-1, 1]) {
+        const curtain = new THREE.Mesh(
+          new THREE.BoxGeometry(0.14, h * 0.7, 1.1),
+          this._velvet(0x4e342e)
+        );
+        curtain.position.set(cx + side * 2.4, cy + h * 0.38, cz + d / 2 - 0.55);
+        group.add(curtain);
+      }
+      // Extra wall sconce emissives (no PointLight)
+      for (const sx of [-5, 5]) {
+        const bulb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.07, 8, 6),
+          this._emissiveGlow(0xffe0b2, 1.05)
+        );
+        bulb.position.set(cx + sx, cy + 2.2, cz);
+        group.add(bulb);
+      }
     }
 
     if (id === "cabinet") {
@@ -1240,6 +1267,23 @@ export class Mansion {
           addCyl(0.05, 0.06, 0.1, cx + i * 1.35 + 0.22, cy + 1.02, cz + side * 0.7, this._mat(0xffe0b2, 0.35), 8);
         }
       }
+      // Tablecloth
+      addBox(7.7, 0.02, 2.95, cx, cy + 0.96, cz, this._cloth(0xf5e6d3, 0.92));
+      // Side curtains
+      for (const side of [-1, 1]) {
+        const curtain = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, h * 0.72, 1.4),
+          this._velvet(0xb71c1c)
+        );
+        curtain.position.set(cx + side * (w / 2 - 0.35), cy + h * 0.4, cz);
+        group.add(curtain);
+      }
+      const candle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 8, 6),
+        this._emissiveGlow(0xffe082, 1.15)
+      );
+      candle.position.set(cx + 1.5, cy + 1.25, cz - d / 2 + 0.5);
+      group.add(candle);
     }
 
     if (id === "workshop" || id === "cellar") {
@@ -1304,6 +1348,14 @@ export class Mansion {
       for (let i = 0; i < 5; i++) {
         const col = [0xf44336, 0x2196f3, 0xffeb3b, 0x4caf50, 0xff9800][i];
         addBox(0.25, 0.25, 0.25, cx - 1 + i * 0.4, cy + 0.15, cz - 2, this._mat(col, 0.7));
+      }
+      for (const side of [-1, 1]) {
+        const curtain = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, h * 0.7, 1.2),
+          this._velvet(0xf48fb1)
+        );
+        curtain.position.set(cx + side * (w / 2 - 0.4), cy + h * 0.4, cz - d / 2 + 0.9);
+        group.add(curtain);
       }
     }
 
@@ -1614,7 +1666,7 @@ export class Mansion {
       conservatory: { south: true, west: true, east: true, north: true },
       dining: { east: true },
       hall_east: { west: true },
-      landing: { north: true },
+      landing: { north: true, south: true },
       library_hall: { south: true, west: true, east: true, north: true },
       workshop: { east: true },
       music: { south: true, west: true, east: true },
@@ -1814,6 +1866,225 @@ export class Mansion {
     this.root.add(g);
   }
 
+
+  /**
+   * Front facade with ground entry + first-floor balcony French doors.
+   * Leaves walkable / driveable openings at y≈4.2–6.4, x∈[-5.5,5.5].
+   */
+  _addFrontFacadeWithBalconyDoors(group, stone, trim, facadeH) {
+    const pz = 14.2;
+    const thick = 0.45;
+    const totalW = 30;
+    const groundDoorW = 3.2;
+    const groundDoorH = 3.4;
+    const balDoorH0 = 4.25;
+    const balDoorH1 = 6.45;
+    const balDoorW = 11.2; // wide opening onto balcony
+
+    // Helper to add a wall slab + collider
+    const addSlab = (w, h, x, y) => {
+      if (w < 0.05 || h < 0.05) return;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, thick), stone);
+      mesh.position.set(x, y, pz);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      this.colliders.push(
+        new THREE.Box3().setFromCenterAndSize(
+          mesh.position.clone(),
+          new THREE.Vector3(w, h, thick)
+        )
+      );
+    };
+
+    // --- Below balcony door band (y 0 → balDoorH0), with ground door ---
+    const belowH = balDoorH0;
+    const belowCy = belowH / 2;
+    const sideW = (totalW - groundDoorW) / 2;
+    addSlab(sideW, belowH, -groundDoorW / 2 - sideW / 2, belowCy);
+    addSlab(sideW, belowH, groundDoorW / 2 + sideW / 2, belowCy);
+    // Ground door header strip up to balcony sill (only over door width)
+    const gh = balDoorH0 - groundDoorH;
+    if (gh > 0.05) addSlab(groundDoorW, gh, 0, groundDoorH + gh / 2);
+
+    // Ground door lintel trim
+    const lintel = new THREE.Mesh(
+      new THREE.BoxGeometry(groundDoorW + 0.4, 0.22, thick + 0.2),
+      trim
+    );
+    lintel.position.set(0, groundDoorH + 0.1, pz);
+    group.add(lintel);
+
+    // Windows on lower wings
+    this._addExteriorWindows(group, {
+      size: [sideW, belowH, thick],
+      pos: [-groundDoorW / 2 - sideW / 2, belowCy, pz],
+    });
+    this._addExteriorWindows(group, {
+      size: [sideW, belowH, thick],
+      pos: [groundDoorW / 2 + sideW / 2, belowCy, pz],
+    });
+
+    // --- Balcony door band: sides only ---
+    const bandH = balDoorH1 - balDoorH0;
+    const bandCy = (balDoorH0 + balDoorH1) / 2;
+    const balSide = (totalW - balDoorW) / 2;
+    addSlab(balSide, bandH, -balDoorW / 2 - balSide / 2, bandCy);
+    addSlab(balSide, bandH, balDoorW / 2 + balSide / 2, bandCy);
+
+    // French-door frames (visual, non-blocking)
+    const frameMat = trim;
+    for (const sx of [-3.5, -1.2, 1.2, 3.5]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, bandH * 0.95, 0.1), frameMat);
+      post.position.set(sx, bandCy, pz + 0.05);
+      group.add(post);
+    }
+    const balLintel = new THREE.Mesh(
+      new THREE.BoxGeometry(balDoorW + 0.5, 0.18, thick + 0.25),
+      trim
+    );
+    balLintel.position.set(0, balDoorH1 + 0.05, pz);
+    group.add(balLintel);
+
+    // --- Above balcony doors to eaves ---
+    const aboveH = facadeH - balDoorH1;
+    if (aboveH > 0.1) {
+      addSlab(totalW, aboveH, 0, balDoorH1 + aboveH / 2);
+      this._addExteriorWindows(group, {
+        size: [totalW, aboveH, thick],
+        pos: [0, balDoorH1 + aboveH / 2, pz],
+      });
+    }
+  }
+
+  /**
+   * Exterior driveable balcony off Upper Landing (south / front of mansion).
+   * Plank deck, stone balustrade, brackets, emissive lanterns + floor region.
+   */
+  _buildBalcony() {
+    const g = new THREE.Group();
+    g.name = "balcony";
+    const deckY = 4.2;
+    const deckW = 12.5; // X
+    const deckD = 5.4;  // Z
+    const deckX = 0.5;
+    const deckZ = 14.8; // center — spans ~12.1 → 17.5
+
+    // Floor region so Explore walk works
+    this.floorRegions.push({
+      minX: deckX - deckW / 2,
+      maxX: deckX + deckW / 2,
+      minZ: deckZ - deckD / 2,
+      maxZ: deckZ + deckD / 2,
+      y: deckY,
+      priority: 4,
+      roomId: "balcony",
+    });
+
+    // Connection strip from Upper Landing south edge (z≈10) to balcony
+    this.floorRegions.push({
+      minX: -6.5, maxX: 7.5,
+      minZ: 9.5, maxZ: deckZ - deckD / 2 + 0.1,
+      y: deckY,
+      priority: 3,
+      roomId: "balcony_approach",
+    });
+
+    const plank = this._floorMat(0x6d4c41, 0.78) || this._mat(0x6d4c41, 0.78);
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, 0.16, deckD), plank);
+    deck.position.set(deckX, deckY - 0.08, deckZ);
+    deck.receiveShadow = true;
+    deck.castShadow = true;
+    g.add(deck);
+
+    // Approach boards toward landing
+    const approach = new THREE.Mesh(
+      new THREE.BoxGeometry(8.5, 0.14, 3.2),
+      plank
+    );
+    approach.position.set(0.5, deckY - 0.07, 11.2);
+    approach.receiveShadow = true;
+    g.add(approach);
+
+    const stone = this._mat(0xd7ccc8, 0.7, 0.15);
+    const railMat = this._mat(0xcfd8dc, 0.45, 0.35);
+
+    // Balustrade posts + rail on outer three sides (N open to house)
+    const minX = deckX - deckW / 2 + 0.15;
+    const maxX = deckX + deckW / 2 - 0.15;
+    const minZ = deckZ - deckD / 2 + 0.15;
+    const maxZ = deckZ + deckD / 2 - 0.15;
+    const postH = 0.95;
+    const posts = [];
+    for (let x = minX; x <= maxX + 0.01; x += 1.15) {
+      posts.push([x, maxZ]); // south outer
+    }
+    for (let z = minZ + 1.1; z < maxZ - 0.2; z += 1.15) {
+      posts.push([minX, z]);
+      posts.push([maxX, z]);
+    }
+    for (const [px, pz] of posts) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, postH, 8), stone);
+      post.position.set(px, deckY + postH / 2, pz);
+      post.castShadow = true;
+      g.add(post);
+      // Ball finial
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), stone);
+      ball.position.set(px, deckY + postH + 0.06, pz);
+      g.add(ball);
+    }
+    // Top rails
+    const railY = deckY + 0.78;
+    const southRail = new THREE.Mesh(
+      new THREE.BoxGeometry(deckW - 0.2, 0.08, 0.1),
+      railMat
+    );
+    southRail.position.set(deckX, railY, maxZ);
+    g.add(southRail);
+    for (const sx of [minX, maxX]) {
+      const sideRail = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.08, deckD - 0.5),
+        railMat
+      );
+      sideRail.position.set(sx, railY, deckZ + 0.15);
+      g.add(sideRail);
+    }
+
+    // Support brackets under deck
+    const bracketMat = this._mat(0x5d4037, 0.55, 0.2);
+    for (let x = -5; x <= 5; x += 2.5) {
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.18), bracketMat);
+      brace.position.set(x, deckY - 0.55, 12.4);
+      brace.rotation.x = 0.4;
+      g.add(brace);
+      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.7, 0.25), bracketMat);
+      foot.position.set(x, deckY - 1.1, 14.0);
+      g.add(foot);
+    }
+
+    // Warm outdoor lanterns (emissive only — light budget)
+    const lanternMat = this._emissiveGlow(0xffe0b2, 1.15);
+    const brass = this._brass();
+    for (const [lx, lz] of [[-5.5, 17.0], [0.5, 17.2], [6.0, 17.0], [-5.5, 12.6], [6.0, 12.6]]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 1.1, 6), brass);
+      pole.position.set(lx, deckY + 0.55, lz);
+      g.add(pole);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), lanternMat);
+      lamp.position.set(lx, deckY + 1.15, lz);
+      g.add(lamp);
+    }
+
+    // Soft room label for getRoomAt via floorRegions / synthetic
+    this.roomLabels.push({
+      id: "balcony",
+      name: "Balcony",
+      floor: "First Floor",
+      x: deckX, y: deckY, z: deckZ,
+    });
+
+    this.root.add(g);
+  }
+
   getFloorY(x, z, currentY = 0) {
     if (!Number.isFinite(currentY)) currentY = 0;
 
@@ -1891,6 +2162,22 @@ export class Mansion {
           best = room;
         }
       }
+    }
+    // Balcony override when standing on deck
+    if (
+      y > 3.8 && y < 6.5 &&
+      x > -6.5 && x < 7.5 &&
+      z > 11.5 && z < 18.0
+    ) {
+      return {
+        id: "balcony",
+        name: "Balcony",
+        floor: "First Floor",
+        size: [12.5, 3.0, 5.4],
+        pos: [0.5, 4.2, 14.8],
+        palette: { wall: 0x4a3728, floor: 0x6d4c41, trim: 0xc9a227, light: 0xffe0b2 },
+        outdoor: true,
+      };
     }
     return best;
   }

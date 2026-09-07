@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { SHARED_CLIP_PLANE } from "./meshes.js";
+import { SHARED_CLIP_PLANE, isConcentricDef } from "./meshes.js";
 
 const TRANSITION_MS = 180;
 const PEEL_OUTER = 0.16;
@@ -23,16 +23,26 @@ export class SliceSystem {
     this.object = null;
     this.def = null;
     this.index = 0;
-    this.mode = "peel"; // peel | ghost | section
+    this.mode = "section"; // peel | ghost | section — Section is the designed Reveal/Learn default
     this.particles = null;
     this.rimLight = null;
     this.cutLight = null;
+    this.cutFaces = null; // Group of cut-face disks/quads
     this.onLayerChange = null;
     this._baseOpacity = new WeakMap();
     this._baseScale = new WeakMap();
-    this._targets = new WeakMap(); // material -> { opacity, emissiveIntensity, wireframe }
-    this._layerScaleTarget = new Map(); // layer -> scale
+    this._basePos = new WeakMap();
+    this._targets = new WeakMap();
+    this._layerScaleTarget = new Map();
+    this._layerPosTarget = new Map();
+    this._layerRadii = [];
     this._pulseT = 0;
+    this._clipNormalLocal = new THREE.Vector3(1, 0, 0); // cut removes +X half
+    this._tmpV = new THREE.Vector3();
+    this._tmpN = new THREE.Vector3();
+    this._box = new THREE.Box3();
+    this._size = new THREE.Vector3();
+    this._centerLocal = new THREE.Vector3();
   }
 
   attach(object3d, scene) {
@@ -40,7 +50,8 @@ export class SliceSystem {
     this.object = object3d;
     this.def = object3d.userData.def;
     this.index = 0;
-    this.mode = this.mode || "peel";
+    // Smart default: Section for concentric onion objects; Peel for exploded assemblies
+    this.mode = isConcentricDef(this.def) ? "section" : "peel";
     this._pulseT = 0;
 
     const meshLayers = object3d.userData.layers || [];
@@ -51,15 +62,28 @@ export class SliceSystem {
       );
     }
 
+    // Measure per-layer radii in LOCAL space for cut-face disks
+    this._layerRadii = [];
+    object3d.updateWorldMatrix(true, true);
+    const worldScale = object3d.scale.x || 1;
     for (const layer of meshLayers) {
       if (!this._baseScale.has(layer)) {
         this._baseScale.set(layer, layer.scale.x || 1);
       }
+      if (!this._basePos.has(layer)) {
+        this._basePos.set(layer, layer.position.clone());
+      }
+      this._box.setFromObject(layer);
+      this._box.getSize(this._size);
+      // World AABB → local radius (undo root scale)
+      const rWorld = Math.max(this._size.y, this._size.z, this._size.x) * 0.48;
+      const r = rWorld / Math.max(worldScale, 1e-4);
+      this._layerRadii.push(Math.max(r, 0.06));
+
       eachMaterial(layer, (m) => {
         if (!this._baseOpacity.has(m)) this._baseOpacity.set(m, m.opacity ?? 1);
         m.clippingPlanes = [SHARED_CLIP_PLANE];
         m.clipShadows = true;
-        // seed targets so first frame doesn't flash
         this._targets.set(m, {
           opacity: m.opacity ?? 1,
           emissiveIntensity: m.emissiveIntensity ?? 0,
@@ -68,6 +92,9 @@ export class SliceSystem {
         });
       });
     }
+
+    this._buildCutFaces(scene);
+    this._updateClipPlane();
     this._apply(true);
     this._spawnVFX(scene);
     return this.currentLayer();
@@ -79,6 +106,8 @@ export class SliceSystem {
         layer.visible = true;
         const baseS = this._baseScale.get(layer);
         if (baseS != null) layer.scale.setScalar(baseS);
+        const baseP = this._basePos.get(layer);
+        if (baseP) layer.position.copy(baseP);
         eachMaterial(layer, (m) => {
           if (m.emissive) {
             m.emissive.setHex(0x000000);
@@ -91,11 +120,19 @@ export class SliceSystem {
           }
           m.wireframe = false;
           m.depthWrite = true;
-          if (this.mode === "section") {
-            // leave clipping as meshes.js set it
-          }
+          m.clippingPlanes = [];
         });
       }
+    }
+    if (this.cutFaces) {
+      if (this.cutFaces.parent) this.cutFaces.parent.remove(this.cutFaces);
+      this.cutFaces.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
+          else o.material.dispose();
+        }
+      });
     }
     if (this.particles && scene) {
       scene.remove(this.particles);
@@ -107,6 +144,7 @@ export class SliceSystem {
       scene.remove(this.cutLight.target);
       scene.remove(this.cutLight);
     }
+    this.cutFaces = null;
     this.particles = null;
     this.rimLight = null;
     this.cutLight = null;
@@ -114,6 +152,8 @@ export class SliceSystem {
     this.def = null;
     this.index = 0;
     this._layerScaleTarget.clear();
+    this._layerPosTarget.clear();
+    this._layerRadii = [];
   }
 
   setMode(mode) {
@@ -148,23 +188,129 @@ export class SliceSystem {
     };
   }
 
+  /** World-space clip through object center, removing local +X half. */
+  _updateClipPlane() {
+    if (!this.object) return;
+    this.object.updateWorldMatrix(true, false);
+    // Point on plane = object world origin (local center)
+    this._tmpV.set(0, 0, 0).applyMatrix4(this.object.matrixWorld);
+    // Normal in world = object local +X (clip keeps points with normal·x + c <= 0 → -X side kept when normal is +X… )
+    // Three.js clips where plane.distanceToPoint(p) < 0 is discarded when using clippingPlanes.
+    // Plane(normal, constant): distance = normal·p + constant. Discard if < 0.
+    // We want to discard local +X (positive local x). World normal = R * (1,0,0).
+    // At center C: normal·C + constant = 0 ⇒ constant = -normal·C.
+    // Point at C + ε*normal: normal·(C+εn)+c = ε > 0 → kept. Wait, Three discards NEGATIVE.
+    // So discard side is where normal·p + c < 0, i.e. opposite to normal.
+    // To discard +X local: use normal = -localX (pointing toward kept half), constant = -normal·C.
+    this._tmpN.copy(this._clipNormalLocal).transformDirection(this.object.matrixWorld).normalize();
+    // Discard the +X side: normal points toward kept (−X), so worldNormal = −localX_world
+    this._tmpN.multiplyScalar(-1);
+    SHARED_CLIP_PLANE.normal.copy(this._tmpN);
+    SHARED_CLIP_PLANE.constant = -this._tmpN.dot(this._tmpV);
+  }
+
+  _buildCutFaces(scene) {
+    const group = new THREE.Group();
+    group.name = "cut_faces";
+    const layers = this.object.userData.layers || [];
+    const dataLayers = this.def?.layers || [];
+
+    for (let i = 0; i < layers.length; i++) {
+      const r = this._layerRadii[i] || 0.1;
+      const color = dataLayers[i]?.color ?? 0xcccccc;
+      // Disk in YZ plane (facing ±X) — the visible cut face / strata ring
+      const geo = new THREE.CircleGeometry(r, 28);
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.55,
+        metalness: 0.08,
+        side: THREE.DoubleSide,
+        emissive: color,
+        emissiveIntensity: 0.15,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      // No clipping on cut faces — they ARE the cut
+      mat.clippingPlanes = [];
+      const disk = new THREE.Mesh(geo, mat);
+      // Sit slightly into the kept half so it isn't z-fought away
+      disk.rotation.y = Math.PI / 2;
+      disk.position.set(-0.002 - i * 0.0015, 0, 0);
+      disk.userData.layerIndex = i;
+      disk.userData.baseEmissive = 0.15;
+      group.add(disk);
+
+      // Thin ring edge for strata readability
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(Math.max(r * 0.92, 0.01), r * 1.02, 28),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.35,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      );
+      ring.material.clippingPlanes = [];
+      ring.rotation.y = Math.PI / 2;
+      ring.position.copy(disk.position);
+      ring.position.x -= 0.001;
+      ring.userData.layerIndex = i;
+      ring.userData.isRing = true;
+      group.add(ring);
+    }
+
+    this.object.add(group);
+    this.cutFaces = group;
+  }
+
   _apply(immediate = false) {
     if (!this.object) return;
     const layers = this.object.userData.layers;
     const mode = this.mode;
+    const concentric = isConcentricDef(this.def);
+    const explode = !concentric && (mode === "peel" || mode === "ghost");
 
-    // Clip plane strength by mode
-    if (mode === "section") {
-      SHARED_CLIP_PLANE.constant = 0.0 + this.index * 0.008;
-    } else if (mode === "ghost") {
-      SHARED_CLIP_PLANE.constant = 0.04 + this.index * 0.012;
-    } else {
-      SHARED_CLIP_PLANE.constant = 0.02 + this.index * 0.01;
-    }
+    this._updateClipPlane();
 
     if (this.cutLight) {
-      this.cutLight.visible = mode === "section";
-      this.cutLight.intensity = mode === "section" ? 28 : 0;
+      this.cutLight.visible = mode === "section" || mode === "peel";
+      this.cutLight.intensity = mode === "section" ? 28 : mode === "peel" ? 14 : 0;
+    }
+
+    // Cut faces: show for section always; for peel show remaining; ghost faint
+    if (this.cutFaces) {
+      this.cutFaces.visible = mode === "section" || mode === "peel" || mode === "ghost";
+      this.cutFaces.children.forEach((child) => {
+        const i = child.userData.layerIndex;
+        if (i == null) return;
+        const isOuter = i < this.index;
+        const isActive = i === this.index;
+        // Outside-in: hide outer cut faces once peeled past; keep active + inner
+        if (mode === "section") {
+          child.visible = !isOuter;
+        } else if (mode === "peel") {
+          child.visible = true;
+          if (child.isMesh && child.material && !child.userData.isRing) {
+            child.material.opacity = isOuter ? 0.25 : 1;
+            child.material.transparent = isOuter;
+          }
+        } else {
+          child.visible = !isOuter || true;
+          if (child.isMesh && child.material && !child.userData.isRing) {
+            child.material.opacity = isOuter ? 0.2 : 0.85;
+            child.material.transparent = true;
+          }
+        }
+        if (child.isMesh && child.material && child.material.emissive && !child.userData.isRing) {
+          child.material.emissiveIntensity = isActive ? 0.65 : child.userData.baseEmissive ?? 0.15;
+        }
+        if (child.userData.isRing) {
+          child.visible = isActive && child.visible;
+        }
+      });
     }
 
     for (let i = 0; i < layers.length; i++) {
@@ -173,11 +319,21 @@ export class SliceSystem {
       const isOuter = i < this.index;
       const isInner = i > this.index;
       const baseS = this._baseScale.get(layer) ?? 1;
+      const baseP = this._basePos.get(layer) || new THREE.Vector3();
 
-      // Section mode hides outer shells; peel/ghost keep them as ghosts
+      // Section: hide outer shells (cut faces remain); peel/ghost keep ghosts
       layer.visible = !(mode === "section" && isOuter);
 
       this._layerScaleTarget.set(layer, isActive ? baseS * 1.02 : baseS);
+
+      // Exploded offset along local +X for outer parts when peeling non-concentric
+      let ox = 0;
+      if (explode && isOuter) {
+        ox = (this.index - i) * 0.22;
+      } else if (explode && isActive) {
+        ox = 0.06;
+      }
+      this._layerPosTarget.set(layer, { x: baseP.x + ox, y: baseP.y, z: baseP.z });
 
       eachMaterial(layer, (m) => {
         const base = this._baseOpacity.get(m) ?? 1;
@@ -215,7 +371,7 @@ export class SliceSystem {
             wireframe = false;
           }
         } else {
-          // section
+          // section — solid cutaway; outer hidden; active highlighted
           if (isOuter) {
             opacity = Math.min(base, SECTION_OUTER);
             depthWrite = false;
@@ -236,8 +392,8 @@ export class SliceSystem {
           m.wireframe = wireframe;
           m.depthWrite = depthWrite;
           if (m.emissive) m.emissiveIntensity = emissiveIntensity;
+          layer.position.set(baseP.x + ox, baseP.y, baseP.z);
         } else {
-          // ensure transparent while lerping
           m.transparent = true;
         }
       });
@@ -271,7 +427,6 @@ export class SliceSystem {
     this.rimLight.position.y += 0.8;
     scene.add(this.rimLight);
 
-    // Thin accent along the cut face (section mode)
     this.cutLight = new THREE.SpotLight(0xffe0a0, 0, 5, Math.PI / 5, 0.55, 1.2);
     this.cutLight.position.copy(this.object.position);
     this.cutLight.position.x -= 0.9;
@@ -283,6 +438,20 @@ export class SliceSystem {
   }
 
   update(t, dt = 1 / 60) {
+    this._updateClipPlane();
+
+    // Keep cut-face group oriented in object local space (already parented)
+    if (this.cutFaces && this.object) {
+      // Pulse active cut face
+      this.cutFaces.children.forEach((child) => {
+        if (child.userData.isRing || child.userData.layerIndex !== this.index) return;
+        if (child.material?.emissive) {
+          const base = 0.55;
+          child.material.emissiveIntensity = base + 0.2 * (0.5 + 0.5 * Math.sin(t * 4));
+        }
+      });
+    }
+
     if (this.particles) {
       this.particles.rotation.y = t * 0.25;
       const arr = this.particles.geometry.attributes.position.array;
@@ -298,7 +467,6 @@ export class SliceSystem {
       this.cutLight.intensity = 24 + Math.sin(t * 4) * 6;
     }
 
-    // Smooth opacity / emissive toward targets (~180ms)
     const alpha = 1 - Math.exp(-dt / (TRANSITION_MS / 1000));
     if (this.object?.userData?.layers) {
       this._pulseT = t;
@@ -312,6 +480,12 @@ export class SliceSystem {
           const s = lerp(layer.scale.x, targetS, alpha);
           layer.scale.setScalar(s);
         }
+        const posT = this._layerPosTarget.get(layer);
+        if (posT) {
+          layer.position.x = lerp(layer.position.x, posT.x, alpha);
+          layer.position.y = lerp(layer.position.y, posT.y, alpha);
+          layer.position.z = lerp(layer.position.z, posT.z, alpha);
+        }
         eachMaterial(layer, (m) => {
           const target = this._targets.get(m);
           if (!target) return;
@@ -320,7 +494,6 @@ export class SliceSystem {
           if (m.emissive) {
             m.emissiveIntensity = lerp(m.emissiveIntensity ?? 0, target.emissiveIntensity, alpha);
           }
-          // snap discrete flags once close
           if (Math.abs(m.opacity - target.opacity) < 0.02) {
             m.wireframe = target.wireframe;
             m.depthWrite = target.depthWrite;

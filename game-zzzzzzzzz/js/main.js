@@ -3,6 +3,7 @@ import { Player } from "./player.js";
 import { Mansion } from "./mansion.js";
 import { InspectMode } from "./inspect.js";
 import { SliceSystem } from "./slice.js";
+import { DriveMode } from "./drive/driveMode.js";
 import { OBJECTS } from "./data/objects.js";
 import { ROOMS } from "./data/rooms.js";
 
@@ -29,8 +30,15 @@ const strataList = document.getElementById("strata-list");
 const btnPrevLayer = document.getElementById("btn-prev-layer");
 const btnNextLayer = document.getElementById("btn-next-layer");
 const modeButtons = [...document.querySelectorAll(".mode-btn")];
+const playModeButtons = [...document.querySelectorAll("[data-play-mode]")];
+const driveHud = document.getElementById("drive-hud");
+const speedoEl = document.getElementById("speedo");
+const driveToast = document.getElementById("drive-toast");
+const driveBadge = document.getElementById("drive-badge");
 
-let mode = "title"; // title | roam | inspect
+/** @type {'explore' | 'drive'} */
+let playMode = "explore";
+let mode = "title"; // title | roam | inspect | drive
 let hoverTarget = null;
 let inspectRoomLabel = "";
 
@@ -78,19 +86,95 @@ player.getFloorY = (x, z) => mansion.getFloorY(x, z, player.floorY);
 player.setPosition(0, undefined, 11);
 const inspect = new InspectMode(camera, canvas);
 const slice = new SliceSystem();
+const drive = new DriveMode(scene, camera);
+
+drive.onSpeed = (kmh) => {
+  if (speedoEl) speedoEl.textContent = `${Math.round(kmh)} km/h`;
+};
+drive.onCheckpoint = (label, meta = {}) => {
+  if (!driveToast) return;
+  driveToast.textContent = meta.shortcut ? label : `Entering ${label}`;
+  driveToast.classList.toggle("shortcut", !!meta.shortcut);
+  driveToast.classList.add("show");
+  clearTimeout(driveToast._t);
+  driveToast._t = setTimeout(() => {
+    driveToast.classList.remove("show", "shortcut");
+  }, 2200);
+};
+drive.onHint = (hint) => {
+  if (!driveToast) return;
+  // Soft discoverability pulse — don't stomp an active room toast mid-show
+  if (driveToast.classList.contains("show") && !driveToast.classList.contains("hint")) return;
+  driveToast.textContent = hint;
+  driveToast.classList.add("show", "hint");
+  clearTimeout(driveToast._t);
+  driveToast._t = setTimeout(() => {
+    driveToast.classList.remove("show", "hint", "shortcut");
+  }, 1800);
+};
 
 const raycaster = new THREE.Raycaster();
 const clock = new THREE.Clock();
 
+function syncPlayModeUI() {
+  playModeButtons.forEach((b) => {
+    b.classList.toggle("active", b.dataset.playMode === playMode);
+  });
+  if (driveHud) driveHud.classList.toggle("hidden", playMode !== "drive");
+  if (driveBadge) driveBadge.classList.toggle("hidden", playMode !== "drive");
+  if (crosshair) crosshair.classList.toggle("hidden", playMode === "drive");
+}
+
+function setPlayMode(next) {
+  if (next !== "explore" && next !== "drive") return;
+  if (next === playMode && mode !== "title") {
+    syncPlayModeUI();
+    return;
+  }
+
+  // Exit inspect if needed
+  if (mode === "inspect") exitInspect(false);
+
+  if (next === "drive") {
+    // Leave explore
+    player.unlock();
+    player.enabled = false;
+    if (drive.active) drive.exit();
+    drive.enter();
+    playMode = "drive";
+    mode = "drive";
+    promptEl.textContent = "WASD drive · Shift boost · Mouse holes & shafts are shortcuts · Explore to walk";
+    promptEl.classList.remove("lit", "hidden");
+  } else {
+    // Explore
+    if (drive.active) drive.exit();
+    playMode = "explore";
+    mode = "roam";
+    player.enabled = true;
+    // Restore camera near player
+    const p = player.position;
+    camera.position.copy(p);
+    player.lock();
+    promptEl.textContent = "Explore the mansion & gardens · Walk to a curiosity";
+    promptEl.classList.remove("lit", "hidden");
+  }
+  syncPlayModeUI();
+}
+
 document.getElementById("btn-enter").addEventListener("click", () => {
   titleScreen.classList.add("hidden");
   hud.classList.remove("hidden");
-  mode = "roam";
-  player.lock();
+  const prefer = document.querySelector('input[name="start-mode"]:checked')?.value
+    || document.getElementById("title-play-mode")?.dataset?.prefer
+    || "explore";
+  // Title segmented control
+  const titleActive = document.querySelector("#title-mode-toggle .play-mode-btn.active");
+  const startMode = titleActive?.dataset?.playMode || prefer || "explore";
+  setPlayMode(startMode === "drive" ? "drive" : "explore");
 });
 
 player.controls.addEventListener("unlock", () => {
-  if (mode === "roam") {
+  if (mode === "roam" && playMode === "explore") {
     promptEl.textContent = "Click to look around · WASD to walk";
     promptEl.classList.remove("lit");
     crosshair.classList.remove("hot");
@@ -98,6 +182,7 @@ player.controls.addEventListener("unlock", () => {
 });
 
 canvas.addEventListener("click", () => {
+  if (playMode === "drive") return;
   if (mode === "roam" && !player.locked) player.lock();
   else if (mode === "roam" && hoverTarget) enterInspect(hoverTarget);
 });
@@ -105,6 +190,13 @@ canvas.addEventListener("click", () => {
 window.addEventListener("keydown", (e) => {
   if (e.code === "Escape") {
     if (mode === "inspect") exitInspect();
+  }
+  // Quick mode switch: digit 1 explore, 2 drive (when not typing)
+  if (e.code === "Digit1" && mode !== "inspect" && mode !== "title") {
+    setPlayMode("explore");
+  }
+  if (e.code === "Digit2" && mode !== "inspect" && mode !== "title") {
+    setPlayMode("drive");
   }
   if (mode === "inspect") {
     if (e.code === "BracketLeft" || e.code === "Minus" || e.code === "ArrowLeft") {
@@ -152,6 +244,16 @@ modeButtons.forEach((btn) => {
   });
 });
 
+playModeButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (mode === "title") {
+      playModeButtons.forEach((b) => b.classList.toggle("active", b === btn));
+      return;
+    }
+    setPlayMode(btn.dataset.playMode);
+  });
+});
+
 slice.onLayerChange = () => syncSliceUI();
 
 function colorCss(hex) {
@@ -159,6 +261,7 @@ function colorCss(hex) {
 }
 
 function enterInspect(target) {
+  if (playMode !== "explore") return;
   const id = target.userData.objectId;
   const obj = target.userData.target || target;
   const def = OBJECTS[id];
@@ -175,7 +278,6 @@ function enterInspect(target) {
   inspect.enter(obj, scene);
   slice.attach(obj, scene);
   inspectPanel.classList.remove("hidden");
-  // next frame open transition
   requestAnimationFrame(() => inspectPanel.classList.add("open"));
   promptEl.classList.add("hidden");
   crosshair.classList.remove("hot");
@@ -191,15 +293,17 @@ function enterInspect(target) {
   syncSliceUI();
 }
 
-function exitInspect() {
+function exitInspect(relock = true) {
   slice.detach(scene);
   inspect.exit(scene);
   inspectPanel.classList.remove("open");
   inspectPanel.classList.add("hidden");
   promptEl.classList.remove("hidden");
-  mode = "roam";
-  player.enabled = true;
-  player.lock();
+  if (playMode === "explore") {
+    mode = "roam";
+    player.enabled = true;
+    if (relock) player.lock();
+  }
 }
 
 function buildSliceTicks(n) {
@@ -263,6 +367,7 @@ function syncSliceUI() {
     el.classList.toggle("active", on);
     if (on) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
+  modeButtons.forEach((b) => b.classList.toggle("active", b.dataset.mode === slice.mode));
 }
 
 function updateRoomBadge(pos) {
@@ -279,7 +384,7 @@ function updateRoomBadge(pos) {
 }
 
 function updateHover() {
-  if (mode !== "roam" || !player.locked) {
+  if (mode !== "roam" || playMode !== "explore" || !player.locked) {
     hoverTarget = null;
     crosshair.classList.remove("hot");
     return;
@@ -322,7 +427,11 @@ function tick() {
   requestAnimationFrame(tick);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
-  if (mode === "roam") {
+  if (mode === "drive" || playMode === "drive") {
+    drive.update(dt);
+    updateRoomBadge(drive.car.position);
+    mansion.updateFireflies(t);
+  } else if (mode === "roam") {
     player.update(dt, mansion.getColliders());
     updateHover();
     updateRoomBadge(player.position);

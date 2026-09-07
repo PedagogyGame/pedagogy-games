@@ -1,7 +1,20 @@
 import * as THREE from "three";
 
-/** Shared vertical cut plane (local +X half removed) for sectional views. */
+/** Shared vertical cut plane — enabled only while inspecting (see slice.js). */
 export const SHARED_CLIP_PLANE = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0.02);
+
+/** Shapes that use exploded peel offsets instead of pure onion shells. */
+export const EXPLODE_SHAPES = new Set([
+  "piano", "violin", "flytrap", "harmonica", "guitar", "clarinet",
+]);
+
+export function isConcentricDef(def) {
+  if (!def) return true;
+  const shape = (def.shape || "").toLowerCase();
+  if (EXPLODE_SHAPES.has(shape)) return false;
+  if (["piano", "violin", "venus_flytrap"].includes(def.id)) return false;
+  return true;
+}
 
 function mat(color, opts = {}) {
   const m = new THREE.MeshStandardMaterial({
@@ -15,7 +28,8 @@ function mat(color, opts = {}) {
     side: opts.side ?? THREE.DoubleSide,
     depthWrite: opts.depthWrite ?? true,
   });
-  m.clippingPlanes = [SHARED_CLIP_PLANE];
+  // Clipping attached only during inspect (SliceSystem.attach)
+  m.clippingPlanes = [];
   m.clipShadows = true;
   return m;
 }

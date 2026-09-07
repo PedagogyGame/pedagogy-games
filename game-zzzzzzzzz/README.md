@@ -1,6 +1,6 @@
 # The Mansion of the Unseen
 
-A children's **3D educational** WebGL game. Free-roam a multi-floor Victorian mansion **and its outer estate grounds**, inspect curiosities, and magically slice them to reveal accurate named layers with kid-friendly definitions. No combat, timers, or fail states — pure exploration.
+A children's **3D educational** WebGL game. Free-roam a multi-floor Victorian mansion **and its outer estate grounds**, inspect curiosities, and magically slice them to reveal accurate named layers with kid-friendly definitions. Or switch to **Drive** mode and pilot a tiny RC car along floor roads, wall tunnels, and furniture-top circuits. No combat, timers, or fail states — pure exploration.
 
 **Premise:** Break open the unseen — without breaking anything.
 
@@ -16,18 +16,89 @@ Open **http://localhost:8080** in a modern desktop browser.
 
 > Three.js r160 is vendored under `vendor/` — fully offline after unpack.
 
+## Play modes
+
+| Mode | What it is |
+|------|------------|
+| **Explore** | FPS walk + inspect / slice (pointer lock) |
+| **Drive** | Chase-cam RC car on painted roads, cornice highways, balcony, ramps, tunnels, furniture rails |
+
+Toggle with the **Explore | Drive** control on the title screen or in-HUD, or keys **1** / **2**. Switching exits inspect, unlocks the pointer, and shows/hides the car cleanly (`playMode = 'explore' | 'drive'`).
+
 ## Controls
+
+### Explore
 
 | Action | Input |
 |--------|--------|
 | Look | Mouse (click canvas to lock pointer) |
 | Move | WASD / arrow keys |
 | Climb floors | Walk the side staircases (west foyer ↔ landing ↔ attic; east foyer ↔ cellar) |
-| Exit to gardens | Walk out the **Grand Foyer front door** (south, toward the drive) or the **Conservatory garden doors** (north, onto the terrace) |
+| Exit to gardens | Walk out the **Grand Foyer front door** or the **Conservatory garden doors** |
 | Inspect object | Walk up + click while crosshair highlights it |
 | Orbit in inspect | Drag mouse |
-| Peel layers | Scroll wheel, slider, bracket keys, or strata buttons |
+| Peel / section layers | Scroll wheel, slider, bracket keys, or strata buttons |
+| Slice modes | **Section** (default for concentric curios — visible cut faces), Peel, Ghost |
 | Leave inspect / unlock | Esc |
+
+### Drive
+
+| Action | Input |
+|--------|--------|
+| Accelerate / brake / steer | WASD / arrows |
+| Boost | Shift |
+| Switch to Explore | HUD toggle or key **1** |
+
+HUD shows a speedometer, Drive badge, and room-enter toasts (“Entering Conservatory”).
+
+## Cross-section cutaways (Reveal / Learn)
+
+On inspect, a **world-space clip plane** cuts through the object center (local +X half removed) and each layer gets a solid **cut-face disk** tinted to that stratum — so kids see rings of color, not vanishing shells. Peeling advances outside-in with the active cut face highlighted and the HUD term locked to the same index. Non-concentric assemblies (violin, piano, flytrap, …) also **explode along +X** in Peel/Ghost.
+
+Hero objects tuned for Section: alkaline AA, Magic 8-Ball, bird egg, coconut, baseball, orange, coffee cherry, hard drive, thermos, nautilus, pocket watch, fig.
+
+## Drive track map (summary)
+
+- **Floor loop:** Foyer → Hall of Echoes → Conservatory → Breakfast Parlor → back
+- **Spurs:** Hall ↔ Cabinet, Hall ↔ Armoury
+- **Outdoor loop:** Front drive → gardens path → terrace → foyer (gravel)
+- **Wall tunnels:** two incline tube corridors (hall↔cabinet, hall↔armoury) with arch frames + emissive strip lights
+- **Stair ramp:** west foyer stair climb onto Upper Landing
+- **Furniture circuits (≥4) + ramps:** foyer console, dining table, cabinet display cases, workshop bench, library bookcase tops, music sideboard, nursery toy chest
+- **Cornice highway:** continuous upper-wall ledge circuits in Foyer, Hall of Echoes (both sides), Cabinet, Armoury, Conservatory — dark wood deck + gold edge trim, doorway-header bridges, diagonal corner braces, on-ramps from stair rail / display cases / bookcase tops
+- **Balcony:** exterior balcony off the **Upper Landing** with driveable loop + return ramps; optional drop ramp to Front Drive. Explore can walk it (`getFloorY` floor region + French doors)
+- **Chandelier ring:** optional elevated loop at foyer chandelier height with cornice on-ramp
+- **Bookcase express:** library tops → nursery / study express links + cross header
+
+Suggested flow: foyer floor → **mouse hole** → wall hollow → furniture → cornice / chandelier → Upper Landing → **Balcony** → flower paths outdoors.
+
+### Mouse shortcuts & shafts
+
+The RC car can sneak like a clever mouse:
+
+| Kind | Routes |
+|------|--------|
+| **Hollow wall tubes** (`shortcut`) | Foyer↔Cabinet (west, skirt + mid), Foyer↔Armoury (east, skirt + mid), Hall↔Conservatory (north cavity), Dining↔Conservatory (shared wall), Cellar↔Ground (pipe shaft) |
+| **Service shafts** (`shaft`) | West-wall zigzag Cellar→Ground→First→Attic; climb tube Cellar→Hall; Hall→Workshop climb |
+| **Drop chutes** (`chute`) | Cornice→foyer floor with landing curve; balcony→foyer slide |
+| **Flower paths** (`flower`) | Rose Walk weave, hedge tunnel, flower-bed sneak, orchard arc, fountain arc, terrace↔front-drive connector |
+
+**Visuals:** round wood-trimmed mouse-hole portals with glowing rings; dark timber/plaster cavity interiors; light slots + dust-mote emissives; petal edge dust + lantern markers on garden shortcuts; optional boost pads at some exits.
+
+**Toasts / hints:** “Mouse run”, “Wall hollow”, “Pipe shaft”; near a portal the HUD whispers “Shortcut — wall run” (or petal / pipe variants). Explore|Drive toggle unchanged.
+
+### Drive handling notes
+
+- Premium candy-red / cream RC mesh, chrome mirrors, glass cabin, detailed wheels, subtle underglow
+- Snappy accel with soft speed cap; high steer at low speed, stable at high; visual drift trail intensity
+- Stronger magnetic centerline on elevated / shortcut / shaft / chute; wider forgiveness on floor roads
+- Soft guard-rail push; banking follows track; landing damp after slides
+- Chase cam: cinematic look-ahead, spring-damped follow (less jitter), boost FOV, smooth dark→light recover after tunnels
+- Off-track: slow on carpet/grass/petal paths, soft pull back near track — never hard freeze
+- Optional speed lines + dust particles while boosting (emissive meshes only)
+- Prefer emissive lenses / lanterns / tunnel strips / mouse-hole glow over extra PointLights
+
+Tracks live in `js/data/tracks.js`; meshes + snap in `js/drive/tracks.js`; car in `js/drive/car.js`; mode glue in `js/drive/driveMode.js`. Balcony architecture is built in `js/mansion.js` (`_buildBalcony`).
 
 ## Multi-floor layout + gardens
 
@@ -39,42 +110,18 @@ Open **http://localhost:8080** in a modern desktop browser.
 | **First Floor** | ≈ 4.2 | Upper Landing, Library Hall, Workshop, Music Room, Study & Darkroom, Nursery & Toy Corner |
 | **Attic** | ≈ 8.4 | Attic Curiosities Loft, Storage & Science Attic |
 
-Outdoor zones use `outdoor: true` (no full walls). The estate includes lawn, gravel drive, stone paths, glowing facade windows, fountain, koi pond, gazebo, greenhouse, carriage shed, orchard trees, topiary, rose ring, lantern posts, and fireflies under dusk fog.
+Stairs use continuous **ramp floor sampling** via `mansion.getFloorY(x, z, currentY)`. Sampling is **story-aware**: stacked rooms sharing XZ no longer steal the ground floor. Spawn is on the foyer near the front door (`z≈11`).
 
-Stairs use continuous **ramp floor sampling** via `mansion.getFloorY(x, z, currentY)`. Sampling is **story-aware**: stacked rooms sharing XZ no longer steal the ground floor, and ramp regions only engage when your feet are near that stair band. Main stairs sit on the **west foyer wall** (cellar on the east; attic on the west landing) so room centers stay flat. Spawn is on the foyer near the front door (`z≈11`), not on a stair foot.
-
-**Performance:** PointLights are capped (~16), moon directional shadows are off, and only large furniture + outer shells cast shadows — keeps WebGL stable with ~95 sliceables. Lamps/chandeliers/windows use emissive meshes instead of extra lights.
-
-## Visual note (high-definition livable interior pass)
-
-Indoor rooms now include plank floor textures, wallpaper paneling, cornice/baseboards, door jambs, recessed mullioned windows, ceiling beams (halls/music/workshop), bordered rugs, multi-bulb emissive chandeliers & sconces, abstract painting canvases, and room-specific static furniture (foyer console/mirror, cabinet glass cases, armoury sofa & game table, dining place settings, workshop pegboard, nursery crib, study desk lamp, continuous library bookcases, conservatory planters, etc.). Hallways are slightly wider. Renderer uses ACES filmic tone mapping, dusk blue-violet fog, and FOV ~68 — bloom skipped for FPS (glow via emissives).
-
-
-Room badge shows `Floor · Room` (e.g. `Gardens · Rose Walk`, `First Floor · Music Room`).
+**Performance:** PointLights capped (~18), moon directional shadows off, large furniture + outer shells cast shadows. Lamps/chandeliers/windows use emissive meshes. Curtains, tablecloths, sharper glass, thicker window trim.
 
 ## Objects (~95 unique sliceables)
 
 Each has ≥5 named layers (data in `js/data/objects.js`) plus a mesh builder in `js/meshes.js`.
 
-**Cabinet / attic curios:** Hornet Nest, Bird Egg, Nautilus, Pearl, Honeycomb, Feather, Coral Colony, Oak Gall, Thunderegg, Ammonite, Tree Cookie, Abalone, Cuttlebone, Sponge…
-
-**Gardens / orchard / rockery / terrace (many outdoors):** Sunflower Head, Artichoke, Aloe Leaf, Carrot, Tomato, Grape, Pine Cone, Pitcher Plant, Venus Flytrap, Avocado, Cacao Pod, Walnut Husk, Lotus Pod, Fig, Orange, Pineapple, Pomegranate, Coffee Cherry, Papaya, Kiwi, Passion Fruit, Barnacle, Sea Urchin, Mermaid's Purse, Starfish, Oyster…
-
-**Drive / shed:** Oil Filter, Skateboard Deck, Super Soaker, Golf Ball (5-piece), Solar Cell, Spinning Reel, Binoculars, Thermos, Glow Stick
-
-**Study models:** Cow Eye, Tooth Model, Long Bone, Artery Model, Hard Drive, Polaroid Film, Color Film, SLR Camera, Fountain Pen, Credit Card
-
-**Workshop / kitchen:** Alkaline AA, Spark Plug, DC Motor, Padlock, MLCC Chip, Formica Sample, Coax Cable, Tape Measure, Sewing Machine, Croissant, Baklava, KitKat, Juice Carton…
-
-**Music:** Grand Piano, Violin, Acoustic Guitar, Clarinet, Metronome, Music Box, Harmonica, Recorder, Trumpet Valve, Speaker Driver, Accordion Free Reed
-
-**Nursery / play:** Etch A Sketch, Nerf Blaster, M&M Candy, Walkman, Skateboard Deck, Magic 8-Ball, Baseball, Pocket Watch, Compass, Gyroscope, Combination Lock
-
-Some types appear in more than one place (repeats for discovery density). Cabinet keeps classic pedestals; other rooms use tables, benches, desks, rugs, garden pots, and rocks.
-
 ## Stack
 
 - Plain HTML / CSS / ES modules (no build step)
 - Three.js r160 + OrbitControls / PointerLockControls (vendored)
-- Procedural meshes, onion-shell cutaways, glassmorphism HUD
+- Procedural meshes, onion-shell cutaways with cut faces, glassmorphism HUD
+- Dual play modes: Explore walk + Drive RC tracks
 - Twilight estate mood: deep blue fog, moon light, warm window glow, path lanterns, fireflies
