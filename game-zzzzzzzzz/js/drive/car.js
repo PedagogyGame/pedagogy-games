@@ -13,7 +13,7 @@ export const ASSIST_MAGNET = false;
 /** Handling / look presets (base values; tiny-car precision). */
 export const VEHICLE_PRESETS = {
   // Driver-feel cruise sweet spot (not crawl ~1.05, not rocket ~1.72):
-  // car maxSpeed ~1.40, boost ~1.92, steerRate ~3.55, steer lerp ~4.2
+  // car maxSpeed ~1.40, boost ~1.92, steerRate ~3.42, steer lerp ~2.85 (planted)
   car: {
     id: "car",
     label: "Car",
@@ -23,7 +23,7 @@ export const VEHICLE_PRESETS = {
     accel: 6.2,
     brake: 14,
     friction: 7.4,
-    steerRate: 3.55,
+    steerRate: 3.42,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -36,7 +36,7 @@ export const VEHICLE_PRESETS = {
     accel: 5.4,
     brake: 13.5,
     friction: 8.0,
-    steerRate: 3.15,
+    steerRate: 3.02,
     bodyColor: 0x1565c0,
     accent: 0xeceff1,
   },
@@ -49,7 +49,7 @@ export const VEHICLE_PRESETS = {
     accel: 5.6,
     brake: 15,
     friction: 8.6,
-    steerRate: 3.25,
+    steerRate: 3.12,
     bodyColor: 0x2e7d32,
     accent: 0xfff59d,
   },
@@ -62,7 +62,7 @@ export const VEHICLE_PRESETS = {
     accel: 6.5,
     brake: 13.5,
     friction: 7.0,
-    steerRate: 3.70,
+    steerRate: 3.55,
     bodyColor: 0xf9a825,
     accent: 0x212121,
   },
@@ -84,7 +84,7 @@ export class RCCar {
     this.accel = 6.2;
     this.brake = 16;
     this.friction = 7.4;
-    this.steerRate = 3.55;
+    this.steerRate = 3.42;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -466,7 +466,8 @@ export class RCCar {
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 4.2 * dt));
+    // Higher input damping → smoother turn-in/out (less twitchy)
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.85 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
@@ -569,9 +570,13 @@ export class RCCar {
 
     let fric = this.friction;
     if (snap?.onTrack) {
-      if (kind === "cornice" || kind === "balcony") fric *= 1.55;
-      else if (elevated || kind === "ramp") fric *= 1.35;
+      if (kind === "cornice" || kind === "balcony") fric *= 1.68;
+      else if (elevated || kind === "ramp") fric *= 1.48;
       else fric *= 1.18;
+    }
+    // Extra grip when soft rim fence is active (casual play stays ON deck)
+    if (onRailDeck && snap?.wallBounce && snap?.onTrack) {
+      fric *= 1.12;
     }
 
     if (throttle > 0) {
@@ -600,12 +605,17 @@ export class RCCar {
     }
 
     const absV = Math.abs(this.speed);
-    const lowBoost = 1.28 - 0.28 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
+    // Milder low-speed steer boost — planted, not twitchy at crawl
+    const lowBoost = 1.12 - 0.12 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
     const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
     const railGrip = (onRailDeck && snap?.onTrack) ? 1.05 : 1;
     const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.05, absV / 0.62 + 0.18) * lowBoost * highDamp * railGrip;
-    this.yaw += steerEff * Math.sign(this.speed || 1) * dt;
+      this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14) * lowBoost * highDamp * railGrip;
+    // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
+    const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
+    const maxYawRate = 2.45; // rad/s soft cap
+    const maxDyaw = maxYawRate * dt;
+    this.yaw += THREE.MathUtils.clamp(yawDelta, -maxDyaw, maxDyaw);
 
     this._driftTrail = THREE.MathUtils.lerp(
       this._driftTrail,
@@ -637,7 +647,9 @@ export class RCCar {
     // Height follow: stick to surface under wheels (NO centerline magnet)
     if (supported && snap) {
       const sticky = elevated || kind === "cornice" || kind === "balcony";
-      const yLock = snap.steep ? 28 : (sticky ? 26 : 18);
+      // Stickier rail on elevated decks; even stickier when hugging the rim fence
+      const nearRim = sticky && typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08;
+      const yLock = snap.steep ? 28 : (sticky ? (nearRim ? 34 : 30) : 18);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
       if (ASSIST_MAGNET && snap.onTrack) {

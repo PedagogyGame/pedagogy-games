@@ -99,7 +99,7 @@ for (const [id, p] of Object.entries(VEHICLE_PRESETS)) {
 }
 const carP = VEHICLE_PRESETS.car;
 if (carP.maxSpeed < 1.35 || carP.maxSpeed > 1.45) throw new Error(`car maxSpeed want ~1.4, got ${carP.maxSpeed}`);
-if (carP.steerRate < 3.4 || carP.steerRate > 3.7) throw new Error(`car steerRate want ~3.55, got ${carP.steerRate}`);
+if (carP.steerRate < 3.35 || carP.steerRate > 3.55) throw new Error(`car steerRate want ~3.42, got ${carP.steerRate}`);
 
 // Collision smoke: walk into a solid wall collider and ensure push-back
 const dom = {
@@ -225,11 +225,40 @@ if (segs.length > 800 && gridMs > fullMs) {
   throw new Error(`Grid slower than full scan (${gridMs} vs ${fullMs})`);
 }
 
-// door_* should not add ribbon meshes named/stacked at spawn — pad present
+// Spawn: ONE apron mesh only — no ring stack, no ribbon overlap under pad
 let spawnPad = false;
-drive.tracks.root.traverse((o) => { if (o.name === "spawn_clean_pad") spawnPad = true; });
+let spawnRing = false;
+let meshesNearSpawn = 0;
+drive.tracks.root.traverse((o) => {
+  if (o.name === "spawn_clean_pad") spawnPad = true;
+  if (o.name === "spawn_road_ring") spawnRing = true;
+  if (o.isMesh && o.geometry) {
+    // Count road-ish meshes whose bbox overlaps spawn apron (~0.95m)
+    o.geometry.computeBoundingBox?.();
+    const bb = o.geometry.boundingBox;
+    if (!bb) return;
+    // world approx via position
+    const cx = o.position.x;
+    const cz = o.position.z;
+    // ribbon meshes sit at origin with baked verts — sample a few positions
+    if (o.name === "spawn_clean_pad") return;
+    if (o.name && o.name.startsWith("ribbon_") && o.geometry.attributes?.position) {
+      const arr = o.geometry.attributes.position.array;
+      let near = false;
+      for (let i = 0; i < arr.length; i += 9) { // every ~3 verts
+        const x = arr[i], z = arr[i + 2];
+        if (Math.hypot(x - CAR_SPAWN.x, z - CAR_SPAWN.z) < 0.85) { near = true; break; }
+      }
+      if (near) meshesNearSpawn++;
+    }
+  }
+});
 if (!spawnPad) throw new Error("spawn_clean_pad missing");
-
+if (spawnRing) throw new Error("spawn_road_ring must be removed (single apron only)");
+if (meshesNearSpawn > 0) {
+  throw new Error(`foyer ribbon still overlaps spawn apron (${meshesNearSpawn} ribbon mesh(es))`);
+}
+console.log("Spawn apron clean", { spawnPad, spawnRing, ribbonOverlap: meshesNearSpawn });
 
 // Elevated bridge / ramp must stay height-matched (no ghost through to story carpet)
 const bridgeSnap = drive.tracks.querySnap(0, 3.5, -0.45, 1.65);
@@ -263,6 +292,23 @@ console.log("Foyer console furniture snap", {
 });
 if (!furnSnap.supported || !(furnSnap.kind === "elevated" || furnSnap.kind === "ramp")) {
   throw new Error(`Furniture deck unsupported: ${furnSnap.kind}/${furnSnap.pathId}`);
+}
+
+// Soft elevated rim fence: near-edge query should push toward center (wallBounce)
+const furnEdge = drive.tracks.querySnap(5.5 + 0.22, 0.98, 10.0, 1.65);
+console.log("Furniture rim fence", {
+  onTrack: furnEdge.onTrack, edgeMargin: furnEdge.edgeMargin,
+  wallBounce: furnEdge.wallBounce, kind: furnEdge.kind,
+});
+if (furnEdge.elevated || furnEdge.kind === "elevated" || furnEdge.kind === "ramp") {
+  if (!furnEdge.wallBounce) {
+    // try a bit farther out
+    const farther = drive.tracks.querySnap(5.5 + 0.28, 0.98, 10.0, 1.65);
+    console.log("Furniture rim fence (farther)", farther.wallBounce, farther.edgeMargin, farther.kind);
+    if (!farther.wallBounce && farther.onTrack) {
+      console.warn("WARN: no wallBounce near furniture rim — check edge fence");
+    }
+  }
 }
 
 // Visible foyer skirting ribbon present (designed road at spawn)

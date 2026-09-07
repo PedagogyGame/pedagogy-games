@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACK_PATHS } from "../data/tracks.js";
+import { TRACK_PATHS, CAR_SPAWN } from "../data/tracks.js";
 
 function makeCanvas(w, h) {
   if (typeof document !== "undefined" && document.createElement) {
@@ -293,52 +293,66 @@ export class TrackSystem {
   }
 
   /**
-   * Designed asphalt pad under CAR_SPAWN — blends into foyer_skirting ribbon.
-   * Yellow center dashes only (shared asphalt tex); no white shards / starburst.
+   * ONE continuous apron under CAR_SPAWN — solid dark asphalt + soft yellow
+   * center dashes only. No ring, no stacked ribbons (foyer_skirting is gapped).
+   * Kills spawn z-fighting / flitting shards / starburst.
    */
   _addSpawnPad() {
-    const matOpts = {
-      color: this._asphalt ? 0xffffff : 0x1a1a20,
-      roughness: 0.84,
-      metalness: 0.06,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-      polygonOffsetUnits: -3,
-    };
-    if (this._asphalt) {
-      const map = this._asphalt.clone();
-      map.repeat.set(1.2, 1.2);
-      map.needsUpdate = true;
-      matOpts.map = map;
+    const sx = CAR_SPAWN.x;
+    const sz = CAR_SPAWN.z;
+    // Dedicated apron texture (not shared UV swimming with ribbon)
+    let map = null;
+    const c = makeCanvas(256, 256);
+    if (c) {
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#1a1a20";
+      ctx.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 500; i++) {
+        const v = 26 + Math.random() * 40;
+        ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+      }
+      // Soft yellow center dashes only — NO white edge lines
+      ctx.strokeStyle = "rgba(220,180,40,0.70)";
+      ctx.lineWidth = 5;
+      ctx.setLineDash([18, 16]);
+      ctx.beginPath();
+      ctx.moveTo(128, 12);
+      ctx.lineTo(128, 244);
+      ctx.stroke();
+      map = new THREE.CanvasTexture(c);
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.anisotropy = 4;
+      map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
+      map.generateMipmaps = true;
+      map.minFilter = THREE.LinearMipmapLinearFilter;
+      map.magFilter = THREE.LinearFilter;
     }
-    const mat = new THREE.MeshStandardMaterial(matOpts);
-    // Continuous designed ribbon pad (rounded rect-ish via circle + soft skirt ring)
-    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.72, 32), mat);
+    const mat = new THREE.MeshStandardMaterial({
+      color: map ? 0xffffff : 0x1a1a20,
+      roughness: 0.86,
+      metalness: 0.05,
+      ...(map ? { map } : {}),
+      // Single mesh above carpet — slight bias only, no stacked layers
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+      depthWrite: true,
+    });
+    // One simple continuous apron (not circle+ring stack)
+    const apronW = 1.55;
+    const apronD = 1.40;
+    const pad = new THREE.Mesh(new THREE.PlaneGeometry(apronW, apronD), mat);
     pad.rotation.x = -Math.PI / 2;
-    pad.position.set(-7.9, 0.055, 12.2);
+    // yaw=0 drives +Z; dashes run along depth (local Y of plane → world Z)
+    pad.position.set(sx, 0.052, sz);
     pad.receiveShadow = true;
+    pad.castShadow = false;
     pad.renderOrder = 2;
     pad.name = "spawn_clean_pad";
+    pad.frustumCulled = true;
     this.root.add(pad);
-    // Subtle outer skirting ring so pad reads as road, not void disc
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.68, 0.82, 32),
-      new THREE.MeshStandardMaterial({
-        color: 0x121218,
-        roughness: 0.9,
-        metalness: 0.04,
-        polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
-        side: THREE.DoubleSide,
-      })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(-7.9, 0.053, 12.2);
-    ring.receiveShadow = true;
-    ring.renderOrder = 1;
-    ring.name = "spawn_road_ring";
-    this.root.add(ring);
+    this._spawnApron = { x: sx, z: sz, r: 0.95 };
   }
 
   _buildPath(path) {
@@ -463,8 +477,12 @@ export class TrackSystem {
     }
 
     // Continuous ribbon — skip door_* and visual:false
+    // Gap foyer_skirting visuals under spawn apron (ONE mesh there — no z-fight)
     if (useRibbon && visualOk) {
-      this._addRibbonRoad(visualPts, width, kind, !!path.closed);
+      const gap = (path.id === "foyer_skirting")
+        ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: 0.95 }
+        : null;
+      this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap);
     }
 
     for (const op of path.points) {
@@ -552,12 +570,13 @@ export class TrackSystem {
   /**
    * Seamless road ribbon: ONE top-deck strip (markings in shared texture only).
    * Smoothed right-vectors kill sawtooth edges; no coplanar bottom / line meshes.
+   * Optional gapOpts {x,z,r} punches a hole (used under spawn apron).
    */
-  _addRibbonRoad(curvePts, width, kind, closed) {
+  _addRibbonRoad(curvePts, width, kind, closed, gapOpts = null) {
     if (!curvePts || curvePts.length < 2) return;
-    const pts = curvePts.slice();
+    let pts = curvePts.slice();
     // Close once only — never double-cap (spawn knot / white shard fan)
-    if (closed && pts.length > 2) {
+    if (closed && pts.length > 2 && !gapOpts) {
       const f = pts[0], l = pts[pts.length - 1];
       const d = f.distanceTo(l);
       if (d < 0.04) {
@@ -568,6 +587,27 @@ export class TrackSystem {
       } else {
         pts.push(f.clone());
       }
+    }
+    // Split into continuous runs excluding spawn gap — apron owns that region alone
+    if (gapOpts && gapOpts.r > 0) {
+      const runs = [];
+      let cur = [];
+      const inGap = (p) => Math.hypot(p.x - gapOpts.x, p.z - gapOpts.z) < gapOpts.r;
+      for (const p of pts) {
+        if (inGap(p)) {
+          if (cur.length >= 2) runs.push(cur);
+          cur = [];
+        } else {
+          cur.push(p);
+        }
+      }
+      if (cur.length >= 2) runs.push(cur);
+      // Closed loop with gap at seam → single open run is enough
+      if (!runs.length) return;
+      for (const run of runs) {
+        this._addRibbonRoad(run, width, kind, false, null);
+      }
+      return;
     }
     const halfW = width * 0.5;
     // Top deck only — sit clearly above room floors (kills floor z-fight shards)
@@ -1568,7 +1608,7 @@ export class TrackSystem {
         // Match mesh deck: slightly generous vs half-width so ribbons/boxes support
         const onTrack = lateral < seg.width * 0.72;
         // Near-deck: still supported on elevated bridges when slightly off centerline
-        const nearDeck = (elev || tube) && lateral < seg.width * 0.98 && dy < 0.5;
+        const nearDeck = (elev || tube) && lateral < seg.width * 1.05 && dy < 0.55;
         const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.62 : 0.9);
 
         let wallBounce = null;
@@ -1584,6 +1624,26 @@ export class TrackSystem {
               z: (pushDirZ / plen) * strength,
             };
           }
+        }
+        // Soft rim fence on elevated / cornice / balcony / furniture decks —
+        // push toward center when near rim (NOT full-track centerline magnet).
+        // Hard fall only if they truly leave the deck into void.
+        const deckFence = elev && !tube && (
+          seg.kind === "elevated" || seg.kind === "cornice" || seg.kind === "balcony"
+          || seg.kind === "ramp"
+        );
+        if (deckFence && lateral > halfW * 0.58 && lateral < halfW * 1.22) {
+          const pushDirX = (px - x);
+          const pushDirZ = (pz - z);
+          const plen = Math.hypot(pushDirX, pushDirZ) || 1;
+          const over = lateral - halfW * 0.58;
+          // Stickier near absolute rim
+          const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.42), 0, 1);
+          const strength = Math.min(0.062, over * (0.10 + 0.14 * rimT));
+          const bx = (pushDirX / plen) * strength;
+          const bz = (pushDirZ / plen) * strength;
+          if (!wallBounce) wallBounce = { x: bx, z: bz };
+          else { wallBounce.x += bx; wallBounce.z += bz; }
         }
 
         const exitedTube = tube && dist > halfW * 1.25 && !steep;

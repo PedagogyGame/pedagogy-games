@@ -49,7 +49,9 @@ Toggle with the **Explore | Drive** control on the title screen or in-HUD, or ke
 | Boost | Shift |
 | Switch to Explore | HUD toggle or key **1** |
 
-**True manual physics** — no centerline magnet. Leave balcony, cornice, furniture, or a wall tube into void and you **fall → CRASH → restart at spawn**. Floor/carpet is still crawlable. Wall hollows have studs, pipes, crack light, speed-gate rings, and exit boost pads.
+**True manual physics** — no centerline magnet. Leave balcony, cornice, furniture, or a wall tube into void and you **fall → CRASH → restart at spawn**. Floor/carpet is still crawlable. Soft **rim fences** on elevated decks push you back toward the center when near the edge (casual play stays on the road); hard fall only if you truly leave the deck. Walls/furniture bounce solid (`setWallColliders`); passages only via mouse/tunnel/shaft/chute/shortcut. Wall hollows have studs, pipes, crack light, speed-gate rings, and exit boost pads.
+
+**Spawn road:** one continuous asphalt apron under `CAR_SPAWN` (dark asphalt + soft yellow center dashes only). Foyer skirting ribbon is gapped there so nothing stacks/z-fights. Driver cruise ~1.40 with smoothed steer (lerp ~2.85, steerRate ~3.42, soft yaw-rate cap).
 
 HUD: “Manual — don't fall!”, speedo, **CRASH** banner, “Wall run” near holes, room-enter toasts.
 
