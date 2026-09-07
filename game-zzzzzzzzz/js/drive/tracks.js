@@ -292,25 +292,53 @@ export class TrackSystem {
     return out;
   }
 
-  /** Dark unmarked pad under CAR_SPAWN — covers junction knot visually. */
+  /**
+   * Designed asphalt pad under CAR_SPAWN — blends into foyer_skirting ribbon.
+   * Yellow center dashes only (shared asphalt tex); no white shards / starburst.
+   */
   _addSpawnPad() {
-    const pad = new THREE.Mesh(
-      new THREE.CircleGeometry(0.55, 24),
-      new THREE.MeshStandardMaterial({
-        color: 0x141418,
-        roughness: 0.92,
-        metalness: 0.04,
-        polygonOffset: true,
-        polygonOffsetFactor: -3,
-        polygonOffsetUnits: -3,
-      })
-    );
+    const matOpts = {
+      color: this._asphalt ? 0xffffff : 0x1a1a20,
+      roughness: 0.84,
+      metalness: 0.06,
+      polygonOffset: true,
+      polygonOffsetFactor: -3,
+      polygonOffsetUnits: -3,
+    };
+    if (this._asphalt) {
+      const map = this._asphalt.clone();
+      map.repeat.set(1.2, 1.2);
+      map.needsUpdate = true;
+      matOpts.map = map;
+    }
+    const mat = new THREE.MeshStandardMaterial(matOpts);
+    // Continuous designed ribbon pad (rounded rect-ish via circle + soft skirt ring)
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(0.72, 32), mat);
     pad.rotation.x = -Math.PI / 2;
-    pad.position.set(-7.9, 0.052, 12.2);
+    pad.position.set(-7.9, 0.055, 12.2);
     pad.receiveShadow = true;
     pad.renderOrder = 2;
     pad.name = "spawn_clean_pad";
     this.root.add(pad);
+    // Subtle outer skirting ring so pad reads as road, not void disc
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.68, 0.82, 32),
+      new THREE.MeshStandardMaterial({
+        color: 0x121218,
+        roughness: 0.9,
+        metalness: 0.04,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+        side: THREE.DoubleSide,
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(-7.9, 0.053, 12.2);
+    ring.receiveShadow = true;
+    ring.renderOrder = 1;
+    ring.name = "spawn_road_ring";
+    this.root.add(ring);
   }
 
   _buildPath(path) {
@@ -324,9 +352,10 @@ export class TrackSystem {
     const kind = path.kind || "floor";
     const tension = path.tension != null ? path.tension : 0.22;
     const useRibbon = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel";
-    // door_* strips: snap segments only — NO visible ribbon (kills foyer starburst stack)
+    // door_* strips: keep snap + thin visible ribbon (asphalt texture has yellow dashes only —
+    // no white edge lines, so foyer junctions no longer starburst/z-fight)
     const isDoorStrip = typeof path.id === "string" && path.id.startsWith("door_");
-    const visualOk = path.visual !== false && !isDoorStrip;
+    const visualOk = path.visual !== false;
 
     if (isDoorStrip && pts.length >= 2) {
       const inset = Math.min(width * 0.85, 0.28);
@@ -357,11 +386,12 @@ export class TrackSystem {
       const floorish = kind === "floor" || kind === "outdoor";
       // Keep cornice beauty; floor visual lower than before; snap coarser still
       const visDense = elevFancy ? (path.fancy ? 8 : 6)
-        : tubeish ? 4
+        : tubeish ? 5
           : kind === "flower" || kind === "tunnel" ? 5
             : floorish ? 4 : 4;
-      const snapDense = elevFancy ? (path.fancy ? 4 : 3)
-        : tubeish ? 3
+      // Denser snap on elevated/tube so rounded CatmullRom corners stay supported
+      const snapDense = elevFancy ? (path.fancy ? 5 : 4)
+        : tubeish ? 4
           : floorish ? 2 : 3;
       const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (useRibbon && visualOk ? 22 : 14));
       const snapN = Math.max(pts.length * snapDense, path.fancy ? 18 : (useRibbon ? 12 : 10));
@@ -643,6 +673,7 @@ export class TrackSystem {
     mesh.castShadow = false;
     mesh.frustumCulled = true;
     mesh.renderOrder = 1;
+    mesh.name = `ribbon_${kind}`;
     this.root.add(mesh);
 
     if (kind === "flower") {
@@ -1453,20 +1484,31 @@ export class TrackSystem {
 
   /**
    * Surface query for MANUAL drive — NO centerline magnet / rail babysitting.
-   * Returns support under wheels, optional tube wall bounce, carpet flag.
+   * Height-matched decks (ramps/bridges/cornice/furniture) beat nearby story floors
+   * so you never ghost through elevated geometry into carpet above/below.
+   * KEEP spatial grid (_segmentsNear) — never full-scan.
    */
   querySnap(x, y, z, radius = 2.4) {
     let best = null;
     let bestScore = Infinity;
-    // Story floor band: prefer floor asphalt / carpet; ignore overhead chutes & cornices
+    // Story floors — narrow band for carpet preference (was 0.85: stole cornice ~3.5)
     const storyFloors = [8.46, 4.26, 0.045, -4.05];
     let storyY = null;
-    let storyDy = 0.85;
+    let storyDy = 0.42;
     for (const f of storyFloors) {
       const d = Math.abs(y - f);
       if (d < storyDy) { storyDy = d; storyY = f; }
     }
-    const onStoryBand = storyY != null;
+    // Wider lookup only for open-floor carpet fallback (not for scoring bias)
+    let carpetStoryY = storyY;
+    if (carpetStoryY == null) {
+      let cd = 0.95;
+      for (const f of storyFloors) {
+        const d = Math.abs(y - f);
+        if (d < cd) { cd = d; carpetStoryY = f; }
+      }
+    }
+    const onFloorCruise = storyY != null; // truly at asphalt/carpet height
 
     const candidates = this._snapGrid && this._snapGrid.size
       ? this._segmentsNear(x, z, radius)
@@ -1480,7 +1522,7 @@ export class TrackSystem {
       const apz = z - seg.a.z;
       const steep = Math.abs(aby) > Math.abs(abx) * 0.45 + Math.abs(abz) * 0.45;
       let t;
-      if (steep || seg.kind === "shaft" || seg.kind === "chute" || seg.kind === "shortcut") {
+      if (steep || seg.kind === "shaft" || seg.kind === "chute" || seg.kind === "shortcut" || seg.kind === "ramp") {
         const abLenSq = abx * abx + aby * aby + abz * abz;
         t = abLenSq > 1e-8 ? (apx * abx + apy * aby + apz * abz) / abLenSq : 0;
       } else {
@@ -1497,37 +1539,43 @@ export class TrackSystem {
       const elev = ELEV_KINDS.has(seg.kind);
       const tube = TUBE_KINDS.has(seg.kind);
       const isFloor = FLOOR_KINDS.has(seg.kind);
-      // Cruising a story floor: skip elevated/tube unless nearly coplanar (ramp/chute lip)
-      if (onStoryBand && (elev || tube) && dy > 0.4 && Math.abs(py - storyY) > 0.35) {
+      // Cruising true floor: skip overhead/under decks unless coplanar lip
+      if (onFloorCruise && (elev || tube) && dy > 0.45 && Math.abs(py - storyY) > 0.5) {
         continue;
       }
-      const heightBand = elev || tube ? 1.15 : 2.8;
+      const heightBand = elev || tube ? 1.25 : 2.8;
       const useRadius = elev || tube
-        ? radius * 0.7
+        ? radius * 0.85
         : (isFloor ? radius * 1.45 : radius * 1.2);
       const checkDist = steep ? dist3 : dist;
       if (dy > heightBand || checkDist > useRadius) continue;
-      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.25 : 0;
-      const floorBias = (onStoryBand && isFloor) ? -0.55 : 0;
-      const elevPenalty = (onStoryBand && (elev || tube)) ? 0.9 : 0;
-      const score = (steep ? dist3 : dist) + dy * (elev ? 0.85 : 0.28) + pathBias + floorBias + elevPenalty;
+
+      // HEIGHT DOMINATES: coplanar ramp/bridge/cornice always beats distant-Y floor
+      const dyW = (elev || tube) ? 3.4 : (isFloor ? 0.55 : 1.1);
+      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.3 : 0;
+      // Mild floor prefer only when both car AND segment are at story asphalt height
+      const floorBias = (onFloorCruise && isFloor && dy < 0.28) ? -0.22 : 0;
+      // Penalize elevated only when clearly wrong height while floor-cruising
+      const elevPenalty = (onFloorCruise && (elev || tube) && dy > 0.38) ? 1.1 : 0;
+      const score = checkDist + dy * dyW + pathBias + floorBias + elevPenalty;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
         const yaw = Math.atan2(abx, abz);
         const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.72 : 0.45);
         const halfW = seg.width * 0.5;
-        // On road surface if within track width (no soft magnet radius)
-        const onTrack = (steep ? dist3 : dist) < seg.width * 0.62;
-        const supported = onTrack && dy < (elev ? 0.55 : 0.85);
+        const lateral = steep ? dist3 : dist;
+        // Match mesh deck: slightly generous vs half-width so ribbons/boxes support
+        const onTrack = lateral < seg.width * 0.72;
+        // Near-deck: still supported on elevated bridges when slightly off centerline
+        const nearDeck = (elev || tube) && lateral < seg.width * 0.98 && dy < 0.5;
+        const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.62 : 0.9);
 
-        // Tube wall bounce when scraping sides (stay enclosed; exit hole mid-tube = no support)
         let wallBounce = null;
         if (tube && dist > halfW * 0.72) {
           const pushDirX = (px - x);
           const pushDirZ = (pz - z);
           const plen = Math.hypot(pushDirX, pushDirZ) || 1;
-          // Soft bounce only while still roughly inside tube envelope
           if (dist < halfW * 1.35) {
             const over = dist - halfW * 0.72;
             const strength = Math.min(0.045, over * 0.085);
@@ -1538,19 +1586,16 @@ export class TrackSystem {
           }
         }
 
-        // Exiting tube sideways into void — not supported
         const exitedTube = tube && dist > halfW * 1.25 && !steep;
-
-        // Off asphalt but near any story floor road → carpet crawl (slow, never fall)
-        const carpet = isFloor && !onTrack && dy < 0.9;
-        const lateral = steep ? dist3 : dist;
-        const edgeMargin = halfW - lateral; // >0 = inside track; small = near rim
+        // Carpet only for true floor kinds near their own Y — never steal elevated decks
+        const carpet = isFloor && !onTrack && dy < 0.55;
+        const edgeMargin = halfW - lateral;
         best = {
           x: px, y: (carpet ? py + 0.01 : py + 0.03), z: pz,
           yaw, bank,
-          onTrack: onTrack && !exitedTube,
+          onTrack: (onTrack || nearDeck) && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
-          softPull: false, // no babysitting
+          softPull: false,
           carpet,
           dist: checkDist, kind: seg.kind, pathId: seg.pathId, label: seg.label,
           wallBounce,
@@ -1561,20 +1606,24 @@ export class TrackSystem {
           tube,
           halfW,
           edgeMargin,
+          nearDeck: !!nearDeck,
         };
       }
     }
 
     if (best) {
-      // Off-track elevated/tube while cruising a story floor → carpet, not fall latch
-      if (onStoryBand && (best.elevated || best.tube) && !best.onTrack) {
+      // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising
+      const farFromDeck = best.elevated || best.tube
+        ? (best.dist > (best.halfW || 0.2) * 1.55 && !best.nearDeck && !best.onTrack)
+        : false;
+      if (onFloorCruise && (best.elevated || best.tube) && farFromDeck) {
         best = {
           x, y: storyY, z,
           yaw: null, bank: 0,
           onTrack: false, supported: true, softPull: false,
           carpet: true, dist: best.dist, kind: "floor", pathId: null, label: null,
           wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
-          edgeMargin: 1, halfW: 1,
+          edgeMargin: 1, halfW: 1, nearDeck: false,
         };
       } else {
         if (best.pathId) this._lastPathId = best.pathId;
@@ -1583,15 +1632,14 @@ export class TrackSystem {
     }
 
     // Open floor of any mansion story → carpet crawl (slow), never void/crash
-    if (onStoryBand && storyY != null) {
-      const nearestStory = storyY;
+    if (carpetStoryY != null && Math.abs(y - carpetStoryY) < 0.95) {
       return {
-        x, y: nearestStory, z,
+        x, y: carpetStoryY, z,
         yaw: null, bank: 0,
         onTrack: false, supported: true, softPull: false,
         carpet: true, dist: 0, kind: "floor", pathId: null, label: null,
         wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
-        edgeMargin: 1, halfW: 1,
+        edgeMargin: 1, halfW: 1, nearDeck: false,
       };
     }
 
@@ -1602,7 +1650,7 @@ export class TrackSystem {
       onTrack: false, supported: false, softPull: false,
       carpet: false, dist: 99, kind: "void", pathId: null, label: null,
       wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
-      edgeMargin: -1, halfW: 0,
+      edgeMargin: -1, halfW: 0, nearDeck: false,
     };
   }
 

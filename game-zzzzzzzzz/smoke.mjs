@@ -117,22 +117,27 @@ player.enabled = true;
 player.getFloorY = (x, z) => mansion.getFloorY(x, z, player.floorY);
 player.setPosition(0, null, 6); // foyer center
 const colliders = mansion.getColliders();
-// Find a ground-floor wall near foyer south/north
+// Prefer an indoor foyer wall panel (not estate boundary hedges)
 let wall = null;
 for (const b of colliders) {
-  if (b.min.y > 1 || b.max.y < 2) continue;
-  // northish foyer wall around z≈-1
-  if (b.min.z < -0.5 && b.max.z > -1.5 && b.min.x < -1 && b.max.x > 1) {
-    // solid part (not door center) — use side panel x>2
-    if (b.min.x > 1.2 || b.max.x < -1.2 || (b.min.x < -2 && b.max.x > 2)) {
-      wall = b;
-      break;
-    }
+  if (b.min.y > 0.5 || b.max.y < 2.5) continue;
+  const cx = (b.min.x + b.max.x) / 2;
+  const cz = (b.min.z + b.max.z) / 2;
+  const thick = Math.min(b.max.x - b.min.x, b.max.z - b.min.z);
+  if (thick > 0.55) continue; // skip huge outdoor slabs
+  // Foyer west/east solid walls ~ x±9, z 0..13
+  if (Math.abs(cx) > 7.5 && Math.abs(cx) < 10 && cz > 0 && cz < 12) {
+    wall = b;
+    break;
   }
 }
-// Fallback: any thick ground collider
 if (!wall) {
-  wall = colliders.find((b) => b.min.y < 0.5 && b.max.y > 2 && (b.max.x - b.min.x) > 2);
+  wall = colliders.find((b) => {
+    const thick = Math.min(b.max.x - b.min.x, b.max.z - b.min.z);
+    return b.min.y < 0.5 && b.max.y > 2.5 && thick < 0.55 && thick > 0.15
+      && Math.abs((b.min.x + b.max.x) / 2) < 30
+      && Math.abs((b.min.z + b.max.z) / 2) < 40;
+  });
 }
 if (!wall) throw new Error("No wall collider found for smoke");
 
@@ -224,5 +229,63 @@ if (segs.length > 800 && gridMs > fullMs) {
 let spawnPad = false;
 drive.tracks.root.traverse((o) => { if (o.name === "spawn_clean_pad") spawnPad = true; });
 if (!spawnPad) throw new Error("spawn_clean_pad missing");
+
+
+// Elevated bridge / ramp must stay height-matched (no ghost through to story carpet)
+const bridgeSnap = drive.tracks.querySnap(0, 3.5, -0.45, 1.65);
+console.log("Hall header bridge snap", {
+  onTrack: bridgeSnap.onTrack, supported: bridgeSnap.supported,
+  kind: bridgeSnap.kind, pathId: bridgeSnap.pathId, y: bridgeSnap.y,
+});
+if (!bridgeSnap.supported || !bridgeSnap.onTrack) {
+  throw new Error(`Hall header bridge unsupported: ${bridgeSnap.kind}/${bridgeSnap.pathId}`);
+}
+if (bridgeSnap.kind === "floor" || bridgeSnap.carpet) {
+  throw new Error("Hall header bridge stolen by floor carpet — ghost deck");
+}
+if (Math.abs(bridgeSnap.y - 3.53) > 0.35) {
+  throw new Error(`Bridge Y wrong: ${bridgeSnap.y}`);
+}
+
+const rampSnap = drive.tracks.querySnap(-7.0, 1.8, 6.0, 1.65);
+console.log("Foyer stair ramp snap", {
+  onTrack: rampSnap.onTrack, supported: rampSnap.supported,
+  kind: rampSnap.kind, pathId: rampSnap.pathId,
+});
+if (!rampSnap.supported || rampSnap.kind !== "ramp") {
+  throw new Error(`Ramp not supported: ${rampSnap.kind}/${rampSnap.pathId}`);
+}
+
+const furnSnap = drive.tracks.querySnap(5.5, 0.98, 10.0, 1.65);
+console.log("Foyer console furniture snap", {
+  onTrack: furnSnap.onTrack, supported: furnSnap.supported,
+  kind: furnSnap.kind, pathId: furnSnap.pathId,
+});
+if (!furnSnap.supported || !(furnSnap.kind === "elevated" || furnSnap.kind === "ramp")) {
+  throw new Error(`Furniture deck unsupported: ${furnSnap.kind}/${furnSnap.pathId}`);
+}
+
+// Visible foyer skirting ribbon present (designed road at spawn)
+let foyerRibbon = false;
+drive.tracks.root.traverse((o) => {
+  if (o.isMesh && o.name === "ribbon_floor") foyerRibbon = true;
+});
+if (!foyerRibbon) throw new Error("foyer floor ribbon mesh missing");
+console.log("Foyer ribbon_floor present", foyerRibbon);
+
+// Drive wall bounce wired
+if (typeof drive.setWallColliders !== "function") {
+  throw new Error("DriveMode.setWallColliders missing");
+}
+drive.setWallColliders(mansion.getColliders());
+console.log("Drive wall colliders", mansion.getColliders().length);
+
+// Furniture colliders should exceed bare walls
+if (mansion.getColliders().length < 160) {
+  console.warn("WARN: expected more furniture colliders, got", mansion.getColliders().length);
+} else {
+  console.log("Collider count with furniture", mansion.getColliders().length);
+}
+
 
 console.log("\nALL SMOKE CHECKS PASSED");

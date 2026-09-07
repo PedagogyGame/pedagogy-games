@@ -59,7 +59,17 @@ export class DriveMode {
     this._smashBits = [];
     this._buildFx();
 
+    /** @type {THREE.Box3[]|null} mansion wall/furniture colliders for drive bounce */
+    this._wallColliders = null;
+    this._carRadius = 0.09;
+    this._passKinds = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
+
     this.parkForExplore();
+  }
+
+  /** Wire mansion colliders so Drive cannot clip through solid walls (except mouse/tunnels). */
+  setWallColliders(colliders) {
+    this._wallColliders = colliders || null;
   }
 
   _buildFx() {
@@ -297,21 +307,22 @@ export class DriveMode {
     const p = this.car.position;
     const yaw = this.car.yaw;
     const spd = Math.abs(this.car.speed);
-    const inWall = this._tunnelDark > 0.4;
+    const inWall = this._tunnelDark > 0.35;
     // Leisure factor: slow sightseeing → higher / farther cinematic chase
     const leisure = 1 - THREE.MathUtils.smoothstep(spd, 0.15, 1.35);
-    const back = (inWall ? 0.26 : 0.4 + leisure * 0.22) + Math.min(0.28, spd * 0.07);
-    const up = (inWall ? 0.095 : 0.14 + leisure * 0.1) + Math.min(0.08, spd * 0.022);
+    // In-wall: tuck camera close + slightly above car so we never clip inside studs
+    const back = (inWall ? 0.16 : 0.4 + leisure * 0.22) + Math.min(0.28, spd * 0.07);
+    const up = (inWall ? 0.12 : 0.14 + leisure * 0.1) + Math.min(0.08, spd * 0.022);
     const cx = p.x - Math.sin(yaw) * back;
     const cy = p.y + up;
     const cz = p.z - Math.cos(yaw) * back;
     this._camPos.set(cx, cy, cz);
 
-    // Look farther down the track when cruising slowly so the path reads
-    const ahead = (inWall ? 0.22 : 0.32 + leisure * 0.28) + Math.min(0.4, spd * 0.09);
+    // Look along tube / track — shorter ahead in walls keeps view readable
+    const ahead = (inWall ? 0.28 : 0.32 + leisure * 0.28) + Math.min(0.4, spd * 0.09);
     this._lookAhead.set(
       p.x + Math.sin(yaw) * ahead,
-      p.y + 0.04 + leisure * 0.03 + Math.min(0.03, spd * 0.007),
+      p.y + (inWall ? 0.06 : 0.04 + leisure * 0.03) + Math.min(0.03, spd * 0.007),
       p.z + Math.cos(yaw) * ahead
     );
     this._camTarget.copy(this._lookAhead);
@@ -319,6 +330,73 @@ export class DriveMode {
     if (immediate) {
       this.camera.position.copy(this._camPos);
       this.camera.lookAt(this._camTarget);
+    }
+  }
+
+  /**
+   * Bounce the RC car off mansion walls/furniture unless in a marked passageway.
+   * Mouse-holes / tunnels / shafts intentionally pierce walls.
+   */
+  _resolveDriveWalls(prevX, prevZ, snap) {
+    const cols = this._wallColliders;
+    if (!cols || !cols.length) return;
+    const kind = snap?.kind || "";
+    if (this._passKinds.has(kind) || snap?.tube) return; // intentional passages
+    const r = this._carRadius;
+    const p = this.car.root.position;
+    const y = p.y;
+    // Car body height band (~wheel to roof)
+    const y0 = y - 0.02;
+    const y1 = y + 0.12;
+    for (let pass = 0; pass < 2; pass++) {
+      let hit = false;
+      for (const box of cols) {
+        if (y1 < box.min.y || y0 > box.max.y) continue;
+        const overlaps =
+          p.x + r > box.min.x && p.x - r < box.max.x &&
+          p.z + r > box.min.z && p.z - r < box.max.z;
+        if (!overlaps) continue;
+        hit = true;
+        const tryX = { x: p.x, z: prevZ };
+        const tryZ = { x: prevX, z: p.z };
+        const hitX =
+          tryX.x + r > box.min.x && tryX.x - r < box.max.x &&
+          tryX.z + r > box.min.z && tryX.z - r < box.max.z;
+        const hitZ =
+          tryZ.x + r > box.min.x && tryZ.x - r < box.max.x &&
+          tryZ.z + r > box.min.z && tryZ.z - r < box.max.z;
+        if (!hitX && hitZ) {
+          p.z = prevZ;
+        } else if (!hitZ && hitX) {
+          p.x = prevX;
+        } else if (!hitX && !hitZ) {
+          // Prefer larger free axis from before
+          const dx = Math.abs(p.x - prevX);
+          const dz = Math.abs(p.z - prevZ);
+          if (dx >= dz) p.z = prevZ;
+          else p.x = prevX;
+        } else {
+          p.x = prevX;
+          p.z = prevZ;
+        }
+        // Depenetrate along shallowest axis
+        const ol = (p.x + r) - box.min.x;
+        const orr = box.max.x - (p.x - r);
+        const od = (p.z + r) - box.min.z;
+        const ou = box.max.z - (p.z - r);
+        if (ol > 0 && orr > 0 && od > 0 && ou > 0) {
+          const m = Math.min(ol, orr, od, ou);
+          const eps = 0.004;
+          if (m === ol) p.x = box.min.x - r - eps;
+          else if (m === orr) p.x = box.max.x + r + eps;
+          else if (m === od) p.z = box.min.z - r - eps;
+          else p.z = box.max.z + r + eps;
+        }
+        this.car.speed *= 0.35;
+      }
+      if (!hit) break;
+      prevX = p.x;
+      prevZ = p.z;
     }
   }
 
@@ -466,7 +544,10 @@ export class DriveMode {
       ? { forward: false, back: false, left: false, right: false, boost: false }
       : this.keys;
 
+    const prevX = pos.x;
+    const prevZ = pos.z;
     const flags = this.car.update(dt, driveKeys, snap);
+    this._resolveDriveWalls(prevX, prevZ, snap);
     this.car.idleTwitch(dt);
     this.tracks.updateVisuals(this._time);
     this._updateFx(dt, snap, flags);
@@ -503,7 +584,14 @@ export class DriveMode {
     wantFov -= this._tunnelDark * (wantFov - this._wallFov);
     if (this.keys.boost && Math.abs(this.car.speed) > 1.5) wantFov += 2.8;
     this._fov = THREE.MathUtils.lerp(this._fov, wantFov, Math.min(1, 2.8 * dt));
-    if (Math.abs(this.camera.fov - this._fov) > 0.08) {
+    // Shrink near-plane in walls so chase cam doesn't clip inside cavity meshes
+    const wantNear = THREE.MathUtils.lerp(0.08, 0.035, this._tunnelDark);
+    let projDirty = Math.abs(this.camera.fov - this._fov) > 0.08;
+    if (Math.abs(this.camera.near - wantNear) > 0.004) {
+      this.camera.near = wantNear;
+      projDirty = true;
+    }
+    if (projDirty) {
       this.camera.fov = this._fov;
       this.camera.updateProjectionMatrix();
     }

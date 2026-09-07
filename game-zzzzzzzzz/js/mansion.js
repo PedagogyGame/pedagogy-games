@@ -1154,10 +1154,17 @@ export class Mansion {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         g.add(mesh);
+        // Inflate collider slightly so Explore/Drive never slip through seams
+        const [wsx, wsy, wsz] = wall.size;
+        const inflate = 0.06;
         this.colliders.push(
           new THREE.Box3().setFromCenterAndSize(
             new THREE.Vector3(...wall.pos),
-            new THREE.Vector3(...wall.size)
+            new THREE.Vector3(
+              wsx > wsz ? wsx : wsx + inflate,
+              wsy,
+              wsz > wsx ? wsz : wsz + inflate
+            )
           )
         );
         this._addWindows(g, wall, p, cy, h);
@@ -1652,6 +1659,24 @@ export class Mansion {
       m.receiveShadow = true;
       m.frustumCulled = true;
       group.add(m);
+      // Solid furniture volumes: block Explore walk + Drive (except mouse passages)
+      // Only sizable pieces — skip tiny trim / legs clutter
+      if (sx >= 0.45 && sy >= 0.35 && sz >= 0.35) {
+        this.colliders.push(
+          new THREE.Box3().setFromCenterAndSize(
+            new THREE.Vector3(x, y, z),
+            new THREE.Vector3(sx, sy, sz)
+          )
+        );
+      } else if (cast && sx >= 0.7 && sz >= 0.4 && sy >= 0.1) {
+        // Tabletops / benches: thin but wide — use extruded collision height
+        this.colliders.push(
+          new THREE.Box3().setFromCenterAndSize(
+            new THREE.Vector3(x, y - sy * 0.5 + Math.max(sy, 0.55) * 0.5, z),
+            new THREE.Vector3(sx * 0.92, Math.max(sy, 0.55), sz * 0.92)
+          )
+        );
+      }
       return m;
     };
     const addCyl = (rt, rb, hh, x, y, z, mat, seg = 10) => {
@@ -1711,6 +1736,12 @@ export class Mansion {
       g.position.set(x, cy, z);
       g.rotation.y = yaw;
       group.add(g);
+      this.colliders.push(
+        new THREE.Box3().setFromCenterAndSize(
+          new THREE.Vector3(x, cy + 0.55, z),
+          new THREE.Vector3(0.9, 1.05, 0.85)
+        )
+      );
     };
 
     if (id === "foyer") {
@@ -2520,22 +2551,22 @@ export class Mansion {
 
         let minX, maxX, minZ, maxZ;
         if (dir === "north" || dir === "south") {
-          // Bridge along Z between the facing wall edges
+          // Bridge along Z between the facing wall edges (pad so walk never drops)
           const edge1 = dir === "north" ? cz1 - d1 / 2 : cz1 + d1 / 2;
           const edge2 = dir === "north" ? cz2 + d2 / 2 : cz2 - d2 / 2;
-          minZ = Math.min(edge1, edge2) - 0.15;
-          maxZ = Math.max(edge1, edge2) + 0.15;
+          minZ = Math.min(edge1, edge2) - 0.28;
+          maxZ = Math.max(edge1, edge2) + 0.28;
           const midX = (cx1 + cx2) / 2;
-          minX = midX - doorW / 2;
-          maxX = midX + doorW / 2;
+          minX = midX - doorW / 2 - 0.12;
+          maxX = midX + doorW / 2 + 0.12;
         } else {
           const edge1 = dir === "west" ? cx1 - w1 / 2 : cx1 + w1 / 2;
           const edge2 = dir === "west" ? cx2 + w2 / 2 : cx2 - w2 / 2;
-          minX = Math.min(edge1, edge2) - 0.15;
-          maxX = Math.max(edge1, edge2) + 0.15;
+          minX = Math.min(edge1, edge2) - 0.28;
+          maxX = Math.max(edge1, edge2) + 0.28;
           const midZ = (cz1 + cz2) / 2;
-          minZ = midZ - doorW / 2;
-          maxZ = midZ + doorW / 2;
+          minZ = midZ - doorW / 2 - 0.12;
+          maxZ = midZ + doorW / 2 + 0.12;
         }
 
         // Always add a high-priority floor strip so gaps never drop to lawn
@@ -2579,7 +2610,10 @@ export class Mansion {
         mesh.receiveShadow = true;
         group.add(mesh);
         this.colliders.push(
-          new THREE.Box3().setFromCenterAndSize(mesh.position.clone(), new THREE.Vector3(remain, sy, sz))
+          new THREE.Box3().setFromCenterAndSize(
+            mesh.position.clone(),
+            new THREE.Vector3(remain, sy, sz + 0.06)
+          )
         );
       }
       const headerH = sy - doorH;
@@ -2603,7 +2637,10 @@ export class Mansion {
         mesh.receiveShadow = true;
         group.add(mesh);
         this.colliders.push(
-          new THREE.Box3().setFromCenterAndSize(mesh.position.clone(), new THREE.Vector3(sx, sy, remain))
+          new THREE.Box3().setFromCenterAndSize(
+            mesh.position.clone(),
+            new THREE.Vector3(sx + 0.06, sy, remain)
+          )
         );
       }
       const headerH = sy - doorH;

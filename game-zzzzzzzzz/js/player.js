@@ -20,7 +20,7 @@ export class Player {
     /** Shift = purposeful brisk walk, not sprint chaos */
     this.briskSpeed = 5.6;
     this.eyeHeight = 1.6;
-    this.radius = 0.36;
+    this.radius = 0.38;
     this.floorY = 0;
     /** @type {null | ((x:number,z:number)=>number)} set by main — should pass this.floorY as story hint */
     this.getFloorY = null;
@@ -159,7 +159,7 @@ export class Player {
 
     const overlapsY = (box) => !(headY() < box.min.y || feetY() > box.max.y);
 
-    for (let pass = 0; pass < 3; pass++) {
+    for (let pass = 0; pass < 4; pass++) {
       let hitAny = false;
       for (const box of colliders) {
         if (!overlapsY(box)) continue;

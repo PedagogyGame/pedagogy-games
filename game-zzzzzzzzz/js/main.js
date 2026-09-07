@@ -258,6 +258,7 @@ if (mansion && !boot.failed) {
     inspect = new InspectMode(camera, canvas);
     slice = new SliceSystem();
     drive = new DriveMode(scene, camera);
+    drive.setWallColliders(mansion.getColliders());
   } catch (err) {
     showBootError(err);
   }
