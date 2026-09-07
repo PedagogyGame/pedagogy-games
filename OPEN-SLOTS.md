@@ -18,7 +18,7 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzzd`, next class is `.game-165`. Three pieces must match: folder name, `href`, CSS class.
+To add more later: next folder is `game-zzzzzzzzze`, next class is `.game-166`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
@@ -49,3 +49,5 @@ Live: `game-zzzzzzzzza/` / `.game-162` — 饿河马 Hungry Hippos (HSK 3–4 vo
 Live: `game-zzzzzzzzzb/` / `.game-163` — Word Climber (barrel vocab tower).
 
 Live: `game-zzzzzzzzzc/` / `.game-164` — Scaleboard (guitar scale neck).
+
+Live: `game-zzzzzzzzzd/` / `.game-165` — Pianoboard (piano scale trainer).
