@@ -5,7 +5,7 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_SCALE = 0.25; // ~0.42 m → ~0.105 m length
+export const CAR_SCALE = 0.218; // ~0.42 m → ~0.092 m length (~13% smaller to match narrower roads)
 
 /** Optional whisper of road grip when wheels on surface. OFF by default. */
 export const ASSIST_MAGNET = false;

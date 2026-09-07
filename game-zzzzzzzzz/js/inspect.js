@@ -10,18 +10,23 @@ export class InspectMode {
     this.controls = new OrbitControls(camera, domElement);
     this.controls.enabled = false;
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.1;
-    this.controls.minDistance = 0.6;
-    this.controls.maxDistance = 8;
+    this.controls.dampingFactor = 0.078;
+    this.controls.minDistance = 0.55;
+    this.controls.maxDistance = 9;
     this.controls.enablePan = false;
-    this.controls.rotateSpeed = 0.72;
-    this.controls.zoomSpeed = 0.85;
+    this.controls.rotateSpeed = 0.82;
+    this.controls.zoomSpeed = 0.9;
+    this.controls.minPolarAngle = 0.18;
+    this.controls.maxPolarAngle = Math.PI - 0.22;
+    this.controls.autoRotate = false;
+    this.controls.autoRotateSpeed = 0.55;
     this.active = false;
     this.targetObject = null;
     this._savedPos = new THREE.Vector3();
     this._savedQuat = new THREE.Quaternion();
     this._keyLight = null;
     this._fillLight = null;
+    this._rimLight = null;
     this._box = new THREE.Box3();
     this._size = new THREE.Vector3();
     this._center = new THREE.Vector3();
@@ -30,7 +35,8 @@ export class InspectMode {
     this._easeTargetFrom = new THREE.Vector3();
     this._easeTargetTo = new THREE.Vector3();
     this._easeT = 1;
-    this._easeDur = 0.48;
+    this._easeDur = 0.58;
+    this._autoUntil = 0;
   }
 
   enter(object3d, scene) {
@@ -47,17 +53,20 @@ export class InspectMode {
     this._easeFrom.copy(this.camera.position);
     this._easeTargetFrom.copy(this.controls.target);
     this._easeTargetTo.copy(this._center);
+    // Slightly elevated ¾ view — satisfying settle into the cut face
     this._easeTo.set(
-      this._center.x + fitDist * 0.72,
-      this._center.y + fitDist * 0.38,
-      this._center.z + fitDist * 0.72
+      this._center.x + fitDist * 0.78,
+      this._center.y + fitDist * 0.42,
+      this._center.z + fitDist * 0.68
     );
     this._easeT = 0;
 
     this.controls.target.copy(this._center);
-    this.controls.minDistance = Math.max(radius * 0.9, 0.5);
-    this.controls.maxDistance = Math.max(fitDist * 2.8, 4);
+    this.controls.minDistance = Math.max(radius * 0.85, 0.48);
+    this.controls.maxDistance = Math.max(fitDist * 3.0, 4.5);
     this.controls.enabled = true;
+    this.controls.autoRotate = true;
+    this._autoUntil = 1.35; // gentle intro spin, then hand control
     this.active = true;
 
     if (scene) this._addLights(scene, this._center, radius);
@@ -65,15 +74,20 @@ export class InspectMode {
 
   _addLights(scene, center, radius) {
     this._removeLights(scene);
-    this._keyLight = new THREE.DirectionalLight(0xffe6c0, 0.85);
+    this._keyLight = new THREE.DirectionalLight(0xffe6c0, 0.95);
     this._keyLight.position.set(center.x + radius * 2.2, center.y + radius * 2.8, center.z + radius * 1.4);
     this._keyLight.target.position.copy(center);
     scene.add(this._keyLight);
     scene.add(this._keyLight.target);
 
-    this._fillLight = new THREE.PointLight(0xc8d8ff, 12, radius * 6, 2);
+    this._fillLight = new THREE.PointLight(0xc8d8ff, 14, radius * 6.5, 2);
     this._fillLight.position.set(center.x - radius * 1.5, center.y + radius * 1.2, center.z + radius * 1.8);
     scene.add(this._fillLight);
+
+    // Warm rim from the cut side so Section faces read clearly
+    this._rimLight = new THREE.PointLight(0xffd699, 10, radius * 5, 2);
+    this._rimLight.position.set(center.x - radius * 2.0, center.y + radius * 0.6, center.z);
+    scene.add(this._rimLight);
   }
 
   _removeLights(scene) {
@@ -82,15 +96,19 @@ export class InspectMode {
       scene.remove(this._keyLight);
     }
     if (this._fillLight && scene) scene.remove(this._fillLight);
+    if (this._rimLight && scene) scene.remove(this._rimLight);
     this._keyLight = null;
     this._fillLight = null;
+    this._rimLight = null;
   }
 
   exit(scene) {
     this.controls.enabled = false;
+    this.controls.autoRotate = false;
     this.active = false;
     this.targetObject = null;
     this._easeT = 1;
+    this._autoUntil = 0;
     this.camera.position.copy(this._savedPos);
     this.camera.quaternion.copy(this._savedQuat);
     if (scene) this._removeLights(scene);
@@ -100,14 +118,18 @@ export class InspectMode {
     if (!this.active) return;
     if (this._easeT < 1) {
       this._easeT = Math.min(1, this._easeT + dt / this._easeDur);
-      // Smoothstep ease-in-out for a tangible settle into orbit
+      // Quintic smoothstep — softer settle into orbit framing
       const u = this._easeT;
-      const s = u * u * (3 - 2 * u);
+      const s = u * u * u * (u * (u * 6 - 15) + 10);
       this.camera.position.lerpVectors(this._easeFrom, this._easeTo, s);
       this.controls.target.lerpVectors(this._easeTargetFrom, this._easeTargetTo, s);
       this.camera.lookAt(this.controls.target);
       this.controls.update();
       return;
+    }
+    if (this._autoUntil > 0) {
+      this._autoUntil -= dt;
+      if (this._autoUntil <= 0) this.controls.autoRotate = false;
     }
     this.controls.update();
   }

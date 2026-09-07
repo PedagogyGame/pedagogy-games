@@ -4,7 +4,8 @@
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
-import { CAR_SPAWN } from "./js/data/tracks.js";
+import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN } from "./js/data/tracks.js";
+import { CAR_SCALE } from "./js/drive/car.js";
 import { VEHICLE_PRESETS } from "./js/drive/car.js";
 import { Player } from "./js/player.js";
 
@@ -333,5 +334,39 @@ if (mansion.getColliders().length < 160) {
   console.log("Collider count with furniture", mansion.getColliders().length);
 }
 
+
+
+// Roadway width scale (~13% smaller) — preserve every path, shrink widths only
+if (Math.abs(ROAD_WIDTH_SCALE - 0.87) > 0.001) {
+  throw new Error(`ROAD_WIDTH_SCALE want 0.87, got ${ROAD_WIDTH_SCALE}`);
+}
+let widthChecks = 0;
+for (const path of TRACK_PATHS) {
+  const design = ROAD_WIDTH_DESIGN[path.id];
+  if (design == null) throw new Error(`missing design width for ${path.id}`);
+  const expect = Math.round(design * ROAD_WIDTH_SCALE * 1000) / 1000;
+  if (Math.abs(path.width - expect) > 0.0005) {
+    throw new Error(`${path.id} width ${path.width} != design ${design} * scale (want ${expect})`);
+  }
+  if (!(path.width < design - 1e-9)) {
+    throw new Error(`${path.id} width not reduced (${path.width} vs design ${design})`);
+  }
+  widthChecks++;
+}
+console.log("Road widths reduced", { scale: ROAD_WIDTH_SCALE, paths: widthChecks, foyer: TRACK_PATHS.find(p => p.id === "foyer_skirting")?.width });
+if (widthChecks < 50) throw new Error("too few paths for width check");
+
+if (CAR_SCALE > 0.23 || CAR_SCALE < 0.20) {
+  throw new Error(`CAR_SCALE should be ~0.218 (10–15% smaller than 0.25), got ${CAR_SCALE}`);
+}
+console.log("CAR_SCALE", CAR_SCALE);
+
+// Explore intact: interactives, spawn z≈11 walk floor
+const interactives = mansion.getInteractives();
+console.log("Explore interactives", interactives.length);
+if (interactives.length < 40) throw new Error(`Explore object roster too small: ${interactives.length}`);
+const spawnFloor = mansion.getFloorY(0, 11, 0);
+console.log("Explore spawn floor", spawnFloor);
+if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, got ${spawnFloor}`);
 
 console.log("\nALL SMOKE CHECKS PASSED");

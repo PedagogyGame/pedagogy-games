@@ -501,7 +501,10 @@ function syncSliceUI() {
   if (!L) return;
   layerTerm.textContent = L.term;
   layerDef.textContent = L.def;
-  layerMeta.textContent = `Layer ${L.index + 1} of ${L.total} · Outside → in`;
+  const modeLabel = L.modeLabel || (L.mode === "section" ? "Section" : L.mode === "ghost" ? "Ghost" : "Peel");
+  layerMeta.textContent = `Layer ${L.index + 1} of ${L.total} · ${modeLabel} · Outside → in`;
+  if (inspectPanel) inspectPanel.dataset.sliceMode = L.mode || "section";
+  if (inspectPanel) inspectPanel.dataset.strata = L.strata || `${L.index + 1}/${L.total}`;
   if (layerHint) {
     if (L.hint) {
       layerHint.textContent = L.hint;

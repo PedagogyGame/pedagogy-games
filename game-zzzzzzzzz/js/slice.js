@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import { SHARED_CLIP_PLANE, isConcentricDef } from "./meshes.js";
 
-const TRANSITION_MS = 280;
-const PEEL_OUTER = 0.16;
-const GHOST_OUTER = 0.15;
+const TRANSITION_MS = 360;
+const PEEL_OUTER = 0.14;
+const GHOST_OUTER = 0.12;
 const SECTION_OUTER = 0.06;
 
 function eachMaterial(layer, fn) {
@@ -178,6 +178,7 @@ export class SliceSystem {
   currentLayer() {
     if (!this.def) return null;
     const L = this.def.layers[this.index];
+    const modeLabel = this.mode === "section" ? "Section" : this.mode === "ghost" ? "Ghost" : "Peel";
     return {
       ...L,
       index: this.index,
@@ -185,6 +186,8 @@ export class SliceSystem {
       objectName: this.def.name,
       hint: L.hint || "",
       mode: this.mode,
+      modeLabel,
+      strata: `${this.index + 1}/${this.def.layers.length}`,
     };
   }
 
@@ -218,37 +221,37 @@ export class SliceSystem {
     for (let i = 0; i < layers.length; i++) {
       const r = this._layerRadii[i] || 0.1;
       const color = dataLayers[i]?.color ?? 0xcccccc;
-      // Disk in YZ plane (facing ±X) — the visible cut face / strata ring
-      const geo = new THREE.CircleGeometry(r, 28);
+      // Disk in YZ plane (facing ±X) — crisp cut face / strata disk
+      const geo = new THREE.CircleGeometry(r, 48);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: 0.55,
-        metalness: 0.08,
+        roughness: 0.42,
+        metalness: 0.14,
         side: THREE.DoubleSide,
         emissive: color,
-        emissiveIntensity: 0.15,
+        emissiveIntensity: 0.22,
         depthWrite: true,
         polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       });
       // No clipping on cut faces — they ARE the cut
       mat.clippingPlanes = [];
       const disk = new THREE.Mesh(geo, mat);
       // Sit slightly into the kept half so it isn't z-fought away
       disk.rotation.y = Math.PI / 2;
-      disk.position.set(-0.002 - i * 0.0015, 0, 0);
+      disk.position.set(-0.003 - i * 0.002, 0, 0);
       disk.userData.layerIndex = i;
-      disk.userData.baseEmissive = 0.15;
+      disk.userData.baseEmissive = 0.22;
       group.add(disk);
 
-      // Thin ring edge for strata readability
+      // Bright outer ring for strata readability
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(Math.max(r * 0.92, 0.01), r * 1.02, 28),
+        new THREE.RingGeometry(Math.max(r * 0.9, 0.01), r * 1.035, 48),
         new THREE.MeshBasicMaterial({
-          color: 0xffffff,
+          color: 0xfff6e0,
           transparent: true,
-          opacity: 0.35,
+          opacity: 0.48,
           side: THREE.DoubleSide,
           depthWrite: false,
         })
@@ -256,10 +259,29 @@ export class SliceSystem {
       ring.material.clippingPlanes = [];
       ring.rotation.y = Math.PI / 2;
       ring.position.copy(disk.position);
-      ring.position.x -= 0.001;
+      ring.position.x -= 0.0012;
       ring.userData.layerIndex = i;
       ring.userData.isRing = true;
       group.add(ring);
+
+      // Soft inner bevel hint (darker annulus) for depth on the cut
+      const bevel = new THREE.Mesh(
+        new THREE.RingGeometry(Math.max(r * 0.78, 0.008), Math.max(r * 0.9, 0.012), 40),
+        new THREE.MeshBasicMaterial({
+          color: 0x1a1208,
+          transparent: true,
+          opacity: 0.22,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      );
+      bevel.material.clippingPlanes = [];
+      bevel.rotation.y = Math.PI / 2;
+      bevel.position.copy(disk.position);
+      bevel.position.x -= 0.0006;
+      bevel.userData.layerIndex = i;
+      bevel.userData.isBevel = true;
+      group.add(bevel);
     }
 
     this.object.add(group);
@@ -277,7 +299,7 @@ export class SliceSystem {
 
     if (this.cutLight) {
       this.cutLight.visible = mode === "section" || mode === "peel";
-      this.cutLight.intensity = mode === "section" ? 28 : mode === "peel" ? 14 : 0;
+      this.cutLight.intensity = mode === "section" ? 34 : mode === "peel" ? 16 : 0;
     }
 
     // Cut faces: show for section always; for peel show remaining; ghost faint
@@ -288,27 +310,33 @@ export class SliceSystem {
         if (i == null) return;
         const isOuter = i < this.index;
         const isActive = i === this.index;
+        const isDecor = child.userData.isRing || child.userData.isBevel;
         // Outside-in: hide outer cut faces once peeled past; keep active + inner
         if (mode === "section") {
           child.visible = !isOuter;
         } else if (mode === "peel") {
           child.visible = true;
-          if (child.isMesh && child.material && !child.userData.isRing) {
-            child.material.opacity = isOuter ? 0.25 : 1;
-            child.material.transparent = isOuter;
+          if (child.isMesh && child.material && !isDecor) {
+            child.material.opacity = isOuter ? 0.22 : 1;
+            child.material.transparent = isOuter || child.material.opacity < 1;
           }
         } else {
-          child.visible = !isOuter || true;
-          if (child.isMesh && child.material && !child.userData.isRing) {
-            child.material.opacity = isOuter ? 0.2 : 0.85;
+          child.visible = true;
+          if (child.isMesh && child.material && !isDecor) {
+            child.material.opacity = isOuter ? 0.18 : 0.9;
             child.material.transparent = true;
           }
         }
-        if (child.isMesh && child.material && child.material.emissive && !child.userData.isRing) {
-          child.material.emissiveIntensity = isActive ? 0.65 : child.userData.baseEmissive ?? 0.15;
+        if (child.isMesh && child.material && child.material.emissive && !isDecor) {
+          child.material.emissiveIntensity = isActive ? 0.78 : child.userData.baseEmissive ?? 0.22;
         }
         if (child.userData.isRing) {
-          child.visible = isActive && child.visible;
+          child.visible = isActive && (mode !== "section" || !isOuter);
+          if (child.material) child.material.opacity = isActive ? 0.62 : 0.35;
+        }
+        if (child.userData.isBevel) {
+          child.visible = !isOuter && child.visible !== false;
+          if (mode === "section") child.visible = !isOuter;
         }
       });
     }
@@ -324,7 +352,7 @@ export class SliceSystem {
       // Section: hide outer shells (cut faces remain); peel/ghost keep ghosts
       layer.visible = !(mode === "section" && isOuter);
 
-      this._layerScaleTarget.set(layer, isActive ? baseS * 1.035 : baseS);
+      this._layerScaleTarget.set(layer, isActive ? baseS * 1.042 : baseS);
 
       // Exploded offset along local +X for outer parts when peeling non-concentric
       let ox = 0;
@@ -446,8 +474,8 @@ export class SliceSystem {
       this.cutFaces.children.forEach((child) => {
         if (child.userData.isRing || child.userData.layerIndex !== this.index) return;
         if (child.material?.emissive) {
-          const base = 0.55;
-          child.material.emissiveIntensity = base + 0.2 * (0.5 + 0.5 * Math.sin(t * 4));
+          const base = 0.62;
+          child.material.emissiveIntensity = base + 0.28 * (0.5 + 0.5 * Math.sin(t * 3.4));
         }
       });
     }
@@ -467,6 +495,7 @@ export class SliceSystem {
       this.cutLight.intensity = 24 + Math.sin(t * 4) * 6;
     }
 
+    // Smooth exponential ease — longer TRANSITION_MS for satisfying layer morph
     const alpha = 1 - Math.exp(-dt / (TRANSITION_MS / 1000));
     if (this.object?.userData?.layers) {
       this._pulseT = t;
@@ -475,7 +504,7 @@ export class SliceSystem {
         if (baseTarget != null) {
           const baseS = this._baseScale.get(layer) ?? 1;
           const isActiveScale = Math.abs(baseTarget - baseS) > 1e-6;
-          const pulse = isActiveScale ? 1 + 0.02 * (0.5 + 0.5 * Math.sin(t * 3.2)) : 1;
+          const pulse = isActiveScale ? 1 + 0.028 * (0.5 + 0.5 * Math.sin(t * 2.8)) : 1;
           const targetS = isActiveScale ? baseS * pulse : baseTarget;
           const s = lerp(layer.scale.x, targetS, alpha);
           layer.scale.setScalar(s);

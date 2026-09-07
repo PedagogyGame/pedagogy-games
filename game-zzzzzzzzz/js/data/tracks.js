@@ -1838,6 +1838,21 @@ export const TRACK_PATHS = [
 
 ];
 
+/**
+ * Roadway width scale (~13% smaller) so skirting / cornice ribbons sit
+ * naturally on architectural ledges. Applied once at module load —
+ * preserves every path id / points / kinds; only width values shrink.
+ */
+export const ROAD_WIDTH_SCALE = 0.87;
+export const ROAD_WIDTH_DESIGN = Object.fromEntries(
+  TRACK_PATHS.map((path) => [path.id, path.width])
+);
+for (const path of TRACK_PATHS) {
+  if (typeof path.width === "number") {
+    path.width = Math.round(path.width * ROAD_WIDTH_SCALE * 1000) / 1000;
+  }
+}
+
 /** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
 export const CAR_SPAWN = { x: -7.9, y: 0.045, z: 12.2, yaw: 0 };
 

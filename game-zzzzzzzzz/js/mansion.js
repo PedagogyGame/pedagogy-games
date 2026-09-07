@@ -66,16 +66,27 @@ export class Mansion {
     const line = "#" + (stripe >>> 0).toString(16).padStart(6, "0");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, 256, 256);
-    for (let y = 0; y < 256; y += 32) {
+    for (let y = 0; y < 256; y += 28) {
       ctx.fillStyle = line;
-      ctx.globalAlpha = 0.35;
+      ctx.globalAlpha = 0.38;
       ctx.fillRect(0, y, 256, 2);
-      ctx.globalAlpha = 0.12;
-      ctx.fillRect(0, y + 14, 256, 1);
+      ctx.globalAlpha = 0.1;
+      ctx.fillRect(0, y + 12, 256, 1);
+      // soft polish highlight along plank center
+      ctx.globalAlpha = 0.06;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, y + 6, 256, 4);
+      ctx.fillStyle = line;
       // plank end joints
-      ctx.globalAlpha = 0.2;
-      const ox = ((y / 32) % 2) * 64;
-      for (let x = ox; x < 256; x += 128) ctx.fillRect(x, y, 2, 32);
+      ctx.globalAlpha = 0.22;
+      const ox = ((y / 28) % 2) * 72;
+      for (let x = ox; x < 256; x += 144) ctx.fillRect(x, y, 2, 28);
+    }
+    // subtle grain noise for premium read at stroll distance
+    for (let i = 0; i < 220; i++) {
+      ctx.globalAlpha = 0.04 + Math.random() * 0.05;
+      ctx.fillStyle = Math.random() > 0.5 ? "#fff8e7" : line;
+      ctx.fillRect(Math.random() * 256, Math.random() * 256, 1, 2);
     }
     ctx.globalAlpha = 1;
     const tex = new THREE.CanvasTexture(c);
@@ -310,22 +321,35 @@ export class Mansion {
     return tex;
   }
 
-  _wallMat(hex, rough = 0.78, metal = 0.04) {
+  _wallMat(hex, rough = 0.74, metal = 0.035) {
     const tex = this._plasterTex(hex);
-    if (!tex) return this._mat(hex, rough, metal);
+    if (!tex) {
+      const m = this._mat(hex, rough, metal);
+      m.side = THREE.FrontSide;
+      m.depthWrite = true;
+      return m;
+    }
     const t = tex.clone();
-    t.repeat.set(2.2, 2.2);
+    t.repeat.set(2.0, 2.0);
     return this._stdMat({
       map: t, color: 0xffffff, roughness: rough, metalness: metal,
+      side: THREE.FrontSide, depthWrite: true,
     });
   }
 
-  _floorMat(hex, rough = 0.82) {
+  _floorMat(hex, rough = 0.72) {
     const tex = this._plankTex(hex);
-    if (!tex) return this._mat(hex, rough, 0.04);
-    tex.repeat.set(4, 4);
+    if (!tex) {
+      const m = this._mat(hex, rough, 0.06);
+      m.side = THREE.FrontSide;
+      m.depthWrite = true;
+      return m;
+    }
+    const t = tex.clone();
+    t.repeat.set(3.6, 3.6);
     return this._stdMat({
-      map: tex, color: 0xffffff, roughness: rough, metalness: 0.04,
+      map: t, color: 0xffffff, roughness: rough, metalness: 0.08,
+      side: THREE.FrontSide, depthWrite: true,
     });
   }
 
@@ -341,11 +365,11 @@ export class Mansion {
     return this._mat(hex, 0.92, 0.02);
   }
 
-  _glass(hex = 0xaaddff, opacity = 0.4) {
+  _glass(hex = 0xaaddff, opacity = 0.38) {
     return new THREE.MeshStandardMaterial({
-      color: hex, roughness: 0.04, metalness: 0.28,
-      transparent: true, opacity: Math.min(opacity, 0.42),
-      emissive: hex, emissiveIntensity: 0.12,
+      color: hex, roughness: 0.03, metalness: 0.32,
+      transparent: true, opacity: Math.min(opacity, 0.4),
+      emissive: hex, emissiveIntensity: 0.16,
     });
   }
 
@@ -1067,7 +1091,8 @@ export class Mansion {
     });
 
     const isAttic = room.floor === "Attic";
-    const floorMat = isAttic ? this._mat(p.floor, 0.88, 0.02) : this._floorMat(p.floor, 0.84);
+    const floorMat = isAttic ? this._mat(p.floor, 0.88, 0.02) : this._floorMat(p.floor, 0.7);
+    // Floor slab: top face exactly at story Y (cy). No coplanar overlays on this plane.
     const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, d), floorMat);
     floor.position.set(cx, cy - 0.1, cz);
     floor.receiveShadow = true;
@@ -1075,7 +1100,43 @@ export class Mansion {
     floor.frustumCulled = true;
     g.add(floor);
 
-    // Area rug with border (skip tiny halls)
+    // Perimeter floor frame (4 strips) — raised clear of plank top to kill shimmer
+    // (never a full coplanar slab on the same Y as the floor)
+    {
+      const frameY = cy + 0.014;
+      const frameH = 0.02;
+      const inset = 0.16;
+      const strip = 0.11;
+      const woodF = this._mat(0x3e2723, 0.55, 0.12);
+      const brassF = this._brass(p.trim);
+      const strips = [
+        { s: [w - inset * 2, frameH, strip], p: [cx, frameY, cz - d / 2 + inset + strip / 2] },
+        { s: [w - inset * 2, frameH, strip], p: [cx, frameY, cz + d / 2 - inset - strip / 2] },
+        { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx - w / 2 + inset + strip / 2, frameY, cz] },
+        { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx + w / 2 - inset - strip / 2, frameY, cz] },
+      ];
+      for (const s of strips) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), woodF);
+        m.position.set(...s.p);
+        m.receiveShadow = true;
+        m.frustumCulled = true;
+        g.add(m);
+        // Brass cap on each strip, +4 mm so never coplanar with wood frame
+        const cap = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            s.s[0] > s.s[2] ? s.s[0] * 0.92 : 0.045,
+            0.012,
+            s.s[2] > s.s[0] ? s.s[2] * 0.92 : 0.045
+          ),
+          brassF
+        );
+        cap.position.set(s.p[0], frameY + 0.014, s.p[2]);
+        cap.frustumCulled = true;
+        g.add(cap);
+      }
+    }
+
+    // Area rug — clearly above frame (skip tiny halls)
     if (w > 5 && d > 5) {
       const rw = Math.min(w * 0.48, 9);
       const rd = Math.min(d * 0.42, 7);
@@ -1084,9 +1145,13 @@ export class Mansion {
         ...(rugTex ? { map: rugTex } : { color: p.trim || 0x6d4c41 }),
         roughness: 0.95,
         metalness: 0.02,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       });
-      const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.035, rd), rugMat);
-      rug.position.set(cx, cy + 0.025, cz);
+      // Center at cy+0.036, h=0.028 → sits fully above frame brass (~cy+0.026)
+      const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.028, rd), rugMat);
+      rug.position.set(cx, cy + 0.036, cz);
       rug.receiveShadow = true;
       rug.frustumCulled = true;
       g.add(rug);
@@ -1113,12 +1178,19 @@ export class Mansion {
       this._addCornice(g, room, p);
       this._addWallPanels(g, room, p);
     } else {
-      const crown = new THREE.Mesh(
-        new THREE.BoxGeometry(w - 0.3, 0.1, d - 0.3),
-        this._brass(p.trim)
-      );
-      crown.position.set(cx, cy + h - 0.08, cz);
-      g.add(crown);
+      // Perimeter-only attic crown (avoid coplanar ceiling slab)
+      const atticY = cy + h - 0.12;
+      const aw = 0.1;
+      for (const s of [
+        { s: [w - 0.35, 0.08, aw], p: [cx, atticY, cz - d / 2 + 0.22] },
+        { s: [w - 0.35, 0.08, aw], p: [cx, atticY, cz + d / 2 - 0.22] },
+        { s: [aw, 0.08, d - 0.35 - aw * 2], p: [cx - w / 2 + 0.22, atticY, cz] },
+        { s: [aw, 0.08, d - 0.35 - aw * 2], p: [cx + w / 2 - 0.22, atticY, cz] },
+      ]) {
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(...s.s), this._brass(p.trim));
+        crown.position.set(...s.p);
+        g.add(crown);
+      }
     }
 
     // Room-specific wallpaper bands + ceiling medallion (mesh accents, no lights)
@@ -1147,7 +1219,7 @@ export class Mansion {
 
     for (const wall of walls) {
       if (doorways[wall.side]) {
-        this._addWallWithDoor(g, wall, p.wall, thick, p.trim);
+        this._addWallWithDoor(g, wall, p.wall, thick, p.trim, true);
       } else {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), this._wallMat(p.wall, 0.78, 0.04));
         mesh.position.set(...wall.pos);
@@ -1171,13 +1243,25 @@ export class Mansion {
       }
     }
 
-    // Sophisticated baseboard + chair rail matching cornice brass/wood
-    // Split around doorways so trim never blocks openings
-    const bbH = 0.22;
-    const chairY = cy + 0.92;
-    const woodTrim = this._mat(0x3e2723, 0.55, 0.12);
+    // Baseboard / chair rail / wainscot — sit ON the inner wall face (not buried
+    // in the wall volume). Distinct depths prevent plaster/wainscot/wallpaper flicker.
+    const bbH = 0.24;
+    const chairY = cy + 0.94;
+    const woodTrim = this._mat(0x3e2723, 0.5, 0.14);
     const brassTrim = this._brass(p.trim);
     const doorGap = 2.75;
+    const halfThick = thick * 0.5; // 0.14
+    // Depth stack from plaster outward into room (mm-scale gaps, rock solid)
+    const D_WAIN = halfThick + 0.018;   // wainscot face
+    const D_BB = halfThick + 0.028;     // baseboard
+    const D_CAP = halfThick + 0.036;    // brass cap
+    const D_RAIL = halfThick + 0.040;   // chair rail
+    const inward = (side, px, pz, depth) => {
+      if (side === "north") return [px, pz + depth];
+      if (side === "south") return [px, pz - depth];
+      if (side === "west") return [px + depth, pz];
+      return [px - depth, pz]; // east
+    };
     for (const wall of walls) {
       const [sx, , sz] = wall.size;
       const [px, , pz] = wall.pos;
@@ -1210,38 +1294,41 @@ export class Mansion {
         }
       } else {
         segments.push({
-          size: [horiz ? sx - 0.15 : 0.1, null, horiz ? 0.1 : sz - 0.15],
+          size: [horiz ? sx - 0.15 : null, null, horiz ? null : sz - 0.15],
           pos: [px, null, pz],
         });
       }
       for (const seg of segments) {
-        const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.15 : 0.1);
-        const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.1 : sz - 0.15);
-        const bx = seg.pos[0];
-        const bz = seg.pos[2];
-        // Tall baseboard
+        const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.15 : 0.08);
+        const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.08 : sz - 0.15);
+        const [bx0, bz0] = [seg.pos[0], seg.pos[2]];
+        const bbT = 0.08; // trim thickness into room
+        const [bx, bz] = inward(wall.side, bx0, bz0, D_BB);
         const bb = new THREE.Mesh(
-          new THREE.BoxGeometry(horiz ? bw : 0.1, bbH, horiz ? 0.1 : bd),
+          new THREE.BoxGeometry(horiz ? bw : bbT, bbH, horiz ? bbT : bd),
           woodTrim
         );
         bb.position.set(bx, cy + bbH / 2, bz);
+        bb.frustumCulled = true;
         g.add(bb);
-        // Cap molding on baseboard
+        const [cxp, czp] = inward(wall.side, bx0, bz0, D_CAP);
         const cap = new THREE.Mesh(
-          new THREE.BoxGeometry(horiz ? bw + 0.03 : 0.12, 0.04, horiz ? 0.12 : bd + 0.03),
+          new THREE.BoxGeometry(horiz ? bw + 0.02 : 0.09, 0.035, horiz ? 0.09 : bd + 0.02),
           brassTrim
         );
-        cap.position.set(bx, cy + bbH + 0.015, bz);
+        cap.position.set(cxp, cy + bbH + 0.012, czp);
+        cap.frustumCulled = true;
         g.add(cap);
-        // Chair rail
+        const [rx, rz] = inward(wall.side, bx0, bz0, D_RAIL);
         const rail = new THREE.Mesh(
-          new THREE.BoxGeometry(horiz ? bw - 0.05 : 0.07, 0.06, horiz ? 0.07 : bd - 0.05),
+          new THREE.BoxGeometry(horiz ? bw - 0.04 : 0.06, 0.055, horiz ? 0.06 : bd - 0.04),
           brassTrim
         );
-        rail.position.set(bx, chairY, bz);
+        rail.position.set(rx, chairY, rz);
+        rail.frustumCulled = true;
         g.add(rail);
       }
-      // Wainscot panel field (below chair rail) — same segments, never across doors
+      // Wainscot — slightly behind baseboard depth, never coplanar with plaster
       const wainH = chairY - cy - bbH - 0.08;
       if (wainH > 0.3) {
         const wainMat = this._mat(
@@ -1249,20 +1336,27 @@ export class Mansion {
           0.72, 0.05
         );
         for (const seg of segments) {
-          const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.45 : 0.05);
-          const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.05 : sz - 0.45);
+          const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.45 : 0.04);
+          const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.04 : sz - 0.45);
+          const [wx, wz] = inward(wall.side, seg.pos[0], seg.pos[2], D_WAIN);
+          const wainT = 0.035;
           const wain = new THREE.Mesh(
-            new THREE.BoxGeometry(horiz ? Math.max(0.1, bw - 0.2) : 0.05, wainH, horiz ? 0.05 : Math.max(0.1, bd - 0.2)),
+            new THREE.BoxGeometry(
+              horiz ? Math.max(0.1, bw - 0.2) : wainT,
+              wainH,
+              horiz ? wainT : Math.max(0.1, bd - 0.2)
+            ),
             wainMat
           );
-          wain.position.set(seg.pos[0], cy + bbH + 0.04 + wainH / 2, seg.pos[2]);
+          wain.position.set(wx, cy + bbH + 0.04 + wainH / 2, wz);
+          wain.frustumCulled = true;
           g.add(wain);
         }
       }
     }
 
     const reach = Math.max(w, d) * 0.7;
-    const spot = new THREE.SpotLight(p.light, 28, reach + 6, Math.PI / 3.2, 0.55, 1.4);
+    const spot = new THREE.SpotLight(p.light, 30, reach + 7, Math.PI / 3.05, 0.62, 1.35);
     spot.position.set(cx, cy + h - 0.35, cz);
     spot.target.position.set(cx, cy, cz);
     // Only a couple of rooms cast spot shadows
@@ -1276,11 +1370,13 @@ export class Mansion {
     g.add(spot, spot.target);
 
     // Prefer a few key room fills; chandelier/sconce emissives cover the rest
-    const keyRooms = new Set(["foyer", "landing", "conservatory", "cellar", "music", "attic_loft"]);
+    // Warm leisurely stroll mood — still capped by _pointLightBudget (18)
+    const keyRooms = new Set(["foyer", "landing", "conservatory", "cellar", "music", "attic_loft", "dining", "library"]);
     if (keyRooms.has(room.id)) {
-      const amb = this._allocPointLight(p.light, 8, reach + 4, 2);
+      const warm = room.id === "cellar" ? 6.5 : room.id === "foyer" || room.id === "landing" ? 9.2 : 7.6;
+      const amb = this._allocPointLight(p.light, warm, reach + 5, 2);
       if (amb) {
-        amb.position.set(cx, cy + Math.min(2.4, h * 0.55), cz);
+        amb.position.set(cx, cy + Math.min(2.55, h * 0.58), cz);
         g.add(amb);
       }
     }
@@ -1292,13 +1388,7 @@ export class Mansion {
     // Surface furniture for realism
     this._addRoomFurniture(g, room, p);
 
-    // Dark wood floor border trim (gold/brass accent corners via trim color)
-    const trim = new THREE.Mesh(
-      new THREE.BoxGeometry(w - 0.35, 0.05, d - 0.35),
-      this._brass(p.trim)
-    );
-    trim.position.set(cx, cy + 0.035, cz);
-    g.add(trim);
+    // Floor edge trim is the perimeter frame above (no full coplanar slab — kills flicker)
 
     this._placeRoomObjects(g, room, cy, p, false);
 
@@ -1316,14 +1406,15 @@ export class Mansion {
       map: (() => { const t = tex.clone(); t.repeat.set(3, 2); return t; })(),
       color: 0xffffff, roughness: 0.86, metalness: 0.02,
     });
-    // Upper wallpaper band above chair rail (keeps wainscot visible)
+    // Upper wallpaper band — inset past plaster AND past wall panels (no shared plane)
     const bandH = Math.min(1.85, h * 0.42);
     const bandY = cy + 1.05 + bandH / 2;
+    const wallIn = 0.14 + 0.052; // halfThick + gap past panels (~0.192)
     const strips = [
-      { s: [w - 0.6, bandH, 0.03], p: [cx, bandY, cz - d / 2 + 0.2] },
-      { s: [w - 0.6, bandH, 0.03], p: [cx, bandY, cz + d / 2 - 0.2] },
-      { s: [0.03, bandH, d - 0.6], p: [cx - w / 2 + 0.2, bandY, cz] },
-      { s: [0.03, bandH, d - 0.6], p: [cx + w / 2 - 0.2, bandY, cz] },
+      { s: [w - 0.6, bandH, 0.028], p: [cx, bandY, cz - d / 2 + wallIn] },
+      { s: [w - 0.6, bandH, 0.028], p: [cx, bandY, cz + d / 2 - wallIn] },
+      { s: [0.028, bandH, d - 0.6], p: [cx - w / 2 + wallIn, bandY, cz] },
+      { s: [0.028, bandH, d - 0.6], p: [cx + w / 2 - wallIn, bandY, cz] },
     ];
     for (const s of strips) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), mat);
@@ -1343,17 +1434,17 @@ export class Mansion {
       roughness: 0.45, metalness: 0.35,
     });
     const r = Math.min(1.1, Math.min(w, d) * 0.12);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.06, 24), mat);
-    disc.position.set(cx, cy + h - 0.08, cz);
+    // Hang just below ceiling underside (cy+h-0.06) — never inside the ceiling slab
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.05, 24), mat);
+    disc.position.set(cx, cy + h - 0.095, cz);
     disc.frustumCulled = true;
     group.add(disc);
-    // Small plaster ring
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(r * 0.85, 0.035, 6, 24),
+      new THREE.TorusGeometry(r * 0.85, 0.03, 6, 24),
       this._brass(p.trim)
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.set(cx, cy + h - 0.1, cz);
+    ring.position.set(cx, cy + h - 0.112, cz);
     group.add(ring);
   }
 
@@ -1539,11 +1630,11 @@ export class Mansion {
     const [cx, cy, cz] = room.pos;
     const brass = this._brass(p.trim);
     const wood = this._mat(0x3e2723, 0.5, 0.15);
-    // Multi-step crown matching driveable cornice ledge look
+    // Crown steps sit CLEARLY below ceiling underside (ceiling bottom ≈ cy+h-0.06)
     const layers = [
-      { t: 0.16, y: 0.06, out: 0.14, mat: wood },
-      { t: 0.12, y: 0.14, out: 0.2, mat: brass },
-      { t: 0.08, y: 0.22, out: 0.26, mat: wood },
+      { t: 0.14, y: 0.10, out: 0.15, mat: wood },
+      { t: 0.11, y: 0.18, out: 0.21, mat: brass },
+      { t: 0.08, y: 0.26, out: 0.27, mat: wood },
     ];
     for (const L of layers) {
       const strips = [
@@ -1559,51 +1650,63 @@ export class Mansion {
         group.add(m);
       }
     }
-    // Drive-ledge visual ring (matches track height feel)
-    const ledge = new THREE.Mesh(
-      new THREE.BoxGeometry(w - 0.35, 0.07, d - 0.35),
-      brass
-    );
-    ledge.position.set(cx, cy + h - 0.28, cz);
-    group.add(ledge);
+    // Drive-ledge as PERIMETER strips only (full slab fought beams/ceiling)
+    const ledgeY = cy + h - 0.30;
+    const ledgeIn = 0.30;
+    const ledgeW = 0.12;
+    const ledgeStrips = [
+      { s: [w - ledgeIn * 2, 0.055, ledgeW], p: [cx, ledgeY, cz - d / 2 + ledgeIn] },
+      { s: [w - ledgeIn * 2, 0.055, ledgeW], p: [cx, ledgeY, cz + d / 2 - ledgeIn] },
+      { s: [ledgeW, 0.055, d - ledgeIn * 2 - ledgeW * 2], p: [cx - w / 2 + ledgeIn, ledgeY, cz] },
+      { s: [ledgeW, 0.055, d - ledgeIn * 2 - ledgeW * 2], p: [cx + w / 2 - ledgeIn, ledgeY, cz] },
+    ];
+    for (const s of ledgeStrips) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), brass);
+      m.position.set(...s.p);
+      m.frustumCulled = true;
+      group.add(m);
+    }
   }
 
   _addWallPanels(group, room, p) {
     const [w, h, d] = room.size;
     const [cx, cy, cz] = room.pos;
     if (h < 3.2) return;
-    const panelH = Math.min(2.4, h * 0.55);
-    const panelY = cy + 0.35 + panelH / 2;
-    const inset = 0.04;
+    // Keep panels below wallpaper band start (~cy+1.05) to avoid Y-overlap shimmer
+    const panelH = Math.min(1.55, h * 0.38);
+    const panelY = cy + 0.42 + panelH / 2;
+    const panelIn = 0.14 + 0.024; // halfThick + small gap (behind wallpaper)
     const dark = this._mat(
       (p.wall & 0xfefefe) === p.wall ? p.wall : ((p.wall >> 1) & 0x7f7f7f) | (p.wall & 0x808080),
       0.82, 0.03
     );
-    // Alternating inset panels on long walls (N/S)
     const nPanels = Math.max(2, Math.floor(w / 2.8));
     for (let i = 0; i < nPanels; i++) {
       if (i % 2 === 1) continue;
       const pw = Math.min(2.2, w / nPanels - 0.25);
       const x = cx - w / 2 + (i + 0.5) * (w / nPanels);
-      for (const zSide of [cz - d / 2 + 0.16 + inset, cz + d / 2 - 0.16 - inset]) {
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, panelH, 0.04), dark);
+      for (const zSide of [cz - d / 2 + panelIn, cz + d / 2 - panelIn]) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, panelH, 0.032), dark);
         panel.position.set(x, panelY, zSide);
         panel.frustumCulled = true;
         group.add(panel);
-        // rail
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(pw + 0.08, 0.05, 0.05), this._brass(p.trim));
-        rail.position.set(x, cy + 0.32 + panelH, zSide);
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(pw + 0.08, 0.045, 0.04),
+          this._brass(p.trim)
+        );
+        // Rail slightly further into room than panel face
+        const railZ = zSide + (zSide > cz ? -0.012 : 0.012);
+        rail.position.set(x, cy + 0.40 + panelH, railZ);
         group.add(rail);
       }
     }
-    // E/W panels
     const nP2 = Math.max(2, Math.floor(d / 2.8));
     for (let i = 0; i < nP2; i++) {
       if (i % 2 === 1) continue;
       const pd = Math.min(2.2, d / nP2 - 0.25);
       const z = cz - d / 2 + (i + 0.5) * (d / nP2);
-      for (const xSide of [cx - w / 2 + 0.16 + inset, cx + w / 2 - 0.16 - inset]) {
-        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.04, panelH, pd), dark);
+      for (const xSide of [cx - w / 2 + panelIn, cx + w / 2 - panelIn]) {
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(0.032, panelH, pd), dark);
         panel.position.set(xSide, panelY, z);
         panel.frustumCulled = true;
         group.add(panel);
@@ -1619,8 +1722,8 @@ export class Mansion {
     for (let i = 0; i < count; i++) {
       const t = count === 1 ? 0 : i / (count - 1) - 0.5;
       const z = cz + t * (d - 1.2);
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(w - 0.5, 0.16, 0.22), beamMat);
-      beam.position.set(cx, cy + h - 0.28, z);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(w - 0.5, 0.14, 0.2), beamMat);
+      beam.position.set(cx, cy + h - 0.20, z);
       beam.frustumCulled = true;
       group.add(beam);
     }
@@ -2335,56 +2438,79 @@ export class Mansion {
     if (sy < 3) return;
     const count = horizontal ? Math.max(1, Math.floor(sx / 5.5)) : Math.max(1, Math.floor(sz / 5.5));
     const trim = this._brass(p.trim);
+    const woodFrame = this._mat(0x3e2723, 0.48, 0.18);
     for (let i = 0; i < count; i++) {
       const t = count === 1 ? 0 : (i / (count - 1) - 0.5) * 0.7;
       const wx = horizontal ? px + t * sx : px;
       const wz = horizontal ? pz : pz + t * sz;
       const wy = floorY + 2.05;
-      // Recess box (slightly inset)
+      // Deep recess for architectural read
       const recess = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 1.55 : 0.18, 2.0, horizontal ? 0.18 : 1.55),
-        this._mat(0x1a1410, 0.85)
+        new THREE.BoxGeometry(horizontal ? 1.62 : 0.2, 2.12, horizontal ? 0.2 : 1.62),
+        this._mat(0x140e0a, 0.88)
       );
       recess.position.set(wx, wy, wz);
       recess.frustumCulled = true;
       group.add(recess);
-      // Outer frame
+      // Outer wood casing
+      const casing = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? 1.52 : 0.16, 2.02, horizontal ? 0.16 : 1.52),
+        woodFrame
+      );
+      casing.position.set(wx, wy, wz);
+      group.add(casing);
+      // Inner brass frame
       const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 1.45 : 0.14, 1.9, horizontal ? 0.14 : 1.45),
+        new THREE.BoxGeometry(horizontal ? 1.38 : 0.12, 1.86, horizontal ? 0.12 : 1.38),
         trim
       );
       frame.position.set(wx, wy, wz);
       group.add(frame);
-      // Glowing pane
+      // Warm leisurely pane (emissive mood — no PointLight)
       const glow = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 1.15 : 0.06, 1.55, horizontal ? 0.06 : 1.15),
+        new THREE.BoxGeometry(horizontal ? 1.12 : 0.055, 1.52, horizontal ? 0.055 : 1.12),
         new THREE.MeshStandardMaterial({
-          color: p.light, emissive: p.light, emissiveIntensity: 0.75,
-          roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.55,
+          color: 0xfff0d8, emissive: p.light, emissiveIntensity: 0.88,
+          roughness: 0.12, metalness: 0.12, transparent: true, opacity: 0.48,
         })
       );
       glow.position.set(wx, wy, wz);
       group.add(glow);
-      // Mullion crossbars
-      const mullH = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 1.15 : 0.04, 0.05, horizontal ? 0.05 : 1.15),
-        trim
+      // 4-lite mullion grid (premium sash feel)
+      const mullMat = trim;
+      for (const dy of [-0.38, 0.38]) {
+        const mullH = new THREE.Mesh(
+          new THREE.BoxGeometry(horizontal ? 1.12 : 0.035, 0.045, horizontal ? 0.045 : 1.12),
+          mullMat
+        );
+        mullH.position.set(wx, wy + dy, wz);
+        group.add(mullH);
+      }
+      const mullMid = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? 1.12 : 0.04, 0.05, horizontal ? 0.05 : 1.12),
+        mullMat
       );
-      mullH.position.set(wx, wy, wz);
-      group.add(mullH);
+      mullMid.position.set(wx, wy, wz);
+      group.add(mullMid);
       const mullV = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 0.05 : 0.04, 1.55, horizontal ? 0.04 : 0.05),
-        trim
+        new THREE.BoxGeometry(horizontal ? 0.05 : 0.035, 1.52, horizontal ? 0.035 : 0.05),
+        mullMat
       );
       mullV.position.set(wx, wy, wz);
       group.add(mullV);
-      // Sill
+      // Deep sill + apron
       const sill = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? 1.55 : 0.22, 0.08, horizontal ? 0.22 : 1.55),
+        new THREE.BoxGeometry(horizontal ? 1.62 : 0.26, 0.09, horizontal ? 0.26 : 1.62),
         trim
       );
-      sill.position.set(wx, wy - 1.0, wz);
+      sill.position.set(wx, wy - 1.02, wz);
       group.add(sill);
+      const apron = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? 1.48 : 0.1, 0.12, horizontal ? 0.1 : 1.48),
+        woodFrame
+      );
+      apron.position.set(wx, wy - 1.14, wz);
+      group.add(apron);
     }
   }
 
@@ -2407,14 +2533,14 @@ export class Mansion {
       group.add(arm);
       const bulb = new THREE.Mesh(
         new THREE.SphereGeometry(0.09, 10, 8),
-        this._emissiveGlow(0xffe0b2, 0.95)
+        this._emissiveGlow(0xffe0b2, 1.12)
       );
       bulb.position.set(bx, y - 0.42, bz);
       group.add(bulb);
     }
     const center = new THREE.Mesh(
       new THREE.SphereGeometry(0.12, 10, 8),
-      this._emissiveGlow(0xffcc80, 0.8)
+      this._emissiveGlow(0xffcc80, 0.95)
     );
     center.position.set(x, y - 0.38, z);
     group.add(center);
@@ -2583,10 +2709,11 @@ export class Mansion {
           : Math.abs((dir === "west" ? cx1 - w1 / 2 : cx1 + w1 / 2) - (dir === "west" ? cx2 + w2 / 2 : cx2 - w2 / 2));
         if (gap > 0.35) {
           const plank = new THREE.Mesh(
-            new THREE.BoxGeometry(Math.max(0.2, maxX - minX), 0.12, Math.max(0.2, maxZ - minZ)),
+            new THREE.BoxGeometry(Math.max(0.2, maxX - minX), 0.08, Math.max(0.2, maxZ - minZ)),
             this._mat(0x5d4037, 0.82, 0.05)
           );
-          plank.position.set((minX + maxX) / 2, cy1 - 0.04, (minZ + maxZ) / 2);
+          // Top ≈ cy1+0.012 — above room plank top, only drawn in real gaps
+          plank.position.set((minX + maxX) / 2, cy1 - 0.028, (minZ + maxZ) / 2);
           plank.receiveShadow = true;
           plank.name = `door_bridge_${room.id}_${destId}`;
           this.root.add(plank);
@@ -2595,16 +2722,17 @@ export class Mansion {
     }
   }
 
-  _addWallWithDoor(group, wall, color, thick, trimColor) {
+  _addWallWithDoor(group, wall, color, thick, trimColor, usePlaster = false) {
     const [sx, sy, sz] = wall.size;
     const [px, py, pz] = wall.pos;
     const doorW = 2.7; // wider passage — matches connector bridges
     const doorH = Math.min(sy * 0.88, 3.35);
     const horizontal = sx > sz;
+    const wallMat = usePlaster ? this._wallMat(color, 0.74, 0.035) : this._mat(color, 0.8);
     if (horizontal) {
       const remain = (sx - doorW) / 2;
       for (const sign of [-1, 1]) {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(remain, sy, sz), this._mat(color, 0.8));
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(remain, sy, sz), wallMat);
         mesh.position.set(px + sign * (doorW / 2 + remain / 2), py, pz);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -2620,7 +2748,7 @@ export class Mansion {
       if (headerH > 0.2) {
         const header = new THREE.Mesh(
           new THREE.BoxGeometry(doorW, headerH, sz),
-          this._mat(color, 0.8)
+          wallMat
         );
         header.position.set(px, py + sy / 2 - headerH / 2, pz);
         group.add(header);
@@ -2631,7 +2759,7 @@ export class Mansion {
     } else {
       const remain = (sz - doorW) / 2;
       for (const sign of [-1, 1]) {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, remain), this._mat(color, 0.8));
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, remain), wallMat);
         mesh.position.set(px, py, pz + sign * (doorW / 2 + remain / 2));
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -2647,7 +2775,7 @@ export class Mansion {
       if (headerH > 0.2) {
         const header = new THREE.Mesh(
           new THREE.BoxGeometry(sx, headerH, doorW),
-          this._mat(color, 0.8)
+          wallMat
         );
         header.position.set(px, py + sy / 2 - headerH / 2, pz);
         group.add(header);
