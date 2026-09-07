@@ -12,28 +12,29 @@ function makeCanvas(w, h) {
 }
 
 function makeAsphaltTexture() {
-  // Markings baked into ONE texture (no separate line meshes). Soft white
-  // edges avoid z-fight shards when ribbons briefly overlap at junctions.
+  // Dark asphalt + soft yellow center dashes ONLY — no bright white edge
+  // lines (those stacked into a flitting starburst at coplanar junctions).
   const c = makeCanvas(256, 256);
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#1c1c22";
+  ctx.fillStyle = "#1a1a20";
   ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 700; i++) {
-    const v = 28 + Math.random() * 48;
-    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.35)`;
+    const v = 26 + Math.random() * 42;
+    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.32)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  // Soft inset edge lines (narrow + muted — yellow dashes stay crisp)
-  ctx.strokeStyle = "rgba(200,205,215,0.55)";
-  ctx.lineWidth = 5;
+  // Very subtle dark shoulder (not bright / not white)
+  ctx.strokeStyle = "rgba(40,42,48,0.55)";
+  ctx.lineWidth = 6;
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(22, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(234, 0); ctx.lineTo(234, 256); ctx.stroke();
-  ctx.strokeStyle = "#f5c400";
-  ctx.lineWidth = 5;
-  ctx.setLineDash([16, 14]);
+  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(18, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(238, 0); ctx.lineTo(238, 256); ctx.stroke();
+  // Soft yellow dashes only
+  ctx.strokeStyle = "rgba(220,180,40,0.72)";
+  ctx.lineWidth = 4;
+  ctx.setLineDash([14, 16]);
   ctx.beginPath();
   ctx.moveTo(128, 0);
   ctx.lineTo(128, 256);
@@ -212,6 +213,11 @@ export class TrackSystem {
     this._moteMats = [];
     this._speedGates = [];
     this._sharedMats = this._makeSharedRoadMats();
+    this._gridCell = 2.5;
+    this._snapGrid = new Map(); // "ix,iz" -> segment index[]
+    this._gridOriginX = 0;
+    this._gridOriginZ = 0;
+    this._visTick = 0;
     this._buildAll();
   }
 
@@ -219,12 +225,98 @@ export class TrackSystem {
     for (const path of TRACK_PATHS) {
       this._buildPath(path);
     }
+    this._buildSnapGrid();
+    this._addSpawnPad();
+    const cells = this._snapGrid.size;
+    console.log(
+      `[TrackSystem] segments=${this.segments.length} snapGrid=${cells} cells @ ${this._gridCell}m (querySnap uses grid, not full scan)`
+    );
+  }
+
+  /** XZ uniform grid so querySnap only tests nearby segment indices. */
+  _buildSnapGrid() {
+    this._snapGrid = new Map();
+    const cell = this._gridCell;
+    if (!this.segments.length) return;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const seg of this.segments) {
+      minX = Math.min(minX, seg.a.x, seg.b.x);
+      maxX = Math.max(maxX, seg.a.x, seg.b.x);
+      minZ = Math.min(minZ, seg.a.z, seg.b.z);
+      maxZ = Math.max(maxZ, seg.a.z, seg.b.z);
+    }
+    this._gridOriginX = minX;
+    this._gridOriginZ = minZ;
+    const pad = 1; // cells of slack for radius queries
+    for (let i = 0; i < this.segments.length; i++) {
+      const seg = this.segments[i];
+      const ax = Math.min(seg.a.x, seg.b.x) - seg.width;
+      const bx = Math.max(seg.a.x, seg.b.x) + seg.width;
+      const az = Math.min(seg.a.z, seg.b.z) - seg.width;
+      const bz = Math.max(seg.a.z, seg.b.z) + seg.width;
+      const ix0 = Math.floor((ax - this._gridOriginX) / cell) - pad;
+      const ix1 = Math.floor((bx - this._gridOriginX) / cell) + pad;
+      const iz0 = Math.floor((az - this._gridOriginZ) / cell) - pad;
+      const iz1 = Math.floor((bz - this._gridOriginZ) / cell) + pad;
+      for (let ix = ix0; ix <= ix1; ix++) {
+        for (let iz = iz0; iz <= iz1; iz++) {
+          const key = ix + "," + iz;
+          let bucket = this._snapGrid.get(key);
+          if (!bucket) { bucket = []; this._snapGrid.set(key, bucket); }
+          bucket.push(i);
+        }
+      }
+    }
+  }
+
+  _segmentsNear(x, z, radius) {
+    const cell = this._gridCell;
+    const r = radius + 1.5;
+    const ix0 = Math.floor((x - r - this._gridOriginX) / cell);
+    const ix1 = Math.floor((x + r - this._gridOriginX) / cell);
+    const iz0 = Math.floor((z - r - this._gridOriginZ) / cell);
+    const iz1 = Math.floor((z + r - this._gridOriginZ) / cell);
+    const seen = new Set();
+    const out = [];
+    for (let ix = ix0; ix <= ix1; ix++) {
+      for (let iz = iz0; iz <= iz1; iz++) {
+        const bucket = this._snapGrid.get(ix + "," + iz);
+        if (!bucket) continue;
+        for (const idx of bucket) {
+          if (seen.has(idx)) continue;
+          seen.add(idx);
+          out.push(this.segments[idx]);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Dark unmarked pad under CAR_SPAWN — covers junction knot visually. */
+  _addSpawnPad() {
+    const pad = new THREE.Mesh(
+      new THREE.CircleGeometry(0.55, 24),
+      new THREE.MeshStandardMaterial({
+        color: 0x141418,
+        roughness: 0.92,
+        metalness: 0.04,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      })
+    );
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(-7.9, 0.052, 12.2);
+    pad.receiveShadow = true;
+    pad.renderOrder = 2;
+    pad.name = "spawn_clean_pad";
+    this.root.add(pad);
   }
 
   _buildPath(path) {
     let pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     if (pts.length < 2) return;
-    // Drop duplicate closed endpoint (avoids starburst fan at loop seams)
+    // Drop duplicate closed endpoint (avoids knot / double-cap at loop seams)
     if (path.closed && pts.length > 2 && pts[0].distanceTo(pts[pts.length - 1]) < 0.05) {
       pts = pts.slice(0, -1);
     }
@@ -232,9 +324,11 @@ export class TrackSystem {
     const kind = path.kind || "floor";
     const tension = path.tension != null ? path.tension : 0.22;
     const useRibbon = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel";
-    // Short door/jamb strips: inset ends so they kiss parent skirting instead of coplanar-overlapping
+    // door_* strips: snap segments only — NO visible ribbon (kills foyer starburst stack)
     const isDoorStrip = typeof path.id === "string" && path.id.startsWith("door_");
-    if (isDoorStrip && useRibbon && pts.length >= 2) {
+    const visualOk = path.visual !== false && !isDoorStrip;
+
+    if (isDoorStrip && pts.length >= 2) {
       const inset = Math.min(width * 0.85, 0.28);
       if (pts.length === 2) {
         const dir = new THREE.Vector3().subVectors(pts[1], pts[0]);
@@ -253,26 +347,46 @@ export class TrackSystem {
       }
     }
 
-    let curvePts = pts;
+    // Visual densify (ribbon beauty) vs coarser snap densify (querySnap cost)
+    let visualPts = pts;
+    let snapPts = pts;
     if (pts.length >= 3) {
       const curve = new THREE.CatmullRomCurve3(pts, !!path.closed, "catmullrom", tension);
-      // Middle density: smooth enough for clean edges, not 16× FPS bomb
-      const dense =
-        kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony"
-          ? (path.fancy ? 8 : 6)
-          : kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute"
-            ? 4
-            : kind === "flower" || kind === "tunnel" ? 6
-              : kind === "floor" || kind === "outdoor" ? 6 : 4;
-      const n = Math.max(pts.length * dense, path.fancy ? 40 : (useRibbon ? 28 : 16));
-      curvePts = curve.getPoints(n);
+      const elevFancy = kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony";
+      const tubeish = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
+      const floorish = kind === "floor" || kind === "outdoor";
+      // Keep cornice beauty; floor visual lower than before; snap coarser still
+      const visDense = elevFancy ? (path.fancy ? 8 : 6)
+        : tubeish ? 4
+          : kind === "flower" || kind === "tunnel" ? 5
+            : floorish ? 4 : 4;
+      const snapDense = elevFancy ? (path.fancy ? 4 : 3)
+        : tubeish ? 3
+          : floorish ? 2 : 3;
+      const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (useRibbon && visualOk ? 22 : 14));
+      const snapN = Math.max(pts.length * snapDense, path.fancy ? 18 : (useRibbon ? 12 : 10));
+      visualPts = curve.getPoints(visN);
+      snapPts = curve.getPoints(snapN);
+      // Closed curves: getPoints repeats the start — drop last so we don't double-cap
+      if (path.closed && visualPts.length > 2
+          && visualPts[0].distanceTo(visualPts[visualPts.length - 1]) < 0.04) {
+        visualPts = visualPts.slice(0, -1);
+      }
+      if (path.closed && snapPts.length > 2
+          && snapPts[0].distanceTo(snapPts[snapPts.length - 1]) < 0.04) {
+        snapPts = snapPts.slice(0, -1);
+      }
     } else if (useRibbon && pts.length === 2) {
-      // Densify short 2-point asphalt strips so the ribbon still looks continuous
       const a = pts[0], b = pts[1];
-      const steps = Math.max(3, Math.ceil(a.distanceTo(b) * 3.5));
-      curvePts = [];
-      for (let i = 0; i <= steps; i++) {
-        curvePts.push(new THREE.Vector3().lerpVectors(a, b, i / steps));
+      const visSteps = Math.max(2, Math.ceil(a.distanceTo(b) * 2.5));
+      const snapSteps = Math.max(1, Math.ceil(a.distanceTo(b) * 1.2));
+      visualPts = [];
+      for (let i = 0; i <= visSteps; i++) {
+        visualPts.push(new THREE.Vector3().lerpVectors(a, b, i / visSteps));
+      }
+      snapPts = [];
+      for (let i = 0; i <= snapSteps; i++) {
+        snapPts.push(new THREE.Vector3().lerpVectors(a, b, i / snapSteps));
       }
     }
 
@@ -281,9 +395,10 @@ export class TrackSystem {
       || kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony"
       || kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
 
-    for (let i = 0; i < curvePts.length - 1; i++) {
-      const a = curvePts[i];
-      const b = curvePts[i + 1];
+    // Snap segments (coarser) — always, including door_* (visual:false)
+    for (let i = 0; i < snapPts.length - 1; i++) {
+      const a = snapPts[i];
+      const b = snapPts[i + 1];
       const dir = new THREE.Vector3().subVectors(b, a);
       const len = dir.length();
       if (len < 0.01) continue;
@@ -303,12 +418,23 @@ export class TrackSystem {
         tube: TUBE_KINDS.has(kind),
       });
 
-      if (!useRibbon) this._addRoadMesh(a, b, dir, len, width, kind, isRail);
     }
 
-    // Continuous asphalt/floor ribbon — no BoxGeometry segment joins / light-leak gaps
-    if (useRibbon) {
-      this._addRibbonRoad(curvePts, width, kind, !!path.closed);
+    if (!useRibbon && visualOk) {
+      for (let i = 0; i < visualPts.length - 1; i++) {
+        const va = visualPts[i];
+        const vb = visualPts[i + 1];
+        const vdir = new THREE.Vector3().subVectors(vb, va);
+        const vlen = vdir.length();
+        if (vlen < 0.01) continue;
+        vdir.normalize();
+        this._addRoadMesh(va, vb, vdir, vlen, width, kind, isRail);
+      }
+    }
+
+    // Continuous ribbon — skip door_* and visual:false
+    if (useRibbon && visualOk) {
+      this._addRibbonRoad(visualPts, width, kind, !!path.closed);
     }
 
     for (const op of path.points) {
@@ -340,7 +466,6 @@ export class TrackSystem {
       this._addFlowerMarkers(pts, width);
     }
     if (kind === "ramp" || kind === "cornice") {
-      // On-ramp signage: emissive arrows near first point
       if (path.id && (path.id.startsWith("ramp_") || path.id.includes("brace") || path.id.includes("mouse_to"))) {
         this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
       }
@@ -401,9 +526,18 @@ export class TrackSystem {
   _addRibbonRoad(curvePts, width, kind, closed) {
     if (!curvePts || curvePts.length < 2) return;
     const pts = curvePts.slice();
-    if (closed) {
+    // Close once only — never double-cap (spawn knot / white shard fan)
+    if (closed && pts.length > 2) {
       const f = pts[0], l = pts[pts.length - 1];
-      if (f.distanceTo(l) > 0.02) pts.push(f.clone());
+      const d = f.distanceTo(l);
+      if (d < 0.04) {
+        // already closed in point list — leave as single seam
+      } else if (d < 0.35) {
+        // near-close: snap last to first instead of adding another vertex
+        l.copy(f);
+      } else {
+        pts.push(f.clone());
+      }
     }
     const halfW = width * 0.5;
     // Top deck only — sit clearly above room floors (kills floor z-fight shards)
@@ -1334,7 +1468,10 @@ export class TrackSystem {
     }
     const onStoryBand = storyY != null;
 
-    for (const seg of this.segments) {
+    const candidates = this._snapGrid && this._snapGrid.size
+      ? this._segmentsNear(x, z, radius)
+      : this.segments;
+    for (const seg of candidates) {
       const abx = seg.b.x - seg.a.x;
       const aby = seg.b.y - seg.a.y;
       const abz = seg.b.z - seg.a.z;
@@ -1497,8 +1634,12 @@ export class TrackSystem {
     return false;
   }
 
-  /** Subtle dust-mote / gate pulse (no extra lights). */
+  /** Subtle dust-mote / gate pulse — throttled (~8 Hz) to cut per-frame cost. */
   updateVisuals(t) {
+    // Quantize so we skip most frames (driveMode still calls every frame)
+    const tick = (t * 8) | 0;
+    if (tick === this._visTick) return;
+    this._visTick = tick;
     const pulse = 0.7 + 0.35 * Math.sin(t * 2.2);
     for (const m of this._moteMats) {
       if (m.emissiveIntensity != null) m.emissiveIntensity = pulse;
@@ -1511,16 +1652,18 @@ export class TrackSystem {
     for (const m of this._rampArrowMats || []) {
       if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
     }
+    // Scale portals/gates less often — skip every other throttle tick
+    if (tick & 1) return;
     for (const p of this.portals) {
       if (p.mesh) {
         const s = 1 + 0.06 * Math.sin(t * 3.0 + p.pos.x);
-        p.mesh.scale.set(s, s, s);
+        p.mesh.scale.setScalar(s);
       }
     }
     for (const g of this._speedGates || []) {
       if (g.mesh) {
         const s = 1 + 0.08 * Math.sin(t * 4.0 + g.pos.z);
-        g.mesh.scale.set(s, s, s);
+        g.mesh.scale.setScalar(s);
         g.mesh.rotation.z = t * 0.6;
       }
     }

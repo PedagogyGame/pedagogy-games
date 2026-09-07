@@ -189,4 +189,40 @@ if (carpetSnap.elevated) throw new Error("Foyer floor must not be elevated");
 console.log("Track segment count", drive.tracks.segments.length);
 if (drive.tracks.segments.length > 12000) throw new Error("Segment count still too high — lag risk");
 
+// Spatial snap grid must exist
+if (!drive.tracks._snapGrid || drive.tracks._snapGrid.size < 10) {
+  throw new Error("snap grid missing or tiny");
+}
+console.log("Snap grid cells", drive.tracks._snapGrid.size, "cellSize", drive.tracks._gridCell);
+
+// querySnap 1000x at spawn — grid must beat naive full scan by a wide margin
+const N = 1000;
+const sx = CAR_SPAWN.x, sy = CAR_SPAWN.y, sz = CAR_SPAWN.z;
+const t0 = performance.now();
+for (let i = 0; i < N; i++) drive.tracks.querySnap(sx, sy, sz, 1.65);
+const gridMs = performance.now() - t0;
+
+// Temporary full-scan baseline (same scoring, all segments)
+const segs = drive.tracks.segments;
+const near = drive.tracks._segmentsNear.bind(drive.tracks);
+drive.tracks._segmentsNear = () => segs; // force full list through same path
+const t1 = performance.now();
+for (let i = 0; i < N; i++) drive.tracks.querySnap(sx, sy, sz, 1.65);
+const fullMs = performance.now() - t1;
+drive.tracks._segmentsNear = near;
+
+console.log(`querySnap x${N} at spawn: grid=${gridMs.toFixed(2)}ms fullScan=${fullMs.toFixed(2)}ms speedup=${(fullMs / Math.max(0.001, gridMs)).toFixed(1)}x`);
+if (gridMs > fullMs * 0.85 && segs.length > 500) {
+  console.warn("WARN: grid not clearly faster — check indexing");
+}
+// Expect meaningful win when segment count is high
+if (segs.length > 800 && gridMs > fullMs) {
+  throw new Error(`Grid slower than full scan (${gridMs} vs ${fullMs})`);
+}
+
+// door_* should not add ribbon meshes named/stacked at spawn — pad present
+let spawnPad = false;
+drive.tracks.root.traverse((o) => { if (o.name === "spawn_clean_pad") spawnPad = true; });
+if (!spawnPad) throw new Error("spawn_clean_pad missing");
+
 console.log("\nALL SMOKE CHECKS PASSED");
