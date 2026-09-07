@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pianoboard V5 — Active Keys Only Color Logic</title>
+<title>Pianoboard V6 — Chord + Scale Color Trainer</title>
 <style>
 :root{
   --bg:#0a0d12;
@@ -471,34 +471,79 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   text-shadow:0 1px 0 rgba(0,0,0,.40);
 }
 
+
+/* V6 hard guarantee:
+   active member keys only get color; inactive keys stay standard piano colors. */
+.whiteKey:not(.active-scale):not(.active-root){
+  background:
+    linear-gradient(90deg, rgba(0,0,0,.06), transparent 12%, rgba(255,255,255,.92) 40%, #f3f7fa 66%, #e1e8ed 100%) !important;
+  border-left:1px solid #c9d0d6 !important;
+  border-right:1px solid #c3cad0 !important;
+  border-bottom:1px solid #bfc7cd !important;
+  box-shadow:
+    inset 0 -8px 14px rgba(0,0,0,.08),
+    inset 0 1px 0 rgba(255,255,255,.7) !important;
+}
+.blackKey:not(.active-scale):not(.active-root){
+  background:
+    linear-gradient(90deg, #0b0e13 0%, #161b22 20%, #2a3038 46%, #14191f 76%, #080b10 100%) !important;
+  border:1px solid rgba(255,255,255,.08) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.10),
+    inset 0 -8px 12px rgba(0,0,0,.42),
+    0 7px 10px rgba(0,0,0,.26) !important;
+}
+
 </style>
 </head>
 <body>
 <div class="app">
 <header>
   <div>
-    <h1>Pianoboard V5</h1>
-    <div class="sub">A realistic piano scale trainer with active-keys-only cyan and magenta color logic, sound, and a large expanded scale library</div>
+    <h1>Pianoboard V6</h1>
+    <div class="sub">A realistic piano chord-and-scale trainer: only selected chord tones or scale tones change color</div>
   </div>
-  <div class="chip" id="status">C Major • realistic piano</div>
+  <div class="chip" id="status">C Major chord • C E G only</div>
 </header>
 
 <main>
 <aside class="panel">
-  <h2>Scale selection</h2>
+  <h2>Selection</h2>
 
   <div class="field">
-    <label for="family">Scale family</label>
-    <select id="family"></select>
+    <label for="studyType">What to display</label>
+    <select id="studyType">
+      <option value="chord" selected>Chord</option>
+      <option value="scale">Scale / mode</option>
+    </select>
+  </div>
+
+  <div id="chordControls">
+    <div class="field">
+      <label for="chordFamily">Chord family</label>
+      <select id="chordFamily"></select>
+    </div>
+
+    <div class="field">
+      <label for="chord">Chord</label>
+      <select id="chord"></select>
+    </div>
+  </div>
+
+  <div id="scaleControls" hidden>
+    <div class="field">
+      <label for="family">Scale family</label>
+      <select id="family"></select>
+    </div>
+
+    <div class="field">
+      <label for="scale">Scale / mode</label>
+      <select id="scale"></select>
+    </div>
   </div>
 
   <div class="field">
-    <label for="scale">Scale / mode</label>
-    <select id="scale"></select>
-  </div>
-
-  <div class="field">
-    <label for="tonic">Tonic spelling</label>
+    <label for="tonic">Tonic / root</label>
     <div class="three">
       <button class="arrow" id="prevTonic">‹</button>
       <select id="tonic"></select>
@@ -507,11 +552,11 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   </div>
 
   <div class="field">
-    <label for="labels">Highlight appearance</label>
+    <label for="labels">Key labels</label>
     <select id="labels">
-      <option value="minimal">Minimal elegant highlights</option>
-      <option value="notes">Subtle note names</option>
-      <option value="degrees">Subtle scale degrees</option>
+      <option value="minimal">No labels</option>
+      <option value="notes">Note names</option>
+      <option value="degrees">Chord / scale degrees</option>
     </select>
   </div>
 
@@ -525,7 +570,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   </div>
 
   <div class="row2">
-    <button class="btn primary" id="playScale">▶ Play scale</button>
+    <button class="btn primary" id="playSelection">▶ Play chord</button>
     <button class="btn" id="playRoot">Play root</button>
   </div>
   <div class="row2" style="margin-top:8px">
@@ -534,7 +579,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   </div>
 
   <div class="micro" style="margin-top:13px">
-    This piano version now follows the exact rule more strictly: only keys that belong to the selected note-set change color. White member keys switch to cyan, black member keys switch to purple-magenta, and every other key remains its normal black or white piano color.
+    <b>Chord mode:</b> only the chord tones change color. White chord-tone keys become cyan; black chord-tone keys become purple-magenta. Every other key remains normal white or black. Scale mode is available separately.
   </div>
 </aside>
 
@@ -562,7 +607,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
 </section>
 
 <aside class="panel right">
-  <h2>Selected scale</h2>
+  <h2 id="detailHeading">Selected chord</h2>
   <div class="infoTitle" id="infoName"></div>
   <div class="infoSub" id="infoAlias"></div>
 
@@ -572,15 +617,15 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   </div>
 
   <div class="hr"></div>
-  <div class="micro">Whole/half-step pattern</div>
+  <div class="micro" id="intervalHeading">Semitone intervals</div>
   <div class="bigMono" id="steps"></div>
 
   <div class="hr"></div>
-  <div class="micro">Scale formula</div>
+  <div class="micro" id="formulaHeading">Chord formula</div>
   <div class="formula" id="formula"></div>
 
   <div class="hr"></div>
-  <div class="micro">Correctly spelled notes</div>
+  <div class="micro" id="notesHeading">Chord tones</div>
   <div class="notes" id="notes"></div>
 
   <div class="hr"></div>
@@ -590,7 +635,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
 </aside>
 </main>
 
-<footer>Pianoboard V5 • only active keys change color • inactive keys stay black and white • sound enabled</footer>
+<footer>Pianoboard V6 • chord mode + scale mode • only selected notes change color • sound enabled</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -601,6 +646,69 @@ const TONICS=["C","C#","Db","D","D#","Eb","E","F","F#","Gb","G","G#","Ab","A","A
 const NAT_PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
 const LETTERS=["C","D","E","F","G","A","B"];
 const WHITE_SET=new Set([0,2,4,5,7,9,11]);
+
+
+const chords=[
+ {name:"Major",symbol:"",family:"Triads",ints:[0,4,7],degrees:["1","3","5"],desc:"Major triad."},
+ {name:"Minor",symbol:"m",family:"Triads",ints:[0,3,7],degrees:["1","b3","5"],desc:"Minor triad."},
+ {name:"Diminished",symbol:"dim",family:"Triads",ints:[0,3,6],degrees:["1","b3","b5"],desc:"Diminished triad."},
+ {name:"Augmented",symbol:"+",family:"Triads",ints:[0,4,8],degrees:["1","3","#5"],desc:"Augmented triad."},
+ {name:"Suspended 2",symbol:"sus2",family:"Triads",ints:[0,2,7],degrees:["1","2","5"],desc:"Suspended second triad."},
+ {name:"Suspended 4",symbol:"sus4",family:"Triads",ints:[0,5,7],degrees:["1","4","5"],desc:"Suspended fourth triad."},
+ {name:"Power chord",symbol:"5",family:"Triads",ints:[0,7],degrees:["1","5"],desc:"Root and perfect fifth."},
+
+ {name:"Major 6",symbol:"6",family:"Sixths / Added tones",ints:[0,4,7,9],degrees:["1","3","5","6"],desc:"Major triad with added sixth."},
+ {name:"Minor 6",symbol:"m6",family:"Sixths / Added tones",ints:[0,3,7,9],degrees:["1","b3","5","6"],desc:"Minor triad with added sixth."},
+ {name:"Add 9",symbol:"add9",family:"Sixths / Added tones",ints:[0,4,7,14],degrees:["1","3","5","9"],desc:"Major triad with added ninth."},
+ {name:"Minor add 9",symbol:"m(add9)",family:"Sixths / Added tones",ints:[0,3,7,14],degrees:["1","b3","5","9"],desc:"Minor triad with added ninth."},
+ {name:"6/9",symbol:"6/9",family:"Sixths / Added tones",ints:[0,4,7,9,14],degrees:["1","3","5","6","9"],desc:"Major sixth chord with added ninth."},
+ {name:"Minor 6/9",symbol:"m6/9",family:"Sixths / Added tones",ints:[0,3,7,9,14],degrees:["1","b3","5","6","9"],desc:"Minor sixth chord with added ninth."},
+ {name:"Add 11",symbol:"add11",family:"Sixths / Added tones",ints:[0,4,5,7],degrees:["1","3","4","5"],desc:"Major triad with added eleventh."},
+ {name:"Minor add 11",symbol:"m(add11)",family:"Sixths / Added tones",ints:[0,3,5,7],degrees:["1","b3","4","5"],desc:"Minor triad with added eleventh."},
+
+ {name:"Major 7",symbol:"maj7",family:"Sevenths",ints:[0,4,7,11],degrees:["1","3","5","7"],desc:"Major seventh chord."},
+ {name:"Dominant 7",symbol:"7",family:"Sevenths",ints:[0,4,7,10],degrees:["1","3","5","b7"],desc:"Dominant seventh chord."},
+ {name:"Minor 7",symbol:"m7",family:"Sevenths",ints:[0,3,7,10],degrees:["1","b3","5","b7"],desc:"Minor seventh chord."},
+ {name:"Minor-major 7",symbol:"m(maj7)",family:"Sevenths",ints:[0,3,7,11],degrees:["1","b3","5","7"],desc:"Minor triad with major seventh."},
+ {name:"Half-diminished 7",symbol:"m7b5",family:"Sevenths",ints:[0,3,6,10],degrees:["1","b3","b5","b7"],desc:"Half-diminished seventh chord."},
+ {name:"Diminished 7",symbol:"dim7",family:"Sevenths",ints:[0,3,6,9],degrees:["1","b3","b5","bb7"],desc:"Fully diminished seventh chord."},
+ {name:"Augmented major 7",symbol:"+maj7",family:"Sevenths",ints:[0,4,8,11],degrees:["1","3","#5","7"],desc:"Augmented triad with major seventh."},
+ {name:"Augmented 7",symbol:"+7",family:"Sevenths",ints:[0,4,8,10],degrees:["1","3","#5","b7"],desc:"Augmented dominant seventh chord."},
+ {name:"7sus4",symbol:"7sus4",family:"Sevenths",ints:[0,5,7,10],degrees:["1","4","5","b7"],desc:"Dominant seventh suspended fourth."},
+
+ {name:"Major 9",symbol:"maj9",family:"Ninths",ints:[0,4,7,11,14],degrees:["1","3","5","7","9"],desc:"Major ninth chord."},
+ {name:"Dominant 9",symbol:"9",family:"Ninths",ints:[0,4,7,10,14],degrees:["1","3","5","b7","9"],desc:"Dominant ninth chord."},
+ {name:"Minor 9",symbol:"m9",family:"Ninths",ints:[0,3,7,10,14],degrees:["1","b3","5","b7","9"],desc:"Minor ninth chord."},
+ {name:"Minor-major 9",symbol:"m(maj9)",family:"Ninths",ints:[0,3,7,11,14],degrees:["1","b3","5","7","9"],desc:"Minor-major ninth chord."},
+ {name:"7 flat 9",symbol:"7b9",family:"Ninths",ints:[0,4,7,10,13],degrees:["1","3","5","b7","b9"],desc:"Dominant seventh with flat ninth."},
+ {name:"7 sharp 9",symbol:"7#9",family:"Ninths",ints:[0,4,7,10,15],degrees:["1","3","5","b7","#9"],desc:"Dominant seventh with sharp ninth."},
+ {name:"9sus4",symbol:"9sus4",family:"Ninths",ints:[0,5,7,10,14],degrees:["1","4","5","b7","9"],desc:"Suspended dominant ninth."},
+
+ {name:"Major 11",symbol:"maj11",family:"Elevenths",ints:[0,4,7,11,14,17],degrees:["1","3","5","7","9","11"],desc:"Major eleventh chord."},
+ {name:"Dominant 11",symbol:"11",family:"Elevenths",ints:[0,4,7,10,14,17],degrees:["1","3","5","b7","9","11"],desc:"Dominant eleventh chord."},
+ {name:"Minor 11",symbol:"m11",family:"Elevenths",ints:[0,3,7,10,14,17],degrees:["1","b3","5","b7","9","11"],desc:"Minor eleventh chord."},
+ {name:"Major 7 sharp 11",symbol:"maj7#11",family:"Elevenths",ints:[0,4,7,11,18],degrees:["1","3","5","7","#11"],desc:"Major seventh with sharp eleventh."},
+ {name:"9 sharp 11",symbol:"9#11",family:"Elevenths",ints:[0,4,7,10,14,18],degrees:["1","3","5","b7","9","#11"],desc:"Dominant ninth with sharp eleventh."},
+
+ {name:"Major 13",symbol:"maj13",family:"Thirteenths",ints:[0,4,7,11,14,17,21],degrees:["1","3","5","7","9","11","13"],desc:"Full major thirteenth chord."},
+ {name:"Dominant 13",symbol:"13",family:"Thirteenths",ints:[0,4,7,10,14,17,21],degrees:["1","3","5","b7","9","11","13"],desc:"Full dominant thirteenth chord."},
+ {name:"Minor 13",symbol:"m13",family:"Thirteenths",ints:[0,3,7,10,14,17,21],degrees:["1","b3","5","b7","9","11","13"],desc:"Full minor thirteenth chord."},
+ {name:"13 flat 9",symbol:"13b9",family:"Thirteenths",ints:[0,4,7,10,13,17,21],degrees:["1","3","5","b7","b9","11","13"],desc:"Dominant thirteenth with flat ninth."},
+ {name:"13 sharp 11",symbol:"13#11",family:"Thirteenths",ints:[0,4,7,10,14,18,21],degrees:["1","3","5","b7","9","#11","13"],desc:"Dominant thirteenth with sharp eleventh."},
+
+ {name:"7 flat 5",symbol:"7b5",family:"Altered dominants",ints:[0,4,6,10],degrees:["1","3","b5","b7"],desc:"Dominant seventh with flat fifth."},
+ {name:"7 sharp 5",symbol:"7#5",family:"Altered dominants",ints:[0,4,8,10],degrees:["1","3","#5","b7"],desc:"Dominant seventh with sharp fifth."},
+ {name:"7 flat 5 flat 9",symbol:"7b5b9",family:"Altered dominants",ints:[0,4,6,10,13],degrees:["1","3","b5","b7","b9"],desc:"Dominant with flat fifth and flat ninth."},
+ {name:"7 sharp 5 flat 9",symbol:"7#5b9",family:"Altered dominants",ints:[0,4,8,10,13],degrees:["1","3","#5","b7","b9"],desc:"Dominant with sharp fifth and flat ninth."},
+ {name:"7 sharp 5 sharp 9",symbol:"7#5#9",family:"Altered dominants",ints:[0,4,8,10,15],degrees:["1","3","#5","b7","#9"],desc:"Dominant with sharp fifth and sharp ninth."},
+ {name:"7 flat 9 sharp 9",symbol:"7b9#9",family:"Altered dominants",ints:[0,4,7,10,13,15],degrees:["1","3","5","b7","b9","#9"],desc:"Dominant with both altered ninths."},
+ {name:"7 alt",symbol:"7alt",family:"Altered dominants",ints:[0,4,6,8,10,13,15],degrees:["1","3","b5","#5","b7","b9","#9"],desc:"Broad altered dominant pitch collection."},
+
+ {name:"Quartal 3-note",symbol:"quartal",family:"Quartal / Cluster",ints:[0,5,10],degrees:["1","4","b7"],desc:"Three-note quartal chord."},
+ {name:"Quartal 4-note",symbol:"quartal4",family:"Quartal / Cluster",ints:[0,5,10,15],degrees:["1","4","b7","#9"],desc:"Four-note stack of fourths."},
+ {name:"Major cluster",symbol:"cluster",family:"Quartal / Cluster",ints:[0,2,4],degrees:["1","2","3"],desc:"Three-note major cluster."},
+ {name:"Minor cluster",symbol:"m cluster",family:"Quartal / Cluster",ints:[0,2,3],degrees:["1","2","b3"],desc:"Compact minor cluster."}
+];
 
 const scales=[
  {name:"Major",alias:"Ionian",family:"Common",ints:[0,2,4,5,7,9,11],degrees:["1","2","3","4","5","6","7"],steps:[2,2,1,2,2,2,1],desc:"The standard major scale."},
@@ -657,11 +765,23 @@ const scales=[
 ];
 
 const $=id=>document.getElementById(id);
+const studyType=$("studyType");
+const chordFamily=$("chordFamily"), chord=$("chord");
+const chordControls=$("chordControls"), scaleControls=$("scaleControls");
 const family=$("family"), scale=$("scale"), tonic=$("tonic"), labels=$("labels"), span=$("span");
 const keysArea=$("keysArea"), scene=$("scene");
 let audioCtx=null, tip=null;
 
-let state={family:"Common", scale:"Major", tonic:"C", span:3, startOct:3};
+let state={
+  type:"chord",
+  chordFamily:"Triads",
+  chord:"Major",
+  family:"Common",
+  scale:"Major",
+  tonic:"C",
+  span:3,
+  startOct:3
+};
 
 function tonicParts(t){
  const letter=t[0], accidental=t.slice(1);
@@ -680,8 +800,10 @@ function signedNearest(diff){
  return diff;
 }
 function degreeNumber(token){
- const m=token.match(/[1-7]/);
- return m?Number(m[0]):1;
+ const m=token.match(/\d+/);
+ if(!m) return 1;
+ const n=Number(m[0]);
+ return ((n-1)%7)+1;
 }
 function spellTone(tonicName, degreeToken, targetPc){
  const tp=tonicParts(tonicName);
@@ -713,22 +835,85 @@ function pcToDegree(){
 }
 function midiToPc(midi){ return ((midi%12)+12)%12; }
 
+function currentChord(){ return chords.find(c=>c.name===state.chord); }
+
+function activeSelection(){
+  return state.type==="chord" ? currentChord() : currentScale();
+}
+
+function selectionPitchClasses(){
+  const sel=activeSelection(), root=tonicParts(state.tonic).pc;
+  return Array.from(new Set(sel.ints.map(i=>(root+i)%12)));
+}
+
+function spelledSelection(){
+  const sel=activeSelection(), root=tonicParts(state.tonic).pc;
+  return sel.ints.map((i,idx)=>spellTone(state.tonic,sel.degrees[idx],(root+i)%12));
+}
+
+function pcToSelectionName(){
+  const map=new Map(), pcs=selectionPitchClasses(), names=spelledSelection();
+  const sel=activeSelection(), root=tonicParts(state.tonic).pc;
+  sel.ints.forEach((i,idx)=>{
+    const pc=(root+i)%12;
+    if(!map.has(pc)) map.set(pc,names[idx]);
+  });
+  return map;
+}
+
+function pcToSelectionDegree(){
+  const map=new Map(), sel=activeSelection(), root=tonicParts(state.tonic).pc;
+  sel.ints.forEach((i,idx)=>{
+    const pc=(root+i)%12;
+    if(!map.has(pc)) map.set(pc,sel.degrees[idx].replaceAll("b","♭").replaceAll("#","♯"));
+  });
+  return map;
+}
+
+
+Array.from(new Set(chords.map(c=>c.family))).forEach(x=>chordFamily.add(new Option(x,x)));
 Array.from(new Set(scales.map(s=>s.family))).forEach(x=>family.add(new Option(x,x)));
 TONICS.forEach(x=>tonic.add(new Option(x,x)));
-function fillScale(){
- const old=state.scale;
- scale.innerHTML="";
- scales.filter(s=>s.family===state.family).forEach(s=>scale.add(new Option(s.name,s.name)));
- if([...scale.options].some(o=>o.value===old)) scale.value=old;
- else scale.selectedIndex=0;
- state.scale=scale.value;
+
+function fillChord(){
+  const old=state.chord;
+  chord.innerHTML="";
+  chords.filter(c=>c.family===state.chordFamily).forEach(c=>chord.add(new Option(`${c.name}${c.symbol ? "  ("+c.symbol+")" : ""}`,c.name)));
+  if([...chord.options].some(o=>o.value===old)) chord.value=old;
+  else chord.selectedIndex=0;
+  state.chord=chord.value;
 }
+
+function fillScale(){
+  const old=state.scale;
+  scale.innerHTML="";
+  scales.filter(s=>s.family===state.family).forEach(s=>scale.add(new Option(s.name,s.name)));
+  if([...scale.options].some(o=>o.value===old)) scale.value=old;
+  else scale.selectedIndex=0;
+  state.scale=scale.value;
+}
+
+function updateModeUI(){
+  const chordMode=state.type==="chord";
+  chordControls.hidden=!chordMode;
+  scaleControls.hidden=chordMode;
+  $("playSelection").textContent=chordMode ? "▶ Play chord" : "▶ Play scale";
+  $("detailHeading").textContent=chordMode ? "Selected chord" : "Selected scale";
+  $("intervalHeading").textContent=chordMode ? "Semitone intervals" : "Whole/half-step pattern";
+  $("formulaHeading").textContent=chordMode ? "Chord formula" : "Scale formula";
+  $("notesHeading").textContent=chordMode ? "Chord tones" : "Correctly spelled notes";
+}
+
 function sync(){
- state.family=family.value;
- state.scale=scale.value;
- state.tonic=tonic.value;
- state.span=Number(span.value);
- $("rangeText").textContent=`Visible keyboard: ${state.span} octave${state.span>1?"s":""}`;
+  state.type=studyType.value;
+  state.chordFamily=chordFamily.value;
+  state.chord=chord.value;
+  state.family=family.value;
+  state.scale=scale.value;
+  state.tonic=tonic.value;
+  state.span=Number(span.value);
+  $("rangeText").textContent=`Visible keyboard: ${state.span} octave${state.span>1?"s":""}`;
+  updateModeUI();
 }
 
 function keyRange(){
@@ -774,7 +959,7 @@ function buildKeyboard(){
  keysArea.style.width = totalW + "px";
  keysArea.style.maxWidth = "100%";
 
- const noteMap=pcToScaleName(), degMap=pcToDegree(), allowed=new Set(scalePitchClasses()), rootPc=tonicParts(state.tonic).pc;
+ const noteMap=pcToSelectionName(), degMap=pcToSelectionDegree(), allowed=new Set(selectionPitchClasses()), rootPc=tonicParts(state.tonic).pc;
  const labelMode = labels.value;
 
  notes.filter(n=>n.isWhite).forEach(note=>{
@@ -844,17 +1029,33 @@ function attachKeyEvents(el, note, noteMap, degMap){
 }
 
 function renderInfo(){
- const sc=currentScale(), names=spelledScale();
- $("infoName").textContent=sc.name;
- $("infoAlias").textContent=sc.alias||sc.family;
- $("keyName").textContent=`${state.tonic} ${sc.name}`;
- $("keySub").textContent=`This scale contains exactly ${sc.ints.length} distinct scale tones. Only those notes are highlighted across the visible keyboard.`;
- $("steps").textContent=sc.steps.join(" – ");
- $("formula").textContent=sc.degrees.map(d=>d.replace("b","♭").replace("#","♯")).join("  ");
- $("notes").textContent=names.join("  •  ");
- $("description").textContent=sc.desc;
- $("status").textContent=`${state.tonic} ${sc.name} • active keys only`;
- $("verify").textContent=`Scale-member count: ${sc.ints.length}. Highlight rule: only visible keys whose pitch class belongs to the selected scale are colorized. Member white keys switch to cyan, member black keys switch to purple-magenta, and all non-member keys remain standard piano white or black.`;
+ const sel=activeSelection(), names=spelledSelection();
+ const chordMode=state.type==="chord";
+
+ $("infoName").textContent=sel.name;
+ $("infoAlias").textContent=chordMode ? `${sel.family}${sel.symbol ? " • "+sel.symbol : ""}` : (sel.alias||sel.family);
+
+ if(chordMode){
+   const symbolName=`${state.tonic}${sel.symbol}`;
+   $("keyName").textContent=`${symbolName} • ${sel.name}`;
+   $("keySub").textContent=`Only these ${selectionPitchClasses().length} chord pitch classes are colored. Every other piano key remains its normal black or white color.`;
+   $("steps").textContent=sel.ints.map(i=>i%12).join(" – ");
+ }else{
+   $("keyName").textContent=`${state.tonic} ${sel.name}`;
+   $("keySub").textContent=`Only pitch classes belonging to this selected scale are colored.`;
+   $("steps").textContent=sel.steps.join(" – ");
+ }
+
+ $("formula").textContent=sel.degrees.map(d=>d.replaceAll("b","♭").replaceAll("#","♯")).join("  ");
+ $("notes").textContent=Array.from(new Set(names)).join("  •  ");
+ $("description").textContent=sel.desc;
+
+ const title=chordMode ? `${state.tonic}${sel.symbol || ""} ${sel.name} chord` : `${state.tonic} ${sel.name}`;
+ $("status").textContent=`${title} • ${selectionPitchClasses().length} active pitch classes`;
+
+ $("verify").textContent=chordMode
+   ? `Chord rule: ONLY ${Array.from(new Set(names)).join(", ")} are colored across the keyboard. White chord-tone keys are cyan. Black chord-tone keys are purple-magenta. All other keys remain ordinary piano white or black.`
+   : `Scale rule: only the selected scale members are colored. In C major scale, for example, all seven white-note pitch classes are scale members; chord mode is separate and colors only chord tones.`;
 }
 function render(){
  sync();
@@ -941,11 +1142,18 @@ async function playRoot(){
   if(!(await ensureAudio())) return;
   playMidiUnlocked(centralRootMidi(), 1.05, 0);
 }
-async function playScale(){
+async function playSelection(){
   if(!(await ensureAudio())) return;
-  const root = centralRootMidi();
-  const sc=currentScale();
-  [...sc.ints,12].forEach((i,n)=>playMidiUnlocked(root+i,.82,n*.24));
+  const root=centralRootMidi();
+  const sel=activeSelection();
+
+  if(state.type==="chord"){
+    // Sound the selected chord simultaneously.
+    const unique=Array.from(new Set(sel.ints.map(i=>i%12))).sort((a,b)=>a-b);
+    unique.forEach((i,n)=>playMidiUnlocked(root+i,1.15,n*.012));
+  }else{
+    [...sel.ints,12].forEach((i,n)=>playMidiUnlocked(root+i,.82,n*.24));
+  }
 }
 
 function toast(msg){
@@ -962,8 +1170,24 @@ function shiftTonic(dir){
   render();
 }
 
-family.addEventListener("change",()=>{state.family=family.value;fillScale();scale.value=state.scale;render();});
+studyType.addEventListener("change",()=>{state.type=studyType.value;render();});
+
+chordFamily.addEventListener("change",()=>{
+  state.chordFamily=chordFamily.value;
+  fillChord();
+  chord.value=state.chord;
+  render();
+});
+chord.addEventListener("change",render);
+
+family.addEventListener("change",()=>{
+  state.family=family.value;
+  fillScale();
+  scale.value=state.scale;
+  render();
+});
 scale.addEventListener("change",render);
+
 tonic.addEventListener("change",render);
 labels.addEventListener("change",render);
 span.addEventListener("change",render);
@@ -977,24 +1201,44 @@ span.addEventListener("change",render);
 $("prevTonic").addEventListener("click",()=>shiftTonic(-1));
 $("nextTonic").addEventListener("click",()=>shiftTonic(1));
 $("nextKey").addEventListener("click",()=>shiftTonic(1));
-$("playScale").addEventListener("click",playScale);
+$("playSelection").addEventListener("click",playSelection);
 $("playRoot").addEventListener("click",playRoot);
+
 $("reset").addEventListener("click",()=>{
+  studyType.value="chord";
+  state.type="chord";
+
+  chordFamily.value="Triads";
+  state.chordFamily="Triads";
+  fillChord();
+  chord.value="Major";
+  state.chord="Major";
+
   family.value="Common";
   state.family="Common";
   fillScale();
   scale.value="Major";
+  state.scale="Major";
+
   tonic.value="C";
   labels.value="minimal";
   span.value="3";
   render();
-  toast("Reset to C Major");
+  toast("Reset to C major chord — C E G only");
 });
+
 window.addEventListener("resize", render);
+
+studyType.value="chord";
+
+chordFamily.value="Triads";
+fillChord();
+chord.value="Major";
 
 family.value="Common";
 fillScale();
 scale.value="Major";
+
 tonic.value="C";
 labels.value="minimal";
 span.value="3";
