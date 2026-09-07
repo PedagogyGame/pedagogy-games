@@ -12,16 +12,18 @@ export const ASSIST_MAGNET = false;
 
 /** Handling / look presets (base values; tiny-car precision). */
 export const VEHICLE_PRESETS = {
+  // Driver-feel cruise sweet spot (not crawl ~1.05, not rocket ~1.72):
+  // car maxSpeed ~1.40, boost ~1.92, steerRate ~3.55, steer lerp ~4.2
   car: {
     id: "car",
     label: "Car",
-    blurb: "Balanced · precise tour",
-    maxSpeed: 1.72,
-    boostMax: 2.4,
-    accel: 7.2,
-    brake: 15,
-    friction: 7.6,
-    steerRate: 4.55,
+    blurb: "Balanced · joyful cruise",
+    maxSpeed: 1.40,
+    boostMax: 1.92,
+    accel: 6.2,
+    brake: 14,
+    friction: 7.4,
+    steerRate: 3.55,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -29,38 +31,38 @@ export const VEHICLE_PRESETS = {
     id: "suv",
     label: "SUV",
     blurb: "Taller · calm cruise",
-    maxSpeed: 1.55,
-    boostMax: 2.15,
-    accel: 6.2,
-    brake: 14.5,
-    friction: 8.4,
-    steerRate: 3.85,
+    maxSpeed: 1.28,
+    boostMax: 1.78,
+    accel: 5.4,
+    brake: 13.5,
+    friction: 8.0,
+    steerRate: 3.15,
     bodyColor: 0x1565c0,
     accent: 0xeceff1,
   },
   jeep: {
     id: "jeep",
     label: "Jeep",
-    blurb: "Chunky · grippy stroll",
-    maxSpeed: 1.48,
-    boostMax: 2.05,
-    accel: 6.6,
-    brake: 16,
-    friction: 9.2,
-    steerRate: 4.1,
+    blurb: "Chunky · grippy roam",
+    maxSpeed: 1.22,
+    boostMax: 1.72,
+    accel: 5.6,
+    brake: 15,
+    friction: 8.6,
+    steerRate: 3.25,
     bodyColor: 0x2e7d32,
     accent: 0xfff59d,
   },
   convertible: {
     id: "convertible",
     label: "Convertible",
-    blurb: "Open-top · nimble look",
-    maxSpeed: 1.82,
-    boostMax: 2.55,
-    accel: 7.6,
-    brake: 14.5,
+    blurb: "Open-top · nimble cruise",
+    maxSpeed: 1.48,
+    boostMax: 2.00,
+    accel: 6.5,
+    brake: 13.5,
     friction: 7.0,
-    steerRate: 5.2,
+    steerRate: 3.70,
     bodyColor: 0xf9a825,
     accent: 0x212121,
   },
@@ -77,12 +79,12 @@ export class RCCar {
     this.yaw = Math.PI;
     this.vy = 0;
     this.vehicleId = "car";
-    this.maxSpeed = 1.72;
-    this.boostMax = 2.4;
-    this.accel = 7.2;
+    this.maxSpeed = 1.40;
+    this.boostMax = 1.92;
+    this.accel = 6.2;
     this.brake = 16;
-    this.friction = 7.6;
-    this.steerRate = 4.55;
+    this.friction = 7.4;
+    this.steerRate = 3.55;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -464,40 +466,56 @@ export class RCCar {
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 6.2 * dt));
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 4.2 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
     const kind = snap?.kind || "";
     const inTube = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "tunnel";
 
-    // Remember elevated runs so leaving balcony/cornice/furniture ≠ carpet
-    if (supported && (elevated || snap?.elevated)) this._lastElevated = true;
-    if (supported && snap?.carpet && !elevated) this._lastElevated = false;
-    if (supported && snap?.onTrack && snap?.kind === "floor") this._lastElevated = false;
+    // Truly elevated = cornice/balcony/furniture/mid-ramp above story floor.
+    // Ramp bases / floor asphalt must NEVER latch elevated (that caused floor crashes).
+    const storyYNow = this._nearestStoryFloor(this.root.position.y);
+    const trulyElevated = !!(elevated && snap && (
+      snap.kind === "cornice" || snap.kind === "balcony"
+      || (snap.y != null && storyYNow != null && snap.y > storyYNow + 0.45)
+      || (snap.y != null && storyYNow == null && snap.y > 0.55)
+    ));
+    if (supported && trulyElevated) this._lastElevated = true;
+    if (supported && (snap?.carpet || snap?.kind === "floor" || snap?.kind === "outdoor" || snap?.kind === "flower")) {
+      this._lastElevated = false;
+    }
+    if (supported && snap?.onTrack && !trulyElevated) this._lastElevated = false;
 
-    // Support grace: N frames without surface → airborne (elevated fails faster)
+    // Floor / outdoor / carpet = slow only. Crash ONLY after leaving elevated rail into void.
     if (supported && !this.airborne) {
       this._unsupportedFrames = 0;
       this._fallStartY = 0;
     } else if (!this.airborne) {
       this._unsupportedFrames += 1;
-      const fromElev = !!(elevated || snap?.wasElevated || this._lastElevated);
-      const limit = fromElev ? 3 : 8;
-      // Open floor of any story = carpet crawl — unless we just left an elevated run
+      const fromElev = !!(this._lastElevated || trulyElevated);
       const storyY = this._nearestStoryFloor(this.root.position.y);
-      const onStoryCarpet = !fromElev && storyY != null
-        && Math.abs(this.root.position.y - storyY) < 0.55;
-      if (!onStoryCarpet && this._unsupportedFrames >= limit) {
+      // Any story floor / outdoor ground band → carpet crawl, never fall
+      const onFloorBand = storyY != null
+        && Math.abs(this.root.position.y - storyY) < 0.85;
+      if (onFloorBand) {
+        this._lastElevated = false;
+        this.root.position.y = THREE.MathUtils.lerp(
+          this.root.position.y, storyY, Math.min(1, 10 * dt)
+        );
+        this._unsupportedFrames = 0;
+      } else if (fromElev && this._unsupportedFrames >= 3) {
         this.airborne = true;
         this._fallStartY = this.root.position.y;
         this._lastElevated = false;
         this.vy = Math.min(this.vy, 0.15);
         flags.fell = true;
-      } else if (onStoryCarpet && !supported) {
-        this.root.position.y = THREE.MathUtils.lerp(
-          this.root.position.y, storyY, Math.min(1, 8 * dt)
-        );
+      } else if (!fromElev && this._unsupportedFrames >= 14) {
+        // Mid-air between stories with no surface — rare; allow fall
+        this.airborne = true;
+        this._fallStartY = this.root.position.y;
+        this.vy = Math.min(this.vy, 0.15);
+        flags.fell = true;
       }
     }
 
@@ -543,7 +561,7 @@ export class RCCar {
     this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
     let maxV = keys.boost ? this.boostMax : this.maxSpeed;
     if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
-      maxV *= 0.58; // milder carpet / off-ribbon penalty (was 0.38)
+      maxV *= 0.62; // mild carpet / off-ribbon penalty — slow, never crash
     }
     if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
     const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
@@ -582,11 +600,11 @@ export class RCCar {
     }
 
     const absV = Math.abs(this.speed);
-    const lowBoost = 1.55 - 0.38 * THREE.MathUtils.smoothstep(absV, 0.08, 1.4);
-    const highDamp = 1 - 0.38 * THREE.MathUtils.smoothstep(absV, 1.2, this.boostMax);
-    const railGrip = (onRailDeck && snap?.onTrack) ? 1.08 : 1;
+    const lowBoost = 1.28 - 0.28 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
+    const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
+    const railGrip = (onRailDeck && snap?.onTrack) ? 1.05 : 1;
     const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.22, absV / 0.5 + 0.24) * lowBoost * highDamp * railGrip;
+      this._steerInput * this.steerRate * Math.min(1.05, absV / 0.62 + 0.18) * lowBoost * highDamp * railGrip;
     this.yaw += steerEff * Math.sign(this.speed || 1) * dt;
 
     this._driftTrail = THREE.MathUtils.lerp(

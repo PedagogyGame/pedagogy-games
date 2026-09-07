@@ -20,7 +20,7 @@ export class Player {
     /** Shift = purposeful brisk walk, not sprint chaos */
     this.briskSpeed = 5.6;
     this.eyeHeight = 1.6;
-    this.radius = 0.32;
+    this.radius = 0.36;
     this.floorY = 0;
     /** @type {null | ((x:number,z:number)=>number)} set by main — should pass this.floorY as story hint */
     this.getFloorY = null;
@@ -149,53 +149,92 @@ export class Player {
     }
   }
 
-  /** Axis-separated slide — avoids getting wedged in corners / doorways. */
+  /**
+   * Robust wall blocking: multi-pass axis slide + minimum-penetration push-out.
+   * Character must never tunnel through thin mansion walls.
+   */
   _resolveColliders(obj, before, colliders) {
-    for (const box of colliders) {
-      if (obj.position.y + 0.5 < box.min.y || obj.position.y - 1.8 > box.max.y) continue;
-      if (!this._hits(obj.position, box)) continue;
+    const feetY = () => obj.position.y - this.eyeHeight + 0.15;
+    const headY = () => obj.position.y + 0.35;
 
-      // Try X-only then Z-only movement from the pre-move pose
-      const tryX = before.clone();
-      tryX.x = obj.position.x;
-      tryX.y = obj.position.y;
-      const tryZ = before.clone();
-      tryZ.z = obj.position.z;
-      tryZ.y = obj.position.y;
+    const overlapsY = (box) => !(headY() < box.min.y || feetY() > box.max.y);
 
-      const okX = !this._hits(tryX, box);
-      const okZ = !this._hits(tryZ, box);
+    for (let pass = 0; pass < 3; pass++) {
+      let hitAny = false;
+      for (const box of colliders) {
+        if (!overlapsY(box)) continue;
+        if (!this._hits(obj.position, box)) continue;
+        hitAny = true;
 
-      if (okX && !okZ) {
-        obj.position.x = tryX.x;
-        obj.position.z = before.z;
-        this.velocity.z *= 0.35;
-      } else if (okZ && !okX) {
-        obj.position.z = tryZ.z;
-        obj.position.x = before.x;
-        this.velocity.x *= 0.35;
-      } else if (okX && okZ) {
-        // Both axes free alone — pick the larger travel (less sticky)
-        const dx = Math.abs(obj.position.x - before.x);
-        const dz = Math.abs(obj.position.z - before.z);
-        if (dx >= dz) {
+        const tryX = before.clone();
+        tryX.x = obj.position.x;
+        tryX.y = obj.position.y;
+        const tryZ = before.clone();
+        tryZ.z = obj.position.z;
+        tryZ.y = obj.position.y;
+
+        const okX = !this._hits(tryX, box);
+        const okZ = !this._hits(tryZ, box);
+
+        if (okX && !okZ) {
           obj.position.x = tryX.x;
           obj.position.z = before.z;
-          this.velocity.z *= 0.35;
-        } else {
+          this.velocity.z *= 0.25;
+        } else if (okZ && !okX) {
           obj.position.z = tryZ.z;
           obj.position.x = before.x;
-          this.velocity.x *= 0.35;
+          this.velocity.x *= 0.25;
+        } else if (okX && okZ) {
+          const dx = Math.abs(obj.position.x - before.x);
+          const dz = Math.abs(obj.position.z - before.z);
+          if (dx >= dz) {
+            obj.position.x = tryX.x;
+            obj.position.z = before.z;
+            this.velocity.z *= 0.25;
+          } else {
+            obj.position.z = tryZ.z;
+            obj.position.x = before.x;
+            this.velocity.x *= 0.25;
+          }
+        } else {
+          obj.position.x = before.x;
+          obj.position.z = before.z;
+          this.velocity.x *= 0.15;
+          this.velocity.z *= 0.15;
+          this._depenetrate(obj, box);
+          const fy = this._sampleFloor(obj.position.x, obj.position.z);
+          obj.position.y = fy + this.eyeHeight;
+          this.floorY = fy;
         }
-      } else {
-        obj.position.copy(before);
-        this.velocity.x *= 0.2;
-        this.velocity.z *= 0.2;
-        const fy = this._sampleFloor(obj.position.x, obj.position.z);
-        obj.position.y = fy + this.eyeHeight;
-        this.floorY = fy;
+
+        if (this._hits(obj.position, box)) {
+          this._depenetrate(obj, box);
+        }
       }
+      if (!hitAny) break;
+      before.x = obj.position.x;
+      before.z = obj.position.z;
+      before.y = obj.position.y;
     }
+  }
+
+  /** Push capsule out along the shallowest penetration axis. */
+  _depenetrate(obj, box) {
+    const r = this.radius;
+    const px = obj.position.x;
+    const pz = obj.position.z;
+    const overlapL = (px + r) - box.min.x;
+    const overlapR = box.max.x - (px - r);
+    const overlapD = (pz + r) - box.min.z;
+    const overlapU = box.max.z - (pz - r);
+    if (overlapL <= 0 || overlapR <= 0 || overlapD <= 0 || overlapU <= 0) return;
+
+    const minPen = Math.min(overlapL, overlapR, overlapD, overlapU);
+    const eps = 0.002;
+    if (minPen === overlapL) obj.position.x = box.min.x - r - eps;
+    else if (minPen === overlapR) obj.position.x = box.max.x + r + eps;
+    else if (minPen === overlapD) obj.position.z = box.min.z - r - eps;
+    else obj.position.z = box.max.z + r + eps;
   }
 
   _hits(pos, box) {
@@ -204,9 +243,7 @@ export class Player {
       pos.x + r > box.min.x &&
       pos.x - r < box.max.x &&
       pos.z + r > box.min.z &&
-      pos.z - r < box.max.z &&
-      pos.y < box.max.y &&
-      pos.y > box.min.y
+      pos.z - r < box.max.z
     );
   }
 

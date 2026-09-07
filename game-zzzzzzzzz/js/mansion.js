@@ -372,6 +372,7 @@ export class Mansion {
         for (const s of room.stairs) this._buildStair(s, room);
       }
     }
+    this._buildDoorConnectors();
     this._buildExteriorFacade();
     this._buildBalcony();
     this._buildGardenFeatures();
@@ -1164,47 +1165,92 @@ export class Mansion {
     }
 
     // Sophisticated baseboard + chair rail matching cornice brass/wood
+    // Split around doorways so trim never blocks openings
     const bbH = 0.22;
     const chairY = cy + 0.92;
     const woodTrim = this._mat(0x3e2723, 0.55, 0.12);
     const brassTrim = this._brass(p.trim);
+    const doorGap = 2.75;
     for (const wall of walls) {
       const [sx, , sz] = wall.size;
       const [px, , pz] = wall.pos;
       const horiz = sx > sz;
-      // Tall baseboard
-      const bb = new THREE.Mesh(
-        new THREE.BoxGeometry(horiz ? sx - 0.15 : 0.1, bbH, horiz ? 0.1 : sz - 0.15),
-        woodTrim
-      );
-      bb.position.set(px, cy + bbH / 2, pz);
-      g.add(bb);
-      // Cap molding on baseboard
-      const cap = new THREE.Mesh(
-        new THREE.BoxGeometry(horiz ? sx - 0.12 : 0.12, 0.04, horiz ? 0.12 : sz - 0.12),
-        brassTrim
-      );
-      cap.position.set(px, cy + bbH + 0.015, pz);
-      g.add(cap);
-      // Chair rail
-      const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(horiz ? sx - 0.2 : 0.07, 0.06, horiz ? 0.07 : sz - 0.2),
-        brassTrim
-      );
-      rail.position.set(px, chairY, pz);
-      g.add(rail);
-      // Wainscot panel field (below chair rail)
+      const hasDoor = !!doorways[wall.side];
+      const segments = [];
+      if (hasDoor && horiz) {
+        const remain = (sx - doorGap) / 2;
+        if (remain > 0.2) {
+          segments.push({
+            size: [remain - 0.08, null, null],
+            pos: [px - (doorGap / 2 + remain / 2), null, pz],
+          });
+          segments.push({
+            size: [remain - 0.08, null, null],
+            pos: [px + (doorGap / 2 + remain / 2), null, pz],
+          });
+        }
+      } else if (hasDoor && !horiz) {
+        const remain = (sz - doorGap) / 2;
+        if (remain > 0.2) {
+          segments.push({
+            size: [null, null, remain - 0.08],
+            pos: [px, null, pz - (doorGap / 2 + remain / 2)],
+          });
+          segments.push({
+            size: [null, null, remain - 0.08],
+            pos: [px, null, pz + (doorGap / 2 + remain / 2)],
+          });
+        }
+      } else {
+        segments.push({
+          size: [horiz ? sx - 0.15 : 0.1, null, horiz ? 0.1 : sz - 0.15],
+          pos: [px, null, pz],
+        });
+      }
+      for (const seg of segments) {
+        const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.15 : 0.1);
+        const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.1 : sz - 0.15);
+        const bx = seg.pos[0];
+        const bz = seg.pos[2];
+        // Tall baseboard
+        const bb = new THREE.Mesh(
+          new THREE.BoxGeometry(horiz ? bw : 0.1, bbH, horiz ? 0.1 : bd),
+          woodTrim
+        );
+        bb.position.set(bx, cy + bbH / 2, bz);
+        g.add(bb);
+        // Cap molding on baseboard
+        const cap = new THREE.Mesh(
+          new THREE.BoxGeometry(horiz ? bw + 0.03 : 0.12, 0.04, horiz ? 0.12 : bd + 0.03),
+          brassTrim
+        );
+        cap.position.set(bx, cy + bbH + 0.015, bz);
+        g.add(cap);
+        // Chair rail
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(horiz ? bw - 0.05 : 0.07, 0.06, horiz ? 0.07 : bd - 0.05),
+          brassTrim
+        );
+        rail.position.set(bx, chairY, bz);
+        g.add(rail);
+      }
+      // Wainscot panel field (below chair rail) — same segments, never across doors
       const wainH = chairY - cy - bbH - 0.08;
       if (wainH > 0.3) {
-        const wain = new THREE.Mesh(
-          new THREE.BoxGeometry(horiz ? sx - 0.45 : 0.05, wainH, horiz ? 0.05 : sz - 0.45),
-          this._mat(
-            ((p.wall >> 1) & 0x7f7f7f) | 0x101010,
-            0.72, 0.05
-          )
+        const wainMat = this._mat(
+          ((p.wall >> 1) & 0x7f7f7f) | 0x101010,
+          0.72, 0.05
         );
-        wain.position.set(px, cy + bbH + 0.04 + wainH / 2, pz);
-        g.add(wain);
+        for (const seg of segments) {
+          const bw = seg.size[0] != null ? seg.size[0] : (horiz ? sx - 0.45 : 0.05);
+          const bd = seg.size[2] != null ? seg.size[2] : (horiz ? 0.05 : sz - 0.45);
+          const wain = new THREE.Mesh(
+            new THREE.BoxGeometry(horiz ? Math.max(0.1, bw - 0.2) : 0.05, wainH, horiz ? 0.05 : Math.max(0.1, bd - 0.2)),
+            wainMat
+          );
+          wain.position.set(seg.pos[0], cy + bbH + 0.04 + wainH / 2, seg.pos[2]);
+          g.add(wain);
+        }
       }
     }
 
@@ -2419,33 +2465,110 @@ export class Mansion {
   }
 
   _doorwaysFor(room) {
-    const pairs = {
-      foyer: { north: true, south: true },
-      hall_ground: { south: true, west: true, east: true, north: true },
-      cabinet: { east: true },
-      armoury: { west: true },
-      conservatory: { south: true, west: true, east: true, north: true },
-      dining: { east: true },
-      hall_east: { west: true },
-      landing: { north: true, south: true },
-      library_hall: { south: true, west: true, east: true, north: true },
-      workshop: { east: true },
-      music: { south: true, west: true, east: true },
-      study_annex: { west: true },
-      study: { east: true },
-      nursery: { west: true },
-      attic_loft: { north: true },
-      science_attic: { south: true },
-      cellar: {},
-    };
-    return pairs[room.id] || {};
+    // Derive from exits so openings always match connected rooms.
+    const dirs = {};
+    const exits = room.exits || {};
+    for (const dir of ["north", "south", "east", "west"]) {
+      const destId = exits[dir];
+      if (!destId) continue;
+      const dest = ROOMS[destId];
+      // Indoor↔indoor, or indoor→named outdoor approach (front_drive / terrace / balcony)
+      if (dest || destId === "front_drive" || destId === "terrace" || destId === "balcony") {
+        dirs[dir] = true;
+      }
+    }
+    // Landing south opens onto the exterior balcony approach
+    if (room.id === "landing") dirs.south = true;
+    // Conservatory north opens to terrace gardens
+    if (room.id === "conservatory") dirs.north = true;
+    // Foyer south opens to front drive
+    if (room.id === "foyer") dirs.south = true;
+    return dirs;
+  }
+
+  /**
+   * Story-aware floor bridges through doorway gaps so rooms that don't
+   * perfectly abut still connect — no drop-through, no invisible blockers.
+   */
+  _buildDoorConnectors() {
+    const opposite = { north: "south", south: "north", east: "west", west: "east" };
+    const done = new Set();
+    const doorW = 2.8; // slightly wider than wall opening for foot path
+    for (const room of Object.values(ROOMS)) {
+      if (room.outdoor) continue;
+      const exits = room.exits || {};
+      for (const dir of ["north", "south", "east", "west"]) {
+        const destId = exits[dir];
+        if (!destId || !ROOMS[destId] || ROOMS[destId].outdoor) continue;
+        const key = [room.id, destId].sort().join(">");
+        if (done.has(key)) continue;
+        done.add(key);
+        const dest = ROOMS[destId];
+        // Only connect if dest also exits back (or we force bidirectional floor)
+        const back = opposite[dir];
+        if (!(dest.exits && (dest.exits[back] === room.id))) {
+          // still bridge if dest lists us under any horizontal exit
+          const listsBack = dest.exits && Object.values(dest.exits).includes(room.id);
+          if (!listsBack) continue;
+        }
+
+        const [w1, , d1] = room.size;
+        const [cx1, cy1, cz1] = room.pos;
+        const [w2, , d2] = dest.size;
+        const [cx2, cy2, cz2] = dest.pos;
+        if (Math.abs(cy1 - cy2) > 0.2) continue; // same story only
+
+        let minX, maxX, minZ, maxZ;
+        if (dir === "north" || dir === "south") {
+          // Bridge along Z between the facing wall edges
+          const edge1 = dir === "north" ? cz1 - d1 / 2 : cz1 + d1 / 2;
+          const edge2 = dir === "north" ? cz2 + d2 / 2 : cz2 - d2 / 2;
+          minZ = Math.min(edge1, edge2) - 0.15;
+          maxZ = Math.max(edge1, edge2) + 0.15;
+          const midX = (cx1 + cx2) / 2;
+          minX = midX - doorW / 2;
+          maxX = midX + doorW / 2;
+        } else {
+          const edge1 = dir === "west" ? cx1 - w1 / 2 : cx1 + w1 / 2;
+          const edge2 = dir === "west" ? cx2 + w2 / 2 : cx2 - w2 / 2;
+          minX = Math.min(edge1, edge2) - 0.15;
+          maxX = Math.max(edge1, edge2) + 0.15;
+          const midZ = (cz1 + cz2) / 2;
+          minZ = midZ - doorW / 2;
+          maxZ = midZ + doorW / 2;
+        }
+
+        // Always add a high-priority floor strip so gaps never drop to lawn
+        this.floorRegions.push({
+          minX, maxX, minZ, maxZ,
+          y: cy1,
+          priority: 6,
+          roomId: `connector_${room.id}_${destId}`,
+        });
+
+        // Visual floor plank only when there is a real gap (> ~0.35 m)
+        const gap = (dir === "north" || dir === "south")
+          ? Math.abs((dir === "north" ? cz1 - d1 / 2 : cz1 + d1 / 2) - (dir === "north" ? cz2 + d2 / 2 : cz2 - d2 / 2))
+          : Math.abs((dir === "west" ? cx1 - w1 / 2 : cx1 + w1 / 2) - (dir === "west" ? cx2 + w2 / 2 : cx2 - w2 / 2));
+        if (gap > 0.35) {
+          const plank = new THREE.Mesh(
+            new THREE.BoxGeometry(Math.max(0.2, maxX - minX), 0.12, Math.max(0.2, maxZ - minZ)),
+            this._mat(0x5d4037, 0.82, 0.05)
+          );
+          plank.position.set((minX + maxX) / 2, cy1 - 0.04, (minZ + maxZ) / 2);
+          plank.receiveShadow = true;
+          plank.name = `door_bridge_${room.id}_${destId}`;
+          this.root.add(plank);
+        }
+      }
+    }
   }
 
   _addWallWithDoor(group, wall, color, thick, trimColor) {
     const [sx, sy, sz] = wall.size;
     const [px, py, pz] = wall.pos;
-    const doorW = 2.4;
-    const doorH = Math.min(sy * 0.85, 3.2);
+    const doorW = 2.7; // wider passage — matches connector bridges
+    const doorH = Math.min(sy * 0.88, 3.35);
     const horizontal = sx > sz;
     if (horizontal) {
       const remain = (sx - doorW) / 2;

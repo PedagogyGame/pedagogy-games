@@ -12,25 +12,28 @@ function makeCanvas(w, h) {
 }
 
 function makeAsphaltTexture() {
+  // Markings baked into ONE texture (no separate line meshes). Soft white
+  // edges avoid z-fight shards when ribbons briefly overlap at junctions.
   const c = makeCanvas(256, 256);
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
   ctx.fillStyle = "#1c1c22";
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 900; i++) {
-    const v = 28 + Math.random() * 50;
-    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.4)`;
+  for (let i = 0; i < 700; i++) {
+    const v = 28 + Math.random() * 48;
+    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.35)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  ctx.strokeStyle = "#e8eaf0";
-  ctx.lineWidth = 10;
+  // Soft inset edge lines (narrow + muted — yellow dashes stay crisp)
+  ctx.strokeStyle = "rgba(200,205,215,0.55)";
+  ctx.lineWidth = 5;
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(18, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(238, 0); ctx.lineTo(238, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(22, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(234, 0); ctx.lineTo(234, 256); ctx.stroke();
   ctx.strokeStyle = "#f5c400";
-  ctx.lineWidth = 6;
-  ctx.setLineDash([18, 14]);
+  ctx.lineWidth = 5;
+  ctx.setLineDash([16, 14]);
   ctx.beginPath();
   ctx.moveTo(128, 0);
   ctx.lineTo(128, 256);
@@ -39,6 +42,9 @@ function makeAsphaltTexture() {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   return tex;
 }
 
@@ -205,6 +211,7 @@ export class TrackSystem {
     this._tmp = new THREE.Vector3();
     this._moteMats = [];
     this._speedGates = [];
+    this._sharedMats = this._makeSharedRoadMats();
     this._buildAll();
   }
 
@@ -215,24 +222,58 @@ export class TrackSystem {
   }
 
   _buildPath(path) {
-    const pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    let pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     if (pts.length < 2) return;
+    // Drop duplicate closed endpoint (avoids starburst fan at loop seams)
+    if (path.closed && pts.length > 2 && pts[0].distanceTo(pts[pts.length - 1]) < 0.05) {
+      pts = pts.slice(0, -1);
+    }
     const width = path.width || 1.2;
     const kind = path.kind || "floor";
     const tension = path.tension != null ? path.tension : 0.22;
+    const useRibbon = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel";
+    // Short door/jamb strips: inset ends so they kiss parent skirting instead of coplanar-overlapping
+    const isDoorStrip = typeof path.id === "string" && path.id.startsWith("door_");
+    if (isDoorStrip && useRibbon && pts.length >= 2) {
+      const inset = Math.min(width * 0.85, 0.28);
+      if (pts.length === 2) {
+        const dir = new THREE.Vector3().subVectors(pts[1], pts[0]);
+        const len = dir.length();
+        if (len > inset * 2.2) {
+          dir.normalize();
+          pts[0].addScaledVector(dir, inset);
+          pts[1].addScaledVector(dir, -inset * 0.35);
+        }
+      } else {
+        const d0 = new THREE.Vector3().subVectors(pts[1], pts[0]);
+        if (d0.length() > inset * 1.2) {
+          d0.normalize();
+          pts[0].addScaledVector(d0, inset);
+        }
+      }
+    }
 
     let curvePts = pts;
     if (pts.length >= 3) {
       const curve = new THREE.CatmullRomCurve3(pts, !!path.closed, "catmullrom", tension);
+      // Middle density: smooth enough for clean edges, not 16× FPS bomb
       const dense =
         kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony"
-          ? (path.fancy ? 14 : 10)
+          ? (path.fancy ? 8 : 6)
           : kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute"
-            ? 6
+            ? 4
             : kind === "flower" || kind === "tunnel" ? 6
-              : kind === "floor" || kind === "outdoor" ? 8 : 5;
-      const n = Math.max(pts.length * dense, path.fancy ? 48 : 24);
+              : kind === "floor" || kind === "outdoor" ? 6 : 4;
+      const n = Math.max(pts.length * dense, path.fancy ? 40 : (useRibbon ? 28 : 16));
       curvePts = curve.getPoints(n);
+    } else if (useRibbon && pts.length === 2) {
+      // Densify short 2-point asphalt strips so the ribbon still looks continuous
+      const a = pts[0], b = pts[1];
+      const steps = Math.max(3, Math.ceil(a.distanceTo(b) * 3.5));
+      curvePts = [];
+      for (let i = 0; i <= steps; i++) {
+        curvePts.push(new THREE.Vector3().lerpVectors(a, b, i / steps));
+      }
     }
 
     const isRail =
@@ -262,7 +303,12 @@ export class TrackSystem {
         tube: TUBE_KINDS.has(kind),
       });
 
-      this._addRoadMesh(a, b, dir, len, width, kind, isRail);
+      if (!useRibbon) this._addRoadMesh(a, b, dir, len, width, kind, isRail);
+    }
+
+    // Continuous asphalt/floor ribbon — no BoxGeometry segment joins / light-leak gaps
+    if (useRibbon) {
+      this._addRibbonRoad(curvePts, width, kind, !!path.closed);
     }
 
     for (const op of path.points) {
@@ -304,7 +350,211 @@ export class TrackSystem {
     }
   }
 
-  _orientMesh(mesh, dir) {
+  _makeSharedRoadMats() {
+    const asphaltMap = this._asphalt;
+    const petalMap = this._petal;
+    // Shared mats + depth bias: markings live in texture only (no coplanar line meshes)
+    const bias = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: true };
+    const asphalt = new THREE.MeshStandardMaterial({
+      color: asphaltMap ? 0xffffff : 0x1c1c22,
+      roughness: 0.82,
+      metalness: 0.06,
+      ...(asphaltMap ? { map: asphaltMap } : {}),
+      ...bias,
+    });
+    if (asphaltMap) {
+      asphaltMap.wrapS = asphaltMap.wrapT = THREE.RepeatWrapping;
+      asphaltMap.repeat.set(1, 1);
+    }
+    const outdoor = new THREE.MeshStandardMaterial({
+      color: asphaltMap ? 0xffffff : 0x5c564c,
+      roughness: 0.88,
+      metalness: 0.05,
+      ...(asphaltMap ? { map: asphaltMap } : {}),
+      ...bias,
+    });
+    const flower = new THREE.MeshStandardMaterial({
+      color: petalMap ? 0xffffff : 0x5d4037,
+      roughness: 0.88,
+      metalness: 0.04,
+      ...(petalMap ? { map: petalMap } : {}),
+      ...bias,
+    });
+    const tunnel = new THREE.MeshStandardMaterial({
+      color: 0x3e2723, roughness: 0.65, metalness: 0.12,
+      ...bias,
+    });
+    return { asphalt, outdoor, flower, tunnel };
+  }
+
+  _roadMatForKind(kind) {
+    if (kind === "outdoor") return this._sharedMats.outdoor;
+    if (kind === "flower") return this._sharedMats.flower;
+    if (kind === "tunnel") return this._sharedMats.tunnel;
+    return this._sharedMats.asphalt;
+  }
+
+  /**
+   * Seamless road ribbon: ONE top-deck strip (markings in shared texture only).
+   * Smoothed right-vectors kill sawtooth edges; no coplanar bottom / line meshes.
+   */
+  _addRibbonRoad(curvePts, width, kind, closed) {
+    if (!curvePts || curvePts.length < 2) return;
+    const pts = curvePts.slice();
+    if (closed) {
+      const f = pts[0], l = pts[pts.length - 1];
+      if (f.distanceTo(l) > 0.02) pts.push(f.clone());
+    }
+    const halfW = width * 0.5;
+    // Top deck only — sit clearly above room floors (kills floor z-fight shards)
+    const yLift = kind === "outdoor" ? 0.01 : 0.008;
+    const n = pts.length;
+    const positions = [];
+    const normals = [];
+    const uvs = [];
+    const indices = [];
+    const rights = [];
+    const ups = [];
+    const tangents = [];
+
+    for (let i = 0; i < n; i++) {
+      const p = pts[i];
+      let tangent;
+      if (i === 0) tangent = new THREE.Vector3().subVectors(pts[1], p);
+      else if (i === n - 1) tangent = new THREE.Vector3().subVectors(p, pts[i - 1]);
+      else tangent = new THREE.Vector3().subVectors(pts[i + 1], pts[i - 1]);
+      if (tangent.lengthSq() < 1e-10) tangent.set(0, 0, 1);
+      tangent.normalize();
+      tangents.push(tangent);
+      let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), tangent);
+      if (right.lengthSq() < 1e-8) {
+        right = new THREE.Vector3().crossVectors(new THREE.Vector3(1, 0, 0), tangent);
+      }
+      right.normalize();
+      const up = new THREE.Vector3().crossVectors(tangent, right).normalize();
+      rights.push(right);
+      ups.push(up);
+    }
+
+    // Flip continuity then Laplacian-smooth rights (stable width, no sawtooth ribbon)
+    for (let i = 1; i < n; i++) {
+      if (rights[i].dot(rights[i - 1]) < 0) {
+        rights[i].multiplyScalar(-1);
+        ups[i].multiplyScalar(-1);
+      }
+    }
+    const smoothR = rights.map((r) => r.clone());
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < n - 1; i++) {
+        const avg = new THREE.Vector3()
+          .add(smoothR[i - 1])
+          .add(smoothR[i])
+          .add(smoothR[i + 1])
+          .multiplyScalar(1 / 3);
+        // Re-orthogonalize to tangent in XZ
+        const t = tangents[i];
+        avg.sub(t.clone().multiplyScalar(avg.dot(t)));
+        if (avg.lengthSq() > 1e-8) smoothR[i].copy(avg.normalize());
+      }
+      // Keep end continuity
+      if (n > 2) {
+        if (smoothR[0].dot(smoothR[1]) < 0) smoothR[0].multiplyScalar(-1);
+        if (smoothR[n - 1].dot(smoothR[n - 2]) < 0) smoothR[n - 1].multiplyScalar(-1);
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      rights[i].copy(smoothR[i]);
+      ups[i].crossVectors(tangents[i], rights[i]).normalize();
+    }
+
+    let dist = 0;
+    const vPer = 2; // L-top, R-top only (no bottom deck = no coplanar fight)
+    for (let i = 0; i < n; i++) {
+      if (i > 0) dist += pts[i].distanceTo(pts[i - 1]);
+      const p = pts[i];
+      const right = rights[i];
+      const up = ups[i];
+      // Stable along-track UV (width-normalized) — no swimming edge shards
+      const u = dist / Math.max(0.55, width);
+      const y = p.y + yLift;
+      const lx = p.x - right.x * halfW;
+      const lz = p.z - right.z * halfW;
+      const rx = p.x + right.x * halfW;
+      const rz = p.z + right.z * halfW;
+
+      positions.push(lx, y, lz);
+      positions.push(rx, y, rz);
+      normals.push(up.x, up.y, up.z);
+      normals.push(up.x, up.y, up.z);
+      uvs.push(0, u);
+      uvs.push(1, u);
+
+      if (i < n - 1) {
+        const a = i * vPer;
+        const b = (i + 1) * vPer;
+        indices.push(a, a + 1, b + 1, a, b + 1, b);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeBoundingSphere();
+
+    const mat = this._roadMatForKind(kind);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.frustumCulled = true;
+    mesh.renderOrder = 1;
+    this.root.add(mesh);
+
+    if (kind === "flower") {
+      this._addFlowerRibbonEdges(pts, rights, ups, width, 0.02, yLift);
+    }
+  }
+
+  _addFlowerRibbonEdges(pts, rights, ups, width, thick, yLift) {
+    const petalColors = [0xe91e63, 0xf48fb1, 0xffcdd2, 0xce93d8];
+    const halfW = width * 0.5 - 0.02;
+    for (const side of [-1, 1]) {
+      const positions = [];
+      const indices = [];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const up = ups[i];
+        const ox = r.x * side * halfW;
+        const oz = r.z * side * halfW;
+        const y = p.y + yLift + thick * 0.7;
+        positions.push(p.x + ox - r.x * 0.015, y, p.z + oz - r.z * 0.015);
+        positions.push(p.x + ox + r.x * 0.015, y, p.z + oz + r.z * 0.015);
+        if (i < pts.length - 1) {
+          const a = i * 2;
+          const b = (i + 1) * 2;
+          indices.push(a, a + 1, b + 1, a, b + 1, b);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      const dust = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({
+          color: petalColors[(side + 1) % petalColors.length],
+          roughness: 0.7, metalness: 0.05,
+          emissive: 0xe91e63, emissiveIntensity: 0.18,
+          transparent: true, opacity: 0.75, side: THREE.DoubleSide,
+        })
+      );
+      this.root.add(dust);
+    }
+  }
+
+    _orientMesh(mesh, dir) {
     const up = new THREE.Vector3(0, 1, 0);
     const zAxis = dir.clone().normalize();
     const xAxis = new THREE.Vector3().crossVectors(up, zAxis);
@@ -709,20 +959,7 @@ export class TrackSystem {
               p.z + right.z * side * (wallSep - 0.02)
             );
             this.root.add(stud);
-            // Horizontal plaster lath hint
-            for (let ly = 0; ly < 3; ly++) {
-              const lath = new THREE.Mesh(
-                new THREE.BoxGeometry(0.01, 0.012, chamber ? 0.7 : 0.4),
-                new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 0.85, metalness: 0.02 })
-              );
-              lath.position.set(
-                p.x + right.x * side * (wallSep - 0.04),
-                p.y + 0.15 + ly * 0.18,
-                p.z + right.z * side * (wallSep - 0.04)
-              );
-              lath.rotation.y = yaw;
-              this.root.add(lath);
-            }
+            // One plaster lath hint (culled for FPS — was 3× per stud)
           }
         }
       }
@@ -805,8 +1042,8 @@ export class TrackSystem {
         this.root.add(crack);
       }
 
-      // Dust motes
-      if (i % 2 === 0) {
+      // Dust motes (sparser for FPS)
+      if (i % 3 === 0) {
         const mote = new THREE.Mesh(new THREE.SphereGeometry(0.022, 5, 5), moteMat);
         mote.position.set(
           p.x + (Math.random() - 0.5) * width * 0.35,
@@ -1087,6 +1324,16 @@ export class TrackSystem {
   querySnap(x, y, z, radius = 2.4) {
     let best = null;
     let bestScore = Infinity;
+    // Story floor band: prefer floor asphalt / carpet; ignore overhead chutes & cornices
+    const storyFloors = [8.46, 4.26, 0.045, -4.05];
+    let storyY = null;
+    let storyDy = 0.85;
+    for (const f of storyFloors) {
+      const d = Math.abs(y - f);
+      if (d < storyDy) { storyDy = d; storyY = f; }
+    }
+    const onStoryBand = storyY != null;
+
     for (const seg of this.segments) {
       const abx = seg.b.x - seg.a.x;
       const aby = seg.b.y - seg.a.y;
@@ -1112,12 +1359,21 @@ export class TrackSystem {
       const dy = Math.abs(y - py);
       const elev = ELEV_KINDS.has(seg.kind);
       const tube = TUBE_KINDS.has(seg.kind);
-      const heightBand = elev || tube ? 1.35 : 2.8;
-      const useRadius = elev ? radius * 0.85 : (FLOOR_KINDS.has(seg.kind) ? radius * 1.45 : radius * 1.2);
+      const isFloor = FLOOR_KINDS.has(seg.kind);
+      // Cruising a story floor: skip elevated/tube unless nearly coplanar (ramp/chute lip)
+      if (onStoryBand && (elev || tube) && dy > 0.4 && Math.abs(py - storyY) > 0.35) {
+        continue;
+      }
+      const heightBand = elev || tube ? 1.15 : 2.8;
+      const useRadius = elev || tube
+        ? radius * 0.7
+        : (isFloor ? radius * 1.45 : radius * 1.2);
       const checkDist = steep ? dist3 : dist;
       if (dy > heightBand || checkDist > useRadius) continue;
       const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.25 : 0;
-      const score = (steep ? dist3 : dist) + dy * (elev ? 0.55 : 0.28) + pathBias;
+      const floorBias = (onStoryBand && isFloor) ? -0.55 : 0;
+      const elevPenalty = (onStoryBand && (elev || tube)) ? 0.9 : 0;
+      const score = (steep ? dist3 : dist) + dy * (elev ? 0.85 : 0.28) + pathBias + floorBias + elevPenalty;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
@@ -1148,13 +1404,12 @@ export class TrackSystem {
         // Exiting tube sideways into void — not supported
         const exitedTube = tube && dist > halfW * 1.25 && !steep;
 
-        const isFloor = FLOOR_KINDS.has(seg.kind);
-        // Off asphalt but near ground road → carpet crawl (still driveable, no fall)
-        const carpet = isFloor && !onTrack && py < 0.5;
+        // Off asphalt but near any story floor road → carpet crawl (slow, never fall)
+        const carpet = isFloor && !onTrack && dy < 0.9;
         const lateral = steep ? dist3 : dist;
         const edgeMargin = halfW - lateral; // >0 = inside track; small = near rim
         best = {
-          x: px, y: (carpet ? 0.045 : py + 0.03), z: pz,
+          x: px, y: (carpet ? py + 0.01 : py + 0.03), z: pz,
           yaw, bank,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
@@ -1174,14 +1429,27 @@ export class TrackSystem {
     }
 
     if (best) {
-      if (best.pathId) this._lastPathId = best.pathId;
+      // Off-track elevated/tube while cruising a story floor → carpet, not fall latch
+      if (onStoryBand && (best.elevated || best.tube) && !best.onTrack) {
+        best = {
+          x, y: storyY, z,
+          yaw: null, bank: 0,
+          onTrack: false, supported: true, softPull: false,
+          carpet: true, dist: best.dist, kind: "floor", pathId: null, label: null,
+          wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+          edgeMargin: 1, halfW: 1,
+        };
+      } else {
+        if (best.pathId) this._lastPathId = best.pathId;
+      }
       return best;
     }
 
-    // Ground-level open floor only (upper stories rely on nearby floor segments / car carpet)
-    if (y < 0.55) {
+    // Open floor of any mansion story → carpet crawl (slow), never void/crash
+    if (onStoryBand && storyY != null) {
+      const nearestStory = storyY;
       return {
-        x, y: 0.045, z,
+        x, y: nearestStory, z,
         yaw: null, bank: 0,
         onTrack: false, supported: true, softPull: false,
         carpet: true, dist: 0, kind: "floor", pathId: null, label: null,
