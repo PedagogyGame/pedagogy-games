@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scaleboard V11 — Restored Audio + Dark Worn Wood</title>
+<title>Scaleboard V13 — Fret-Space Coordinate Fix</title>
 <style>
 :root{
   --bg:#0a0d11;
@@ -424,6 +424,23 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   main{grid-template-columns:300px 1fr}
   .right{grid-column:1/-1}
 }
+
+@media(max-width:700px){
+  .fret{height:2px}
+  .mark{box-shadow:
+    0 0 0 1px rgba(8,12,17,.18),
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 -1px 2px rgba(0,0,0,.10),
+    0 3px 6px rgba(0,0,0,.16),
+    0 0 12px rgba(220,230,236,.03)}
+  .mark.root{box-shadow:
+    0 0 0 1px rgba(52,41,21,.18),
+    inset 0 1px 0 rgba(255,255,255,.34),
+    inset 0 -1px 2px rgba(97,75,32,.10),
+    0 3px 6px rgba(0,0,0,.16),
+    0 0 12px rgba(219,191,120,.05)}
+}
+
 @media(max-width:850px){
   header{align-items:start;flex-direction:column}
   main{grid-template-columns:1fr;padding:10px}
@@ -432,14 +449,21 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   .body{width:546px}
   .neck{width:252px}
 }
+
+/* V13: clearer separation between fret wire and marker */
+.mark{z-index:34}
+@media(max-width:700px){
+  .fret{height:1.6px}
+}
+
 </style>
 </head>
 <body>
 <div class="app">
 <header>
   <div>
-    <h1>Scaleboard V11</h1>
-    <div class="sub">Restored interactive sound plus darker, aged, worn wood with richer grain, rubbed finish, scratches, and depth</div>
+    <h1>Scaleboard V13</h1>
+    <div class="sub">Restored sound, dark worn wood, and fret markers now positioned from the fretboard's actual rendered coordinates so they stay inside the fret spaces</div>
   </div>
   <div class="chip" id="status">C Major • sound restored • dark worn wood</div>
 </header>
@@ -497,7 +521,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
   </div>
 
   <div class="micro" style="margin-top:13px">
-    Markers remain inside the playable fret spaces. Sound is restored for note clicks, root playback, and full-scale playback, while the guitar now has a darker, more worn finish with aged grain, rubbed areas, subtle scratches, and deeper wood tone.
+    The marker placement is now tied directly to the fretboard after it has been rendered and scaled. Each rectangle is given hard clearance from both fret wires, so it stays visibly inside the playable fret space instead of drifting onto a metal line.
   </div>
 </aside>
 
@@ -552,7 +576,7 @@ footer{text-align:center;padding:12px 18px 20px;font-size:11px;color:#748293}
 </aside>
 </main>
 
-<footer>Scaleboard V11 • restored sound • darker worn wood • richer aged texture</footer>
+<footer>Scaleboard V13 • rendered-coordinate fret placement • markers locked inside fret spaces</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -676,13 +700,13 @@ function sync(){
 function rawFret(n){return 1-Math.pow(2,-n/12)}
 const rawMax=rawFret(MAX_LAYOUT_FRET);
 function yLine(n){return NECK_H*(rawFret(n)/rawMax)}
-function yCenterBetweenFrets(f){
+function yCenterBetweenFrets(f, ratio=0.68){
  const top = yLine(f-1), bottom = yLine(f);
  const gap = bottom - top;
  // Real fretting happens inside the fret space, slightly behind the fret wire.
  // With the nut at the top, that means closer to the lower line of the fret space,
  // but not touching it.
- return top + gap * 0.68;
+ return top + gap * ratio;
 }
 function xString(i){
  const pad=25,usable=NECK_W-pad*2;
@@ -756,40 +780,62 @@ function renderMarkers(){
  const rootPc=tonicParts(state.tonic).pc;
  const allowed=new Set(scalePitchClasses());
  const noteMap=pcToScaleName(),degMap=pcToDegree();
- const left=scene.clientWidth/2-NECK_W/2;
  const style=labels.value;
+
+ // The guitar is scaled and perspective-transformed visually.
+ // Use the fretboard's actual rendered rectangle so markers remain locked
+ // to the same on-screen fret geometry on desktop and mobile.
+ const sceneRect=scene.getBoundingClientRect();
+ const neckRect=neck.getBoundingClientRect();
+ const sx=neckRect.width/NECK_W;
+ const sy=neckRect.height/NECK_H;
+
+ const isMobile=window.innerWidth<=700;
+ const pressRatio=isMobile ? 0.60 : 0.62;
 
  strings.forEach((s,si)=>{
   for(let fret=1; fret<=15; fret++){
    if(!visibleFret(fret)) continue;
+
    const pc=(s.pc+fret)%12;
    if(!allowed.has(pc)) continue;
 
-   const x=left+xString(si);
-   const y=110+yCenterBetweenFrets(fret); // precisely centered within the fret space
+   const localTop=yLine(fret-1);
+   const localBottom=yLine(fret);
 
-   const isRoot = pc===rootPc;
-   const spaceH = yLine(fret) - yLine(fret-1);
+   const screenTop=neckRect.top-sceneRect.top + localTop*sy;
+   const screenBottom=neckRect.top-sceneRect.top + localBottom*sy;
+   const screenGap=screenBottom-screenTop;
 
-   // Keep markers clearly within the fret space, especially in upper frets.
-   const baseH = Math.max(7.5, Math.min(10.5, spaceH * 0.24));
-   const baseW = Math.max(15.5, Math.min(22.5, baseH * 2.1));
+   const x=neckRect.left-sceneRect.left + xString(si)*sx;
+   const isRoot=pc===rootPc;
 
-   const h = isRoot ? baseH * 1.08 : baseH;
-   const w = isRoot ? baseW * 1.08 : baseW;
-   const radius = Math.max(3, Math.min(4.5, h * 0.28));
+   // Dimension markers from the actual rendered fret-space height.
+   const baseH=Math.max(isMobile?7:8, Math.min(isMobile?11:13, screenGap*0.18));
+   const baseW=Math.max(isMobile?15:17, Math.min(isMobile?23:27, baseH*2.05));
+   const h=isRoot ? baseH*1.04 : baseH;
+   const w=isRoot ? baseW*1.04 : baseW;
+
+   // Target a realistic fretting position, but hard-clamp the marker
+   // to an interior safe zone so it cannot touch either fret wire.
+   const desired=screenTop + screenGap*pressRatio;
+   const safeTop=screenTop + h/2 + Math.max(4,screenGap*0.07);
+   const safeBottom=screenBottom - h/2 - Math.max(5,screenGap*0.08);
+   const y=Math.max(safeTop, Math.min(desired, safeBottom));
+
+   const radius=Math.max(2.5, Math.min(4.2,h*0.25));
 
    const m=document.createElement("button");
    m.className="mark"+(isRoot?" root":"")+(style==="minimal"?" minimal":"");
    m.style.left=x+"px";
    m.style.top=y+"px";
-   m.style.width = w.toFixed(1) + "px";
-   m.style.height = h.toFixed(1) + "px";
-   m.style.borderRadius = radius.toFixed(1) + "px";
+   m.style.width=w.toFixed(1)+"px";
+   m.style.height=h.toFixed(1)+"px";
+   m.style.borderRadius=radius.toFixed(1)+"px";
 
    const lab=document.createElement("span");
    lab.className="markLabel";
-   lab.style.fontSize = Math.max(5.8, Math.min(7.0, h * 0.50)).toFixed(1) + "px";
+   lab.style.fontSize=Math.max(5.2,Math.min(6.8,h*0.48)).toFixed(1)+"px";
    lab.textContent=style==="notes"?(noteMap.get(pc)||""):style==="degrees"?(degMap.get(pc)||""):"";
    m.appendChild(lab);
 
@@ -797,6 +843,7 @@ function renderMarkers(){
    m.addEventListener("mouseenter",()=>showTip(tipText,x,y-8));
    m.addEventListener("mouseleave",hideTip);
    m.addEventListener("click",()=>playMidi(s.midi+fret,.55,0));
+
    scene.appendChild(m);
   }
  });
@@ -814,7 +861,7 @@ function renderInfo(){
  $("notes").textContent=names.join("  •  ");
  $("description").textContent=sc.desc;
  $("status").textContent=`${state.tonic} ${sc.name} • ${sc.ints.length} note scale • proper fretting markers`;
- $("verify").textContent=`Marker placement now uses a playable fretting position inside each fret space, set closer to the destination fret wire while remaining clearly off the metal line. Marker dimensions also shrink more aggressively in the tight upper frets so they stay inside the fret space.`;
+ $("verify").textContent=`Markers are now positioned from the fretboard's actual rendered screen coordinates after all scaling and perspective transforms. Each marker is clamped to a safe interior zone between its two fret wires, so it cannot visually sit on either metal fret line.`;
 }
 function render(){clearGenerated();drawStatic();renderMarkers();renderInfo()}
 
