@@ -484,7 +484,12 @@ export class RCCar {
       || (snap.y != null && storyYNow != null && snap.y > storyYNow + 0.45)
       || (snap.y != null && storyYNow == null && snap.y > 0.55)
     ));
-    if (supported && trulyElevated) this._lastElevated = true;
+    // Do not latch elevated grace while still under a ceiling deck
+    const underCeiling = !!(elevated && snap?.y != null
+      && (snap.y - this.root.position.y) > 0.28
+      && kind !== "ramp" && !snap?.steep);
+    if (supported && trulyElevated && !underCeiling) this._lastElevated = true;
+    if (underCeiling) this._lastElevated = false;
     if (supported && (snap?.carpet || snap?.kind === "floor" || snap?.kind === "outdoor" || snap?.kind === "flower")) {
       this._lastElevated = false;
     }
@@ -649,14 +654,21 @@ export class RCCar {
     }
 
     // Height follow: stick to surface under wheels (NO centerline magnet)
-    if (supported && snap) {
-      const sticky = elevated || kind === "cornice" || kind === "balcony" || !!snap.nearDeck;
+    // Never yank upward onto cornice/balcony/furniture from below (under ≠ on).
+    const belowElevDeck = !!(elevated && snap && snap.y != null
+      && (snap.y - y) > 0.28
+      && kind !== "ramp" && !snap.steep);
+    if (supported && snap && !belowElevDeck) {
+      const sticky = (elevated || kind === "cornice" || kind === "balcony" || !!snap.nearDeck)
+        && !belowElevDeck;
       // Stickier on elevated decks; nearDeck Y-assist stays glued without flipping onTrack
       const nearRim = sticky && (
         !!snap.nearDeck
         || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
-      const yLock = snap.steep ? 32 : (sticky ? (nearRim ? 40 : 36) : 18);
+      // Ramp climb: firm follow along surface; flat decks sticky; never from under
+      const yLock = snap.steep || kind === "ramp" ? 28
+        : (sticky ? (nearRim ? 34 : 30) : 18);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
       if (ASSIST_MAGNET && snap.onTrack) {

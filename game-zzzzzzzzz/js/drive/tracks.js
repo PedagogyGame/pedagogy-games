@@ -53,17 +53,20 @@ function makeChevronTexture() {
   const c = makeCanvas(64, 128);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#37474f";
+  // Muted slate deck + soft gold chevrons (baked into ramp ribbon — no neon pile)
+  ctx.fillStyle = "#3a4550";
   ctx.fillRect(0, 0, 64, 128);
-  ctx.strokeStyle = "#ffd54f";
-  ctx.lineWidth = 5;
-  for (let y = 8; y < 128; y += 28) {
+  ctx.strokeStyle = "#b89a4a";
+  ctx.lineWidth = 2.5;
+  ctx.globalAlpha = 0.55;
+  for (let y = 14; y < 128; y += 36) {
     ctx.beginPath();
-    ctx.moveTo(12, y + 16);
+    ctx.moveTo(16, y + 12);
     ctx.lineTo(32, y);
-    ctx.lineTo(52, y + 16);
+    ctx.lineTo(48, y + 12);
     ctx.stroke();
   }
+  ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -368,7 +371,9 @@ export class TrackSystem {
     const width = path.width || 1.2;
     const kind = path.kind || "floor";
     const tension = path.tension != null ? path.tension : 0.22;
-    const useRibbon = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel";
+    // Floor asphalt AND elevated/ramp/cornice/balcony: ONE continuous ribbon mesh (no BoxGeometry plank stacks)
+    const useRibbon = kind === "floor" || kind === "outdoor" || kind === "flower" || kind === "tunnel"
+      || kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony";
     // door_* strips: keep snap + thin visible ribbon (asphalt texture has yellow dashes only —
     // no white edge lines, so foyer junctions no longer starburst/z-fight)
     const isDoorStrip = typeof path.id === "string" && path.id.startsWith("door_");
@@ -485,7 +490,7 @@ export class TrackSystem {
       const gap = (path.id === "foyer_skirting")
         ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: 0.95 }
         : null;
-      this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap);
+      this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap, isRail);
     }
 
     for (const op of path.points) {
@@ -516,10 +521,9 @@ export class TrackSystem {
     if (kind === "flower") {
       this._addFlowerMarkers(pts, width);
     }
-    if (kind === "ramp" || kind === "cornice") {
-      if (path.id && (path.id.startsWith("ramp_") || path.id.includes("brace") || path.id.includes("mouse_to"))) {
-        this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
-      }
+    // One subtle chevron at low on-ramp feet only (no yellow triangle piles at junctions)
+    if (kind === "ramp" && path.id && path.id.startsWith("ramp_") && pts[0].y < 1.15) {
+      this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
     }
     // Cornice showcase: start/finish stripe only (banners/posts culled for Drive FPS)
     if (kind === "cornice" || kind === "balcony") {
@@ -619,7 +623,7 @@ export class TrackSystem {
    * Smoothed right-vectors kill sawtooth edges; no coplanar bottom / line meshes.
    * Optional gapOpts {x,z,r} punches a hole (used under spawn apron).
    */
-  _addRibbonRoad(curvePts, width, kind, closed, gapOpts = null) {
+  _addRibbonRoad(curvePts, width, kind, closed, gapOpts = null, rail = false) {
     if (!curvePts || curvePts.length < 2) return;
     let pts = curvePts.slice();
     // Close once only — never double-cap (spawn knot / white shard fan)
@@ -652,13 +656,14 @@ export class TrackSystem {
       // Closed loop with gap at seam → single open run is enough
       if (!runs.length) return;
       for (const run of runs) {
-        this._addRibbonRoad(run, width, kind, false, null);
+        this._addRibbonRoad(run, width, kind, false, null, rail);
       }
       return;
     }
     const halfW = width * 0.5;
+    const isDeck = kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony";
     // Top deck only — sit clearly above room floors (kills floor z-fight shards)
-    const yLift = kind === "outdoor" ? 0.01 : 0.008;
+    const yLift = kind === "outdoor" ? 0.01 : (isDeck ? 0.012 : 0.008);
     const n = pts.length;
     const positions = [];
     const normals = [];
@@ -754,16 +759,82 @@ export class TrackSystem {
     geo.setIndex(indices);
     geo.computeBoundingSphere();
 
-    const mat = this._roadMatForKind(kind);
+    const mat = isDeck ? this._elevMatForKind(kind) : this._roadMatForKind(kind);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.castShadow = false;
     mesh.frustumCulled = true;
-    mesh.renderOrder = 1;
+    mesh.renderOrder = isDeck ? 2 : 1;
     mesh.name = `ribbon_${kind}`;
     this.root.add(mesh);
 
-    // flower edge dust ribbons culled (FPS)
+    // Continuous edge rails for open decks (same ribbon approach — no per-box planks)
+    const wantRails = !!(rail || isDeck)
+      && kind !== "shortcut" && kind !== "mouse" && kind !== "shaft" && kind !== "chute";
+    if (wantRails) {
+      this._addRibbonRails(pts, rights, ups, width, kind);
+    }
+  }
+
+  /** Thin continuous rail strips along ribbon edges (replaces BoxGeometry rail stacks). */
+  _addRibbonRails(pts, rights, ups, width, kind) {
+    if (!pts || pts.length < 2) return;
+    if (!this._railMats) this._railMats = {};
+    let railMat = this._railMats[kind];
+    if (!railMat) {
+      const fancyRail = kind === "cornice" || kind === "balcony";
+      const railColor =
+        kind === "cornice" ? 0xe0c060
+          : kind === "balcony" ? 0xd7ccc8
+            : kind === "ramp" ? 0xffcc80
+              : 0xffcc80;
+      railMat = new THREE.MeshStandardMaterial({
+        color: railColor,
+        roughness: fancyRail ? 0.28 : 0.38,
+        metalness: fancyRail ? 0.78 : 0.55,
+        emissive: fancyRail ? 0x8a6a1a : 0x000000,
+        emissiveIntensity: fancyRail ? 0.14 : 0,
+        transparent: true,
+        opacity: kind === "balcony" ? 0.88 : fancyRail ? 0.9 : 0.65,
+      });
+      this._railMats[kind] = railMat;
+    }
+    const fancyRail = kind === "cornice" || kind === "balcony";
+    const railHalf = fancyRail ? 0.016 : 0.012;
+    const railUp = fancyRail ? 0.055 : 0.045;
+    const halfW = width * 0.5 + 0.012;
+    for (const side of [-1, 1]) {
+      const positions = [];
+      const normals = [];
+      const indices = [];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i];
+        const r = rights[i];
+        const up = ups[i];
+        const cx = p.x + r.x * side * halfW;
+        const cy = p.y + 0.03;
+        const cz = p.z + r.z * side * halfW;
+        // Two verts across rail width (along right)
+        positions.push(cx - r.x * railHalf, cy, cz - r.z * railHalf);
+        positions.push(cx + r.x * railHalf, cy + railUp * 0.15, cz + r.z * railHalf);
+        normals.push(up.x, up.y, up.z, up.x, up.y, up.z);
+        if (i < pts.length - 1) {
+          const a = i * 2;
+          const b = (i + 1) * 2;
+          indices.push(a, a + 1, b + 1, a, b + 1, b);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+      geo.setIndex(indices);
+      geo.computeBoundingSphere();
+      const mesh = new THREE.Mesh(geo, railMat);
+      mesh.castShadow = false;
+      mesh.frustumCulled = true;
+      mesh.name = `ribbon_rail_${kind}`;
+      this.root.add(mesh);
+    }
   }
 
   _addFlowerRibbonEdges(pts, rights, ups, width, thick, yLift) {
@@ -1028,25 +1099,20 @@ export class TrackSystem {
     dir.normalize();
     const yaw = Math.atan2(dir.x, dir.z);
     if (!this._rampArrowMats) this._rampArrowMats = [];
+    // Single quiet gold chevron at ramp foot — no dual neon triangle piles
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xffeb3b, emissive: 0xffc107, emissiveIntensity: 1.45, roughness: 0.35,
+      color: 0xc9a227, emissive: 0x8a6a1a, emissiveIntensity: 0.35, roughness: 0.45, metalness: 0.35,
     });
     this._rampArrowMats.push(mat);
-    // Dual chevrons — readable on-ramp invitation without neon spam
-    for (const step of [0, 0.22]) {
-      const ox = from.x + dir.x * step;
-      const oz = from.z + dir.z * step;
-      const oy = from.y + 0.11 + step * 0.02;
-      const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.018, 0.16), mat);
-      shaft.position.set(ox, oy, oz);
-      shaft.rotation.y = yaw;
-      this.root.add(shaft);
-      const head = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.1, 3), mat);
-      head.position.set(ox + dir.x * 0.12, oy, oz + dir.z * 0.12);
-      head.rotation.y = yaw;
-      head.rotation.x = Math.PI / 2;
-      this.root.add(head);
-    }
+    const ox = from.x + dir.x * 0.08;
+    const oz = from.z + dir.z * 0.08;
+    const oy = from.y + 0.045;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.07, 3), mat);
+    head.position.set(ox + dir.x * 0.04, oy, oz + dir.z * 0.04);
+    head.rotation.y = yaw;
+    head.rotation.x = Math.PI / 2;
+    head.frustumCulled = true;
+    this.root.add(head);
   }
 
   /** Start/finish stripe only on main cornice circuits (banners/posts culled). */
@@ -1141,8 +1207,9 @@ export class TrackSystem {
 
   /**
    * Surface query for MANUAL drive — NO centerline magnet / rail babysitting.
-   * Height-matched decks (ramps/bridges/cornice/furniture) beat nearby story floors
-   * so you never ghost through elevated geometry into carpet above/below.
+   * Strict under≠on: elevated/cornice/balcony ignored when car is below the deck;
+   * ramps only engage along their surface corridor (no jump-up from floor).
+   * Coplanar decks still beat nearby story floors when ON the surface.
    * KEEP spatial grid (_segmentsNear) — never full-scan.
    */
   querySnap(x, y, z, radius = 2.4) {
@@ -1196,11 +1263,39 @@ export class TrackSystem {
       const elev = ELEV_KINDS.has(seg.kind);
       const tube = TUBE_KINDS.has(seg.kind);
       const isFloor = FLOOR_KINDS.has(seg.kind);
-      // Cruising true floor: skip overhead/under decks unless coplanar lip
-      if (onFloorCruise && (elev || tube) && dy > 0.45 && Math.abs(py - storyY) > 0.5) {
+      const flatDeck = seg.kind === "cornice" || seg.kind === "balcony" || seg.kind === "elevated";
+      // signedBelow > 0 ⇒ segment surface is ABOVE the car (car is underneath)
+      const signedBelow = py - y;
+
+      // Half-width corridor (used by under≠on ramp exceptions + scoring)
+      const halfApprox = seg.width * 0.5;
+      const inRampCorridor = seg.kind === "ramp" && (steep ? dist3 : dist) < halfApprox * 1.08;
+      const rampContinuity = seg.kind === "ramp" && this._lastPathId === seg.pathId
+        && (steep ? dist3 : dist) < halfApprox * 1.35;
+
+      // ── Strict under ≠ on ──────────────────────────────────────────
+      // Flat elevated decks: ignore entirely when car is under the deck.
+      if (flatDeck && signedBelow > 0.28) continue;
+      // Ramps: allow deeper "below surface" ONLY while inside the climb corridor
+      // (or continuing the same ramp) so under≠on does not drop legitimate climbs.
+      // Still ignore jump-ups from floor under a high midspan outside the ribbon.
+      if (seg.kind === "ramp") {
+        const rampUnderMax = (inRampCorridor || rampContinuity) ? 0.58 : 0.32;
+        if (signedBelow > rampUnderMax) continue;
+      }
+      // Horizontal tubes: no jump-up from far below
+      if (tube && !steep && signedBelow > 0.45) continue;
+
+      // Cruising true floor: skip overhead decks unless coplanar lip
+      // (ramps in-corridor are exempt — feet + early climb must engage)
+      if (onFloorCruise && (elev || tube) && !inRampCorridor && !rampContinuity
+          && dy > 0.45 && Math.abs(py - storyY) > 0.5) {
         continue;
       }
-      const heightBand = elev || tube ? 1.25 : 2.8;
+      // On-deck height band (tight): must be near surface, not reaching up through void
+      const heightBand = elev || tube
+        ? (flatDeck ? 0.72 : (seg.kind === "ramp" && (inRampCorridor || rampContinuity) ? 1.15 : 0.95))
+        : 2.8;
       const useRadius = elev || tube
         ? radius * 0.85
         : (isFloor ? radius * 1.45 : radius * 1.2);
@@ -1212,9 +1307,23 @@ export class TrackSystem {
       const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.48 : 0;
       // Mild floor prefer only when both car AND segment are at story asphalt height
       const floorBias = (onFloorCruise && isFloor && dy < 0.28) ? -0.22 : 0;
+      // Snap engagement at ramp feet / climb: beat skirting pathBias+floorBias
+      // so the car picks up the ramp the moment it drives onto the foot corridor.
+      const rampBias = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)
+        && signedBelow <= ((inRampCorridor || rampContinuity) ? 0.55 : 0.28)
+        && dy < 0.72) ? -1.25 : 0;
       // Penalize elevated only when clearly wrong height while floor-cruising
-      const elevPenalty = (onFloorCruise && (elev || tube) && dy > 0.38) ? 1.1 : 0;
-      const score = checkDist + dy * dyW + pathBias + floorBias + elevPenalty;
+      // — never penalize an in-corridor ramp (feet kiss floor by design).
+      const elevPenalty = (onFloorCruise && (elev || tube) && dy > 0.38
+        && !inRampCorridor && !rampContinuity) ? 1.1 : 0;
+      // Hard penalty if somehow still scoring a flat deck from below (not ramps)
+      const underPenalty = (flatDeck && signedBelow > 0.22) ? 2.4
+        : (seg.kind === "ramp" && signedBelow > 0.55 && !inRampCorridor) ? 2.4 : 0;
+      // Off-ribbon elevated must not steal junctions from coplanar on-ribbon decks
+      const offRibbonPenalty = ((elev || tube) && checkDist >= halfApprox
+        && !(seg.kind === "ramp" && rampContinuity)) ? 1.15 : 0;
+      const score = checkDist + dy * dyW + pathBias + floorBias + rampBias
+        + elevPenalty + underPenalty + offRibbonPenalty;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
@@ -1222,11 +1331,18 @@ export class TrackSystem {
         const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.62 : seg.kind === "ramp" ? 0.52 : 0.45);
         const halfW = seg.width * 0.5;
         const lateral = steep ? dist3 : dist;
-        // BINARY onTrack: clearly on road ribbon/deck (strict half-width). No fuzzy half-support.
-        const onTrack = lateral < halfW;
-        // nearDeck: longer elevated/tube Y-assist + rim fence only — NEVER merges into onTrack
-        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.42 && dy < 0.68;
-        const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.72 : 0.9);
+        // BINARY onTrack: half-width ribbon. Ramps allow slightly deeper under-surface
+        // while progressing in corridor so climb pickup is not blocked by under≠on.
+        const rampOnUnder = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)) ? 0.52 : 0.28;
+        const onTrack = lateral < halfW && signedBelow <= rampOnUnder;
+        // nearDeck: rim Y-assist only when already at deck height — NEVER from underneath
+        // (ramps in-corridor may use a slightly deeper band for climb glue)
+        const nearDeckUnder = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)) ? 0.35 : 0.12;
+        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.42
+          && dy < 0.55 && signedBelow <= nearDeckUnder && (y - py) < 0.55;
+        const supportUnder = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)) ? 0.52 : 0.28;
+        const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.72 : 0.9)
+          && signedBelow <= supportUnder;
 
         let wallBounce = null;
         if (tube && dist > halfW * 0.72) {
@@ -1303,7 +1419,8 @@ export class TrackSystem {
           edgeMargin: 1, halfW: 1, nearDeck: false,
         };
       } else {
-        if (best.pathId) this._lastPathId = best.pathId;
+        // Only latch path continuity when actually on the ribbon (avoids junction theft)
+        if (best.pathId && best.onTrack) this._lastPathId = best.pathId;
       }
       return best;
     }
@@ -1365,7 +1482,7 @@ export class TrackSystem {
     if (tick === this._visTick) return;
     this._visTick = tick;
     if (this._rampArrowMats && this._rampArrowMats.length) {
-      const rampGlow = 1.15 + 0.45 * Math.sin(t * 2.0);
+      const rampGlow = 0.28 + 0.12 * Math.sin(t * 1.6);
       for (const m of this._rampArrowMats) {
         if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
       }

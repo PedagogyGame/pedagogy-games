@@ -411,7 +411,9 @@ export class DriveMode {
   _resolveDriveWalls(prevX, prevZ, snap) {
     if (!this._wallColliders || !this._wallColliders.length) return;
     const kind = snap?.kind || "";
-    if (this._passKinds.has(kind) || snap?.tube) return; // intentional passages
+    // Passages + on-track ramp climb (stair center run); sides/furniture still bounce
+    if (this._passKinds.has(kind) || snap?.tube) return;
+    if (kind === "ramp" && snap?.onTrack) return;
     const r = this._carRadius;
     const p = this.car.root.position;
     const y = p.y;

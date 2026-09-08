@@ -2888,6 +2888,41 @@ export class Mansion {
       priority: 10,
     });
 
+    // Stair collision: side barriers + underside slab (center run stays driveable via ramp track)
+    const yLo = Math.min(s.fromY, s.toY);
+    const yHi = Math.max(s.fromY, s.toY);
+    const sideT = 0.22;
+    if (dir === "north" || dir === "south") {
+      this.colliders.push(
+        new THREE.Box3(
+          new THREE.Vector3(minX - sideT, yLo - 0.02, minZ),
+          new THREE.Vector3(minX + 0.08, yHi + 0.55, maxZ)
+        ),
+        new THREE.Box3(
+          new THREE.Vector3(maxX - 0.08, yLo - 0.02, minZ),
+          new THREE.Vector3(maxX + sideT, yHi + 0.55, maxZ)
+        )
+      );
+    } else {
+      this.colliders.push(
+        new THREE.Box3(
+          new THREE.Vector3(minX, yLo - 0.02, minZ - sideT),
+          new THREE.Vector3(maxX, yHi + 0.55, minZ + 0.08)
+        ),
+        new THREE.Box3(
+          new THREE.Vector3(minX, yLo - 0.02, maxZ - 0.08),
+          new THREE.Vector3(maxX, yHi + 0.55, maxZ + sideT)
+        )
+      );
+    }
+    // Underside slab — blocks ghosting through the stair from below/side
+    this.colliders.push(
+      new THREE.Box3(
+        new THREE.Vector3(minX + 0.05, yLo - 0.15, minZ + 0.05),
+        new THREE.Vector3(maxX - 0.05, yLo + Math.max(0.35, (yHi - yLo) * 0.22), maxZ - 0.05)
+      )
+    );
+
     for (const side of [-1, 1]) {
       for (let i = 0; i < steps; i++) {
         const y = s.fromY + rise * (i + 0.5) + 0.55;

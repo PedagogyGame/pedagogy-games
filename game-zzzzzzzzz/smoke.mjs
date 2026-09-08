@@ -250,8 +250,10 @@ drive.tracks.root.traverse((o) => {
       const arr = o.geometry.attributes.position.array;
       let near = false;
       for (let i = 0; i < arr.length; i += 9) { // every ~3 verts
-        const x = arr[i], z = arr[i + 2];
-        if (Math.hypot(x - CAR_SPAWN.x, z - CAR_SPAWN.z) < 0.85) { near = true; break; }
+        const x = arr[i], y = arr[i + 1], z = arr[i + 2];
+        // Only floor-band ribbons z-fight the apron — elevated cornice/ramps above are fine
+        // Ground-story band only (ignore cellar ribbons that share XZ under the apron)
+        if (y > -0.15 && y < 0.35 && Math.hypot(x - CAR_SPAWN.x, z - CAR_SPAWN.z) < 0.85) { near = true; break; }
       }
       if (near) meshesNearSpawn++;
     }
@@ -357,29 +359,37 @@ if (mansion.getColliders().length < 160) {
   if (floorOff.onTrack) throw new Error("Open floor must not be onTrack");
   if (!floorOff.carpet || !floorOff.supported) throw new Error("Open floor should be carpet-supported");
 
-  // True lateral offset from ramp_foyer_console centerline (path not axis-aligned)
+  // True lateral offset from cornice_foyer (long ribbon, no twin deck steal)
   let best = null, bd = 99;
   for (const seg of drive.tracks.segments) {
-    if (seg.pathId !== "ramp_foyer_console") continue;
+    if (seg.pathId !== "cornice_foyer") continue;
     const mx = (seg.a.x + seg.b.x) * 0.5;
     const mz = (seg.a.z + seg.b.z) * 0.5;
-    const d = Math.hypot(mx - 5.5, mz - 10);
+    const d = Math.hypot(mx - 8.3, mz - 6.0);
     if (d < bd) { bd = d; best = seg; }
   }
-  if (!best) throw new Error("ramp_foyer_console segment missing");
+  if (!best) throw new Error("cornice_foyer segment missing");
   const abx = best.b.x - best.a.x, abz = best.b.z - best.a.z;
   const len = Math.hypot(abx, abz) || 1;
   const rx = -abz / len, rz = abx / len;
   const midX = (best.a.x + best.b.x) * 0.5;
   const midY = (best.a.y + best.b.y) * 0.5;
   const midZ = (best.a.z + best.b.z) * 0.5;
-  // Just past half-width → nearDeck Y-assist, NOT onTrack
-  const elevOff = drive.tracks.querySnap(
-    midX + rx * best.width * 0.55,
-    midY,
-    midZ + rz * best.width * 0.55,
-    1.65
-  );
+  // Just past half-width (inward toward void) → nearDeck Y-assist, NOT onTrack
+  // Try both perpendicular signs; keep the one that reports nearDeck on this cornice
+  let elevOff = null;
+  for (const sign of [-1, 1]) {
+    const cand = drive.tracks.querySnap(
+      midX + rx * best.width * 0.55 * sign,
+      midY,
+      midZ + rz * best.width * 0.55 * sign,
+      1.65
+    );
+    if (cand.pathId === "cornice_foyer" && cand.nearDeck && !cand.onTrack) {
+      elevOff = cand; break;
+    }
+    if (!elevOff) elevOff = cand;
+  }
   console.log("Binary elevated nearDeck", {
     onTrack: elevOff.onTrack, nearDeck: elevOff.nearDeck, supported: elevOff.supported,
     elevated: elevOff.elevated, kind: elevOff.kind, edgeMargin: elevOff.edgeMargin,
@@ -552,5 +562,131 @@ if (interactives.length < 40) throw new Error(`Explore object roster too small: 
 const spawnFloor = mansion.getFloorY(0, 11, 0);
 console.log("Explore spawn floor", spawnFloor);
 if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, got ${spawnFloor}`);
+
+
+// ── Drive expand: attic loft / cellar stubs / wall mice / ramp pickup ──
+{
+  const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
+  const mustNew = [
+    "attic_loft_skirting", "attic_science_skirting", "attic_loft_to_science",
+    "attic_from_shaft_service", "attic_from_landing_access",
+    "cellar_skirting", "cellar_to_shaft_service", "cellar_to_pipe_east", "cellar_to_climb_tube",
+    "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase", "mouse_hall_conservatory_mid",
+  ];
+  for (const id of mustNew) {
+    if (!byId[id]) throw new Error(`Missing expand path ${id}`);
+  }
+  // Hall header invisible snap KEEP
+  if (byId.cornice_hall_cross_south?.visual !== false) {
+    throw new Error("cornice_hall_cross_south must stay visual:false (invisible snap keep)");
+  }
+
+  // Attic loft corner + shaft portal
+  const loft = drive.tracks.querySnap(-10.3, 8.46 + 0.04, 4.3, 1.65);
+  console.log("Attic loft corner snap", { kind: loft.kind, pathId: loft.pathId, onTrack: loft.onTrack });
+  if (!loft.onTrack || !loft.supported) throw new Error("Attic loft corner unsupported");
+  if (!(loft.kind === "cornice" || loft.kind === "ramp")) {
+    throw new Error(`Attic loft want cornice/ramp, got ${loft.kind}/${loft.pathId}`);
+  }
+  const loftNorth = drive.tracks.querySnap(0, 8.5 + 0.04, -16.5, 1.65);
+  if (!loftNorth.onTrack || loftNorth.pathId !== "attic_loft_skirting") {
+    throw new Error(`Attic loft north snap ${loftNorth.kind}/${loftNorth.pathId}`);
+  }
+  const shaftAttic = drive.tracks.querySnap(-5.0, 8.46 + 0.04, -2.0, 1.65);
+  if (!shaftAttic.supported) throw new Error("shaft_service_west attic portal unsupported");
+
+  // Cellar skirting makes shaft stubs reachable
+  const cellar = drive.tracks.querySnap(-8.3, -4.05 + 0.04, 15.3, 1.65);
+  console.log("Cellar skirting snap", { kind: cellar.kind, pathId: cellar.pathId, onTrack: cellar.onTrack });
+  if (!cellar.onTrack || cellar.kind !== "floor") throw new Error("Cellar skirting unsupported");
+  const cellarShaft = drive.tracks.querySnap(-8.4, -4.05 + 0.04, 7.0, 1.65);
+  if (!cellarShaft.supported) throw new Error("Cellar→shaft_service stub unsupported");
+
+  // Wall-hollow mice: mid-cavity onTrack + tube (wall collision exempt kinds)
+  const passOk = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
+  for (const [id, idx] of [
+    ["mouse_armoury_nursery_chase", 4],
+    ["mouse_cabinet_study_chase", 4],
+    ["mouse_hall_conservatory_mid", 3],
+  ]) {
+    const pts = byId[id].points;
+    const mid = pts[idx];
+    const s = drive.tracks.querySnap(mid.x, mid.y + 0.03, mid.z, 1.65);
+    console.log(`Wall mouse ${id}`, { kind: s.kind, pathId: s.pathId, onTrack: s.onTrack, tube: s.tube });
+    if (!s.onTrack || !s.supported) throw new Error(`${id} mid cavity unsupported`);
+    if (!passOk.has(s.kind) && s.pathId !== id) throw new Error(`${id} mid not passage kind: ${s.kind}`);
+    if (!drive._passKinds.has(s.kind) && !s.tube) {
+      throw new Error(`${id} would NOT be wall-collision exempt (${s.kind})`);
+    }
+  }
+  // Portals present on new mice
+  const portalPaths = new Set(drive.tracks.portals.map((p) => p.pathId));
+  for (const id of ["mouse_armoury_nursery_chase", "mouse_cabinet_study_chase", "mouse_hall_conservatory_mid"]) {
+    if (!portalPaths.has(id)) throw new Error(`Missing portals for ${id}`);
+  }
+
+  // RAMP PICKUP AUDIT — every ramp foot engages even after hostile skirting latch
+  const ramps = TRACK_PATHS.filter((p) => p.kind === "ramp");
+  let footFail = 0;
+  let climbFail = 0;
+  const footFails = [];
+  const climbFails = [];
+  for (const path of ramps) {
+    drive.tracks._lastPathId = "foyer_skirting"; // hostile pathBias (real approach)
+    const foot = path.points[0];
+    const fs = drive.tracks.querySnap(foot.x, foot.y + 0.04, foot.z, 1.65);
+    if (!(fs.kind === "ramp" && fs.onTrack && fs.supported)) {
+      footFail++;
+      if (footFails.length < 6) footFails.push(`${path.id}→${fs.kind}/${fs.pathId}/on=${fs.onTrack}`);
+    }
+    // Sample along climb (~25% / 50% / 75%) — onTrack+supported; slight under-surface drop
+    for (const frac of [0.25, 0.5, 0.75]) {
+      const i = Math.min(path.points.length - 2, Math.max(1, Math.floor((path.points.length - 1) * frac)));
+      const a = path.points[i];
+      const b = path.points[i + 1];
+      const x = (a.x + b.x) * 0.5;
+      const y = (a.y + b.y) * 0.5;
+      const z = (a.z + b.z) * 0.5;
+      const s0 = drive.tracks.querySnap(x, y + 0.04, z, 1.65);
+      if (!(s0.supported && s0.onTrack && (s0.kind === "ramp" || s0.pathId === path.id))) {
+        climbFail++;
+        if (climbFails.length < 6) climbFails.push(`${path.id}@${frac}→${s0.kind}/${s0.pathId}`);
+      }
+      // under≠on must NOT block legitimate ramp corridor progress
+      const s1 = drive.tracks.querySnap(x, y - 0.2, z, 1.65);
+      if (!(s1.supported && (s1.kind === "ramp" || s1.pathId === path.id) && (s1.onTrack || s1.nearDeck))) {
+        climbFail++;
+        if (climbFails.length < 8) climbFails.push(`${path.id}@${frac}drop→${s1.kind}/${s1.pathId}/on=${s1.onTrack}`);
+      }
+    }
+  }
+  console.log("Ramp pickup audit", {
+    ramps: ramps.length, footFail, climbFail, footFails, climbFails: climbFails.slice(0, 4),
+  });
+  if (footFail > 0) throw new Error(`Ramp feet not engaging: ${footFails.join("; ")}`);
+  if (climbFail > 0) throw new Error(`Ramp climb pickup failed: ${climbFails.join("; ")}`);
+
+  // Flat-deck under≠on still: under foyer cornice must NOT claim elevated onTrack
+  const underCornice = drive.tracks.querySnap(-8.3, 0.06, 6.0, 1.65);
+  if (underCornice.kind === "cornice" || underCornice.kind === "balcony" || underCornice.kind === "elevated") {
+    if (underCornice.onTrack) throw new Error("under≠on broken: flat deck onTrack from below");
+  }
+  console.log("under≠on flat deck ok", { kind: underCornice.kind, onTrack: underCornice.onTrack });
+
+  // Attic access grade tour-friendly
+  const atticRamp = byId.attic_from_landing_access;
+  let rise = Math.abs(atticRamp.points.at(-1).y - atticRamp.points[0].y);
+  let run = 0;
+  for (let i = 1; i < atticRamp.points.length; i++) {
+    run += Math.hypot(
+      atticRamp.points[i].x - atticRamp.points[i - 1].x,
+      atticRamp.points[i].z - atticRamp.points[i - 1].z
+    );
+  }
+  const g = rise / Math.max(run, 1e-6);
+  console.log("Attic landing ramp grade", +g.toFixed(3));
+  if (g > 0.58) throw new Error(`attic_from_landing_access too steep ${g.toFixed(2)}`);
+}
+
 
 console.log("\nALL SMOKE CHECKS PASSED");
