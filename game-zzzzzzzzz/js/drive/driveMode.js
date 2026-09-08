@@ -28,6 +28,7 @@ export class DriveMode {
     this._hintCooldown = 0;
     this._lastHint = "";
     this._edgeWarn = 0; // 0..1 soft near-edge amount (elevated tracks)
+    this._camElevated = 0; // smoothed elevated chase blend
     this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
     this._driveFov = 68; // calmer tour FOV (was arcade-wide 74)
@@ -376,21 +377,23 @@ export class DriveMode {
     const yaw = this.car.yaw;
     const spd = Math.abs(this.car.speed);
     const inWall = this._tunnelDark > 0.35;
+    const elev = this._camElevated || 0;
     // Leisure factor: slow sightseeing → higher / farther cinematic chase
     const leisure = 1 - THREE.MathUtils.smoothstep(spd, 0.15, 1.35);
     // In-wall: tuck camera close + slightly above car so we never clip inside studs
-    const back = (inWall ? 0.16 : 0.4 + leisure * 0.22) + Math.min(0.28, spd * 0.07);
-    const up = (inWall ? 0.12 : 0.14 + leisure * 0.1) + Math.min(0.08, spd * 0.022);
+    // Elevated: slightly higher / calmer chase so cornice banks don't jitter the lens
+    const back = (inWall ? 0.16 : 0.4 + leisure * 0.22 + elev * 0.06) + Math.min(0.28, spd * 0.07);
+    const up = (inWall ? 0.12 : 0.14 + leisure * 0.1 + elev * 0.05) + Math.min(0.08, spd * 0.022);
     const cx = p.x - Math.sin(yaw) * back;
     const cy = p.y + up;
     const cz = p.z - Math.cos(yaw) * back;
     this._camPos.set(cx, cy, cz);
 
     // Look along tube / track — shorter ahead in walls keeps view readable
-    const ahead = (inWall ? 0.28 : 0.32 + leisure * 0.28) + Math.min(0.4, spd * 0.09);
+    const ahead = (inWall ? 0.28 : 0.32 + leisure * 0.28 + elev * 0.06) + Math.min(0.4, spd * 0.09);
     this._lookAhead.set(
       p.x + Math.sin(yaw) * ahead,
-      p.y + (inWall ? 0.06 : 0.04 + leisure * 0.03) + Math.min(0.03, spd * 0.007),
+      p.y + (inWall ? 0.06 : 0.04 + leisure * 0.03 + elev * 0.02) + Math.min(0.03, spd * 0.007),
       p.z + Math.cos(yaw) * ahead
     );
     this._camTarget.copy(this._lookAhead);
@@ -626,12 +629,16 @@ export class DriveMode {
       this._beginCrash();
     }
 
+    const onElevDeck = !!(snap && (snap.elevated || snap.nearDeck || snap.kind === "cornice"
+      || snap.kind === "balcony" || snap.kind === "ramp"));
+    this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, Math.min(1, 3.2 * dt));
     this._snapCamera(false);
 
     const spdAbs = Math.abs(this.car.speed);
     const leisureCam = 1 - THREE.MathUtils.smoothstep(spdAbs, 0.15, 1.3);
-    const spring = 10.5 + leisureCam * 3.5; // softer follow when touring slowly
-    const damp = 4.2 + leisureCam * 0.8;
+    const elevCam = this._camElevated || 0;
+    const spring = 10.5 + leisureCam * 3.5 - elevCam * 2.2; // softer follow on elevated decks
+    const damp = 4.2 + leisureCam * 0.8 + elevCam * 0.9;
     const dx = this._camPos.x - this.camera.position.x;
     const dy = this._camPos.y - this.camera.position.y;
     const dz = this._camPos.z - this.camera.position.z;

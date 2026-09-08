@@ -92,6 +92,7 @@ export class RCCar {
     this._unsupportedFrames = 0;
     this._fallStartY = 0;
     this._lastElevated = false;
+    this._smoothBank = 0;
     this._steerInput = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
@@ -416,6 +417,7 @@ export class RCCar {
     this._unsupportedFrames = 0;
     this._fallStartY = 0;
     this._lastElevated = false;
+    this._smoothBank = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
@@ -505,7 +507,8 @@ export class RCCar {
           this.root.position.y, storyY, Math.min(1, 10 * dt)
         );
         this._unsupportedFrames = 0;
-      } else if (fromElev && this._unsupportedFrames >= 3) {
+      } else if (fromElev && this._unsupportedFrames >= 6) {
+        // Brief grace after leaving deck — softens junction blips; hard crash only for true void
         this.airborne = true;
         this._fallStartY = this.root.position.y;
         this._lastElevated = false;
@@ -570,14 +573,14 @@ export class RCCar {
 
     let fric = this.friction;
     if (snap?.onTrack) {
-      if (kind === "cornice" || kind === "balcony") fric *= 1.68;
-      else if (elevated || kind === "ramp") fric *= 1.48;
+      if (kind === "cornice" || kind === "balcony") fric *= 1.78;
+      else if (elevated || kind === "ramp") fric *= 1.58;
       else fric *= 1.18;
     }
     // Extra grip when soft rim fence is active (casual play stays ON deck)
     // Rim fence grip while onTrack OR brief nearDeck Y-assist (still not "on road")
     if (onRailDeck && snap?.wallBounce && (snap?.onTrack || snap?.nearDeck)) {
-      fric *= 1.12;
+      fric *= 1.18;
     }
 
     if (throttle > 0) {
@@ -651,9 +654,9 @@ export class RCCar {
       // Stickier on elevated decks; nearDeck Y-assist stays glued without flipping onTrack
       const nearRim = sticky && (
         !!snap.nearDeck
-        || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08)
+        || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
-      const yLock = snap.steep ? 28 : (sticky ? (nearRim ? 34 : 30) : 18);
+      const yLock = snap.steep ? 32 : (sticky ? (nearRim ? 40 : 36) : 18);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
       if (ASSIST_MAGNET && snap.onTrack) {
@@ -662,9 +665,23 @@ export class RCCar {
         z = THREE.MathUtils.lerp(z, snap.z, whisper);
       }
 
-      const bank = snap.bank || 0;
-      const targetRoll = bank - this._steerInput * 0.14 * Math.min(1, absV / 1.2);
-      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 11 * dt));
+      // Smooth bank across segment joins — no pitch/roll jitter on cornice/balcony/ramp
+      const rawBank = snap.bank || 0;
+      const bankSmooth = sticky ? 14 : 11;
+      this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
+      const bank = this._smoothBank;
+      // Gentle yaw settle along banked ribbon (tiny — keeps free steer, kills join twitch)
+      if (sticky && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
+        let dyaw = snap.yaw - this.yaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        // Only nudge when roughly aligned with travel (avoid U-turn snaps)
+        if (Math.abs(dyaw) < 0.55) {
+          this.yaw += dyaw * Math.min(0.18, 1.6 * dt) * Math.min(1, absV / 0.9);
+        }
+      }
+      const targetRoll = bank - this._steerInput * 0.12 * Math.min(1, absV / 1.2);
+      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 13 * dt));
     } else {
       this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 6 * dt));
     }
@@ -683,8 +700,8 @@ export class RCCar {
     this.bodyPivot.rotation.z = this._bodyRoll;
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(
       this.bodyPivot.rotation.x,
-      -(snap?.bank || 0) * 0.35 - this._landingDamp * 0.08,
-      Math.min(1, 8 * dt)
+      -(this._smoothBank || snap?.bank || 0) * 0.32 - this._landingDamp * 0.08,
+      Math.min(1, 10 * dt)
     );
 
     if (inTube) {

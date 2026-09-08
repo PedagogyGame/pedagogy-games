@@ -280,13 +280,19 @@ if (Math.abs(bridgeSnap.y - 3.53) > 0.35) {
   throw new Error(`Bridge Y wrong: ${bridgeSnap.y}`);
 }
 
-const rampSnap = drive.tracks.querySnap(-7.0, 1.8, 6.0, 1.65);
-console.log("Foyer stair ramp snap", {
-  onTrack: rampSnap.onTrack, supported: rampSnap.supported,
-  kind: rampSnap.kind, pathId: rampSnap.pathId,
-});
-if (!rampSnap.supported || rampSnap.kind !== "ramp") {
-  throw new Error(`Ramp not supported: ${rampSnap.kind}/${rampSnap.pathId}`);
+// Sample mid-climb on ramp_foyer_to_landing (path lengthened for gentler grade)
+{
+  const foyerRamp = TRACK_PATHS.find((p) => p.id === "ramp_foyer_to_landing");
+  if (!foyerRamp) throw new Error("ramp_foyer_to_landing missing");
+  const mid = foyerRamp.points[Math.floor(foyerRamp.points.length / 2)];
+  const rampSnap = drive.tracks.querySnap(mid.x, mid.y, mid.z, 1.65);
+  console.log("Foyer stair ramp snap", {
+    onTrack: rampSnap.onTrack, supported: rampSnap.supported,
+    kind: rampSnap.kind, pathId: rampSnap.pathId, sample: mid,
+  });
+  if (!rampSnap.supported || rampSnap.kind !== "ramp") {
+    throw new Error(`Ramp not supported: ${rampSnap.kind}/${rampSnap.pathId}`);
+  }
 }
 
 const furnSnap = drive.tracks.querySnap(5.5, 0.98, 10.0, 1.65);
@@ -443,6 +449,76 @@ if (drive.tracks.segments.length > 3500) {
 }
 
 
+
+
+// Elevated circuit united — key junctions meet; primary climbs not near-vertical
+{
+  const elevKinds = new Set(["elevated", "cornice", "balcony", "ramp"]);
+  const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
+  const must = [
+    "ramp_landing_to_landing_cornice",
+    "cornice_landing_west",
+    "ramp_study_express_to_cases",
+    "ramp_music_to_hall_cornice",
+    "ramp_console_to_foyer_cornice",
+    "ramp_workshop_to_dining_cornice",
+  ];
+  for (const id of must) {
+    if (!byId[id]) throw new Error(`Missing elevated connector ${id}`);
+  }
+  const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
+    const a = byId[aId], b = byId[bId];
+    const pa = aEnd === "start" ? a.points[0] : a.points[a.points.length - 1];
+    let best = Infinity;
+    for (const q of b.points) {
+      best = Math.min(best, Math.hypot(pa.x - q.x, pa.y - q.y, pa.z - q.z));
+    }
+    if (best > maxD) throw new Error(`Junction ${aId}:${aEnd}↔${bId} gap ${best.toFixed(3)}`);
+    return best;
+  };
+  const joins = [
+    joinOK("cornice_hall_cross_mid", "start", "cornice_hall_west", 0.2),
+    joinOK("cornice_hall_cross_mid", "end", "cornice_hall_east", 0.2),
+    joinOK("cornice_dining_bridge", "start", "cornice_conservatory", 0.15),
+    joinOK("cornice_dining_bridge", "end", "cornice_dining", 0.15),
+    joinOK("ramp_balcony_to_drive", "start", "balcony_loop", 0.12),
+    joinOK("ramp_cases_to_cornice", "end", "cornice_cabinet", 0.2),
+    joinOK("ramp_landing_to_landing_cornice", "end", "cornice_landing_east", 0.12),
+    joinOK("ramp_study_express_to_cases", "end", "furniture_cabinet_cases", 0.2),
+    joinOK("ramp_music_to_hall_cornice", "end", "cornice_conservatory", 0.15),
+  ];
+  // Primary on-ramps: overall grade should stay tour-friendly (not chute-steep)
+  const grade = (id) => {
+    const p = byId[id];
+    const rise = Math.abs(p.points.at(-1).y - p.points[0].y);
+    let run = 0;
+    for (let i = 1; i < p.points.length; i++) {
+      run += Math.hypot(p.points[i].x - p.points[i - 1].x, p.points[i].z - p.points[i - 1].z);
+    }
+    return rise / Math.max(run, 1e-6);
+  };
+  for (const [id, maxG] of [
+    ["ramp_foyer_to_landing", 0.55],
+    ["ramp_cabinet_case", 0.45],
+    ["ramp_landing_to_landing_cornice", 0.55],
+    ["ramp_console_to_foyer_cornice", 0.55],
+    ["ramp_stair_to_cornice", 0.4],
+  ]) {
+    const g = grade(id);
+    if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
+  }
+  // Cornice snap still solid mid-circuit
+  const corniceSnap = drive.tracks.querySnap(0, 3.48, -0.55, 1.65);
+  if (!corniceSnap.onTrack || !corniceSnap.elevated) {
+    throw new Error(`Cornice circuit snap failed: ${corniceSnap.kind}/${corniceSnap.pathId}`);
+  }
+  console.log("Elevated circuit united", {
+    connectors: must.length,
+    joins: joins.map((d) => +d.toFixed(3)),
+    foyerClimb: +grade("ramp_foyer_to_landing").toFixed(3),
+    cornicePath: corniceSnap.pathId,
+  });
+}
 
 // Roadway width scale (~13% smaller) — preserve every path, shrink widths only
 if (Math.abs(ROAD_WIDTH_SCALE - 0.87) > 0.001) {

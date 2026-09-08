@@ -407,7 +407,7 @@ export class TrackSystem {
           : kind === "flower" || kind === "tunnel" ? 2
             : floorish ? 2 : 2;
       // Snap densify: elevated/tube need curve support; floor coarser
-      const snapDense = elevFancy ? (path.fancy ? 4 : 3)
+      const snapDense = elevFancy ? (path.fancy ? 5 : (path.closed ? 4 : 3))
         : tubeish ? 3
           : floorish ? 2 : 2;
       const visN = Math.max(pts.length * visDense, path.fancy ? 20 : (useRibbon && visualOk ? 12 : 8));
@@ -1209,7 +1209,7 @@ export class TrackSystem {
 
       // HEIGHT DOMINATES: coplanar ramp/bridge/cornice always beats distant-Y floor
       const dyW = (elev || tube) ? 3.4 : (isFloor ? 0.55 : 1.1);
-      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.3 : 0;
+      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.48 : 0;
       // Mild floor prefer only when both car AND segment are at story asphalt height
       const floorBias = (onFloorCruise && isFloor && dy < 0.28) ? -0.22 : 0;
       // Penalize elevated only when clearly wrong height while floor-cruising
@@ -1219,14 +1219,14 @@ export class TrackSystem {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
         const yaw = Math.atan2(abx, abz);
-        const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.72 : 0.45);
+        const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.62 : seg.kind === "ramp" ? 0.52 : 0.45);
         const halfW = seg.width * 0.5;
         const lateral = steep ? dist3 : dist;
         // BINARY onTrack: clearly on road ribbon/deck (strict half-width). No fuzzy half-support.
         const onTrack = lateral < halfW;
-        // nearDeck: elevated/tube Y-stick + rim fence only — NEVER merges into onTrack
-        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.28 && dy < 0.55;
-        const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.62 : 0.9);
+        // nearDeck: longer elevated/tube Y-assist + rim fence only — NEVER merges into onTrack
+        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.42 && dy < 0.68;
+        const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.72 : 0.9);
 
         let wallBounce = null;
         if (tube && dist > halfW * 0.72) {
@@ -1249,14 +1249,14 @@ export class TrackSystem {
           seg.kind === "elevated" || seg.kind === "cornice" || seg.kind === "balcony"
           || seg.kind === "ramp"
         );
-        if (deckFence && lateral > halfW * 0.58 && lateral < halfW * 1.22) {
+        if (deckFence && lateral > halfW * 0.50 && lateral < halfW * 1.38) {
           const pushDirX = (px - x);
           const pushDirZ = (pz - z);
           const plen = Math.hypot(pushDirX, pushDirZ) || 1;
-          const over = lateral - halfW * 0.58;
-          // Stickier near absolute rim
-          const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.42), 0, 1);
-          const strength = Math.min(0.062, over * (0.10 + 0.14 * rimT));
+          const over = lateral - halfW * 0.50;
+          // Stickier near absolute rim — casual play stays ON deck
+          const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.55), 0, 1);
+          const strength = Math.min(0.088, over * (0.13 + 0.20 * rimT));
           const bx = (pushDirX / plen) * strength;
           const bz = (pushDirZ / plen) * strength;
           if (!wallBounce) wallBounce = { x: bx, z: bz };
@@ -1291,7 +1291,7 @@ export class TrackSystem {
     if (best) {
       // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising
       const farFromDeck = best.elevated || best.tube
-        ? (best.dist > (best.halfW || 0.2) * 1.28 && !best.nearDeck && !best.onTrack)
+        ? (best.dist > (best.halfW || 0.2) * 1.42 && !best.nearDeck && !best.onTrack)
         : false;
       if (onFloorCruise && (best.elevated || best.tube) && farFromDeck) {
         best = {
