@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0908" />
+<meta name="description" content="Vocab Hunter — Doom halls, Turok beasts, type Chinese with no spaces." />
+<title>Mandarin Dinosaur Doom</title>
+<style>
+:root {
+  --gold: #c8a44a;
+  --hud: #d4c48a;
+  --ink: #070605;
+  --panel: rgba(10, 8, 4, 0.94);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body, #app, #game-root {
+  width: 100%; height: 100%; min-height: 100vh; min-height: 100dvh;
+  overflow: hidden;
+  background: var(--ink); color: var(--hud);
+  font-family: "Courier New", ui-monospace, monospace;
+  touch-action: none; user-select: none;
+}
+#wrap {
+  position: relative; width: 100%; height: 100%;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column; outline: none;
+}
+canvas#view {
+  display: block; width: 100%; flex: 1 1 auto; min-height: 240px;
+  background: #0a0908; image-rendering: auto;
+}
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+#objectCard {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); left: 8px;
+  width: 104px; background: var(--panel); border: 2px solid #8a6a20;
+  padding: 8px 4px 10px; text-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+#objectCard .emo { font-size: 42px; line-height: 1.1; }
+#objectCard .en { font-size: 11px; color: #b8a878; margin-top: 2px; letter-spacing: .04em; }
+#objectCard .zh { font-size: 18px; color: #ffe08a; margin-top: 2px; font-family: "PingFang SC","Noto Sans SC",sans-serif; }
+#rankTag { margin-top: 6px; font-size: 9px; letter-spacing: .16em; color: #f0c060; }
+#stats {
+  position: absolute; top: max(8px, env(safe-area-inset-top)); right: 10px;
+  text-align: right; font-size: 12px; line-height: 1.45; text-shadow: 0 1px 4px #000;
+  letter-spacing: .06em;
+}
+#hp { color: #e05040; letter-spacing: .04em; }
+#doombar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 56px; background: linear-gradient(#2a2018,#100e0c);
+  border-top: 2px solid #5a4030;
+  display: flex; align-items: stretch;
+  font-size: 10px; letter-spacing: .08em; color: #e0c070;
+}
+#doombar .cell {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-left: 1px solid #3a2a20; gap: 2px;
+}
+#doombar .n { font-size: 18px; color: #f2d070; }
+#doombar .cell.on { background: #4a2410; color: #fff0a0; box-shadow: inset 0 0 0 1px #c8a44a; }
+#cross {
+  position: absolute; left: 50%; top: 46%; width: 10px; height: 10px;
+  margin: -5px 0 0 -5px; border: 1px solid rgba(255,220,120,.4); border-radius: 50%;
+  transition: opacity .3s;
+}
+#combat {
+  display: none; position: absolute; inset: 0; z-index: 8; pointer-events: auto;
+  background: rgba(8,6,4,.22);
+}
+#combat.show { display: block; }
+#wordBox {
+  position: absolute; left: 50%; top: 14%; transform: translateX(-50%);
+  width: min(380px, 92vw); background: var(--panel);
+  border: 3px solid #8a6a20; padding: 16px 14px 14px; text-align: center;
+  box-shadow: 0 16px 40px rgba(0,0,0,.55);
+}
+#wordBox h2 { font-size: 11px; letter-spacing: .18em; color: #c8a44a; margin-bottom: 6px; }
+#promptZh { font-size: 36px; font-family: "PingFang SC","Noto Sans SC",serif; color: #fff6d8; min-height: 44px; }
+#diffLine { font-size: 11px; color: #d09040; margin: 4px 0 10px; letter-spacing: .08em; }
+#timerBar { height: 8px; background: #2a1810; margin: 0 0 12px; overflow: hidden; }
+#timerFill { height: 100%; width: 100%; background: #c8a44a; transform-origin: left; transition: transform .08s linear; }
+#timerFill.low { background: #a32018; }
+#answer {
+  width: 100%; font-size: 20px; padding: 12px 8px; border: 2px solid #8a7020;
+  background: #1a140c; color: #fff4c8; text-align: center; outline: none;
+  font-family: inherit; text-transform: lowercase; border-radius: 0;
+}
+#answer:focus { border-color: #e8c060; }
+#wordBox.revealing #answer,
+#wordBox.revealing #skipBtn,
+#wordBox.revealing #promptZh { display: none !important; }
+#revealAns { display: none; padding: 8px 0 4px; }
+#wordBox.revealing #revealAns { display: block; }
+#revealAns .k { font-size: 10px; letter-spacing: .18em; color: #c8a44a; margin-bottom: 4px; }
+#revealAns .py { font-size: 28px; color: #fff6d0; letter-spacing: .08em; }
+#revealAns .zh { font-size: 22px; color: #e8c070; font-family: "PingFang SC","Noto Sans SC",sans-serif; margin-top: 2px; }
+.btn.skip {
+  margin-top: 12px; padding: 10px 14px; font-size: 12px; letter-spacing: .12em;
+  background: #2a1810; border: 1px solid #8a5a30; color: #e8c090; width: 100%;
+}
+.btn.skip:hover { background: #3a2014; }
+#hintLine { font-size: 11px; color: #8a7860; margin-top: 10px; line-height: 1.4; }
+#feedback {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%,-50%);
+  font-size: 22px; letter-spacing: .14em; text-shadow: 0 2px 10px #000;
+  opacity: 0; pointer-events: none; z-index: 9; text-align: center;
+  font-family: "Georgia", serif;
+}
+#cinemaCap {
+  position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%);
+  font-size: 13px; letter-spacing: .22em; color: #f0e0b0;
+  text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity .4s;
+  pointer-events: none; z-index: 6; text-align: center;
+}
+.screen {
+  position: fixed; inset: 0; z-index: 20;
+  background: radial-gradient(ellipse at 50% 24%, #3a2014 0%, #080604 70%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 18px; text-align: center; pointer-events: auto;
+}
+.screen .mark {
+  font-size: 11px; letter-spacing: .4em; color: #a07030; margin-bottom: 8px;
+}
+.screen h1 { font-size: clamp(28px, 8vw, 46px); color: #c8a44a; letter-spacing: .12em; font-weight: 700; }
+.screen .sub { font-size: 14px; color: #b8a070; margin: 8px 0 18px; font-family: "PingFang SC","Noto Sans SC",sans-serif; }
+.screen p { max-width: 460px; font-size: 13px; line-height: 1.6; color: #cfc3a4; margin-bottom: 10px; }
+.keys {
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+  margin: 0 0 16px; max-width: 460px;
+}
+.keys span {
+  border: 1px solid #5a4030; padding: 6px 10px; font-size: 11px; color: #d4c48a;
+  letter-spacing: .06em; background: rgba(20,12,8,.5);
+}
+.keys b { color: #ffe08a; }
+.btn {
+  pointer-events: auto; margin-top: 14px; padding: 14px 28px;
+  background: #3a2010; border: 2px solid #c8a44a; color: #ffe9a0;
+  font-size: 15px; letter-spacing: .14em; cursor: pointer; font-family: inherit;
+}
+.btn:hover { background: #4a2c14; }
+.btn:active { transform: translateY(1px); }
+.btn.ghost {
+  background: transparent; color: #d4c48a; border-color: #6a5030;
+  margin-top: 10px; padding: 12px 22px; font-size: 13px;
+}
+.btn.ghost:hover { background: #2a1c10; }
+.actions { display: flex; flex-direction: column; align-items: center; gap: 0; }
+#pads {
+  position: absolute; bottom: 60px; left: 0; right: 0; height: 128px;
+  pointer-events: none; z-index: 7; display: none;
+}
+#pads.on { display: block; }
+.pad {
+  pointer-events: auto; position: absolute; width: 52px; height: 52px;
+  background: rgba(20,14,10,.55); border: 1px solid rgba(200,164,74,.4);
+  color: #e8d8a0; font-size: 18px; display: flex; align-items: center; justify-content: center;
+}
+#pUp { left: 66px; bottom: 70px; } #pDn { left: 66px; bottom: 8px; }
+#pLt { left: 10px; bottom: 38px; } #pRt { left: 122px; bottom: 38px; }
+#pTurnL { right: 122px; bottom: 38px; } #pTurnR { right: 10px; bottom: 38px; }
+#msg {
+  position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%);
+  font-size: 12px; color: #ffe9a0; text-shadow: 0 1px 3px #000; white-space: nowrap;
+  letter-spacing: .08em;
+}
+@media (prefers-reduced-motion: reduce) {
+  #timerFill { transition: none; }
+  #cinemaCap { transition: none; }
+}
+
+html, body, #game-root {
+  width: 100%; height: 100%; min-height: 100vh; min-height: 100dvh;
+  margin: 0; overflow: hidden; background: #070605;
+}
+</style>
+</head>
+<body>
+<div id="game-root"></div>
+<script>
+window.__VH_STANDALONE = true;
+const markup = "<div id=\"wrap\" tabindex=\"0\">\n  <canvas id=\"view\"></canvas>\n  <div id=\"hud\">\n    <div id=\"objectCard\" style=\"display:none\">\n      <div class=\"emo\" id=\"cardEmo\">🍎</div>\n      <div class=\"en\" id=\"cardEn\">apple</div>\n      <div class=\"zh\" id=\"cardZh\">苹果</div>\n      <div id=\"rankTag\">EASY</div>\n    </div>\n    <div id=\"stats\">\n      <div id=\"hp\">♥♥♥♥♥♥♥</div>\n      <div id=\"sc\">FRAGS 0</div>\n      <div id=\"en\">HANGAR 0 LEFT</div>\n    </div>\n    <div id=\"cross\"></div>\n    <div id=\"msg\"></div>\n    <div id=\"cinemaCap\"></div>\n    <div id=\"doombar\">\n      <div class=\"cell\" id=\"wPistol\"><span>PISTOL</span><span class=\"n\" id=\"amBullets\">20</span></div>\n      <div class=\"cell\" id=\"wShot\"><span>SHOTGUN</span><span class=\"n\" id=\"amShells\">0</span></div>\n      <div class=\"cell\" id=\"wChain\"><span>CHAINGUN</span><span class=\"n\" id=\"amChain\">0</span></div>\n      <div class=\"cell\" id=\"wRock\"><span>ROCKET</span><span class=\"n\" id=\"amRockets\">0</span></div>\n      <div class=\"cell\" id=\"wPlas\"><span>PLASMA</span><span class=\"n\" id=\"amCells\">0</span></div>\n    </div>\n  </div>\n  <div id=\"combat\">\n    <div id=\"wordBox\">\n      <h2>CHAMBER THE ROUND — NO SPACES</h2>\n      <div id=\"promptZh\">苹果</div>\n      <div id=\"diffLine\">RAPTOR · EASY · LOADS PISTOL</div>\n      <div id=\"timerBar\"><div id=\"timerFill\"></div></div>\n      <input id=\"answer\" type=\"text\" autocomplete=\"off\" autocorrect=\"off\" autocapitalize=\"off\" spellcheck=\"false\"\n             lang=\"zh\" inputmode=\"text\" placeholder=\"pinyin or 汉字\" />\n      <div id=\"revealAns\" hidden>\n        <div class=\"k\">THE WORD WAS</div>\n        <div class=\"py\" id=\"revealPy\">pingguo</div>\n        <div class=\"zh\" id=\"revealZh\">苹果</div>\n      </div>\n      <button class=\"btn skip\" type=\"button\" id=\"skipBtn\">I DON'T KNOW</button>\n      <div id=\"hintLine\">wrong = misfire, same word · skip = see answer, new word, −1 heart</div>\n    </div>\n  </div>\n  <div id=\"feedback\"></div>\n  <div id=\"pads\">\n    <div class=\"pad\" id=\"pUp\">▲</div><div class=\"pad\" id=\"pDn\">▼</div>\n    <div class=\"pad\" id=\"pLt\">◀</div><div class=\"pad\" id=\"pRt\">▶</div>\n    <div class=\"pad\" id=\"pTurnL\">Q</div><div class=\"pad\" id=\"pTurnR\">E</div>\n  </div>\n  <div class=\"screen\" id=\"title\">\n    <div class=\"mark\">三幕</div>\n    <h1>VOCAB HUNTER</h1>\n    <div class=\"sub\">词洞猎手 · hangar · yard · sky</div>\n    <div class=\"keys\">\n      <span><b>W S</b> walk</span>\n      <span><b>A D</b> turn</span>\n      <span><b>Q E</b> sidestep</span>\n      <span><b>1–5</b> guns</span>\n    </div>\n    <p>A beast only fights when it is in front of you, in line. Type the Chinese word with no spaces. Correct loads the gun and the kill plays itself. Wrong misfires — same word, you take the hit.</p>\n    <p>Act I hangar. Act II you drive the castle yard. Act III a crude ship, nose level, raptor craft in the air. Cyan pad skips an act.</p>\n    <p id=\"bootErr\" style=\"color:#e07050;display:none;max-width:420px\"></p>\n    <div class=\"actions\">\n      <button class=\"btn\" type=\"button\" id=\"startBtn\">ENTER THE HANGAR</button>\n      <button class=\"btn ghost\" type=\"button\" id=\"dlBtn\">DOWNLOAD HTML</button>\n    </div>\n  </div>\n  <div class=\"screen\" id=\"over\" style=\"display:none\">\n    <h1 id=\"overTitle\">RIP</h1>\n    <div class=\"sub\" id=\"overSub\">the hangar keeps the shells</div>\n    <p id=\"overStats\"></p>\n    <button class=\"btn\" type=\"button\" id=\"retryBtn\">TRY AGAIN</button>\n  </div>\n</div>\n";
+function boot(root) {
+  if (typeof document === "undefined") return;
+  const host = root || document.getElementById("game-root");
+  if (!host) return;
+  host.innerHTML = markup;
+  const gen = (Number(host.dataset.vhGen) || 0) + 1;
+  host.dataset.vhGen = String(gen);
+  const $ = (id) => host.querySelector("#" + id) || document.getElementById(id);
+
+  const canvas = $("view");
+  let ctx = canvas ? canvas.getContext("2d", { alpha: false }) : null;
+  const capEl = $("cinemaCap");
+  function showBoot(msg) {
+    const el = $("bootErr");
+    if (el) { el.style.display = "block"; el.textContent = msg; }
+  }
+  if (!canvas || !ctx) showBoot("canvas failed to start");
+  window.addEventListener("error", (ev) => showBoot(ev.message || "script error"));
+
+  const VOCAB = [
+    { en: "apple", zh: "苹果", py: "pingguo", emoji: "🍎" },
+    { en: "chair", zh: "椅子", py: "yizi", emoji: "🪑" },
+    { en: "table", zh: "桌子", py: "zhuozi", emoji: "🪵" },
+    { en: "bed", zh: "床", py: "chuang", emoji: "🛏️" },
+    { en: "book", zh: "书", py: "shu", emoji: "📖" },
+    { en: "cup", zh: "杯子", py: "beizi", emoji: "☕" },
+    { en: "phone", zh: "手机", py: "shouji", emoji: "📱" },
+    { en: "door", zh: "门", py: "men", emoji: "🚪" },
+    { en: "window", zh: "窗户", py: "chuanghu", emoji: "🪟" },
+    { en: "lamp", zh: "灯", py: "deng", emoji: "💡" },
+    { en: "key", zh: "钥匙", py: "yaoshi", emoji: "🔑" },
+    { en: "bag", zh: "包", py: "bao", emoji: "👜" },
+    { en: "shoes", zh: "鞋子", py: "xiezi", emoji: "👟" },
+    { en: "hat", zh: "帽子", py: "maozi", emoji: "🧢" },
+    { en: "water", zh: "水", py: "shui", emoji: "💧" },
+    { en: "rice", zh: "米饭", py: "mifan", emoji: "🍚" },
+    { en: "knife", zh: "刀", py: "dao", emoji: "🔪" },
+    { en: "bowl", zh: "碗", py: "wan", emoji: "🥣" },
+    { en: "cat", zh: "猫", py: "mao", emoji: "🐱" },
+    { en: "dog", zh: "狗", py: "gou", emoji: "🐶" },
+    { en: "car", zh: "车", py: "che", emoji: "🚗" },
+    { en: "bike", zh: "自行车", py: "zixingche", emoji: "🚲" },
+    { en: "TV", zh: "电视", py: "dianshi", emoji: "📺" },
+    { en: "computer", zh: "电脑", py: "diannao", emoji: "💻" },
+    { en: "clock", zh: "钟", py: "zhong", emoji: "⏰" },
+    { en: "umbrella", zh: "伞", py: "san", emoji: "☂️" },
+    { en: "mirror", zh: "镜子", py: "jingzi", emoji: "🪞" },
+    { en: "pen", zh: "笔", py: "bi", emoji: "🖊️" },
+    { en: "paper", zh: "纸", py: "zhi", emoji: "📄" },
+    { en: "flower", zh: "花", py: "hua", emoji: "🌸" },
+    { en: "house", zh: "房子", py: "fangzi", emoji: "🏠" },
+    { en: "bread", zh: "面包", py: "mianbao", emoji: "🍞" },
+    { en: "egg", zh: "鸡蛋", py: "jidan", emoji: "🥚" },
+    { en: "shirt", zh: "衬衫", py: "chenshan", emoji: "👕" },
+    { en: "box", zh: "盒子", py: "hezi", emoji: "📦" },
+    { en: "bottle", zh: "瓶子", py: "pingzi", emoji: "🍾" },
+  ];
+
+  const parse = (rows) => rows.map((r) => r.split("").map(Number));
+  // 0 floor  1 tech  2 slime  3 computer  4 rust  5 vis door  6 cyan pad
+  const HANGAR = parse([
+    "111111111111111111111111",
+    "100000000000000000000001",
+    "100000000000000000000001",
+    "100000033300000222200001",
+    "100000033300000222200001",
+    "100000000000000000000001",
+    "100000000000000000000001",
+    "111110000000000000011111",
+    "100000000000000000000001",
+    "100000000000000000000001",
+    "100000044400000333300001",
+    "100000044400000333300001",
+    "100000000000000000000001",
+    "100000000000000000000001",
+    "111110000000000000011111",
+    "100000000000000000000001",
+    "100000000000000000000661",
+    "111111111111111111111111",
+  ]);
+  const GROUNDS = parse([
+    "111111111111111111111111",
+    "100000000000000000000001",
+    "100000011111111111000001",
+    "100000010000000001000001",
+    "100000010044440001000001",
+    "100000010000000001000001",
+    "100000011105501111000001",
+    "100000000000000000000001",
+    "100000000000000000000001",
+    "100022200000000002220001",
+    "100022200000000002220001",
+    "100000000000000000000001",
+    "100000000111111000000001",
+    "100000000100001000000001",
+    "100000000000000000000661",
+    "111111111111111111111111",
+  ]);
+
+  let CUR = HANGAR;
+  let MAP_W = CUR[0].length, MAP_H = CUR.length;
+  let stage = "hangar";
+  function useMap(m) { CUR = m; MAP_W = m[0].length; MAP_H = m.length; }
+  function zoneName() {
+    return stage === "sky" ? "SKY" : stage === "grounds" ? "YARD" : "HANGAR";
+  }
+
+  const RANKS = {
+    raptor:   { label: "RAPTOR",       diff: "EASY",   hp: 1, weapon: "pistol",   ammoKey: "bullets", ammoGive: 12, consume: 3,  time: 12, shots: 1, color: "#5a7a28", accent: "#e03418", loadLine: "LOADS PISTOL +12" },
+    dilo:     { label: "DILOPHOSAUR",  diff: "MEDIUM", hp: 2, weapon: "shotgun",  ammoKey: "shells",  ammoGive: 6,  consume: 2,  time: 11, shots: 2, color: "#8a6a24", accent: "#e84820", loadLine: "LOADS SHOTGUN +6" },
+    commando: { label: "RAPTOR PACK",  diff: "MEDIUM", hp: 3, weapon: "chaingun", ammoKey: "chain",   ammoGive: 24, consume: 10, time: 11, shots: 3, color: "#3a5a20", accent: "#d03018", loadLine: "LOADS CHAINGUN +24" },
+    rex:      { label: "TYRANT",       diff: "HARD",   hp: 4, weapon: "rocket",   ammoKey: "rockets", ammoGive: 3,  consume: 1,  time: 10, shots: 2, color: "#6a3a18", accent: "#e05018", loadLine: "LOADS ROCKET +3" },
+    giga:     { label: "GIGA",         diff: "BRUTAL", hp: 6, weapon: "plasma",   ammoKey: "cells",   ammoGive: 30, consume: 12, time: 10, shots: 3, color: "#241018", accent: "#c01828", loadLine: "LOADS PLASMA +30" },
+    compy:    { label: "COMPY",        diff: "EASY",   hp: 1, weapon: "pistol",   ammoKey: "bullets", ammoGive: 8,  consume: 2,  time: 13, shots: 1, color: "#6a8a40", accent: "#e8a030", loadLine: "LOADS PISTOL +8" },
+    trike:    { label: "TRICERATOPS",  diff: "HARD",   hp: 5, weapon: "rocket",   ammoKey: "rockets", ammoGive: 2,  consume: 1,  time: 10, shots: 2, color: "#5a6a38", accent: "#c09030", loadLine: "LOADS ROCKET +2" },
+    ptera:    { label: "PTERANODON",   diff: "MEDIUM", hp: 2, weapon: "shotgun",  ammoKey: "shells",  ammoGive: 5,  consume: 2,  time: 11, shots: 2, color: "#4a3a58", accent: "#c03040", loadLine: "LOADS SHOTGUN +5" },
+    leach:    { label: "LEAPER",       diff: "MEDIUM", hp: 2, weapon: "chaingun", ammoKey: "chain",   ammoGive: 16, consume: 8,  time: 11, shots: 2, color: "#8a4028", accent: "#e03818", loadLine: "LOADS CHAINGUN +16" },
+  };
+
+  const WEAPONS = ["pistol", "shotgun", "chaingun", "rocket", "plasma"];
+  const WEP_IDS = { pistol: "wPistol", shotgun: "wShot", chaingun: "wChain", rocket: "wRock", plasma: "wPlas" };
+
+  const FOV = Math.PI * 0.52;
+  const MOVE = 3.55;
+  const ROT = 2.4;
+  const RADIUS = 0.22;
+  const STEP = 1 / 60;
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const keys = Object.create(null);
+  const touchHold = Object.create(null);
+  let qaHeld = [];
+
+  let W = 480, H = 300;
+  let state = "title";
+  const player = { x: 2.5, y: 2.5, z: 0, a: 0, vx: 0, vy: 0, speed: 0, vf: 0, vs: 0, vr: 0 };
+  const prev = { x: 2.5, y: 2.5, a: 0 };
+  const cam = { x: 2.5, y: 2.5, a: 0 };
+  let hp = 7, frags = 0;
+  let ammo = { bullets: 20, shells: 0, chain: 0, rockets: 0, cells: 0 };
+  let gun = "pistol";
+  let enemies = [];
+  let last = 0, acc = 0;
+  let vocab = null;
+  let cinema = null;
+  let kick = 0, muzzle = 0, dim = 0, bob = 0;
+  let usedWords = new Set();
+  let particles = [];
+  let tracers = [];
+  const isTouch = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+
+  let audioCtx = null;
+  let masterGain = null;
+  function ensureAudio() {
+    if (audioCtx) return audioCtx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try {
+      audioCtx = new AC({ latencyHint: "interactive" });
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.8;
+      masterGain.connect(audioCtx.destination);
+    } catch (e) { audioCtx = null; }
+    return audioCtx;
+  }
+  function beep(freq, dur, type, vol) {
+    if (!audioCtx) ensureAudio();
+    if (!audioCtx || !masterGain) return;
+    try {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type || "sine";
+      o.frequency.value = freq * (0.96 + Math.random() * 0.08);
+      g.gain.setValueAtTime(vol || 0.05, audioCtx.currentTime);
+      o.connect(g); g.connect(masterGain);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+      o.stop(audioCtx.currentTime + dur);
+    } catch (e) {}
+  }
+  function sfx(kind) {
+    if (kind === "shot") { beep(180, 0.07, "triangle", 0.05); beep(90, 0.1, "sine", 0.03); }
+    if (kind === "shotgun") beep(90, 0.14, "triangle", 0.06);
+    if (kind === "chain") beep(240, 0.04, "sine", 0.04);
+    if (kind === "rocket") beep(70, 0.22, "sine", 0.07);
+    if (kind === "plasma") beep(480, 0.12, "sine", 0.05);
+    if (kind === "misfire") beep(64, 0.16, "sine", 0.04);
+    if (kind === "load") { beep(420, 0.08, "sine", 0.04); beep(640, 0.1, "sine", 0.03); }
+    if (kind === "fall") { beep(90, 0.4, "sine", 0.035); beep(50, 0.5, "sine", 0.03); }
+    if (kind === "growl") { beep(55, 0.28, "sawtooth", 0.035); beep(38, 0.4, "sine", 0.03); }
+    if (kind === "pad") { beep(520, 0.12, "sine", 0.04); beep(780, 0.16, "sine", 0.03); }
+  }
+
+  function resize() {
+    const wrap = $("wrap");
+    const rw = (wrap && wrap.clientWidth) || window.innerWidth || 800;
+    const rh = (wrap && wrap.clientHeight) || window.innerHeight || 520;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(320, Math.floor(rw * dpr * 0.9));
+    H = Math.max(200, Math.floor(Math.max(240, rh - 56) * dpr * 0.9));
+    W -= W % 2;
+    canvas.width = W;
+    canvas.height = H;
+  }
+  addEventListener("resize", resize);
+
+  function cell(x, y) {
+    const tx = x | 0, ty = y | 0;
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return 1;
+    return CUR[ty][tx];
+  }
+  function solidTile(tx, ty) {
+    if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+    const t = CUR[ty][tx];
+    return t !== 0 && t !== 5 && t !== 6;
+  }
+  function tile(x, y) { return solidTile(x | 0, y | 0) ? 1 : 0; }
+
+  function circleHits(x, y, r) {
+    if (stage === "sky") {
+      return x < 1.4 || y < 1.4 || x > MAP_W - 1.4 || y > MAP_H - 1.4;
+    }
+    const x0 = Math.floor(x - r), x1 = Math.floor(x + r);
+    const y0 = Math.floor(y - r), y1 = Math.floor(y + r);
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        if (!solidTile(tx, ty)) continue;
+        const cx = Math.max(tx, Math.min(x, tx + 1));
+        const cy = Math.max(ty, Math.min(y, ty + 1));
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy < r * r) return true;
+      }
+    }
+    return false;
+  }
+
+  function slideMove(x, y, vx, vy, r, dt) {
+    const travel = Math.hypot(vx, vy) * dt;
+    const n = Math.max(1, Math.ceil(travel / 0.08));
+    const sdt = dt / n;
+    let cx = x, cy = y, cvx = vx, cvy = vy;
+    for (let i = 0; i < n; i++) {
+      const nx = cx + cvx * sdt;
+      if (!circleHits(nx, cy, r)) cx = nx;
+      else cvx = 0;
+      const ny = cy + cvy * sdt;
+      if (!circleHits(cx, ny, r)) cy = ny;
+      else cvy = 0;
+    }
+    if (stage === "sky") {
+      if (cx < 1.5) { cx = 1.5; cvx = Math.abs(cvx) * 0.35; }
+      if (cy < 1.5) { cy = 1.5; cvy = Math.abs(cvy) * 0.35; }
+      if (cx > MAP_W - 1.5) { cx = MAP_W - 1.5; cvx = -Math.abs(cvx) * 0.35; }
+      if (cy > MAP_H - 1.5) { cy = MAP_H - 1.5; cvy = -Math.abs(cvy) * 0.35; }
+    }
+    return { x: cx, y: cy, vx: cvx, vy: cvy };
+  }
+
+  function hasLOS(x0, y0, x1, y1) {
+    if (stage === "sky") return true;
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.1) return true;
+    const steps = Math.max(10, (dist * 24) | 0);
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const px = x0 + dx * t, py = y0 + dy * t;
+      if (Math.hypot(x1 - px, y1 - py) < 0.35) break;
+      if (tile(px, py)) return false;
+    }
+    return true;
+  }
+  function angDiff(a, b) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function damp(cur, target, lambda, dt) {
+    return lerp(cur, target, 1 - Math.exp(-lambda * dt));
+  }
+  function facingEnemy(e, maxAng) {
+    const dx = e.x - player.x, dy = e.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    const a = Math.atan2(dy, dx);
+    return dist > 0.35 && Math.abs(angDiff(player.a, a)) < (maxAng || FOV * 0.26) && hasLOS(player.x, player.y, e.x, e.y);
+  }
+
+  function pickWord() {
+    const pool = VOCAB.filter((v) => !usedWords.has(v.py));
+    const src = pool.length ? pool : VOCAB;
+    const w = src[(Math.random() * src.length) | 0];
+    usedWords.add(w.py);
+    if (usedWords.size > VOCAB.length - 4) usedWords.clear();
+    return w;
+  }
+
+  function spawnEnemies(spots) {
+    enemies = spots.map(([x, y, kind], i) => ({
+      x, y, z: stage === "sky" || kind === "ptera" ? 1.2 : 0,
+      kind, alive: true, pose: "idle", poseT: 0, recoil: 0,
+      ship: stage === "sky",
+      hp: (RANKS[kind] || RANKS.raptor).hp,
+      word: pickWord(), bob: Math.random() * 6, id: i,
+      orbit: Math.random() * 6, hunt: 0, vx: 0, vy: 0,
+    }));
+  }
+  function hangarSpots() {
+    return [
+      [16.5, 2.4, "compy"],
+      [5.5, 8.5, "raptor"],
+      [16.5, 8.5, "dilo"],
+      [5.5, 12.5, "leach"],
+      [16.5, 15.5, "ptera"],
+    ];
+  }
+  function groundsSpots() {
+    return [
+      [4.5, 8.5, "trike"],
+      [18.5, 8.5, "commando"],
+      [11.5, 11.5, "rex"],
+      [19.5, 13.5, "ptera"],
+    ];
+  }
+  function skySpots() {
+    return [
+      [8, 6, "ptera"],
+      [16, 8, "raptor"],
+      [12, 12, "dilo"],
+      [6, 14, "leach"],
+      [18, 5, "giga"],
+    ];
+  }
+
+  function resetBody(x, y, a) {
+    player.x = x; player.y = y; player.a = a;
+    player.vx = player.vy = player.speed = player.vf = player.vs = player.vr = 0;
+    prev.x = x; prev.y = y; prev.a = a;
+    cam.x = x; cam.y = y; cam.a = a;
+  }
+
+  function resetGame() {
+    stage = "hangar";
+    useMap(HANGAR);
+    resetBody(2.6, 2.6, 0.15);
+    hp = 7; frags = 0; kick = 0; muzzle = 0; dim = 0; bob = 0; acc = 0;
+    ammo = { bullets: 20, shells: 0, chain: 0, rockets: 0, cells: 0 };
+    gun = "pistol";
+    usedWords.clear();
+    spawnEnemies(hangarSpots());
+    vocab = null; cinema = null; particles = []; tracers = [];
+    $("combat")?.classList.remove("show");
+    const card = $("objectCard"); if (card) card.style.display = "none";
+    const inp = $("answer"); if (inp) inp.value = "";
+    if (capEl) capEl.style.opacity = "0";
+    updateHUD();
+  }
+
+  function enterGrounds() {
+    stage = "grounds";
+    useMap(GROUNDS);
+    resetBody(3.2, 3.2, 0.35);
+    spawnEnemies(groundsSpots());
+    bang("CASTLE YARD — DRIVE", "#ffe080");
+    sfx("pad");
+    if (capEl) { capEl.textContent = "ACT II · THE YARD"; capEl.style.opacity = "1"; setTimeout(() => { capEl.style.opacity = "0"; }, 1600); }
+    updateHUD();
+  }
+  function enterSky() {
+    stage = "sky";
+    useMap(GROUNDS);
+    resetBody(12, 8, 0);
+    player.z = 2;
+    spawnEnemies(skySpots());
+    bang("SHIP LAUNCH", "#9cf0ff");
+    sfx("pad");
+    if (capEl) { capEl.textContent = "ACT III · HOLD THE NOSE LEVEL"; capEl.style.opacity = "1"; setTimeout(() => { capEl.style.opacity = "0"; }, 1800); }
+    updateHUD();
+  }
+  function afterClear() {
+    if (stage === "hangar") enterGrounds();
+    else if (stage === "grounds") enterSky();
+    else endRun(true);
+  }
+
+  function updateHUD() {
+    const hpEl = $("hp"); if (hpEl) hpEl.textContent = "♥".repeat(Math.max(0, hp)) + "♡".repeat(Math.max(0, 7 - hp));
+    const sc = $("sc"); if (sc) sc.textContent = "FRAGS " + frags;
+    const en = $("en"); if (en) en.textContent = zoneName() + "  " + enemies.filter((e) => e.alive).length + " LEFT";
+    const map = { bullets: "amBullets", shells: "amShells", chain: "amChain", rockets: "amRockets", cells: "amCells" };
+    Object.keys(map).forEach((k) => { const n = $(map[k]); if (n) n.textContent = ammo[k]; });
+    WEAPONS.forEach((w) => { const el = $(WEP_IDS[w]); if (el) el.classList.toggle("on", gun === w); });
+    const cr = $("cross"); if (cr) cr.style.opacity = cinema ? "0" : "1";
+  }
+
+  function norm(s) {
+    return String(s || "")
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/ü/g, "v").replace(/v/g, "u")
+      .replace(/[^a-z\u4e00-\u9fff]/g, "");
+  }
+  function fillVocabCard(w, rank) {
+    const setTxt = (id, v) => { const n = $(id); if (n) n.textContent = v; };
+    setTxt("cardEmo", w.emoji || "");
+    setTxt("cardEn", w.en || "");
+    setTxt("cardZh", w.zh || "");
+    setTxt("rankTag", rank.diff);
+    setTxt("promptZh", w.zh || "");
+    setTxt("diffLine", rank.label + " · " + rank.diff + " · " + rank.loadLine);
+    const card = $("objectCard");
+    if (card) card.style.display = "block";
+  }
+  function startVocab(e) {
+    if (vocab || cinema) return;
+    player.vx = player.vy = player.speed = player.vf = player.vs = player.vr = 0;
+    Object.keys(keys).forEach((k) => { keys[k] = false; });
+    const rank = RANKS[e.kind] || RANKS.raptor;
+    const w = e.word || pickWord();
+    e.word = w;
+    e.pose = "roar"; e.poseT = 0;
+    vocab = { enemy: e, word: w, rank, t: rank.time, max: rank.time, reveal: 0, pendingDeath: false };
+    fillVocabCard(w, rank);
+    $("wordBox")?.classList.remove("revealing");
+    $("combat")?.classList.add("show");
+    const inp = $("answer");
+    if (inp) {
+      inp.disabled = false;
+      inp.value = "";
+      setTimeout(() => { try { inp.focus(); inp.select(); } catch (err) {} }, 30);
+    }
+    sfx("growl");
+  }
+  function misfireSameWord() {
+    if (!vocab || vocab.reveal > 0) return;
+    hp--;
+    dim = 0.28;
+    sfx("misfire");
+    vocab.enemy.recoil = 0.9;
+    vocab.enemy.pose = "roar";
+    vocab.t = vocab.max;
+    updateHUD();
+    bang(hp <= 0 ? "LAST HEART" : "MISFIRE", "#e07050");
+    const inp = $("answer");
+    if (inp) { inp.value = ""; try { inp.focus(); } catch (e) {} }
+    if (hp <= 0) { closeVocabBox(); vocab = null; return endRun(false); }
+  }
+  function skipReveal() {
+    if (!vocab || vocab.reveal > 0) return;
+    const w = vocab.word || {};
+    hp--;
+    dim = 0.28;
+    sfx("misfire");
+    vocab.reveal = 1;
+    vocab.pendingDeath = hp <= 0;
+    const py = $("revealPy"); const zh = $("revealZh");
+    if (py) py.textContent = w.py || "";
+    if (zh) zh.textContent = w.zh || "";
+    $("wordBox")?.classList.add("revealing");
+    const inp = $("answer");
+    if (inp) { inp.blur(); inp.disabled = true; }
+    updateHUD();
+    bang(vocab.pendingDeath ? "LAST HEART" : "−1 HEART", "#e07050");
+  }
+  function nextWordAfterReveal() {
+    if (!vocab) return;
+    if (vocab.pendingDeath) { closeVocabBox(); vocab = null; return endRun(false); }
+    const e = vocab.enemy;
+    const w = pickWord();
+    e.word = w; vocab.word = w; vocab.t = vocab.max; vocab.reveal = 0;
+    fillVocabCard(w, vocab.rank);
+    $("wordBox")?.classList.remove("revealing");
+    const inp = $("answer");
+    if (inp) {
+      inp.disabled = false; inp.value = "";
+      setTimeout(() => { try { inp.focus(); inp.select(); } catch (err) {} }, 20);
+    }
+  }
+  function closeVocabBox() {
+    $("combat")?.classList.remove("show");
+    $("wordBox")?.classList.remove("revealing");
+    const card = $("objectCard"); if (card) card.style.display = "none";
+    const inp = $("answer"); if (inp) { inp.disabled = false; inp.blur(); }
+  }
+  function loadAndFight() {
+    const e = vocab.enemy;
+    const rank = vocab.rank;
+    closeVocabBox();
+    ammo[rank.ammoKey] += rank.ammoGive;
+    gun = rank.weapon;
+    sfx("load");
+    vocab = null;
+    updateHUD();
+    e.pose = "roar"; e.poseT = 0; e.recoil = 0;
+    cinema = { enemy: e, rank, phase: "lock", t: 0, shotsDone: 0, shotsNeed: rank.shots };
+    if (capEl) { capEl.textContent = rank.label; capEl.style.opacity = "1"; }
+    dim = 0.12;
+  }
+  function bang(text, color) {
+    const el = $("feedback");
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = color;
+    el.style.opacity = "1";
+    el.style.transition = "none";
+    requestAnimationFrame(() => {
+      el.style.transition = "opacity .9s ease";
+      el.style.opacity = "0";
+    });
+  }
+  function bestFrags() {
+    try { return Number(localStorage.getItem("vh-best") || 0) || 0; } catch (e) { return 0; }
+  }
+  function saveBest() {
+    try { localStorage.setItem("vh-best", String(Math.max(frags, bestFrags()))); } catch (e) {}
+  }
+  function endRun(win) {
+    state = "over";
+    cinema = null; vocab = null;
+    saveBest();
+    if (capEl) capEl.style.opacity = "0";
+    const ov = $("over"); if (ov) ov.style.display = "flex";
+    const t = $("overTitle"); if (t) t.textContent = win ? "KEEP TAKEN" : "RIP";
+    const s = $("overSub"); if (s) s.textContent = win ? "hangar · yard · sky" : "the hangar keeps the shells";
+    const st = $("overStats"); if (st) st.textContent = "Frags " + frags + "   ·   best " + bestFrags() + "   ·   " + zoneName();
+  }
+  function tryAnswer() {
+    if (!vocab || vocab.reveal > 0) return;
+    const inp = $("answer");
+    const n = norm(inp ? inp.value : "");
+    const w = vocab.word || {};
+    if (n && (n === norm(w.py) || n === w.zh)) loadAndFight();
+    else misfireSameWord();
+  }
+
+  const answerEl = $("answer");
+  if (answerEl) {
+    answerEl.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") { ev.preventDefault(); tryAnswer(); }
+    });
+    answerEl.addEventListener("keyup", (ev) => ev.stopPropagation());
+  }
+  $("skipBtn")?.addEventListener("click", (ev) => { ev.preventDefault(); skipReveal(); });
+
+  addEventListener("keydown", (e) => {
+    if (state !== "play") return;
+    const tag = e.target && e.target.tagName;
+    if (vocab || tag === "INPUT" || tag === "TEXTAREA") return;
+    const code = String(e.code || "").toLowerCase();
+    const key = String(e.key || "").toLowerCase();
+    if (code) keys[code] = true;
+    if (key) keys[key] = true;
+    if (key === "1" || code === "digit1") gun = "pistol";
+    if (key === "2" || code === "digit2") gun = "shotgun";
+    if (key === "3" || code === "digit3") gun = "chaingun";
+    if (key === "4" || code === "digit4") gun = "rocket";
+    if (key === "5" || code === "digit5") gun = "plasma";
+    if (key.startsWith("arrow") || key === " " || code.startsWith("key") || code.startsWith("arrow")) e.preventDefault();
+    updateHUD();
+  });
+  addEventListener("keyup", (e) => {
+    const code = String(e.code || "").toLowerCase();
+    const key = String(e.key || "").toLowerCase();
+    if (code) keys[code] = false;
+    if (key) keys[key] = false;
+  });
+  addEventListener("blur", () => { Object.keys(keys).forEach((k) => { keys[k] = false; }); });
+  addEventListener("visibilitychange", () => {
+    if (document.hidden) Object.keys(keys).forEach((k) => { keys[k] = false; });
+    else if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  });
+
+  function bindPad(id, code) {
+    const el = $(id);
+    if (!el) return;
+    const on = (ev) => { ev.preventDefault(); touchHold[code] = true; };
+    const off = (ev) => { ev.preventDefault(); touchHold[code] = false; };
+    el.addEventListener("touchstart", on, { passive: false });
+    el.addEventListener("touchend", off, { passive: false });
+    el.addEventListener("touchcancel", off, { passive: false });
+    el.addEventListener("mousedown", on);
+    addEventListener("mouseup", off);
+  }
+  bindPad("pUp", "w"); bindPad("pDn", "s");
+  bindPad("pLt", "a"); bindPad("pRt", "d");
+  bindPad("pTurnL", "q"); bindPad("pTurnR", "e");
+
+  function qaHas(code) { return qaHeld.indexOf(code) >= 0; }
+  function down(k) {
+    if (qaHeld.length) {
+      const map = {
+        w: "KeyW", s: "KeyS", a: "KeyA", d: "KeyD", q: "KeyQ", e: "KeyE",
+        arrowleft: "ArrowLeft", arrowright: "ArrowRight",
+        arrowup: "ArrowUp", arrowdown: "ArrowDown",
+      };
+      if (qaHas(map[k])) return true;
+      return false;
+    }
+    if (k === "w") return !!(keys.w || keys.keyw || keys.arrowup || touchHold.w);
+    if (k === "s") return !!(keys.s || keys.keys || keys.arrowdown || touchHold.s);
+    if (k === "a") return !!(keys.a || keys.keya || keys.arrowleft || touchHold.a);
+    if (k === "d") return !!(keys.d || keys.keyd || keys.arrowright || touchHold.d);
+    if (k === "q") return !!(keys.q || keys.keyq || touchHold.q);
+    if (k === "e") return !!(keys.e || keys.keye || touchHold.e);
+    return !!(keys[k] || touchHold[k]);
+  }
+
+  window.__controlsTest = {
+    getYaw: () => -player.a,
+    getSpeed: () => Math.hypot(player.vx, player.vy),
+    setKeys: (codes) => { qaHeld = codes || []; },
+    getPos: () => ({ x: player.x, y: player.y, a: player.a, stage, hp, frags, cell: cell(player.x, player.y), st: state, v: !!vocab, c: !!cinema }),
+    warp: (x, y, a) => { resetBody(x, y, a == null ? player.a : a); },
+  };
+
+  function readSteer() {
+    let s = 0;
+    if (down("a")) s += 1;
+    if (down("d")) s -= 1;
+    return s;
+  }
+
+  function movePlayer(dt) {
+    if (vocab || cinema) {
+      player.vx = damp(player.vx, 0, 14, dt);
+      player.vy = damp(player.vy, 0, 14, dt);
+      player.speed = damp(player.speed, 0, 14, dt);
+      player.vf = player.vs = player.vr = 0;
+      return;
+    }
+    const steer = readSteer();
+    player.vr = steer;
+    const ca = Math.cos(player.a), sa = Math.sin(player.a);
+
+    if (stage === "sky") {
+      player.a -= steer * ROT * 1.15 * dt;
+      if (down("w")) {
+        player.vx += ca * 11 * dt;
+        player.vy += sa * 11 * dt;
+      }
+      const drag = down("s") ? 3.4 : 0.55;
+      player.vx *= Math.exp(-drag * dt);
+      player.vy *= Math.exp(-drag * dt);
+      const sp = Math.hypot(player.vx, player.vy);
+      const max = MOVE * 1.75;
+      if (sp > max) { player.vx *= max / sp; player.vy *= max / sp; }
+      player.vf = down("w") ? 1 : down("s") ? -1 : 0;
+      const moved = slideMove(player.x, player.y, player.vx, player.vy, 0.28, dt);
+      player.x = moved.x; player.y = moved.y; player.vx = moved.vx; player.vy = moved.vy;
+      return;
+    }
+
+    if (stage === "grounds") {
+      let throttle = 0;
+      if (down("w")) throttle += 1;
+      if (down("s")) throttle -= 0.65;
+      const max = MOVE * 1.4;
+      if (throttle) player.speed += throttle * 10 * dt;
+      else player.speed *= Math.exp(-2.6 * dt);
+      if (player.speed > max) player.speed = max;
+      if (player.speed < -max * 0.42) player.speed = -max * 0.42;
+      const fac = 0.32 + 0.68 * Math.min(1, Math.abs(player.speed) / max);
+      player.a -= steer * ROT * 1.05 * fac * dt;
+      player.vx = Math.cos(player.a) * player.speed;
+      player.vy = Math.sin(player.a) * player.speed;
+      player.vf = throttle;
+      const hitSp = player.speed;
+      const moved = slideMove(player.x, player.y, player.vx, player.vy, RADIUS, dt);
+      player.x = moved.x; player.y = moved.y; player.vx = moved.vx; player.vy = moved.vy;
+      if ((moved.vx === 0 && Math.abs(ca * hitSp) > 0.4) || (moved.vy === 0 && Math.abs(sa * hitSp) > 0.4)) {
+        player.speed *= 0.35;
+      } else {
+        const along = player.vx * Math.cos(player.a) + player.vy * Math.sin(player.a);
+        player.speed = along;
+      }
+      return;
+    }
+
+    // hangar walk — accelerate toward wish, slide on walls
+    let tf = 0, ts = 0;
+    if (down("w")) tf += 1;
+    if (down("s")) tf -= 1;
+    if (down("q")) ts -= 1;
+    if (down("e")) ts += 1;
+    player.vf = tf; player.vs = ts;
+    player.a -= steer * ROT * dt;
+    const fca = Math.cos(player.a), fsa = Math.sin(player.a);
+    let wx = fca * tf - fsa * ts;
+    let wy = fsa * tf + fca * ts;
+    const wl = Math.hypot(wx, wy);
+    if (wl > 1) { wx /= wl; wy /= wl; }
+    const max = MOVE;
+    if (wl > 0.01) {
+      player.vx += wx * 16 * dt;
+      player.vy += wy * 16 * dt;
+    } else {
+      const sp = Math.hypot(player.vx, player.vy);
+      const drop = Math.min(sp, 12 * dt);
+      if (sp > 1e-4) { player.vx *= (sp - drop) / sp; player.vy *= (sp - drop) / sp; }
+      else { player.vx = 0; player.vy = 0; }
+    }
+    const sp = Math.hypot(player.vx, player.vy);
+    if (sp > max) { player.vx *= max / sp; player.vy *= max / sp; }
+    const moved = slideMove(player.x, player.y, player.vx, player.vy, RADIUS, dt);
+    player.x = moved.x; player.y = moved.y; player.vx = moved.vx; player.vy = moved.vy;
+  }
+
+  function moveEnemies(dt) {
+    if (vocab || cinema) return;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      e.bob += dt * 2.2;
+      e.poseT += dt;
+      const dx = player.x - e.x, dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy);
+      const reach = stage === "sky" ? 4.2 : 2.6;
+      if (dist < reach && facingEnemy(e, FOV * 0.24)) { startVocab(e); return; }
+      if (stage === "sky") {
+        e.orbit += dt * 0.5;
+        e.vx = Math.cos(e.orbit) * 0.7;
+        e.vy = Math.sin(e.orbit * 0.8) * 0.7;
+        e.x += e.vx * dt;
+        e.y += e.vy * dt;
+        e.z = 1.1 + Math.sin(e.orbit * 1.2) * 0.4;
+        e.x = Math.max(2, Math.min(MAP_W - 2, e.x));
+        e.y = Math.max(2, Math.min(MAP_H - 2, e.y));
+      } else if (dist < 9 && dist > 1.4) {
+        const spd = e.kind === "rex" || e.kind === "giga" || e.kind === "trike" ? 0.9 : 1.2;
+        const ux = dx / dist, uy = dy / dist;
+        const moved = slideMove(e.x, e.y, ux * spd, uy * spd, 0.28, dt);
+        e.x = moved.x; e.y = moved.y;
+        e.hunt = 1;
+      } else e.hunt = Math.max(0, e.hunt - dt);
+      if (e.kind === "ptera" && stage !== "sky") {
+        e.orbit += dt * 0.4;
+        e.z = 0.9 + Math.sin(e.orbit) * 0.25;
+      }
+    }
+  }
+
+  function spray(e, n, col, speed) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = speed * (0.3 + Math.random());
+      particles.push({
+        x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        life: 0.5 + Math.random() * 0.7, max: 1.1,
+        z: 0.3 + Math.random() * 0.5, vz: (Math.random() - 0.2) * 1.2,
+        col, size: 1.5 + Math.random() * 3,
+      });
+    }
+  }
+  function fireShot(c) {
+    const e = c.enemy, rank = c.rank;
+    sfx(rank.weapon === "shotgun" ? "shotgun" : rank.weapon === "chaingun" ? "chain" : rank.weapon === "rocket" ? "rocket" : rank.weapon === "plasma" ? "plasma" : "shot");
+    muzzle = 0.12; kick = 0.45;
+    e.recoil = 1; e.pose = "hit"; e.poseT = 0;
+    const col = rank.weapon === "plasma" ? "#9cf0ff" : rank.weapon === "rocket" ? "#ffb060" : "#f0d090";
+    tracers.push({ t: 0, col, kind: rank.weapon });
+    ammo[rank.ammoKey] = Math.max(0, ammo[rank.ammoKey] - Math.max(1, (rank.consume / rank.shots) | 0));
+    spray(e, rank.weapon === "shotgun" ? 18 : 10, rank.weapon === "plasma" ? "#80e0ff" : "#7a2018", rank.weapon === "rocket" ? 2.4 : 1.4);
+    if (rank.weapon === "rocket") spray(e, 14, "#e8a040", 1.8);
+    updateHUD();
+  }
+  function runCinema(dt) {
+    if (!cinema) return;
+    const c = cinema, e = c.enemy;
+    const slow = c.phase === "fall" || c.phase === "hold" ? 0.72 : 1;
+    c.t += dt * slow;
+    e.poseT += dt;
+    e.recoil = Math.max(0, e.recoil - dt * 1.6);
+    if (muzzle > 0) muzzle -= dt;
+    if (kick > 0) kick -= dt * 2.4;
+    const desired = Math.atan2(e.y - player.y, e.x - player.x);
+    player.a += angDiff(player.a, desired) * Math.min(1, 5 * dt);
+    if (c.phase === "lock") {
+      const lined = Math.abs(angDiff(player.a, desired)) < 0.07 && hasLOS(player.x, player.y, e.x, e.y);
+      if ((lined && c.t > 0.32) || c.t > 1.2) { c.phase = "shot"; c.t = 0; fireShot(c); }
+    } else if (c.phase === "shot") {
+      if (c.t > 0.18) { c.phase = "reel"; c.t = 0; c.shotsDone++; }
+    } else if (c.phase === "reel") {
+      if (c.t > 0.4) {
+        if (c.shotsDone < c.shotsNeed) { c.phase = "shot"; c.t = 0; fireShot(c); }
+        else {
+          c.phase = "fall"; c.t = 0; e.pose = "fall"; e.poseT = 0; e.alive = false;
+          sfx("fall"); spray(e, 22, "#5a1810", 0.9); spray(e, 10, "#c4a060", 0.5);
+        }
+      }
+    } else if (c.phase === "fall") {
+      if (capEl) capEl.textContent = c.rank.label + "  —  FALLEN";
+      if (c.t > 1.2) { c.phase = "hold"; c.t = 0; frags++; updateHUD(); bang(c.rank.label, "#e8d090"); }
+    } else if (c.phase === "hold") {
+      if (c.t > 0.65) {
+        cinema = null;
+        if (capEl) capEl.style.opacity = "0";
+        dim = 0;
+        if (!enemies.some((x) => x.alive)) afterClear();
+      }
+    }
+  }
+
+  function physicsStep(dt) {
+    movePlayer(dt);
+    if (stage !== "sky" && !vocab && !cinema && cell(player.x, player.y) === 6) afterClear();
+    moveEnemies(dt);
+    runCinema(dt);
+    if (vocab) {
+      if (vocab.reveal > 0) {
+        vocab.reveal += dt;
+        if (vocab.reveal > 1.15) nextWordAfterReveal();
+      } else {
+        vocab.t -= dt;
+        const pct = Math.max(0, vocab.t / vocab.max);
+        const fill = $("timerFill");
+        if (fill) {
+          fill.style.transform = "scaleX(" + pct + ")";
+          fill.classList.toggle("low", pct < 0.28);
+        }
+        if (vocab.t <= 0) misfireSameWord();
+      }
+    }
+    if (dim > 0) dim = Math.max(0, dim - dt * 0.5);
+    const spd = Math.hypot(player.vx, player.vy);
+    if (!reduceMotion && spd > 0.4 && !cinema && !vocab) bob += spd * dt * 2.4;
+  }
+
+  function drawSkyWorld(zbuf) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#7aa0c4");
+    g.addColorStop(0.38, "#d0c4a0");
+    g.addColorStop(0.5, "#4a5a38");
+    g.addColorStop(1, "#1a2418");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    const horizon = H * 0.48;
+    ctx.fillStyle = "#2e3828";
+    ctx.beginPath();
+    ctx.moveTo(0, horizon + 10);
+    for (let i = 0; i <= 8; i++) ctx.lineTo((W * i) / 8, horizon - 18 - ((i * 17) % 23));
+    ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.fill();
+    const cx = W * 0.5 + Math.sin(cam.a) * 48;
+    ctx.fillStyle = "#3a342c";
+    ctx.fillRect(cx - 58, horizon - 86, 116, 96);
+    ctx.fillStyle = "#2a2620";
+    ctx.fillRect(cx - 74, horizon - 108, 28, 46);
+    ctx.fillRect(cx + 46, horizon - 108, 28, 46);
+    ctx.fillRect(cx - 12, horizon - 122, 24, 36);
+    ctx.fillStyle = "#1a1814";
+    ctx.fillRect(cx - 8, horizon - 34, 16, 32);
+    ctx.fillStyle = "rgba(255,220,140,0.18)";
+    ctx.fillRect(cx - 40, horizon - 70, 18, 14);
+    ctx.fillRect(cx + 16, horizon - 70, 18, 14);
+    ctx.strokeStyle = "rgba(80,255,160,0.45)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(W * 0.5 - 16, H * 0.46 - 9, 32, 18);
+    ctx.beginPath();
+    ctx.moveTo(W * 0.5, H * 0.46 - 14); ctx.lineTo(W * 0.5, H * 0.46 + 14);
+    ctx.moveTo(W * 0.5 - 14, H * 0.46); ctx.lineTo(W * 0.5 + 14, H * 0.46);
+    ctx.stroke();
+    for (let i = 0; i < W; i++) zbuf[i] = 40;
+  }
+
+  function castDDA() {
+    const zbuf = new Float32Array(W);
+    if (stage === "sky") { drawSkyWorld(zbuf); return zbuf; }
+    const bobY = reduceMotion ? 0 : Math.sin(bob) * 3;
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, stage === "grounds" ? "#6aa0c8" : "#2c221c");
+    sky.addColorStop(0.47, stage === "grounds" ? "#b8d4e8" : "#12100e");
+    sky.addColorStop(0.5, stage === "grounds" ? "#6aaa48" : "#1c1814");
+    sky.addColorStop(1, stage === "grounds" ? "#3a6a28" : "#0c0a08");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+    const floorTop = H * 0.5 + bobY * 0.15;
+    for (let row = 0; row < 12; row++) {
+      const t = row / 12;
+      const y = floorTop + t * t * (H - floorTop);
+      const next = floorTop + ((row + 1) / 12) ** 2 * (H - floorTop);
+      ctx.fillStyle = stage === "grounds"
+        ? (row % 2 ? "rgba(70,140,40,0.16)" : "rgba(40,90,20,0.1)")
+        : (row % 2 ? "rgba(40,28,18,0.26)" : "rgba(18,12,8,0.16)");
+      ctx.fillRect(0, y, W, Math.max(1, next - y));
+    }
+    const colW = W > 900 ? 2 : 1;
+    for (let col = 0; col < W; col += colW) {
+      const camX = 2 * col / W - 1;
+      const rayA = cam.a + Math.atan(camX * Math.tan(FOV / 2));
+      const rdx = Math.cos(rayA), rdy = Math.sin(rayA);
+      let mapX = cam.x | 0, mapY = cam.y | 0;
+      const deltaX = Math.abs(1 / (rdx || 1e-8));
+      const deltaY = Math.abs(1 / (rdy || 1e-8));
+      let stepX, stepY, sideX, sideY, side = 0, hit = 0;
+      if (rdx < 0) { stepX = -1; sideX = (cam.x - mapX) * deltaX; }
+      else { stepX = 1; sideX = (mapX + 1 - cam.x) * deltaX; }
+      if (rdy < 0) { stepY = -1; sideY = (cam.y - mapY) * deltaY; }
+      else { stepY = 1; sideY = (mapY + 1 - cam.y) * deltaY; }
+      for (let i = 0; i < 40; i++) {
+        if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+        else { sideY += deltaY; mapY += stepY; side = 1; }
+        if (mapX < 0 || mapY < 0 || mapX >= MAP_W || mapY >= MAP_H) { hit = 1; break; }
+        const t = CUR[mapY][mapX];
+        if (t && t !== 5 && t !== 6) { hit = t; break; }
+      }
+      let raw;
+      if (side === 0) raw = (mapX - cam.x + (1 - stepX) / 2) / (rdx || 1e-8);
+      else raw = (mapY - cam.y + (1 - stepY) / 2) / (rdy || 1e-8);
+      raw = Math.abs(raw);
+      const dist = Math.max(0.14, raw * Math.cos(rayA - cam.a));
+      for (let k = 0; k < colW && col + k < W; k++) zbuf[col + k] = dist;
+      const wallU = side === 0 ? cam.y + raw * rdy : cam.x + raw * rdx;
+      const u = ((wallU % 1) + 1) % 1;
+      const hMul = hit === 4 ? 1.08 : hit === 2 ? 0.84 : 0.82;
+      const wh = Math.min(H * 2.2, (H * hMul) / dist);
+      const y0 = (H - wh) / 2 + bobY + (hit === 2 ? H * 0.03 : 0);
+      const shade = Math.max(0.18, 1 - dist / 16) * (side ? 0.74 : 1);
+      const band = (u * 6) | 0;
+      const rivet = (u * 5 % 1) < 0.07;
+      let r, g2, b;
+      if (hit === 2) {
+        r = 28 * shade; g2 = (70 + band * 4) * shade; b = 30 * shade;
+      } else if (hit === 3) {
+        r = 38 * shade; g2 = 64 * shade; b = 90 * shade;
+        if (band % 2 === 0) { b += 22 * shade; g2 += 10 * shade; }
+        if (rivet) { r += 40 * shade; g2 += 60 * shade; }
+      } else if (hit === 4) {
+        r = (110 + band * 6) * shade; g2 = 24 * shade; b = 18 * shade;
+      } else if (stage === "grounds") {
+        r = (186 + band * 4) * shade; g2 = (150 + band * 2) * shade; b = (86 + band) * shade;
+      } else {
+        r = (82 + band * 2) * shade; g2 = (56 + (band % 3)) * shade; b = 38 * shade;
+        if (rivet) { r += 22 * shade; g2 += 16 * shade; }
+      }
+      if ((u * 6 % 1) < 0.05) { r *= 0.55; g2 *= 0.55; b *= 0.55; }
+      ctx.fillStyle = "rgb(" + (r | 0) + "," + (g2 | 0) + "," + (b | 0) + ")";
+      ctx.fillRect(col, y0, colW, wh);
+      ctx.fillStyle = "rgba(0,0,0," + (0.12 * shade) + ")";
+      ctx.fillRect(col, y0 + wh * 0.33, colW, 1);
+      ctx.fillRect(col, y0 + wh * 0.66, colW, 1);
+      if (hit === 3 && (band === 1 || band === 4)) {
+        ctx.fillStyle = "rgba(120,200,220," + (0.4 * shade) + ")";
+        ctx.fillRect(col, y0 + wh * 0.28, colW, Math.max(2, wh * 0.06));
+      }
+      if (hit === 2) {
+        ctx.fillStyle = "rgba(20,80,30," + (0.32 * shade) + ")";
+        ctx.fillRect(col, y0 + wh * 0.62, colW, wh * 0.38);
+      }
+    }
+    return zbuf;
+  }
+
+  function project(x, y) {
+    const dx = x - cam.x, dy = y - cam.y;
+    const dist = Math.hypot(dx, dy);
+    let a = Math.atan2(dy, dx) - cam.a;
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return { sx: (0.5 + a / FOV) * W, dist, a, visible: Math.abs(a) < FOV * 0.95 };
+  }
+
+  function drawDino(e, sx, sy, scale, shade) {
+    const rank = RANKS[e.kind] || RANKS.raptor;
+    ctx.save();
+    ctx.translate(sx, sy);
+    let fall = 0, squash = 1, lift = 0;
+    if (e.pose === "fall") {
+      const p = Math.min(1, e.poseT / 1.15);
+      fall = p * 1.2; squash = 1 - p * 0.32; lift = Math.sin(p * Math.PI) * 8;
+    } else if (e.pose === "hit") lift = -e.recoil * 6;
+    else if (e.pose === "roar") lift = Math.sin(e.poseT * 8) * 2;
+    ctx.rotate(fall);
+    ctx.translate(e.recoil * 8, lift);
+    ctx.scale(scale * squash, scale);
+    ctx.globalAlpha = Math.max(0.4, shade);
+    if (e.ship) {
+      ctx.fillStyle = "#4a5560";
+      ctx.beginPath();
+      ctx.moveTo(-38, 8); ctx.lineTo(40, 0); ctx.lineTo(24, 18); ctx.lineTo(-30, 20);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#2a3038";
+      ctx.fillRect(-8, -8, 30, 12);
+      ctx.fillStyle = muzzle > 0 ? "#9cf0ff" : "#6a7380";
+      ctx.fillRect(34, -2, 10, 5);
+      ctx.translate(2, -12);
+      ctx.scale(0.52, 0.52);
+    }
+    const body = rank.color, dark = "#1a120c", belly = "#d4b890", eye = rank.accent;
+    const big = e.kind === "rex" || e.kind === "giga" || e.kind === "trike";
+    if (e.kind === "compy") ctx.scale(0.62, 0.62);
+
+    ctx.fillStyle = "rgba(0,0,0,0.28)";
+    ctx.beginPath(); ctx.ellipse(0, 34, 18, 5, 0, 0, 7); ctx.fill();
+
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-22, 18);
+    ctx.quadraticCurveTo(-28, 4, -12, -6);
+    ctx.quadraticCurveTo(-2, -18, 12, -14);
+    ctx.quadraticCurveTo(22, -8, 20, 4);
+    ctx.quadraticCurveTo(14, 18, 4, 22);
+    ctx.quadraticCurveTo(-10, 24, -22, 18);
+    ctx.fill();
+    ctx.fillStyle = belly;
+    ctx.globalAlpha = Math.max(0.25, shade * 0.5);
+    ctx.beginPath(); ctx.ellipse(-2, 10, big ? 10 : 7, big ? 8 : 6, 0.2, 0, 7); ctx.fill();
+    ctx.globalAlpha = Math.max(0.4, shade);
+
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-20, 8); ctx.quadraticCurveTo(-36, 12, -32, 18); ctx.quadraticCurveTo(-16, 14, -10, 10);
+    ctx.fill();
+
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(10, -12); ctx.quadraticCurveTo(22, -10, 32, -2);
+    ctx.lineTo(30, 5); ctx.lineTo(10, 2); ctx.fill();
+    ctx.fillStyle = "#3a2014";
+    ctx.fillRect(20, -2, 8, 1.4);
+
+    if (e.kind === "dilo") {
+      ctx.fillStyle = "#c05048";
+      ctx.beginPath(); ctx.moveTo(4, -16); ctx.quadraticCurveTo(0, -30, 10, -18); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(10, -14); ctx.quadraticCurveTo(8, -26, 16, -14); ctx.fill();
+    }
+    if (e.kind === "trike") {
+      ctx.fillStyle = "#d8c898";
+      ctx.beginPath(); ctx.arc(8, -12, 11, 0, 7); ctx.fill();
+      ctx.fillStyle = "#c8b070";
+      ctx.beginPath(); ctx.moveTo(18, -14); ctx.lineTo(32, -22); ctx.lineTo(18, -8); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(8, -20); ctx.lineTo(6, -34); ctx.lineTo(14, -18); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(2, -18); ctx.lineTo(-4, -32); ctx.lineTo(8, -16); ctx.fill();
+    }
+    if (e.kind === "ptera") {
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.moveTo(-6, -8); ctx.quadraticCurveTo(-42, -26, -8, 4); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(8, -6); ctx.quadraticCurveTo(46, -22, 10, 6); ctx.fill();
+    }
+    if (e.kind === "leach") {
+      ctx.fillStyle = "#c05028";
+      ctx.beginPath(); ctx.ellipse(0, 8, 8, 14, 0.3, 0, 7); ctx.fill();
+    }
+
+    ctx.fillStyle = "#f2e4c8";
+    ctx.beginPath(); ctx.ellipse(12, -8, 3, 2.3, -0.2, 0, 7); ctx.fill();
+    ctx.fillStyle = "#1a1008";
+    ctx.beginPath(); ctx.arc(12.4, -8, 1.4, 0, 7); ctx.fill();
+    ctx.fillStyle = eye;
+    ctx.beginPath(); ctx.arc(12.8, -8.3, e.hunt > 0 ? 1.1 : 0.65, 0, 7); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(13.1, -8.7, 0.3, 0, 7); ctx.fill();
+
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.moveTo(-10, 18); ctx.lineTo(-14, 32); ctx.lineTo(-6, 32); ctx.lineTo(-4, 18); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(4, 18); ctx.lineTo(2, 32); ctx.lineTo(10, 32); ctx.lineTo(10, 18); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.fillRect(-15, 31, 10, 3);
+    ctx.fillRect(1, 31, 10, 3);
+
+    if (e.pose === "roar" || (e.pose === "hit" && e.recoil > 0.4)) {
+      ctx.fillStyle = "#3a1010";
+      ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(30, 8); ctx.lineTo(16, 6); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawSprites(zbuf, dt) {
+    const vis = enemies.map((e) => ({ e, ...project(e.x, e.y) }))
+      .filter((v) => v.visible && (v.e.alive || v.e.pose === "fall" || v.e.pose === "hit"))
+      .sort((a, b) => b.dist - a.dist);
+    for (const v of vis) {
+      const size = Math.min(H * 1.9, (H * (stage === "sky" ? 1.55 : 1.05)) / Math.max(0.28, v.dist));
+      const col = v.sx | 0;
+      if (col < 0 || col >= W) continue;
+      if (stage !== "sky" && v.dist > zbuf[Math.max(0, Math.min(W - 1, col))] + 0.25) continue;
+      const bobAmt = v.e.alive && v.e.pose === "idle" ? Math.sin(v.e.bob) * size * 0.02 : 0;
+      const lift = (v.e.z || 0) * (28 / Math.max(0.4, v.dist));
+      drawDino(v.e, v.sx, H * 0.54 + bobAmt - lift, size / 50, Math.max(0.35, 1 - v.dist / 14));
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vz -= 2.2 * dt;
+      if (p.life <= 0 || p.z < 0) { particles.splice(i, 1); continue; }
+      const pr = project(p.x, p.y);
+      if (!pr.visible) continue;
+      const s = Math.max(1, p.size * 8 / Math.max(0.4, pr.dist));
+      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.fillStyle = p.col;
+      ctx.beginPath();
+      ctx.arc(pr.sx, H * 0.5 - p.z * 40 / Math.max(0.4, pr.dist), s, 0, 7);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    for (let i = tracers.length - 1; i >= 0; i--) {
+      const tr = tracers[i];
+      tr.t += dt * 5;
+      if (tr.t >= 1) { tracers.splice(i, 1); continue; }
+      const x0 = W * 0.62, y0 = H * 0.78, x1 = W * 0.5, y1 = H * 0.46;
+      ctx.strokeStyle = tr.col;
+      ctx.globalAlpha = 1 - tr.t;
+      ctx.lineWidth = tr.kind === "rocket" ? 4 : tr.kind === "plasma" ? 3 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(lerp(x0, x1, Math.max(0, tr.t - 0.18)), lerp(y0, y1, Math.max(0, tr.t - 0.18)));
+      ctx.lineTo(lerp(x0, x1, tr.t), lerp(y0, y1, tr.t));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawGun() {
+    const k = kick * 8;
+    ctx.save();
+    ctx.translate(W * 0.64, H * 0.8 + k);
+    ctx.fillStyle = "#5a3a2c";
+    ctx.beginPath();
+    ctx.moveTo(-22, 6); ctx.lineTo(10, 4); ctx.lineTo(18, 32); ctx.lineTo(-28, 36);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#c4a07a";
+    ctx.fillRect(-16, 2, 14, 12);
+    if (gun === "shotgun") {
+      ctx.fillStyle = "#2a2824"; ctx.fillRect(-58, -8, 72, 9);
+      ctx.fillStyle = "#4a3220"; ctx.fillRect(-10, -4, 22, 16);
+    } else if (gun === "chaingun") {
+      ctx.fillStyle = "#3a3a36"; ctx.fillRect(-52, -12, 64, 14);
+    } else if (gun === "rocket") {
+      ctx.fillStyle = "#3a3024"; ctx.fillRect(-62, -10, 78, 12);
+      ctx.fillStyle = "#5a2414"; ctx.fillRect(-18, -6, 26, 18);
+    } else if (gun === "plasma") {
+      ctx.fillStyle = "#203848"; ctx.fillRect(-54, -10, 66, 12);
+      ctx.fillStyle = muzzle > 0 ? "#9cf0ff" : "#2a5868";
+      ctx.beginPath(); ctx.arc(-54, -4, 6, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = "#2a2a28"; ctx.fillRect(-40, -6, 48, 7);
+      ctx.fillStyle = "#4a3220"; ctx.fillRect(-8, -2, 16, 14);
+    }
+    if (muzzle > 0) {
+      ctx.fillStyle = gun === "plasma" ? "rgba(140,230,255,0.85)" : "rgba(255,220,140,0.8)";
+      ctx.beginPath();
+      ctx.moveTo(-58, -4); ctx.lineTo(-78, -12); ctx.lineTo(-72, -4); ctx.lineTo(-78, 4);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function miniMap() {
+    if (cinema || stage === "sky") return;
+    const s = 3;
+    const ox = 8, oy = H - 18 - MAP_H * s;
+    if (oy < 8) return;
+    ctx.globalAlpha = 0.55;
+    for (let y = 0; y < MAP_H; y++) {
+      for (let x = 0; x < MAP_W; x++) {
+        const t = CUR[y][x];
+        if (!t) continue;
+        ctx.fillStyle = t === 6 ? "#80e0ff" : t === 2 ? "#1a5a22" : t === 3 ? "#245060" : t === 4 ? "#6a1810" : "#4a3220";
+        ctx.fillRect(ox + x * s, oy + y * s, s, s);
+      }
+    }
+    ctx.fillStyle = "#ffe080";
+    ctx.fillRect(ox + cam.x * s - 1, oy + cam.y * s - 1, 3, 3);
+    const fx = Math.cos(cam.a), fy = Math.sin(cam.a);
+    ctx.strokeStyle = "#ffe080";
+    ctx.beginPath();
+    ctx.moveTo(ox + cam.x * s, oy + cam.y * s);
+    ctx.lineTo(ox + (cam.x + fx * 1.6) * s, oy + (cam.y + fy * 1.6) * s);
+    ctx.stroke();
+    ctx.fillStyle = "#80ff70";
+    for (const e of enemies) if (e.alive) ctx.fillRect(ox + e.x * s, oy + e.y * s, 2, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawFrame(dt) {
+    const zbuf = castDDA();
+    drawSprites(zbuf, dt);
+    drawGun();
+    miniMap();
+    if (dim > 0) {
+      ctx.fillStyle = "rgba(20,10,8," + (dim * 0.5) + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
+    const msg = $("msg");
+    if (msg) {
+      const lined = !vocab && !cinema && enemies.find((e) => e.alive && facingEnemy(e, FOV * 0.24) && Math.hypot(e.x - player.x, e.y - player.y) < 5);
+      msg.textContent = cinema ? "" : lined
+        ? (lined.ship ? "ship in the pipe — type" : "beast in line — type")
+        : (stage === "sky" ? "W thrust · S brake · A/D yaw" : stage === "grounds" ? "W drive · S reverse · A/D steer" : "W/S walk · A/D turn · Q/E sidestep");
+    }
+  }
+
+  function tick(t) {
+    requestAnimationFrame(tick);
+    if (host.dataset.vhGen && Number(host.dataset.vhGen) !== gen) return;
+    if (!last) last = t;
+    const frameDt = Math.min(0.05, (t - last) / 1000);
+    last = t;
+    if (state !== "play") return;
+    acc += frameDt;
+    if (acc > 0.2) acc = 0.2;
+    while (acc >= STEP) {
+      prev.x = player.x; prev.y = player.y; prev.a = player.a;
+      physicsStep(STEP);
+      acc -= STEP;
+    }
+    const alpha = acc / STEP;
+    cam.x = lerp(prev.x, player.x, alpha);
+    cam.y = lerp(prev.y, player.y, alpha);
+    cam.a = prev.a + angDiff(prev.a, player.a) * alpha;
+    drawFrame(frameDt);
+  }
+
+  function beginPlay() {
+    ensureAudio();
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    const title = $("title"); if (title) title.style.display = "none";
+    if (isTouch) $("pads")?.classList.add("on");
+    resetGame(); state = "play"; last = 0; acc = 0; resize();
+    const wrap = $("wrap");
+    if (wrap) { wrap.tabIndex = 0; try { wrap.focus(); } catch (e) {} }
+    try { canvas && canvas.focus(); } catch (e) {}
+  }
+  function saveHtmlFile(ev) {
+    if (ev) ev.preventDefault();
+    if (window.__VH_STANDALONE) {
+      bang("THIS FILE IS THE GAME", "#c8a44a");
+      return;
+    }
+    const name = "VocabHunter.html";
+    const go = async () => {
+      const r = await fetch("/vocab-hunter.html", { cache: "no-store" });
+      if (!r.ok) throw new Error("missing");
+      const blob = await r.blob();
+      const file = new File([blob], name, { type: "text/html;charset=utf-8" });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Vocab Hunter" });
+        bang("SHARED", "#c8a44a");
+        return;
+      }
+      if (window.showSaveFilePicker) {
+        const h = await window.showSaveFilePicker({
+          suggestedName: name,
+          types: [{ description: "HTML game", accept: { "text/html": [".html"] } }],
+        });
+        const w = await h.createWritable();
+        await w.write(blob);
+        await w.close();
+        bang("SAVED VOCABHUNTER.HTML", "#c8a44a");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.rel = "noopener";
+      a.style.display = "none";
+      (document.body || host).appendChild(a);
+      a.click();
+      setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 2500);
+      bang("SAVING VOCABHUNTER.HTML", "#c8a44a");
+    };
+    go().catch(() => {
+      window.open("/vocab-hunter.html", "_blank", "noopener");
+      bang("OPENED — USE SAVE PAGE AS", "#e8c070");
+    });
+  }
+  $("startBtn")?.addEventListener("click", beginPlay);
+  $("dlBtn")?.addEventListener("click", saveHtmlFile);
+  if (window.__VH_STANDALONE) {
+    const b = $("dlBtn");
+    if (b) b.style.display = "none";
+  }
+  $("retryBtn")?.addEventListener("click", () => {
+    const ov = $("over"); if (ov) ov.style.display = "none";
+    resetGame(); state = "play"; last = 0; acc = 0;
+  });
+
+  resize();
+  requestAnimationFrame(tick);
+}
+
+boot(document.getElementById("game-root"));
+</script>
+</body>
+</html>
