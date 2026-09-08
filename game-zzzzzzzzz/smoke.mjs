@@ -183,13 +183,16 @@ drive.tracks.root.traverse((o) => {
 console.log("Ribbon-like meshes", ribbonLike);
 if (ribbonLike < 1) throw new Error("Expected continuous ribbon meshes");
 
-// Floor off-ribbon = supported carpet, never void (no floor crash)
+// Floor off-ribbon = supported carpet, never void (no floor crash) — NOT onTrack
 const carpetSnap = drive.tracks.querySnap(0, 0.045, 6, 1.65);
 console.log("Foyer center carpet snap", {
-  supported: carpetSnap.supported, carpet: carpetSnap.carpet, elevated: carpetSnap.elevated, kind: carpetSnap.kind,
+  supported: carpetSnap.supported, carpet: carpetSnap.carpet, onTrack: carpetSnap.onTrack,
+  elevated: carpetSnap.elevated, kind: carpetSnap.kind,
 });
 if (!carpetSnap.supported) throw new Error("Foyer floor should be supported (carpet), not void");
 if (carpetSnap.elevated) throw new Error("Foyer floor must not be elevated");
+if (carpetSnap.onTrack) throw new Error("Foyer center must NOT be onTrack (binary: carpet != road)");
+if (!carpetSnap.carpet) throw new Error("Foyer center should be carpet");
 
 // Segment count sanity (density reduced from ×16)
 console.log("Track segment count", drive.tracks.segments.length);
@@ -326,12 +329,117 @@ if (typeof drive.setWallColliders !== "function") {
 }
 drive.setWallColliders(mansion.getColliders());
 console.log("Drive wall colliders", mansion.getColliders().length);
+if (!drive._wallGrid || drive._wallGrid.size < 5) {
+  throw new Error("Drive wall spatial hash missing or tiny");
+}
+console.log("Drive wallGrid cells", drive._wallGrid.size, "cellSize", drive._wallGridCell);
 
 // Furniture colliders should exceed bare walls
 if (mansion.getColliders().length < 160) {
   console.warn("WARN: expected more furniture colliders, got", mansion.getColliders().length);
 } else {
   console.log("Collider count with furniture", mansion.getColliders().length);
+}
+
+// Binary track: open floor carpet must never invent onTrack; elevated nearDeck must not merge
+{
+  const floorOff = drive.tracks.querySnap(0, 0.045, 6, 1.65);
+  console.log("Binary off-ribbon foyer floor", {
+    onTrack: floorOff.onTrack, nearDeck: floorOff.nearDeck, carpet: floorOff.carpet,
+    supported: floorOff.supported, kind: floorOff.kind,
+  });
+  if (floorOff.onTrack) throw new Error("Open floor must not be onTrack");
+  if (!floorOff.carpet || !floorOff.supported) throw new Error("Open floor should be carpet-supported");
+
+  // True lateral offset from ramp_foyer_console centerline (path not axis-aligned)
+  let best = null, bd = 99;
+  for (const seg of drive.tracks.segments) {
+    if (seg.pathId !== "ramp_foyer_console") continue;
+    const mx = (seg.a.x + seg.b.x) * 0.5;
+    const mz = (seg.a.z + seg.b.z) * 0.5;
+    const d = Math.hypot(mx - 5.5, mz - 10);
+    if (d < bd) { bd = d; best = seg; }
+  }
+  if (!best) throw new Error("ramp_foyer_console segment missing");
+  const abx = best.b.x - best.a.x, abz = best.b.z - best.a.z;
+  const len = Math.hypot(abx, abz) || 1;
+  const rx = -abz / len, rz = abx / len;
+  const midX = (best.a.x + best.b.x) * 0.5;
+  const midY = (best.a.y + best.b.y) * 0.5;
+  const midZ = (best.a.z + best.b.z) * 0.5;
+  // Just past half-width → nearDeck Y-assist, NOT onTrack
+  const elevOff = drive.tracks.querySnap(
+    midX + rx * best.width * 0.55,
+    midY,
+    midZ + rz * best.width * 0.55,
+    1.65
+  );
+  console.log("Binary elevated nearDeck", {
+    onTrack: elevOff.onTrack, nearDeck: elevOff.nearDeck, supported: elevOff.supported,
+    elevated: elevOff.elevated, kind: elevOff.kind, edgeMargin: elevOff.edgeMargin,
+  });
+  if (elevOff.onTrack) throw new Error("Elevated nearDeck must not merge into onTrack");
+  if (!elevOff.nearDeck) throw new Error("Expected nearDeck just past half-width on elevated");
+  if (!elevOff.supported) throw new Error("nearDeck should still support Y-stick briefly");
+
+  // Far past deck → unsupported (void / fall), still not onTrack
+  const elevVoid = drive.tracks.querySnap(
+    midX + rx * best.width * 1.05,
+    midY,
+    midZ + rz * best.width * 1.05,
+    1.65
+  );
+  console.log("Binary elevated void rim", {
+    onTrack: elevVoid.onTrack, nearDeck: elevVoid.nearDeck, supported: elevVoid.supported,
+    kind: elevVoid.kind,
+  });
+  if (elevVoid.onTrack) throw new Error("Void rim must not be onTrack");
+  if (elevVoid.supported && elevVoid.kind !== "floor") {
+    // may snap to distant floor carpet at wrong Y — only accept if not claiming elevated support
+    if (elevVoid.elevated || elevVoid.nearDeck) {
+      throw new Error("Far past elevated deck must not stay elevated-supported");
+    }
+  }
+}
+
+// Mesh count under drive_tracks — lag killer was 20k+ decorative meshes
+let driveMeshes = 0;
+drive.tracks.root.traverse((o) => { if (o.isMesh) driveMeshes++; });
+console.log("drive_tracks mesh count", driveMeshes, "segments", drive.tracks.segments.length);
+if (driveMeshes > 5000) {
+  throw new Error(`drive_tracks still too heavy: ${driveMeshes} meshes (want <=5000)`);
+}
+if (drive.tracks.segments.length > 3500) {
+  throw new Error(`segment count high: ${drive.tracks.segments.length}`);
+}
+
+// Wall query strategy profile: spatial neighbors << full list
+{
+  const cols = mansion.getColliders();
+  drive.setWallColliders(cols);
+  const N = 2000;
+  const px = CAR_SPAWN.x, pz = CAR_SPAWN.z;
+  const t0 = performance.now();
+  let nearN = 0;
+  for (let i = 0; i < N; i++) {
+    const n = drive._wallsNear(px, pz, 0.45);
+    nearN = n.length;
+  }
+  const gridMs = performance.now() - t0;
+  const t1 = performance.now();
+  for (let i = 0; i < N; i++) {
+    let c = 0;
+    for (const b of cols) {
+      if (Math.abs((b.min.x + b.max.x) * 0.5 - px) < 8) c++; // cheap stand-in full touch
+      void b.min.y;
+    }
+    nearN = c || nearN;
+  }
+  const fullMs = performance.now() - t1;
+  console.log(`wallNear x${N}: gridNeighbors≈${drive._wallsNear(px, pz, 0.45).length}/${cols.length} grid=${gridMs.toFixed(2)}ms fullTouch=${fullMs.toFixed(2)}ms`);
+  if (drive._wallsNear(px, pz, 0.45).length >= cols.length) {
+    console.warn("WARN: wall spatial hash returned all colliders at spawn");
+  }
 }
 
 

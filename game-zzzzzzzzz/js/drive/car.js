@@ -575,7 +575,8 @@ export class RCCar {
       else fric *= 1.18;
     }
     // Extra grip when soft rim fence is active (casual play stays ON deck)
-    if (onRailDeck && snap?.wallBounce && snap?.onTrack) {
+    // Rim fence grip while onTrack OR brief nearDeck Y-assist (still not "on road")
+    if (onRailDeck && snap?.wallBounce && (snap?.onTrack || snap?.nearDeck)) {
       fric *= 1.12;
     }
 
@@ -646,9 +647,12 @@ export class RCCar {
 
     // Height follow: stick to surface under wheels (NO centerline magnet)
     if (supported && snap) {
-      const sticky = elevated || kind === "cornice" || kind === "balcony";
-      // Stickier rail on elevated decks; even stickier when hugging the rim fence
-      const nearRim = sticky && typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08;
+      const sticky = elevated || kind === "cornice" || kind === "balcony" || !!snap.nearDeck;
+      // Stickier on elevated decks; nearDeck Y-assist stays glued without flipping onTrack
+      const nearRim = sticky && (
+        !!snap.nearDeck
+        || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08)
+      );
       const yLock = snap.steep ? 28 : (sticky ? (nearRim ? 34 : 30) : 18);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 

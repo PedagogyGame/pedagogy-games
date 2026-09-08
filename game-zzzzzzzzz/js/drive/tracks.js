@@ -228,9 +228,12 @@ export class TrackSystem {
     this._buildSnapGrid();
     this._addSpawnPad();
     const cells = this._snapGrid.size;
+    let meshCount = 0;
+    this.root.traverse((o) => { if (o.isMesh) meshCount++; });
     console.log(
-      `[TrackSystem] segments=${this.segments.length} snapGrid=${cells} cells @ ${this._gridCell}m (querySnap uses grid, not full scan)`
+      `[TrackSystem] segments=${this.segments.length} meshes=${meshCount} snapGrid=${cells} cells @ ${this._gridCell}m (querySnap uses grid, not full scan)`
     );
+    this._meshCount = meshCount;
   }
 
   /** XZ uniform grid so querySnap only tests nearby segment indices. */
@@ -398,17 +401,17 @@ export class TrackSystem {
       const elevFancy = kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony";
       const tubeish = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
       const floorish = kind === "floor" || kind === "outdoor";
-      // Keep cornice beauty; floor visual lower than before; snap coarser still
-      const visDense = elevFancy ? (path.fancy ? 8 : 6)
-        : tubeish ? 5
-          : kind === "flower" || kind === "tunnel" ? 5
-            : floorish ? 4 : 4;
-      // Denser snap on elevated/tube so rounded CatmullRom corners stay supported
-      const snapDense = elevFancy ? (path.fancy ? 5 : 4)
-        : tubeish ? 4
-          : floorish ? 2 : 3;
-      const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (useRibbon && visualOk ? 22 : 14));
-      const snapN = Math.max(pts.length * snapDense, path.fancy ? 18 : (useRibbon ? 12 : 10));
+      // Visual densify kept low for draw-call/FPS; snap stays reliable on curves
+      const visDense = elevFancy ? (path.fancy ? 3 : 2)
+        : tubeish ? 2
+          : kind === "flower" || kind === "tunnel" ? 2
+            : floorish ? 2 : 2;
+      // Snap densify: elevated/tube need curve support; floor coarser
+      const snapDense = elevFancy ? (path.fancy ? 4 : 3)
+        : tubeish ? 3
+          : floorish ? 2 : 2;
+      const visN = Math.max(pts.length * visDense, path.fancy ? 20 : (useRibbon && visualOk ? 12 : 8));
+      const snapN = Math.max(pts.length * snapDense, path.fancy ? 14 : (useRibbon ? 10 : 8));
       visualPts = curve.getPoints(visN);
       snapPts = curve.getPoints(snapN);
       // Closed curves: getPoints repeats the start — drop last so we don't double-cap
@@ -518,6 +521,7 @@ export class TrackSystem {
         this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
       }
     }
+    // Cornice showcase: start/finish stripe only (banners/posts culled for Drive FPS)
     if (kind === "cornice" || kind === "balcony") {
       this._addCorniceShowcase(pts, width, path);
     }
@@ -565,6 +569,49 @@ export class TrackSystem {
     if (kind === "flower") return this._sharedMats.flower;
     if (kind === "tunnel") return this._sharedMats.tunnel;
     return this._sharedMats.asphalt;
+  }
+
+  /** Shared non-asphalt deck mats (no per-segment map clones — cuts GPU state thrash). */
+  _elevMatForKind(kind) {
+    if (!this._elevMats) this._elevMats = {};
+    if (this._elevMats[kind]) return this._elevMats[kind];
+    let mat;
+    if (kind === "cornice") {
+      mat = new THREE.MeshStandardMaterial({
+        color: this._corniceDeck ? 0xffffff : 0x3e2723, roughness: 0.42, metalness: 0.28,
+        ...(this._corniceDeck ? { map: this._corniceDeck } : {}),
+      });
+    } else if (kind === "balcony") {
+      mat = new THREE.MeshStandardMaterial({
+        color: this._corniceDeck ? 0xffffff : 0x6d4c41, roughness: 0.55, metalness: 0.12,
+        ...(this._corniceDeck ? { map: this._corniceDeck } : {}),
+      });
+    } else if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
+      mat = new THREE.MeshStandardMaterial({
+        color: this._hollow ? 0xffffff : 0x2a2018, roughness: 0.78, metalness: 0.08,
+        ...(this._hollow ? { map: this._hollow } : {}),
+      });
+    } else if (kind === "chute") {
+      mat = new THREE.MeshStandardMaterial({
+        color: 0x37474f, roughness: 0.4, metalness: 0.35,
+        emissive: 0x263238, emissiveIntensity: 0.15,
+      });
+    } else if (kind === "ramp") {
+      mat = new THREE.MeshStandardMaterial({
+        color: this._chevron ? 0xffffff : 0x455a64, roughness: 0.5, metalness: 0.28,
+        ...(this._chevron ? { map: this._chevron } : {}),
+      });
+    } else if (kind === "elevated") {
+      mat = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.5, metalness: 0.28 });
+    } else {
+      mat = this._roadMatForKind(kind);
+    }
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -1;
+    mat.polygonOffsetUnits = -2;
+    mat.depthWrite = true;
+    this._elevMats[kind] = mat;
+    return mat;
   }
 
   /**
@@ -716,9 +763,7 @@ export class TrackSystem {
     mesh.name = `ribbon_${kind}`;
     this.root.add(mesh);
 
-    if (kind === "flower") {
-      this._addFlowerRibbonEdges(pts, rights, ups, width, 0.02, yLift);
-    }
+    // flower edge dust ribbons culled (FPS)
   }
 
   _addFlowerRibbonEdges(pts, rights, ups, width, thick, yLift) {
@@ -786,169 +831,20 @@ export class TrackSystem {
       : Math.min(0.045, Math.max(0.02, len * 0.08));
     const meshLen = len + overlap;
     const geo = new THREE.BoxGeometry(width, thick, meshLen);
-    let mat;
-    if (kind === "outdoor") {
-      const opts = { color: 0xffffff, roughness: 0.88, metalness: 0.05 };
-      if (this._asphalt) {
-        opts.map = this._asphalt.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 1.4));
-        opts.map.needsUpdate = true;
-      } else {
-        opts.color = 0x5c564c;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "flower") {
-      const opts = { color: 0x5d4037, roughness: 0.88, metalness: 0.04 };
-      if (this._petal) {
-        opts.map = this._petal.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 1.2));
-        opts.map.needsUpdate = true;
-        opts.color = 0xffffff;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "cornice") {
-      const opts = {
-        color: 0xffffff, roughness: 0.42, metalness: 0.28,
-      };
-      if (this._corniceDeck) {
-        opts.map = this._corniceDeck.clone();
-        opts.map.repeat.set(1, Math.max(1.2, len / 0.7));
-        opts.map.needsUpdate = true;
-      } else {
-        opts.color = 0x3e2723;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "balcony") {
-      const opts = {
-        color: 0xffffff, roughness: 0.55, metalness: 0.12,
-      };
-      if (this._corniceDeck) {
-        opts.map = this._corniceDeck.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 0.85));
-        opts.map.needsUpdate = true;
-      } else {
-        opts.color = 0x6d4c41;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
-      const opts = {
-        color: 0x2a2018, roughness: 0.78, metalness: 0.08,
-      };
-      if (this._hollow) {
-        opts.map = this._hollow.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 1.1));
-        opts.map.needsUpdate = true;
-        opts.color = 0xffffff;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "chute") {
-      mat = new THREE.MeshStandardMaterial({
-        color: 0x37474f, roughness: 0.4, metalness: 0.35,
-        emissive: 0x263238, emissiveIntensity: 0.15,
-      });
-    } else if (kind === "elevated" || kind === "ramp") {
-      const opts = {
-        color: kind === "ramp" ? 0x455a64 : 0x263238,
-        roughness: 0.5, metalness: 0.28,
-      };
-      if (kind === "ramp" && this._chevron) {
-        opts.map = this._chevron.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 0.9));
-        opts.map.needsUpdate = true;
-        opts.color = 0xffffff;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    } else if (kind === "tunnel") {
-      mat = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.65, metalness: 0.12 });
-    } else {
-      const opts = { color: 0x1c1c22, roughness: 0.82, metalness: 0.06 };
-      if (this._asphalt) {
-        opts.map = this._asphalt.clone();
-        opts.map.repeat.set(1, Math.max(1, len / 1.4));
-        opts.map.needsUpdate = true;
-        opts.color = 0xffffff;
-      }
-      mat = new THREE.MeshStandardMaterial(opts);
-    }
-    // Depth bias so overlapping join strips don't z-fight / tear
-    mat.polygonOffset = true;
-    mat.polygonOffsetFactor = -1;
-    mat.polygonOffsetUnits = -2;
-    mat.depthWrite = true;
+    // Shared mats per kind — no per-box texture clones (major GPU/CPU win)
+    const mat = this._elevMatForKind(kind);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(mid);
     // Nudge asphalt slightly above shared floor planes to reduce coplanar light leaks
     if (asphaltJoin) mesh.position.y += 0.0015;
     const xAxis = this._orientMesh(mesh, dir);
     mesh.receiveShadow = true;
-    mesh.castShadow = kind === "elevated" || kind === "cornice" || kind === "balcony";
+    mesh.castShadow = false; // Drive lag: no per-deck shadow casters
     mesh.frustumCulled = true;
     mesh.renderOrder = asphaltJoin ? 1 : 0;
     this.root.add(mesh);
 
-    // Premium gold inlay + brass edge on cornice / balcony
-    if (kind === "cornice" || kind === "balcony") {
-      const goldMat = new THREE.MeshStandardMaterial({
-        color: 0xe8c547, roughness: 0.28, metalness: 0.85,
-        emissive: 0xc9a227, emissiveIntensity: 0.22,
-      });
-      // Center gold inlay line
-      const inlay = new THREE.Mesh(
-        new THREE.BoxGeometry(0.028, 0.012, len * 0.98),
-        goldMat
-      );
-      inlay.position.copy(mid);
-      inlay.position.y += thick * 0.65;
-      inlay.quaternion.copy(mesh.quaternion);
-      this.root.add(inlay);
-      for (const side of [-1, 1]) {
-        const strip = new THREE.Mesh(
-          new THREE.BoxGeometry(0.022, 0.016, len),
-          goldMat
-        );
-        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.018));
-        strip.position.copy(mid).add(off);
-        strip.position.y += thick * 0.55;
-        strip.quaternion.copy(mesh.quaternion);
-        this.root.add(strip);
-      }
-    }
-
-    // Petal-colored edge dust on flower paths
-    if (kind === "flower") {
-      const petalColors = [0xe91e63, 0xf48fb1, 0xffcdd2, 0xce93d8];
-      for (const side of [-1, 1]) {
-        const dust = new THREE.Mesh(
-          new THREE.BoxGeometry(0.03, 0.01, len * 0.95),
-          new THREE.MeshStandardMaterial({
-            color: petalColors[(side + 1) % petalColors.length],
-            roughness: 0.7, metalness: 0.05,
-            emissive: 0xe91e63, emissiveIntensity: 0.18,
-            transparent: true, opacity: 0.75,
-          })
-        );
-        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.02));
-        dust.position.copy(mid).add(off);
-        dust.position.y += thick * 0.6;
-        dust.quaternion.copy(mesh.quaternion);
-        this.root.add(dust);
-      }
-    }
-
-    // Timber skirting edges inside hollow walls
-    if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
-      for (const side of [-1, 1]) {
-        const trim = new THREE.Mesh(
-          new THREE.BoxGeometry(0.018, 0.022, len),
-          new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.65, metalness: 0.1 })
-        );
-        const off = xAxis.clone().multiplyScalar(side * (width * 0.5 - 0.01));
-        trim.position.copy(mid).add(off);
-        trim.position.y += thick * 0.4;
-        trim.quaternion.copy(mesh.quaternion);
-        this.root.add(trim);
-      }
-    }
+    // Gold inlay / petal dust / hollow timber trim culled — road surface + rails only (FPS)
 
     if ((kind === "floor" || kind === "outdoor") && !this._asphalt) {
       const line = new THREE.Mesh(
@@ -961,48 +857,49 @@ export class TrackSystem {
       this.root.add(line);
     }
 
-    if (rail || ELEV_KINDS.has(kind)) {
-      const railColor =
-        kind === "cornice" ? 0xe0c060
-          : kind === "balcony" ? 0xd7ccc8
-            : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0x8d6e63
-              : kind === "chute" ? 0x90a4ae
-                : 0xffcc80;
-      const woodColor = kind === "cornice" ? 0x3e2723 : 0x5d4037;
-      const railH = (kind === "shortcut" || kind === "shaft" || kind === "chute") ? 0.055
-        : (kind === "cornice" || kind === "balcony") ? 0.085 : 0.07;
-      const slim = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "flower";
+    // Essential rails on open elevated decks only (tubes use cavity walls / bounce)
+    const wantRails = (rail || ELEV_KINDS.has(kind))
+      && kind !== "shortcut" && kind !== "mouse" && kind !== "shaft" && kind !== "chute";
+    if (wantRails) {
+      if (!this._railMats) this._railMats = {};
+      const railKey = kind;
+      let railMat = this._railMats[railKey];
+      if (!railMat) {
+        const railColor =
+          kind === "cornice" ? 0xe0c060
+            : kind === "balcony" ? 0xd7ccc8
+              : kind === "shortcut" || kind === "mouse" || kind === "shaft" ? 0x8d6e63
+                : kind === "chute" ? 0x90a4ae
+                  : 0xffcc80;
+        const fancyRail = kind === "cornice" || kind === "balcony";
+        const slim = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "flower";
+        railMat = new THREE.MeshStandardMaterial({
+          color: railColor,
+          roughness: fancyRail ? 0.28 : 0.38,
+          metalness: fancyRail ? 0.78 : 0.55,
+          emissive: fancyRail ? 0x8a6a1a : 0x000000,
+          emissiveIntensity: fancyRail ? 0.18 : 0,
+          transparent: true,
+          opacity: kind === "balcony" ? 0.9 : slim ? 0.55 : fancyRail ? 0.92 : 0.7,
+        });
+        this._railMats[railKey] = railMat;
+      }
       const fancyRail = kind === "cornice" || kind === "balcony";
+      const slim = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "flower";
+      const railH = (kind === "shortcut" || kind === "shaft" || kind === "chute") ? 0.055
+        : fancyRail ? 0.085 : 0.07;
       for (const side of [-1, 1]) {
         const railMesh = new THREE.Mesh(
           new THREE.BoxGeometry(slim ? 0.02 : fancyRail ? 0.032 : 0.028, railH, len),
-          new THREE.MeshStandardMaterial({
-            color: railColor,
-            roughness: fancyRail ? 0.28 : 0.38,
-            metalness: fancyRail ? 0.78 : 0.55,
-            emissive: fancyRail ? 0x8a6a1a : 0x000000,
-            emissiveIntensity: fancyRail ? 0.18 : 0,
-            transparent: true,
-            opacity: kind === "balcony" ? 0.9 : slim ? 0.55 : fancyRail ? 0.92 : 0.7,
-          })
+          railMat
         );
         const off = xAxis.clone().multiplyScalar(side * (width * 0.5 + 0.015));
         railMesh.position.copy(mid).add(off);
         railMesh.position.y += 0.05;
         railMesh.quaternion.copy(mesh.quaternion);
+        railMesh.castShadow = false;
+        railMesh.frustumCulled = true;
         this.root.add(railMesh);
-
-        // Skip wood base on slim cavities to keep mesh count down
-        if (!slim) {
-          const base = new THREE.Mesh(
-            new THREE.BoxGeometry(0.032, 0.022, len),
-            new THREE.MeshStandardMaterial({ color: woodColor, roughness: 0.7, metalness: 0.1 })
-          );
-          base.position.copy(mid).add(off);
-          base.position.y += 0.012;
-          base.quaternion.copy(mesh.quaternion);
-          this.root.add(base);
-        }
       }
     }
   }
@@ -1026,9 +923,6 @@ export class TrackSystem {
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x5d4037, roughness: 0.45, metalness: 0.25,
     });
-    const woodMat = new THREE.MeshStandardMaterial({
-      color: 0x8d6e63, roughness: 0.55, metalness: 0.15,
-    });
     const glowMat = new THREE.MeshStandardMaterial({
       color: kind === "flower" ? 0xffcdd2 : 0xffe0b2,
       emissive: kind === "flower" ? 0xe91e63 : 0xffcc80,
@@ -1036,34 +930,18 @@ export class TrackSystem {
       roughness: 0.35, transparent: true, opacity: 0.85,
     });
 
-    // Circular wood-trimmed mouse hole
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.028, 8, 20), ringMat);
+    // Compact mouse hole: ring + glow disc only (trim/halo culled for FPS)
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.028, 6, 14), ringMat);
     ring.position.set(p.x, p.y + r * 0.15, p.z);
     ring.rotation.y = yaw;
+    ring.castShadow = false;
     this.root.add(ring);
 
-    const trim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 6, 16), woodMat);
-    trim.position.copy(ring.position);
-    trim.rotation.copy(ring.rotation);
-    this.root.add(trim);
-
-    // Glowing hole disc (discoverability)
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(r * 0.85, 16), glowMat);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(r * 0.85, 12), glowMat);
     disc.position.copy(ring.position);
     disc.rotation.y = yaw;
+    disc.castShadow = false;
     this.root.add(disc);
-
-    // Outer pulsing ring (emissive only — light budget safe)
-    const halo = new THREE.Mesh(
-      new THREE.TorusGeometry(r * 1.15, 0.02, 6, 18),
-      new THREE.MeshStandardMaterial({
-        color: 0xffecb3, emissive: 0xffb74d, emissiveIntensity: 1.4,
-        roughness: 0.4, transparent: true, opacity: 0.7,
-      })
-    );
-    halo.position.copy(ring.position);
-    halo.rotation.copy(ring.rotation);
-    this.root.add(halo);
 
     this.portals.push({
       pos: p.clone(),
@@ -1071,7 +949,7 @@ export class TrackSystem {
       kind,
       pathId: path.id,
       label: op.label || "Shortcut — wall run",
-      mesh: halo,
+      mesh: disc,
     });
   }
 
@@ -1089,197 +967,38 @@ export class TrackSystem {
   }
 
   _addHollowCavityDecor(pts, width, kind) {
-    const plaster = new THREE.MeshStandardMaterial({
-      color: 0x3e342c, roughness: 0.85, metalness: 0.05,
-    });
-    const studMat = new THREE.MeshStandardMaterial({
-      color: 0x6d4c41, roughness: 0.7, metalness: 0.08,
-    });
-    const pipeMat = new THREE.MeshStandardMaterial({
-      color: 0x78909c, roughness: 0.35, metalness: 0.65,
-      emissive: 0x37474f, emissiveIntensity: 0.12,
-    });
-    const insulMat = new THREE.MeshStandardMaterial({
-      color: 0xfff3e0, roughness: 0.95, metalness: 0.0,
-      transparent: true, opacity: 0.72,
-    });
-    const cableMat = new THREE.MeshStandardMaterial({
-      color: 0x1b5e20, roughness: 0.6, metalness: 0.2,
-    });
-    const crackMat = new THREE.MeshStandardMaterial({
-      color: 0xffe0b2, emissive: 0xffb74d, emissiveIntensity: 1.35,
-      roughness: 0.4, transparent: true, opacity: 0.9,
-    });
-    const moteMat = new THREE.MeshStandardMaterial({
-      color: 0xfff8e1, emissive: 0xffe0b2, emissiveIntensity: 0.95,
-      transparent: true, opacity: 0.6, roughness: 0.5,
-    });
-    const gateMat = new THREE.MeshStandardMaterial({
-      color: 0x80d8ff, emissive: 0x29b6f6, emissiveIntensity: 1.6,
-      roughness: 0.25, transparent: true, opacity: 0.55,
-      side: THREE.DoubleSide,
-    });
-    this._moteMats.push(moteMat);
-    this._moteMats.push(gateMat);
-    this._moteMats.push(crackMat);
-
+    // Sparse plaster walls only — motes/banners/gates/insulation/cables culled (Drive FPS)
+    if (!pts || pts.length < 2 || kind === "chute") return;
+    if (!this._hollowWallMat) {
+      this._hollowWallMat = new THREE.MeshStandardMaterial({
+        color: 0x3e342c, roughness: 0.85, metalness: 0.05,
+      });
+    }
+    const plaster = this._hollowWallMat;
     const n = pts.length;
-    for (let i = 0; i < n; i++) {
+    const step = Math.max(2, Math.floor(n / 6));
+    for (let i = 0; i < n; i += step) {
       const p = pts[i];
       let yaw = 0;
       if (i < n - 1) yaw = Math.atan2(pts[i + 1].x - p.x, pts[i + 1].z - p.z);
       else if (i > 0) yaw = Math.atan2(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
       const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-      const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-
-      // Rhythm: narrow → chamber → narrow (wider walls at chamber indices)
-      const phase = i / Math.max(1, n - 1);
-      const chamber = Math.sin(phase * Math.PI * 2.2) > 0.35;
-      const wallH = chamber ? width * 1.55 : width * 1.05;
-      const wallSep = chamber ? width * 0.72 : width * 0.52;
-
-      if (kind !== "chute") {
-        for (const side of [-1, 1]) {
-          const wall = new THREE.Mesh(
-            new THREE.BoxGeometry(0.08, wallH, chamber ? 0.95 : 0.55),
-            plaster
-          );
-          wall.position.set(
-            p.x + right.x * side * wallSep,
-            p.y + wallH * 0.42,
-            p.z + right.z * side * wallSep
-          );
-          wall.rotation.y = yaw;
-          this.root.add(wall);
-
-          // Vertical timber studs ~16" OC feel
-          if (i % 2 === 0) {
-            const stud = new THREE.Mesh(
-              new THREE.BoxGeometry(0.038, wallH * 0.95, 0.038),
-              studMat
-            );
-            stud.position.set(
-              p.x + right.x * side * (wallSep - 0.02),
-              p.y + wallH * 0.4,
-              p.z + right.z * side * (wallSep - 0.02)
-            );
-            this.root.add(stud);
-            // One plaster lath hint (culled for FPS — was 3× per stud)
-          }
-        }
-      }
-
-      // Copper pipes + electrical conduit along ceiling
-      if (i % 3 === 1) {
-        const copper = new THREE.MeshStandardMaterial({
-          color: 0xb87333, roughness: 0.32, metalness: 0.78,
-          emissive: 0x4e342e, emissiveIntensity: 0.08,
-        });
-        const pipe = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.026, 0.026, width * 1.15, 8),
-          copper
+      const wallH = width * 1.15;
+      const wallSep = width * 0.55;
+      for (const side of [-1, 1]) {
+        const wall = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, wallH, 0.7),
+          plaster
         );
-        pipe.position.set(p.x, p.y + wallH * 0.85, p.z);
-        pipe.rotation.z = Math.PI / 2;
-        pipe.rotation.y = yaw;
-        this.root.add(pipe);
-        // EMT conduit (grey)
-        const conduit = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.014, 0.014, width * 1.05, 6),
-          pipeMat
+        wall.position.set(
+          p.x + right.x * side * wallSep,
+          p.y + wallH * 0.42,
+          p.z + right.z * side * wallSep
         );
-        conduit.position.set(
-          p.x + right.x * 0.08,
-          p.y + wallH * 0.78,
-          p.z + right.z * 0.08
-        );
-        conduit.rotation.z = Math.PI / 2;
-        conduit.rotation.y = yaw;
-        this.root.add(conduit);
-      }
-
-      // Insulation tufts
-      if (i % 4 === 2) {
-        for (const side of [-1, 1]) {
-          const tuft = new THREE.Mesh(
-            new THREE.SphereGeometry(0.045 + (i % 3) * 0.01, 6, 5),
-            insulMat
-          );
-          tuft.position.set(
-            p.x + right.x * side * wallSep * 0.7,
-            p.y + 0.12 + (i % 2) * 0.08,
-            p.z + right.z * side * wallSep * 0.7 - fwd.z * 0.05
-          );
-          tuft.scale.set(1.4, 0.7, 1.1);
-          this.root.add(tuft);
-        }
-      }
-
-      // Cable runs
-      if (i % 5 === 0) {
-        const cable = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.012, 0.012, 0.7, 6),
-          cableMat
-        );
-        cable.position.set(
-          p.x + right.x * 0.12,
-          p.y + wallH * 0.7,
-          p.z
-        );
-        cable.rotation.x = Math.PI / 2;
-        cable.rotation.y = yaw;
-        this.root.add(cable);
-      }
-
-      // Warm crack light alternating with dark
-      if (i % 2 === 0) {
-        const crack = new THREE.Mesh(
-          new THREE.BoxGeometry(0.04, wallH * 0.55, 0.02),
-          crackMat
-        );
-        const side = (i % 4 === 0) ? 1 : -1;
-        crack.position.set(
-          p.x + right.x * side * wallSep * 0.98,
-          p.y + wallH * 0.35,
-          p.z + right.z * side * wallSep * 0.98
-        );
-        crack.rotation.y = yaw;
-        this.root.add(crack);
-      }
-
-      // Dust motes (sparser for FPS)
-      if (i % 3 === 0) {
-        const mote = new THREE.Mesh(new THREE.SphereGeometry(0.022, 5, 5), moteMat);
-        mote.position.set(
-          p.x + (Math.random() - 0.5) * width * 0.35,
-          p.y + 0.25 + Math.random() * 0.4,
-          p.z + (Math.random() - 0.5) * 0.2
-        );
-        this.root.add(mote);
-      }
-
-      // Speed-gate glow rings to thread (score-less feel)
-      if (i > 0 && i < n - 1 && (i % Math.max(2, Math.floor(n / 4)) === 0)) {
-        const gate = new THREE.Mesh(
-          new THREE.TorusGeometry(width * 0.55, 0.018, 6, 18),
-          gateMat
-        );
-        gate.position.set(p.x, p.y + width * 0.45, p.z);
-        gate.rotation.y = yaw;
-        this.root.add(gate);
-        if (!this._speedGates) this._speedGates = [];
-        this._speedGates.push({ mesh: gate, pos: p.clone() });
-      }
-
-      // Little bumps / banked feel via raised road nubs at chamber entries
-      if (chamber && i % 3 === 0) {
-        const bump = new THREE.Mesh(
-          new THREE.BoxGeometry(width * 0.7, 0.03, 0.12),
-          studMat
-        );
-        bump.position.set(p.x, p.y + 0.04, p.z);
-        bump.rotation.y = yaw;
-        this.root.add(bump);
+        wall.rotation.y = yaw;
+        wall.castShadow = false;
+        wall.frustumCulled = true;
+        this.root.add(wall);
       }
     }
   }
@@ -1330,128 +1049,38 @@ export class TrackSystem {
     }
   }
 
-  /**
-   * Brass posts + lit banner flaps along cornice/balcony; start/finish stripe on main circuit.
-   * Samples sparsely to keep mesh count reasonable. Safe when canvas textures are null (Node).
-   */
+  /** Start/finish stripe only on main cornice circuits (banners/posts culled). */
   _addCorniceShowcase(pts, width, path) {
-    if (!pts || pts.length < 3) return;
-    let pathLen = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      pathLen += pts[i].distanceTo(pts[i + 1]);
-    }
-    if (path && path.closed) pathLen += pts[pts.length - 1].distanceTo(pts[0]);
-    if (pathLen < 2.5) return;
-
-    const brassMat = new THREE.MeshStandardMaterial({
-      color: 0xc9a227, roughness: 0.32, metalness: 0.85,
-      emissive: 0x8a6a1a, emissiveIntensity: 0.18,
-    });
-    const bannerMat = new THREE.MeshStandardMaterial({
-      color: 0x8b1538, emissive: 0xff5252, emissiveIntensity: 0.95,
-      roughness: 0.5, metalness: 0.08,
-      transparent: true, opacity: 0.9, side: THREE.DoubleSide,
-    });
-    if (!this._bannerMats) this._bannerMats = [];
-    this._bannerMats.push(bannerMat);
-
-    const step = Math.max(2, Math.floor(pts.length / 10));
-    const postH = 0.22 + Math.min(0.12, width * 0.35);
-    const sideOff = width * 0.52 + 0.02;
-
-    for (let i = 0; i < pts.length; i += step) {
-      const p = pts[i];
-      let yaw = 0;
-      if (i < pts.length - 1) {
-        yaw = Math.atan2(pts[i + 1].x - p.x, pts[i + 1].z - p.z);
-      } else if (i > 0) {
-        yaw = Math.atan2(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
-      }
-      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
-
-      for (const side of [-1, 1]) {
-        const ox = right.x * side * sideOff;
-        const oz = right.z * side * sideOff;
-        const post = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.012, 0.016, postH, 6),
-          brassMat
-        );
-        post.position.set(p.x + ox, p.y + postH * 0.5 + 0.02, p.z + oz);
-        post.frustumCulled = true;
-        this.root.add(post);
-
-        // Lit banner flap hanging from a short brass arm
-        const arm = new THREE.Mesh(
-          new THREE.BoxGeometry(0.04, 0.01, 0.01),
-          brassMat
-        );
-        arm.position.set(p.x + ox, p.y + postH + 0.02, p.z + oz);
-        arm.rotation.y = yaw;
-        this.root.add(arm);
-
-        const flap = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.07, 0.1),
-          bannerMat
-        );
-        flap.position.set(
-          p.x + ox + right.x * side * 0.03,
-          p.y + postH - 0.02,
-          p.z + oz + right.z * side * 0.03
-        );
-        flap.rotation.y = yaw + (side > 0 ? 0.35 : -0.35);
-        flap.frustumCulled = true;
-        this.root.add(flap);
-      }
-
-      // Small brass finial on centerline every other sample
-      if ((i / step) % 2 === 0) {
-        const tip = new THREE.Mesh(
-          new THREE.SphereGeometry(0.018, 6, 6),
-          brassMat
-        );
-        tip.position.set(p.x, p.y + 0.06, p.z);
-        this.root.add(tip);
-      }
-    }
-
+    // Banners/brass posts/motes culled — keep optional start/finish stripe only
+    if (!pts || pts.length < 2) return;
     const id = (path && path.id) || "";
     const wantSF = !!(path && (path.startFinish || path.fancy
       || id.includes("foyer") || id.includes("circuit") || id.startsWith("cornice_main")));
-    if (wantSF) {
-      const a = pts[0];
-      const b = pts[Math.min(1, pts.length - 1)];
-      const dir = new THREE.Vector3().subVectors(b, a);
-      if (dir.lengthSq() < 1e-8 && pts.length > 2) {
-        dir.subVectors(pts[2], a);
-      }
-      if (dir.lengthSq() > 1e-8) {
-        dir.normalize();
-        const yaw = Math.atan2(dir.x, dir.z);
-        const stripeW = Math.max(width * 1.15, 0.28);
-        const opts = {
-          color: 0xffffff, roughness: 0.55, metalness: 0.05,
-          emissive: 0x222222, emissiveIntensity: 0.12,
-        };
-        if (this._startFinish) {
-          opts.map = this._startFinish;
-        } else {
-          opts.color = 0xf5f5f5;
-        }
-        const mat = new THREE.MeshStandardMaterial(opts);
-        const stripe = new THREE.Mesh(
-          new THREE.BoxGeometry(stripeW, 0.012, Math.max(0.16, width * 0.55)),
-          mat
-        );
-        stripe.position.set(
-          a.x + dir.x * 0.08,
-          a.y + 0.04,
-          a.z + dir.z * 0.08
-        );
-        stripe.rotation.y = yaw;
-        stripe.receiveShadow = true;
-        this.root.add(stripe);
-      }
-    }
+    if (!wantSF) return;
+    const a = pts[0];
+    const b = pts[Math.min(1, pts.length - 1)];
+    const dir = new THREE.Vector3().subVectors(b, a);
+    if (dir.lengthSq() < 1e-8 && pts.length > 2) dir.subVectors(pts[2], a);
+    if (dir.lengthSq() < 1e-8) return;
+    dir.normalize();
+    const yaw = Math.atan2(dir.x, dir.z);
+    const stripeW = Math.max(width * 1.15, 0.28);
+    const opts = {
+      color: 0xffffff, roughness: 0.55, metalness: 0.05,
+      emissive: 0x222222, emissiveIntensity: 0.12,
+    };
+    if (this._startFinish) opts.map = this._startFinish;
+    else opts.color = 0xf5f5f5;
+    const mat = new THREE.MeshStandardMaterial(opts);
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(stripeW, 0.012, Math.max(0.16, width * 0.55)),
+      mat
+    );
+    stripe.position.set(a.x + dir.x * 0.08, a.y + 0.04, a.z + dir.z * 0.08);
+    stripe.rotation.y = yaw;
+    stripe.receiveShadow = true;
+    stripe.castShadow = false;
+    this.root.add(stripe);
   }
 
   _addTunnelArches(pts, width) {
@@ -1465,7 +1094,8 @@ export class TrackSystem {
       color: 0xffe0b2, emissive: 0xffcc80, emissiveIntensity: 1.1,
       roughness: 0.4,
     });
-    for (let i = 0; i < pts.length; i++) {
+    const step = Math.max(1, Math.floor(pts.length / 4));
+    for (let i = 0; i < pts.length; i += step) {
       const p = pts[i];
       let yaw = Math.PI / 2;
       if (i < pts.length - 1) {
@@ -1479,22 +1109,15 @@ export class TrackSystem {
       }
 
       const arch = new THREE.Mesh(
-        new THREE.TorusGeometry(width * 0.58, 0.09, 8, 16, Math.PI),
+        new THREE.TorusGeometry(width * 0.58, 0.09, 6, 12, Math.PI),
         archMat
       );
       arch.position.set(p.x, p.y + width * 0.58, p.z);
       arch.rotation.y = yaw;
       arch.rotation.z = Math.PI;
+      arch.castShadow = false;
+      arch.frustumCulled = true;
       this.root.add(arch);
-
-      const trim = new THREE.Mesh(
-        new THREE.TorusGeometry(width * 0.58, 0.035, 6, 14, Math.PI),
-        trimMat
-      );
-      trim.position.copy(arch.position);
-      trim.position.y += 0.02;
-      trim.rotation.copy(arch.rotation);
-      this.root.add(trim);
 
       const sideOff = width * 0.58;
       const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
@@ -1509,16 +1132,10 @@ export class TrackSystem {
           p.z + right.z * side * sideOff
         );
         wall.rotation.y = yaw;
+        wall.castShadow = false;
+        wall.frustumCulled = true;
         this.root.add(wall);
       }
-
-      const strip = new THREE.Mesh(
-        new THREE.BoxGeometry(width * 0.7, 0.04, 0.12),
-        lightMat
-      );
-      strip.position.set(p.x, p.y + width * 1.05, p.z);
-      strip.rotation.y = yaw;
-      this.root.add(strip);
     }
   }
 
@@ -1605,10 +1222,10 @@ export class TrackSystem {
         const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.72 : 0.45);
         const halfW = seg.width * 0.5;
         const lateral = steep ? dist3 : dist;
-        // Match mesh deck: slightly generous vs half-width so ribbons/boxes support
-        const onTrack = lateral < seg.width * 0.72;
-        // Near-deck: still supported on elevated bridges when slightly off centerline
-        const nearDeck = (elev || tube) && lateral < seg.width * 1.05 && dy < 0.55;
+        // BINARY onTrack: clearly on road ribbon/deck (strict half-width). No fuzzy half-support.
+        const onTrack = lateral < halfW;
+        // nearDeck: elevated/tube Y-stick + rim fence only — NEVER merges into onTrack
+        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.28 && dy < 0.55;
         const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.62 : 0.9);
 
         let wallBounce = null;
@@ -1647,13 +1264,13 @@ export class TrackSystem {
         }
 
         const exitedTube = tube && dist > halfW * 1.25 && !steep;
-        // Carpet only for true floor kinds near their own Y — never steal elevated decks
+        // Carpet = off-ribbon floor support/slow only — must NOT claim onTrack
         const carpet = isFloor && !onTrack && dy < 0.55;
         const edgeMargin = halfW - lateral;
         best = {
           x: px, y: (carpet ? py + 0.01 : py + 0.03), z: pz,
           yaw, bank,
-          onTrack: (onTrack || nearDeck) && !exitedTube,
+          onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
           softPull: false,
           carpet,
@@ -1674,7 +1291,7 @@ export class TrackSystem {
     if (best) {
       // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising
       const farFromDeck = best.elevated || best.tube
-        ? (best.dist > (best.halfW || 0.2) * 1.55 && !best.nearDeck && !best.onTrack)
+        ? (best.dist > (best.halfW || 0.2) * 1.28 && !best.nearDeck && !best.onTrack)
         : false;
       if (onFloorCruise && (best.elevated || best.tube) && farFromDeck) {
         best = {
@@ -1742,37 +1359,24 @@ export class TrackSystem {
     return false;
   }
 
-  /** Subtle dust-mote / gate pulse — throttled (~8 Hz) to cut per-frame cost. */
+  /** Track FX pulse — heavily throttled; motes/banners/gates mostly culled. */
   updateVisuals(t) {
-    // Quantize so we skip most frames (driveMode still calls every frame)
-    const tick = (t * 8) | 0;
+    const tick = (t * 2) | 0; // ~2 Hz
     if (tick === this._visTick) return;
     this._visTick = tick;
-    const pulse = 0.7 + 0.35 * Math.sin(t * 2.2);
-    for (const m of this._moteMats) {
-      if (m.emissiveIntensity != null) m.emissiveIntensity = pulse;
-    }
-    const glow = 0.9 + 0.45 * Math.sin(t * 2.8);
-    for (const m of this._bannerMats || []) {
-      if (m.emissiveIntensity != null) m.emissiveIntensity = glow;
-    }
-    const rampGlow = 1.15 + 0.55 * Math.sin(t * 2.4);
-    for (const m of this._rampArrowMats || []) {
-      if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
-    }
-    // Scale portals/gates less often — skip every other throttle tick
-    if (tick & 1) return;
-    for (const p of this.portals) {
-      if (p.mesh) {
-        const s = 1 + 0.06 * Math.sin(t * 3.0 + p.pos.x);
-        p.mesh.scale.setScalar(s);
+    if (this._rampArrowMats && this._rampArrowMats.length) {
+      const rampGlow = 1.15 + 0.45 * Math.sin(t * 2.0);
+      for (const m of this._rampArrowMats) {
+        if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
       }
     }
-    for (const g of this._speedGates || []) {
-      if (g.mesh) {
-        const s = 1 + 0.08 * Math.sin(t * 4.0 + g.pos.z);
-        g.mesh.scale.setScalar(s);
-        g.mesh.rotation.z = t * 0.6;
+    // Portals: rare scale pulse only
+    if ((tick & 3) === 0) {
+      for (const p of this.portals) {
+        if (p.mesh) {
+          const s = 1 + 0.04 * Math.sin(t * 2.2 + p.pos.x);
+          p.mesh.scale.setScalar(s);
+        }
       }
     }
   }

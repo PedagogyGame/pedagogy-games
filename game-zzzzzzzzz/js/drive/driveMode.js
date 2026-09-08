@@ -61,6 +61,10 @@ export class DriveMode {
 
     /** @type {THREE.Box3[]|null} mansion wall/furniture colliders for drive bounce */
     this._wallColliders = null;
+    this._wallGrid = new Map();
+    this._wallGridCell = 3.0;
+    this._wallGridOriginX = 0;
+    this._wallGridOriginZ = 0;
     this._carRadius = 0.09;
     this._passKinds = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
 
@@ -70,6 +74,70 @@ export class DriveMode {
   /** Wire mansion colliders so Drive cannot clip through solid walls (except mouse/tunnels). */
   setWallColliders(colliders) {
     this._wallColliders = colliders || null;
+    this._buildWallGrid();
+  }
+
+  /** XZ spatial hash for Drive wall bounce — same idea as track snap grid. */
+  _buildWallGrid() {
+    this._wallGrid = new Map();
+    this._wallGridCell = 3.0;
+    this._wallGridOriginX = 0;
+    this._wallGridOriginZ = 0;
+    const cols = this._wallColliders;
+    if (!cols || !cols.length) return;
+    let minX = Infinity, minZ = Infinity;
+    for (const b of cols) {
+      minX = Math.min(minX, b.min.x);
+      minZ = Math.min(minZ, b.min.z);
+    }
+    this._wallGridOriginX = minX;
+    this._wallGridOriginZ = minZ;
+    const cell = this._wallGridCell;
+    const pad = 0; // boxes already padded by car radius at query time
+    for (let i = 0; i < cols.length; i++) {
+      const b = cols[i];
+      const ix0 = Math.floor((b.min.x - this._wallGridOriginX) / cell) - pad;
+      const ix1 = Math.floor((b.max.x - this._wallGridOriginX) / cell) + pad;
+      const iz0 = Math.floor((b.min.z - this._wallGridOriginZ) / cell) - pad;
+      const iz1 = Math.floor((b.max.z - this._wallGridOriginZ) / cell) + pad;
+      for (let ix = ix0; ix <= ix1; ix++) {
+        for (let iz = iz0; iz <= iz1; iz++) {
+          const key = ix + "," + iz;
+          let bucket = this._wallGrid.get(key);
+          if (!bucket) { bucket = []; this._wallGrid.set(key, bucket); }
+          bucket.push(i);
+        }
+      }
+    }
+    console.log(
+      `[DriveMode] wallGrid=${this._wallGrid.size} cells @ ${cell}m for ${cols.length} colliders (spatial, not linear scan)`
+    );
+  }
+
+  _wallsNear(x, z, radius) {
+    const cols = this._wallColliders;
+    if (!cols || !cols.length) return [];
+    if (!this._wallGrid || !this._wallGrid.size) return cols;
+    const cell = this._wallGridCell;
+    const r = radius;
+    const ix0 = Math.floor((x - r - this._wallGridOriginX) / cell);
+    const ix1 = Math.floor((x + r - this._wallGridOriginX) / cell);
+    const iz0 = Math.floor((z - r - this._wallGridOriginZ) / cell);
+    const iz1 = Math.floor((z + r - this._wallGridOriginZ) / cell);
+    const seen = new Set();
+    const out = [];
+    for (let ix = ix0; ix <= ix1; ix++) {
+      for (let iz = iz0; iz <= iz1; iz++) {
+        const bucket = this._wallGrid.get(ix + "," + iz);
+        if (!bucket) continue;
+        for (const idx of bucket) {
+          if (seen.has(idx)) continue;
+          seen.add(idx);
+          out.push(cols[idx]);
+        }
+      }
+    }
+    return out;
   }
 
   _buildFx() {
@@ -338,8 +406,7 @@ export class DriveMode {
    * Mouse-holes / tunnels / shafts intentionally pierce walls.
    */
   _resolveDriveWalls(prevX, prevZ, snap) {
-    const cols = this._wallColliders;
-    if (!cols || !cols.length) return;
+    if (!this._wallColliders || !this._wallColliders.length) return;
     const kind = snap?.kind || "";
     if (this._passKinds.has(kind) || snap?.tube) return; // intentional passages
     const r = this._carRadius;
@@ -348,6 +415,9 @@ export class DriveMode {
     // Car body height band (~wheel to roof)
     const y0 = y - 0.02;
     const y1 = y + 0.12;
+    // Spatial-hash neighbors only (was full linear scan of ~232 boxes)
+    const cols = this._wallsNear(p.x, p.z, r + 0.35);
+    if (!cols.length) return;
     for (let pass = 0; pass < 2; pass++) {
       let hit = false;
       for (const box of cols) {
