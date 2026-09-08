@@ -255,3 +255,49 @@ console.log("\nSUMMARY", {
   crashed: results.filter((r) => r.reason === "crashed").length,
   sloppy: bad.map((r) => r.id),
 });
+
+/** Hostile lateral-drift crest proof — yaw bias + weak steer (real-drive failure mode). */
+function hostileFoyerCrest(yawBias = 0.22) {
+  const path = byId.ramp_foyer_to_landing;
+  const foot = path.points[0], p1 = path.points[1], end = path.points.at(-1);
+  const dx = p1.x - foot.x, dz = p1.z - foot.z, len = Math.hypot(dx, dz) || 1;
+  car.setPose(foot.x + (dx / len) * 0.08, foot.y + 0.04, foot.z + (dz / len) * 0.08,
+    Math.atan2(dx, dz) + yawBias);
+  car.crashed = false; car.airborne = false; car.speed = 1.25; car.vy = 0;
+  car._unsupportedFrames = 0; car._lastElevated = false; car._tumble = 0;
+  tracks._lastPathId = "foyer_skirting";
+  const dt = 1 / 60;
+  const keys = { forward: true, back: false, left: false, right: false };
+  let maxY = 0, fell = false;
+  for (let frame = 0; frame < 1400; frame++) {
+    const pos = car.root.position;
+    const snap = tracks.querySnap(pos.x, pos.y, pos.z, 1.65);
+    if (snap.kind === "ramp" && snap.yaw != null) {
+      let dyaw = snap.yaw - car.yaw;
+      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      keys.left = dyaw > 0.15;
+      keys.right = dyaw < -0.15;
+    }
+    const flags = car.update(dt, keys, snap);
+    if (pos.y > maxY) maxY = pos.y;
+    if (flags.fell || car.crashed) { fell = true; break; }
+    if (Math.hypot(pos.x - end.x, pos.y - end.y, pos.z - end.z) < 0.45) {
+      return {
+        ok: true, maxY: +maxY.toFixed(3), endY: +pos.y.toFixed(3),
+        crestY: end.y, fell: false, frames: frame, yawBias,
+      };
+    }
+  }
+  return {
+    ok: false, maxY: +maxY.toFixed(3), endY: +car.root.position.y.toFixed(3),
+    crestY: end.y, fell, crashed: car.crashed, yawBias,
+  };
+}
+
+const hostile = hostileFoyerCrest(0.22);
+console.log("HOSTILE foyer→landing crest", hostile);
+if (!hostile.ok || hostile.fell || hostile.maxY < 4.0) {
+  console.error("HOSTILE CREST FAIL — car did not reach landing without fall");
+  process.exitCode = 1;
+}

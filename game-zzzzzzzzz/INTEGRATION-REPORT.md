@@ -3,6 +3,29 @@
 **Date:** 2026-09-08 (America/Chicago)  
 **Stack:** Three.js r160 WebGL (online-first at pedagogygame.com) — vendored static zip, no Phaser/PixiJS.
 
+## Ramp climb — real-drive fix (2026-09-08)
+
+**What was wrong:** `ramp_foyer_to_landing` centerline smoke passed, but real `car.update` drifted off the narrow ribbon (post-`ROAD_WIDTH_SCALE` halfW≈0.19), lost `onTrack` mid-climb (~y=2), and fell to foyer carpet — never reached landing y=4.26.
+
+| Fix | Detail |
+|-----|--------|
+| Ramp width boost | `RAMP_WIDTH_MULT=1.72` after scale; `RAMP_WIDTH_MIN=0.58` → halfW ≥ ~0.29 (foyer halfW **0.389**) |
+| Climb-only lateral hold | Soft magnet + yaw settle while `kind===ramp && (onTrack\|nearDeck\|rampContinuity)` — not full floor magnet |
+| Stronger ramp Y-lock | yLock 28→38 on ramp surface |
+| Grade soften | Even Y along flat + mild bow; max segment grade ≤0.44; death traps **disabled**: `ramp_cabinet_down`, `ramp_study_express_to_cases`, `ramp_cornice_to_balcony` |
+| Invisible elev | `visual:false` elev/ramp get **no snap segments** / no support (no ghost lifts) |
+| Crest | foyer→landing end Y still **4.26** |
+
+### Before / after (full car.update sims)
+
+| Sim | Before | After |
+|-----|--------|-------|
+| Hostile yaw-bias foyer climb | stall ~y=2.0–2.9, slide off / fall | **reach crest** maxY≈4.13, no fall |
+| `car-phys-sim.mjs` primary climbs | 11/11 guided OK (smoke lied) | 11/11 OK + hostile crest OK |
+| Smoke ramp pickup / mounts | pass | pass (30 enabled ramps) |
+
+Preserved: binary onTrack floors, under≠on flat decks, lag culls, asphalt look, Explore.
+
 ## Near-track Explore polish
 
 | Corridor | Change |

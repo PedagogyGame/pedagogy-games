@@ -448,29 +448,33 @@ export class TrackSystem {
       || kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony"
       || kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
 
-    // Snap segments (coarser) — always, including door_* (visual:false)
-    for (let i = 0; i < snapPts.length - 1; i++) {
-      const a = snapPts[i];
-      const b = snapPts[i + 1];
-      const dir = new THREE.Vector3().subVectors(b, a);
-      const len = dir.length();
-      if (len < 0.01) continue;
-      dir.normalize();
+    // Snap segments (coarser). Door strips always. Invisible elev/ramp/cornice/balcony
+    // get NO snap — ghost lifts forbidden; if it is driveable it MUST draw asphalt.
+    const elevNoGhost = ELEV_KINDS.has(kind) || kind === "ramp";
+    if (!(elevNoGhost && !visualOk)) {
+      for (let i = 0; i < snapPts.length - 1; i++) {
+        const a = snapPts[i];
+        const b = snapPts[i + 1];
+        const dir = new THREE.Vector3().subVectors(b, a);
+        const len = dir.length();
+        if (len < 0.01) continue;
+        dir.normalize();
 
-      let label = null;
-      for (const op of path.points) {
-        if (!op.label) continue;
-        const d = Math.hypot(op.x - a.x, op.y - a.y, op.z - a.z);
-        if (d < 1.6) { label = op.label; break; }
+        let label = null;
+        for (const op of path.points) {
+          if (!op.label) continue;
+          const d = Math.hypot(op.x - a.x, op.y - a.y, op.z - a.z);
+          if (d < 1.6) { label = op.label; break; }
+        }
+
+        this.segments.push({
+          a: a.clone(), b: b.clone(), dir: dir.clone(), len,
+          kind, pathId: path.id, width, label, rail: isRail,
+          elevated: ELEV_KINDS.has(kind),
+          tube: TUBE_KINDS.has(kind),
+          visual: visualOk,
+        });
       }
-
-      this.segments.push({
-        a: a.clone(), b: b.clone(), dir: dir.clone(), len,
-        kind, pathId: path.id, width, label, rail: isRail,
-        elevated: ELEV_KINDS.has(kind),
-        tube: TUBE_KINDS.has(kind),
-      });
-
     }
 
     if (!useRibbon && visualOk) {
@@ -1279,6 +1283,10 @@ export class TrackSystem {
       // signedBelow > 0 ⇒ segment surface is ABOVE the car (car is underneath)
       const signedBelow = py - y;
 
+      // Invisible elev/ramp/cornice/balcony: never engage snap/support (no ghost lifts).
+      // Floor/flower visual:false connectors may still guide at carpet height.
+      if ((elev || seg.kind === "ramp") && seg.visual === false) continue;
+
       // Half-width corridor (used by under≠on ramp exceptions + scoring)
       const halfApprox = seg.width * 0.5;
       const inRampCorridor = seg.kind === "ramp" && (steep ? dist3 : dist) < halfApprox * 1.08;
@@ -1389,8 +1397,10 @@ export class TrackSystem {
           const plen = Math.hypot(pushDirX, pushDirZ) || 1;
           const over = lateral - halfW * 0.50;
           // Stickier near absolute rim — casual play stays ON deck
+          // Ramps: stronger rim push (climb assist) without full centerline magnet
+          const rampRim = seg.kind === "ramp" ? 1.55 : 1;
           const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.55), 0, 1);
-          const strength = Math.min(0.088, over * (0.13 + 0.20 * rimT));
+          const strength = Math.min(0.088 * rampRim, over * (0.13 + 0.20 * rimT) * rampRim);
           const bx = (pushDirX / plen) * strength;
           const bz = (pushDirZ / plen) * strength;
           if (!wallBounce) wallBounce = { x: bx, z: bz };
@@ -1418,6 +1428,7 @@ export class TrackSystem {
           halfW,
           edgeMargin,
           nearDeck: !!nearDeck,
+          rampContinuity: !!(seg.kind === "ramp" && rampContinuity),
         };
       }
     }

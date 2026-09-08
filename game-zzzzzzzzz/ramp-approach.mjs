@@ -130,6 +130,7 @@ let totalFootFail = 0, totalProgFail = 0;
 for (const id of PRIMARY) {
   const path = TRACK_PATHS.find((p) => p.id === id);
   if (!path) { console.log("MISSING", id); continue; }
+  if (path.disabled) { console.log("SKIP disabled", id); continue; }
   const best = nearestApproach(path.points[0]);
   const r = approachTest(path, best.id);
   console.log("\n===", id, "via", best.id, "d=" + best.d.toFixed(3));

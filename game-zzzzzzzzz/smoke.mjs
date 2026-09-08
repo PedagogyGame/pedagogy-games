@@ -4,7 +4,7 @@
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
-import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN, RAMP_MOUNT_FEET } from "./js/data/tracks.js";
+import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN, RAMP_MOUNT_FEET, RAMP_WIDTH_MULT, RAMP_WIDTH_MIN } from "./js/data/tracks.js";
 import { CAR_SCALE } from "./js/drive/car.js";
 import { VEHICLE_PRESETS } from "./js/drive/car.js";
 import { Player } from "./js/player.js";
@@ -472,13 +472,16 @@ if (drive.tracks.segments.length > 4200) {
   const must = [
     "ramp_landing_to_landing_cornice",
     "cornice_landing_west",
-    "ramp_study_express_to_cases",
     "ramp_music_to_hall_cornice",
     "ramp_console_to_foyer_cornice",
     "ramp_workshop_to_dining_cornice",
   ];
   for (const id of must) {
-    if (!byId[id]) throw new Error(`Missing elevated connector ${id}`);
+    if (!byId[id] || byId[id].disabled) throw new Error(`Missing elevated connector ${id}`);
+  }
+  // Death-trap climbs stay in data but disabled (no invisible/undriveable lifts)
+  for (const id of ["ramp_cabinet_down", "ramp_study_express_to_cases", "ramp_cornice_to_balcony"]) {
+    if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (too steep to soften)`);
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
     const a = byId[aId], b = byId[bId];
@@ -498,7 +501,7 @@ if (drive.tracks.segments.length > 4200) {
     joinOK("ramp_balcony_to_drive", "start", "balcony_loop", 0.12),
     joinOK("ramp_cases_to_cornice", "end", "cornice_cabinet", 0.2),
     joinOK("ramp_landing_to_landing_cornice", "end", "cornice_landing_east", 0.12),
-    joinOK("ramp_study_express_to_cases", "end", "furniture_cabinet_cases", 0.2),
+    // ramp_study_express_to_cases disabled (mean grade death trap)
     joinOK("ramp_music_to_hall_cornice", "end", "cornice_conservatory", 0.15),
   ];
   // Primary on-ramps: overall grade should stay tour-friendly (not chute-steep)
@@ -512,11 +515,11 @@ if (drive.tracks.segments.length > 4200) {
     return rise / Math.max(run, 1e-6);
   };
   for (const [id, maxG] of [
-    ["ramp_foyer_to_landing", 0.55],
+    ["ramp_foyer_to_landing", 0.45],
     ["ramp_cabinet_case", 0.45],
-    ["ramp_landing_to_landing_cornice", 0.55],
-    ["ramp_console_to_foyer_cornice", 0.55],
-    // ramp_stair_to_cornice culled (snap thief on primary foyer climb)
+    ["ramp_landing_to_landing_cornice", 0.45],
+    ["ramp_console_to_foyer_cornice", 0.45],
+    // steep death-traps disabled rather than left undriveable
   ]) {
     const g = grade(id);
     if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
@@ -534,25 +537,43 @@ if (drive.tracks.segments.length > 4200) {
   });
 }
 
-// Roadway width scale (~13% smaller) — preserve every path, shrink widths only
+// Roadway width scale (~13% smaller) — preserve every path, shrink widths only.
+// Climb ramps get RAMP_WIDTH_MULT after scale (halfW ≥ ~0.29) so real cars do not slide off.
 if (Math.abs(ROAD_WIDTH_SCALE - 0.87) > 0.001) {
   throw new Error(`ROAD_WIDTH_SCALE want 0.87, got ${ROAD_WIDTH_SCALE}`);
 }
+if (!(RAMP_WIDTH_MULT >= 1.5) || !(RAMP_WIDTH_MIN >= 0.55)) {
+  throw new Error(`Ramp width boost missing/weak: mult=${RAMP_WIDTH_MULT} min=${RAMP_WIDTH_MIN}`);
+}
 let widthChecks = 0;
+let rampHalfOk = 0;
 for (const path of TRACK_PATHS) {
   const design = ROAD_WIDTH_DESIGN[path.id];
   if (design == null) throw new Error(`missing design width for ${path.id}`);
-  const expect = Math.round(design * ROAD_WIDTH_SCALE * 1000) / 1000;
-  if (Math.abs(path.width - expect) > 0.0005) {
-    throw new Error(`${path.id} width ${path.width} != design ${design} * scale (want ${expect})`);
+  let expect = Math.round(design * ROAD_WIDTH_SCALE * 1000) / 1000;
+  if (path.kind === "ramp") {
+    expect = Math.round(expect * RAMP_WIDTH_MULT * 1000) / 1000;
+    if (expect < RAMP_WIDTH_MIN) expect = RAMP_WIDTH_MIN;
   }
-  if (!(path.width < design - 1e-9)) {
+  if (Math.abs(path.width - expect) > 0.0005) {
+    throw new Error(`${path.id} width ${path.width} != expect ${expect} (design ${design})`);
+  }
+  if (path.kind !== "ramp" && !(path.width < design - 1e-9)) {
     throw new Error(`${path.id} width not reduced (${path.width} vs design ${design})`);
+  }
+  if (path.kind === "ramp" && !path.disabled) {
+    if (path.width * 0.5 < 0.28) throw new Error(`${path.id} halfW ${path.width * 0.5} < 0.28`);
+    rampHalfOk++;
   }
   widthChecks++;
 }
-console.log("Road widths reduced", { scale: ROAD_WIDTH_SCALE, paths: widthChecks, foyer: TRACK_PATHS.find(p => p.id === "foyer_skirting")?.width });
+console.log("Road widths reduced", {
+  scale: ROAD_WIDTH_SCALE, rampMult: RAMP_WIDTH_MULT, paths: widthChecks, rampHalfOk,
+  foyer: TRACK_PATHS.find(p => p.id === "foyer_skirting")?.width,
+  foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "ramp_foyer_to_landing")?.width * 0.5).toFixed(3),
+});
 if (widthChecks < 50) throw new Error("too few paths for width check");
+if (rampHalfOk < 20) throw new Error("too few widened climb ramps");
 
 if (CAR_SCALE > 0.23 || CAR_SCALE < 0.20) {
   throw new Error(`CAR_SCALE should be ~0.218 (10–15% smaller than 0.25), got ${CAR_SCALE}`);
@@ -639,9 +660,17 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   for (const id of mustNew) {
     if (!byId[id]) throw new Error(`Missing expand path ${id}`);
   }
-  // Hall header invisible snap KEEP
+  // Hall header: visual:false OK (foyer cornice draws it) but must NOT elev-support
   if (byId.cornice_hall_cross_south?.visual !== false) {
-    throw new Error("cornice_hall_cross_south must stay visual:false (invisible snap keep)");
+    throw new Error("cornice_hall_cross_south must stay visual:false (drawn by foyer cornice)");
+  }
+  {
+    const ghost = drive.tracks.querySnap(0.0, 3.5, -0.45, 1.65);
+    if (ghost.pathId === "cornice_hall_cross_south") {
+      throw new Error("invisible cornice_hall_cross_south must not win snap/support");
+    }
+    // Some visible path (chandelier ramp / foyer cornice) may still hold here
+    console.log("Invisible elev snap blocked", { kind: ghost.kind, pathId: ghost.pathId, on: ghost.onTrack });
   }
 
   // Attic loft corner + shaft portal
@@ -822,7 +851,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     let mountFail = 0;
     const mountFails = [];
     const mounts = Object.entries(RAMP_MOUNT_FEET);
-    if (mounts.length < 30) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`);
+    if (mounts.length < 28) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`);
     for (const [id, mount] of mounts) {
       const path = byId[id];
       if (!path) { mountFail++; mountFails.push(`${id} missing`); continue; }

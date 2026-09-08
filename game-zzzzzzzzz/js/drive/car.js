@@ -653,7 +653,9 @@ export class RCCar {
       this._scrape = Math.max(0, this._scrape - 3 * dt);
     }
 
-    // Height follow: stick to surface under wheels (NO centerline magnet)
+    // Height follow: stick to surface under wheels (NO full-floor centerline magnet).
+    // Climb ramps get a SOFT lateral hold + yaw settle so real cars do not slide off
+    // narrow ribbons (smoke centerline sampling used to hide this).
     // Never yank upward onto cornice/balcony/furniture from below (under ≠ on).
     const belowElevDeck = !!(elevated && snap && snap.y != null
       && (snap.y - y) > 0.28
@@ -666,12 +668,23 @@ export class RCCar {
         !!snap.nearDeck
         || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
-      // Ramp climb: firm follow along surface; flat decks sticky; never from under
-      const yLock = snap.steep || kind === "ramp" ? 28
+      // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
+      const yLock = snap.steep || kind === "ramp" ? 38
         : (sticky ? (nearRim ? 34 : 30) : 18);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
-      if (ASSIST_MAGNET && snap.onTrack) {
+      // Climb-only soft lateral magnet (NOT full floor ASSIST_MAGNET)
+      const rampAssist = kind === "ramp" && (
+        !!snap.onTrack || !!snap.nearDeck || !!snap.rampContinuity
+      );
+      if (rampAssist && snap.x != null && snap.z != null) {
+        const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
+        // Stronger near rim; whisper near center — keeps free steer feel mid-ribbon
+        const rimFactor = em < 0.10 ? 1.85 : (em < 0.18 ? 1.25 : 0.7);
+        const pull = Math.min(0.28, (0.10 + 0.14 * rimFactor) * Math.min(1, 12 * dt));
+        x = THREE.MathUtils.lerp(x, snap.x, pull);
+        z = THREE.MathUtils.lerp(z, snap.z, pull);
+      } else if (ASSIST_MAGNET && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
         x = THREE.MathUtils.lerp(x, snap.x, whisper);
         z = THREE.MathUtils.lerp(z, snap.z, whisper);
@@ -679,17 +692,20 @@ export class RCCar {
 
       // Smooth bank across segment joins — no pitch/roll jitter on cornice/balcony/ramp
       const rawBank = snap.bank || 0;
-      const bankSmooth = sticky ? 14 : 11;
+      const bankSmooth = sticky || rampAssist ? 14 : 11;
       this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
       const bank = this._smoothBank;
-      // Gentle yaw settle along banked ribbon (tiny — keeps free steer, kills join twitch)
-      if (sticky && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
+      // Gentle yaw settle — decks + climb ramps (stronger on ramp so spiral holds)
+      if ((sticky || rampAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
         let dyaw = snap.yaw - this.yaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
         // Only nudge when roughly aligned with travel (avoid U-turn snaps)
-        if (Math.abs(dyaw) < 0.55) {
-          this.yaw += dyaw * Math.min(0.18, 1.6 * dt) * Math.min(1, absV / 0.9);
+        const yawLim = rampAssist ? 0.85 : 0.55;
+        const yawK = rampAssist ? 0.34 : 0.18;
+        const yawRate = rampAssist ? 2.8 : 1.6;
+        if (Math.abs(dyaw) < yawLim) {
+          this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }
       }
       const targetRoll = bank - this._steerInput * 0.12 * Math.min(1, absV / 1.2);

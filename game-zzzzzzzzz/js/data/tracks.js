@@ -583,23 +583,24 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
-    width: 0.44,
+    width: 0.52,
     points: [
+      // Lengthened spiral (more run) — softener evens Y; crest stays landing y=4.26
       { x: -8.3, y: 0.06, z: 9.05, label: "Grand Foyer" },
-      { x: -8.28, y: 0.28, z: 8.2 },
-      { x: -8.25, y: 0.55, z: 7.3 },
-      { x: -8.2, y: 0.85, z: 6.35 },
-      { x: -8.1, y: 1.18, z: 5.45 },
-      { x: -7.9, y: 1.52, z: 4.65 },
-      { x: -7.5, y: 1.85, z: 4.05 },
-      { x: -6.95, y: 2.18, z: 3.7 },
-      { x: -6.3, y: 2.5, z: 3.6 },
-      { x: -5.75, y: 2.82, z: 3.85 },
-      { x: -5.55, y: 3.12, z: 4.45 },
-      { x: -5.75, y: 3.42, z: 5.15 },
-      { x: -6.25, y: 3.7, z: 5.45 },
-      { x: -6.7, y: 3.95, z: 5.4 },
-      { x: -6.95, y: 4.1, z: 5.22 },
+      { x: -8.28, y: 0.28, z: 8.15 },
+      { x: -8.26, y: 0.52, z: 7.2 },
+      { x: -8.22, y: 0.78, z: 6.2 },
+      { x: -8.12, y: 1.08, z: 5.25 },
+      { x: -7.92, y: 1.4, z: 4.4 },
+      { x: -7.55, y: 1.72, z: 3.75 },
+      { x: -7.0, y: 2.05, z: 3.35 },
+      { x: -6.3, y: 2.38, z: 3.25 },
+      { x: -5.65, y: 2.7, z: 3.55 },
+      { x: -5.35, y: 3.0, z: 4.25 },
+      { x: -5.45, y: 3.28, z: 5.05 },
+      { x: -5.95, y: 3.55, z: 5.55 },
+      { x: -6.5, y: 3.8, z: 5.55 },
+      { x: -6.9, y: 4.02, z: 5.3 },
       { x: -7.2, y: 4.26, z: 5.0, label: "Upper Landing" },
     ],
   },
@@ -1091,7 +1092,7 @@ export const TRACK_PATHS = [
     rail: true,
     tension: 0.1,
     fancy: true,
-    visual: false, // foyer cornice already draws this header — keep snap only
+    visual: false, // foyer cornice draws this header — NO elev snap/support (invisible must not lift)
     points: [
       { x: -3.15, y: 3.4, z: -0.55 },
       { x: -1.5, y: 3.46, z: -0.48 },
@@ -2626,8 +2627,20 @@ export const TRACK_PATHS = [
  * Roadway width scale (~13% smaller) so skirting / cornice ribbons sit
  * naturally on architectural ledges. Applied once at module load —
  * preserves every path id / points / kinds; only width values shrink.
+ *
+ * Climb ramps get an extra width boost AFTER scale so post-scale halfW
+ * lands ~0.29–0.35 (real car has lateral drift; centerline smoke lied).
  */
 export const ROAD_WIDTH_SCALE = 0.87;
+/** Extra multiplier for kind===ramp only (after ROAD_WIDTH_SCALE). */
+export const RAMP_WIDTH_MULT = 1.72;
+/** Minimum post-boost ramp width → halfW ≥ ~0.29. */
+export const RAMP_WIDTH_MIN = 0.58;
+/** Soften lumpy / death-trap climb grades (rise/run per segment). */
+export const RAMP_MAX_GRADE = 0.44;
+/** Mean grade above this after soften → path disabled (no invisible death traps). */
+export const RAMP_DISABLE_MEAN_GRADE = 0.48;
+
 export const ROAD_WIDTH_DESIGN = Object.fromEntries(
   TRACK_PATHS.map((path) => [path.id, path.width])
 );
@@ -2635,6 +2648,83 @@ for (const path of TRACK_PATHS) {
   if (typeof path.width === "number") {
     path.width = Math.round(path.width * ROAD_WIDTH_SCALE * 1000) / 1000;
   }
+}
+for (const path of TRACK_PATHS) {
+  if (path.kind !== "ramp" || typeof path.width !== "number") continue;
+  path.width = Math.round(path.width * RAMP_WIDTH_MULT * 1000) / 1000;
+  if (path.width < RAMP_WIDTH_MIN) path.width = RAMP_WIDTH_MIN;
+}
+
+/**
+ * Soften ramp grades: even Y along flat arc, mild sin-bow lengthen if mean
+ * still too steep, else disable. Keeps foot/crest XYZ (junction kisses).
+ */
+function _softenRampGrades(path) {
+  if (path.kind !== "ramp" || path.disabled || !path.points || path.points.length < 3) return;
+  const pts = path.points;
+  const foot = pts[0];
+  const crest = pts[pts.length - 1];
+  const y0 = foot.y;
+  const y1 = crest.y;
+  const rise = Math.abs(y1 - y0);
+
+  const recomputeCum = () => {
+    const cum = [0];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.z - a.z));
+    }
+    return cum;
+  };
+
+  let cum = recomputeCum();
+  let totalFlat = cum[cum.length - 1];
+  if (totalFlat < 1e-4 || rise < 1e-4) return;
+
+  // Mild lateral bow to gain flat length when mean grade is too steep
+  if (rise / totalFlat > RAMP_MAX_GRADE) {
+    const needFlat = rise / RAMP_MAX_GRADE;
+    const chord = Math.hypot(crest.x - foot.x, crest.z - foot.z) || 1;
+    const nx = -(crest.z - foot.z) / chord;
+    const nz = (crest.x - foot.x) / chord;
+    // Grow bow amplitude until flat length hits need (cap so we do not leave the room)
+    let amp = 0.15;
+    for (let iter = 0; iter < 8; iter++) {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const t = cum[i] / totalFlat;
+        const bow = Math.sin(Math.PI * t) * amp * (0.35 + 0.08 * iter);
+        // apply relative to original chord sample — use current x/z + incremental
+        pts[i].x += nx * bow * 0.22;
+        pts[i].z += nz * bow * 0.22;
+      }
+      cum = recomputeCum();
+      totalFlat = cum[cum.length - 1];
+      if (rise / totalFlat <= RAMP_MAX_GRADE) break;
+      amp += 0.12;
+    }
+  }
+
+  cum = recomputeCum();
+  totalFlat = cum[cum.length - 1];
+  const mean = rise / Math.max(1e-4, totalFlat);
+
+  // Death trap — cannot soften without a redesign
+  if (mean > RAMP_DISABLE_MEAN_GRADE) {
+    path.disabled = true;
+    path._disabledReason = `mean grade ${mean.toFixed(2)} > ${RAMP_DISABLE_MEAN_GRADE}`;
+    return;
+  }
+
+  // Even Y along flat arc — kills lumpy max-segment spikes, keeps ends
+  for (let i = 1; i < pts.length - 1; i++) {
+    const t = cum[i] / totalFlat;
+    pts[i].y = Math.round((y0 + (y1 - y0) * t) * 1000) / 1000;
+  }
+}
+
+for (const path of TRACK_PATHS) {
+  _softenRampGrades(path);
 }
 
 /** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
