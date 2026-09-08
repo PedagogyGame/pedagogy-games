@@ -30,6 +30,7 @@ export class SliceSystem {
     this.cutFaces = null; // Group of cut-face disks/quads
     this.onLayerChange = null;
     this._baseOpacity = new WeakMap();
+    this._baseEmissive = new WeakMap();
     this._baseScale = new WeakMap();
     this._basePos = new WeakMap();
     this._targets = new WeakMap();
@@ -82,8 +83,16 @@ export class SliceSystem {
 
       eachMaterial(layer, (m) => {
         if (!this._baseOpacity.has(m)) this._baseOpacity.set(m, m.opacity ?? 1);
+        if (!this._baseEmissive) this._baseEmissive = new WeakMap();
+        if (!this._baseEmissive.has(m)) {
+          this._baseEmissive.set(m, {
+            color: m.emissive ? m.emissive.getHex() : 0,
+            intensity: m.emissiveIntensity ?? 0,
+          });
+        }
         m.clippingPlanes = [SHARED_CLIP_PLANE];
         m.clipShadows = true;
+        m.needsUpdate = true;
         this._targets.set(m, {
           opacity: m.opacity ?? 1,
           emissiveIntensity: m.emissiveIntensity ?? 0,
@@ -109,18 +118,25 @@ export class SliceSystem {
         const baseP = this._basePos.get(layer);
         if (baseP) layer.position.copy(baseP);
         eachMaterial(layer, (m) => {
+          const be = this._baseEmissive?.get(m);
           if (m.emissive) {
-            m.emissive.setHex(0x000000);
-            m.emissiveIntensity = 0;
+            if (be) {
+              m.emissive.setHex(be.color);
+              m.emissiveIntensity = be.intensity;
+            } else {
+              m.emissive.setHex(0x000000);
+              m.emissiveIntensity = 0;
+            }
           }
           const base = this._baseOpacity.get(m);
           if (base != null) {
             m.opacity = base;
-            m.transparent = base < 1;
+            m.transparent = base < 0.999;
           }
           m.wireframe = false;
           m.depthWrite = true;
           m.clippingPlanes = [];
+          m.needsUpdate = true;
         });
       }
     }
@@ -222,27 +238,29 @@ export class SliceSystem {
       const r = this._layerRadii[i] || 0.1;
       const color = dataLayers[i]?.color ?? 0xcccccc;
       // Disk in YZ plane (facing ±X) — crisp cut face / strata disk
-      const geo = new THREE.CircleGeometry(r, 48);
+      const geo = new THREE.CircleGeometry(r * 1.04, 48);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: 0.42,
-        metalness: 0.14,
+        roughness: 0.38,
+        metalness: 0.12,
         side: THREE.DoubleSide,
         emissive: color,
-        emissiveIntensity: 0.22,
+        emissiveIntensity: 0.42,
         depthWrite: true,
         polygonOffset: true,
-        polygonOffsetFactor: -2,
-        polygonOffsetUnits: -2,
+        polygonOffsetFactor: -4,
+        polygonOffsetUnits: -4,
       });
       // No clipping on cut faces — they ARE the cut
       mat.clippingPlanes = [];
       const disk = new THREE.Mesh(geo, mat);
+      disk.renderOrder = 3;
       // Sit slightly into the kept half so it isn't z-fought away
       disk.rotation.y = Math.PI / 2;
-      disk.position.set(-0.003 - i * 0.002, 0, 0);
+      disk.position.set(-0.004 - i * 0.0025, 0, 0);
       disk.userData.layerIndex = i;
-      disk.userData.baseEmissive = 0.22;
+      disk.userData.baseEmissive = 0.42;
+      disk.userData.isCutDisk = true;
       group.add(disk);
 
       // Bright outer ring for strata readability
@@ -257,6 +275,7 @@ export class SliceSystem {
         })
       );
       ring.material.clippingPlanes = [];
+      ring.renderOrder = 4;
       ring.rotation.y = Math.PI / 2;
       ring.position.copy(disk.position);
       ring.position.x -= 0.0012;
@@ -276,6 +295,7 @@ export class SliceSystem {
         })
       );
       bevel.material.clippingPlanes = [];
+      bevel.renderOrder = 3;
       bevel.rotation.y = Math.PI / 2;
       bevel.position.copy(disk.position);
       bevel.position.x -= 0.0006;
@@ -284,6 +304,8 @@ export class SliceSystem {
       group.add(bevel);
     }
 
+    group.renderOrder = 2;
+    group.visible = true;
     this.object.add(group);
     this.cutFaces = group;
   }
@@ -299,7 +321,7 @@ export class SliceSystem {
 
     if (this.cutLight) {
       this.cutLight.visible = mode === "section" || mode === "peel";
-      this.cutLight.intensity = mode === "section" ? 34 : mode === "peel" ? 16 : 0;
+      this.cutLight.intensity = mode === "section" ? 48 : mode === "peel" ? 22 : 0;
     }
 
     // Cut faces: show for section always; for peel show remaining; ghost faint
@@ -328,7 +350,7 @@ export class SliceSystem {
           }
         }
         if (child.isMesh && child.material && child.material.emissive && !isDecor) {
-          child.material.emissiveIntensity = isActive ? 0.78 : child.userData.baseEmissive ?? 0.22;
+          child.material.emissiveIntensity = isActive ? 0.95 : child.userData.baseEmissive ?? 0.42;
         }
         if (child.userData.isRing) {
           child.visible = isActive && (mode !== "section" || !isOuter);
@@ -415,14 +437,12 @@ export class SliceSystem {
         this._targets.set(m, target);
 
         if (immediate) {
-          m.transparent = true;
           m.opacity = opacity;
+          m.transparent = opacity < 0.995 || wireframe;
           m.wireframe = wireframe;
-          m.depthWrite = depthWrite;
+          m.depthWrite = depthWrite && opacity >= 0.95 && !wireframe;
           if (m.emissive) m.emissiveIntensity = emissiveIntensity;
           layer.position.set(baseP.x + ox, baseP.y, baseP.z);
-        } else {
-          m.transparent = true;
         }
       });
     }
@@ -455,7 +475,7 @@ export class SliceSystem {
     this.rimLight.position.y += 0.8;
     scene.add(this.rimLight);
 
-    this.cutLight = new THREE.SpotLight(0xffe0a0, 0, 5, Math.PI / 5, 0.55, 1.2);
+    this.cutLight = new THREE.SpotLight(0xffe0a0, 0, 6.5, Math.PI / 4.2, 0.45, 1.1);
     this.cutLight.position.copy(this.object.position);
     this.cutLight.position.x -= 0.9;
     this.cutLight.position.y += 0.35;
@@ -519,15 +539,15 @@ export class SliceSystem {
           const target = this._targets.get(m);
           if (!target) return;
           m.opacity = lerp(m.opacity ?? 1, target.opacity, alpha);
-          m.transparent = true;
+          m.transparent = m.opacity < 0.995 || target.wireframe;
           if (m.emissive) {
             m.emissiveIntensity = lerp(m.emissiveIntensity ?? 0, target.emissiveIntensity, alpha);
           }
           if (Math.abs(m.opacity - target.opacity) < 0.02) {
             m.wireframe = target.wireframe;
-            m.depthWrite = target.depthWrite;
-          } else if (target.wireframe) {
-            m.wireframe = true;
+            m.depthWrite = target.depthWrite && m.opacity >= 0.95 && !target.wireframe;
+          } else if (target.wireframe || target.opacity < 0.5) {
+            m.wireframe = target.wireframe;
             m.depthWrite = false;
           }
         });

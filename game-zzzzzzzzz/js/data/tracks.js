@@ -14,18 +14,22 @@ export const TRACK_PATHS = [
   // ═══════════════════════════════════════════════════════════════
 
   // Foyer skirting loop (hug walls ~0.55–0.7 m inset)
+  
+  
   {
     id: "foyer_skirting",
     kind: "floor",
     width: 0.42,
-    tension: 0.18,
+    tension: 0.12,
     closed: true,
+    fancy: true,
     points: [
       { x: -7.9, y: 0.06, z: 12.2, label: "Grand Foyer" },
       { x: -4.0, y: 0.06, z: 12.35 },
       { x: 0.0, y: 0.06, z: 12.4 },
       { x: 4.0, y: 0.06, z: 12.35 },
       { x: 7.9, y: 0.06, z: 12.2 },
+      { x: 8.15, y: 0.06, z: 11.3 },
       { x: 8.2, y: 0.06, z: 10.5 },
       { x: 8.35, y: 0.06, z: 9.0 },
       { x: 8.35, y: 0.06, z: 5.0 },
@@ -37,7 +41,8 @@ export const TRACK_PATHS = [
       { x: -8.35, y: 0.06, z: 1.0 },
       { x: -8.35, y: 0.06, z: 5.0 },
       { x: -8.3, y: 0.06, z: 9.05 },
-      { x: -8.35, y: 0.06, z: 10.5 },
+      { x: -8.3, y: 0.06, z: 10.5 },
+      { x: -8.15, y: 0.06, z: 11.35 },
       { x: -7.9, y: 0.06, z: 12.2 },
     ],
   },
@@ -274,64 +279,89 @@ export const TRACK_PATHS = [
     ],
   },
   // Outdoor — mansion exterior perimeter (NOT center driveway spine)
+  
   {
     id: "outdoor_perimeter",
     kind: "outdoor",
     width: 0.55,
-    tension: 0.2,
+    tension: 0.12,
     closed: true,
+    fancy: true,
     points: [
+      // Softened corners (fillets) so Catmull stays on asphalt ribbon
       { x: -6.5, y: 0.08, z: 14.2, label: "Front Drive" },
+      { x: -4.58, y: 0.08, z: 14.29 },
       { x: 0.0, y: 0.08, z: 14.5 },
       { x: 6.5, y: 0.08, z: 14.2 },
+      { x: 9.2, y: 0.08, z: 16.5 },
       { x: 10.0, y: 0.08, z: 18 },
+      { x: 12.0, y: 0.08, z: 20.2 },
       { x: 14.0, y: 0.08, z: 22, label: "Rose Walk" },
+      { x: 16.2, y: 0.08, z: 18.5 },
       { x: 18.0, y: 0.08, z: 14 },
       { x: 20.0, y: 0.08, z: 0 },
       { x: 18.0, y: 0.08, z: -18 },
+      { x: 15.5, y: 0.08, z: -30 },
       { x: 14.0, y: 0.08, z: -36 },
+      { x: 11.2, y: 0.08, z: -39.2 },
       { x: 8.0, y: 0.08, z: -42 },
       { x: 0.0, y: 0.08, z: -44.5, label: "Conservatory Terrace" },
       { x: -8.0, y: 0.08, z: -42 },
+      { x: -11.2, y: 0.08, z: -39.2 },
       { x: -14.0, y: 0.08, z: -36 },
+      { x: -15.5, y: 0.08, z: -30 },
       { x: -18.0, y: 0.08, z: -18 },
       { x: -20.0, y: 0.08, z: 0 },
       { x: -16.0, y: 0.08, z: 14 },
+      { x: -12.5, y: 0.08, z: 17.8 },
       { x: -10.0, y: 0.08, z: 20 },
+      { x: -8.0, y: 0.08, z: 17.2 },
       { x: -6.5, y: 0.08, z: 14.2 },
     ],
   },
   // Tiny edge pad: front door → outdoor (side of threshold)
+  
   {
     id: "door_foyer_outdoor",
     kind: "outdoor",
     width: 0.4,
+    tension: 0.12,
     points: [
+      // Kiss foyer south skirting → outdoor front-drive ribbon
       { x: -3.2, y: 0.06, z: 12.35, label: "Grand Foyer" },
-      { x: -3.5, y: 0.07, z: 13.2 },
-      { x: -4.5, y: 0.08, z: 14.0, label: "Front Drive" },
+      { x: -3.55, y: 0.07, z: 13.1 },
+      { x: -4.15, y: 0.08, z: 13.75 },
+      { x: -4.58, y: 0.08, z: 14.29, label: "Front Drive" },
     ],
   },
 
   // First floor — wall skirting (replaces center spine highways)
+  
+  
   {
     id: "landing_skirting",
     kind: "floor",
     width: 0.4,
-    tension: 0.18,
+    tension: 0.1,
     closed: true,
+    fancy: true,
     points: [
+      // Extra NW/NE fillets + lower tension keep Catmull on asphalt
       { x: -6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
+      { x: -4.5, y: 4.26, z: 8.95 },
       { x: -2.0, y: 4.26, z: 9.0 },
       { x: 0.0, y: 4.26, z: 9.0 },
       { x: 2.0, y: 4.26, z: 9.0 },
+      { x: 4.5, y: 4.26, z: 8.95 },
       { x: 6.8, y: 4.26, z: 8.8 },
+      { x: 7.1, y: 4.26, z: 7.0 },
       { x: 7.2, y: 4.26, z: 5.0 },
       { x: 7.2, y: 4.26, z: 1.0 },
       { x: 2.9, y: 4.26, z: -0.8 },
       { x: -2.9, y: 4.26, z: -0.8 },
       { x: -7.2, y: 4.26, z: 1.0 },
       { x: -7.2, y: 4.26, z: 5.0 },
+      { x: -7.1, y: 4.26, z: 7.0 },
       { x: -6.8, y: 4.26, z: 8.8 },
     ],
   },
@@ -547,72 +577,83 @@ export const TRACK_PATHS = [
 
 
   // Driveable stair ramp: foyer west stair → upper landing (reach furniture circuits)
+  
+  
+  
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
     width: 0.44,
     points: [
-      // Foot kisses foyer west skirting — gentle grade, clear corridor
       { x: -8.3, y: 0.06, z: 9.05, label: "Grand Foyer" },
-      { x: -8.28, y: 0.22, z: 8.35 },
-      { x: -8.25, y: 0.42, z: 7.55 },
-      { x: -8.22, y: 0.68, z: 6.7 },
-      { x: -8.2, y: 0.95, z: 5.9 },
-      { x: -8.15, y: 1.22, z: 5.15 },
-      { x: -7.95, y: 1.5, z: 4.45 },
-      { x: -7.55, y: 1.78, z: 3.95 },
-      { x: -7.0, y: 2.08, z: 3.7 },
-      { x: -6.4, y: 2.38, z: 3.65 },
-      { x: -5.9, y: 2.68, z: 3.9 },
-      { x: -5.7, y: 2.95, z: 4.4 },
-      { x: -5.85, y: 3.22, z: 4.95 },
-      { x: -6.25, y: 3.48, z: 5.25 },
-      { x: -6.7, y: 3.72, z: 5.3 },
-      { x: -7.0, y: 3.95, z: 5.15 },
-      { x: -7.15, y: 4.12, z: 5.05 },
+      { x: -8.28, y: 0.28, z: 8.2 },
+      { x: -8.25, y: 0.55, z: 7.3 },
+      { x: -8.2, y: 0.85, z: 6.35 },
+      { x: -8.1, y: 1.18, z: 5.45 },
+      { x: -7.9, y: 1.52, z: 4.65 },
+      { x: -7.5, y: 1.85, z: 4.05 },
+      { x: -6.95, y: 2.18, z: 3.7 },
+      { x: -6.3, y: 2.5, z: 3.6 },
+      { x: -5.75, y: 2.82, z: 3.85 },
+      { x: -5.55, y: 3.12, z: 4.45 },
+      { x: -5.75, y: 3.42, z: 5.15 },
+      { x: -6.25, y: 3.7, z: 5.45 },
+      { x: -6.7, y: 3.95, z: 5.4 },
+      { x: -6.95, y: 4.1, z: 5.22 },
       { x: -7.2, y: 4.26, z: 5.0, label: "Upper Landing" },
     ],
   },
   // ─── Furniture-top circuits + ramps (Toy Story vibe) ───
   // 1) Foyer console top
+  
+  
+  
+  
+  
   {
     id: "ramp_foyer_console",
     kind: "ramp",
     width: 0.44,
     points: [
       { x: 8.3, y: 0.06, z: 10.5 },
-      { x: 7.85, y: 0.14, z: 10.4 },
-      { x: 7.35, y: 0.28, z: 10.3 },
-      { x: 6.85, y: 0.48, z: 10.2 },
-      { x: 6.4, y: 0.72, z: 10.15 },
-      { x: 6.2, y: 0.9, z: 10.18 },
+      { x: 7.75, y: 0.3, z: 10.4 },
+      { x: 7.2, y: 0.52, z: 10.3 },
+      { x: 6.7, y: 0.72, z: 10.22 },
+      { x: 6.4, y: 0.88, z: 10.2 },
       { x: 6.2, y: 0.98, z: 10.2, label: "Foyer Console" },
     ],
   },
+  
   {
     id: "furniture_foyer_console",
     kind: "elevated",
     width: 0.40,
     rail: true,
     closed: true,
+    tension: 0.1,
     points: [
+      // Softer loop — less yaw kink at SE/SW corners; kiss to cornice ramp
       { x: 6.2, y: 0.98, z: 10.2, label: "Foyer Console" },
-      { x: 5.5, y: 0.98, z: 10.2 },
-      { x: 4.75, y: 0.98, z: 9.75 },
-      { x: 5.5, y: 0.98, z: 9.7 },
-      { x: 6.4, y: 0.98, z: 9.8 },
+      { x: 5.7, y: 0.98, z: 10.22 },
+      { x: 5.15, y: 0.98, z: 10.05 },
+      { x: 4.85, y: 0.98, z: 9.8 },
+      { x: 5.2, y: 0.98, z: 9.65 },
+      { x: 5.8, y: 0.98, z: 9.7 },
+      { x: 6.25, y: 0.98, z: 9.85 },
       { x: 6.2, y: 0.98, z: 10.2 },
     ],
   },
+  
   {
     id: "ramp_foyer_console_down",
     kind: "ramp",
     width: 0.40,
     points: [
-      { x: 4.75, y: 0.98, z: 9.75 },
+      // Foot kissed to softened console SE corner
+      { x: 4.85, y: 0.98, z: 9.8 },
       { x: 6.0, y: 0.55, z: 9.4 },
-      { x: 7.0, y: 0.2, z: 9.8 },
-      { x: 7.8, y: 0.06, z: 10.5 },
+      { x: 7.15, y: 0.18, z: 9.95 },
+      { x: 8.15, y: 0.06, z: 10.5 }, // crest kiss foyer_skirting ≤0.05
     ],
   },
 
@@ -653,8 +694,48 @@ export const TRACK_PATHS = [
     points: [
       { x: -13.25, y: 0.98, z: -29.85 },
       { x: -12.0, y: 0.5, z: -28.5 },
-      { x: -10.5, y: 0.15, z: -27.5 },
-      { x: -11.4, y: 0.06, z: -26.8 },
+      { x: -11.7, y: 0.16, z: -27.2 },
+      { x: -11.5, y: 0.06, z: -26.52 }, // crest kiss dining_skirting ≤0.05
+    ],
+  },
+
+  // Breakfast Parlor west wall breakthrough — table highway continues into gardens
+  // (was a flat green-wall dead-end; now portal + wall-hollow mouse run)
+  {
+    id: "mouse_dining_west_garden",
+    kind: "mouse",
+    width: 0.26,
+    tension: 0.28,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: -19.4, y: 0.95, z: -30.0, label: "Mouse run", portal: true },
+      { x: -20.2, y: 0.92, z: -30.0 },
+      { x: -21.6, y: 0.78, z: -30.1 },
+      { x: -22.8, y: 0.55, z: -30.2, label: "Wall hollow" },
+      { x: -23.6, y: 0.35, z: -29.5 },
+      { x: -24.4, y: 0.18, z: -28.5 },
+      { x: -25.2, y: 0.1, z: -26.5 },
+      { x: -26.0, y: 0.1, z: -24.0 },
+      { x: -28.0, y: 0.1, z: -24.0, label: "Flower Beds", portal: true },
+    ],
+  },
+  // Cornice-level twin: dining west cornice → outdoor (between-walls feel)
+  {
+    id: "mouse_dining_cornice_garden",
+    kind: "shortcut",
+    width: 0.26,
+    tension: 0.28,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: -22.7, y: 3.4, z: -30.5, label: "Mouse run", portal: true },
+      { x: -23.3, y: 3.2, z: -30.2 },
+      { x: -23.8, y: 2.7, z: -29.5, label: "Wall hollow" },
+      { x: -24.4, y: 2.0, z: -28.5 },
+      { x: -25.0, y: 1.2, z: -27.0 },
+      { x: -25.6, y: 0.55, z: -25.5 },
+      { x: -26.0, y: 0.1, z: -24.0, label: "Flower Beds", portal: true },
     ],
   },
 
@@ -693,16 +774,16 @@ export const TRACK_PATHS = [
       { x: -11, y: 1.82, z: -4 },
     ],
   },
-  {
+    {
     id: "ramp_cabinet_down",
     kind: "ramp",
     width: 0.40,
     points: [
+      // Straightened descent (was zigzagging — CatmullRom bowed past halfW)
       { x: -8.0, y: 1.82, z: -8.0 },
-      { x: -6.2, y: 1.4, z: -7.5 },
-      { x: -4.8, y: 0.95, z: -7.2 },
-      { x: -4.2, y: 0.55, z: -7.4 },
-      { x: -4.8, y: 0.25, z: -7.7 },
+      { x: -7.2, y: 1.35, z: -7.9 },
+      { x: -6.4, y: 0.9, z: -7.85 },
+      { x: -5.8, y: 0.5, z: -7.82 },
       { x: -5.5, y: 0.06, z: -7.8 },
     ],
   },
@@ -808,8 +889,8 @@ export const TRACK_PATHS = [
       { x: -3.1, y: 6.8, z: -10 },
       { x: -2.4, y: 6.1, z: -8.2 },
       { x: -1.6, y: 5.4, z: -6.4 },
-      { x: -1.4, y: 4.8, z: -5.0 },
-      { x: -2.8, y: 4.26, z: -4.2 },
+      { x: -1.7, y: 4.7, z: -4.8 },
+      { x: -2.95, y: 4.26, z: -4.02 }, // crest kiss library_skirting_west ≤0.05
     ],
   },
 
@@ -936,10 +1017,11 @@ export const TRACK_PATHS = [
       { x: -8.15, y: 3.35, z: 12.15 },
     ],
   },
-  // On-ramp: foyer stair rail → cornice
+  // DISABLED — branched mid foyer stair & stole snap from primary climb
   {
     id: "ramp_stair_to_cornice",
     kind: "ramp",
+    disabled: true,
     width: 0.42,
     points: [
       // Branches from mid foyer stair climb onto west cornice
@@ -1357,6 +1439,8 @@ export const TRACK_PATHS = [
       { x: 6.5, y: 4.28, z: 12.2, label: "Balcony" },
     ],
   },
+  
+  
   {
     id: "balcony_loop",
     kind: "balcony",
@@ -1364,12 +1448,15 @@ export const TRACK_PATHS = [
     rail: true,
     tension: 0.05,
     closed: true,
+    fancy: true,
     points: [
       { x: 6.5, y: 4.28, z: 12.2, label: "Balcony" },
       { x: 4.0, y: 4.28, z: 13.5 },
       { x: 0.0, y: 4.28, z: 14.5 },
       { x: -4.0, y: 4.28, z: 13.5 },
       { x: -5.5, y: 4.28, z: 12.2 },
+      // Fillet softens ~130° west return kink
+      { x: -5.7, y: 4.28, z: 13.9 },
       { x: -5.5, y: 4.28, z: 15.8 },
       { x: -2.0, y: 4.28, z: 17.2 },
       { x: 0.0, y: 4.28, z: 17.2 },
@@ -1385,10 +1472,11 @@ export const TRACK_PATHS = [
     kind: "ramp",
     width: 0.40,
     points: [
+      // Ends at north landing center — clears attic_from_landing_access foot at (-6.8,8.8)
       { x: -5.5, y: 4.28, z: 12.2, label: "Balcony" },
-      { x: -5.8, y: 4.26, z: 10.2 },
-      { x: -6.2, y: 4.26, z: 9.2 },
-      { x: -6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
+      { x: -4.2, y: 4.26, z: 10.6 },
+      { x: -2.8, y: 4.26, z: 9.4 },
+      { x: -2.0, y: 4.26, z: 9.0, label: "Upper Landing" },
     ],
   },
   // Optional drop ramp: balcony → front drive gravel
@@ -1888,26 +1976,30 @@ export const TRACK_PATHS = [
 
   // ─── Elevated circuit connectors (unite cornice / balcony / furniture / landing) ───
   // Gentle climb: Upper Landing floor → high landing cornice (closes orphan start)
+  
+  
+  
   {
     id: "ramp_landing_to_landing_cornice",
     kind: "ramp",
     width: 0.42,
     points: [
-      // Foot on landing_skirting center — gentle spiral climb to cornice
+      // Foot on landing center, climbs NORTH off skirting first (no ribbon theft/false voids)
       { x: 0.0, y: 4.26, z: 9.0, label: "Upper Landing" },
-      { x: 0.7, y: 4.4, z: 9.12 },
-      { x: 1.4, y: 4.58, z: 9.15 },
-      { x: 2.05, y: 4.8, z: 9.05 },
-      { x: 2.6, y: 5.05, z: 8.85 },
-      { x: 3.0, y: 5.32, z: 8.55 },
-      { x: 3.25, y: 5.6, z: 8.2 },
-      { x: 3.3, y: 5.88, z: 7.9 },
-      { x: 3.1, y: 6.15, z: 7.7 },
-      { x: 2.7, y: 6.4, z: 7.6 },
-      { x: 2.15, y: 6.62, z: 7.65 },
-      { x: 1.5, y: 6.82, z: 7.85 },
-      { x: 0.9, y: 6.98, z: 8.1 },
-      { x: 0.4, y: 7.1, z: 8.35 },
+      { x: 0.15, y: 4.4, z: 9.4 },
+      { x: 0.6, y: 4.6, z: 9.65 },
+      { x: 1.3, y: 4.85, z: 9.7 },
+      { x: 2.1, y: 5.12, z: 9.45 },
+      { x: 2.75, y: 5.38, z: 8.95 },
+      { x: 3.2, y: 5.62, z: 8.4 },
+      { x: 3.4, y: 5.85, z: 7.8 },
+      { x: 3.35, y: 6.08, z: 7.25 },
+      { x: 3.0, y: 6.3, z: 6.85 },
+      { x: 2.45, y: 6.5, z: 6.7 },
+      { x: 1.8, y: 6.7, z: 6.9 },
+      { x: 1.2, y: 6.9, z: 7.35 },
+      { x: 0.7, y: 7.05, z: 7.85 },
+      { x: 0.3, y: 7.14, z: 8.25 },
       { x: 0.0, y: 7.2, z: 8.5, label: "Landing Cornice" },
     ],
   },
@@ -2006,19 +2098,26 @@ export const TRACK_PATHS = [
     ],
   },
   // Foyer console → east cornice climb (unites low furniture into upper circuit)
+  
+  
+  
+  
+  
+  
+  
   {
     id: "ramp_console_to_foyer_cornice",
     kind: "ramp",
     width: 0.37,
     points: [
-      { x: 6.2, y: 0.98, z: 10.2, label: "Foyer Console" },
-      { x: 5.4, y: 1.3, z: 10.8 },
-      { x: 4.6, y: 1.7, z: 11.5 },
-      { x: 4.2, y: 2.15, z: 12.1 },
-      { x: 5.0, y: 2.55, z: 12.25 },
-      { x: 6.2, y: 2.95, z: 12.2 },
-      { x: 7.2, y: 3.25, z: 12.05 },
-      { x: 7.7, y: 3.38, z: 11.7 },
+      { x: 6.08, y: 0.99, z: 10.22, label: "Foyer Console" },
+      { x: 5.25, y: 1.42, z: 10.85 },
+      { x: 4.55, y: 1.92, z: 11.55 },
+      { x: 4.3, y: 2.28, z: 12.1 },
+      { x: 4.75, y: 2.55, z: 12.38 },
+      { x: 5.6, y: 2.85, z: 12.28 },
+      { x: 6.55, y: 3.15, z: 12.08 },
+      { x: 7.45, y: 3.36, z: 11.7 },
       { x: 8.15, y: 3.46, z: 11.4, label: "Foyer Cornice" },
     ],
   },
@@ -2119,28 +2218,30 @@ export const TRACK_PATHS = [
     ],
   },
   // Landing attic stair access → loft south wall (west corner climb remnant)
+  
+  
   {
     id: "attic_from_landing_access",
     kind: "ramp",
     width: 0.4,
     points: [
-      // Long spiral along landing → west wall → loft SW corner (grade <0.55)
+      // Rise pushed into long spiral legs — loft crest ≤~0.55
       { x: -6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
-      { x: -5.2, y: 4.42, z: 9.0 },
-      { x: -3.6, y: 4.65, z: 8.4 },
-      { x: -3.4, y: 4.9, z: 7.0 },
-      { x: -4.2, y: 5.15, z: 5.8 },
-      { x: -5.6, y: 5.4, z: 5.2 },
-      { x: -7.0, y: 5.65, z: 5.4 },
-      { x: -8.0, y: 5.9, z: 6.2 },
-      { x: -8.4, y: 6.15, z: 7.2 },
-      { x: -8.2, y: 6.4, z: 8.2 },
-      { x: -8.6, y: 6.65, z: 8.6 },
-      { x: -9.4, y: 6.95, z: 8.0 },
-      { x: -9.9, y: 7.25, z: 6.8 },
-      { x: -10.2, y: 7.55, z: 5.6 },
-      { x: -10.35, y: 7.85, z: 4.9 },
-      { x: -10.4, y: 8.15, z: 4.5 },
+      { x: -5.2, y: 4.5, z: 9.0 },
+      { x: -3.6, y: 4.8, z: 8.35 },
+      { x: -3.35, y: 5.15, z: 6.9 },
+      { x: -4.2, y: 5.5, z: 5.6 },
+      { x: -5.7, y: 5.85, z: 5.05 },
+      { x: -7.15, y: 6.2, z: 5.3 },
+      { x: -8.15, y: 6.5, z: 6.25 },
+      { x: -8.45, y: 6.8, z: 7.4 },
+      { x: -8.3, y: 7.05, z: 8.25 },
+      { x: -8.7, y: 7.3, z: 8.55 },
+      { x: -9.45, y: 7.55, z: 7.9 },
+      { x: -9.95, y: 7.8, z: 6.7 },
+      { x: -10.2, y: 8.0, z: 5.6 },
+      { x: -10.3, y: 8.18, z: 4.9 },
+      { x: -10.32, y: 8.32, z: 4.55 },
       { x: -10.3, y: 8.46, z: 4.3, label: "Attic loft" },
     ],
   },
@@ -2313,6 +2414,211 @@ export const TRACK_PATHS = [
     ],
   },
 
+  // ═══════════════════════════════════════════════════════════════
+  // LOFT EDGE RINGS + INTERSECTING WALL MICE (asphalt ribbons; corner hug)
+  // Shared mats / one ribbon per path — path density OK, mesh bloat not.
+  // ═══════════════════════════════════════════════════════════════
+
+  // Attic loft inner cross — E–W spine intersecting perimeter (tourable loft highway)
+  {
+    id: "attic_loft_cross_ew",
+    kind: "cornice",
+    width: 0.34,
+    rail: true,
+    tension: 0.12,
+    fancy: true,
+    points: [
+      { x: -10.5, y: 8.46, z: -6.0, label: "Attic loft" },
+      { x: -6.0, y: 8.48, z: -6.0 },
+      { x: 0.0, y: 8.5, z: -6.0 },
+      { x: 6.0, y: 8.48, z: -6.0 },
+      { x: 10.5, y: 8.46, z: -6.0, label: "Attic loft" },
+    ],
+  },
+  // Attic loft inner cross — N–S spine (intersects E–W at center)
+  {
+    id: "attic_loft_cross_ns",
+    kind: "cornice",
+    width: 0.34,
+    rail: true,
+    tension: 0.12,
+    fancy: true,
+    points: [
+      { x: 0.0, y: 8.5, z: 4.45, label: "Attic loft" },
+      { x: 0.0, y: 8.48, z: 0.0 },
+      { x: 0.0, y: 8.5, z: -6.0 },
+      { x: 0.0, y: 8.48, z: -12.0 },
+      { x: 0.0, y: 8.5, z: -16.5, label: "Attic loft" },
+    ],
+  },
+  // First-floor library loft edge (east room rim at cornice height — hugs walls)
+  {
+    id: "loft_library_edge",
+    kind: "cornice",
+    width: 0.33,
+    rail: true,
+    tension: 0.13,
+    fancy: true,
+    closed: true,
+    points: [
+      // Library [7.2×20] @ (0,-10) — hug walls ~0.5 m inset
+      { x: -3.1, y: 7.15, z: -0.9, label: "Library Hall" },
+      { x: 0.0, y: 7.18, z: -0.8 },
+      { x: 3.1, y: 7.15, z: -0.9 },
+      { x: 3.15, y: 7.18, z: -6.0 },
+      { x: 3.15, y: 7.15, z: -12.0 },
+      { x: 3.1, y: 7.18, z: -19.1 },
+      { x: 0.0, y: 7.15, z: -19.2 },
+      { x: -3.1, y: 7.18, z: -19.1 },
+      { x: -3.15, y: 7.15, z: -12.0 },
+      { x: -3.15, y: 7.18, z: -6.0 },
+      { x: -3.1, y: 7.15, z: -0.9 },
+    ],
+  },
+  // Nursery loft edge ring
+  
+  {
+    id: "loft_nursery_edge",
+    kind: "cornice",
+    width: 0.32,
+    rail: true,
+    tension: 0.08,
+    fancy: true,
+    closed: true,
+    points: [
+      { x: 6.8, y: 7.15, z: -1.7, label: "Nursery & Toy Corner" },
+      { x: 14.0, y: 7.18, z: -1.6 },
+      { x: 21.0, y: 7.15, z: -1.7 },
+      { x: 21.15, y: 7.16, z: -4.8 },
+      { x: 21.2, y: 7.18, z: -8.0 },
+      { x: 21.15, y: 7.16, z: -11.2 },
+      { x: 21.0, y: 7.15, z: -14.2 },
+      { x: 14.0, y: 7.18, z: -14.3 },
+      { x: 6.8, y: 7.15, z: -14.2 },
+      { x: 6.65, y: 7.16, z: -11.2 },
+      { x: 6.6, y: 7.18, z: -8.0 },
+      { x: 6.65, y: 7.16, z: -4.8 },
+      { x: 6.8, y: 7.15, z: -1.7 },
+    ],
+  },
+  // Music loft edge (south first-floor)
+  
+  {
+    id: "loft_music_edge",
+    kind: "cornice",
+    width: 0.32,
+    rail: true,
+    tension: 0.08,
+    fancy: true,
+    closed: true,
+    points: [
+      // Midpoints on long E/W sides keep Catmull + chord samples on ribbon
+      { x: -9.4, y: 7.15, z: -20.7, label: "Music Room" },
+      { x: 0.0, y: 7.18, z: -20.6 },
+      { x: 9.4, y: 7.15, z: -20.7 },
+      { x: 9.45, y: 7.16, z: -24.3 },
+      { x: 9.5, y: 7.18, z: -28.0 },
+      { x: 9.45, y: 7.16, z: -31.6 },
+      { x: 9.4, y: 7.15, z: -35.2 },
+      { x: 0.0, y: 7.18, z: -35.3 },
+      { x: -9.4, y: 7.15, z: -35.2 },
+      { x: -9.45, y: 7.16, z: -31.6 },
+      { x: -9.5, y: 7.18, z: -28.0 },
+      { x: -9.45, y: 7.16, z: -24.3 },
+      { x: -9.4, y: 7.15, z: -20.7 },
+    ],
+  },
+  // Bridge: landing cornice → library loft edge (tiny connector, clear of walk)
+  {
+    id: "loft_landing_to_library",
+    kind: "cornice",
+    width: 0.32,
+    rail: true,
+    tension: 0.1,
+    fancy: true,
+    points: [
+      { x: 3.15, y: 7.2, z: 1.0, label: "Landing Cornice" },
+      { x: 3.15, y: 7.18, z: 0.0 },
+      { x: 3.1, y: 7.15, z: -0.9, label: "Library Hall" },
+    ],
+  },
+
+  // ── Intersecting mouse wall corridors (portals clear of doorways) ──
+
+  // A) Landing ↔ Library — pierce shared south wall at mid height
+  {
+    id: "mouse_landing_library_mid",
+    kind: "mouse",
+    width: 0.26,
+    tension: 0.28,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: 0.0, y: 5.55, z: 8.2, label: "Mouse run", portal: true },
+      { x: 0.8, y: 5.65, z: 6.0 },
+      { x: 1.6, y: 5.75, z: 3.0, label: "Wall hollow" },
+      { x: 2.4, y: 5.7, z: 0.5 },
+      { x: 2.95, y: 5.55, z: -2.0 },
+      { x: 2.95, y: 5.4, z: -6.0 },
+      { x: 3.0, y: 5.2, z: -10.0, label: "Library Hall", portal: true },
+    ],
+  },
+  // B) Foyer ↔ Hall — mid-cavity cross (between double walls, above skirting)
+  {
+    id: "mouse_foyer_hall_mid",
+    kind: "shortcut",
+    width: 0.26,
+    tension: 0.28,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: 0.0, y: 1.65, z: 4.0, label: "Mouse run", portal: true },
+      { x: 0.0, y: 1.75, z: 2.0 },
+      { x: 0.0, y: 1.85, z: 0.2, label: "Wall hollow" },
+      { x: 0.0, y: 1.8, z: -1.5 },
+      { x: 0.0, y: 1.7, z: -4.0 },
+      { x: 0.0, y: 1.55, z: -8.0 },
+      { x: 0.0, y: 1.4, z: -12.0, label: "Hall of Echoes", portal: true },
+    ],
+  },
+  // C) Dining ↔ Hall west — shared wall sneak (ground, skirting-clear)
+  {
+    id: "mouse_dining_hall_west",
+    kind: "mouse",
+    width: 0.25,
+    tension: 0.3,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: -11.0, y: 0.55, z: -23.6, label: "Mouse run", portal: true },
+      { x: -8.5, y: 0.7, z: -22.8 },
+      { x: -5.5, y: 0.85, z: -22.2, label: "Wall hollow" },
+      { x: -3.4, y: 0.75, z: -21.5 },
+      { x: -2.95, y: 0.45, z: -18.0 },
+      { x: -2.95, y: 0.18, z: -12.0 },
+      { x: -2.9, y: 0.06, z: -6.0, label: "Hall of Echoes", portal: true },
+    ],
+  },
+  // D) Library ↔ Attic loft — between-floors wall chase (gentle grade, portals clear)
+  {
+    id: "mouse_library_attic_chase",
+    kind: "mouse",
+    width: 0.26,
+    tension: 0.3,
+    rail: true,
+    boostExit: true,
+    points: [
+      { x: -2.95, y: 4.26, z: -10.0, label: "Mouse run", portal: true },
+      { x: -3.2, y: 4.6, z: -9.5 },
+      { x: -3.6, y: 5.2, z: -8.5 },
+      { x: -4.2, y: 5.9, z: -7.5, label: "Wall hollow" },
+      { x: -5.0, y: 6.6, z: -7.0 },
+      { x: -6.0, y: 7.3, z: -6.5 },
+      { x: -7.5, y: 7.9, z: -6.2 },
+      { x: -9.0, y: 8.3, z: -6.0 },
+      { x: -10.3, y: 8.46, z: -6.0, label: "Attic loft", portal: true },
+    ],
+  },
 
 ];
 
@@ -2333,6 +2639,69 @@ for (const path of TRACK_PATHS) {
 
 /** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
 export const CAR_SPAWN = { x: -7.9, y: 0.045, z: 12.2, yaw: 0 };
+
+
+/**
+ * Precise ramp foot engagement zones for every enabled climb.
+ * `approach` = skirting/deck path the car arrives on; `foot` = points[0];
+ * engage within engageBack meters behind the foot along approach heading.
+ * Climb samples at 25/50/75% along the ramp must stay onTrack+supported.
+ * Junction kiss to destination decks is verified ≤0.05 m in smoke.
+ */
+export const RAMP_MOUNT_FEET = (() => {
+  const PRIMARY_APPROACH = {
+    ramp_foyer_to_landing: "foyer_skirting",
+    ramp_foyer_console: "foyer_skirting",
+    ramp_foyer_console_down: "furniture_foyer_console",
+    ramp_dining_table: "door_cons_dining",
+    ramp_dining_down: "furniture_dining_table",
+    ramp_cabinet_case: "cabinet_skirting",
+    ramp_cabinet_down: "furniture_cabinet_cases",
+    ramp_workshop_bench: "workshop_skirting",
+    ramp_workshop_down: "furniture_workshop_bench",
+    ramp_library_bookcase: "library_skirting_east",
+    ramp_library_down: "furniture_library_tops",
+    ramp_music_sideboard: "music_skirting",
+    ramp_music_down: "furniture_music_sideboard",
+    ramp_nursery_chest: "nursery_skirting",
+    ramp_nursery_down: "furniture_nursery_chest",
+    ramp_landing_to_landing_cornice: "landing_skirting",
+    ramp_console_to_foyer_cornice: "furniture_foyer_console",
+    ramp_landing_to_balcony: "landing_skirting",
+    ramp_balcony_to_drive: "balcony_loop",
+    ramp_balcony_return: "balcony_loop",
+    ramp_cornice_to_balcony: "cornice_landing_east",
+    ramp_music_to_hall_cornice: "furniture_music_sideboard",
+    ramp_cases_to_cornice: "furniture_cabinet_cases",
+    ramp_study_express_to_cases: "bookcase_express_lib_study",
+    ramp_workshop_to_dining_cornice: "workshop_skirting",
+    attic_from_landing_access: "landing_skirting",
+    ramp_cornice_to_landing: "cornice_landing_east",
+    ramp_bookcase_to_landing_cornice: "furniture_library_tops",
+    ramp_bookcase_west_to_landing_cornice: "furniture_library_tops",
+    ramp_nursery_express_return: "bookcase_express_lib_nursery",
+    ramp_cornice_to_chandelier: "cornice_hall_cross_south",
+    ramp_mouse_to_foyer_cornice: "mouse_foyer_cabinet_skirt",
+    ramp_mouse_east_to_foyer_cornice: "mouse_foyer_armoury_skirt",
+  };
+  const out = {};
+  for (const path of TRACK_PATHS) {
+    if (path.kind !== "ramp" || path.disabled) continue;
+    const foot = path.points[0];
+    const crest = path.points[path.points.length - 1];
+    out[path.id] = {
+      approach: PRIMARY_APPROACH[path.id] || null,
+      foot: { x: foot.x, y: foot.y, z: foot.z },
+      crest: { x: crest.x, y: crest.y, z: crest.z },
+      /** Meters behind foot along approach where ramp snap must win */
+      engageBack: 0.08,
+      /** Soft crest blend band (m) — avoid snap theft at deck kiss */
+      crestSoft: 0.12,
+      climbFracs: [0.25, 0.5, 0.75],
+    };
+  }
+  return out;
+})();
 
 /** Labels that are shortcut/shaft toasts (no "Entering" prefix). */
 export const SHORTCUT_TOAST_RE = /mouse run|wall hollow|pipe shaft|service shaft|drop chute|climb tube|safe landing|petal path|hedge tunnel|fountain arc|shortcut bridge|chandelier ring|nursery express|study express|library express|start \/ finish|molding tunnel|dining header|dining cornice|attic loft|science attic|cellar workshop/i;

@@ -12,29 +12,29 @@ function makeCanvas(w, h) {
 }
 
 function makeAsphaltTexture() {
-  // Dark asphalt + soft yellow center dashes ONLY — no bright white edge
-  // lines (those stacked into a flitting starburst at coplanar junctions).
+  // Solid black asphalt + white shoulder dashes + yellow center lane
+  // (baked into one texture — no coplanar line meshes / no wood-plank look).
   const c = makeCanvas(256, 256);
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#1a1a20";
+  ctx.fillStyle = "#141418";
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 700; i++) {
-    const v = 26 + Math.random() * 42;
-    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.32)`;
+  for (let i = 0; i < 900; i++) {
+    const v = 22 + Math.random() * 38;
+    ctx.fillStyle = `rgba(${v},${v},${v + 3},0.38)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  // Very subtle dark shoulder (not bright / not white)
-  ctx.strokeStyle = "rgba(40,42,48,0.55)";
-  ctx.lineWidth = 6;
-  ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(18, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(238, 0); ctx.lineTo(238, 256); ctx.stroke();
-  // Soft yellow dashes only
-  ctx.strokeStyle = "rgba(220,180,40,0.72)";
-  ctx.lineWidth = 4;
-  ctx.setLineDash([14, 16]);
+  // Soft white shoulder dashes (texture-only — no junction star meshes)
+  ctx.strokeStyle = "rgba(230,230,235,0.55)";
+  ctx.lineWidth = 3.5;
+  ctx.setLineDash([10, 14]);
+  ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(22, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(234, 0); ctx.lineTo(234, 256); ctx.stroke();
+  // Yellow center lane dashes
+  ctx.strokeStyle = "rgba(235,195,45,0.85)";
+  ctx.lineWidth = 5;
+  ctx.setLineDash([16, 14]);
   ctx.beginPath();
   ctx.moveTo(128, 0);
   ctx.lineTo(128, 256);
@@ -226,6 +226,7 @@ export class TrackSystem {
 
   _buildAll() {
     for (const path of TRACK_PATHS) {
+      if (path.disabled) continue;
       this._buildPath(path);
     }
     this._buildSnapGrid();
@@ -575,45 +576,48 @@ export class TrackSystem {
     return this._sharedMats.asphalt;
   }
 
-  /** Shared non-asphalt deck mats (no per-segment map clones — cuts GPU state thrash). */
+  /**
+   * Deck mats: primary roads (ramp/elevated/cornice/balcony) share asphalt lane language
+   * with floor highways. Wall hollows stay timber/plaster; chutes stay metal.
+   */
   _elevMatForKind(kind) {
     if (!this._elevMats) this._elevMats = {};
     if (this._elevMats[kind]) return this._elevMats[kind];
     let mat;
-    if (kind === "cornice") {
+    const asphaltMap = this._asphalt;
+    const asphaltBias = {
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: true,
+    };
+    // Road family — solid asphalt + baked white/yellow lane markings
+    if (kind === "ramp" || kind === "elevated" || kind === "cornice" || kind === "balcony") {
       mat = new THREE.MeshStandardMaterial({
-        color: this._corniceDeck ? 0xffffff : 0x3e2723, roughness: 0.42, metalness: 0.28,
-        ...(this._corniceDeck ? { map: this._corniceDeck } : {}),
-      });
-    } else if (kind === "balcony") {
-      mat = new THREE.MeshStandardMaterial({
-        color: this._corniceDeck ? 0xffffff : 0x6d4c41, roughness: 0.55, metalness: 0.12,
-        ...(this._corniceDeck ? { map: this._corniceDeck } : {}),
+        color: asphaltMap ? 0xffffff : 0x141418,
+        roughness: kind === "ramp" ? 0.78 : 0.84,
+        metalness: 0.08,
+        ...(asphaltMap ? { map: asphaltMap } : {}),
+        ...asphaltBias,
       });
     } else if (kind === "shortcut" || kind === "mouse" || kind === "shaft") {
       mat = new THREE.MeshStandardMaterial({
         color: this._hollow ? 0xffffff : 0x2a2018, roughness: 0.78, metalness: 0.08,
         ...(this._hollow ? { map: this._hollow } : {}),
       });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits = -2;
+      mat.depthWrite = true;
     } else if (kind === "chute") {
       mat = new THREE.MeshStandardMaterial({
         color: 0x37474f, roughness: 0.4, metalness: 0.35,
         emissive: 0x263238, emissiveIntensity: 0.15,
       });
-    } else if (kind === "ramp") {
-      mat = new THREE.MeshStandardMaterial({
-        color: this._chevron ? 0xffffff : 0x455a64, roughness: 0.5, metalness: 0.28,
-        ...(this._chevron ? { map: this._chevron } : {}),
-      });
-    } else if (kind === "elevated") {
-      mat = new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.5, metalness: 0.28 });
+      mat.polygonOffset = true;
+      mat.polygonOffsetFactor = -1;
+      mat.polygonOffsetUnits = -2;
+      mat.depthWrite = true;
     } else {
       mat = this._roadMatForKind(kind);
     }
-    mat.polygonOffset = true;
-    mat.polygonOffsetFactor = -1;
-    mat.polygonOffsetUnits = -2;
-    mat.depthWrite = true;
     this._elevMats[kind] = mat;
     return mat;
   }
@@ -663,7 +667,8 @@ export class TrackSystem {
     const halfW = width * 0.5;
     const isDeck = kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony";
     // Top deck only — sit clearly above room floors (kills floor z-fight shards)
-    const yLift = kind === "outdoor" ? 0.01 : (isDeck ? 0.012 : 0.008);
+    // Floor asphalt clear of plank top + frame brass; decks slightly above surfaces
+    const yLift = kind === "outdoor" ? 0.014 : (isDeck ? 0.014 : 0.012);
     const n = pts.length;
     const positions = [];
     const normals = [];
@@ -784,18 +789,18 @@ export class TrackSystem {
     if (!railMat) {
       const fancyRail = kind === "cornice" || kind === "balcony";
       const railColor =
-        kind === "cornice" ? 0xe0c060
-          : kind === "balcony" ? 0xd7ccc8
-            : kind === "ramp" ? 0xffcc80
-              : 0xffcc80;
+        kind === "cornice" ? 0xcfd8dc
+          : kind === "balcony" ? 0xb0bec5
+            : kind === "ramp" ? 0x90a4ae
+              : 0x78909c;
       railMat = new THREE.MeshStandardMaterial({
         color: railColor,
-        roughness: fancyRail ? 0.28 : 0.38,
-        metalness: fancyRail ? 0.78 : 0.55,
-        emissive: fancyRail ? 0x8a6a1a : 0x000000,
-        emissiveIntensity: fancyRail ? 0.14 : 0,
+        roughness: fancyRail ? 0.35 : 0.42,
+        metalness: fancyRail ? 0.55 : 0.4,
+        emissive: 0x000000,
+        emissiveIntensity: 0,
         transparent: true,
-        opacity: kind === "balcony" ? 0.88 : fancyRail ? 0.9 : 0.65,
+        opacity: kind === "balcony" ? 0.9 : fancyRail ? 0.85 : 0.7,
       });
       this._railMats[kind] = railMat;
     }
@@ -1014,6 +1019,12 @@ export class TrackSystem {
     disc.castShadow = false;
     this.root.add(disc);
 
+    ring.userData.exploreHint = true;
+    disc.userData.exploreHint = true;
+    // Dim mansion-friendly glow — readable in Explore without neon spam
+    glowMat.emissiveIntensity = kind === "flower" ? 0.55 : 0.7;
+    glowMat.opacity = 0.72;
+
     this.portals.push({
       pos: p.clone(),
       y: op.y,
@@ -1021,6 +1032,7 @@ export class TrackSystem {
       pathId: path.id,
       label: op.label || "Shortcut — wall run",
       mesh: disc,
+      ring,
     });
   }
 
@@ -1309,9 +1321,15 @@ export class TrackSystem {
       const floorBias = (onFloorCruise && isFloor && dy < 0.28) ? -0.22 : 0;
       // Snap engagement at ramp feet / climb: beat skirting pathBias+floorBias
       // so the car picks up the ramp the moment it drives onto the foot corridor.
+      // Prefer real climbs (steeper grade) over near-flat ramp connectors at shared feet
+      const rampGrade = seg.kind === "ramp"
+        ? Math.abs(aby) / Math.max(1e-4, Math.hypot(abx, abz))
+        : 0;
       const rampBias = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)
         && signedBelow <= ((inRampCorridor || rampContinuity) ? 0.55 : 0.28)
-        && dy < 0.72) ? -1.25 : 0;
+        && dy < 0.72)
+        ? (-1.25 - Math.min(0.55, rampGrade * 0.85))
+        : 0;
       // Penalize elevated only when clearly wrong height while floor-cruising
       // — never penalize an in-corridor ramp (feet kiss floor by design).
       const elevPenalty = (onFloorCruise && (elev || tube) && dy > 0.38
@@ -1498,7 +1516,39 @@ export class TrackSystem {
     }
   }
 
+  /**
+   * Track visibility by play mode.
+   * - true / "drive": full asphalt + rails + portals
+   * - false: hide everything
+   * - "explore": only mouse/flower/shaft portal rings (subtle mansion cues)
+   */
   setVisible(v) {
-    this.root.visible = v;
+    const mode = v === true || v === "drive" ? "drive"
+      : v === "explore" || v === "portals" ? "explore"
+        : "off";
+    this._visMode = mode;
+    if (mode === "off") {
+      this.root.visible = false;
+      return;
+    }
+    this.root.visible = true;
+    const exploreOnly = mode === "explore";
+    this.root.traverse((obj) => {
+      if (!obj.isMesh && !obj.isLine && !obj.isPoints) return;
+      if (exploreOnly) {
+        obj.visible = !!obj.userData.exploreHint;
+      } else {
+        obj.visible = true;
+      }
+    });
+    // Explore: quieter portal pulse so mansion look stays primary
+    for (const p of this.portals) {
+      if (p.mesh && p.mesh.material) {
+        p.mesh.material.emissiveIntensity = exploreOnly
+          ? (p.kind === "flower" ? 0.4 : 0.55)
+          : (p.kind === "flower" ? 0.9 : 1.15);
+        p.mesh.material.opacity = exploreOnly ? 0.62 : 0.85;
+      }
+    }
   }
 }

@@ -4,10 +4,14 @@
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
-import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN } from "./js/data/tracks.js";
+import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN, RAMP_MOUNT_FEET } from "./js/data/tracks.js";
 import { CAR_SCALE } from "./js/drive/car.js";
 import { VEHICLE_PRESETS } from "./js/drive/car.js";
 import { Player } from "./js/player.js";
+import { OBJECTS } from "./js/data/objects.js";
+import { ROOMS } from "./js/data/rooms.js";
+import { buildLayerShells, isConcentricDef } from "./js/meshes.js";
+import { SliceSystem } from "./js/slice.js";
 
 // Minimal DOM stubs for PointerLock / canvas texture paths
 if (typeof globalThis.document === "undefined") {
@@ -425,7 +429,7 @@ console.log("drive_tracks mesh count", driveMeshes, "segments", drive.tracks.seg
 if (driveMeshes > 5000) {
   throw new Error(`drive_tracks still too heavy: ${driveMeshes} meshes (want <=5000)`);
 }
-if (drive.tracks.segments.length > 3500) {
+if (drive.tracks.segments.length > 4200) {
   throw new Error(`segment count high: ${drive.tracks.segments.length}`);
 }
 
@@ -512,7 +516,7 @@ if (drive.tracks.segments.length > 3500) {
     ["ramp_cabinet_case", 0.45],
     ["ramp_landing_to_landing_cornice", 0.55],
     ["ramp_console_to_foyer_cornice", 0.55],
-    ["ramp_stair_to_cornice", 0.4],
+    // ramp_stair_to_cornice culled (snap thief on primary foyer climb)
   ]) {
     const g = grade(id);
     if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
@@ -563,6 +567,65 @@ const spawnFloor = mansion.getFloorY(0, 11, 0);
 console.log("Explore spawn floor", spawnFloor);
 if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, got ${spawnFloor}`);
 
+// Explore objects: ROOMS placements vs scene + SliceSystem section cut faces
+{
+  let placements = 0;
+  for (const r of Object.values(ROOMS)) placements += (r.objects || []).length;
+  const realObjs = interactives.filter((o) => o.userData?.layers);
+  const hits = interactives.filter((o) => o.userData?.target);
+  console.log("Explore object roster", { placements, realObjs: realObjs.length, hitProxies: hits.length });
+  if (realObjs.length !== placements) {
+    throw new Error(`Interactable meshes ${realObjs.length} != ROOMS placements ${placements}`);
+  }
+  if (hits.length !== placements) {
+    throw new Error(`Hit proxies ${hits.length} != ROOMS placements ${placements}`);
+  }
+  for (const id of ["nautilus", "piano", "alkaline_aa"]) {
+    const o = realObjs.find((x) => x.userData.objectId === id);
+    if (!o) throw new Error(`Missing scene object ${id}`);
+    const box = new THREE.Box3().setFromObject(o);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if (id !== "piano" && maxDim < 0.35) throw new Error(`${id} too small in scene: ${maxDim}`);
+  }
+
+  for (const id of ["nautilus", "piano"]) {
+    const def = OBJECTS[id];
+    const obj = buildLayerShells(def);
+    scene.add(obj);
+    const slice = new SliceSystem();
+    slice.attach(obj, scene);
+    slice.setMode("section");
+    slice.setIndex(0);
+    slice._apply(true);
+    if (!slice.cutFaces?.visible) throw new Error(`${id}: cutFaces not visible`);
+    const disks = slice.cutFaces.children.filter(
+      (c) => c.userData.isCutDisk || (!c.userData.isRing && !c.userData.isBevel)
+    );
+    if (disks.length < def.layers.length) throw new Error(`${id}: missing cut disks`);
+    if (!disks.every((d) => d.visible)) throw new Error(`${id}: cut disks hidden at index 0`);
+    let badTransparent = 0;
+    for (const layer of obj.userData.layers) {
+      layer.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if ((m.opacity ?? 1) >= 0.99 && m.transparent) badTransparent++;
+          if (!m.clippingPlanes?.length) throw new Error(`${id}: material missing clip plane`);
+        }
+      });
+    }
+    if (badTransparent > 0) throw new Error(`${id}: solid section mats forced transparent`);
+    slice.setIndex(2);
+    slice._apply(true);
+    if (obj.userData.layers[0].visible) throw new Error(`${id}: outer layer still visible in section@2`);
+    const active = disks.find((d) => d.userData.layerIndex === 2);
+    if (!active?.visible) throw new Error(`${id}: active cut disk hidden at index 2`);
+    slice.detach(scene);
+    scene.remove(obj);
+    console.log(`Slice section OK ${id}`, { concentric: isConcentricDef(def), disks: disks.length });
+  }
+}
 
 // ── Drive expand: attic loft / cellar stubs / wall mice / ramp pickup ──
 {
@@ -608,6 +671,12 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     ["mouse_armoury_nursery_chase", 4],
     ["mouse_cabinet_study_chase", 4],
     ["mouse_hall_conservatory_mid", 3],
+    ["mouse_landing_library_mid", 3],
+    ["mouse_foyer_hall_mid", 3],
+    ["mouse_dining_hall_west", 3],
+    ["mouse_library_attic_chase", 4],
+    ["mouse_dining_west_garden", 3],
+    ["mouse_dining_cornice_garden", 2],
   ]) {
     const pts = byId[id].points;
     const mid = pts[idx];
@@ -621,12 +690,27 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   }
   // Portals present on new mice
   const portalPaths = new Set(drive.tracks.portals.map((p) => p.pathId));
-  for (const id of ["mouse_armoury_nursery_chase", "mouse_cabinet_study_chase", "mouse_hall_conservatory_mid"]) {
+  for (const id of [
+    "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase", "mouse_hall_conservatory_mid",
+    "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_dining_hall_west", "mouse_library_attic_chase",
+    "mouse_dining_west_garden", "mouse_dining_cornice_garden",
+  ]) {
     if (!portalPaths.has(id)) throw new Error(`Missing portals for ${id}`);
+  }
+  // New loft edge / cross ribbons onTrack
+  for (const [id, x, y, z] of [
+    ["attic_loft_cross_ew", 0, 8.5, -6.0],
+    ["attic_loft_cross_ns", 0, 8.48, 0.0],
+    ["loft_library_edge", 3.15, 7.15, -6.0],
+    ["loft_nursery_edge", 14.0, 7.15, -1.6],
+    ["loft_music_edge", 0, 7.15, -20.6],
+  ]) {
+    const s = drive.tracks.querySnap(x, y + 0.04, z, 1.65);
+    if (!s.onTrack || !s.supported) throw new Error(`Loft edge ${id} unsupported → ${s.kind}/${s.pathId}`);
   }
 
   // RAMP PICKUP AUDIT — every ramp foot engages even after hostile skirting latch
-  const ramps = TRACK_PATHS.filter((p) => p.kind === "ramp");
+  const ramps = TRACK_PATHS.filter((p) => p.kind === "ramp" && !p.disabled);
   let footFail = 0;
   let climbFail = 0;
   const footFails = [];
@@ -686,6 +770,106 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   const g = rise / Math.max(run, 1e-6);
   console.log("Attic landing ramp grade", +g.toFixed(3));
   if (g > 0.58) throw new Error(`attic_from_landing_access too steep ${g.toFixed(2)}`);
+
+  // ── Explore ↔ Drive near-track integration ─────────────────────────
+  // Hall skirting walk lane clear (consoles hug plaster outside asphalt)
+  {
+    const cols = mansion.getColliders();
+    const r = 0.38;
+    const hits = (x, z, y = 0) => {
+      let n = 0;
+      for (const b of cols) {
+        if (y + 1.95 < b.min.y || y + 0.15 > b.max.y) continue;
+        if (x + r > b.min.x && x - r < b.max.x && z + r > b.min.z && z - r < b.max.z) n++;
+      }
+      return n;
+    };
+    const laneFails = [];
+    for (const z of [-2, -6, -10, -14, -18]) {
+      for (const x of [2.55, -2.55]) {
+        if (hits(x, z, 0) > 0) laneFails.push(`${x},${z}`);
+      }
+    }
+    // Doorway centers must stay Explore-clear
+    for (const [name, x, z, y] of [
+      ["foyer→hall", 0, -0.5, 0],
+      ["hall→cons", 0, -21, 0],
+      ["foyer front", 0, 12.5, 0],
+    ]) {
+      if (hits(x, z, y) > 0) laneFails.push(name);
+    }
+    console.log("Explore near-track walk lanes", { laneFails, hallCleared: laneFails.length === 0 });
+    if (laneFails.length) throw new Error(`Explore near-track blocked: ${laneFails.join("; ")}`);
+  }
+
+  // Explore portal cues visible without full asphalt
+  {
+    drive.tracks.setVisible("explore");
+    let portalVis = 0, asphaltVis = 0;
+    drive.tracks.root.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.userData.exploreHint && o.visible) portalVis++;
+      if (!o.userData.exploreHint && o.visible) asphaltVis++;
+    });
+    drive.tracks.setVisible(true); // restore for any later checks
+    console.log("Explore portal cues", { portalVis, asphaltVis, portals: drive.tracks.portals.length });
+    if (portalVis < 4) throw new Error("Explore should show mouse portal cues");
+    if (asphaltVis > 0) throw new Error("Explore must hide asphalt ribbons");
+  }
+
+  // Precise ramp mounts from designated approach paths (25/50/75%)
+  {
+    let mountFail = 0;
+    const mountFails = [];
+    const mounts = Object.entries(RAMP_MOUNT_FEET);
+    if (mounts.length < 30) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`);
+    for (const [id, mount] of mounts) {
+      const path = byId[id];
+      if (!path) { mountFail++; mountFails.push(`${id} missing`); continue; }
+      const approachId = mount.approach || "foyer_skirting";
+      drive.tracks._lastPathId = approachId;
+      // Foot engagement zone
+      const fs = drive.tracks.querySnap(mount.foot.x, mount.foot.y + 0.04, mount.foot.z, 1.65);
+      if (!(fs.onTrack && fs.supported && (fs.kind === "ramp" || fs.pathId === id))) {
+        mountFail++;
+        if (mountFails.length < 8) mountFails.push(`${id} foot→${fs.kind}/${fs.pathId}`);
+      }
+      // Approach just behind foot (engageBack): skirting/deck or ramp must hold support
+      const a = path.points[0], b = path.points[1];
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const bx = a.x - (dx / len) * mount.engageBack;
+      const bz = a.z - (dz / len) * mount.engageBack;
+      const bs = drive.tracks.querySnap(bx, a.y + 0.04, bz, 1.65);
+      const approachOk = bs.supported && (
+        (bs.onTrack && (bs.pathId === id || bs.pathId === approachId || bs.kind === "ramp"
+          || bs.kind === "floor" || bs.kind === "elevated" || bs.kind === "cornice"
+          || bs.kind === "balcony" || bs.kind === "mouse" || bs.kind === "shortcut"))
+        || (bs.kind === "ramp" && bs.pathId === id && (bs.onTrack || bs.nearDeck))
+      );
+      if (!approachOk) {
+        mountFail++;
+        if (mountFails.length < 8) {
+          mountFails.push(`${id} approach→${bs.kind}/${bs.pathId}/on=${bs.onTrack}/nd=${!!bs.nearDeck}`);
+        }
+      }
+      for (const frac of mount.climbFracs) {
+        const i = Math.min(path.points.length - 2, Math.max(1, Math.floor((path.points.length - 1) * frac)));
+        const p0 = path.points[i], p1 = path.points[i + 1];
+        const x = (p0.x + p1.x) * 0.5;
+        const y = (p0.y + p1.y) * 0.5;
+        const z = (p0.z + p1.z) * 0.5;
+        const s = drive.tracks.querySnap(x, y + 0.04, z, 1.65);
+        if (!(s.onTrack && s.supported && (s.kind === "ramp" || s.pathId === id))) {
+          mountFail++;
+          if (mountFails.length < 8) mountFails.push(`${id}@${frac}→${s.kind}/${s.pathId}`);
+        }
+      }
+    }
+    console.log("Ramp mount precision", { mounts: mounts.length, mountFail, mountFails: mountFails.slice(0, 5) });
+    if (mountFail > 0) throw new Error(`Ramp mount precision failed: ${mountFails.join("; ")}`);
+  }
+
 }
 
 

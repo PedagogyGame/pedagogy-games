@@ -17,20 +17,23 @@ export function isConcentricDef(def) {
 }
 
 function mat(color, opts = {}) {
+  // Subtle idle emissive from base color so curios read as interactables in dark rooms
+  const idleEmis = opts.emissiveIntensity ?? 0.075;
   const m = new THREE.MeshStandardMaterial({
     color,
-    roughness: opts.roughness ?? 0.55,
-    metalness: opts.metalness ?? 0.15,
+    roughness: opts.roughness ?? 0.48,
+    metalness: opts.metalness ?? 0.18,
     transparent: opts.transparent ?? (!!opts.opacity && opts.opacity < 1),
     opacity: opts.opacity ?? 1,
-    emissive: opts.emissive ?? 0x000000,
-    emissiveIntensity: opts.emissiveIntensity ?? 0,
+    emissive: opts.emissive ?? color,
+    emissiveIntensity: idleEmis,
     side: opts.side ?? THREE.DoubleSide,
     depthWrite: opts.depthWrite ?? true,
   });
   // Clipping attached only during inspect (SliceSystem.attach)
   m.clippingPlanes = [];
   m.clipShadows = true;
+  m.needsUpdate = true;
   return m;
 }
 
@@ -54,9 +57,9 @@ function cyl(rTop, rBot, h, rad = 20) {
   return new THREE.CylinderGeometry(rTop, rBot, h, rad);
 }
 function sph(r, w = 24, h = 16, half = true) {
-  // half=true -> longitude half for cutaway silhouette even without clip
+  // half=true -> keep local −X so the open face sits in YZ, matching SHARED_CLIP_PLANE + cut disks
   return half
-    ? new THREE.SphereGeometry(r, w, h, 0, Math.PI, 0, Math.PI)
+    ? new THREE.SphereGeometry(r, w, h, -Math.PI / 2, Math.PI, 0, Math.PI)
     : new THREE.SphereGeometry(r, w, h);
 }
 function box(x, y, z) {
@@ -70,7 +73,10 @@ function finish(root, def, layers) {
   if (layers.length !== def.layers.length) {
     console.warn(`[meshes] ${def.id}: expected ${def.layers.length} layers, got ${layers.length}`);
   }
-  root.scale.setScalar(def.scale || 0.5);
+  // Readable roam scale: curios were ~20–40cm and vanished into furniture
+  const base = def.scale || 0.5;
+  const s = def.monument ? base : Math.max(base * 1.42, 0.62);
+  root.scale.setScalar(s);
   root.userData.objectId = def.id;
   root.userData.layers = layers;
   root.userData.def = def;
@@ -2293,13 +2299,26 @@ export function buildLayerShells(def) {
 
 export function buildPedestal(color = 0x5d4037) {
   const g = new THREE.Group();
-  const base = new THREE.Mesh(cyl(0.35, 0.4, 0.15, 16), mat(color, { roughness: 0.7 }));
-  base.position.y = 0.075;
-  const col = new THREE.Mesh(cyl(0.12, 0.16, 0.7, 12), mat(0xc9a227, { metalness: 0.6, roughness: 0.3 }));
-  col.position.y = 0.5;
-  const top = new THREE.Mesh(cyl(0.32, 0.3, 0.08, 16), mat(color, { roughness: 0.6 }));
-  top.position.y = 0.89;
-  g.add(base, col, top);
+  const base = new THREE.Mesh(cyl(0.38, 0.44, 0.16, 16), mat(color, { roughness: 0.62, emissiveIntensity: 0.04 }));
+  base.position.y = 0.08;
+  const col = new THREE.Mesh(cyl(0.13, 0.17, 0.72, 12), mat(0xd4af37, { metalness: 0.72, roughness: 0.28, emissiveIntensity: 0.12 }));
+  col.position.y = 0.52;
+  const top = new THREE.Mesh(cyl(0.36, 0.33, 0.09, 16), mat(0x6d4c41, { roughness: 0.5, emissiveIntensity: 0.08 }));
+  top.position.y = 0.92;
+  // Soft accent ring — marks the curiosity without neon spam
+  const halo = new THREE.Mesh(
+    new THREE.RingGeometry(0.28, 0.4, 28),
+    new THREE.MeshBasicMaterial({
+      color: 0xffe082,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+  );
+  halo.rotation.x = -Math.PI / 2;
+  halo.position.y = 0.975;
+  g.add(base, col, top, halo);
   g.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = false;

@@ -1245,11 +1245,12 @@ export class Mansion {
 
     // Baseboard / chair rail / wainscot — sit ON the inner wall face (not buried
     // in the wall volume). Distinct depths prevent plaster/wainscot/wallpaper flicker.
-    const bbH = 0.24;
+    // bbH keeps a low "road-height" foot (~asphalt y≈0.06) readable next to Drive ribbons.
+    const bbH = 0.22;
     const chairY = cy + 0.94;
     const woodTrim = this._mat(0x3e2723, 0.5, 0.14);
     const brassTrim = this._brass(p.trim);
-    const doorGap = 2.75;
+    const doorGap = 3.1; // match doorW so baseboard/wainscot leave doorway clear
     const halfThick = thick * 0.5; // 0.14
     // Depth stack from plaster outward into room (mm-scale gaps, rock solid)
     const D_WAIN = halfThick + 0.018;   // wainscot face
@@ -2263,14 +2264,15 @@ export class Mansion {
     }
 
     if (id === "hall_ground") {
-      // Consoles + benches along long walls; runner already via rug
+      // Consoles hug the plaster (outside Drive skirting ~0.55–0.7 m inset) so
+      // Explore walk lane beside the asphalt ribbon stays clear — no prop theft.
       for (const z of [cz - 8, cz, cz + 6]) {
         for (const side of [-1, 1]) {
-          const x = cx + side * (w / 2 - 0.55);
-          addBox(0.45, 0.9, 1.3, x, cy + 0.45, z, darkWood, true);
-          addBox(0.5, 0.08, 1.35, x, cy + 0.92, z, brass);
-          const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.35, 8), this._mat(0x90a4ae, 0.4, 0.3));
-          vase.position.set(x, cy + 1.15, z);
+          const x = cx + side * (w / 2 - 0.28);
+          addBox(0.28, 0.88, 1.15, x, cy + 0.44, z, darkWood, true);
+          addBox(0.32, 0.07, 1.2, x, cy + 0.90, z, brass);
+          const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.32, 8), this._mat(0x90a4ae, 0.4, 0.3));
+          vase.position.set(x, cy + 1.1, z);
           group.add(vase);
         }
       }
@@ -2383,43 +2385,71 @@ export class Mansion {
         }
       } else if (surface === "table" || surface === "bench" || surface === "desk" || surface === "planter") {
         const top = new THREE.Mesh(
-          new THREE.BoxGeometry(surface === "planter" ? 0.9 : 1.1, 0.1, 0.7),
-          this._mat(outdoor ? 0x6d4c41 : 0x5d4037, 0.7)
+          new THREE.BoxGeometry(surface === "planter" ? 0.95 : 1.2, 0.1, 0.75),
+          this._mat(outdoor ? 0x8d6e63 : 0x6d4c41, 0.55, 0.12)
         );
         top.position.set(px, cy + 0.85, pz);
         group.add(top);
-        for (const sx of [-0.4, 0.4]) {
-          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.85, 0.1), this._mat(0x4e342e, 0.75));
+        for (const sx of [-0.45, 0.45]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.85, 0.1), this._mat(0x4e342e, 0.7));
           leg.position.set(px + sx, cy + 0.42, pz);
           group.add(leg);
         }
       } else if (surface === "garden") {
-        const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.35, 10), this._mat(0x8d6e63, 0.8));
-        pot.position.set(px, cy + 0.18, pz);
+        const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.38, 10), this._mat(0xa1887f, 0.75));
+        pot.position.set(px, cy + 0.2, pz);
         group.add(pot);
       } else if (surface === "shelf" || surface === "stand") {
-        const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.5), this._mat(p.trim, 0.5, 0.3));
+        const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.09, 0.55), this._mat(p.trim, 0.42, 0.35));
         shelf.position.set(px, cy + 0.95, pz);
         group.add(shelf);
       }
       // rug / floor: no extra prop
 
       const obj = buildLayerShells(def);
-      let yOff = 1.05;
+      let yOff = 1.02; // pedestal top ~0.97
       if (def.monument) yOff = 0.5;
-      else if (surface === "rug" || surface === "floor") yOff = 0.35;
-      else if (surface === "garden") yOff = 0.55;
-      else if (surface === "rock" || surface === "stump" || surface === "crate") yOff = 0.7;
-      else if (surface === "table" || surface === "bench" || surface === "desk" || surface === "planter" || surface === "shelf" || surface === "stand") yOff = 1.05;
+      else if (surface === "rug" || surface === "floor") yOff = 0.42;
+      else if (surface === "garden") yOff = 0.58;
+      else if (surface === "rock" || surface === "stump" || surface === "crate") yOff = 0.72;
+      else if (surface === "pedestal") yOff = 1.02;
+      else if (surface === "table" || surface === "bench" || surface === "desk" || surface === "planter" || surface === "shelf" || surface === "stand") yOff = 1.08;
       obj.position.set(px, cy + yOff, pz);
       if (def.monument) obj.scale.multiplyScalar(1.1);
       obj.userData.interactable = true;
       obj.userData.objectId = def.id;
+      obj.visible = true;
+      obj.traverse((o) => {
+        if (o.isMesh) {
+          o.visible = true;
+          o.frustumCulled = true;
+        }
+      });
       group.add(obj);
       this.interactives.push(obj);
 
+      // Accent plinth / under-glow for non-pedestal surfaces so curios read in dark rooms
+      if (surface !== "pedestal" && surface !== "floor" && surface !== "rug" && !def.monument) {
+        const accent = new THREE.Mesh(
+          new THREE.RingGeometry(0.22, 0.38, 24),
+          new THREE.MeshBasicMaterial({
+            color: 0xffe082,
+            transparent: true,
+            opacity: 0.28,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+        );
+        accent.rotation.x = -Math.PI / 2;
+        accent.position.set(px, cy + yOff - 0.02, pz);
+        accent.renderOrder = 1;
+        group.add(accent);
+      }
+
+      // Generous hit proxy — small shells were easy to miss with the crosshair
+      const hitR = def.monument ? 2.2 : 1.15;
       const hit = new THREE.Mesh(
-        new THREE.SphereGeometry(def.monument ? 1.8 : 0.7, 8, 8),
+        new THREE.SphereGeometry(hitR, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })
       );
       hit.position.copy(obj.position);
@@ -2725,7 +2755,7 @@ export class Mansion {
   _addWallWithDoor(group, wall, color, thick, trimColor, usePlaster = false) {
     const [sx, sy, sz] = wall.size;
     const [px, py, pz] = wall.pos;
-    const doorW = 2.7; // wider passage — matches connector bridges
+    const doorW = 3.05; // Explore-clear near doorway-edge Drive strips (radius 0.38)
     const doorH = Math.min(sy * 0.88, 3.35);
     const horizontal = sx > sz;
     const wallMat = usePlaster ? this._wallMat(color, 0.74, 0.035) : this._mat(color, 0.8);

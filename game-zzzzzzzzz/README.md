@@ -6,7 +6,9 @@ A children's **3D educational** WebGL game. Free-roam a multi-floor Victorian ma
 
 ## How to run
 
-Needs a static file server (ES modules + import map). From this folder:
+**Online-first:** play at [pedagogygame.com](https://pedagogygame.com) (Three.js WebGL — Explore walk + Drive RC). This repo is the same static ES-module build (vendored `three` + import map); no Phaser/PixiJS conversion and no trivia APIs.
+
+Local static server (ES modules + import map):
 
 ```bash
 python3 -m http.server 8080
@@ -14,7 +16,7 @@ python3 -m http.server 8080
 
 Open **http://localhost:8080** in a modern desktop browser.
 
-> Three.js r160 is vendored under `vendor/` — fully offline after unpack.
+> Three.js r160 is vendored under `vendor/` — the deploy zip runs from any static host (or locally) without a CDN.
 
 ## Play modes
 
@@ -78,6 +80,11 @@ Floor roads hug **walls / skirting** (≈0.4–0.8 m inset) — no center-room h
 **Explore park:** car (~0.11 m long) idle at west foyer skirting by the front door (`CAR_SPAWN`); tracks hidden.
 
 Suggested flow: foyer skirting → **mouse hole** → wall hollow → furniture → cornice → Upper Landing → **Balcony** → flower paths outdoors.
+
+
+### Explore ↔ Drive near tracks
+
+Floor ribbons hug skirting; Explore polish keeps **walk lanes clear** beside those corridors (doorways, hall consoles hug plaster outside the asphalt inset). In Explore, asphalt stays hidden but **mouse-portal rings** remain as quiet wall cues. Ramp feet are designated in `RAMP_MOUNT_FEET` (`js/data/tracks.js`) — approach path, foot XYZ, engage band, and 25/50/75% climb samples.
 
 ### Mouse shortcuts & shafts
 

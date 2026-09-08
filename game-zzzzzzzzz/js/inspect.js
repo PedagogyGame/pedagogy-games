@@ -47,17 +47,18 @@ export class InspectMode {
     this._box.setFromObject(object3d);
     this._box.getCenter(this._center);
     this._box.getSize(this._size);
-    const radius = Math.max(this._size.length() * 0.5, 0.35);
-    const fitDist = Math.max(radius / Math.sin((this.camera.fov * Math.PI) / 360) * 0.55, 1.2);
+    const radius = Math.max(this._size.length() * 0.5, 0.45);
+    // Prefer a closer frame so small curios fill the view
+    const fitDist = Math.max(radius / Math.sin((this.camera.fov * Math.PI) / 360) * 0.48, 1.05);
 
     this._easeFrom.copy(this.camera.position);
     this._easeTargetFrom.copy(this.controls.target);
     this._easeTargetTo.copy(this._center);
-    // Slightly elevated ¾ view — satisfying settle into the cut face
+    // Bias hard toward +X so the section cut face (YZ disks) faces the camera
     this._easeTo.set(
-      this._center.x + fitDist * 0.78,
-      this._center.y + fitDist * 0.42,
-      this._center.z + fitDist * 0.68
+      this._center.x + fitDist * 1.05,
+      this._center.y + fitDist * 0.32,
+      this._center.z + fitDist * 0.28
     );
     this._easeT = 0;
 
@@ -74,19 +75,20 @@ export class InspectMode {
 
   _addLights(scene, center, radius) {
     this._removeLights(scene);
-    this._keyLight = new THREE.DirectionalLight(0xffe6c0, 0.95);
+    this._keyLight = new THREE.DirectionalLight(0xffe6c0, 1.25);
     this._keyLight.position.set(center.x + radius * 2.2, center.y + radius * 2.8, center.z + radius * 1.4);
     this._keyLight.target.position.copy(center);
     scene.add(this._keyLight);
     scene.add(this._keyLight.target);
 
-    this._fillLight = new THREE.PointLight(0xc8d8ff, 14, radius * 6.5, 2);
+    this._fillLight = new THREE.PointLight(0xc8d8ff, 22, radius * 7.5, 2);
     this._fillLight.position.set(center.x - radius * 1.5, center.y + radius * 1.2, center.z + radius * 1.8);
     scene.add(this._fillLight);
 
     // Warm rim from the cut side so Section faces read clearly
-    this._rimLight = new THREE.PointLight(0xffd699, 10, radius * 5, 2);
-    this._rimLight.position.set(center.x - radius * 2.0, center.y + radius * 0.6, center.z);
+    this._rimLight = new THREE.PointLight(0xffd699, 18, radius * 6, 2);
+    // Rim from +X (cut side) so section faces pop
+    this._rimLight.position.set(center.x + radius * 2.2, center.y + radius * 0.55, center.z);
     scene.add(this._rimLight);
   }
 

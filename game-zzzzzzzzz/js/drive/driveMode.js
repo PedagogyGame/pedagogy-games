@@ -211,7 +211,8 @@ export class DriveMode {
     this.car.speed = 0;
     this.car.root.visible = true;
     this.car.setLightsSubtle(true);
-    this.tracks.setVisible(false);
+    // Explore: hide asphalt ribbons; keep subtle mouse-portal cues near tracks
+    this.tracks.setVisible("explore");
     this._fxRoot.visible = false;
     this._crashPhase = null;
     this._inputsFrozen = false;
