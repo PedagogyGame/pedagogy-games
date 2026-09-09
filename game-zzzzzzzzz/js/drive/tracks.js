@@ -377,6 +377,11 @@ export class TrackSystem {
 
   _buildPath(path) {
     let pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    // Sit floor asphalt near plank top so the car does not hover mid-air above wood
+    const FLOOR_Y_SETTLE = 0.02;
+    if (path.kind === "floor" || path.kind === "outdoor" || path.kind === "flower") {
+      pts = pts.map((v) => new THREE.Vector3(v.x, FLOOR_Y_SETTLE, v.z));
+    }
     if (pts.length < 2) return;
     // Drop duplicate closed endpoint (avoids knot / double-cap at loop seams)
     if (path.closed && pts.length > 2 && pts[0].distanceTo(pts[pts.length - 1]) < 0.05) {
@@ -1454,7 +1459,7 @@ export class TrackSystem {
         const carpet = isFloor && !onTrack && dy < 0.55;
         const edgeMargin = halfW - lateral;
         best = {
-          x: px, y: (carpet ? py + 0.01 : py + 0.03), z: pz,
+          x: px, y: (carpet ? py + 0.008 : py + 0.015), z: pz,
           yaw, bank,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
@@ -1551,7 +1556,7 @@ export class TrackSystem {
       if (halfW < 0.16) continue; // skip wire-thin leftovers
       const yaw = Math.atan2(abx, abz);
       const cand = {
-        x: px, y: py + 0.03, z: pz, yaw,
+        x: px, y: py + 0.015, z: pz, yaw,
         onTrack: true, supported: true, kind: seg.kind, pathId: seg.pathId,
         dist, elevated: ELEV_KINDS.has(seg.kind),
       };

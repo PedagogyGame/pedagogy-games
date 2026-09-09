@@ -74,6 +74,9 @@ export class RCCar {
     this.root.name = "rc_car";
     this.bodyPivot = new THREE.Group();
     this.root.add(this.bodyPivot);
+    // NOSE_MATCH_FORWARD: mesh nose was modeled toward -Z; travel uses +Z at yaw 0
+    this.bodyPivot.rotation.y = Math.PI;
+
     this.wheels = [];
     this.speed = 0;
     this.yaw = Math.PI;

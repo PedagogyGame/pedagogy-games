@@ -2852,7 +2852,7 @@ for (const path of TRACK_PATHS) {
 }
 
 /** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
-export const CAR_SPAWN = { x: -7.9, y: 0.045, z: 12.2, yaw: 0 };
+export const CAR_SPAWN = { x: -7.9, y: 0.02, z: 12.2, yaw: 0 };
 
 
 /**

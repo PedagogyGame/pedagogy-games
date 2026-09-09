@@ -138,9 +138,10 @@ function setPlayMode(next) {
     playMode = "drive";
     mode = "drive";
     clearCuriosityGlints();
-    promptEl.textContent =
-      "Toy tour of the house · WASD cruise · Shift boost (treat) · Follow glowing ramps";
-    promptEl.classList.remove("lit", "hidden");
+    // Drive: keep speed/vehicle HUD only — no lingering instruction text
+    promptEl.textContent = "";
+    promptEl.classList.add("hidden");
+    promptEl.classList.remove("lit");
   } else {
     if (drive.active) drive.exit();
     playMode = "explore";
