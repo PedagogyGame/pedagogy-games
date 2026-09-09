@@ -756,7 +756,9 @@ export class TrackSystem {
     }
 
     let dist = 0;
-    const vPer = 2; // L-top, R-top only (no bottom deck = no coplanar fight)
+    // Solid asphalt slab: top + bottom + side walls (not paper-thin tape ribbons)
+    const slab = isDeck ? 0.055 : (kind === "ramp" ? 0.048 : 0.028);
+    const vPer = isDeck ? 4 : 2; // decks: L-top R-top R-bot L-bot
     for (let i = 0; i < n; i++) {
       if (i > 0) dist += pts[i].distanceTo(pts[i - 1]);
       const p = pts[i];
@@ -776,11 +778,28 @@ export class TrackSystem {
       normals.push(up.x, up.y, up.z);
       uvs.push(0, u);
       uvs.push(1, u);
+      if (isDeck) {
+        positions.push(rx, y - slab, rz);
+        positions.push(lx, y - slab, lz);
+        normals.push(-up.x, -up.y, -up.z);
+        normals.push(-up.x, -up.y, -up.z);
+        uvs.push(1, u);
+        uvs.push(0, u);
+      }
 
       if (i < n - 1) {
         const a = i * vPer;
         const b = (i + 1) * vPer;
+        // top deck
         indices.push(a, a + 1, b + 1, a, b + 1, b);
+        if (isDeck) {
+          // bottom
+          indices.push(a + 3, b + 3, b + 2, a + 3, b + 2, a + 2);
+          // right wall (a+1 top-right → a+2 bot-right)
+          indices.push(a + 1, a + 2, b + 2, a + 1, b + 2, b + 1);
+          // left wall (a top-left → a+3 bot-left)
+          indices.push(a, b, b + 3, a, b + 3, a + 3);
+        }
       }
     }
 

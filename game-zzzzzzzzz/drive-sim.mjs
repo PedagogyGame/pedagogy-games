@@ -44,7 +44,7 @@ const drive = new DriveMode(scene, camera);
 const tracks = drive.tracks;
 
 const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
-const elevPaths = TRACK_PATHS.filter((p) => ELEV_GRAPH_KINDS.has(p.kind));
+const elevPaths = TRACK_PATHS.filter((p) => ELEV_GRAPH_KINDS.has(p.kind) && !p.disabled);
 const deckPaths = TRACK_PATHS.filter((p) => DECK_KINDS.has(p.kind));
 
 function endPts(p) {
@@ -89,20 +89,20 @@ function tryLink(a, aEnd, b, bEnd, explicit = false) {
   return { ok: false, dist: best, thresh };
 }
 
-// Link every elev pair by endpoint↔any-point proximity
+// Link every elev pair by endpoint↔any-point proximity (both directions —
+// closed loops like cornice_foyer only expose mid-header points, not ends)
 for (let i = 0; i < elevPaths.length; i++) {
   for (let j = i + 1; j < elevPaths.length; j++) {
     const a = elevPaths[i], b = elevPaths[j];
-    // Check both ends of a against b, and both ends of b against a
-    const r1 = tryLink(a, "start", b, "start");
-    const r2 = tryLink(a, "end", b, "start");
-    // tryLink already scans all points; calling twice covers both ends of a
-    void r1; void r2;
+    tryLink(a, "start", b, "start");
+    tryLink(a, "end", b, "start");
+    tryLink(b, "start", a, "start");
+    tryLink(b, "end", a, "start");
   }
 }
 
 // Also link floor↔elev at on-ramps: floor paths near ramp bottoms (for tour)
-const floorPaths = TRACK_PATHS.filter((p) => p.kind === "floor" || p.kind === "outdoor" || p.kind === "flower" || p.kind === "tunnel");
+const floorPaths = TRACK_PATHS.filter((p) => !p.disabled && (p.kind === "floor" || p.kind === "outdoor" || p.kind === "flower" || p.kind === "tunnel"));
 const allGraphPaths = [...elevPaths, ...floorPaths];
 const allNodes = allGraphPaths.map((p) => p.id);
 const adjAll = Object.fromEntries(allNodes.map((id) => [id, [...(adj[id] || [])]]));

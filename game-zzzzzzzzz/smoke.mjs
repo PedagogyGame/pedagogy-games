@@ -482,7 +482,12 @@ if (drive.tracks.segments.length > 4200) {
   // Death-trap climbs stay in data but disabled (no invisible/undriveable lifts)
   for (const id of ["ramp_cabinet_down", "ramp_study_express_to_cases", "ramp_cornice_to_balcony",
     "chandelier_ring_foyer", "ramp_cornice_to_chandelier", "chute_foyer_drop", "chute_balcony_foyer",
-    "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_library_attic_chase", "loft_nursery_edge"]) {
+    "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_library_attic_chase", "loft_nursery_edge",
+    // Decorative / undrivable ribbons (screenshot V + triple-fork cleanup)
+    "mouse_east_grand_run", "mouse_west_grand_run", "mouse_foyer_armoury_mid", "mouse_foyer_cabinet_mid",
+    "ramp_mouse_to_foyer_cornice", "ramp_mouse_east_to_foyer_cornice",
+    "mouse_cellar_ground_shaft", "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase",
+    "shaft_service_west"]) {
     if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (void-risk / secondary island)`);
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {

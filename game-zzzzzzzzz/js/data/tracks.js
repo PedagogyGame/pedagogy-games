@@ -614,13 +614,14 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_console",
     kind: "ramp",
-    width: 0.44,
+    width: 0.48,
     points: [
       { x: 8.3, y: 0.06, z: 10.5 },
-      { x: 7.75, y: 0.3, z: 10.4 },
-      { x: 7.2, y: 0.52, z: 10.3 },
-      { x: 6.7, y: 0.72, z: 10.22 },
-      { x: 6.4, y: 0.88, z: 10.2 },
+      { x: 7.85, y: 0.22, z: 10.45 },
+      { x: 7.4, y: 0.4, z: 10.38 },
+      { x: 7.0, y: 0.58, z: 10.3 },
+      { x: 6.65, y: 0.74, z: 10.25 },
+      { x: 6.4, y: 0.88, z: 10.22 },
       { x: 6.2, y: 0.98, z: 10.2, label: "Foyer Console" },
     ],
   },
@@ -704,6 +705,7 @@ export const TRACK_PATHS = [
   // (was a flat green-wall dead-end; now portal + wall-hollow mouse run)
   {
     id: "mouse_dining_west_garden",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "mouse",
     width: 0.26,
     tension: 0.28,
@@ -724,6 +726,7 @@ export const TRACK_PATHS = [
   // Cornice-level twin: dining west cornice → outdoor (between-walls feel)
   {
     id: "mouse_dining_cornice_garden",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.26,
     tension: 0.28,
@@ -793,13 +796,15 @@ export const TRACK_PATHS = [
   {
     id: "ramp_workshop_bench",
     kind: "ramp",
-    width: 0.4,
+    width: 0.42,
     points: [
-      // Approach from workshop east skirting → ramp onto bench
+      // Smooth westward climb — no 162° V-kink
       { x: -11.1, y: 4.26, z: -30.0, label: "Workshop" },
-      { x: -10, y: 4.55, z: -29 },
-      { x: -12, y: 4.9, z: -30.5 },
-      { x: -14, y: 5.15, z: -31.5, label: "Workshop Bench" },
+      { x: -11.6, y: 4.45, z: -30.25 },
+      { x: -12.25, y: 4.68, z: -30.55 },
+      { x: -12.95, y: 4.9, z: -30.9 },
+      { x: -13.55, y: 5.05, z: -31.25 },
+      { x: -14.0, y: 5.15, z: -31.5, label: "Workshop Bench" },
     ],
   },
   {
@@ -1041,7 +1046,7 @@ export const TRACK_PATHS = [
   {
     id: "cornice_hall_east",
     kind: "cornice",
-    width: 0.355,
+    width: 0.38,
     rail: true,
     tension: 0.12,
     fancy: true,
@@ -1056,15 +1061,15 @@ export const TRACK_PATHS = [
       { x: 3.25, y: 3.44, z: -15.5 },
       { x: 3.15, y: 3.36, z: -18.0 },
       { x: 3.2, y: 3.42, z: -20.2 },
-      { x: 2.4, y: 3.5, z: -21.6 },
-      { x: 1.2, y: 3.55, z: -22.2 },
-      { x: 0.0, y: 3.58, z: -22.45, label: "Conservatory Header" },
+      { x: 3.3, y: 3.48, z: -21.3 },
+      { x: 3.4, y: 3.52, z: -22.0 },
+      { x: 3.5, y: 3.55, z: -22.5, label: "Conservatory Header" },
     ],
   },
   {
     id: "cornice_hall_west",
     kind: "cornice",
-    width: 0.355,
+    width: 0.38,
     rail: true,
     tension: 0.12,
     fancy: true,
@@ -1079,9 +1084,9 @@ export const TRACK_PATHS = [
       { x: -3.25, y: 3.44, z: -15.5 },
       { x: -3.15, y: 3.36, z: -18.0 },
       { x: -3.2, y: 3.42, z: -20.2 },
-      { x: -2.4, y: 3.5, z: -21.6 },
-      { x: -1.2, y: 3.55, z: -22.2 },
-      { x: 0.0, y: 3.58, z: -22.45 },
+      { x: -3.3, y: 3.48, z: -21.3 },
+      { x: -3.4, y: 3.52, z: -22.0 },
+      { x: -3.5, y: 3.55, z: -22.5, label: "Conservatory Header" },
     ],
   },
   // Cross-hall bridge near foyer (railed header)
@@ -1169,13 +1174,15 @@ export const TRACK_PATHS = [
   {
     id: "ramp_cases_to_cornice",
     kind: "ramp",
-    width: 0.37,
+    width: 0.40,
     points: [
-      { x: -14, y: 1.82, z: -4 },
-      { x: -15.8, y: 2.25, z: -2.8 },
-      { x: -17.6, y: 2.7, z: -1.8 },
-      { x: -19.4, y: 3.1, z: -1.2 },
-      { x: -20.8, y: 3.35, z: -1.05 },
+      // Foot on WEST case tops (T) — not SE climb arrival
+      { x: -20, y: 1.82, z: -4, label: "Display Case" },
+      { x: -20.4, y: 2.15, z: -3.2 },
+      { x: -20.7, y: 2.5, z: -2.4 },
+      { x: -20.9, y: 2.85, z: -1.7 },
+      { x: -21.1, y: 3.15, z: -1.25 },
+      { x: -21.35, y: 3.35, z: -1.05 },
       { x: -21.5, y: 3.48, z: -1.0, label: "Cabinet Cornice" },
     ],
   },
@@ -1398,6 +1405,7 @@ export const TRACK_PATHS = [
   // Wall-run exit on-ramp: mouse mid → foyer cornice
   {
     id: "ramp_mouse_to_foyer_cornice",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "ramp",
     width: 0.34,
     points: [
@@ -1413,6 +1421,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_mouse_east_to_foyer_cornice",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "ramp",
     width: 0.34,
     points: [
@@ -1508,6 +1517,7 @@ export const TRACK_PATHS = [
   // 1) Foyer ↔ Cabinet (inside west wall) — skirting + mid-height twin
   {
     id: "mouse_foyer_cabinet_skirt",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.24,
     tension: 0.3,
@@ -1529,6 +1539,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "mouse_foyer_cabinet_mid",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.26,
     tension: 0.28,
@@ -1548,6 +1559,7 @@ export const TRACK_PATHS = [
   // 2) Foyer ↔ Armoury (inside east wall)
   {
     id: "mouse_foyer_armoury_skirt",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.24,
     tension: 0.3,
@@ -1569,6 +1581,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "mouse_foyer_armoury_mid",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.26,
     tension: 0.28,
@@ -1588,6 +1601,7 @@ export const TRACK_PATHS = [
   // 3) Hall ↔ Conservatory (north wall cavity)
   {
     id: "mouse_hall_conservatory",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.24,
     tension: 0.28,
@@ -1607,6 +1621,7 @@ export const TRACK_PATHS = [
   // 4) Dining ↔ Conservatory (shared wall)
   {
     id: "mouse_dining_conservatory",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.24,
     tension: 0.28,
@@ -1625,6 +1640,7 @@ export const TRACK_PATHS = [
   // 5) Cellar ↔ Ground (vertical wall chase / pipe shaft)
   {
     id: "mouse_cellar_ground_shaft",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.26,
     tension: 0.32,
@@ -1646,6 +1662,7 @@ export const TRACK_PATHS = [
   // Service shaft: Cellar → Ground → First → Attic (west wall zigzag)
   {
     id: "shaft_service_west",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shaft",
     width: 0.24,
     tension: 0.35,
@@ -1705,6 +1722,7 @@ export const TRACK_PATHS = [
   // Climb tube: cellar → hall / workshop approach (spiral-ish)
   {
     id: "climb_cellar_to_hall",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shaft",
     width: 0.26,
     tension: 0.34,
@@ -1721,6 +1739,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "climb_hall_to_workshop",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shaft",
     width: 0.26,
     tension: 0.32,
@@ -1738,6 +1757,7 @@ export const TRACK_PATHS = [
   // ─── SPECTACULAR continuous west-wall run: foyer → hall → conservatory ───
   {
     id: "mouse_west_grand_run",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.28,
     tension: 0.32,
@@ -1768,6 +1788,7 @@ export const TRACK_PATHS = [
   // Mid-height east grand run: foyer cornice cavity → armoury → hall
   {
     id: "mouse_east_grand_run",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.28,
     tension: 0.32,
@@ -1987,25 +2008,23 @@ export const TRACK_PATHS = [
   {
     id: "ramp_landing_to_landing_cornice",
     kind: "ramp",
-    width: 0.42,
+    width: 0.44,
     points: [
-      // Foot on landing center, climbs NORTH off skirting first (no ribbon theft/false voids)
+      // Foot on landing center; crest T-joins EAST cornice arm (no center triple fork)
       { x: 0.0, y: 4.26, z: 9.0, label: "Upper Landing" },
-      { x: 0.15, y: 4.4, z: 9.4 },
-      { x: 0.6, y: 4.6, z: 9.65 },
-      { x: 1.3, y: 4.85, z: 9.7 },
-      { x: 2.1, y: 5.12, z: 9.45 },
-      { x: 2.75, y: 5.38, z: 8.95 },
-      { x: 3.2, y: 5.62, z: 8.4 },
-      { x: 3.4, y: 5.85, z: 7.8 },
-      { x: 3.35, y: 6.08, z: 7.25 },
-      { x: 3.0, y: 6.3, z: 6.85 },
-      { x: 2.45, y: 6.5, z: 6.7 },
-      { x: 1.8, y: 6.7, z: 6.9 },
-      { x: 1.2, y: 6.9, z: 7.35 },
-      { x: 0.7, y: 7.05, z: 7.85 },
-      { x: 0.3, y: 7.14, z: 8.25 },
-      { x: 0.0, y: 7.2, z: 8.5, label: "Landing Cornice" },
+      { x: 0.35, y: 4.42, z: 9.35 },
+      { x: 0.95, y: 4.65, z: 9.55 },
+      { x: 1.7, y: 4.92, z: 9.5 },
+      { x: 2.35, y: 5.2, z: 9.15 },
+      { x: 2.85, y: 5.48, z: 8.65 },
+      { x: 3.15, y: 5.78, z: 8.1 },
+      { x: 3.25, y: 6.08, z: 7.55 },
+      { x: 3.15, y: 6.35, z: 7.15 },
+      { x: 2.95, y: 6.6, z: 7.0 },
+      { x: 2.95, y: 6.82, z: 7.25 },
+      { x: 3.15, y: 7.0, z: 7.7 },
+      { x: 3.35, y: 7.12, z: 8.15 },
+      { x: 3.5, y: 7.22, z: 8.55, label: "Landing Cornice" },
     ],
   },
   // West landing cornice spur — mirrors east approach, joins bookcase west
@@ -2075,15 +2094,17 @@ export const TRACK_PATHS = [
   {
     id: "ramp_music_to_hall_cornice",
     kind: "ramp",
-    width: 0.37,
+    width: 0.42,
     points: [
-      { x: 0.0, y: 5.18, z: -20.6, label: "Music Sideboard" },
-      { x: 1.5, y: 4.9, z: -20.9 },
-      { x: 2.8, y: 4.55, z: -21.4 },
-      { x: 2.4, y: 4.15, z: -22.0 },
-      { x: 1.2, y: 3.85, z: -22.3 },
-      { x: 0.4, y: 3.65, z: -22.4 },
-      { x: 0.0, y: 3.58, z: -22.45, label: "Conservatory Header" },
+      // Foot on WEST sideboard (T) — not the climb-arrival SE (kills music triple fork)
+      { x: -4.0, y: 5.18, z: -20.6, label: "Music Sideboard" },
+      { x: -2.2, y: 4.95, z: -20.9 },
+      { x: -0.2, y: 4.7, z: -21.2 },
+      { x: 1.8, y: 4.4, z: -21.45 },
+      { x: 3.6, y: 4.1, z: -21.7 },
+      { x: 5.0, y: 3.85, z: -21.95 },
+      { x: 6.1, y: 3.7, z: -22.25 },
+      { x: 7.0, y: 3.6, z: -22.55, label: "Conservatory Cornice" },
     ],
   },
   // Workshop bench → dining cornice (gentle furniture→cornice link)
@@ -2113,16 +2134,17 @@ export const TRACK_PATHS = [
   {
     id: "ramp_console_to_foyer_cornice",
     kind: "ramp",
-    width: 0.37,
+    width: 0.44,
     points: [
-      { x: 6.08, y: 0.99, z: 10.22, label: "Foyer Console" },
-      { x: 5.25, y: 1.42, z: 10.85 },
-      { x: 4.55, y: 1.92, z: 11.55 },
-      { x: 4.3, y: 2.28, z: 12.1 },
-      { x: 4.75, y: 2.55, z: 12.38 },
-      { x: 5.6, y: 2.85, z: 12.28 },
-      { x: 6.55, y: 3.15, z: 12.08 },
-      { x: 7.45, y: 3.36, z: 11.7 },
+      // Foot on WEST furniture loop (T-junction) — NOT the SE climb arrival (kills triple fork)
+      { x: 5.2, y: 0.98, z: 9.65, label: "Foyer Console" },
+      { x: 4.55, y: 1.28, z: 10.35 },
+      { x: 4.15, y: 1.58, z: 11.1 },
+      { x: 4.35, y: 1.92, z: 11.75 },
+      { x: 5.05, y: 2.28, z: 12.15 },
+      { x: 5.85, y: 2.62, z: 12.25 },
+      { x: 6.7, y: 2.95, z: 12.05 },
+      { x: 7.45, y: 3.22, z: 11.7 },
       { x: 8.15, y: 3.46, z: 11.4, label: "Foyer Cornice" },
     ],
   },
@@ -2353,6 +2375,7 @@ export const TRACK_PATHS = [
   // 1) Armoury (ground) ↔ Nursery (first) — climb inside the shared east wall hollow
   {
     id: "mouse_armoury_nursery_chase",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "mouse",
     width: 0.26,
     tension: 0.3,
@@ -2376,6 +2399,7 @@ export const TRACK_PATHS = [
   // 2) Cabinet (ground) ↔ Study (first) — west wall hollow climb / drop
   {
     id: "mouse_cabinet_study_chase",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "mouse",
     width: 0.26,
     tension: 0.3,
@@ -2399,6 +2423,7 @@ export const TRACK_PATHS = [
   // 3) Hall ↔ Conservatory mid-height — pierce the north header wall cavity
   {
     id: "mouse_hall_conservatory_mid",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "shortcut",
     width: 0.26,
     tension: 0.28,
@@ -2664,6 +2689,7 @@ export const TRACK_PATHS = [
   // C) Dining ↔ Hall west — shared wall sneak (ground, skirting-clear)
   {
     id: "mouse_dining_hall_west",
+    disabled: true, // drive-course: decorative / undrivable ribbon (triple-fork or insane grade)
     kind: "mouse",
     width: 0.25,
     tension: 0.3,
@@ -2721,7 +2747,7 @@ export const FLOOR_WIDTH_MIN = 0.78; // playable floor cruise (halfW ≥0.39)
 /** Doorway connector min width after scale. */
 export const DOOR_WIDTH_MIN = 0.48;
 /** Elevated/cornice/balcony/furniture decks min after scale. */
-export const DECK_WIDTH_MIN = 0.42;
+export const DECK_WIDTH_MIN = 0.52; // solid elevated asphalt (not tape ribbons)
 /** Soften lumpy / death-trap climb grades (rise/run per segment). */
 export const RAMP_MAX_GRADE = 0.44;
 /** Mean grade above this after soften → path disabled (no invisible death traps). */
