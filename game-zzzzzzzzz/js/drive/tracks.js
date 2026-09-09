@@ -247,12 +247,13 @@ export class TrackSystem {
   }
 
   _buildAll() {
+    // Apron first so foyer_skirting visual gap matches pad radius (no sliver overlap)
+    this._addSpawnPad();
     for (const path of TRACK_PATHS) {
       if (path.disabled) continue;
       this._buildPath(path);
     }
     this._buildSnapGrid();
-    this._addSpawnPad();
     const cells = this._snapGrid.size;
     let meshCount = 0;
     this.root.traverse((o) => { if (o.isMesh) meshCount++; });
@@ -341,13 +342,18 @@ export class TrackSystem {
         ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
         ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
       }
-      // Soft yellow center dashes only — NO white edge lines
-      ctx.strokeStyle = "rgba(220,180,40,0.70)";
-      ctx.lineWidth = 5;
-      ctx.setLineDash([18, 16]);
+      // Real road markings: white shoulders + yellow center
+      ctx.strokeStyle = "rgba(230,230,235,0.60)";
+      ctx.lineWidth = 4;
+      ctx.setLineDash([12, 14]);
+      ctx.beginPath(); ctx.moveTo(28, 8); ctx.lineTo(28, 248); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(228, 8); ctx.lineTo(228, 248); ctx.stroke();
+      ctx.strokeStyle = "rgba(235,195,45,0.88)";
+      ctx.lineWidth = 6;
+      ctx.setLineDash([20, 14]);
       ctx.beginPath();
-      ctx.moveTo(128, 12);
-      ctx.lineTo(128, 244);
+      ctx.moveTo(128, 8);
+      ctx.lineTo(128, 248);
       ctx.stroke();
       map = new THREE.CanvasTexture(c);
       map.colorSpace = THREE.SRGBColorSpace;
@@ -368,12 +374,12 @@ export class TrackSystem {
       polygonOffsetUnits: -1,
       depthWrite: true,
     });
-    // One simple continuous apron (not circle+ring stack)
-    const apronW = 1.55;
-    const apronD = 1.40;
+    // Wide solid start pad — matches foyer_drive_start width into open foyer
+    const apronW = 3.4;
+    const apronD = 4.0;
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(apronW, apronD), mat);
     pad.rotation.x = -Math.PI / 2;
-    // yaw=0 drives +Z; dashes run along depth (local Y of plane → world Z)
+    pad.rotation.z = CAR_SPAWN.yaw || 0; // dashes / pad align with travel
     pad.position.set(sx, 0.075, sz);
     pad.receiveShadow = true;
     pad.castShadow = false;
@@ -381,7 +387,7 @@ export class TrackSystem {
     pad.name = "spawn_clean_pad";
     pad.frustumCulled = true;
     this.root.add(pad);
-    this._spawnApron = { x: sx, z: sz, r: 0.95 };
+    this._spawnApron = { x: sx, z: sz, r: 2.25 };
   }
 
   _buildPath(path) {
@@ -530,8 +536,8 @@ export class TrackSystem {
     // Continuous ribbon — skip door_* and visual:false
     // Gap foyer_skirting visuals under spawn apron (ONE mesh there — no z-fight)
     if (useRibbon && visualOk) {
-      const gap = (path.id === "foyer_skirting")
-        ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: 0.95 }
+      const gap = (path.id === "foyer_skirting" || path.id === "foyer_drive_start")
+        ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: (this._spawnApron?.r || 1.85) }
         : null;
       this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap, isRail);
     }
@@ -1305,7 +1311,7 @@ export class TrackSystem {
     let best = null;
     let bestScore = Infinity;
     // Story floors — narrow band for carpet preference (was 0.85: stole cornice ~3.5)
-    const storyFloors = [8.46, 4.26, 0.045, -4.05];
+    const storyFloors = [8.46, 4.26, 0.075, -4.05];
     let storyY = null;
     let storyDy = 0.42;
     for (const f of storyFloors) {
@@ -1426,9 +1432,18 @@ export class TrackSystem {
           while (d1 > Math.PI) d1 -= Math.PI * 2;
           while (d1 < -Math.PI) d1 += Math.PI * 2;
           align = Math.max(Math.cos(d0), Math.cos(d1));
-          if (align < 0.50) rampBias *= 0.06;
-          else if (align < 0.72) rampBias *= 0.35;
-          else if (align < 0.88) rampBias *= 0.7;
+          // Foyer climb foot: generous engage so browser approach mounts
+          const foyerFoot = seg.pathId === "ramp_foyer_to_landing"
+            && Math.hypot(x - (-7.15), z - 11.20) < 1.85;
+          if (foyerFoot) {
+            if (align < 0.25) rampBias *= 0.45;
+            else if (align < 0.55) rampBias *= 0.75;
+            // else keep full bias
+          } else {
+            if (align < 0.50) rampBias *= 0.06;
+            else if (align < 0.72) rampBias *= 0.35;
+            else if (align < 0.88) rampBias *= 0.7;
+          }
         }
         // No carYaw (legacy sims / placement at foot): leave full rampBias
       }
@@ -1507,7 +1522,8 @@ export class TrackSystem {
         const edgeMargin = halfW - lateral;
         best = {
           // Ride height = segment Y + ribbon yLift so wheels sit on asphalt top (not hover/sink)
-          x: px, y: (carpet ? py + 0.008 : py + ribbonYLift(seg.kind)), z: pz,
+          // Plant wheels on asphalt top: tiny -2mm sink hides mesh faceting; carpet matches lift
+          x: px, y: (carpet ? py + ribbonYLift(seg.kind) : py + ribbonYLift(seg.kind) - 0.002), z: pz,
           yaw, bank,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
@@ -1549,7 +1565,43 @@ export class TrackSystem {
           this._lastPathKind = best.kind || null;
         }
       }
+      // Spawn apron = visual asphalt must count as onTrack (no carpet penalty at pad edge)
+      if (this._spawnApron && onFloorCruise && !best.onTrack
+          && (best.kind === "floor" || best.carpet || best.kind === "outdoor")) {
+        const adx = x - this._spawnApron.x;
+        const adz = z - this._spawnApron.z;
+        if (adx * adx + adz * adz <= this._spawnApron.r * this._spawnApron.r) {
+          best = {
+            ...best,
+            onTrack: true,
+            supported: true,
+            carpet: false,
+            kind: best.kind === "outdoor" ? "outdoor" : "floor",
+            pathId: best.pathId || "foyer_drive_start",
+            edgeMargin: Math.max(0.2, best.edgeMargin || 0.2),
+            y: best.y != null ? best.y : (storyY ?? 0.075),
+          };
+          this._lastPathId = best.pathId;
+          this._lastPathKind = best.kind;
+        }
+      }
       return best;
+    }
+
+    // Spawn apron alone (no ribbon sample) still drives as asphalt
+    if (this._spawnApron && carpetStoryY != null && Math.abs(y - carpetStoryY) < 0.95) {
+      const adx = x - this._spawnApron.x;
+      const adz = z - this._spawnApron.z;
+      if (adx * adx + adz * adz <= this._spawnApron.r * this._spawnApron.r) {
+        return {
+          x, y: carpetStoryY, z,
+          yaw: CAR_SPAWN.yaw, bank: 0,
+          onTrack: true, supported: true, softPull: false,
+          carpet: false, dist: 0, kind: "floor", pathId: "foyer_drive_start", label: null,
+          wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+          edgeMargin: 0.4, halfW: 1.1, nearDeck: false,
+        };
+      }
     }
 
     // Open floor of any mansion story → carpet crawl (slow), never void/crash

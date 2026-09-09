@@ -592,13 +592,14 @@ export class DriveMode {
         base = esc.yaw;
       }
     }
-    const probeClear = (yaw) => {
-      const dx = Math.sin(yaw) * 0.55;
-      const dz = Math.cos(yaw) * 0.55;
+    // Dense forward samples so thin posts/pillars between coarse distances cannot sneak through
+    const probeClear = (yaw, dist = 0.85) => {
+      const dx = Math.sin(yaw) * dist;
+      const dz = Math.cos(yaw) * dist;
       const px = x + dx;
       const pz = z + dz;
       const r = this._carRadius;
-      const cols = this._wallsNear(px, pz, r + 0.2);
+      const cols = this._wallsNear(px, pz, r + 0.28);
       const y0 = y - 0.02;
       const y1 = y + 0.12;
       for (const box of cols) {
@@ -610,11 +611,51 @@ export class DriveMode {
       }
       return true;
     };
-    const candidates = [base, base + Math.PI, base + Math.PI / 2, base - Math.PI / 2];
-    for (const yaw of candidates) {
-      if (probeClear(yaw)) return yaw;
+    const corridorClear = (yaw) => {
+      // Require clear asphalt ≥3 m ahead (pillar/furniture must not sit in camera cone)
+      for (const d of [0.35, 0.7, 1.1, 1.6, 2.2, 3.0]) {
+        if (!probeClear(yaw, d)) return false;
+      }
+      return true;
+    };
+    // Authored spawn yaw FIRST (into foyer / toward climb) — never let
+    // skirting tangent steal into a wall-hug heading when the fallback is clear.
+    const candidates = [];
+    if (Number.isFinite(fallback)) {
+      candidates.push(fallback, fallback + Math.PI);
     }
-    return base;
+    candidates.push(base, base + Math.PI, base + Math.PI / 2, base - Math.PI / 2);
+    // Mild offsets if authored heading kisses a post
+    if (Number.isFinite(fallback)) {
+      for (const d of [0.25, -0.25, 0.5, -0.5, 0.85, -0.85]) candidates.push(fallback + d);
+    }
+    const seen = new Set();
+    for (const yaw of candidates) {
+      const key = (Math.round(yaw * 1000) / 1000);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (corridorClear(yaw)) return yaw;
+    }
+    for (const yaw of candidates) {
+      if (probeClear(yaw, 0.9) && probeClear(yaw, 1.35) && probeClear(yaw, 2.0)) return yaw;
+    }
+    for (const yaw of candidates) {
+      if (probeClear(yaw, 0.55)) return yaw;
+    }
+    return Number.isFinite(fallback) ? fallback : base;
+  }
+
+  /** Foyer climb approach corridor — stair/furniture must not pin before snap. */
+  _nearFoyerClimbCorridor(x, z) {
+    // Foot pulled into clear asphalt south of west stair (see ramp_foyer_to_landing)
+    const fx = -7.15, fz = 11.20;
+    if (Math.hypot(x - fx, z - fz) <= 1.55) return true;
+    // Early climb ribbon band (open asphalt → stair throat)
+    if (x >= -8.55 && x <= -5.85 && z >= 7.6 && z <= 12.2) {
+      const along = Math.hypot(x - fx, z - (fz - 1.2));
+      if (along < 2.4) return true;
+    }
+    return false;
   }
 
   /**
@@ -635,7 +676,16 @@ export class DriveMode {
     const y = p.y;
     const y0 = y - 0.02;
     const y1 = y + 0.12;
-    const cols = this._wallsNear(p.x, p.z, r + 0.35);
+    // Ruthless: in foyer climb corridor, pierce ALL stair/furniture within 1.5m
+    // so dark-pad / stringer / pillar cannot kill speed before ramp snap.
+    const climbApproach = this._nearFoyerClimbCorridor(p.x, p.z);
+    if (climbApproach && (kind === "floor" || kind === "ramp" || !kind)) {
+      // Still collide with room walls — only soft kinds are pierced
+    }
+    let cols = this._wallsNear(p.x, p.z, r + 0.35);
+    if (climbApproach) {
+      cols = cols.filter((b) => (b.driveKind || "wall") === "wall");
+    }
     if (!cols.length) return;
 
     const onRibbon = !!(snap && snap.onTrack);
@@ -686,7 +736,14 @@ export class DriveMode {
         this._frameWallHits = (this._frameWallHits || 0) + 1;
         const soft = box.driveKind === "furniture" || box.driveKind === "stair";
         if (!soft) this._jamHits = (this._jamHits || 0) + 1;
-        // Feed car scrape FX + widen floor yaw settle while sliding mansion walls
+        // Floor asphalt onTrack: positional depenetrate ONLY — no speed scrub / yaw yank
+        // (aggressive scrub was killing W cruise to ~3 km/h / pin on apron edge).
+        const floorCruise = onRibbon && (kind === "floor" || kind === "outdoor" || kind === "flower");
+        if (floorCruise) {
+          this.car._scrape = Math.min(1, (this.car._scrape || 0) + 0.08);
+          continue;
+        }
+        // Feed car scrape FX while sliding mansion walls off-ribbon / elevated
         this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.25 : 0.45));
 
         // Fresh forward each hit (yaw may have slid on prior collider)
@@ -710,26 +767,25 @@ export class DriveMode {
             let dyaw = slideYaw - this.car.yaw;
             while (dyaw > Math.PI) dyaw -= Math.PI * 2;
             while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-            // Stronger yaw settle when more head-on so corners don't wedge
-            const yawBlend = Math.min(0.85, 0.35 + headOn * 0.5);
+            // Light yaw slide only when clearly head-on — grazing must not yank steer
+            const yawBlend = Math.min(0.42, 0.10 + headOn * 0.32);
             this.car.yaw += dyaw * yawBlend;
             this.car.root.rotation.y = this.car.yaw;
             const loss = soft
-              ? (0.06 + headOn * 0.22)
-              : (0.10 + headOn * 0.38);
+              ? (0.04 + headOn * 0.16)
+              : (0.07 + headOn * 0.28);
             const signed = Math.sign(spd || 1);
-            this.car.speed = signed * spd2 * (1 - Math.min(0.72, loss));
-            // Grazing on ribbon: keep a cruise floor so skirting doesn't die
-            if (onRibbon && headOn < 0.45) {
-              const floor = Math.min(this.car.maxSpeed * 0.62, 0.75);
-              if (Math.abs(this.car.speed) < floor * 0.55) {
-                this.car.speed = signed * Math.max(Math.abs(this.car.speed), floor * 0.55);
+            this.car.speed = signed * spd2 * (1 - Math.min(0.55, loss));
+            if (onRibbon && headOn < 0.55) {
+              const floor = Math.min(this.car.maxSpeed * 0.70, 0.85);
+              const keep = headOn < 0.25 ? 0.72 : 0.55;
+              if (Math.abs(this.car.speed) < floor * keep) {
+                this.car.speed = signed * Math.max(Math.abs(this.car.speed), floor * keep);
               }
             }
           } else {
             // Truly jammed into wall with no tangent — soft bounce reverse
             this.car.speed *= soft ? 0.48 : 0.32;
-            // Kick yaw toward open tangent matching previous travel intent
             const tx = -nz;
             const tz = nx;
             const intend = (prevX !== p.x || prevZ !== p.z)
@@ -757,39 +813,23 @@ export class DriveMode {
       if (!hit) break;
     }
 
-    // Under wall pressure on ribbon: magnet along wall-safe directions only.
-    // Skirting centerlines can sit inside thin wall AABBs — never pull into the normal.
+    // Under wall pressure: light outward + tiny wall-safe centerline nudge — NO yaw magnet.
+    // (Full 0.42 shove + yaw settle was yanking steer into furniture; keep positional only.)
     if (hitCount > 0 && onRibbon && snap && snap.x != null && snap.z != null) {
-      const pull = (kind === "floor" || kind === "outdoor" || kind === "flower") ? 0.42 : 0.28;
       const nLen = Math.hypot(accNX, accNZ) || 1;
       const nnx = accNX / nLen;
       const nnz = accNZ / nLen;
       const toSX = snap.x - p.x;
       const toSZ = snap.z - p.z;
       const nDot = toSX * nnx + toSZ * nnz;
-      // Drop the into-wall component of the magnet (keep outward + tangential)
+      // Drop into-wall component of magnet
       const adjX = toSX - Math.min(0, nDot) * nnx;
       const adjZ = toSZ - Math.min(0, nDot) * nnz;
+      const pull = (kind === "floor" || kind === "outdoor" || kind === "flower") ? 0.10 : 0.08;
       p.x += adjX * pull;
       p.z += adjZ * pull;
-      // Bias slightly outward so next frame is clear of the stud
-      p.x += nnx * 0.014;
-      p.z += nnz * 0.014;
-      if (snap.yaw != null && Number.isFinite(snap.yaw)) {
-        let dyaw = snap.yaw - this.car.yaw;
-        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        // Bidirectional ribbon — pick reverse if closer (approach ramp against winding)
-        let dyawR = dyaw + Math.PI;
-        while (dyawR > Math.PI) dyawR -= Math.PI * 2;
-        while (dyawR < -Math.PI) dyawR += Math.PI * 2;
-        if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
-        // Wider settle under scrape so corners realign to ribbon (e.g. 260°→180°)
-        if (Math.abs(dyaw) < 1.85) {
-          this.car.yaw += dyaw * Math.min(0.55, 0.28 + Math.abs(dyaw) * 0.2);
-          this.car.root.rotation.y = this.car.yaw;
-        }
-      }
+      p.x += nnx * 0.010;
+      p.z += nnz * 0.010;
     }
   }
 
@@ -839,32 +879,39 @@ export class DriveMode {
     const escape = this.tracks.findEscapeSnap
       ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 4.5)
       : null;
-    if (!escape || !escape.onTrack) {
-      if (snap && snap.x != null && snap.z != null) {
-        p.x += (snap.x - p.x) * 0.45;
-        p.z += (snap.z - p.z) * 0.45;
-        if (snap.yaw != null && Number.isFinite(snap.yaw)) this.car.yaw = snap.yaw;
-        this.car.speed = Math.max(this.car.speed, 0.55);
-        this.car.root.rotation.y = this.car.yaw;
-      }
+    // Prefer road center + forward along ribbon (not sideways into furniture/stairs)
+    const target = (escape && escape.onTrack) ? escape : (snap && snap.onTrack ? snap : escape);
+    if (!target || target.x == null) {
       this._stuckTimer = 0;
       this._jamHits = 0;
       this._stuckNudgeCd = 0.85;
       return;
     }
-
-    p.x = escape.x;
-    p.z = escape.z;
-    p.y = Math.max(p.y, escape.y);
-    if (escape.yaw != null && Number.isFinite(escape.yaw)) this.car.yaw = escape.yaw;
+    let yaw = (target.yaw != null && Number.isFinite(target.yaw)) ? target.yaw : this.car.yaw;
+    // Choose ribbon direction closest to current facing / travel intent
+    let dYaw = yaw - this.car.yaw;
+    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+    let dYawR = dYaw + Math.PI;
+    while (dYawR > Math.PI) dYawR -= Math.PI * 2;
+    while (dYawR < -Math.PI) dYawR += Math.PI * 2;
+    if (Math.abs(dYawR) < Math.abs(dYaw)) yaw += Math.PI;
+    // Nudge to centerline then along road forward (away from pin), then clear walls
+    let nx = target.x + Math.sin(yaw) * 0.35;
+    let nz = target.z + Math.cos(yaw) * 0.35;
+    const cleared = this._clearPointFromWalls(nx, nz, p.y, 0.04);
+    p.x = cleared.x;
+    p.z = cleared.z;
+    if (target.y != null) p.y = Math.max(p.y, target.y);
+    this.car.yaw = yaw;
     this.car.root.rotation.y = this.car.yaw;
-    this.car.speed = Math.max(0.7, Math.min(this.car.maxSpeed * 0.55, Math.abs(this.car.speed) + 0.55));
+    this.car.speed = Math.max(0.75, Math.min(this.car.maxSpeed * 0.60, Math.abs(this.car.speed) + 0.60));
     this.car.airborne = false;
     this.car.vy = 0;
     this.car._unsupportedFrames = 0;
     this._stuckTimer = 0;
     this._jamHits = 0;
-    this._stuckNudgeCd = 1.1;
+    this._stuckNudgeCd = 1.0;
     if (this.onHint) this.onHint("Unstuck — back on the road");
   }
 
@@ -1024,6 +1071,14 @@ export class DriveMode {
     const prevZ = pos.z;
     const flags = this.car.update(dt, driveKeys, snap);
     this._resolveDriveWalls(prevX, prevZ, snap);
+    // Guarantee: holding W on floor asphalt always keeps accelerating (no silent pin)
+    if (driveKeys.forward && snap && snap.onTrack
+        && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")
+        && !this.car.airborne && !this.car.crashed) {
+      if (this.car.speed < 0.55) {
+        this.car.speed = Math.min(this.car.maxSpeed, Math.max(this.car.speed, 0.55));
+      }
+    }
     this._updateStuckEscape(dt, driveKeys, snap, prevX, prevZ);
     this.car.idleTwitch(dt);
     this.tracks.updateVisuals(this._time);

@@ -257,7 +257,7 @@ drive.tracks.root.traverse((o) => {
         const x = arr[i], y = arr[i + 1], z = arr[i + 2];
         // Only floor-band ribbons z-fight the apron — elevated cornice/ramps above are fine
         // Ground-story band only (ignore cellar ribbons that share XZ under the apron)
-        if (y > -0.15 && y < 0.35 && Math.hypot(x - CAR_SPAWN.x, z - CAR_SPAWN.z) < 0.85) { near = true; break; }
+        if (y > -0.15 && y < 0.35 && Math.hypot(x - CAR_SPAWN.x, z - CAR_SPAWN.z) < 1.55) { near = true; break; }
       }
       if (near) meshesNearSpawn++;
     }

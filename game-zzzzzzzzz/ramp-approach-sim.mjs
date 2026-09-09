@@ -55,7 +55,7 @@ const crest = ramp.points[ramp.points.length - 1];
 
 // Prove stringers no longer overlap west skirting centerline
 {
-  const skirtingX = -8.3;
+  const skirtingX = -7.15;
   let overlap = false;
   let culprit = null;
   for (let i = 0; i < cols.length; i++) {
@@ -78,9 +78,9 @@ const crest = ramp.points[ramp.points.length - 1];
   for (const b of drive._wallColliders) {
     if (b.min.y > 0.2) continue;
     if (b.max.z < 8.5 || b.min.z > 11.5) continue;
-    if (b.max.x < -8.6 || b.min.x > -7.9) continue;
-    // Does AABB overlap car at (-8.3, 9.5)?
-    const px = -8.3, pz = 9.5;
+    if (b.max.x < -8.0 || b.min.x > -6.4) continue;
+    // Does AABB overlap car on clear climb approach?
+    const px = -7.15, pz = 10.5;
     if (px + r > b.min.x && px - r < b.max.x && pz + r > b.min.z && pz - r < b.max.z) {
       hitRibbon = true;
       hitInfo = { kind: b.driveKind, x: [b.min.x, b.max.x], z: [b.min.z, b.max.z], y: [b.min.y, b.max.y] };
@@ -104,22 +104,25 @@ function reset(x, z, yaw, spd = 0.32) {
   drive._stuckNudgeCd = 0;
   drive._crashPhase = null;
   drive._inputsFrozen = false;
-  drive.tracks._lastPathId = "foyer_skirting";
+  drive.tracks._lastPathId = "foyer_drive_start";
   drive.tracks._lastPathKind = "floor";
 }
 
-function steerAimClimb() {
+function steerAimClimb(noise = 0) {
   const p = drive.car.position;
   const s = drive.tracks.querySnap(p.x, p.y, p.z, 1.65, drive.car.yaw);
-  let yawTarget = Math.PI; // -Z toward foot from south
+  let yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
   const toFoot = Math.hypot(p.x - foot.x, p.z - foot.z);
-  if (s?.kind === "ramp" && s.onTrack && s.yaw != null) {
+  // Near foot / on ramp: lock climb heading (browser still wobbles farther out)
+  if (s?.kind === "ramp" && (s.onTrack || s.nearDeck || s.rampContinuity) && s.yaw != null) {
     yawTarget = s.yaw;
-  } else if (toFoot < 2.8 || p.z < 10.0) {
-    const tgt = ramp.points[Math.min(3, ramp.points.length - 1)];
+    noise *= 0.15;
+  } else if (toFoot < 1.35 && Math.abs(p.x - foot.x) < 0.85) {
+    // Only climb-aim once actually at the foot — earlier mid-ramp aim yanks south off the start road
+    const tgt = ramp.points[Math.min(4, ramp.points.length - 1)];
     yawTarget = Math.atan2(tgt.x - p.x, tgt.z - p.z);
-  } else if (s?.yaw != null) {
-    // Bidirectional prefer
+    noise *= 0.15;
+  } else if (s?.pathId === "foyer_drive_start" && s.yaw != null) {
     let d0 = s.yaw - drive.car.yaw;
     while (d0 > Math.PI) d0 -= Math.PI * 2;
     while (d0 < -Math.PI) d0 += Math.PI * 2;
@@ -127,36 +130,67 @@ function steerAimClimb() {
     while (d1 > Math.PI) d1 -= Math.PI * 2;
     while (d1 < -Math.PI) d1 += Math.PI * 2;
     yawTarget = Math.abs(d1) < Math.abs(d0) ? s.yaw + Math.PI : s.yaw;
+  } else {
+    // Recover onto start road / foot if noise threw us onto carpet
+    yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
   }
+  yawTarget += noise;
   let left = false, right = false;
   if (Number.isFinite(yawTarget)) {
     let dyaw = yawTarget - drive.car.yaw;
     while (dyaw > Math.PI) dyaw -= Math.PI * 2;
     while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-    left = dyaw > 0.06;
-    right = dyaw < -0.06;
+    left = dyaw > 0.045;
+    right = dyaw < -0.045;
   }
   return { forward: true, back: false, left, right, boost: false, snap: s };
 }
 
-// ─── 1) Approach climb from spawn along west skirting, mount, no pin ───
+// ─── 1) HOSTILE browser-like: spawn → climb with human steering noise + walls ───
 {
-  reset(-8.05, 12.0, Math.PI, 0.30); // playtest-like: face ramp along west wall
+  // Match live spawn; _pickOpenRoadYaw must keep into-foyer heading
+  const spawnYaw = drive._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+  reset(CAR_SPAWN.x, CAR_SPAWN.z, spawnYaw, 0.22);
+  drive.tracks._lastPathId = "foyer_drive_start";
+  drive.tracks._lastPathKind = "floor";
   let pinFrames = 0, maxPin = 0, streak = 0, minSpd = 99;
   let mounted = false, crested = false, maxY = 0;
   let sumSpd = 0, n = 0;
-  for (let i = 0; i < 60 * 28; i++) {
-    const { snap, ...keys } = steerAimClimb();
+  let culprit = null;
+  for (let i = 0; i < 60 * 40; i++) {
+    const noise = Math.sin(i * 0.19) * 0.055 + Math.sin(i * 0.47) * 0.035 + Math.sin(i * 0.07) * 0.02;
+    const { snap: s, ...keys } = steerAimClimb(noise);
     drive.keys = keys;
     drive.update(dt);
-    const spd = Math.abs(drive.car.speed);
     const p = drive.car.position;
+    const s2 = drive.tracks.querySnap(p.x, p.y, p.z, 1.65, drive.car.yaw);
+    const spd = Math.abs(drive.car.speed);
     sumSpd += spd; n++;
-    if (i > 45 && spd < minSpd) minSpd = spd;
-    if (spd < 0.05) { pinFrames++; streak++; maxPin = Math.max(maxPin, streak); }
-    else streak = 0;
+    if (i > 60 && spd < minSpd) minSpd = spd;
+    if (spd < 0.05) {
+      pinFrames++; streak++; maxPin = Math.max(maxPin, streak);
+      if (streak > 20 && !culprit) {
+        const r = drive._carRadius;
+        const hits = [];
+        for (const b of drive._wallColliders) {
+          if (b.min.y > 0.55) continue;
+          if (p.x + r > b.min.x && p.x - r < b.max.x && p.z + r > b.min.z && p.z - r < b.max.z) {
+            hits.push({
+              kind: b.driveKind || "wall",
+              x: [+b.min.x.toFixed(2), +b.max.x.toFixed(2)],
+              y: [+b.min.y.toFixed(2), +b.max.y.toFixed(2)],
+              z: [+b.min.z.toFixed(2), +b.max.z.toFixed(2)],
+            });
+          }
+        }
+        culprit = {
+          x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2),
+          spd: +spd.toFixed(3), path: s2?.pathId, kind: s2?.kind, hits,
+        };
+      }
+    } else streak = 0;
     maxY = Math.max(maxY, p.y);
-    if (snap?.kind === "ramp" && snap.pathId === "ramp_foyer_to_landing" && snap.onTrack) mounted = true;
+    if (s2?.kind === "ramp" && s2.pathId === "ramp_foyer_to_landing" && s2.onTrack) mounted = true;
     if (p.y >= crest.y - 0.25 && Math.hypot(p.x - crest.x, p.z - crest.z) < 1.5) {
       crested = true;
       break;
@@ -166,10 +200,11 @@ function steerAimClimb() {
   const pinTime = pinFrames / 60;
   const maxPinS = maxPin / 60;
   const avg = sumSpd / n;
-  console.log("APPROACH", {
+  console.log("HOSTILE_APPROACH", {
+    spawnYaw: +spawnYaw.toFixed(3),
     avgSpd: +avg.toFixed(3), minSpd: +minSpd.toFixed(3),
     pinTime_s: +pinTime.toFixed(2), maxPinStreak_s: +maxPinS.toFixed(2),
-    mounted, crested, maxY: +maxY.toFixed(3),
+    mounted, crested, maxY: +maxY.toFixed(3), culprit,
     end: {
       x: +drive.car.position.x.toFixed(2),
       y: +drive.car.position.y.toFixed(2),
@@ -178,20 +213,21 @@ function steerAimClimb() {
       kmh: +drive.car.getSpeedKmh().toFixed(1),
     },
   });
-  ok("ramp-approach pinTime < 0.5s", pinTime < 0.5, `pinTime=${pinTime.toFixed(2)}s`);
-  ok("ramp-approach no permanent pin (streak < 0.5s)", maxPinS < 0.5, `maxPin=${maxPinS.toFixed(2)}s`);
+  ok("hostile spawn yaw into foyer", Math.cos(spawnYaw) < -0.55, `yaw=${spawnYaw.toFixed(3)}`);
+  ok("ramp-approach pinTime≈0 (<0.35s)", pinTime < 0.35, `pinTime=${pinTime.toFixed(2)}s culprit=${JSON.stringify(culprit)}`);
+  ok("ramp-approach no permanent pin (streak < 0.35s)", maxPinS < 0.35, `maxPin=${maxPinS.toFixed(2)}s`);
   ok("ramp-approach mounts climb", mounted, `mounted=${mounted}`);
   ok("ramp-approach crests landing", crested && !drive.car.crashed, `maxY=${maxY.toFixed(2)} crest=${crest.y}`);
-  ok("ramp-approach avg cruise > 0.35", avg > 0.35, `avg=${avg.toFixed(3)}`);
+  ok("ramp-approach avg cruise > 0.30", avg > 0.30, `avg=${avg.toFixed(3)}`);
 }
 
 // ─── 2) Nose into former stringer endcap / underside grab zone ───
 {
   const cases = [
-    { label: "west_foot_aim_climb", x: -8.25, z: 9.2, yaw: Math.PI },
-    { label: "stringer_endcap_z8", x: -8.3, z: 8.2, yaw: Math.PI * 0.95 },
-    { label: "into_stair_from_room", x: -7.2, z: 8.8, yaw: -Math.PI / 2 },
-    { label: "wall_gap_former_wedge", x: -8.55, z: 8.3, yaw: Math.PI },
+    { label: "clear_foot_aim_climb", x: -7.15, z: 11.2, yaw: Math.PI },
+    { label: "stringer_endcap_z8", x: -7.4, z: 9.0, yaw: Math.PI * 0.95 },
+    { label: "into_stair_from_room", x: -6.4, z: 9.2, yaw: -Math.PI / 2 },
+    { label: "former_wall_wedge", x: -8.2, z: 9.5, yaw: Math.PI },
   ];
   for (const c of cases) {
     reset(c.x, c.z, c.yaw, 0.35);

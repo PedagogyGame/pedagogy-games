@@ -4,6 +4,7 @@
  * no enabled primary path with maxG>0.55 or interior angle>150°.
  */
 import * as THREE from "./vendor/three.module.js";
+import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
 import { RCCar, CAR_SCALE } from "./js/drive/car.js";
 import { TRACK_PATHS, CAR_SPAWN } from "./js/data/tracks.js";
@@ -45,7 +46,9 @@ const ok = (name, pass, detail = "") => {
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
+const mansion = new Mansion(scene);
 const drive = new DriveMode(scene, camera);
+drive.setWallColliders(mansion.getColliders());
 const car = drive.car;
 const tracks = drive.tracks;
 const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
@@ -99,8 +102,8 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
     liveMax = Math.max(liveMax, (wp.y - car._wheelRadius) - liveSurf);
   }
   ok(
-    "wheel gap ≤0.03",
-    liveMax <= 0.03 && liveMax >= -0.02,
+    "wheel gap ≤0.01 (flush on asphalt)",
+    liveMax <= 0.01 && liveMax >= -0.01,
     `liveMaxGap=${liveMax.toFixed(4)} rootY=${car.position.y.toFixed(4)} surf=${liveSurf.toFixed(4)} onTrack=${!!live?.onTrack}`
   );
   // Floor Y settle must NOT flatten upper stories
@@ -317,20 +320,32 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   ok(".drive-hint CSS removed or inert", !css.includes(".drive-hint {") || css.includes("drive-hint removed"));
 }
 
-// ── 10) Spawn yaw faces along foyer_skirting (+X), not into south wall ──
+// ── 10) Spawn west apron into foyer (-Z + mild west), NOT center pillar / wall-hug ──
 {
-  const path = byId["foyer_skirting"];
-  const a = path.points[0], b = path.points[1];
-  const want = Math.atan2(b.x - a.x, b.z - a.z);
+  const want = Math.PI; // into room
   let dyaw = CAR_SPAWN.yaw - want;
   while (dyaw > Math.PI) dyaw -= Math.PI * 2;
   while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-  ok("CAR_SPAWN.yaw along skirting", Math.abs(dyaw) < 0.35, `yaw=${CAR_SPAWN.yaw.toFixed(3)} want=${want.toFixed(3)} dyaw=${dyaw.toFixed(3)}`);
+  ok("CAR_SPAWN.yaw into foyer (allow mild west bias)", Math.abs(dyaw) < 0.55,
+    `yaw=${CAR_SPAWN.yaw.toFixed(3)} want≈${want.toFixed(3)} d=${dyaw.toFixed(3)}`);
+  ok("CAR_SPAWN off wall-hug SW corner", Math.hypot(CAR_SPAWN.x - (-7.9), CAR_SPAWN.z - 12.2) > 2.5,
+    `spawn=(${CAR_SPAWN.x},${CAR_SPAWN.z})`);
+  ok("CAR_SPAWN off center pillar lane", Math.abs(CAR_SPAWN.x) >= 2.5,
+    `spawn.x=${CAR_SPAWN.x}`);
   const snap = tracks.querySnap(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, 2.0);
-  let d2 = (snap?.yaw ?? 0) - want;
-  while (d2 > Math.PI) d2 -= Math.PI * 2;
-  while (d2 < -Math.PI) d2 += Math.PI * 2;
-  ok("spawn snap·skirting", snap && Math.abs(d2) < 0.35, `snapYaw=${snap?.yaw?.toFixed(3)} d2=${d2.toFixed(3)}`);
+  ok("spawn on asphalt", !!(snap && snap.onTrack), `path=${snap?.pathId} on=${snap?.onTrack}`);
+  // enter() must not steal yaw into wall-hug +X
+  drive.enter();
+  let dy = drive.car.yaw - want;
+  while (dy > Math.PI) dy -= Math.PI * 2;
+  while (dy < -Math.PI) dy += Math.PI * 2;
+  ok("enter() yaw stays into foyer (not wall)", Math.abs(dy) < 0.70,
+    `carYaw=${drive.car.yaw.toFixed(3)} deg=${(drive.car.yaw*180/Math.PI).toFixed(1)}`);
+  // Probe forward must not be into south wall (+Z); prefer -X toward climb
+  const fx = Math.sin(drive.car.yaw), fz = Math.cos(drive.car.yaw);
+  ok("enter() forward has -Z into room", fz < -0.55, `fwd=(${fx.toFixed(2)},${fz.toFixed(2)})`);
+  ok("enter() forward not east of spawn (toward climb)", fx <= 0.15, `fx=${fx.toFixed(2)}`);
+  drive.exit();
 }
 
 // ── 11) WASD: keys.forward accelerates from spawn (no wall pin) ────
@@ -344,6 +359,41 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   ok("keys.forward accelerates", sp1 > 0.45 && sp1 > sp0 + 0.3, `sp0=${sp0.toFixed(3)} sp1=${sp1.toFixed(3)} moved=${moved.toFixed(3)}`);
   ok("_addCorniceShowcase on TrackSystem", typeof drive.tracks._addCorniceShowcase === "function");
   ok("drive fill light present", !!drive._fillLight);
+  drive.exit();
+}
+
+// ── 11b) Spawn forward corridor clear 3m + W 2s moves (no pin) ────
+{
+  drive.enter();
+  const yaw = drive.car.yaw;
+  const r = drive._carRadius;
+  const y0 = CAR_SPAWN.y - 0.02, y1 = CAR_SPAWN.y + 0.12;
+  let clear3 = true;
+  const hitAt = [];
+  for (const dist of [0.35, 0.7, 1.1, 1.6, 2.2, 3.0]) {
+    const px = CAR_SPAWN.x + Math.sin(yaw) * dist;
+    const pz = CAR_SPAWN.z + Math.cos(yaw) * dist;
+    const cols = drive._wallsNear ? drive._wallsNear(px, pz, r + 0.28) : [];
+    for (const box of cols) {
+      if (y1 < box.min.y || y0 > box.max.y) continue;
+      if (px + r > box.min.x && px - r < box.max.x && pz + r > box.min.z && pz - r < box.max.z) {
+        clear3 = false;
+        hitAt.push(dist);
+        break;
+      }
+    }
+  }
+  ok("spawn forward probeClear 3m", clear3, hitAt.length ? `hit@${hitAt.join(',')}` : "clear");
+  drive.keys.forward = true;
+  let wallFrames = 0;
+  const x0 = drive.car.position.x, z0 = drive.car.position.z;
+  for (let i = 0; i < 120; i++) {
+    drive.update(1 / 60);
+    if ((drive._frameWallHits || 0) > 0) wallFrames++;
+  }
+  const moved = Math.hypot(drive.car.position.x - x0, drive.car.position.z - z0);
+  ok("W 2s moves >0.5m", moved > 0.5, `moved=${moved.toFixed(3)} spd=${Math.abs(drive.car.speed).toFixed(3)}`);
+  ok("W 2s no wall-hit pin frames", wallFrames === 0, `wallFrames=${wallFrames}`);
   drive.exit();
 }
 

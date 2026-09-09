@@ -19,7 +19,7 @@ export const TRACK_PATHS = [
   {
     id: "foyer_skirting",
     kind: "floor",
-    width: 0.42,
+    width: 1.15,
     tension: 0.12,
     closed: true,
     fancy: true,
@@ -29,21 +29,44 @@ export const TRACK_PATHS = [
       { x: 0.0, y: 0.06, z: 12.4 },
       { x: 4.0, y: 0.06, z: 12.35 },
       { x: 7.9, y: 0.06, z: 12.2 },
-      { x: 8.15, y: 0.06, z: 11.3 },
-      { x: 8.2, y: 0.06, z: 10.5 },
-      { x: 8.35, y: 0.06, z: 9.0 },
-      { x: 8.35, y: 0.06, z: 5.0 },
-      { x: 8.35, y: 0.06, z: 1.0 },
-      { x: 8.2, y: 0.06, z: -0.35 },
-      { x: 2.85, y: 0.06, z: -0.4 },
-      { x: -2.85, y: 0.06, z: -0.4 },
-      { x: -8.2, y: 0.06, z: -0.35 },
-      { x: -8.35, y: 0.06, z: 1.0 },
-      { x: -8.35, y: 0.06, z: 5.0 },
-      { x: -8.3, y: 0.06, z: 9.05 },
-      { x: -8.3, y: 0.06, z: 10.5 },
-      { x: -8.15, y: 0.06, z: 11.35 },
+      { x: 8.05, y: 0.06, z: 11.3 },
+      { x: 8.10, y: 0.06, z: 10.5 },
+      { x: 8.15, y: 0.06, z: 9.0 },
+      { x: 8.15, y: 0.06, z: 5.0 },
+      { x: 8.15, y: 0.06, z: 1.0 },
+      { x: 8.00, y: 0.06, z: -0.30 },
+      { x: 2.85, y: 0.06, z: -0.35 },
+      { x: -2.85, y: 0.06, z: -0.35 },
+      { x: -8.00, y: 0.06, z: -0.30 },
+      { x: -8.15, y: 0.06, z: 1.0 },
+      { x: -8.15, y: 0.06, z: 5.0 },
+      { x: -8.05, y: 0.06, z: 7.55 },
+      // Peel east into clear asphalt — kiss climb foot (one obvious climb)
+      { x: -7.55, y: 0.06, z: 9.30 },
+      { x: -7.15, y: 0.06, z: 11.20 },
+      { x: -7.4, y: 0.06, z: 12.0 },
       { x: -7.9, y: 0.06, z: 12.2 },
+    ],
+  },
+  // Wide start road: open-foyer spawn → clear climb foot (NOT wall-hug tape)
+  {
+    id: "foyer_drive_start",
+    kind: "floor",
+    width: 2.60,  // post ROAD_WIDTH_SCALE ≈2.26 — wide open-foyer asphalt
+    tension: 0.08,
+    fancy: true,
+    points: [
+      // Wide open-foyer start: W alone stays on asphalt INTO room, then west to climb
+      // (south of old south-bench choke at z≈11; clear of west stair stringers).
+      { x: -3.2, y: 0.06, z: 12.15, label: "Grand Foyer" },
+      { x: -3.25, y: 0.06, z: 11.15 },
+      { x: -3.35, y: 0.06, z: 10.15 },
+      { x: -3.55, y: 0.06, z: 9.55 },
+      { x: -4.35, y: 0.06, z: 9.40 },
+      { x: -5.35, y: 0.06, z: 9.55 },
+      { x: -6.25, y: 0.06, z: 10.15 },
+      { x: -6.85, y: 0.06, z: 10.75 },
+      { x: -7.15, y: 0.06, z: 11.20 }, // kiss ramp_foyer_to_landing foot
     ],
   },
   // Doorway edge strip: foyer → hall (east jamb, not dead center)
@@ -53,7 +76,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.15,
     points: [
-      { x: 2.85, y: 0.06, z: -0.4, label: "Grand Foyer" },
+      { x: 2.85, y: 0.06, z: -0.35, label: "Grand Foyer" },
       { x: 2.85, y: 0.06, z: -1.2 },
       { x: 2.9, y: 0.06, z: -2.2, label: "Hall of Echoes" },
     ],
@@ -64,7 +87,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.15,
     points: [
-      { x: -2.85, y: 0.06, z: -0.4 },
+      { x: -2.85, y: 0.06, z: -0.35 },
       { x: -2.85, y: 0.06, z: -1.2 },
       { x: -2.9, y: 0.06, z: -2.2, label: "Hall of Echoes" },
     ],
@@ -585,24 +608,28 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
-    width: 0.52,
+    width: 0.78,
     points: [
-      // Lengthened spiral (more run) — softener evens Y; crest stays landing y=4.26
-      { x: -8.3, y: 0.06, z: 9.05, label: "Grand Foyer" },
-      { x: -8.28, y: 0.28, z: 8.15 },
-      { x: -8.26, y: 0.52, z: 7.2 },
-      { x: -8.22, y: 0.78, z: 6.2 },
-      { x: -8.12, y: 1.08, z: 5.25 },
-      { x: -7.92, y: 1.4, z: 4.4 },
-      { x: -7.55, y: 1.72, z: 3.75 },
-      { x: -7.0, y: 2.05, z: 3.35 },
-      { x: -6.3, y: 2.38, z: 3.25 },
-      { x: -5.65, y: 2.7, z: 3.55 },
-      { x: -5.35, y: 3.0, z: 4.25 },
-      { x: -5.45, y: 3.28, z: 5.05 },
-      { x: -5.95, y: 3.55, z: 5.55 },
-      { x: -6.5, y: 3.8, z: 5.55 },
-      { x: -6.9, y: 4.02, z: 5.3 },
+      // ONE obvious climb: foot in CLEAR open asphalt (not wall/stringer/dark-pad choke).
+      // Centered on west stair (~x=-7), pulled south into foyer for browser approach.
+      { x: -7.15, y: 0.06, z: 11.20, label: "Grand Foyer" },
+      { x: -7.16, y: 0.10, z: 10.55 },
+      { x: -7.18, y: 0.18, z: 9.85 },
+      { x: -7.20, y: 0.30, z: 9.10 },
+      { x: -7.22, y: 0.46, z: 8.35 },
+      { x: -7.20, y: 0.60, z: 7.55 },
+      { x: -7.12, y: 0.82, z: 6.60 },
+      { x: -6.95, y: 1.08, z: 5.75 },
+      { x: -6.70, y: 1.36, z: 5.00 },
+      { x: -6.35, y: 1.66, z: 4.40 },
+      { x: -5.95, y: 1.98, z: 3.95 },
+      { x: -5.55, y: 2.30, z: 3.70 },
+      { x: -5.30, y: 2.62, z: 3.85 },
+      { x: -5.25, y: 2.94, z: 4.40 },
+      { x: -5.45, y: 3.24, z: 5.05 },
+      { x: -5.90, y: 3.52, z: 5.45 },
+      { x: -6.45, y: 3.78, z: 5.50 },
+      { x: -6.90, y: 4.02, z: 5.30 },
       { x: -7.2, y: 4.26, z: 5.0, label: "Upper Landing" },
     ],
   },
@@ -2852,8 +2879,8 @@ for (const path of TRACK_PATHS) {
   _softenRampGrades(path);
 }
 
-/** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
-export const CAR_SPAWN = { x: -7.9, y: 0.075, z: 12.2, yaw: Math.PI / 2 }; // +X along foyer_skirting (NOT +Z into south wall)
+/** Spawn — west foyer asphalt (x≈-3.2), clear of center lantern/pillar; yaw into room + climb (NOT wall-hug). */
+export const CAR_SPAWN = { x: -3.2, y: 0.075, z: 12.15, yaw: Math.PI + 0.12 }; // into open foyer (W on asphalt); mild west bias toward climb, NOT wall-hug / center pillar
 
 
 /**
@@ -2865,7 +2892,7 @@ export const CAR_SPAWN = { x: -7.9, y: 0.075, z: 12.2, yaw: Math.PI / 2 }; // +X
  */
 export const RAMP_MOUNT_FEET = (() => {
   const PRIMARY_APPROACH = {
-    ramp_foyer_to_landing: "foyer_skirting",
+    ramp_foyer_to_landing: "foyer_drive_start",
     ramp_foyer_console: "foyer_skirting",
     ramp_foyer_console_down: "furniture_foyer_console",
     ramp_dining_table: "door_cons_dining",

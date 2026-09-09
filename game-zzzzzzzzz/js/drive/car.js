@@ -437,7 +437,9 @@ export class RCCar {
   }
 
   _storyFloors() {
-    return [8.46, 4.26, 0.045, -4.05];
+    // Match ground asphalt ride height (pathY 0.06 + yLift 0.015) — carpet must
+    // NOT settle 3cm below ribbon or the car bobs / looks like it floats at edges.
+    return [8.46, 4.26, 0.075, -4.05];
   }
 
   /** Nearest walkable story floor within band, or null if mid-air between stories. */
@@ -457,7 +459,7 @@ export class RCCar {
     for (const f of this._storyFloors()) {
       if (f < start - 0.35) return f;
     }
-    return 0.045;
+    return 0.075;
   }
 
   /**
@@ -573,7 +575,7 @@ export class RCCar {
     this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
     let maxV = keys.boost ? this.boostMax : this.maxSpeed;
     if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
-      maxV *= 0.58; // off-road slow (not sticky death)
+      maxV *= 0.78; // brief off-ribbon slow — not sticky death (was 0.58 → felt like 3 km/h pin)
     }
     if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
     const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
@@ -677,8 +679,8 @@ export class RCCar {
         || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
       // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
-      const yLock = snap.steep || kind === "ramp" ? 38
-        : (sticky ? (nearRim ? 34 : 30) : 18);
+      const yLock = snap.steep || kind === "ramp" ? 42
+        : (sticky ? (nearRim ? 36 : 32) : 28);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
       // Climb-only soft lateral magnet (NOT full floor ASSIST_MAGNET)
@@ -694,13 +696,13 @@ export class RCCar {
         z = THREE.MathUtils.lerp(z, snap.z, pull);
       } else if (snap.onTrack && snap.x != null && snap.z != null
         && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
-        // Soft floor-ribbon glue — stronger near rim / after wall scrape (skirting)
+        // Whisper-only floor glue near absolute rim — no yaw-magnet cruise yank
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        const rimFactor = em < 0.10 ? 1.85 : (em < 0.18 ? 1.35 : (em < 0.28 ? 0.9 : 0.5));
-        const scrapeBoost = this._scrape > 0.08 ? 1.55 : 1;
-        const pull = Math.min(0.34, (0.08 + 0.13 * rimFactor) * scrapeBoost * Math.min(1, 12 * dt));
-        x = THREE.MathUtils.lerp(x, snap.x, pull);
-        z = THREE.MathUtils.lerp(z, snap.z, pull);
+        if (em < 0.06) {
+          const pull = Math.min(0.10, 0.06 * Math.min(1, 10 * dt));
+          x = THREE.MathUtils.lerp(x, snap.x, pull);
+          z = THREE.MathUtils.lerp(z, snap.z, pull);
+        }
       } else if (ASSIST_MAGNET && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
         x = THREE.MathUtils.lerp(x, snap.x, whisper);
@@ -712,23 +714,21 @@ export class RCCar {
       const bankSmooth = sticky || rampAssist ? 14 : 11;
       this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
       const bank = this._smoothBank;
-      // Gentle yaw settle — decks + climb ramps (stronger on ramp so spiral holds)
-      const floorAssist = snap.onTrack && (kind === "floor" || kind === "outdoor" || kind === "flower");
-      if ((sticky || rampAssist || floorAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
+      // Gentle yaw settle — climb ramps / decks only. Floor cruise: NO ribbon yaw magnet
+      // (player must be able to hold W and go straight on skirting without constant correction).
+      const floorAssist = false;
+      if ((sticky || rampAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
         let dyaw = snap.yaw - this.yaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        // Bidirectional ribbon yaw — reverse travel (foyer skirting → west ramp) must not U-turn
+        // Bidirectional ribbon yaw — reverse travel must not U-turn
         let dyawR = dyaw + Math.PI;
         while (dyawR > Math.PI) dyawR -= Math.PI * 2;
         while (dyawR < -Math.PI) dyawR += Math.PI * 2;
         if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
-        // Only nudge when roughly aligned with travel (avoid U-turn snaps).
-        // Under wall scrape / near rim: allow wider settle so skirting recovers.
-        const scrapeWiden = this._scrape > 0.12 || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.06);
-        const yawLim = rampAssist ? 0.85 : (floorAssist ? (scrapeWiden ? 1.55 : 0.85) : 0.55);
-        const yawK = rampAssist ? 0.34 : (floorAssist ? (scrapeWiden ? 0.38 : 0.26) : 0.18);
-        const yawRate = rampAssist ? 2.8 : (floorAssist ? (scrapeWiden ? 3.2 : 2.2) : 1.6);
+        const yawLim = rampAssist ? 0.70 : 0.45;
+        const yawK = rampAssist ? 0.22 : 0.12;
+        const yawRate = rampAssist ? 2.0 : 1.2;
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }

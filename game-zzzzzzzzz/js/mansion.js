@@ -774,7 +774,8 @@ export class Mansion {
 
     // Lantern posts along paths
     const lanterns = [
-      [0, 20], [0, 12], [0, -16], [0, -36], [0, -48],
+      // [0,12] was INSIDE foyer south strip — looked like central pillar in Drive spawn cone
+      [0, 20], [0, 18], [0, -16], [0, -36], [0, -48],
       [-22, 8], [-22, -8], [-22, -28],
       [22, 8], [22, -8], [22, -28],
       [-8, 34], [8, 34], [0, 42],
@@ -989,6 +990,14 @@ export class Mansion {
     );
     post.position.set(x, 1.2, z);
     g.add(post);
+    // Soft furniture AABB so Drive probes never treat a post as clear asphalt
+    this._pushCollider(
+      new THREE.Box3(
+        new THREE.Vector3(x - 0.14, 0.0, z - 0.14),
+        new THREE.Vector3(x + 0.14, 2.35, z + 0.14)
+      ),
+      "furniture"
+    );
     const lamp = new THREE.Mesh(
       new THREE.BoxGeometry(0.35, 0.45, 0.35),
       new THREE.MeshStandardMaterial({
@@ -1885,9 +1894,9 @@ export class Mansion {
       }
       // Fireplace on north wall (hall entrance side, offset from center path)
       addFireplace(cx + 5.2, cz - d / 2 + 0.4, "south");
-      // Bench near front door (south) — offset from spawn path
-      addBox(2.0, 0.12, 0.55, cx - 5, cy + 0.48, cz + 5, darkWood);
-      for (const sx of [-0.8, 0.8]) addBox(0.1, 0.48, 0.5, cx - 5 + sx, cy + 0.24, cz + 5, wood);
+      // Bench against south wall west corner — clear of foyer_drive_start / climb approach
+      addBox(2.0, 0.12, 0.55, cx - 6.6, cy + 0.48, cz + d / 2 - 0.85, darkWood);
+      for (const sx of [-0.8, 0.8]) addBox(0.1, 0.48, 0.5, cx - 6.6 + sx, cy + 0.24, cz + d / 2 - 0.85, wood);
       addArmchair(cx + 3.5, cz + 2, 0x5d4037, Math.PI * 0.15);
       addSideTable(cx + 4.5, cz + 1.2);
       addFloorLamp(cx + 6.2, cz + 2.5);
