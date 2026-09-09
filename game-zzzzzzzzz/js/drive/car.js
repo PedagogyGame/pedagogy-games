@@ -684,6 +684,14 @@ export class RCCar {
         const pull = Math.min(0.28, (0.10 + 0.14 * rimFactor) * Math.min(1, 12 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
+      } else if (snap.onTrack && snap.x != null && snap.z != null
+        && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
+        // Soft floor-ribbon glue — stay on visible asphalt without arcade magnet
+        const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
+        const rimFactor = em < 0.12 ? 1.55 : (em < 0.22 ? 1.05 : 0.55);
+        const pull = Math.min(0.22, (0.07 + 0.11 * rimFactor) * Math.min(1, 11 * dt));
+        x = THREE.MathUtils.lerp(x, snap.x, pull);
+        z = THREE.MathUtils.lerp(z, snap.z, pull);
       } else if (ASSIST_MAGNET && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
         x = THREE.MathUtils.lerp(x, snap.x, whisper);
@@ -696,14 +704,15 @@ export class RCCar {
       this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
       const bank = this._smoothBank;
       // Gentle yaw settle — decks + climb ramps (stronger on ramp so spiral holds)
-      if ((sticky || rampAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
+      const floorAssist = snap.onTrack && (kind === "floor" || kind === "outdoor" || kind === "flower");
+      if ((sticky || rampAssist || floorAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
         let dyaw = snap.yaw - this.yaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
         // Only nudge when roughly aligned with travel (avoid U-turn snaps)
-        const yawLim = rampAssist ? 0.85 : 0.55;
-        const yawK = rampAssist ? 0.34 : 0.18;
-        const yawRate = rampAssist ? 2.8 : 1.6;
+        const yawLim = rampAssist ? 0.85 : (floorAssist ? 0.7 : 0.55);
+        const yawK = rampAssist ? 0.34 : (floorAssist ? 0.22 : 0.18);
+        const yawRate = rampAssist ? 2.8 : (floorAssist ? 2.0 : 1.6);
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }

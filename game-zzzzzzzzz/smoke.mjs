@@ -480,8 +480,10 @@ if (drive.tracks.segments.length > 4200) {
     if (!byId[id] || byId[id].disabled) throw new Error(`Missing elevated connector ${id}`);
   }
   // Death-trap climbs stay in data but disabled (no invisible/undriveable lifts)
-  for (const id of ["ramp_cabinet_down", "ramp_study_express_to_cases", "ramp_cornice_to_balcony"]) {
-    if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (too steep to soften)`);
+  for (const id of ["ramp_cabinet_down", "ramp_study_express_to_cases", "ramp_cornice_to_balcony",
+    "chandelier_ring_foyer", "ramp_cornice_to_chandelier", "chute_foyer_drop", "chute_balcony_foyer",
+    "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_library_attic_chase", "loft_nursery_edge"]) {
+    if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (void-risk / secondary island)`);
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
     const a = byId[aId], b = byId[bId];
@@ -721,6 +723,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     ["mouse_dining_west_garden", 3],
     ["mouse_dining_cornice_garden", 2],
   ]) {
+    if (byId[id]?.disabled) { console.log(`Wall mouse ${id} SKIP disabled`); continue; }
     const pts = byId[id].points;
     const mid = pts[idx];
     const s = drive.tracks.querySnap(mid.x, mid.y + 0.03, mid.z, 1.65);
@@ -738,6 +741,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_dining_hall_west", "mouse_library_attic_chase",
     "mouse_dining_west_garden", "mouse_dining_cornice_garden",
   ]) {
+    if (byId[id]?.disabled) continue;
     if (!portalPaths.has(id)) throw new Error(`Missing portals for ${id}`);
   }
   // New loft edge / cross ribbons onTrack
@@ -748,6 +752,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     ["loft_nursery_edge", 14.0, 7.15, -1.6],
     ["loft_music_edge", 0, 7.15, -20.6],
   ]) {
+    if (byId[id]?.disabled) { console.log(`Loft edge ${id} SKIP disabled`); continue; }
     const s = drive.tracks.querySnap(x, y + 0.04, z, 1.65);
     if (!s.onTrack || !s.supported) throw new Error(`Loft edge ${id} unsupported → ${s.kind}/${s.pathId}`);
   }

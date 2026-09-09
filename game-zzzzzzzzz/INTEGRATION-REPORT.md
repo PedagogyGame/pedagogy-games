@@ -1,44 +1,44 @@
 # Explore ↔ Drive near-track integration report
 
-**Date:** 2026-09-08 (America/Chicago)  
-**Stack:** Three.js r160 WebGL (online-first at pedagogygame.com) — vendored static zip, no Phaser/PixiJS.
+**Date:** 2026-09-09 (America/Chicago)  
+**Stack:** Three.js r160 WebGL — vendored static zip.
 
-## Drive stuck / furniture cage — real fix (2026-09-08)
+## Core tour fix (2026-09-09) — UPPER + floor playable
 
-**What was wrong:** Tiny RC car wedged between room walls and furniture bases (extruded tabletop AABBs + chairs) sat at ~0 km/h on wood floorboards; thin post-scale ribbons read as wires; dark ramp mats vanished on dark floors. Prior "fixed" zips claimed green without a stuck sandwich sim.
+**Priority:** floor cruise → foyer→landing→cornice → primary upper loop; disable void-dump islands.
 
 | Fix | Detail |
 |-----|--------|
-| Furniture tagging | `box.driveKind = "furniture"` from room furniture; tall wall consoles now get AABBs too |
-| Drive soft colliders | `DriveMode._driveSoftCollider`: shrink XZ ~26%, raise min.y ~0.36 m — Explore keeps full boxes; walls stay hard |
-| Auto-unstuck | Forward + off-ribbon stall/jam >0.6s → `findEscapeSnap` nudge onto visible onTrack asphalt |
-| Thick asphalt | `FLOOR_WIDTH_MIN=0.52`, `DOOR_WIDTH_MIN=0.48`, `DECK_WIDTH_MIN=0.42` after scale |
-| No ghost snaps | `visual:false` paths get **no** snap segments (flower connector included) |
-| Readable ramps | Bright chevron asphalt mat + slight emissive (not black-on-wood stealth) |
+| Floor asphalt | `FLOOR_WIDTH_MIN` 0.52 → **0.78** (halfW ≥0.39) |
+| Floor ribbon hold | Soft lateral + yaw settle on floor/outdoor/flower when `onTrack` (ASSIST_MAGNET still false) |
+| Primary loft links | `loft_landing_to_library` kissed to landing cornice; west twin; `loft_library_to_music`; shelf→music kiss |
+| Study express | `ramp_study_express_down` to study floor (no 2m+ void dump) |
+| Disabled islands | chandelier ring+ramp, loft_nursery, mid-air mice, chutes, loft→attic science ramp |
 
-### Honest sims
+### Core tour numbers (`core-tour-sim.mjs`)
+
+| Check | Result |
+|-------|--------|
+| Floor cruise 8s | **onRate=100%** falls=0 |
+| foyer→landing crest | OK onRate=100% |
+| landing→cornice crest | OK onRate=100% |
+| cornice↔landing↔balcony↔return | OK falls=0 |
+| Primary joins ≤0.15m | **12/12** d=0.000 |
+
+### Other sims
 
 | Sim | Result |
 |-----|--------|
-| `car-stuck-sim.mjs` | foyer / hall / dining / landing wall+furniture wedges escape ≤3s; foyer→landing crest OK |
-| `car-phys-sim.mjs` | 11/11 guided OK; hostile multi-climb (foyer, console, cornice link, dining, attic) PASSED |
-| `smoke.mjs` | ALL SMOKE CHECKS PASSED (Explore lanes + binary onTrack + under≠on preserved) |
+| `car-stuck-sim.mjs` | PASSED (5/5 + foyer crest) |
+| `car-phys-sim.mjs` | 11/11 + HOSTILE multi-climb PASSED |
+| `smoke.mjs` | ALL SMOKE CHECKS PASSED |
 
-## Ramp climb — real-drive fix (earlier same day)
+### Intentional remaining islands
 
-Ramp width boost, climb-only lateral hold, Y-lock 38, grade soften. Preserved: binary onTrack, under≠on, lag culls, Explore.
+- **Dining table furniture** (y≈0.98) — own on/off ramps; not on primary upper loop
+- **Attic loft/science** — reachable via `attic_from_landing_access` from landing; not fused into landing cornice (Δy≈1.2m intentional)
+- **Nursery loft** — disabled as secondary (strand risk)
+- **Chandelier ring** — disabled (decorative void island)
+- **Steep death traps** — `ramp_cabinet_down`, `ramp_study_express_to_cases`, `ramp_cornice_to_balcony` remain disabled
 
-## Still might fail (honest)
-
-- Hostile climbs can crest ~88–95% of rise with yaw bias (not exact XYZ kiss every time).
-- Unstuck nudges to nearest thick asphalt — may briefly teleport ~1–2 m when caged deep in furniture clusters.
-- `ramp-approach` still reports 2 secondary progFail samples (music sideboard / non-primary); primary mounts OK.
-- Extremely narrow mouse tubes unchanged (intentional hollow runs, not floor asphalt).
-
-## Smoke
-
-```
-node --import ./smoke-register.mjs smoke.mjs → ALL SMOKE CHECKS PASSED
-node --import ./smoke-register.mjs car-stuck-sim.mjs → PASSED
-node --import ./smoke-register.mjs car-phys-sim.mjs → 11/11 + HOSTILE multi-climb PASSED
-```
+Preserved: climb hold, unstuck, visible-only asphalt, under≠on, lag culls, Explore.

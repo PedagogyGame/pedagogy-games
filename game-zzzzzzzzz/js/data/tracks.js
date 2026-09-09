@@ -872,13 +872,13 @@ export const TRACK_PATHS = [
     tension: 0.04,
     points: [
       { x: 3.1, y: 6.8, z: -16 },
-      { x: 3.1, y: 6.85, z: -19 },
-      { x: 3.1, y: 6.9, z: -22 },
-      { x: 1.5, y: 6.95, z: -23.4 },
-      { x: 0, y: 7.0, z: -24, label: "Cornice Circuit" },
-      { x: -1.5, y: 6.95, z: -23.4 },
-      { x: -3.1, y: 6.9, z: -22 },
-      { x: -3.1, y: 6.85, z: -19 },
+      { x: 3.1, y: 6.95, z: -18.5 },
+      { x: 3.1, y: 7.15, z: -20.7, label: "Music loft kiss" },
+      { x: 1.5, y: 7.16, z: -22.8 },
+      { x: 0, y: 7.18, z: -24.0, label: "Cornice Circuit" },
+      { x: -1.5, y: 7.16, z: -22.8 },
+      { x: -3.1, y: 7.15, z: -20.7, label: "Music loft kiss" },
+      { x: -3.1, y: 6.95, z: -18.5 },
       { x: -3.1, y: 6.8, z: -16 },
     ],
   },
@@ -1669,6 +1669,7 @@ export const TRACK_PATHS = [
   // Dramatic drop chute: foyer cornice → foyer floor (steep slide + landing curve)
   {
     id: "chute_foyer_drop",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "chute",
     width: 0.32,
     tension: 0.4,
@@ -1686,6 +1687,7 @@ export const TRACK_PATHS = [
   // Balcony → foyer interior chute (alternate dramatic drop)
   {
     id: "chute_balcony_foyer",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "chute",
     width: 0.32,
     tension: 0.38,
@@ -1893,6 +1895,7 @@ export const TRACK_PATHS = [
   // Chandelier ring — decorative loop at foyer chandelier height
   {
     id: "chandelier_ring_foyer",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -1913,10 +1916,11 @@ export const TRACK_PATHS = [
   // On-ramp to chandelier ring from foyer cornice south header
   {
     id: "ramp_cornice_to_chandelier",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "ramp",
     width: 0.40,
     points: [
-      { x: 0.0, y: 3.5, z: -0.45, label: "Hall Header Bridge" },
+      { x: 0.0, y: 3.48, z: -0.6, label: "Hall Header Bridge" },
       { x: 0.0, y: 3.25, z: 1.2 },
       { x: 0.0, y: 3.0, z: 2.5 },
       { x: 0.0, y: 2.85, z: 3.6, label: "Chandelier ring" },
@@ -2480,6 +2484,7 @@ export const TRACK_PATHS = [
   
   {
     id: "loft_nursery_edge",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2529,7 +2534,7 @@ export const TRACK_PATHS = [
       { x: -9.4, y: 7.15, z: -20.7 },
     ],
   },
-  // Bridge: landing cornice → library loft edge (tiny connector, clear of walk)
+  // Bridge: landing cornice east tip → library loft edge (was floating dead-end at z=1)
   {
     id: "loft_landing_to_library",
     kind: "cornice",
@@ -2538,9 +2543,81 @@ export const TRACK_PATHS = [
     tension: 0.1,
     fancy: true,
     points: [
-      { x: 3.15, y: 7.2, z: 1.0, label: "Landing Cornice" },
-      { x: 3.15, y: 7.18, z: 0.0 },
+      { x: 3.3, y: 7.1, z: -2.2, label: "Landing Cornice" },
+      { x: 3.2, y: 7.12, z: -1.55 },
       { x: 3.1, y: 7.15, z: -0.9, label: "Library Hall" },
+    ],
+  },
+  // West twin: landing cornice west tip → library loft
+  {
+    id: "loft_landing_to_library_west",
+    kind: "cornice",
+    width: 0.32,
+    rail: true,
+    tension: 0.1,
+    fancy: true,
+    points: [
+      { x: -3.3, y: 7.1, z: -2.2, label: "Landing Cornice" },
+      { x: -3.2, y: 7.12, z: -1.55 },
+      { x: -3.1, y: 7.15, z: -0.9, label: "Library Hall" },
+    ],
+  },
+  // Library loft south header → music loft north (closes 1.4 m void gap)
+  {
+    id: "loft_library_to_music",
+    kind: "cornice",
+    width: 0.32,
+    rail: true,
+    tension: 0.08,
+    fancy: true,
+    points: [
+      { x: 0.0, y: 7.15, z: -19.2, label: "Library Hall" },
+      { x: 0.0, y: 7.16, z: -19.9 },
+      { x: 0.0, y: 7.18, z: -20.6, label: "Music Room" },
+    ],
+  },
+  // Nursery loft west rail → bookcase express cross (closes ~0.43 m Y island gap)
+  {
+    id: "ramp_loft_nursery_to_express",
+    disabled: true, // core-tour: secondary island / void risk
+    kind: "ramp",
+    width: 0.36,
+    points: [
+      { x: 6.65, y: 7.16, z: -11.2, label: "Nursery loft" },
+      { x: 7.05, y: 7.02, z: -11.5 },
+      { x: 7.5, y: 6.86, z: -11.8 },
+      { x: 8.0, y: 6.7, z: -12.0, label: "Nursery Express" },
+    ],
+  },
+  // Study loft-adjacent express → study floor (was 2.2 m void dump)
+  {
+    id: "ramp_study_express_down",
+    kind: "ramp",
+    width: 0.37,
+    points: [
+      { x: -18.0, y: 5.18, z: -4.2, label: "Study & Darkroom" },
+      { x: -18.6, y: 5.0, z: -3.4 },
+      { x: -19.4, y: 4.75, z: -2.7 },
+      { x: -20.2, y: 4.5, z: -2.25 },
+      { x: -20.5, y: 4.35, z: -2.15 },
+      { x: -20.5, y: 4.26, z: -2.2, label: "Study" },
+    ],
+  },
+  // Music loft → science attic (gentle bowed climb; closes 1.3 m vertical island gap)
+  {
+    id: "ramp_loft_music_to_attic_science",
+    disabled: true, // core-tour: secondary island / void risk
+    kind: "ramp",
+    width: 0.38,
+    points: [
+      { x: 0.0, y: 7.18, z: -20.6, label: "Music loft" },
+      { x: 1.6, y: 7.35, z: -20.0 },
+      { x: 3.0, y: 7.6, z: -19.0 },
+      { x: 3.4, y: 7.9, z: -17.8 },
+      { x: 2.2, y: 8.15, z: -17.0 },
+      { x: 0.6, y: 8.35, z: -16.7 },
+      { x: 0.0, y: 8.46, z: -18.0 },
+      { x: 0.0, y: 8.48, z: -20.6, label: "Science attic" },
     ],
   },
 
@@ -2549,6 +2626,7 @@ export const TRACK_PATHS = [
   // A) Landing ↔ Library — pierce shared south wall at mid height
   {
     id: "mouse_landing_library_mid",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "mouse",
     width: 0.26,
     tension: 0.28,
@@ -2567,6 +2645,7 @@ export const TRACK_PATHS = [
   // B) Foyer ↔ Hall — mid-cavity cross (between double walls, above skirting)
   {
     id: "mouse_foyer_hall_mid",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "shortcut",
     width: 0.26,
     tension: 0.28,
@@ -2603,6 +2682,7 @@ export const TRACK_PATHS = [
   // D) Library ↔ Attic loft — between-floors wall chase (gentle grade, portals clear)
   {
     id: "mouse_library_attic_chase",
+    disabled: true, // core-tour: secondary island / void risk
     kind: "mouse",
     width: 0.26,
     tension: 0.3,
@@ -2637,7 +2717,7 @@ export const RAMP_WIDTH_MULT = 1.72;
 /** Minimum post-boost ramp width → halfW ≥ ~0.29. */
 export const RAMP_WIDTH_MIN = 0.58;
 /** Floor/outdoor post-scale min — thick readable asphalt (no wire-thin ribbons). */
-export const FLOOR_WIDTH_MIN = 0.52;
+export const FLOOR_WIDTH_MIN = 0.78; // playable floor cruise (halfW ≥0.39)
 /** Doorway connector min width after scale. */
 export const DOOR_WIDTH_MIN = 0.48;
 /** Elevated/cornice/balcony/furniture decks min after scale. */
@@ -2788,9 +2868,12 @@ export const RAMP_MOUNT_FEET = (() => {
     ramp_bookcase_to_landing_cornice: "furniture_library_tops",
     ramp_bookcase_west_to_landing_cornice: "furniture_library_tops",
     ramp_nursery_express_return: "bookcase_express_lib_nursery",
-    ramp_cornice_to_chandelier: "cornice_hall_cross_south",
+    ramp_cornice_to_chandelier: "cornice_foyer",
     ramp_mouse_to_foyer_cornice: "mouse_foyer_cabinet_skirt",
     ramp_mouse_east_to_foyer_cornice: "mouse_foyer_armoury_skirt",
+    ramp_loft_nursery_to_express: "loft_nursery_edge",
+    ramp_study_express_down: "bookcase_express_lib_study",
+    ramp_loft_music_to_attic_science: "loft_music_edge",
   };
   const out = {};
   for (const path of TRACK_PATHS) {
