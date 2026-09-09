@@ -68,14 +68,59 @@ export class DriveMode {
     this._wallGridOriginZ = 0;
     this._carRadius = 0.09;
     this._passKinds = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
+    this._stuckTimer = 0;
+    this._stuckNudgeCd = 0;
+    this._jamHits = 0;
 
     this.parkForExplore();
   }
 
-  /** Wire mansion colliders so Drive cannot clip through solid walls (except mouse/tunnels). */
+  /** Wire mansion colliders so Drive cannot clip through solid walls (except mouse/tunnels).
+   * Furniture AABBs are raised/shrunk for Drive only — tiny car is not caged under tables
+   * or between wall and furniture bases. Room walls stay hard. Explore keeps full boxes.
+   */
   setWallColliders(colliders) {
-    this._wallColliders = colliders || null;
+    if (!colliders || !colliders.length) {
+      this._wallColliders = null;
+      this._buildWallGrid();
+      return;
+    }
+    this._wallColliders = colliders.map((b) => this._driveSoftCollider(b));
     this._buildWallGrid();
+  }
+
+  /**
+   * Soft copy for Drive: furniture shrink XZ ~26% and raise min.y so floor cruise
+   * (car height band ~0..0.12) slips under tabletops / past chair bases.
+   * Walls / stairs / hedges unchanged.
+   */
+  _driveSoftCollider(box) {
+    const out = box.clone();
+    out.driveKind = box.driveKind || "wall";
+    if (out.driveKind !== "furniture") return out;
+    const cx = (out.min.x + out.max.x) * 0.5;
+    const cz = (out.min.z + out.max.z) * 0.5;
+    const hx = Math.max(0.06, (out.max.x - out.min.x) * 0.5 * 0.74);
+    const hz = Math.max(0.06, (out.max.z - out.min.z) * 0.5 * 0.74);
+    out.min.x = cx - hx;
+    out.max.x = cx + hx;
+    out.min.z = cz - hz;
+    out.max.z = cz + hz;
+    // Raise collision floor — leave a crawl gap for the RC car
+    const raise = 0.36;
+    if (out.max.y - out.min.y > raise + 0.12) {
+      out.min.y = Math.min(out.max.y - 0.12, out.min.y + raise);
+    } else {
+      // Short volumes: shrink further in XZ instead of fully blocking floor
+      const hx2 = hx * 0.85;
+      const hz2 = hz * 0.85;
+      out.min.x = cx - hx2;
+      out.max.x = cx + hx2;
+      out.min.z = cz - hz2;
+      out.max.z = cz + hz2;
+      out.min.y = Math.min(out.max.y - 0.08, out.min.y + 0.22);
+    }
+    return out;
   }
 
   /** XZ spatial hash for Drive wall bounce — same idea as track snap grid. */
@@ -290,6 +335,9 @@ export class DriveMode {
     this._lastHint = "";
     this._edgeWarn = 0;
     this._edgeHintCd = 0;
+    this._stuckTimer = 0;
+    this._stuckNudgeCd = 0;
+    this._jamHits = 0;
     if (typeof document !== "undefined") {
       document.addEventListener("keydown", this._onKey);
       document.addEventListener("keyup", this._onKey);
@@ -326,6 +374,9 @@ export class DriveMode {
     this._camVel.set(0, 0, 0);
     this._snapCamera(true);
     this._edgeWarn = 0;
+    this._stuckTimer = 0;
+    this._stuckNudgeCd = 0;
+    this._jamHits = 0;
     if (this.onHud) this.onHud({ mode: "manual", text: "Toy tour — cruise the house" });
   }
 
@@ -410,6 +461,7 @@ export class DriveMode {
    * Mouse-holes / tunnels / shafts intentionally pierce walls.
    */
   _resolveDriveWalls(prevX, prevZ, snap) {
+    this._frameWallHits = 0;
     if (!this._wallColliders || !this._wallColliders.length) return;
     const kind = snap?.kind || "";
     // Passages + on-track ramp climb (stair center run); sides/furniture still bounce
@@ -468,12 +520,85 @@ export class DriveMode {
           else if (m === od) p.z = box.min.z - r - eps;
           else p.z = box.max.z + r + eps;
         }
-        this.car.speed *= 0.35;
+        // Furniture: gentler scrub so Drive can scrape free; walls still brake hard
+        const soft = box.driveKind === "furniture";
+        this.car.speed *= soft ? 0.62 : 0.35;
+        this._frameWallHits = (this._frameWallHits || 0) + 1;
+        if (!soft) this._jamHits = (this._jamHits || 0) + 1;
       }
       if (!hit) break;
       prevX = p.x;
       prevZ = p.z;
     }
+  }
+
+
+  /**
+   * Auto-unstuck: forward input but speed≈0 for >0.6s, or jammed in colliders.
+   * Soft-nudge toward nearest visible onTrack asphalt (prefer floor/outdoor).
+   */
+  _updateStuckEscape(dt, keys, snap, prevX, prevZ) {
+    if (!this.active || this._inputsFrozen || this.car.airborne || this.car.crashed) {
+      this._stuckTimer = 0;
+      this._jamHits = 0;
+      return;
+    }
+    this._stuckNudgeCd = Math.max(0, (this._stuckNudgeCd || 0) - dt);
+    const forward = !!(keys && keys.forward);
+    const absV = Math.abs(this.car.speed);
+    const p = this.car.root.position;
+    const moved = Math.hypot(p.x - prevX, p.z - prevZ);
+    const onRibbon = !!(snap && snap.onTrack);
+    // Stall: forward but barely moving (0 km/h screenshot) OR scraping wall while off-ribbon
+    const stalled = forward && !onRibbon && absV < 0.08 && moved < 0.005;
+    const slowOffRoad = forward && !onRibbon && absV < 0.20 && moved < 0.012
+      && ((this._frameWallHits || 0) >= 1 || (snap && snap.carpet));
+    const jammed = forward && absV < 0.15 && (
+      (this._frameWallHits || 0) >= 2 || (this._jamHits || 0) >= 3
+    );
+
+    if (stalled || jammed || slowOffRoad) {
+      this._stuckTimer = (this._stuckTimer || 0) + dt;
+    } else if (!forward || onRibbon || absV > 0.35) {
+      this._stuckTimer = 0;
+      this._jamHits = 0;
+    } else {
+      this._stuckTimer = Math.max(0, (this._stuckTimer || 0) - dt * 0.35);
+      this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
+    }
+
+    if (this._stuckTimer < 0.6 || this._stuckNudgeCd > 0) return;
+
+    const escape = this.tracks.findEscapeSnap
+      ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 4.5)
+      : null;
+    if (!escape || !escape.onTrack) {
+      if (snap && snap.x != null && snap.z != null) {
+        p.x += (snap.x - p.x) * 0.45;
+        p.z += (snap.z - p.z) * 0.45;
+        if (snap.yaw != null && Number.isFinite(snap.yaw)) this.car.yaw = snap.yaw;
+        this.car.speed = Math.max(this.car.speed, 0.55);
+        this.car.root.rotation.y = this.car.yaw;
+      }
+      this._stuckTimer = 0;
+      this._jamHits = 0;
+      this._stuckNudgeCd = 0.85;
+      return;
+    }
+
+    p.x = escape.x;
+    p.z = escape.z;
+    p.y = Math.max(p.y, escape.y);
+    if (escape.yaw != null && Number.isFinite(escape.yaw)) this.car.yaw = escape.yaw;
+    this.car.root.rotation.y = this.car.yaw;
+    this.car.speed = Math.max(0.7, Math.min(this.car.maxSpeed * 0.55, Math.abs(this.car.speed) + 0.55));
+    this.car.airborne = false;
+    this.car.vy = 0;
+    this.car._unsupportedFrames = 0;
+    this._stuckTimer = 0;
+    this._jamHits = 0;
+    this._stuckNudgeCd = 1.1;
+    if (this.onHint) this.onHint("Unstuck — back on the road");
   }
 
   _updateFx(dt, snap, flags) {
@@ -624,6 +749,7 @@ export class DriveMode {
     const prevZ = pos.z;
     const flags = this.car.update(dt, driveKeys, snap);
     this._resolveDriveWalls(prevX, prevZ, snap);
+    this._updateStuckEscape(dt, driveKeys, snap, prevX, prevZ);
     this.car.idleTwitch(dt);
     this.tracks.updateVisuals(this._time);
     this._updateFx(dt, snap, flags);

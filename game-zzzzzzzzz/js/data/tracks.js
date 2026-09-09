@@ -2636,6 +2636,12 @@ export const ROAD_WIDTH_SCALE = 0.87;
 export const RAMP_WIDTH_MULT = 1.72;
 /** Minimum post-boost ramp width → halfW ≥ ~0.29. */
 export const RAMP_WIDTH_MIN = 0.58;
+/** Floor/outdoor post-scale min — thick readable asphalt (no wire-thin ribbons). */
+export const FLOOR_WIDTH_MIN = 0.52;
+/** Doorway connector min width after scale. */
+export const DOOR_WIDTH_MIN = 0.48;
+/** Elevated/cornice/balcony/furniture decks min after scale. */
+export const DECK_WIDTH_MIN = 0.42;
 /** Soften lumpy / death-trap climb grades (rise/run per segment). */
 export const RAMP_MAX_GRADE = 0.44;
 /** Mean grade above this after soften → path disabled (no invisible death traps). */
@@ -2653,6 +2659,18 @@ for (const path of TRACK_PATHS) {
   if (path.kind !== "ramp" || typeof path.width !== "number") continue;
   path.width = Math.round(path.width * RAMP_WIDTH_MULT * 1000) / 1000;
   if (path.width < RAMP_WIDTH_MIN) path.width = RAMP_WIDTH_MIN;
+}
+// Enforce thick visible asphalt on every snap-active ribbon (visual:false paths
+// get no snap elsewhere — driveable ⇒ drawable and thick).
+for (const path of TRACK_PATHS) {
+  if (path.disabled || path.visual === false || typeof path.width !== "number") continue;
+  const id = path.id || "";
+  if (path.kind === "floor" || path.kind === "outdoor" || path.kind === "flower") {
+    if (id.startsWith("door_") && path.width < DOOR_WIDTH_MIN) path.width = DOOR_WIDTH_MIN;
+    else if (path.width < FLOOR_WIDTH_MIN) path.width = FLOOR_WIDTH_MIN;
+  } else if (path.kind === "elevated" || path.kind === "cornice" || path.kind === "balcony") {
+    if (path.width < DECK_WIDTH_MIN) path.width = DECK_WIDTH_MIN;
+  }
 }
 
 /**

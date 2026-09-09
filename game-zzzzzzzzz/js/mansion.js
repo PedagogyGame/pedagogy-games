@@ -1763,22 +1763,25 @@ export class Mansion {
       m.receiveShadow = true;
       m.frustumCulled = true;
       group.add(m);
-      // Solid furniture volumes: block Explore walk + Drive (except mouse passages)
-      // Only sizable pieces — skip tiny trim / legs clutter
-      if (sx >= 0.45 && sy >= 0.35 && sz >= 0.35) {
-        this.colliders.push(
+      // Solid furniture volumes: block Explore walk; Drive softens (shrink/raise).
+      // Include tall wall-hugging consoles (thin X, long Z) that used to skip AABB.
+      const tallConsole = sy >= 0.55 && Math.min(sx, sz) >= 0.22 && Math.max(sx, sz) >= 0.7;
+      if ((sx >= 0.45 && sy >= 0.35 && sz >= 0.35) || tallConsole) {
+        this._pushCollider(
           new THREE.Box3().setFromCenterAndSize(
             new THREE.Vector3(x, y, z),
             new THREE.Vector3(sx, sy, sz)
-          )
+          ),
+          "furniture"
         );
       } else if (cast && sx >= 0.7 && sz >= 0.4 && sy >= 0.1) {
-        // Tabletops / benches: thin but wide — use extruded collision height
-        this.colliders.push(
+        // Tabletops / benches: thin but wide — extruded for Explore; Drive raises min.y
+        this._pushCollider(
           new THREE.Box3().setFromCenterAndSize(
             new THREE.Vector3(x, y - sy * 0.5 + Math.max(sy, 0.55) * 0.5, z),
             new THREE.Vector3(sx * 0.92, Math.max(sy, 0.55), sz * 0.92)
-          )
+          ),
+          "furniture"
         );
       }
       return m;
@@ -1840,11 +1843,12 @@ export class Mansion {
       g.position.set(x, cy, z);
       g.rotation.y = yaw;
       group.add(g);
-      this.colliders.push(
+      this._pushCollider(
         new THREE.Box3().setFromCenterAndSize(
           new THREE.Vector3(x, cy + 0.55, z),
           new THREE.Vector3(0.9, 1.05, 0.85)
-        )
+        ),
+        "furniture"
       );
     };
 
@@ -3298,6 +3302,13 @@ export class Mansion {
 
   getInteractives() {
     return this.interactives;
+  }
+
+
+  /** Push a collider AABB. driveKind: "wall" (default) | "furniture" (Drive softens). */
+  _pushCollider(box, driveKind = "wall") {
+    box.driveKind = driveKind;
+    this.colliders.push(box);
   }
 
   getColliders() {

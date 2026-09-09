@@ -4,7 +4,7 @@
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
-import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN, RAMP_MOUNT_FEET, RAMP_WIDTH_MULT, RAMP_WIDTH_MIN } from "./js/data/tracks.js";
+import { CAR_SPAWN, TRACK_PATHS, ROAD_WIDTH_SCALE, ROAD_WIDTH_DESIGN, RAMP_MOUNT_FEET, RAMP_WIDTH_MULT, RAMP_WIDTH_MIN, FLOOR_WIDTH_MIN, DOOR_WIDTH_MIN, DECK_WIDTH_MIN } from "./js/data/tracks.js";
 import { CAR_SCALE } from "./js/drive/car.js";
 import { VEHICLE_PRESETS } from "./js/drive/car.js";
 import { Player } from "./js/player.js";
@@ -547,6 +547,7 @@ if (!(RAMP_WIDTH_MULT >= 1.5) || !(RAMP_WIDTH_MIN >= 0.55)) {
 }
 let widthChecks = 0;
 let rampHalfOk = 0;
+let floorMinOk = 0;
 for (const path of TRACK_PATHS) {
   const design = ROAD_WIDTH_DESIGN[path.id];
   if (design == null) throw new Error(`missing design width for ${path.id}`);
@@ -554,21 +555,34 @@ for (const path of TRACK_PATHS) {
   if (path.kind === "ramp") {
     expect = Math.round(expect * RAMP_WIDTH_MULT * 1000) / 1000;
     if (expect < RAMP_WIDTH_MIN) expect = RAMP_WIDTH_MIN;
+  } else if (!path.disabled && path.visual !== false) {
+    const id = path.id || "";
+    if (path.kind === "floor" || path.kind === "outdoor" || path.kind === "flower") {
+      if (id.startsWith("door_") && expect < DOOR_WIDTH_MIN) expect = DOOR_WIDTH_MIN;
+      else if (expect < FLOOR_WIDTH_MIN) expect = FLOOR_WIDTH_MIN;
+    } else if (path.kind === "elevated" || path.kind === "cornice" || path.kind === "balcony") {
+      if (expect < DECK_WIDTH_MIN) expect = DECK_WIDTH_MIN;
+    }
   }
   if (Math.abs(path.width - expect) > 0.0005) {
     throw new Error(`${path.id} width ${path.width} != expect ${expect} (design ${design})`);
   }
-  if (path.kind !== "ramp" && !(path.width < design - 1e-9)) {
-    throw new Error(`${path.id} width not reduced (${path.width} vs design ${design})`);
-  }
+  // Ramps boosted; floors may grow to FLOOR_WIDTH_MIN for readable asphalt
   if (path.kind === "ramp" && !path.disabled) {
     if (path.width * 0.5 < 0.28) throw new Error(`${path.id} halfW ${path.width * 0.5} < 0.28`);
     rampHalfOk++;
   }
+  if ((path.kind === "floor" || path.kind === "outdoor") && !path.disabled && path.visual !== false) {
+    if (path.width < FLOOR_WIDTH_MIN - 1e-6 && !(path.id || "").startsWith("door_")) {
+      throw new Error(`${path.id} floor width ${path.width} < FLOOR_WIDTH_MIN ${FLOOR_WIDTH_MIN}`);
+    }
+    floorMinOk++;
+  }
   widthChecks++;
 }
-console.log("Road widths reduced", {
-  scale: ROAD_WIDTH_SCALE, rampMult: RAMP_WIDTH_MULT, paths: widthChecks, rampHalfOk,
+console.log("Road widths scaled + thick-asphalt mins", {
+  scale: ROAD_WIDTH_SCALE, rampMult: RAMP_WIDTH_MULT, floorMin: FLOOR_WIDTH_MIN,
+  paths: widthChecks, rampHalfOk, floorMinOk,
   foyer: TRACK_PATHS.find(p => p.id === "foyer_skirting")?.width,
   foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "ramp_foyer_to_landing")?.width * 0.5).toFixed(3),
 });

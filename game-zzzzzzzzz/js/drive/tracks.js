@@ -18,7 +18,7 @@ function makeAsphaltTexture() {
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#141418";
+  ctx.fillStyle = "#1a1a22";
   ctx.fillRect(0, 0, 256, 256);
   for (let i = 0; i < 900; i++) {
     const v = 22 + Math.random() * 38;
@@ -50,26 +50,39 @@ function makeAsphaltTexture() {
 }
 
 function makeChevronTexture() {
-  const c = makeCanvas(64, 128);
+  const c = makeCanvas(128, 256);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  // Muted slate deck + soft gold chevrons (baked into ramp ribbon — no neon pile)
-  ctx.fillStyle = "#3a4550";
-  ctx.fillRect(0, 0, 64, 128);
-  ctx.strokeStyle = "#b89a4a";
-  ctx.lineWidth = 2.5;
-  ctx.globalAlpha = 0.55;
-  for (let y = 14; y < 128; y += 36) {
+  // Bright climb asphalt — readable on dark wood floors (not stealth black blocks)
+  ctx.fillStyle = "#3a424e";
+  ctx.fillRect(0, 0, 128, 256);
+  for (let i = 0; i < 400; i++) {
+    const v = 55 + Math.random() * 40;
+    ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.35)`;
+    ctx.fillRect(Math.random() * 128, Math.random() * 256, 2, 2);
+  }
+  // White shoulders
+  ctx.strokeStyle = "rgba(245,245,250,0.75)";
+  ctx.lineWidth = 5;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(14, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(114, 0); ctx.lineTo(114, 256); ctx.stroke();
+  // Strong yellow chevrons (climb language)
+  ctx.strokeStyle = "#f0d24a";
+  ctx.lineWidth = 4.5;
+  ctx.globalAlpha = 0.95;
+  for (let y = 18; y < 256; y += 40) {
     ctx.beginPath();
-    ctx.moveTo(16, y + 12);
-    ctx.lineTo(32, y);
-    ctx.lineTo(48, y + 12);
+    ctx.moveTo(32, y + 16);
+    ctx.lineTo(64, y);
+    ctx.lineTo(96, y + 16);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   return tex;
 }
 
@@ -448,10 +461,8 @@ export class TrackSystem {
       || kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony"
       || kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
 
-    // Snap segments (coarser). Door strips always. Invisible elev/ramp/cornice/balcony
-    // get NO snap — ghost lifts forbidden; if it is driveable it MUST draw asphalt.
-    const elevNoGhost = ELEV_KINDS.has(kind) || kind === "ramp";
-    if (!(elevNoGhost && !visualOk)) {
+    // Snap segments (coarser). ANY visual:false path gets NO snap — if driveable it MUST draw.
+    if (visualOk) {
       for (let i = 0; i < snapPts.length - 1; i++) {
         const a = snapPts[i];
         const b = snapPts[i + 1];
@@ -593,10 +604,22 @@ export class TrackSystem {
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: true,
     };
     // Road family — solid asphalt + baked white/yellow lane markings
-    if (kind === "ramp" || kind === "elevated" || kind === "cornice" || kind === "balcony") {
+    // Climb ramps: bright asphalt language (chevron map) — readable on dark floors
+    if (kind === "ramp") {
+      const rampMap = this._chevron || asphaltMap;
+      mat = new THREE.MeshStandardMaterial({
+        color: rampMap ? 0xffffff : 0x3a424e,
+        roughness: 0.72,
+        metalness: 0.1,
+        emissive: 0x1a2030,
+        emissiveIntensity: 0.14,
+        ...(rampMap ? { map: rampMap } : {}),
+        ...asphaltBias,
+      });
+    } else if (kind === "elevated" || kind === "cornice" || kind === "balcony") {
       mat = new THREE.MeshStandardMaterial({
         color: asphaltMap ? 0xffffff : 0x141418,
-        roughness: kind === "ramp" ? 0.78 : 0.84,
+        roughness: 0.84,
         metalness: 0.08,
         ...(asphaltMap ? { map: asphaltMap } : {}),
         ...asphaltBias,
@@ -672,7 +695,7 @@ export class TrackSystem {
     const isDeck = kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony";
     // Top deck only — sit clearly above room floors (kills floor z-fight shards)
     // Floor asphalt clear of plank top + frame brass; decks slightly above surfaces
-    const yLift = kind === "outdoor" ? 0.014 : (isDeck ? 0.014 : 0.012);
+    const yLift = kind === "outdoor" ? 0.016 : (isDeck ? 0.016 : (kind === "ramp" ? 0.018 : 0.015));
     const n = pts.length;
     const positions = [];
     const normals = [];
@@ -927,8 +950,9 @@ export class TrackSystem {
     // Gold inlay / petal dust / hollow timber trim culled — road surface + rails only (FPS)
 
     if ((kind === "floor" || kind === "outdoor") && !this._asphalt) {
+      // Wide center dash — never ultra-thin wire ribbons
       const line = new THREE.Mesh(
-        new THREE.BoxGeometry(0.02, 0.008, meshLen * 0.95),
+        new THREE.BoxGeometry(Math.max(0.08, width * 0.22), 0.01, meshLen * 0.95),
         new THREE.MeshBasicMaterial({ color: 0xf0c000 })
       );
       line.position.copy(mid);
@@ -1283,9 +1307,8 @@ export class TrackSystem {
       // signedBelow > 0 ⇒ segment surface is ABOVE the car (car is underneath)
       const signedBelow = py - y;
 
-      // Invisible elev/ramp/cornice/balcony: never engage snap/support (no ghost lifts).
-      // Floor/flower visual:false connectors may still guide at carpet height.
-      if ((elev || seg.kind === "ramp") && seg.visual === false) continue;
+      // Invisible paths never engage — snap-active requires drawn asphalt.
+      if (seg.visual === false) continue;
 
       // Half-width corridor (used by under≠on ramp exceptions + scoring)
       const halfApprox = seg.width * 0.5;
@@ -1475,6 +1498,51 @@ export class TrackSystem {
       wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
       edgeMargin: -1, halfW: 0, nearDeck: false,
     };
+  }
+
+
+  /**
+   * Nearest visible onTrack asphalt for unstuck nudge.
+   * Prefers floor/outdoor at story height; falls back to any onTrack ribbon.
+   */
+  findEscapeSnap(x, y, z, radius = 4.5) {
+    let bestFloor = null;
+    let bestFloorD = Infinity;
+    let bestAny = null;
+    let bestAnyD = Infinity;
+    const candidates = this._snapGrid && this._snapGrid.size
+      ? this._segmentsNear(x, z, radius)
+      : this.segments;
+    for (const seg of candidates) {
+      if (seg.visual === false) continue;
+      const abx = seg.b.x - seg.a.x;
+      const aby = seg.b.y - seg.a.y;
+      const abz = seg.b.z - seg.a.z;
+      const abLenSq = abx * abx + abz * abz;
+      let t = abLenSq > 1e-8 ? ((x - seg.a.x) * abx + (z - seg.a.z) * abz) / abLenSq : 0;
+      t = Math.max(0, Math.min(1, t));
+      const px = seg.a.x + abx * t;
+      const py = seg.a.y + aby * t;
+      const pz = seg.a.z + abz * t;
+      const dist = Math.hypot(x - px, z - pz);
+      const dy = Math.abs(y - py);
+      if (dist > radius || dy > 2.8) continue;
+      // Prefer centers of thick ribbons (clear of furniture cages)
+      const halfW = seg.width * 0.5;
+      if (halfW < 0.16) continue; // skip wire-thin leftovers
+      const yaw = Math.atan2(abx, abz);
+      const cand = {
+        x: px, y: py + 0.03, z: pz, yaw,
+        onTrack: true, supported: true, kind: seg.kind, pathId: seg.pathId,
+        dist, elevated: ELEV_KINDS.has(seg.kind),
+      };
+      const score = dist + dy * 0.35;
+      if (FLOOR_KINDS.has(seg.kind) && dy < 0.85) {
+        if (score < bestFloorD) { bestFloorD = score; bestFloor = cand; }
+      }
+      if (score < bestAnyD) { bestAnyD = score; bestAny = cand; }
+    }
+    return bestFloor || bestAny;
   }
 
   nearestCheckpoint(x, z, maxDist = 3.5, y = null) {

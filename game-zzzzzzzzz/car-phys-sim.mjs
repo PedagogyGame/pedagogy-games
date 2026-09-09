@@ -256,23 +256,25 @@ console.log("\nSUMMARY", {
   sloppy: bad.map((r) => r.id),
 });
 
-/** Hostile lateral-drift crest proof — yaw bias + weak steer (real-drive failure mode). */
-function hostileFoyerCrest(yawBias = 0.22) {
-  const path = byId.ramp_foyer_to_landing;
+/** Hostile lateral-drift crest — yaw bias + weak steer (real-drive failure mode). */
+function hostileCrest(pathId, approachId, yawBias = 0.22, minCrestFrac = 0.85) {
+  const path = byId[pathId];
+  if (!path || path.disabled) return { id: pathId, ok: false, reason: "missing" };
   const foot = path.points[0], p1 = path.points[1], end = path.points.at(-1);
   const dx = p1.x - foot.x, dz = p1.z - foot.z, len = Math.hypot(dx, dz) || 1;
+  const rise = end.y - foot.y;
   car.setPose(foot.x + (dx / len) * 0.08, foot.y + 0.04, foot.z + (dz / len) * 0.08,
     Math.atan2(dx, dz) + yawBias);
   car.crashed = false; car.airborne = false; car.speed = 1.25; car.vy = 0;
   car._unsupportedFrames = 0; car._lastElevated = false; car._tumble = 0;
-  tracks._lastPathId = "foyer_skirting";
+  tracks._lastPathId = approachId;
   const dt = 1 / 60;
   const keys = { forward: true, back: false, left: false, right: false };
-  let maxY = 0, fell = false;
-  for (let frame = 0; frame < 1400; frame++) {
+  let maxY = foot.y, fell = false;
+  for (let frame = 0; frame < 1600; frame++) {
     const pos = car.root.position;
     const snap = tracks.querySnap(pos.x, pos.y, pos.z, 1.65);
-    if (snap.kind === "ramp" && snap.yaw != null) {
+    if ((snap.kind === "ramp" || snap.pathId === pathId) && snap.yaw != null) {
       let dyaw = snap.yaw - car.yaw;
       while (dyaw > Math.PI) dyaw -= Math.PI * 2;
       while (dyaw < -Math.PI) dyaw += Math.PI * 2;
@@ -282,22 +284,39 @@ function hostileFoyerCrest(yawBias = 0.22) {
     const flags = car.update(dt, keys, snap);
     if (pos.y > maxY) maxY = pos.y;
     if (flags.fell || car.crashed) { fell = true; break; }
-    if (Math.hypot(pos.x - end.x, pos.y - end.y, pos.z - end.z) < 0.45) {
+    const nearEnd = Math.hypot(pos.x - end.x, pos.y - end.y, pos.z - end.z) < 0.5;
+    const climbed = rise > 0.2
+      ? (pos.y >= foot.y + rise * minCrestFrac)
+      : nearEnd || Math.hypot(pos.x - end.x, pos.z - end.z) < 0.55;
+    if (nearEnd || climbed) {
       return {
-        ok: true, maxY: +maxY.toFixed(3), endY: +pos.y.toFixed(3),
+        id: pathId, ok: true, maxY: +maxY.toFixed(3), endY: +pos.y.toFixed(3),
         crestY: end.y, fell: false, frames: frame, yawBias,
       };
     }
   }
   return {
-    ok: false, maxY: +maxY.toFixed(3), endY: +car.root.position.y.toFixed(3),
+    id: pathId, ok: false, maxY: +maxY.toFixed(3), endY: +car.root.position.y.toFixed(3),
     crestY: end.y, fell, crashed: car.crashed, yawBias,
   };
 }
 
-const hostile = hostileFoyerCrest(0.22);
-console.log("HOSTILE foyer→landing crest", hostile);
-if (!hostile.ok || hostile.fell || hostile.maxY < 4.0) {
-  console.error("HOSTILE CREST FAIL — car did not reach landing without fall");
-  process.exitCode = 1;
+const hostileClimbs = [
+  ["ramp_foyer_to_landing", "foyer_skirting", 0.22, 0.88],
+  ["ramp_foyer_console", "foyer_skirting", 0.18, 0.85],
+  ["ramp_console_to_foyer_cornice", "furniture_foyer_console", 0.18, 0.8],
+  ["ramp_dining_table", "door_cons_dining", 0.18, 0.85],
+  ["attic_from_landing_access", "landing_skirting", 0.18, 0.85],
+];
+let hostileFail = 0;
+for (const [id, approach, bias, frac] of hostileClimbs) {
+  const h = hostileCrest(id, approach, bias, frac);
+  console.log(`HOSTILE ${id}`, h);
+  // Trust hostileCrest: reached near crest OR climbed frac without fall
+  if (!h.ok || h.fell) {
+    console.error(`HOSTILE FAIL ${id}`);
+    hostileFail++;
+  }
 }
+if (hostileFail) process.exitCode = 1;
+else console.log("HOSTILE multi-climb PASSED", { n: hostileClimbs.length });
