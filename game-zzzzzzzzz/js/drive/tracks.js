@@ -204,6 +204,14 @@ const ELEV_KINDS = new Set(["elevated", "cornice", "balcony", "ramp", "shortcut"
 const TUBE_KINDS = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
 const FLOOR_KINDS = new Set(["floor", "outdoor", "flower"]);
 
+/** Ribbon top offset matching _addRibbonRoad yLift — snap ride height must equal visual asphalt. */
+function ribbonYLift(kind) {
+  if (kind === "outdoor" || kind === "flower") return 0.016;
+  if (kind === "ramp") return 0.018;
+  if (kind === "elevated" || kind === "cornice" || kind === "balcony") return 0.016;
+  return 0.015; // floor + default
+}
+
 /**
  * Builds road meshes from TRACK_PATHS and provides nearest-track snap queries.
  */
@@ -218,6 +226,7 @@ export class TrackSystem {
     this.portals = [];
     this.boostPads = [];
     this._lastPathId = null;
+    this._lastPathKind = null;
     this._asphalt = makeAsphaltTexture();
     this._chevron = makeChevronTexture();
     this._petal = makePetalTexture();
@@ -365,7 +374,7 @@ export class TrackSystem {
     const pad = new THREE.Mesh(new THREE.PlaneGeometry(apronW, apronD), mat);
     pad.rotation.x = -Math.PI / 2;
     // yaw=0 drives +Z; dashes run along depth (local Y of plane → world Z)
-    pad.position.set(sx, 0.052, sz);
+    pad.position.set(sx, 0.075, sz);
     pad.receiveShadow = true;
     pad.castShadow = false;
     pad.renderOrder = 2;
@@ -377,10 +386,23 @@ export class TrackSystem {
 
   _buildPath(path) {
     let pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
-    // Sit floor asphalt near plank top so the car does not hover mid-air above wood
-    const FLOOR_Y_SETTLE = 0.02;
+    // Preserve story floors. Only normalize near-ground asphalt so ribbon Y matches
+    // ramp feet (authored ~0.06). NEVER flatten landing/attic/cellar to ground.
+    const STORY_BANDS = [-4.05, 0.06, 4.26, 8.46];
     if (path.kind === "floor" || path.kind === "outdoor" || path.kind === "flower") {
-      pts = pts.map((v) => new THREE.Vector3(v.x, FLOOR_Y_SETTLE, v.z));
+      pts = pts.map((v) => {
+        let best = v.y;
+        let bd = Infinity;
+        for (const s of STORY_BANDS) {
+          const d = Math.abs(v.y - s);
+          if (d < bd && d < 0.55) { bd = d; best = s; }
+        }
+        // Outdoor / flower stay slightly proud of indoor asphalt when near ground
+        if ((path.kind === "outdoor" || path.kind === "flower") && Math.abs(best - 0.06) < 0.01) {
+          best = 0.08;
+        }
+        return new THREE.Vector3(v.x, best, v.z);
+      });
     }
     if (pts.length < 2) return;
     // Drop duplicate closed endpoint (avoids knot / double-cap at loop seams)
@@ -547,7 +569,8 @@ export class TrackSystem {
       this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
     }
     // Cornice showcase: start/finish stripe only (banners/posts culled for Drive FPS)
-    if (kind === "cornice" || kind === "balcony") {
+    // Guard: avoid boot crash if class body/load race omits the method briefly
+    if ((kind === "cornice" || kind === "balcony") && typeof this._addCorniceShowcase === "function") {
       this._addCorniceShowcase(pts, width, path);
     }
   }
@@ -698,9 +721,11 @@ export class TrackSystem {
     }
     const halfW = width * 0.5;
     const isDeck = kind === "elevated" || kind === "ramp" || kind === "cornice" || kind === "balcony";
-    // Top deck only — sit clearly above room floors (kills floor z-fight shards)
-    // Floor asphalt clear of plank top + frame brass; decks slightly above surfaces
-    const yLift = kind === "outdoor" ? 0.016 : (isDeck ? 0.016 : (kind === "ramp" ? 0.018 : 0.015));
+    // Thick asphalt for ALL driveable ribbons (floor + decks) — no paper-tape look
+    const thickAsphalt = isDeck || kind === "floor" || kind === "outdoor" || kind === "flower";
+    // Floor asphalt clear of plank top; decks slightly above surfaces
+    const yLift = kind === "outdoor" || kind === "flower" ? 0.016
+      : (kind === "ramp" ? 0.018 : (isDeck ? 0.016 : 0.015));
     const n = pts.length;
     const positions = [];
     const normals = [];
@@ -762,8 +787,8 @@ export class TrackSystem {
 
     let dist = 0;
     // Solid asphalt slab: top + bottom + side walls (not paper-thin tape ribbons)
-    const slab = isDeck ? 0.055 : (kind === "ramp" ? 0.048 : 0.028);
-    const vPer = isDeck ? 4 : 2; // decks: L-top R-top R-bot L-bot
+    const slab = isDeck ? 0.055 : (kind === "ramp" ? 0.048 : (thickAsphalt ? 0.036 : 0.028));
+    const vPer = thickAsphalt ? 4 : 2; // L-top R-top R-bot L-bot
     for (let i = 0; i < n; i++) {
       if (i > 0) dist += pts[i].distanceTo(pts[i - 1]);
       const p = pts[i];
@@ -783,7 +808,7 @@ export class TrackSystem {
       normals.push(up.x, up.y, up.z);
       uvs.push(0, u);
       uvs.push(1, u);
-      if (isDeck) {
+      if (thickAsphalt) {
         positions.push(rx, y - slab, rz);
         positions.push(lx, y - slab, lz);
         normals.push(-up.x, -up.y, -up.z);
@@ -797,7 +822,7 @@ export class TrackSystem {
         const b = (i + 1) * vPer;
         // top deck
         indices.push(a, a + 1, b + 1, a, b + 1, b);
-        if (isDeck) {
+        if (thickAsphalt) {
           // bottom
           indices.push(a + 3, b + 3, b + 2, a + 3, b + 2, a + 2);
           // right wall (a+1 top-right → a+2 bot-right)
@@ -1276,7 +1301,7 @@ export class TrackSystem {
    * Coplanar decks still beat nearby story floors when ON the surface.
    * KEEP spatial grid (_segmentsNear) — never full-scan.
    */
-  querySnap(x, y, z, radius = 2.4) {
+  querySnap(x, y, z, radius = 2.4, carYaw = null) {
     let best = null;
     let bestScore = Infinity;
     // Story floors — narrow band for carpet preference (was 0.85: stole cornice ~3.5)
@@ -1380,11 +1405,33 @@ export class TrackSystem {
       const rampGrade = seg.kind === "ramp"
         ? Math.abs(aby) / Math.max(1e-4, Math.hypot(abx, abz))
         : 0;
-      const rampBias = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)
+      let rampBias = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)
         && signedBelow <= ((inRampCorridor || rampContinuity) ? 0.55 : 0.28)
         && dy < 0.72)
         ? (-1.25 - Math.min(0.55, rampGrade * 0.85))
         : 0;
+      // Floor-cruise continuity: kissing ramp feet must NOT steal skirting loops /
+      // T-junctions into furniture unless the car is aiming along the ramp.
+      const lastIsFloor = this._lastPathKind === "floor"
+        || this._lastPathKind === "outdoor"
+        || this._lastPathKind === "flower";
+      if (rampBias && lastIsFloor && onFloorCruise && !rampContinuity) {
+        let align = 1;
+        if (carYaw != null && Number.isFinite(carYaw)) {
+          const rampYaw = Math.atan2(abx, abz);
+          let d0 = rampYaw - carYaw;
+          while (d0 > Math.PI) d0 -= Math.PI * 2;
+          while (d0 < -Math.PI) d0 += Math.PI * 2;
+          let d1 = d0 + Math.PI;
+          while (d1 > Math.PI) d1 -= Math.PI * 2;
+          while (d1 < -Math.PI) d1 += Math.PI * 2;
+          align = Math.max(Math.cos(d0), Math.cos(d1));
+          if (align < 0.50) rampBias *= 0.06;
+          else if (align < 0.72) rampBias *= 0.35;
+          else if (align < 0.88) rampBias *= 0.7;
+        }
+        // No carYaw (legacy sims / placement at foot): leave full rampBias
+      }
       // Penalize elevated only when clearly wrong height while floor-cruising
       // — never penalize an in-corridor ramp (feet kiss floor by design).
       const elevPenalty = (onFloorCruise && (elev || tube) && dy > 0.38
@@ -1459,7 +1506,8 @@ export class TrackSystem {
         const carpet = isFloor && !onTrack && dy < 0.55;
         const edgeMargin = halfW - lateral;
         best = {
-          x: px, y: (carpet ? py + 0.008 : py + 0.015), z: pz,
+          // Ride height = segment Y + ribbon yLift so wheels sit on asphalt top (not hover/sink)
+          x: px, y: (carpet ? py + 0.008 : py + ribbonYLift(seg.kind)), z: pz,
           yaw, bank,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
@@ -1496,7 +1544,10 @@ export class TrackSystem {
         };
       } else {
         // Only latch path continuity when actually on the ribbon (avoids junction theft)
-        if (best.pathId && best.onTrack) this._lastPathId = best.pathId;
+        if (best.pathId && best.onTrack) {
+          this._lastPathId = best.pathId;
+          this._lastPathKind = best.kind || null;
+        }
       }
       return best;
     }
@@ -1556,7 +1607,7 @@ export class TrackSystem {
       if (halfW < 0.16) continue; // skip wire-thin leftovers
       const yaw = Math.atan2(abx, abz);
       const cand = {
-        x: px, y: py + 0.015, z: pz, yaw,
+        x: px, y: py + ribbonYLift(seg.kind), z: pz, yaw,
         onTrack: true, supported: true, kind: seg.kind, pathId: seg.pathId,
         dist, elevated: ELEV_KINDS.has(seg.kind),
       };

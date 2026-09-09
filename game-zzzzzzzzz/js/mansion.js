@@ -2922,39 +2922,49 @@ export class Mansion {
       priority: 10,
     });
 
-    // Stair collision: side barriers + underside slab (center run stays driveable via ramp track)
+    // Stair collision: side barriers + underside slab (center run stays driveable via ramp track).
+    // Stringers sit INSIDE the stair footprint (not outside) so wall-skirting ribbons —
+    // foyer west/east — stay clear for Drive approach onto ramp feet (no pillar grab).
     const yLo = Math.min(s.fromY, s.toY);
     const yHi = Math.max(s.fromY, s.toY);
-    const sideT = 0.22;
     if (dir === "north" || dir === "south") {
-      this.colliders.push(
+      this._pushCollider(
         new THREE.Box3(
-          new THREE.Vector3(minX - sideT, yLo - 0.02, minZ),
-          new THREE.Vector3(minX + 0.08, yHi + 0.55, maxZ)
+          new THREE.Vector3(minX + 0.04, yLo - 0.02, minZ),
+          new THREE.Vector3(minX + 0.28, yHi + 0.55, maxZ)
         ),
+        "stair"
+      );
+      this._pushCollider(
         new THREE.Box3(
-          new THREE.Vector3(maxX - 0.08, yLo - 0.02, minZ),
-          new THREE.Vector3(maxX + sideT, yHi + 0.55, maxZ)
-        )
+          new THREE.Vector3(maxX - 0.28, yLo - 0.02, minZ),
+          new THREE.Vector3(maxX - 0.04, yHi + 0.55, maxZ)
+        ),
+        "stair"
       );
     } else {
-      this.colliders.push(
+      this._pushCollider(
         new THREE.Box3(
-          new THREE.Vector3(minX, yLo - 0.02, minZ - sideT),
-          new THREE.Vector3(maxX, yHi + 0.55, minZ + 0.08)
+          new THREE.Vector3(minX, yLo - 0.02, minZ + 0.04),
+          new THREE.Vector3(maxX, yHi + 0.55, minZ + 0.28)
         ),
+        "stair"
+      );
+      this._pushCollider(
         new THREE.Box3(
-          new THREE.Vector3(minX, yLo - 0.02, maxZ - 0.08),
-          new THREE.Vector3(maxX, yHi + 0.55, maxZ + sideT)
-        )
+          new THREE.Vector3(minX, yLo - 0.02, maxZ - 0.28),
+          new THREE.Vector3(maxX, yHi + 0.55, maxZ - 0.04)
+        ),
+        "stair"
       );
     }
-    // Underside slab — blocks ghosting through the stair from below/side
-    this.colliders.push(
+    // Underside slab — blocks ghosting; Drive softens (raises min.y) so floor approach clears
+    this._pushCollider(
       new THREE.Box3(
-        new THREE.Vector3(minX + 0.05, yLo - 0.15, minZ + 0.05),
-        new THREE.Vector3(maxX - 0.05, yLo + Math.max(0.35, (yHi - yLo) * 0.22), maxZ - 0.05)
-      )
+        new THREE.Vector3(minX + 0.08, yLo - 0.15, minZ + 0.08),
+        new THREE.Vector3(maxX - 0.08, yLo + Math.max(0.35, (yHi - yLo) * 0.22), maxZ - 0.08)
+      ),
+      "stair"
     );
 
     for (const side of [-1, 1]) {
@@ -3260,14 +3270,16 @@ export class Mansion {
 
   getRoomAt(x, y, z) {
     let best = null;
-    let bestPri = -1;
+    let bestScore = Infinity;
     for (const room of Object.values(ROOMS)) {
       const [w, h, d] = room.size;
       const [cx, cy, cz] = room.pos;
-      // Outdoor zones: ignore vertical wall height tightly; badge when on grounds
+      // Basement volumes share XZ with ground rooms; never pick cellar when above -1
+      if (!room.outdoor && cy < -2 && y > -1) continue;
+      // Outdoor zones: loose vertical; indoor: stay near this story's floor band
       const yOk = room.outdoor
         ? y > cy - 0.5 && y < cy + 8
-        : y > cy - 0.5 && y < cy + h + 1.5;
+        : y > cy - 0.5 && y < cy + Math.min(h + 0.35, 3.0);
       if (
         x > cx - w / 2 && x < cx + w / 2 &&
         z > cz - d / 2 && z < cz + d / 2 &&
@@ -3275,8 +3287,10 @@ export class Mansion {
       ) {
         let pri = room.id.includes("hall") ? 0 : 1;
         if (room.outdoor) pri = 3;
-        if (pri >= bestPri) {
-          bestPri = pri;
+        // Prefer room whose floor Y is closest to query Y (fixes cellar-over-foyer)
+        const score = Math.abs(cy - y) * 10 - pri;
+        if (score < bestScore) {
+          bestScore = score;
           best = room;
         }
       }
@@ -3305,7 +3319,7 @@ export class Mansion {
   }
 
 
-  /** Push a collider AABB. driveKind: "wall" (default) | "furniture" (Drive softens). */
+  /** Push a collider AABB. driveKind: "wall" (default) | "furniture" | "stair" (Drive softens). */
   _pushCollider(box, driveKind = "wall") {
     box.driveKind = driveKind;
     this.colliders.push(box);

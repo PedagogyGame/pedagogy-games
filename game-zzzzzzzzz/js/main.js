@@ -9,6 +9,7 @@ import { OBJECTS } from "./data/objects.js";
 import { ROOM_PURPOSES } from "./data/rooms.js";
 
 const canvas = document.getElementById("c");
+if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
 const titleScreen = document.getElementById("title-screen");
 const hud = document.getElementById("hud");
 const promptEl = document.getElementById("prompt");
@@ -111,8 +112,12 @@ function syncPlayModeUI() {
     b.classList.toggle("active", b.dataset.playMode === playMode);
   });
   if (driveHud) driveHud.classList.toggle("hidden", playMode !== "drive");
-  if (driveBadge) driveBadge.classList.toggle("hidden", playMode !== "drive");
+  // Drive: hide basement/room chip + redundant DRIVE pill so they don't stack on Explore/Drive
+  if (driveBadge) driveBadge.classList.add("hidden");
+  if (roomBadge) roomBadge.classList.toggle("hidden", playMode === "drive");
   if (crosshair) crosshair.classList.toggle("hidden", playMode === "drive");
+  document.body.classList.toggle("drive-mode", playMode === "drive");
+  if (hud) hud.classList.toggle("drive-mode", playMode === "drive");
 }
 
 function setPlayMode(next) {
@@ -142,6 +147,14 @@ function setPlayMode(next) {
     promptEl.textContent = "";
     promptEl.classList.add("hidden");
     promptEl.classList.remove("lit");
+    // Drop button focus so WASD reaches canvas / document listeners
+    if (document.activeElement && document.activeElement.blur) {
+      try { document.activeElement.blur(); } catch (_) {}
+    }
+    if (canvas) {
+      canvas.tabIndex = 0;
+      try { canvas.focus({ preventScroll: true }); } catch (_) { try { canvas.focus(); } catch (_) {} }
+    }
   } else {
     if (drive.active) drive.exit();
     playMode = "explore";
@@ -280,7 +293,10 @@ if (!boot.failed && mansion && drive && inspect && slice) {
     }, 2200);
   };
   drive.onHint = (hint) => {
-    if (!driveToast) return;
+    if (!driveToast || !hint) return;
+    // Skip tutorial / instruction spam — keep only short situational cues
+    const skip = /cruise|cornice circuit|WASD|find glowing|ease back|toy tour|leisurely/i.test(hint);
+    if (skip) return;
     if (driveToast.classList.contains("show") && !driveToast.classList.contains("hint")) return;
     driveToast.textContent = hint;
     driveToast.classList.add("show", "hint");
@@ -303,27 +319,8 @@ if (!boot.failed && mansion && drive && inspect && slice) {
       driveCrashBanner.textContent = "";
     }
   };
-  drive.onHud = ({ mode: m, text }) => {
-    if (!driveModeLabel) return;
-    driveModeLabel.classList.remove("crash", "wall");
-    if (m === "crash") {
-      driveModeLabel.textContent = text || "CRASH";
-      driveModeLabel.classList.add("crash");
-    } else if (m === "wall") {
-      driveModeLabel.textContent = text || "Wall run";
-      driveModeLabel.classList.add("wall");
-      clearTimeout(driveModeLabel._t);
-      driveModeLabel._t = setTimeout(() => {
-        driveModeLabel.classList.remove("wall");
-        driveModeLabel.textContent = "Toy tour — cruise the house";
-      }, 2200);
-    } else if (m === "restart") {
-      driveModeLabel.textContent = text || "Crashed! Restarting…";
-      driveModeLabel.classList.add("crash");
-    } else if (m === "manual" || m === "off") {
-      driveModeLabel.textContent = text || "Toy tour — cruise the house";
-    }
-  };
+  // Drive HUD = speedometer + vehicle picker only (no lingering instruction label)
+  drive.onHud = () => {};
 
   slice.onLayerChange = () => syncSliceUI();
 

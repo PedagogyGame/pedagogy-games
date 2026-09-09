@@ -72,6 +72,13 @@ export class DriveMode {
     this._stuckNudgeCd = 0;
     this._jamHits = 0;
 
+    // Temporary chase-cam fill so foyer spawn is not pitch black (room lights sit high/center)
+    this._fillLight = new THREE.PointLight(0xffe0b2, 4.2, 11, 2);
+    this._fillLight.name = "drive_fill";
+    this._fillLight.visible = false;
+    this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
+    scene.add(this._fillLight);
+
     this.parkForExplore();
   }
 
@@ -92,11 +99,37 @@ export class DriveMode {
   /**
    * Soft copy for Drive: furniture shrink XZ ~26% and raise min.y so floor cruise
    * (car height band ~0..0.12) slips under tabletops / past chair bases.
-   * Walls / stairs / hedges unchanged.
+   * Stair underside slabs raise above the *story* RC band so ramp-foot approach is not
+   * pinned (foyer y≈0, landing y≈4.2, cellar y≈-4.2). Absolute 0.52 only fixed ground;
+   * stringers stay (already inset inside stair footprint in mansion build).
    */
   _driveSoftCollider(box) {
     const out = box.clone();
     out.driveKind = box.driveKind || "wall";
+    if (out.driveKind === "stair") {
+      const bw = out.max.x - out.min.x;
+      const bd = out.max.z - out.min.z;
+      const thinStringer = Math.min(bw, bd) < 0.35 && Math.max(bw, bd) > 0.75;
+      if (thinStringer) {
+        // Authored stair side AABBs span both stories. Leave a car-height portal at
+        // each floor so skirting that crosses a stair foot/crest cannot pillar-grab;
+        // the middle still blocks off-road cuts and ramp snaps pierce it while climbing.
+        out.min.y += 0.54;
+        out.max.y -= 0.55;
+      } else if (bw > 0.75 && bd > 0.75) {
+        // Underside / tread slab (both axes wide): raise relative to story floor.
+        // Built as yLo-0.15 … yLo+… — story floor ≈ min.y + 0.15.
+        const storyFloor = out.min.y + 0.15;
+        const raised = storyFloor + 0.52;
+        // Never invert AABB (descending cellar underside max is below ground 0.52).
+        if (raised < out.max.y - 0.05) {
+          out.min.y = Math.max(out.min.y, raised);
+        } else {
+          out.min.y = Math.min(out.max.y - 0.08, Math.max(out.min.y, storyFloor + 0.42));
+        }
+      }
+      return out;
+    }
     if (out.driveKind !== "furniture") return out;
     const cx = (out.min.x + out.max.x) * 0.5;
     const cz = (out.min.z + out.max.z) * 0.5;
@@ -244,10 +277,7 @@ export class DriveMode {
     this.car.setPose(pos.x, pos.y, pos.z, yaw);
     this.car.speed = this.active ? Math.min(spd, this.car.maxSpeed * 0.5) : 0;
     this.car.setLightsSubtle(wasSubtle);
-    if (this.onHud) {
-      const p = VEHICLE_PRESETS[id];
-      this.onHud({ mode: "manual", text: `${p.label} — leisurely cruise` });
-    }
+    if (this.onHud) this.onHud({ mode: "manual", text: "" });
   }
 
   parkForExplore() {
@@ -259,6 +289,7 @@ export class DriveMode {
     // Explore: hide asphalt ribbons; keep subtle mouse-portal cues near tracks
     this.tracks.setVisible("explore");
     this._fxRoot.visible = false;
+    if (this._fillLight) this._fillLight.visible = false;
     this._crashPhase = null;
     this._inputsFrozen = false;
     this._flash = 0;
@@ -268,12 +299,19 @@ export class DriveMode {
   }
 
   _onKey(e) {
+    const code = e.code;
+    const isDriveKey =
+      code === "KeyW" || code === "ArrowUp" ||
+      code === "KeyS" || code === "ArrowDown" ||
+      code === "KeyA" || code === "ArrowLeft" ||
+      code === "KeyD" || code === "ArrowRight" ||
+      code === "ShiftLeft" || code === "ShiftRight";
     if (!this.active || this._inputsFrozen) {
       if (this._inputsFrozen) {
         // Still clear keys so they don't stick after restart
         const down = e.type === "keydown";
         if (!down) {
-          switch (e.code) {
+          switch (code) {
             case "KeyW": case "ArrowUp": this.keys.forward = false; break;
             case "KeyS": case "ArrowDown": this.keys.back = false; break;
             case "KeyA": case "ArrowLeft": this.keys.left = false; break;
@@ -284,8 +322,10 @@ export class DriveMode {
       }
       return;
     }
+    if (!isDriveKey) return;
+    if (e.cancelable) e.preventDefault();
     const down = e.type === "keydown";
-    switch (e.code) {
+    switch (code) {
       case "KeyW":
       case "ArrowUp":
         this.keys.forward = down;
@@ -316,7 +356,9 @@ export class DriveMode {
     this.car.setLightsSubtle(false);
     this.tracks.setVisible(true);
     this._fxRoot.visible = true;
-    this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+    // Face along open road (snap yaw + wall probe), never into foyer south wall
+    const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+    this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
     this.car.speed = 0;
     this.car.resetBoost();
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
@@ -338,13 +380,35 @@ export class DriveMode {
     this._stuckTimer = 0;
     this._stuckNudgeCd = 0;
     this._jamHits = 0;
+    if (this._fillLight) {
+      this._fillLight.visible = true;
+      this._fillLight.intensity = 4.2;
+      this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
+    }
     if (typeof document !== "undefined") {
-      document.addEventListener("keydown", this._onKey);
-      document.addEventListener("keyup", this._onKey);
+      const canvas = document.getElementById("c");
+      if (canvas) {
+        if (!canvas.hasAttribute("tabindex") || canvas.tabIndex < 0) canvas.tabIndex = 0;
+        try { canvas.focus({ preventScroll: true }); } catch (_) { try { canvas.focus(); } catch (_) {} }
+      }
+      // Idempotent rebind (capture) — Drive WASD works without pointer lock / button focus
+      const win = typeof window !== "undefined" ? window : null;
+      if (win && typeof win.removeEventListener === "function") {
+        win.removeEventListener("keydown", this._onKey, true);
+        win.removeEventListener("keyup", this._onKey, true);
+      }
+      document.removeEventListener("keydown", this._onKey, true);
+      document.removeEventListener("keyup", this._onKey, true);
+      if (win && typeof win.addEventListener === "function") {
+        win.addEventListener("keydown", this._onKey, true);
+        win.addEventListener("keyup", this._onKey, true);
+      }
+      document.addEventListener("keydown", this._onKey, true);
+      document.addEventListener("keyup", this._onKey, true);
     }
     this._snapCamera(true);
-    if (this.onHud) this.onHud({ mode: "manual", text: "Toy tour — cruise the house" });
-    if (this.onHint) this.onHint("Cornice circuit tours the rooms below — find glowing ramps");
+    // Drive HUD is speed + vehicle only — no lingering instruction text
+    if (this.onHud) this.onHud({ mode: "manual", text: "" });
   }
 
   exit() {
@@ -353,16 +417,23 @@ export class DriveMode {
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
     this.camera.fov = this._baseFov;
     this.camera.updateProjectionMatrix();
+    if (this._fillLight) this._fillLight.visible = false;
     if (typeof document !== "undefined") {
-      document.removeEventListener("keydown", this._onKey);
-      document.removeEventListener("keyup", this._onKey);
+      const win = typeof window !== "undefined" ? window : null;
+      if (win && typeof win.removeEventListener === "function") {
+        win.removeEventListener("keydown", this._onKey, true);
+        win.removeEventListener("keyup", this._onKey, true);
+      }
+      document.removeEventListener("keydown", this._onKey, true);
+      document.removeEventListener("keyup", this._onKey, true);
     }
     this.parkForExplore();
     if (this.onHud) this.onHud({ mode: "off" });
   }
 
   _respawnAtStart() {
-    this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+    const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+    this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
     this.car.speed = 0;
     this.car.resetBoost();
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
@@ -377,7 +448,7 @@ export class DriveMode {
     this._stuckTimer = 0;
     this._stuckNudgeCd = 0;
     this._jamHits = 0;
-    if (this.onHud) this.onHud({ mode: "manual", text: "Toy tour — cruise the house" });
+    if (this.onHud) this.onHud({ mode: "manual", text: "" });
   }
 
   _beginCrash() {
@@ -457,26 +528,122 @@ export class DriveMode {
   }
 
   /**
-   * Bounce the RC car off mansion walls/furniture unless in a marked passageway.
-   * Mouse-holes / tunnels / shafts intentionally pierce walls.
+   * Push an XZ point out of Drive wall/furniture AABBs (car radius pad).
+   * Skirting centerlines sometimes clip stair stringers — magnets must aim clear.
+   */
+  _clearPointFromWalls(x, z, y, pad = 0.02) {
+    const r = this._carRadius + pad;
+    const y0 = y - 0.02;
+    const y1 = y + 0.12;
+    let px = x;
+    let pz = z;
+    const cols = this._wallsNear(px, pz, r + 0.5);
+    for (let pass = 0; pass < 4; pass++) {
+      let moved = false;
+      for (const box of cols) {
+        if (y1 < box.min.y || y0 > box.max.y) continue;
+        if (!(px + r > box.min.x && px - r < box.max.x &&
+              pz + r > box.min.z && pz - r < box.max.z)) continue;
+        const ol = (px + r) - box.min.x;
+        const orr = box.max.x - (px - r);
+        const od = (pz + r) - box.min.z;
+        const ou = box.max.z - (pz - r);
+        const eps = 0.008;
+        const bw = box.max.x - box.min.x;
+        const bd = box.max.z - box.min.z;
+        // Thin stair stringers / jambs: escape along the thin axis so ribbon
+        // magnets stay beside the slab (not parked on its short end-cap).
+        const thinX = bw < bd * 0.65;
+        const thinZ = bd < bw * 0.65;
+        const minX = Math.min(ol, orr);
+        const minZ = Math.min(od, ou);
+        // Prefer escaping thin slabs sideways (stair stringers) — end-cap
+        // shallowest-Z traps skirting magnets on the short face.
+        let useX;
+        if (thinX && minX < 0.55) useX = true;
+        else if (thinZ && minZ < 0.55) useX = false;
+        else useX = minX <= minZ;
+        if (useX) {
+          if (ol < orr) px = box.min.x - r - eps;
+          else px = box.max.x + r + eps;
+        } else {
+          if (od < ou) pz = box.min.z - r - eps;
+          else pz = box.max.z + r + eps;
+        }
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    return { x: px, z: pz };
+  }
+
+  /**
+   * Choose yaw along open asphalt — prefer snap yaw / reverse that does NOT
+   * immediately nose into a wall or furniture collider (T-junction safe).
+   */
+  _pickOpenRoadYaw(x, y, z, fallback) {
+    const snap = this.tracks.querySnap(x, y, z, 2.0, fallback);
+    let base = (snap && Number.isFinite(snap.yaw)) ? snap.yaw : fallback;
+    // Prefer floor ribbon yaw when a kissing ramp stole the junction snap
+    if (snap && (snap.kind === "ramp" || snap.kind === "elevated")) {
+      const esc = this.tracks.findEscapeSnap ? this.tracks.findEscapeSnap(x, y, z, 2.2) : null;
+      if (esc && (esc.kind === "floor" || esc.kind === "outdoor")
+          && Number.isFinite(esc.yaw) && esc.dist < 0.55) {
+        base = esc.yaw;
+      }
+    }
+    const probeClear = (yaw) => {
+      const dx = Math.sin(yaw) * 0.55;
+      const dz = Math.cos(yaw) * 0.55;
+      const px = x + dx;
+      const pz = z + dz;
+      const r = this._carRadius;
+      const cols = this._wallsNear(px, pz, r + 0.2);
+      const y0 = y - 0.02;
+      const y1 = y + 0.12;
+      for (const box of cols) {
+        if (y1 < box.min.y || y0 > box.max.y) continue;
+        if (px + r > box.min.x && px - r < box.max.x &&
+            pz + r > box.min.z && pz - r < box.max.z) {
+          return false;
+        }
+      }
+      return true;
+    };
+    const candidates = [base, base + Math.PI, base + Math.PI / 2, base - Math.PI / 2];
+    for (const yaw of candidates) {
+      if (probeClear(yaw)) return yaw;
+    }
+    return base;
+  }
+
+  /**
+   * Soft wall slide — depenetrate along outward normal, keep tangential speed,
+   * scrub only when head-on. Grazing along skirting must NOT pin to ~0.
+   * Passages / on-track ramp climbs still pierce.
    */
   _resolveDriveWalls(prevX, prevZ, snap) {
     this._frameWallHits = 0;
     if (!this._wallColliders || !this._wallColliders.length) return;
     const kind = snap?.kind || "";
-    // Passages + on-track ramp climb (stair center run); sides/furniture still bounce
     if (this._passKinds.has(kind) || snap?.tube) return;
-    if (kind === "ramp" && snap?.onTrack) return;
+    // Pierce while climbing OR approaching foot (nearDeck / continuity) so stair
+    // stringers / underside never pin the ribbon path onto the ramp.
+    if (kind === "ramp" && (snap?.onTrack || snap?.nearDeck || snap?.rampContinuity)) return;
     const r = this._carRadius;
     const p = this.car.root.position;
     const y = p.y;
-    // Car body height band (~wheel to roof)
     const y0 = y - 0.02;
     const y1 = y + 0.12;
-    // Spatial-hash neighbors only (was full linear scan of ~232 boxes)
     const cols = this._wallsNear(p.x, p.z, r + 0.35);
     if (!cols.length) return;
-    for (let pass = 0; pass < 2; pass++) {
+
+    const onRibbon = !!(snap && snap.onTrack);
+    let hitCount = 0;
+    let accNX = 0;
+    let accNZ = 0;
+
+    for (let pass = 0; pass < 3; pass++) {
       let hit = false;
       for (const box of cols) {
         if (y1 < box.min.y || y0 > box.max.y) continue;
@@ -485,50 +652,144 @@ export class DriveMode {
           p.z + r > box.min.z && p.z - r < box.max.z;
         if (!overlaps) continue;
         hit = true;
-        const tryX = { x: p.x, z: prevZ };
-        const tryZ = { x: prevX, z: p.z };
-        const hitX =
-          tryX.x + r > box.min.x && tryX.x - r < box.max.x &&
-          tryX.z + r > box.min.z && tryX.z - r < box.max.z;
-        const hitZ =
-          tryZ.x + r > box.min.x && tryZ.x - r < box.max.x &&
-          tryZ.z + r > box.min.z && tryZ.z - r < box.max.z;
-        if (!hitX && hitZ) {
-          p.z = prevZ;
-        } else if (!hitZ && hitX) {
-          p.x = prevX;
-        } else if (!hitX && !hitZ) {
-          // Prefer larger free axis from before
-          const dx = Math.abs(p.x - prevX);
-          const dz = Math.abs(p.z - prevZ);
-          if (dx >= dz) p.z = prevZ;
-          else p.x = prevX;
-        } else {
-          p.x = prevX;
-          p.z = prevZ;
-        }
-        // Depenetrate along shallowest axis
+
+        // Depenetrate along shallowest axis → outward normal
         const ol = (p.x + r) - box.min.x;
         const orr = box.max.x - (p.x - r);
         const od = (p.z + r) - box.min.z;
         const ou = box.max.z - (p.z - r);
-        if (ol > 0 && orr > 0 && od > 0 && ou > 0) {
-          const m = Math.min(ol, orr, od, ou);
-          const eps = 0.004;
-          if (m === ol) p.x = box.min.x - r - eps;
-          else if (m === orr) p.x = box.max.x + r + eps;
-          else if (m === od) p.z = box.min.z - r - eps;
-          else p.z = box.max.z + r + eps;
+        if (!(ol > 0 && orr > 0 && od > 0 && ou > 0)) continue;
+        const eps = 0.006;
+        const bw = box.max.x - box.min.x;
+        const bd = box.max.z - box.min.z;
+        const thinX = bw < bd * 0.65;
+        const thinZ = bd < bw * 0.65;
+        const minX = Math.min(ol, orr);
+        const minZ = Math.min(od, ou);
+        let useX;
+        if (thinX && minX < 0.55) useX = true;
+        else if (thinZ && minZ < 0.55) useX = false;
+        else useX = minX <= minZ;
+        let nx = 0;
+        let nz = 0;
+        if (useX) {
+          if (ol < orr) { p.x = box.min.x - r - eps; nx = -1; }
+          else { p.x = box.max.x + r + eps; nx = 1; }
+        } else {
+          if (od < ou) { p.z = box.min.z - r - eps; nz = -1; }
+          else { p.z = box.max.z + r + eps; nz = 1; }
         }
-        // Furniture: gentler scrub so Drive can scrape free; walls still brake hard
-        const soft = box.driveKind === "furniture";
-        this.car.speed *= soft ? 0.62 : 0.35;
+
+        hitCount += 1;
+        accNX += nx;
+        accNZ += nz;
         this._frameWallHits = (this._frameWallHits || 0) + 1;
+        const soft = box.driveKind === "furniture" || box.driveKind === "stair";
         if (!soft) this._jamHits = (this._jamHits || 0) + 1;
+        // Feed car scrape FX + widen floor yaw settle while sliding mansion walls
+        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.25 : 0.45));
+
+        // Fresh forward each hit (yaw may have slid on prior collider)
+        const fwdX = Math.sin(this.car.yaw);
+        const fwdZ = Math.cos(this.car.yaw);
+
+        // Project velocity onto wall tangent — slide, don't pin
+        const spd = this.car.speed;
+        const vx = fwdX * spd;
+        const vz = fwdZ * spd;
+        const nDotV = vx * nx + vz * nz;
+        const headOn = Math.max(0, -(fwdX * nx + fwdZ * nz)); // 0=graze, 1=nose-in
+
+        if (nDotV < 0) {
+          // Remove into-wall component; keep tangential slide
+          const vx2 = vx - nDotV * nx;
+          const vz2 = vz - nDotV * nz;
+          const spd2 = Math.hypot(vx2, vz2);
+          if (spd2 > 0.04) {
+            const slideYaw = Math.atan2(vx2, vz2);
+            let dyaw = slideYaw - this.car.yaw;
+            while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+            while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+            // Stronger yaw settle when more head-on so corners don't wedge
+            const yawBlend = Math.min(0.85, 0.35 + headOn * 0.5);
+            this.car.yaw += dyaw * yawBlend;
+            this.car.root.rotation.y = this.car.yaw;
+            const loss = soft
+              ? (0.06 + headOn * 0.22)
+              : (0.10 + headOn * 0.38);
+            const signed = Math.sign(spd || 1);
+            this.car.speed = signed * spd2 * (1 - Math.min(0.72, loss));
+            // Grazing on ribbon: keep a cruise floor so skirting doesn't die
+            if (onRibbon && headOn < 0.45) {
+              const floor = Math.min(this.car.maxSpeed * 0.62, 0.75);
+              if (Math.abs(this.car.speed) < floor * 0.55) {
+                this.car.speed = signed * Math.max(Math.abs(this.car.speed), floor * 0.55);
+              }
+            }
+          } else {
+            // Truly jammed into wall with no tangent — soft bounce reverse
+            this.car.speed *= soft ? 0.48 : 0.32;
+            // Kick yaw toward open tangent matching previous travel intent
+            const tx = -nz;
+            const tz = nx;
+            const intend = (prevX !== p.x || prevZ !== p.z)
+              ? Math.atan2(p.x - prevX, p.z - prevZ)
+              : this.car.yaw;
+            const tYawA = Math.atan2(tx, tz);
+            const tYawB = Math.atan2(-tx, -tz);
+            let dA = tYawA - intend;
+            let dB = tYawB - intend;
+            while (dA > Math.PI) dA -= Math.PI * 2;
+            while (dA < -Math.PI) dA += Math.PI * 2;
+            while (dB > Math.PI) dB -= Math.PI * 2;
+            while (dB < -Math.PI) dB += Math.PI * 2;
+            this.car.yaw = Math.abs(dA) <= Math.abs(dB) ? tYawA : tYawB;
+            this.car.root.rotation.y = this.car.yaw;
+            if (Math.abs(this.car.speed) < 0.25) {
+              this.car.speed = Math.sign(this.car.speed || 1) * 0.35;
+            }
+          }
+        } else {
+          // Parallel / moving away — whisper scrub only
+          this.car.speed *= soft ? 0.99 : 0.97;
+        }
       }
       if (!hit) break;
-      prevX = p.x;
-      prevZ = p.z;
+    }
+
+    // Under wall pressure on ribbon: magnet along wall-safe directions only.
+    // Skirting centerlines can sit inside thin wall AABBs — never pull into the normal.
+    if (hitCount > 0 && onRibbon && snap && snap.x != null && snap.z != null) {
+      const pull = (kind === "floor" || kind === "outdoor" || kind === "flower") ? 0.42 : 0.28;
+      const nLen = Math.hypot(accNX, accNZ) || 1;
+      const nnx = accNX / nLen;
+      const nnz = accNZ / nLen;
+      const toSX = snap.x - p.x;
+      const toSZ = snap.z - p.z;
+      const nDot = toSX * nnx + toSZ * nnz;
+      // Drop the into-wall component of the magnet (keep outward + tangential)
+      const adjX = toSX - Math.min(0, nDot) * nnx;
+      const adjZ = toSZ - Math.min(0, nDot) * nnz;
+      p.x += adjX * pull;
+      p.z += adjZ * pull;
+      // Bias slightly outward so next frame is clear of the stud
+      p.x += nnx * 0.014;
+      p.z += nnz * 0.014;
+      if (snap.yaw != null && Number.isFinite(snap.yaw)) {
+        let dyaw = snap.yaw - this.car.yaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        // Bidirectional ribbon — pick reverse if closer (approach ramp against winding)
+        let dyawR = dyaw + Math.PI;
+        while (dyawR > Math.PI) dyawR -= Math.PI * 2;
+        while (dyawR < -Math.PI) dyawR += Math.PI * 2;
+        if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
+        // Wider settle under scrape so corners realign to ribbon (e.g. 260°→180°)
+        if (Math.abs(dyaw) < 1.85) {
+          this.car.yaw += dyaw * Math.min(0.55, 0.28 + Math.abs(dyaw) * 0.2);
+          this.car.root.rotation.y = this.car.yaw;
+        }
+      }
     }
   }
 
@@ -556,8 +817,11 @@ export class DriveMode {
     const jammed = forward && absV < 0.15 && (
       (this._frameWallHits || 0) >= 2 || (this._jamHits || 0) >= 3
     );
+    // On-ribbon wall pin (skirting scrape that still dies) — escape sooner
+    const wallPin = forward && onRibbon && absV < 0.18 && moved < 0.004
+      && (this._frameWallHits || 0) >= 1;
 
-    if (stalled || jammed || slowOffRoad) {
+    if (stalled || jammed || slowOffRoad || wallPin) {
       this._stuckTimer = (this._stuckTimer || 0) + dt;
     } else if (!forward || onRibbon || absV > 0.35) {
       this._stuckTimer = 0;
@@ -567,7 +831,10 @@ export class DriveMode {
       this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
     }
 
-    if (this._stuckTimer < 0.6 || this._stuckNudgeCd > 0) return;
+    // Escape sooner on ribbon wall-pin / ramp-approach grab (playtest 0 km/h)
+    const nearClimb = !!(snap && (snap.kind === "ramp" || snap.nearDeck || snap.rampContinuity));
+    const stuckNeed = (wallPin || nearClimb) ? 0.35 : 0.6;
+    if (this._stuckTimer < stuckNeed || this._stuckNudgeCd > 0) return;
 
     const escape = this.tracks.findEscapeSnap
       ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 4.5)
@@ -735,7 +1002,15 @@ export class DriveMode {
     }
 
     const pos = this.car.position;
-    const snap = this.tracks.querySnap(pos.x, pos.y, pos.z, 1.65);
+    const snap = this.tracks.querySnap(pos.x, pos.y, pos.z, 1.65, this.car.yaw);
+    // Floor/outdoor ribbon magnets must aim at a wall-cleared point (stair stringers
+    // often overlap authored skirting centerlines by a few cm).
+    if (snap && snap.onTrack && snap.x != null && snap.z != null
+        && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")) {
+      const cleared = this._clearPointFromWalls(snap.x, snap.z, pos.y);
+      snap.x = cleared.x;
+      snap.z = cleared.z;
+    }
 
     if (this.tracks.onBoostPad(pos.x, pos.z) && this.car.speed > 0.35 && !this.car.airborne) {
       this.car.speed = Math.min(this.car.boostMax, this.car.speed + 3.2 * dt);
@@ -804,6 +1079,11 @@ export class DriveMode {
 
     if (this.onSpeed) this.onSpeed(this.car.getSpeedKmh());
 
+    if (this._fillLight && this._fillLight.visible) {
+      const p = this.car.position;
+      this._fillLight.position.set(p.x, p.y + 1.55, p.z);
+    }
+
     this._labelCooldown = Math.max(0, this._labelCooldown - dt);
     this._hintCooldown = Math.max(0, this._hintCooldown - dt);
 
@@ -846,7 +1126,7 @@ export class DriveMode {
     this._edgeWarn = THREE.MathUtils.lerp(this._edgeWarn, edgeAmt, Math.min(1, 6 * dt));
     if (this._edgeWarn > 0.45 && this._edgeHintCd <= 0 && !this._crashPhase) {
       this._edgeHintCd = 2.8;
-      if (this.onHint) this.onHint("Near the edge — ease back toward the track");
+      // no instructional edge spam in Drive HUD
     }
 
     this._applyFlashFade();

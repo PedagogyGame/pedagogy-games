@@ -573,7 +573,7 @@ export class RCCar {
     this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
     let maxV = keys.boost ? this.boostMax : this.maxSpeed;
     if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
-      maxV *= 0.62; // mild carpet / off-ribbon penalty — slow, never crash
+      maxV *= 0.58; // off-road slow (not sticky death)
     }
     if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
     const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
@@ -621,8 +621,13 @@ export class RCCar {
     const lowBoost = 1.12 - 0.12 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
     const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
     const railGrip = (onRailDeck && snap?.onTrack) ? 1.05 : 1;
+    // Near-wall / scrape: damp steering so corners don't yaw harder into the stud
+    const wallSteerDamp = 1 - 0.38 * THREE.MathUtils.clamp(this._scrape, 0, 1);
+    const rimSteerDamp = (snap?.onTrack && typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08)
+      ? 0.82 : 1;
     const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14) * lowBoost * highDamp * railGrip;
+      this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14)
+      * lowBoost * highDamp * railGrip * wallSteerDamp * rimSteerDamp;
     // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
     const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
     const maxYawRate = 2.45; // rad/s soft cap
@@ -689,10 +694,11 @@ export class RCCar {
         z = THREE.MathUtils.lerp(z, snap.z, pull);
       } else if (snap.onTrack && snap.x != null && snap.z != null
         && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
-        // Soft floor-ribbon glue — stay on visible asphalt without arcade magnet
+        // Soft floor-ribbon glue — stronger near rim / after wall scrape (skirting)
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        const rimFactor = em < 0.12 ? 1.55 : (em < 0.22 ? 1.05 : 0.55);
-        const pull = Math.min(0.22, (0.07 + 0.11 * rimFactor) * Math.min(1, 11 * dt));
+        const rimFactor = em < 0.10 ? 1.85 : (em < 0.18 ? 1.35 : (em < 0.28 ? 0.9 : 0.5));
+        const scrapeBoost = this._scrape > 0.08 ? 1.55 : 1;
+        const pull = Math.min(0.34, (0.08 + 0.13 * rimFactor) * scrapeBoost * Math.min(1, 12 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
       } else if (ASSIST_MAGNET && snap.onTrack) {
@@ -712,10 +718,17 @@ export class RCCar {
         let dyaw = snap.yaw - this.yaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        // Only nudge when roughly aligned with travel (avoid U-turn snaps)
-        const yawLim = rampAssist ? 0.85 : (floorAssist ? 0.7 : 0.55);
-        const yawK = rampAssist ? 0.34 : (floorAssist ? 0.22 : 0.18);
-        const yawRate = rampAssist ? 2.8 : (floorAssist ? 2.0 : 1.6);
+        // Bidirectional ribbon yaw — reverse travel (foyer skirting → west ramp) must not U-turn
+        let dyawR = dyaw + Math.PI;
+        while (dyawR > Math.PI) dyawR -= Math.PI * 2;
+        while (dyawR < -Math.PI) dyawR += Math.PI * 2;
+        if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
+        // Only nudge when roughly aligned with travel (avoid U-turn snaps).
+        // Under wall scrape / near rim: allow wider settle so skirting recovers.
+        const scrapeWiden = this._scrape > 0.12 || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.06);
+        const yawLim = rampAssist ? 0.85 : (floorAssist ? (scrapeWiden ? 1.55 : 0.85) : 0.55);
+        const yawK = rampAssist ? 0.34 : (floorAssist ? (scrapeWiden ? 0.38 : 0.26) : 0.18);
+        const yawRate = rampAssist ? 2.8 : (floorAssist ? (scrapeWiden ? 3.2 : 2.2) : 1.6);
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }

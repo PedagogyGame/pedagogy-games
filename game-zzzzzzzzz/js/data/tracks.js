@@ -552,6 +552,7 @@ export const TRACK_PATHS = [
   // ─── Wall tunnels / incline corridors ───
   {
     id: "tunnel_hall_cabinet",
+    disabled: true, // drive-course: skinny decorative tunnel (not primary asphalt)
     kind: "tunnel",
     width: 0.4,
     points: [
@@ -564,6 +565,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "tunnel_hall_armoury",
+    disabled: true, // drive-course: skinny decorative tunnel (not primary asphalt)
     kind: "tunnel",
     width: 0.4,
     points: [
@@ -1363,6 +1365,7 @@ export const TRACK_PATHS = [
   // Molding tunnel: short decorative pass-through on foyer east cornice
   {
     id: "tunnel_foyer_molding_east",
+    disabled: true, // drive-course: skinny decorative tunnel (not primary asphalt)
     kind: "tunnel",
     width: 0.34,
     tension: 0.15,
@@ -1375,6 +1378,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "tunnel_foyer_molding_west",
+    disabled: true, // drive-course: skinny decorative tunnel (not primary asphalt)
     kind: "tunnel",
     width: 0.34,
     tension: 0.15,
@@ -2005,25 +2009,22 @@ export const TRACK_PATHS = [
   
   
   
-  {
+    {
     id: "ramp_landing_to_landing_cornice",
     kind: "ramp",
-    width: 0.44,
+    width: 0.48,
     points: [
-      // Foot on landing center; crest T-joins EAST cornice arm (no center triple fork)
+      // Long clear climb: bow south then east to cornice T (grade ≤0.44)
       { x: 0.0, y: 4.26, z: 9.0, label: "Upper Landing" },
-      { x: 0.35, y: 4.42, z: 9.35 },
-      { x: 0.95, y: 4.65, z: 9.55 },
-      { x: 1.7, y: 4.92, z: 9.5 },
-      { x: 2.35, y: 5.2, z: 9.15 },
-      { x: 2.85, y: 5.48, z: 8.65 },
-      { x: 3.15, y: 5.78, z: 8.1 },
-      { x: 3.25, y: 6.08, z: 7.55 },
-      { x: 3.15, y: 6.35, z: 7.15 },
-      { x: 2.95, y: 6.6, z: 7.0 },
-      { x: 2.95, y: 6.82, z: 7.25 },
-      { x: 3.15, y: 7.0, z: 7.7 },
-      { x: 3.35, y: 7.12, z: 8.15 },
+      { x: 0.4, y: 4.45, z: 9.6 },
+      { x: 1.0, y: 4.7, z: 10.2 },
+      { x: 1.8, y: 5.0, z: 10.5 },
+      { x: 2.6, y: 5.35, z: 10.35 },
+      { x: 3.2, y: 5.7, z: 9.9 },
+      { x: 3.5, y: 6.05, z: 9.3 },
+      { x: 3.55, y: 6.4, z: 8.85 },
+      { x: 3.5, y: 6.75, z: 8.6 },
+      { x: 3.5, y: 7.05, z: 8.55 },
       { x: 3.5, y: 7.22, z: 8.55, label: "Landing Cornice" },
     ],
   },
@@ -2852,7 +2853,7 @@ for (const path of TRACK_PATHS) {
 }
 
 /** Spawn / Explore park pose — west foyer skirting by front door (NOT mid-room). */
-export const CAR_SPAWN = { x: -7.9, y: 0.02, z: 12.2, yaw: 0 };
+export const CAR_SPAWN = { x: -7.9, y: 0.075, z: 12.2, yaw: Math.PI / 2 }; // +X along foyer_skirting (NOT +Z into south wall)
 
 
 /**
