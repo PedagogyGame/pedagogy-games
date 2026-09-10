@@ -250,7 +250,8 @@ export class TrackSystem {
     // Apron first so foyer_skirting visual gap matches pad radius (no sliver overlap)
     this._addSpawnPad();
     for (const path of TRACK_PATHS) {
-      if (path.disabled) continue;
+      // Disabled = no mesh, no snap, no chevron/arrow/boost decor (player build)
+      if (path.disabled || path._disabledReason) continue;
       this._buildPath(path);
     }
     this._buildSnapGrid();
@@ -391,6 +392,7 @@ export class TrackSystem {
   }
 
   _buildPath(path) {
+    if (!path || path.disabled) return;
     let pts = path.points.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     // Preserve story floors. Only normalize near-ground asphalt so ribbon Y matches
     // ramp feet (authored ~0.06). NEVER flatten landing/attic/cellar to ground.

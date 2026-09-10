@@ -208,6 +208,7 @@ function softSteerKeys() {
     { label: "south_wall_headon", x: -4.0, y: 0.075, z: 11.6, yaw: 0, N: 3.5 },
     { label: "east_skirting_into_wall", x: 7.6, y: 0.075, z: 11.8, yaw: Math.PI / 2, N: 4.0 },
     { label: "SE_corner_wedge", x: 7.8, y: 0.075, z: 11.9, yaw: 0.4, N: 4.0 },
+    { label: "east_console_wall", x: 7.2, y: 0.075, z: 10.2, yaw: Math.PI / 2, N: 4.0 },
   ];
 
   for (const c of cases) {

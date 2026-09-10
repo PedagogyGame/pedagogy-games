@@ -55,7 +55,9 @@ const crest = ramp.points[ramp.points.length - 1];
 
 // Prove stringers no longer overlap west skirting centerline
 {
-  const skirtingX = -7.15;
+  const foot0 = ramp.points[0];
+  const skirtingX = foot0.x;
+  const skirtingZ = foot0.z;
   let overlap = false;
   let culprit = null;
   for (let i = 0; i < cols.length; i++) {
@@ -64,7 +66,7 @@ const crest = ramp.points[ramp.points.length - 1];
     // Drive-softened copy used in play
     const soft = drive._wallColliders[i] || b;
     if (soft.min.y > 0.2) continue; // raised underside ok
-    if (soft.max.z < 7.5 || soft.min.z > 12) continue;
+    if (soft.max.z < foot0.z - 2.5 || soft.min.z > foot0.z + 2.5) continue;
     if (soft.min.x <= skirtingX && soft.max.x >= skirtingX) {
       overlap = true;
       culprit = { i, min: soft.min, max: soft.max, kind: soft.driveKind };
@@ -77,10 +79,10 @@ const crest = ramp.points[ramp.points.length - 1];
   let hitInfo = null;
   for (const b of drive._wallColliders) {
     if (b.min.y > 0.2) continue;
-    if (b.max.z < 8.5 || b.min.z > 11.5) continue;
-    if (b.max.x < -8.0 || b.min.x > -6.4) continue;
+    if (b.max.z < foot0.z - 1.5 || b.min.z > foot0.z + 2.0) continue;
+    if (b.max.x < foot0.x - 1.2 || b.min.x > foot0.x + 1.2) continue;
     // Does AABB overlap car on clear climb approach?
-    const px = -7.15, pz = 10.5;
+    const px = foot0.x, pz = foot0.z + 1.4;
     if (px + r > b.min.x && px - r < b.max.x && pz + r > b.min.z && pz - r < b.max.z) {
       hitRibbon = true;
       hitInfo = { kind: b.driveKind, x: [b.min.x, b.max.x], z: [b.min.z, b.max.z], y: [b.min.y, b.max.y] };
@@ -122,7 +124,7 @@ function steerAimClimb(noise = 0) {
     const tgt = ramp.points[Math.min(4, ramp.points.length - 1)];
     yawTarget = Math.atan2(tgt.x - p.x, tgt.z - p.z);
     noise *= 0.15;
-  } else if (s?.pathId === "foyer_drive_start" && s.yaw != null) {
+  } else if ((s?.pathId === "foyer_drive_start" || s?.pathId === "foyer_climb_spur") && s.yaw != null) {
     let d0 = s.yaw - drive.car.yaw;
     while (d0 > Math.PI) d0 -= Math.PI * 2;
     while (d0 < -Math.PI) d0 += Math.PI * 2;
@@ -157,7 +159,7 @@ function steerAimClimb(noise = 0) {
   let mounted = false, crested = false, maxY = 0;
   let sumSpd = 0, n = 0;
   let culprit = null;
-  for (let i = 0; i < 60 * 40; i++) {
+  for (let i = 0; i < 60 * 55; i++) {
     const noise = Math.sin(i * 0.19) * 0.055 + Math.sin(i * 0.47) * 0.035 + Math.sin(i * 0.07) * 0.02;
     const { snap: s, ...keys } = steerAimClimb(noise);
     drive.keys = keys;
@@ -191,7 +193,7 @@ function steerAimClimb(noise = 0) {
     } else streak = 0;
     maxY = Math.max(maxY, p.y);
     if (s2?.kind === "ramp" && s2.pathId === "ramp_foyer_to_landing" && s2.onTrack) mounted = true;
-    if (p.y >= crest.y - 0.25 && Math.hypot(p.x - crest.x, p.z - crest.z) < 1.5) {
+    if (p.y >= crest.y - 0.35 && Math.hypot(p.x - crest.x, p.z - crest.z) < 2.2) {
       crested = true;
       break;
     }
@@ -223,8 +225,9 @@ function steerAimClimb(noise = 0) {
 
 // ─── 2) Nose into former stringer endcap / underside grab zone ───
 {
+  const fx = foot.x, fz = foot.z;
   const cases = [
-    { label: "clear_foot_aim_climb", x: -7.15, z: 11.2, yaw: Math.PI },
+    { label: "clear_foot_aim_climb", x: fx, z: fz + 0.15, yaw: Math.PI },
     { label: "stringer_endcap_z8", x: -7.4, z: 9.0, yaw: Math.PI * 0.95 },
     { label: "into_stair_from_room", x: -6.4, z: 9.2, yaw: -Math.PI / 2 },
     { label: "former_wall_wedge", x: -8.2, z: 9.5, yaw: Math.PI },

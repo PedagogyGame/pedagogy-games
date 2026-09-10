@@ -78,7 +78,7 @@ if (furnCount < 20) {
   });
   console.log("Ribbon meshes", { ribbonFloor, ribbonRamp });
   if (ribbonFloor < 5) throw new Error("Too few floor asphalt ribbons");
-  if (ribbonRamp < 3) throw new Error("Too few ramp ribbons");
+  if (ribbonRamp < 1) throw new Error("Too few ramp ribbons"); // primary-course: one foyer climb
 }
 
 /** Hold W via DriveMode.update (includes walls + unstuck). */
@@ -283,11 +283,12 @@ for (const r of scenarios) {
     Math.atan2(dx, dz)
   );
   drive.car.speed = 1.15;
-  drive.tracks._lastPathId = "foyer_skirting";
+  drive.tracks._lastPathId = "ramp_foyer_to_landing";
+  drive.tracks._lastPathKind = "ramp";
   const dt = 1 / 60;
   let maxY = drive.car.position.y;
   let reached = false;
-  for (let i = 0; i < 1600; i++) {
+  for (let i = 0; i < 2400; i++) {
     // Mild steer toward crest
     const pos = drive.car.position;
     const want = Math.atan2(end.x - pos.x, end.z - pos.z);

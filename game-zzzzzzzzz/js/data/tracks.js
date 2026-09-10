@@ -24,6 +24,8 @@ export const TRACK_PATHS = [
     closed: true,
     fancy: true,
     points: [
+      // Perimeter ROUTES AROUND grand west stair — open-foyer bow, NOT under the climb.
+      // Climb owns the east-of-stair corridor alone (no floor snap theft).
       { x: -7.9, y: 0.06, z: 12.2, label: "Grand Foyer" },
       { x: -4.0, y: 0.06, z: 12.35 },
       { x: 0.0, y: 0.06, z: 12.4 },
@@ -38,13 +40,24 @@ export const TRACK_PATHS = [
       { x: 2.85, y: 0.06, z: -0.35 },
       { x: -2.85, y: 0.06, z: -0.35 },
       { x: -8.00, y: 0.06, z: -0.30 },
-      { x: -8.15, y: 0.06, z: 1.0 },
-      { x: -8.15, y: 0.06, z: 5.0 },
-      { x: -8.05, y: 0.06, z: 7.55 },
-      // Peel east into clear asphalt — kiss climb foot (one obvious climb)
-      { x: -7.55, y: 0.06, z: 9.30 },
-      { x: -7.15, y: 0.06, z: 11.20 },
-      { x: -7.4, y: 0.06, z: 12.0 },
+      // West wall only NORTH of stair
+      { x: -8.45, y: 0.06, z: 1.0 },
+      { x: -8.45, y: 0.06, z: 1.85 },
+      // North face → open foyer (east of climb lane)
+      { x: -6.8, y: 0.06, z: 1.90 },
+      { x: -4.2, y: 0.06, z: 2.40 },
+      { x: -3.2, y: 0.06, z: 3.80 },
+      { x: -3.2, y: 0.06, z: 5.80 },
+      { x: -3.2, y: 0.06, z: 7.80 },
+      { x: -3.2, y: 0.06, z: 9.40 },
+      // Climb spur / open lane — then across south face of stair
+      { x: -3.6, y: 0.06, z: 10.60 },
+      { x: -4.70, y: 0.06, z: 10.60 }, // climb T
+      { x: -6.2, y: 0.06, z: 9.40 },
+      { x: -7.5, y: 0.06, z: 9.20 },
+      { x: -8.45, y: 0.06, z: 9.40 },
+      { x: -8.45, y: 0.06, z: 10.6 },
+      { x: -8.35, y: 0.06, z: 11.7 },
       { x: -7.9, y: 0.06, z: 12.2 },
     ],
   },
@@ -53,20 +66,30 @@ export const TRACK_PATHS = [
     id: "foyer_drive_start",
     kind: "floor",
     width: 2.60,  // post ROAD_WIDTH_SCALE ≈2.26 — wide open-foyer asphalt
+    tension: 0.06,
+    fancy: true,
+    points: [
+      // Wide straight lane into open foyer — pure W stays on asphalt (no early west kink).
+      { x: -3.2, y: 0.06, z: 12.15, label: "Grand Foyer" },
+      { x: -3.2, y: 0.06, z: 11.10 },
+      { x: -3.2, y: 0.06, z: 9.80 },
+      { x: -3.2, y: 0.06, z: 8.40 },
+      { x: -3.2, y: 0.06, z: 6.80 },
+      { x: -3.2, y: 0.06, z: 5.20 },
+    ],
+  },
+  // Short T spur: open lane → climb foot east of grand stair
+  {
+    id: "foyer_climb_spur",
+    kind: "floor",
+    width: 1.80,
     tension: 0.08,
     fancy: true,
     points: [
-      // Wide open-foyer start: W alone stays on asphalt INTO room, then west to climb
-      // (south of old south-bench choke at z≈11; clear of west stair stringers).
-      { x: -3.2, y: 0.06, z: 12.15, label: "Grand Foyer" },
-      { x: -3.25, y: 0.06, z: 11.15 },
-      { x: -3.35, y: 0.06, z: 10.15 },
-      { x: -3.55, y: 0.06, z: 9.55 },
-      { x: -4.35, y: 0.06, z: 9.40 },
-      { x: -5.35, y: 0.06, z: 9.55 },
-      { x: -6.25, y: 0.06, z: 10.15 },
-      { x: -6.85, y: 0.06, z: 10.75 },
-      { x: -7.15, y: 0.06, z: 11.20 }, // kiss ramp_foyer_to_landing foot
+      { x: -3.2, y: 0.06, z: 10.60 },
+      { x: -3.7, y: 0.06, z: 10.60 },
+      { x: -4.2, y: 0.06, z: 10.60 },
+      { x: -4.70, y: 0.06, z: 10.60 }, // kiss ramp_foyer_to_landing foot
     ],
   },
   // Doorway edge strip: foyer → hall (east jamb, not dead center)
@@ -382,6 +405,7 @@ export const TRACK_PATHS = [
       { x: 7.2, y: 4.26, z: 1.0 },
       { x: 2.9, y: 4.26, z: -0.8 },
       { x: -2.9, y: 4.26, z: -0.8 },
+      { x: -3.7, y: 4.26, z: -0.40 }, // kiss ramp_foyer_to_landing crest
       { x: -7.2, y: 4.26, z: 1.0 },
       { x: -7.2, y: 4.26, z: 5.0 },
       { x: -7.1, y: 4.26, z: 7.0 },
@@ -610,27 +634,22 @@ export const TRACK_PATHS = [
     kind: "ramp",
     width: 0.78,
     points: [
-      // ONE obvious climb: foot in CLEAR open asphalt (not wall/stringer/dark-pad choke).
-      // Centered on west stair (~x=-7), pulled south into foyer for browser approach.
-      { x: -7.15, y: 0.06, z: 11.20, label: "Grand Foyer" },
-      { x: -7.16, y: 0.10, z: 10.55 },
-      { x: -7.18, y: 0.18, z: 9.85 },
-      { x: -7.20, y: 0.30, z: 9.10 },
-      { x: -7.22, y: 0.46, z: 8.35 },
-      { x: -7.20, y: 0.60, z: 7.55 },
-      { x: -7.12, y: 0.82, z: 6.60 },
-      { x: -6.95, y: 1.08, z: 5.75 },
-      { x: -6.70, y: 1.36, z: 5.00 },
-      { x: -6.35, y: 1.66, z: 4.40 },
-      { x: -5.95, y: 1.98, z: 3.95 },
-      { x: -5.55, y: 2.30, z: 3.70 },
-      { x: -5.30, y: 2.62, z: 3.85 },
-      { x: -5.25, y: 2.94, z: 4.40 },
-      { x: -5.45, y: 3.24, z: 5.05 },
-      { x: -5.90, y: 3.52, z: 5.45 },
-      { x: -6.45, y: 3.78, z: 5.50 },
-      { x: -6.90, y: 4.02, z: 5.30 },
-      { x: -7.2, y: 4.26, z: 5.0, label: "Upper Landing" },
+      // ONE clear climb EAST of grand stair. Long run for gentle grade.
+      // Crest on landing EAST of attic stair (attic AABB x[-7.6,-5.4] z[0.5,6]).
+      { x: -4.70, y: 0.06, z: 10.60, label: "Grand Foyer" },
+      { x: -4.70, y: 0.30, z: 9.70 },
+      { x: -4.70, y: 0.60, z: 8.70 },
+      { x: -4.70, y: 0.95, z: 7.70 },
+      { x: -4.70, y: 1.35, z: 6.70 },
+      { x: -4.70, y: 1.80, z: 5.70 },
+      { x: -4.70, y: 2.25, z: 4.70 },
+      { x: -4.70, y: 2.70, z: 3.70 },
+      { x: -4.70, y: 3.15, z: 2.80 },
+      { x: -4.70, y: 3.55, z: 2.00 },
+      { x: -4.65, y: 3.90, z: 1.30 },
+      { x: -4.50, y: 4.12, z: 0.70 },
+      { x: -4.20, y: 4.22, z: 0.20 },
+      { x: -3.70, y: 4.26, z: -0.40, label: "Upper Landing" },
     ],
   },
   // ─── Furniture-top circuits + ramps (Toy Story vibe) ───
@@ -817,6 +836,7 @@ export const TRACK_PATHS = [
   },
     {
     id: "ramp_cabinet_down",
+    disabled: true, // primary-course: orphan furniture-top descent
     kind: "ramp",
     width: 0.40,
     points: [
@@ -1037,6 +1057,7 @@ export const TRACK_PATHS = [
   // Foyer cornice — start/finish stripe + banked corners + chicane on south header
   {
     id: "cornice_foyer",
+    disabled: true, // primary-course: ceiling road clutter in foyer Drive view
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1368,6 +1389,7 @@ export const TRACK_PATHS = [
   // Climb from foyer cornice → Upper Landing
   {
     id: "ramp_cornice_to_landing",
+    disabled: true, // primary-course: secondary elevated chevron junk (foyer view)
     kind: "ramp",
     width: 0.37,
     points: [
@@ -1382,6 +1404,7 @@ export const TRACK_PATHS = [
   // First-floor landing cornice → bookcase highway
   {
     id: "cornice_landing_east",
+    disabled: true, // primary-course: high landing junk above foyer stair
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1494,6 +1517,7 @@ export const TRACK_PATHS = [
   // Architectural balcony track — loop with turnaround
   {
     id: "ramp_landing_to_balcony",
+    disabled: true, // primary-course: keep foyer readable — balcony climb secondary
     kind: "ramp",
     width: 0.40,
     points: [
@@ -1533,6 +1557,7 @@ export const TRACK_PATHS = [
   // Return inside via west side of balcony
   {
     id: "ramp_balcony_return",
+    disabled: true, // primary-course: keep foyer readable — balcony climb secondary
     kind: "ramp",
     width: 0.40,
     points: [
@@ -1546,6 +1571,7 @@ export const TRACK_PATHS = [
   // Optional drop ramp: balcony → front drive gravel
   {
     id: "ramp_balcony_to_drive",
+    disabled: true, // primary-course: keep foyer readable — balcony climb secondary
     kind: "ramp",
     width: 0.40,
     points: [
@@ -2064,6 +2090,7 @@ export const TRACK_PATHS = [
   
     {
     id: "ramp_landing_to_landing_cornice",
+    disabled: true, // primary-course: secondary elevated chevron junk (foyer view)
     kind: "ramp",
     width: 0.48,
     points: [
@@ -2084,6 +2111,7 @@ export const TRACK_PATHS = [
   // West landing cornice spur — mirrors east approach, joins bookcase west
   {
     id: "cornice_landing_west",
+    disabled: true, // primary-course: high landing junk above foyer stair
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -2117,6 +2145,7 @@ export const TRACK_PATHS = [
   // Study express turnaround → soft drop onto cabinet case tops (no void dump)
   {
     id: "ramp_study_express_to_cases",
+    disabled: true, // primary-course: secondary elevated chevron junk
     kind: "ramp",
     width: 0.37,
     points: [
@@ -2308,6 +2337,7 @@ export const TRACK_PATHS = [
   
   {
     id: "attic_from_landing_access",
+    disabled: true, // primary-course: secondary elevated chevron junk (foyer view)
     kind: "ramp",
     width: 0.4,
     points: [
@@ -2912,7 +2942,7 @@ for (const path of TRACK_PATHS) {
 }
 
 /** Spawn — west foyer asphalt (x≈-3.2), clear of center lantern/pillar; yaw into room + climb (NOT wall-hug). */
-export const CAR_SPAWN = { x: -3.2, y: 0.075, z: 12.15, yaw: Math.PI + 0.12 }; // into open foyer (W on asphalt); mild west bias toward climb, NOT wall-hug / center pillar
+export const CAR_SPAWN = { x: -3.2, y: 0.075, z: 12.15, yaw: Math.PI }; // straight into open foyer asphalt lane (pure W onTrack)
 
 
 /**
@@ -2924,7 +2954,7 @@ export const CAR_SPAWN = { x: -3.2, y: 0.075, z: 12.15, yaw: Math.PI + 0.12 }; /
  */
 export const RAMP_MOUNT_FEET = (() => {
   const PRIMARY_APPROACH = {
-    ramp_foyer_to_landing: "foyer_drive_start",
+    ramp_foyer_to_landing: "foyer_climb_spur",
     ramp_foyer_console: "foyer_skirting",
     ramp_foyer_console_down: "furniture_foyer_console",
     ramp_dining_table: "door_cons_dining",

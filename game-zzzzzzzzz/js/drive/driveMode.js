@@ -647,13 +647,13 @@ export class DriveMode {
 
   /** Foyer climb approach corridor — stair/furniture must not pin before snap. */
   _nearFoyerClimbCorridor(x, z) {
-    // Foot pulled into clear asphalt south of west stair (see ramp_foyer_to_landing)
-    const fx = -7.15, fz = 11.20;
-    if (Math.hypot(x - fx, z - fz) <= 1.55) return true;
-    // Early climb ribbon band (open asphalt → stair throat)
-    if (x >= -8.55 && x <= -5.85 && z >= 7.6 && z <= 12.2) {
-      const along = Math.hypot(x - fx, z - (fz - 1.2));
-      if (along < 2.4) return true;
+    // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
+    const fx = -4.70, fz = 10.60;
+    if (Math.hypot(x - fx, z - fz) <= 1.65) return true;
+    // East-flank climb band (open asphalt → beside stair → landing)
+    if (x >= -5.60 && x <= -3.60 && z >= -0.8 && z <= 11.2) {
+      const along = Math.hypot(x - fx, z - fz);
+      if (along < 3.2) return true;
     }
     return false;
   }
@@ -741,6 +741,33 @@ export class DriveMode {
         const floorCruise = onRibbon && (kind === "floor" || kind === "outdoor" || kind === "flower");
         if (floorCruise) {
           this.car._scrape = Math.min(1, (this.car._scrape || 0) + 0.08);
+          // Still kill into-wall speed when nose-in — otherwise HUD speed>0 while position frozen
+          const fwdX0 = Math.sin(this.car.yaw);
+          const fwdZ0 = Math.cos(this.car.yaw);
+          const headOn0 = Math.max(0, -(fwdX0 * nx + fwdZ0 * nz));
+          if (headOn0 > 0.55) {
+            const spd0 = this.car.speed;
+            const vx0 = fwdX0 * spd0;
+            const vz0 = fwdZ0 * spd0;
+            const nDot0 = vx0 * nx + vz0 * nz;
+            if (nDot0 < 0) {
+              const vx2 = vx0 - nDot0 * nx;
+              const vz2 = vz0 - nDot0 * nz;
+              const spd2 = Math.hypot(vx2, vz2);
+              const signed = Math.sign(spd0 || 1);
+              if (spd2 > 0.05) {
+                const slideYaw = Math.atan2(vx2, vz2);
+                let dyaw = slideYaw - this.car.yaw;
+                while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+                while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+                this.car.yaw += dyaw * Math.min(0.55, 0.18 + headOn0 * 0.4);
+                this.car.root.rotation.y = this.car.yaw;
+                this.car.speed = signed * Math.max(spd2 * 0.92, 0.45);
+              } else {
+                this.car.speed *= 0.55;
+              }
+            }
+          }
           continue;
         }
         // Feed car scrape FX while sliding mansion walls off-ribbon / elevated
@@ -860,20 +887,26 @@ export class DriveMode {
     // On-ribbon wall pin (skirting scrape that still dies) — escape sooner
     const wallPin = forward && onRibbon && absV < 0.18 && moved < 0.004
       && (this._frameWallHits || 0) >= 1;
+    // Ben freeze class: HUD speed>0 but position locked against wall/furniture
+    const speedFrozen = forward && moved < 0.0025 && absV > 0.25
+      && ((this._frameWallHits || 0) >= 1 || (this._jamHits || 0) >= 1);
 
-    if (stalled || jammed || slowOffRoad || wallPin) {
+    if (stalled || jammed || slowOffRoad || wallPin || speedFrozen) {
       this._stuckTimer = (this._stuckTimer || 0) + dt;
-    } else if (!forward || onRibbon || absV > 0.35) {
+    } else if (!forward || (onRibbon && !speedFrozen && absV > 0.35 && moved > 0.008)) {
       this._stuckTimer = 0;
       this._jamHits = 0;
+    } else if (!forward || (onRibbon && moved > 0.01)) {
+      this._stuckTimer = Math.max(0, (this._stuckTimer || 0) - dt * 0.5);
+      this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
     } else {
       this._stuckTimer = Math.max(0, (this._stuckTimer || 0) - dt * 0.35);
       this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
     }
 
-    // Escape sooner on ribbon wall-pin / ramp-approach grab (playtest 0 km/h)
+    // Escape sooner on ribbon wall-pin / speed-freeze / ramp-approach grab
     const nearClimb = !!(snap && (snap.kind === "ramp" || snap.nearDeck || snap.rampContinuity));
-    const stuckNeed = (wallPin || nearClimb) ? 0.35 : 0.6;
+    const stuckNeed = (wallPin || speedFrozen || nearClimb) ? 0.28 : 0.6;
     if (this._stuckTimer < stuckNeed || this._stuckNudgeCd > 0) return;
 
     const escape = this.tracks.findEscapeSnap
@@ -926,8 +959,16 @@ export class DriveMode {
       snap?.kind === "shortcut" || snap?.kind === "mouse" || snap?.kind === "shaft"
       || snap?.kind === "tunnel" || snap?.kind === "chute";
 
-    // Speed lines — boost OR fast wall run
-    const showLines = (boosting && spd > 1.4) || (inWall && spd > 1.8);
+    // Track real displacement — kill ghost streaks when pinned / absV≈0 / stuck
+    const prevFx = this._fxPrevPos || p;
+    const movedFx = Math.hypot(p.x - prevFx.x, p.z - prevFx.z);
+    this._fxPrevPos = { x: p.x, y: p.y, z: p.z };
+    const reallyMoving = movedFx > 0.004 && spd > 0.35;
+    this._fxStuck = reallyMoving ? 0 : Math.min(1, (this._fxStuck || 0) + dt * 3);
+
+    // Speed lines — boost OR fast wall run, ONLY while actually translating
+    const showLines = reallyMoving && this._fxStuck < 0.2
+      && ((boosting && spd > 1.4) || (inWall && spd > 1.8));
     for (let i = 0; i < this._speedLines.length; i++) {
       const line = this._speedLines[i];
       if (showLines) {
@@ -944,12 +985,17 @@ export class DriveMode {
         if (inWall) line.material.color.setHex(0xffe0b2);
         else line.material.color.setHex(0xffffff);
       } else {
-        line.material.opacity = Math.max(0, line.material.opacity - 4 * dt);
-        if (line.material.opacity <= 0.02) line.visible = false;
+        // Hard-clear when stuck / not moving — no frozen translucent bars
+        const fade = (!reallyMoving || this._fxStuck > 0.15) ? 12 : 4;
+        line.material.opacity = Math.max(0, line.material.opacity - fade * dt);
+        if (line.material.opacity <= 0.02) {
+          line.visible = false;
+          line.material.opacity = 0;
+        }
       }
     }
 
-    if ((boosting || this.car.driftTrail > 0.35) && spd > 1.2 && Math.random() < 0.35) {
+    if (reallyMoving && (boosting || this.car.driftTrail > 0.35) && spd > 1.2 && Math.random() < 0.35) {
       const slot = this._dust.find((d) => d.life <= 0);
       if (slot) {
         slot.life = 0.45 + Math.random() * 0.35;
@@ -961,6 +1007,14 @@ export class DriveMode {
         const petal = snap?.kind === "flower";
         slot.mesh.material.color.setHex(petal ? 0xf48fb1 : 0xd7ccc8);
         slot.mesh.material.emissive.setHex(petal ? 0xe91e63 : 0xffcc80);
+      }
+    }
+    // Freeze / absV≈0: snuff bokeh dust immediately (no lingering orbs when pinned)
+    if (!reallyMoving || this._fxStuck > 0.25) {
+      for (const d of this._dust) {
+        d.life = 0;
+        d.mesh.visible = false;
+        d.mesh.material.opacity = 0;
       }
     }
     for (const d of this._dust) {
@@ -1071,10 +1125,13 @@ export class DriveMode {
     const prevZ = pos.z;
     const flags = this.car.update(dt, driveKeys, snap);
     this._resolveDriveWalls(prevX, prevZ, snap);
-    // Guarantee: holding W on floor asphalt always keeps accelerating (no silent pin)
+    // Guarantee: holding W on floor asphalt keeps cruise — but NOT while wall-pinned
+    // (forcing 0.55 during a freeze made HUD read 17 km/h with zero translation).
+    const movedFrame = Math.hypot(this.car.position.x - prevX, this.car.position.z - prevZ);
     if (driveKeys.forward && snap && snap.onTrack
         && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")
-        && !this.car.airborne && !this.car.crashed) {
+        && !this.car.airborne && !this.car.crashed
+        && movedFrame > 0.0015 && (this._frameWallHits || 0) < 2) {
       if (this.car.speed < 0.55) {
         this.car.speed = Math.min(this.car.maxSpeed, Math.max(this.car.speed, 0.55));
       }
