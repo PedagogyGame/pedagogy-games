@@ -119,10 +119,9 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
 {
   const primaryRamps = [
     "ramp_foyer_to_landing",
-    "ramp_foyer_console",
-    "ramp_console_to_foyer_cornice",
     "ramp_landing_to_landing_cornice",
     "ramp_landing_to_balcony",
+    "ramp_cornice_to_landing",
   ];
   let kissOk = true;
   const details = [];
@@ -214,37 +213,18 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   ok("foyer→landing climb crest", reached && !car.crashed, `y=${car.position.y.toFixed(2)} reached=${reached} climbFrames=${onClimb}`);
 }
 
-// ── 6) Console → cornice climb (the foyer "first climb" hero) ─────
+// ── 6) Foyer console wall-fork class MUST stay disabled ───────────
 {
-  const path = byId["ramp_console_to_foyer_cornice"];
-  const pts = path.points;
-  const foot = pts[0];
-  const crest = pts[pts.length - 1];
-  car.setPose(foot.x, foot.y + 0.02, foot.z, Math.atan2(pts[1].x - foot.x, pts[1].z - foot.z));
-  car.speed = 1.2;
-  car.crashed = false; car.airborne = false; car.vy = 0;
-  car._unsupportedFrames = 0; car._lastElevated = false;
-  tracks._lastPathId = "furniture_foyer_console";
-  const dt = 1 / 60;
-  let reached = false;
-  const keys = { forward: true, back: false, left: false, right: false, boost: false };
-  for (let i = 0; i < 60 * 20; i++) {
-    const s = tracks.querySnap(car.position.x, car.position.y, car.position.z, 1.8, car.yaw);
-    if (s?.onTrack && s.yaw != null) {
-      let dyaw = s.yaw - car.yaw;
-      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-      keys.left = dyaw > 0.1;
-      keys.right = dyaw < -0.1;
-    }
-    car.update(dt, keys, s);
-    if (car.position.y >= crest.y - 0.2 && Math.hypot(car.position.x - crest.x, car.position.z - crest.z) < 1.4) {
-      reached = true;
-      break;
-    }
-    if (car.crashed) break;
-  }
-  ok("console→cornice climb crest", reached && !car.crashed, `y=${car.position.y.toFixed(2)} reached=${reached}`);
+  const culled = [
+    "ramp_foyer_console", "furniture_foyer_console", "ramp_foyer_console_down",
+    "ramp_console_to_foyer_cornice",
+  ];
+  const stillOn = culled.filter((id) => byId[id] && !byId[id].disabled);
+  ok("foyer console wall-fork disabled", stillOn.length === 0, stillOn.join(",") || "all off");
+  // No snap-active climb ribbon at east wall behind console table
+  const wall = tracks.querySnap(8.15, 0.35, 10.5, 1.2);
+  const bad = wall?.kind === "ramp" || /console|furniture_foyer/i.test(String(wall?.pathId || ""));
+  ok("no wall-behind-table climb ribbon", !bad, `${wall?.kind}/${wall?.pathId}`);
 }
 
 // ── 7) Geometry: primary set maxG / interior angle ────────────────
@@ -257,8 +237,7 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
     "conservatory_skirting", "door_cons_dining", "dining_skirting",
     "hall_to_cabinet_skirt", "cabinet_skirting",
     "hall_to_armoury_skirt", "armoury_skirting",
-    "ramp_foyer_to_landing", "ramp_foyer_console", "furniture_foyer_console",
-    "ramp_console_to_foyer_cornice", "cornice_foyer",
+    "ramp_foyer_to_landing", "foyer_drive_start", "cornice_foyer",
     "cornice_hall_east", "cornice_hall_west",
     "landing_skirting", "ramp_landing_to_landing_cornice",
     "cornice_landing_east", "cornice_landing_west",

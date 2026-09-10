@@ -301,30 +301,23 @@ if (Math.abs(bridgeSnap.y - 3.53) > 0.35) {
   }
 }
 
+// Foyer console furniture-top circuit DISABLED (Ben wall-fork / table-clip class)
 const furnSnap = drive.tracks.querySnap(5.5, 0.98, 10.0, 1.65);
-console.log("Foyer console furniture snap", {
+console.log("Foyer console furniture snap (must be gone)", {
   onTrack: furnSnap.onTrack, supported: furnSnap.supported,
   kind: furnSnap.kind, pathId: furnSnap.pathId,
 });
-if (!furnSnap.supported || !(furnSnap.kind === "elevated" || furnSnap.kind === "ramp")) {
-  throw new Error(`Furniture deck unsupported: ${furnSnap.kind}/${furnSnap.pathId}`);
+if (furnSnap.onTrack && (furnSnap.kind === "elevated" || furnSnap.kind === "ramp")
+    && /console|furniture_foyer/i.test(String(furnSnap.pathId || ""))) {
+  throw new Error(`Foyer console ribbon still snap-active: ${furnSnap.kind}/${furnSnap.pathId}`);
 }
-
-// Soft elevated rim fence: near-edge query should push toward center (wallBounce)
-const furnEdge = drive.tracks.querySnap(5.5 + 0.22, 0.98, 10.0, 1.65);
-console.log("Furniture rim fence", {
-  onTrack: furnEdge.onTrack, edgeMargin: furnEdge.edgeMargin,
-  wallBounce: furnEdge.wallBounce, kind: furnEdge.kind,
+// Wall-behind-table floor band must not host climb ribbons (skirting asphalt OK)
+const wallFork = drive.tracks.querySnap(8.15, 0.35, 10.5, 1.2);
+console.log("Foyer east wall behind table", {
+  onTrack: wallFork.onTrack, kind: wallFork.kind, pathId: wallFork.pathId, y: wallFork.y,
 });
-if (furnEdge.elevated || furnEdge.kind === "elevated" || furnEdge.kind === "ramp") {
-  if (!furnEdge.wallBounce) {
-    // try a bit farther out
-    const farther = drive.tracks.querySnap(5.5 + 0.28, 0.98, 10.0, 1.65);
-    console.log("Furniture rim fence (farther)", farther.wallBounce, farther.edgeMargin, farther.kind);
-    if (!farther.wallBounce && farther.onTrack) {
-      console.warn("WARN: no wallBounce near furniture rim — check edge fence");
-    }
-  }
+if (wallFork.kind === "ramp" || /console|furniture_foyer/i.test(String(wallFork.pathId || ""))) {
+  throw new Error(`Wall-behind-table fork still present: ${wallFork.kind}/${wallFork.pathId}`);
 }
 
 // Visible foyer skirting ribbon present (designed road at spawn)
@@ -472,9 +465,8 @@ if (drive.tracks.segments.length > 4200) {
   const must = [
     "ramp_landing_to_landing_cornice",
     "cornice_landing_west",
-    "ramp_music_to_hall_cornice",
-    "ramp_console_to_foyer_cornice",
-    "ramp_workshop_to_dining_cornice",
+    "ramp_foyer_to_landing",
+    "ramp_cornice_to_landing",
   ];
   for (const id of must) {
     if (!byId[id] || byId[id].disabled) throw new Error(`Missing elevated connector ${id}`);
@@ -487,7 +479,18 @@ if (drive.tracks.segments.length > 4200) {
     "mouse_east_grand_run", "mouse_west_grand_run", "mouse_foyer_armoury_mid", "mouse_foyer_cabinet_mid",
     "ramp_mouse_to_foyer_cornice", "ramp_mouse_east_to_foyer_cornice",
     "mouse_cellar_ground_shaft", "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase",
-    "shaft_service_west"]) {
+    "shaft_service_west",
+    // Furniture-top / wall-table multi-fork ribbons (Ben foyer console fork class)
+    "ramp_foyer_console", "furniture_foyer_console", "ramp_foyer_console_down", "ramp_console_to_foyer_cornice",
+    "ramp_dining_table", "furniture_dining_table", "ramp_dining_down",
+    "ramp_workshop_bench", "furniture_workshop_bench", "ramp_workshop_down", "ramp_workshop_to_dining_cornice",
+    "ramp_nursery_chest", "furniture_nursery_chest", "ramp_nursery_down", "ramp_nursery_express_return",
+    "ramp_cabinet_case", "furniture_cabinet_cases", "ramp_cases_to_cornice",
+    "ramp_music_sideboard", "furniture_music_sideboard", "ramp_music_down", "ramp_music_to_hall_cornice",
+    "ramp_library_bookcase", "furniture_library_tops", "ramp_library_down",
+    "ramp_bookcase_to_landing_cornice", "ramp_bookcase_west_to_landing_cornice",
+    "bookcase_express_lib_nursery", "bookcase_express_lib_study", "bookcase_express_cross",
+    "shelf_highway_hall", "ramp_study_express_down"]) {
     if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (void-risk / secondary island)`);
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
@@ -506,10 +509,10 @@ if (drive.tracks.segments.length > 4200) {
     joinOK("cornice_dining_bridge", "start", "cornice_conservatory", 0.15),
     joinOK("cornice_dining_bridge", "end", "cornice_dining", 0.15),
     joinOK("ramp_balcony_to_drive", "start", "balcony_loop", 0.12),
-    joinOK("ramp_cases_to_cornice", "end", "cornice_cabinet", 0.2),
     joinOK("ramp_landing_to_landing_cornice", "end", "cornice_landing_east", 0.12),
-    // ramp_study_express_to_cases disabled (mean grade death trap)
-    joinOK("ramp_music_to_hall_cornice", "end", "cornice_conservatory", 0.15),
+    // Proper foyer climb T: floor asphalt → ramp_foyer_to_landing
+    joinOK("ramp_foyer_to_landing", "start", "foyer_drive_start", 0.12),
+    joinOK("ramp_foyer_to_landing", "end", "landing_skirting", 0.2),
   ];
   // Primary on-ramps: overall grade should stay tour-friendly (not chute-steep)
   const grade = (id) => {
@@ -523,10 +526,9 @@ if (drive.tracks.segments.length > 4200) {
   };
   for (const [id, maxG] of [
     ["ramp_foyer_to_landing", 0.45],
-    ["ramp_cabinet_case", 0.45],
     ["ramp_landing_to_landing_cornice", 0.45],
-    ["ramp_console_to_foyer_cornice", 0.45],
-    // steep death-traps disabled rather than left undriveable
+    ["ramp_cornice_to_landing", 0.45],
+    // furniture-top / wall-table forks disabled rather than left undriveable
   ]) {
     const g = grade(id);
     if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
@@ -594,7 +596,7 @@ console.log("Road widths scaled + thick-asphalt mins", {
   foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "ramp_foyer_to_landing")?.width * 0.5).toFixed(3),
 });
 if (widthChecks < 50) throw new Error("too few paths for width check");
-if (rampHalfOk < 20) throw new Error("too few widened climb ramps");
+if (rampHalfOk < 6) throw new Error("too few widened climb ramps"); // furniture-top forks culled; keep primary climbs
 
 if (CAR_SCALE > 0.23 || CAR_SCALE < 0.20) {
   throw new Error(`CAR_SCALE should be ~0.218 (10–15% smaller than 0.25), got ${CAR_SCALE}`);
@@ -632,19 +634,18 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     if (id !== "piano" && maxDim < 0.35) throw new Error(`${id} too small in scene: ${maxDim}`);
   }
 
-  for (const id of ["nautilus", "piano"]) {
+  // Spot-check iconic curios, then every OBJECTS id via setSlice fracs
+  for (const id of ["nautilus", "piano", "alkaline_aa", "thunderegg", "credit_card"]) {
     const def = OBJECTS[id];
     const obj = buildLayerShells(def);
     scene.add(obj);
     const slice = new SliceSystem();
     slice.attach(obj, scene);
     slice.setMode("section");
-    slice.setIndex(0);
+    slice.setSlice(0);
     slice._apply(true);
     if (!slice.cutFaces?.visible) throw new Error(`${id}: cutFaces not visible`);
-    const disks = slice.cutFaces.children.filter(
-      (c) => c.userData.isCutDisk || (!c.userData.isRing && !c.userData.isBevel)
-    );
+    const disks = slice.cutFaces.children.filter((c) => c.userData.isCutDisk);
     if (disks.length < def.layers.length) throw new Error(`${id}: missing cut disks`);
     if (!disks.every((d) => d.visible)) throw new Error(`${id}: cut disks hidden at index 0`);
     let badTransparent = 0;
@@ -658,11 +659,14 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
       });
     }
     if (badTransparent > 0) throw new Error(`${id}: solid section mats forced transparent`);
-    slice.setIndex(2);
+    const mid = Math.min(2, def.layers.length - 1);
+    slice.setSlice(mid / Math.max(def.layers.length - 1, 1));
     slice._apply(true);
-    if (obj.userData.layers[0].visible) throw new Error(`${id}: outer layer still visible in section@2`);
-    const active = disks.find((d) => d.userData.layerIndex === 2);
-    if (!active?.visible) throw new Error(`${id}: active cut disk hidden at index 2`);
+    if (mid > 0 && obj.userData.layers[0].visible) {
+      throw new Error(`${id}: outer layer still visible in section@${mid}`);
+    }
+    const active = disks.find((d) => d.userData.layerIndex === slice.index);
+    if (!active?.visible) throw new Error(`${id}: active cut disk hidden at index ${slice.index}`);
     slice.detach(scene);
     scene.remove(obj);
     console.log(`Slice section OK ${id}`, { concentric: isConcentricDef(def), disks: disks.length });
@@ -875,7 +879,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     let mountFail = 0;
     const mountFails = [];
     const mounts = Object.entries(RAMP_MOUNT_FEET);
-    if (mounts.length < 28) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`);
+    if (mounts.length < 6) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`); // furniture-top climbs culled
     for (const [id, mount] of mounts) {
       const path = byId[id];
       if (!path) { mountFail++; mountFails.push(`${id} missing`); continue; }

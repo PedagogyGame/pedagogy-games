@@ -642,6 +642,7 @@ export const TRACK_PATHS = [
   
   {
     id: "ramp_foyer_console",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.48,
     points: [
@@ -657,6 +658,7 @@ export const TRACK_PATHS = [
   
   {
     id: "furniture_foyer_console",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -677,6 +679,7 @@ export const TRACK_PATHS = [
   
   {
     id: "ramp_foyer_console_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -691,6 +694,7 @@ export const TRACK_PATHS = [
   // 2) Dining table edge circuit
   {
     id: "ramp_dining_table",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -702,6 +706,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_dining_table",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -720,6 +725,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_dining_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -775,6 +781,7 @@ export const TRACK_PATHS = [
   // 3) Cabinet display case tops
   {
     id: "ramp_cabinet_case",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -788,6 +795,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_cabinet_cases",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.44,
     rail: true,
@@ -824,6 +832,7 @@ export const TRACK_PATHS = [
   // 4) Workshop bench (first floor)
   {
     id: "ramp_workshop_bench",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.42,
     points: [
@@ -838,6 +847,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_workshop_bench",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -853,6 +863,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_workshop_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -866,6 +877,7 @@ export const TRACK_PATHS = [
   // 5) Library bookcase tops + corner shelf highway
   {
     id: "ramp_library_bookcase",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -881,6 +893,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_library_tops",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.42,
     rail: true,
@@ -900,6 +913,7 @@ export const TRACK_PATHS = [
   // High corner shelf circuit (cornice height in hall)
   {
     id: "shelf_highway_hall",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.42,
     rail: true,
@@ -918,6 +932,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_library_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -932,6 +947,7 @@ export const TRACK_PATHS = [
   // 6) Music sideboard
   {
     id: "ramp_music_sideboard",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -944,6 +960,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_music_sideboard",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -959,6 +976,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_music_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -972,6 +990,7 @@ export const TRACK_PATHS = [
   // 7) Nursery toy chest
   {
     id: "ramp_nursery_chest",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -984,6 +1003,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "furniture_nursery_chest",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -998,6 +1018,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_nursery_down",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.4,
     points: [
@@ -1202,6 +1223,7 @@ export const TRACK_PATHS = [
   // Ramp from display cases up to cabinet cornice
   {
     id: "ramp_cases_to_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.40,
     points: [
@@ -1379,6 +1401,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_bookcase_to_landing_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.37,
     points: [
@@ -1982,6 +2005,7 @@ export const TRACK_PATHS = [
   // Bookcase-top express: library → nursery → study
   {
     id: "bookcase_express_lib_nursery",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -2000,6 +2024,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "bookcase_express_lib_study",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -2019,6 +2044,7 @@ export const TRACK_PATHS = [
   // Nursery ↔ Study cross via library north header (completes express triangle)
   {
     id: "bookcase_express_cross",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "elevated",
     width: 0.40,
     rail: true,
@@ -2077,6 +2103,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "ramp_bookcase_west_to_landing_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.37,
     points: [
@@ -2107,6 +2134,7 @@ export const TRACK_PATHS = [
   // Nursery express already meets toy chest; soft return ramp to nursery floor
   {
     id: "ramp_nursery_express_return",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.37,
     points: [
@@ -2121,6 +2149,7 @@ export const TRACK_PATHS = [
   // Music sideboard ↔ hall cornice header (unites mid furniture into cornice circuit)
   {
     id: "ramp_music_to_hall_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.42,
     points: [
@@ -2138,6 +2167,7 @@ export const TRACK_PATHS = [
   // Workshop bench → dining cornice (gentle furniture→cornice link)
   {
     id: "ramp_workshop_to_dining_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.37,
     points: [
@@ -2161,6 +2191,7 @@ export const TRACK_PATHS = [
   
   {
     id: "ramp_console_to_foyer_cornice",
+    disabled: true, // drive-course: furniture-top / wall-table multi-fork ribbon (Ben console fork class)
     kind: "ramp",
     width: 0.44,
     points: [
@@ -2645,6 +2676,7 @@ export const TRACK_PATHS = [
   // Study loft-adjacent express → study floor (was 2.2 m void dump)
   {
     id: "ramp_study_express_down",
+    disabled: true, // drive-course: orphan after furniture/express cull
     kind: "ramp",
     width: 0.37,
     points: [

@@ -37,6 +37,7 @@ export class SliceSystem {
     this._layerScaleTarget = new Map();
     this._layerPosTarget = new Map();
     this._layerRadii = [];
+    this._cutRadii = [];
     this._pulseT = 0;
     this._clipNormalLocal = new THREE.Vector3(1, 0, 0); // cut removes +X half
     this._tmpV = new THREE.Vector3();
@@ -76,8 +77,8 @@ export class SliceSystem {
       }
       this._box.setFromObject(layer);
       this._box.getSize(this._size);
-      // World AABB → local radius (undo root scale)
-      const rWorld = Math.max(this._size.y, this._size.z, this._size.x) * 0.48;
+      // World AABB → local radius in the cut plane (YZ); fall back to X for thin rods
+      const rWorld = Math.max(this._size.y, this._size.z, this._size.x * 0.85) * 0.5;
       const r = rWorld / Math.max(worldScale, 1e-4);
       this._layerRadii.push(Math.max(r, 0.06));
 
@@ -170,6 +171,7 @@ export class SliceSystem {
     this._layerScaleTarget.clear();
     this._layerPosTarget.clear();
     this._layerRadii = [];
+    this._cutRadii = [];
   }
 
   setMode(mode) {
@@ -189,6 +191,19 @@ export class SliceSystem {
 
   delta(d) {
     return this.setIndex(this.index + d);
+  }
+
+  /**
+   * Continuous cutaway depth in [0, 1] → discrete layer index.
+   * 0 = outermost, 1 = innermost. Used by checks + slider fraction mapping.
+   */
+  setSlice(frac) {
+    if (!this.def) return null;
+    const n = this.def.layers.length;
+    if (n <= 1) return this.setIndex(0);
+    const t = Math.max(0, Math.min(1, Number(frac) || 0));
+    const i = Math.round(t * (n - 1));
+    return this.setIndex(i);
   }
 
   currentLayer() {
@@ -233,12 +248,36 @@ export class SliceSystem {
     group.name = "cut_faces";
     const layers = this.object.userData.layers || [];
     const dataLayers = this.def?.layers || [];
+    const n = layers.length;
 
-    for (let i = 0; i < layers.length; i++) {
-      const r = this._layerRadii[i] || 0.1;
+    // Build outer→inner radii for annulus packing on the cut plane.
+    // Prefer measured AABB radii when already nested; otherwise spread evenly
+    // so every stratum gets a visible ring (assemblies / explode shapes).
+    const raw = this._layerRadii.map((r) => Math.max(r || 0.08, 0.06));
+    let nested = n > 1;
+    for (let i = 1; i < n; i++) {
+      if (!(raw[i] < raw[i - 1] * 0.98)) nested = false;
+    }
+    const radii = new Array(n);
+    if (nested) {
+      for (let i = 0; i < n; i++) radii[i] = raw[i];
+    } else {
+      const outer = Math.max(raw[0], ...raw, 0.14);
+      for (let i = 0; i < n; i++) {
+        radii[i] = Math.max(outer * (1 - i / (n + 0.15)), outer * 0.12, 0.045);
+      }
+    }
+    this._cutRadii = radii;
+
+    for (let i = 0; i < n; i++) {
+      const rOuter = radii[i] * 1.02;
+      const rInner = i < n - 1 ? Math.max(radii[i + 1] * 0.98, 0.012) : 0;
       const color = dataLayers[i]?.color ?? 0xcccccc;
-      // Disk in YZ plane (facing ±X) — crisp cut face / strata disk
-      const geo = new THREE.CircleGeometry(r * 1.04, 48);
+      // Annulus (or core disk) in YZ — all strata visible at once like a real section
+      const geo =
+        i === n - 1 || rInner < 0.015
+          ? new THREE.CircleGeometry(rOuter, 48)
+          : new THREE.RingGeometry(rInner, rOuter, 48);
       const mat = new THREE.MeshStandardMaterial({
         color,
         roughness: 0.38,
@@ -247,25 +286,29 @@ export class SliceSystem {
         emissive: color,
         emissiveIntensity: 0.42,
         depthWrite: true,
+        transparent: false,
+        opacity: 1,
         polygonOffset: true,
         polygonOffsetFactor: -4,
         polygonOffsetUnits: -4,
       });
-      // No clipping on cut faces — they ARE the cut
       mat.clippingPlanes = [];
       const disk = new THREE.Mesh(geo, mat);
       disk.renderOrder = 3;
-      // Sit slightly into the kept half so it isn't z-fought away
       disk.rotation.y = Math.PI / 2;
-      disk.position.set(-0.004 - i * 0.0025, 0, 0);
+      // Same plane for every stratum (tiny epsilon avoids z-fight); outer no longer occludes inners
+      disk.position.set(-0.005 - i * 0.00035, 0, 0);
       disk.userData.layerIndex = i;
       disk.userData.baseEmissive = 0.42;
       disk.userData.isCutDisk = true;
+      disk.userData.rOuter = rOuter;
+      disk.userData.rInner = rInner;
       group.add(disk);
 
-      // Bright outer ring for strata readability
+      // Bright rim on the outer edge of this stratum
+      const rimInner = Math.max(rOuter * 0.93, rInner + 0.004, 0.01);
       const ring = new THREE.Mesh(
-        new THREE.RingGeometry(Math.max(r * 0.9, 0.01), r * 1.035, 48),
+        new THREE.RingGeometry(rimInner, rOuter * 1.02, 48),
         new THREE.MeshBasicMaterial({
           color: 0xfff6e0,
           transparent: true,
@@ -278,30 +321,32 @@ export class SliceSystem {
       ring.renderOrder = 4;
       ring.rotation.y = Math.PI / 2;
       ring.position.copy(disk.position);
-      ring.position.x -= 0.0012;
+      ring.position.x -= 0.0008;
       ring.userData.layerIndex = i;
       ring.userData.isRing = true;
       group.add(ring);
 
-      // Soft inner bevel hint (darker annulus) for depth on the cut
-      const bevel = new THREE.Mesh(
-        new THREE.RingGeometry(Math.max(r * 0.78, 0.008), Math.max(r * 0.9, 0.012), 40),
-        new THREE.MeshBasicMaterial({
-          color: 0x1a1208,
-          transparent: true,
-          opacity: 0.22,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        })
-      );
-      bevel.material.clippingPlanes = [];
-      bevel.renderOrder = 3;
-      bevel.rotation.y = Math.PI / 2;
-      bevel.position.copy(disk.position);
-      bevel.position.x -= 0.0006;
-      bevel.userData.layerIndex = i;
-      bevel.userData.isBevel = true;
-      group.add(bevel);
+      // Soft bevel on the inner edge for depth
+      if (rInner > 0.02) {
+        const bevel = new THREE.Mesh(
+          new THREE.RingGeometry(Math.max(rInner * 0.92, 0.008), Math.min(rInner * 1.08, rOuter * 0.98), 40),
+          new THREE.MeshBasicMaterial({
+            color: 0x1a1208,
+            transparent: true,
+            opacity: 0.22,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+        );
+        bevel.material.clippingPlanes = [];
+        bevel.renderOrder = 3;
+        bevel.rotation.y = Math.PI / 2;
+        bevel.position.copy(disk.position);
+        bevel.position.x -= 0.0004;
+        bevel.userData.layerIndex = i;
+        bevel.userData.isBevel = true;
+        group.add(bevel);
+      }
     }
 
     group.renderOrder = 2;
@@ -324,41 +369,53 @@ export class SliceSystem {
       this.cutLight.intensity = mode === "section" ? 48 : mode === "peel" ? 22 : 0;
     }
 
-    // Cut faces: show for section always; for peel show remaining; ghost faint
+    // Cut faces: annular strata always readable; never let an outer disk occlude inners
     if (this.cutFaces) {
-      this.cutFaces.visible = mode === "section" || mode === "peel" || mode === "ghost";
+      this.cutFaces.visible = true;
       this.cutFaces.children.forEach((child) => {
         const i = child.userData.layerIndex;
         if (i == null) return;
         const isOuter = i < this.index;
         const isActive = i === this.index;
         const isDecor = child.userData.isRing || child.userData.isBevel;
-        // Outside-in: hide outer cut faces once peeled past; keep active + inner
+        const mat = child.isMesh ? child.material : null;
+
         if (mode === "section") {
+          // Hide peeled-away outer strata; keep active + inner rings on the cut
           child.visible = !isOuter;
+          if (mat && !isDecor) {
+            mat.opacity = 1;
+            mat.transparent = false;
+            mat.depthWrite = true;
+          }
         } else if (mode === "peel") {
           child.visible = true;
-          if (child.isMesh && child.material && !isDecor) {
-            child.material.opacity = isOuter ? 0.22 : 1;
-            child.material.transparent = isOuter || child.material.opacity < 1;
+          if (mat && !isDecor) {
+            mat.opacity = isOuter ? 0.28 : isActive ? 1 : 0.92;
+            mat.transparent = mat.opacity < 0.98;
+            mat.depthWrite = !mat.transparent;
           }
         } else {
+          // ghost
           child.visible = true;
-          if (child.isMesh && child.material && !isDecor) {
-            child.material.opacity = isOuter ? 0.18 : 0.9;
-            child.material.transparent = true;
+          if (mat && !isDecor) {
+            mat.opacity = isOuter ? 0.2 : isActive ? 0.95 : 0.75;
+            mat.transparent = true;
+            mat.depthWrite = false;
           }
         }
-        if (child.isMesh && child.material && child.material.emissive && !isDecor) {
-          child.material.emissiveIntensity = isActive ? 0.95 : child.userData.baseEmissive ?? 0.42;
+
+        if (mat && mat.emissive && !isDecor) {
+          mat.emissiveIntensity = isActive ? 1.05 : child.userData.baseEmissive ?? 0.42;
+          mat.needsUpdate = true;
         }
+
         if (child.userData.isRing) {
-          child.visible = isActive && (mode !== "section" || !isOuter);
-          if (child.material) child.material.opacity = isActive ? 0.62 : 0.35;
+          child.visible = isActive && !isOuter;
+          if (mat) mat.opacity = isActive ? 0.72 : 0.35;
         }
         if (child.userData.isBevel) {
-          child.visible = !isOuter && child.visible !== false;
-          if (mode === "section") child.visible = !isOuter;
+          child.visible = !isOuter;
         }
       });
     }

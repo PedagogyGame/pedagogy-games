@@ -536,7 +536,7 @@ export class TrackSystem {
     // Continuous ribbon — skip door_* and visual:false
     // Gap foyer_skirting visuals under spawn apron (ONE mesh there — no z-fight)
     if (useRibbon && visualOk) {
-      const gap = (path.id === "foyer_skirting" || path.id === "foyer_drive_start")
+      const gap = (path.id === "foyer_skirting" || path.id === "foyer_drive_start" || path.id === "door_foyer_outdoor")
         ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: (this._spawnApron?.r || 1.85) }
         : null;
       this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap, isRail);
