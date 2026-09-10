@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocab System</title>
+    
+    <!-- 
+      RESOURCE URL LIST:
+      1. Engine (Phaser 3): https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js
+      2. Live API (Datamuse): https://api.datamuse.com/words?ml=engineering&md=d&max=60
+      3. Assets (jsDelivr CDN / Phaser Examples Github Raw):
+         - Background: https://cdn.jsdelivr.net/gh/photonstorm/phaser3-examples@master/public/assets/skies/deep-space.jpg
+         - Particle: https://cdn.jsdelivr.net/gh/photonstorm/phaser3-examples@master/public/assets/particles/sparkle1.png
+         - Audio (Success): https://cdn.jsdelivr.net/gh/photonstorm/phaser3-examples@master/public/assets/audio/SoundEffects/p-ping.mp3
+         - Audio (Error): https://cdn.jsdelivr.net/gh/photonstorm/phaser3-examples@master/public/assets/audio/SoundEffects/explosion.mp3
+    -->
+
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+
+    <style>
+        body {
+            background-color: #050505;
+            color: #33ff00;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Animated CRT Scanlines */
+        body::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.35) 50%
+            );
+            background-size: 100% 4px;
+            z-index: 50;
+            pointer-events: none;
+            animation: scrollScanlines 10s linear infinite;
+        }
+
+        /* Subtle CRT Flicker & Glow */
+        body::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: radial-gradient(circle, rgba(51,255,0,0.04) 0%, rgba(0,0,0,0.5) 100%);
+            z-index: 49;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+
+        @keyframes scrollScanlines {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 400px; }
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.95; }
+            50% { opacity: 1; }
+            100% { opacity: 0.98; }
+        }
+
+        #game-container {
+            z-index: 10;
+            box-shadow: 0 0 30px rgba(51, 255, 0, 0.25);
+            border: 2px solid #1a5e1a;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container"></div>
+
+<script>
+    const fallbackData = [
+        { word: "rafter", def: "Internal sloped wooden beams that extend from ridge to eaves." },
+        { word: "pitch", def: "The steepness or slope of the roof." },
+        { word: "valley", def: "Internal V-shaped intersection where two descending roof planes meet." },
+        { word: "shingle", def: "Individual overlapping roofing unit that forms the outermost layer." },
+        { word: "fascia", def: "Vertical board along the roof edge where gutters are attached." }
+    ];
+
+    class MainScene extends Phaser.Scene {
+        constructor() {
+            super({ key: 'MainScene' });
+            this.vocabList = [];
+            this.currentWordObj = null;
+            this.health = 100;
+            this.timeElapsedMs = 0; // Tracked in milliseconds for smooth animation
+            this.maxTimeMs = 15000;
+            this.playerInput = "";
+            this.isTimerRunning = false;
+        }
+
+        preload() {
+            const cdnBase = 'https://cdn.jsdelivr.net/gh/photonstorm/phaser3-examples@master/public/assets';
+            this.load.image('bg', `${cdnBase}/skies/deep-space.jpg`);
+            this.load.image('sparkle', `${cdnBase}/particles/sparkle1.png`);
+            this.load.audio('success', `${cdnBase}/audio/SoundEffects/p-ping.mp3`);
+            this.load.audio('error', `${cdnBase}/audio/SoundEffects/explosion.mp3`);
+        }
+
+        async create() {
+            // Dynamic Background
+            this.bg = this.add.image(400, 300, 'bg').setAlpha(0.4);
+            this.bg.setScale(2.0); // Scaled up to allow for rotation without seeing edges
+
+            // Ambient floating particles
+            this.add.particles(400, 650, 'sparkle', {
+                x: { min: 0, max: 800 },
+                speedY: { min: -10, max: -30 },
+                speedX: { min: -10, max: 10 },
+                scale: { start: 0.5, end: 0 },
+                alpha: { start: 0.3, end: 0 },
+                blendMode: 'ADD',
+                lifespan: 6000,
+                frequency: 150
+            });
+            
+            // UI Setup
+            this.defText = this.add.text(400, 200, "Initializing Neural Link...\nFetching Data...", {
+                fontFamily: 'Courier', fontSize: '24px', color: '#00ffcc', 
+                align: 'center', wordWrap: { width: 600 }
+            }).setOrigin(0.5).setAlpha(0); // Starts invisible for fade-in effect
+
+            // Smooth fade in for initial text
+            this.tweens.add({ targets: this.defText, alpha: 1, duration: 1000 });
+
+            this.inputText = this.add.text(400, 380, "", {
+                fontFamily: 'Courier', fontSize: '36px', color: '#ffff00', 
+                backgroundColor: '#111111', padding: { x: 20, y: 10 }
+            }).setOrigin(0.5);
+
+            // Status Bars
+            this.add.text(50, 30, "SYSTEM INTEGRITY:", { fontFamily: 'Courier', fontSize: '18px', color: '#ffffff' });
+            this.add.rectangle(50, 60, 300, 20, 0x333333).setOrigin(0, 0.5);
+            this.healthBar = this.add.rectangle(50, 60, 300, 20, 0x33ff00).setOrigin(0, 0.5);
+
+            this.add.text(50, 100, "TIME REMAINING:", { fontFamily: 'Courier', fontSize: '18px', color: '#ffffff' });
+            this.add.rectangle(50, 130, 300, 20, 0x333333).setOrigin(0, 0.5);
+            this.timeBar = this.add.rectangle(50, 130, 300, 20, 0x00ccff).setOrigin(0, 0.5);
+
+            await this.fetchData();
+            this.input.keyboard.on('keydown', this.handleKey, this);
+            this.nextWord();
+        }
+
+        // 60FPS Game Loop
+        update(time, delta) {
+            // Smooth background rotation
+            if (this.bg) {
+                this.bg.rotation += 0.0002 * delta; 
+            }
+
+            // Frame-by-frame timer shrinkage
+            if (this.isTimerRunning && this.health > 0) {
+                this.timeElapsedMs += delta;
+                
+                let timePct = Math.max(0, 1 - (this.timeElapsedMs / this.maxTimeMs));
+                this.timeBar.width = 300 * timePct; // Smoothly scales down every frame
+
+                // Color switch dynamically at the 10-second mark
+                if (this.timeElapsedMs > 10000) {
+                    this.timeBar.fillColor = 0xff9900; // Warning orange
+                } else {
+                    this.timeBar.fillColor = 0x00ccff; // Safe blue
+                }
+
+                if (this.timeElapsedMs >= this.maxTimeMs) {
+                    this.handleTimeout();
+                }
+            }
+        }
+
+        async fetchData() {
+            try {
+                let res = await fetch('https://api.datamuse.com/words?ml=engineering&md=d&max=60');
+                if (!res.ok) throw new Error("API Failure");
+                let data = await res.json();
+                
+                this.vocabList = data
+                    .filter(d => d.defs && d.word.indexOf(' ') === -1)
+                    .map(d => ({
+                        word: d.word.toLowerCase(),
+                        def: d.defs[0].replace(/^[a-zA-Z]+\t/, '')
+                    }));
+                
+                if(this.vocabList.length === 0) throw new Error("Empty data");
+            } catch (err) {
+                this.vocabList = fallbackData;
+            }
+            this.vocabList.sort(() => Math.random() - 0.5);
+        }
+
+        nextWord() {
+            if (this.vocabList.length === 0 || this.health <= 0) {
+                this.gameOver();
+                return;
+            }
+
+            this.currentWordObj = this.vocabList.pop();
+            this.playerInput = "";
+            this.inputText.setText("_");
+            this.inputText.setScale(1); 
+            
+            // Text fade-in transition
+            this.defText.setAlpha(0);
+            this.defText.setText(this.currentWordObj.def);
+            this.tweens.add({ targets: this.defText, alpha: 1, duration: 400, ease: 'Power2' });
+
+            this.maxTimeMs = this.currentWordObj.word.length > 7 ? 20000 : 15000;
+            this.timeElapsedMs = 0;
+            this.timeBar.width = 300;
+            this.isTimerRunning = true;
+        }
+
+        handleKey(event) {
+            if (!this.currentWordObj || this.health <= 0 || !this.isTimerRunning) return;
+
+            if (event.key === 'Backspace') {
+                this.playerInput = this.playerInput.slice(0, -1);
+            } else if (event.key === 'Enter') {
+                this.checkAnswer();
+            } else if (event.key.length === 1 && event.key.match(/[a-z]/i)) {
+                this.playerInput += event.key.toLowerCase();
+                
+                // Dynamic feedback: tiny scale pop on keystroke
+                this.tweens.add({
+                    targets: this.inputText,
+                    scaleX: 1.05, scaleY: 1.05,
+                    duration: 50, yoyo: true
+                });
+            }
+
+            this.inputText.setText(this.playerInput + "_");
+        }
+
+        checkAnswer() {
+            this.isTimerRunning = false;
+
+            if (this.playerInput === this.currentWordObj.word) {
+                this.sound.play('success', { volume: 0.5 });
+                
+                if (this.timeElapsedMs <= 10000) {
+                    this.adjustHealth(10);
+                    this.defText.setText("SPEED BONUS +10%\n\n" + this.currentWordObj.word.toUpperCase());
+                } else {
+                    this.defText.setText("CORRECT.\n\n" + this.currentWordObj.word.toUpperCase());
+                }
+
+                // Explosion of particles on correct answer
+                let particles = this.add.particles(400, 380, 'sparkle', {
+                    speed: { min: 100, max: 300 },
+                    scale: { start: 1, end: 0 },
+                    blendMode: 'ADD', lifespan: 800, quantity: 30
+                });
+                this.time.delayedCall(800, () => particles.destroy());
+
+            } else {
+                this.triggerErrorPenalty();
+            }
+
+            this.time.delayedCall(1500, this.nextWord, [], this);
+        }
+
+        handleTimeout() {
+            this.isTimerRunning = false;
+            this.triggerErrorPenalty(true);
+            this.time.delayedCall(1500, this.nextWord, [], this);
+        }
+
+        triggerErrorPenalty(isTimeout = false) {
+            this.sound.play('error', { volume: 0.3 });
+            
+            // Smooth Camera Shake
+            this.cameras.main.shake(250, 0.015, true);
+            
+            let penalty = isTimeout ? 25 : (this.currentWordObj.word.length > 7 ? 30 : 20);
+            this.adjustHealth(-penalty);
+            
+            let msg = isTimeout ? "TIMEOUT." : "ERROR.";
+            this.defText.setText(`${msg}\nCorrect term: ${this.currentWordObj.word.toUpperCase()}`);
+        }
+
+        // Smoothly animates the health bar to its new size
+        adjustHealth(amount) {
+            this.health = Phaser.Math.Clamp(this.health + amount, 0, 100);
+            
+            let healthPct = this.health / 100;
+            let targetColor = (this.health > 50) ? 0x33ff00 : (this.health > 25 ? 0xffff00 : 0xff0000);
+
+            // Tween the bar width smoothly
+            this.tweens.add({
+                targets: this.healthBar,
+                width: 300 * healthPct,
+                duration: 400,
+                ease: 'Power2',
+                onUpdate: () => {
+                    this.healthBar.fillColor = targetColor;
+                }
+            });
+        }
+
+        gameOver() {
+            this.isTimerRunning = false;
+            this.inputText.setVisible(false);
+            if (this.health <= 0) {
+                this.defText.setText("CRITICAL FAILURE.\nSYSTEM SHUTDOWN.");
+                this.defText.setColor("#ff0000");
+                this.cameras.main.fade(2000, 50, 0, 0);
+            } else {
+                this.defText.setText("DATABASE EXHAUSTED.\nTRAINING COMPLETE.");
+                this.defText.setColor("#33ff00");
+            }
+        }
+    }
+
+    const config = {
+        type: Phaser.WEBGL,
+        width: 800,
+        height: 600,
+        parent: 'game-container',
+        scene: MainScene,
+        audio: { disableWebAudio: false }
+    };
+
+    const game = new Phaser.Game(config);
+</script>
+
+</body>
+</html>
