@@ -598,14 +598,26 @@ kbd.kbd{
 #audioVolume{width:100%;accent-color:#6cecff}
 #audioEngineReadout{margin-top:3px}
 
+
+.signalMeter{
+  height:8px;margin-top:7px;border-radius:999px;overflow:hidden;
+  background:#090d12;border:1px solid #29343f;
+}
+.signalFill{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,#49d6ff,#cb72ff);
+  transition:width .08s linear;
+}
+#audioBridge{display:none}
+
 </style>
 </head>
 <body>
 <div class="app">
 <header>
   <div>
-    <h1>Pianoboard V11</h1>
-    <div class="sub">Finer piano keys, expanded theory choices, and an audited audio engine that fully resumes before every key or sequence plays</div>
+    <h1>Pianoboard V12</h1>
+    <div class="sub">Finer piano keys, expanded theory choices, and dual-path audio with a live output signal check</div>
   </div>
   <div class="chip" id="status">C Major chord • C E G only</div>
 </header>
@@ -747,8 +759,18 @@ kbd.kbd{
   <div class="keyCard" style="margin-top:8px">
     <div class="micro">Last note</div>
     <div class="keyBig" id="audioNoteReadout">—</div>
-    <div class="micro" id="audioEngineReadout">Ready — tap any piano key.</div><div class="micro">Every key tap, root, chord, scale, and harmonic sequence waits for a fully running AudioContext, then uses the same direct note engine.</div>
+    <div class="micro" id="audioEngineReadout">Ready — press Enable / Check Audio.</div>
+    <div class="micro" id="audioOutputReadout">Output path: not initialized</div>
+    <div class="micro" id="audioSignalReadout">Signal: not tested</div>
+    <div class="signalMeter"><div class="signalFill" id="signalFill"></div></div>
   </div>
+
+  <div class="row2" style="margin-top:8px">
+    <button class="btn primary" id="enableAudio">Enable / Check Audio</button>
+    <button class="btn" id="forceDirect">Switch Output</button>
+  </div>
+
+  <audio id="audioBridge" playsinline preload="auto"></audio>
 
   <div class="smallNote" style="margin-top:13px">
     <b>Tighter browsing:</b> use <kbd class="kbd">Library focus</kbd> to keep the lists practical.
@@ -810,7 +832,7 @@ kbd.kbd{
 </aside>
 </main>
 
-<footer>Pianoboard V11 • runtime-audited audio • every key wired • every sequence wired</footer>
+<footer>Pianoboard V12 • direct + media-bridge audio • live signal meter • every playback path wired</footer>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1081,7 +1103,9 @@ const family=$("family"), scale=$("scale"), tonic=$("tonic"), labels=$("labels")
 const quickModeBank=$("quickModeBank");
 const audioVolume=$("audioVolume"), volumeReadout=$("volumeReadout");
 const sustainToggle=$("sustainToggle"), audioTest=$("audioTest");
+const enableAudio=$("enableAudio"), forceDirect=$("forceDirect"), audioBridge=$("audioBridge");
 const audioNoteReadout=$("audioNoteReadout"), audioEngineReadout=$("audioEngineReadout");
+const audioOutputReadout=$("audioOutputReadout"), audioSignalReadout=$("audioSignalReadout"), signalFill=$("signalFill");
 const keysArea=$("keysArea"), scene=$("scene");
 let audioCtx=null, tip=null;
 
@@ -1557,6 +1581,13 @@ let hammerNoiseBuffer=null;
 let sustainEnabled=true;
 let pianoVolume=.82;
 
+let mediaDest=null;
+let analyserNode=null;
+let outputMode="media"; // media bridge first; direct destination is fallback
+let directConnected=false;
+let mediaConnected=false;
+let meterTimer=null;
+
 function midiName(midi){
   const names=["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
   const rounded=Math.round(midi);
@@ -1569,6 +1600,7 @@ async function ensureAudioReady(){
   const AudioCtor=window.AudioContext||window.webkitAudioContext;
   if(!AudioCtor){
     audioEngineReadout.textContent="AudioContext unavailable in this browser";
+    audioOutputReadout.textContent="Output path: unavailable";
     toast("Audio is not supported in this browser");
     return null;
   }
@@ -1578,23 +1610,38 @@ async function ensureAudioReady(){
     catch(e){audioCtx=new AudioCtor();}
   }
 
-  // Safari/iPhone can leave a newly created context suspended.
-  // Do not schedule the note until resume() has actually completed.
+  setupPianoGraph();
+
   if(audioCtx.state!=="running"){
-    try{
-      await audioCtx.resume();
-    }catch(e){
-      console.warn("Audio resume failed",e);
-    }
+    try{ await audioCtx.resume(); }
+    catch(e){ console.warn("Audio resume failed",e); }
   }
 
   if(audioCtx.state!=="running"){
-    audioEngineReadout.textContent="Tap again to enable audio";
+    audioEngineReadout.textContent="Browser still has audio suspended — press Enable / Check Audio again";
     return null;
   }
 
-  setupPianoGraph();
-  audioEngineReadout.textContent="Audio active • running";
+  // Prefer an HTMLMediaElement bridge. This creates a second, browser-media
+  // output path instead of relying only on AudioContext.destination.
+  if(outputMode==="media" && mediaDest){
+    try{
+      if(audioBridge.srcObject!==mediaDest.stream) audioBridge.srcObject=mediaDest.stream;
+      audioBridge.muted=false;
+      audioBridge.volume=1;
+      await audioBridge.play();
+      audioOutputReadout.textContent="Output path: HTML media bridge";
+    }catch(e){
+      console.warn("Media bridge play failed; using direct output",e);
+      outputMode="direct";
+      connectDirectOutput();
+    }
+  }else{
+    connectDirectOutput();
+  }
+
+  startSignalMeter();
+  audioEngineReadout.textContent="Audio engine active • running";
   return audioCtx;
 }
 
@@ -1630,6 +1677,15 @@ function makeHammerNoise(ctx){
   return b;
 }
 
+function connectDirectOutput(){
+  if(!audioCtx || !pianoCompressor) return;
+  if(!directConnected){
+    pianoCompressor.connect(audioCtx.destination);
+    directConnected=true;
+  }
+  audioOutputReadout.textContent="Output path: direct Web Audio";
+}
+
 function setupPianoGraph(){
   if(!audioCtx || pianoMaster) return;
 
@@ -1656,10 +1712,89 @@ function setupPianoGraph(){
   pianoMaster.connect(pianoConvolver);
   pianoDry.connect(pianoCompressor);
   pianoConvolver.connect(pianoWet).connect(pianoCompressor);
-  pianoCompressor.connect(audioCtx.destination);
+
+  // Live analyser proves whether the synth is actually producing signal.
+  analyserNode=audioCtx.createAnalyser();
+  analyserNode.fftSize=2048;
+  analyserNode.smoothingTimeConstant=.72;
+  pianoCompressor.connect(analyserNode);
+
+  // Media-stream bridge: Web Audio synth -> MediaStream -> real <audio> element.
+  if(audioCtx.createMediaStreamDestination){
+    try{
+      mediaDest=audioCtx.createMediaStreamDestination();
+      pianoCompressor.connect(mediaDest);
+      mediaConnected=true;
+      audioBridge.srcObject=mediaDest.stream;
+      outputMode="media";
+      audioOutputReadout.textContent="Output path: media bridge prepared";
+    }catch(e){
+      console.warn("Media destination unavailable",e);
+      mediaDest=null;
+      outputMode="direct";
+      connectDirectOutput();
+    }
+  }else{
+    outputMode="direct";
+    connectDirectOutput();
+  }
 
   hammerNoiseBuffer=makeHammerNoise(audioCtx);
-  audioEngineReadout.textContent="Direct piano engine ready";
+  audioEngineReadout.textContent="Audio graph ready";
+}
+
+
+function readSignalLevel(){
+  if(!analyserNode) return 0;
+  const arr=new Float32Array(analyserNode.fftSize);
+  analyserNode.getFloatTimeDomainData(arr);
+  let ss=0, peak=0;
+  for(const v of arr){
+    ss+=v*v;
+    const a=Math.abs(v);
+    if(a>peak) peak=a;
+  }
+  const rms=Math.sqrt(ss/arr.length);
+  return Math.max(rms,peak*.55);
+}
+
+function updateSignalMeter(){
+  const level=readSignalLevel();
+  const pct=Math.max(0,Math.min(100,level*240));
+  signalFill.style.width=pct.toFixed(1)+"%";
+  if(level>.002){
+    audioSignalReadout.textContent=`Signal detected: ${(20*Math.log10(Math.max(level,1e-6))).toFixed(1)} dBFS approx.`;
+  }
+}
+
+function startSignalMeter(){
+  if(meterTimer) return;
+  meterTimer=setInterval(updateSignalMeter,80);
+}
+
+async function runAudioCheck(){
+  if(!(await ensureAudioReady())) return false;
+
+  audioSignalReadout.textContent="Signal: testing C–E–G…";
+  const root=60;
+  [0,4,7].forEach((i,n)=>{
+    const hz=440*Math.pow(2,((root+i)-69)/12);
+    playPianoFrequencyUnlocked(hz,1.35,n*.18,.72);
+  });
+
+  await new Promise(r=>setTimeout(r,130));
+  const level=readSignalLevel();
+
+  if(level>.002){
+    const db=20*Math.log10(Math.max(level,1e-6));
+    audioSignalReadout.textContent=`Signal PASS: ${db.toFixed(1)} dBFS approx.`;
+    signalFill.style.width=Math.min(100,level*240).toFixed(1)+"%";
+    return true;
+  }else{
+    audioSignalReadout.textContent="Signal FAIL: synth graph is silent";
+    signalFill.style.width="0%";
+    return false;
+  }
 }
 
 function addOscPartial(freq,amp,decay,t,output,detuneCents=0,type="sine"){
@@ -1755,7 +1890,7 @@ async function playMidi(midi,duration=2.2,delay=0,velocity=.82){
   const ok=playPianoFrequencyUnlocked(hz,duration,delay,velocity);
   if(ok){
     audioNoteReadout.textContent=`${midiName(midi)} • ${hz.toFixed(2)} Hz`;
-    audioEngineReadout.textContent="Audio active • running";
+    audioEngineReadout.textContent=`Audio active • ${outputMode==="media"?"media bridge":"direct output"}`;
   }
   return ok;
 }
@@ -1872,6 +2007,35 @@ span.addEventListener("change",render);
 
 
 
+
+enableAudio.addEventListener("click",async()=>{
+  const ok=await runAudioCheck();
+  if(ok) toast("Audio signal detected");
+  else toast("Audio signal was not detected");
+});
+
+forceDirect.addEventListener("click",async()=>{
+  if(outputMode==="media"){
+    outputMode="direct";
+    connectDirectOutput();
+    try{audioBridge.pause();}catch(e){}
+    forceDirect.textContent="Use Media Bridge";
+  }else{
+    outputMode="media";
+    if(mediaDest){
+      try{
+        audioBridge.srcObject=mediaDest.stream;
+        await audioBridge.play();
+        audioOutputReadout.textContent="Output path: HTML media bridge";
+        forceDirect.textContent="Use Direct Output";
+      }catch(e){
+        outputMode="direct";
+        connectDirectOutput();
+      }
+    }
+  }
+});
+
 audioVolume.addEventListener("input",()=>{
   pianoVolume=Number(audioVolume.value)/100;
   volumeReadout.textContent=`${audioVolume.value}%`;
@@ -1958,7 +2122,15 @@ audioVolume.value="82";
 volumeReadout.textContent="82%";
 sustainEnabled=true;
 sustainToggle.textContent="Sustain: On";
+forceDirect.textContent="Use Direct Output";
 render();
+window.__pianoboardAudioDiag={
+  context:()=>audioCtx,
+  analyser:()=>analyserNode,
+  compressor:()=>pianoCompressor,
+  outputMode:()=>outputMode,
+  level:()=>readSignalLevel()
+};
 })();
 </script>
 </body>
