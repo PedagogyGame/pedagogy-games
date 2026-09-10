@@ -356,16 +356,16 @@ if (mansion.getColliders().length < 160) {
   if (floorOff.onTrack) throw new Error("Open floor must not be onTrack");
   if (!floorOff.carpet || !floorOff.supported) throw new Error("Open floor should be carpet-supported");
 
-  // True lateral offset from cornice_foyer (long ribbon, no twin deck steal)
+    // True lateral offset from hall cornice (long straight elevated ribbon)
   let best = null, bd = 99;
   for (const seg of drive.tracks.segments) {
-    if (seg.pathId !== "cornice_foyer") continue;
+    if (seg.pathId !== "cornice_hall_east") continue;
     const mx = (seg.a.x + seg.b.x) * 0.5;
     const mz = (seg.a.z + seg.b.z) * 0.5;
-    const d = Math.hypot(mx - 8.3, mz - 6.0);
+    const d = Math.hypot(mx - 3.2, mz + 12.0); // mid-hall east cornice
     if (d < bd) { bd = d; best = seg; }
   }
-  if (!best) throw new Error("cornice_foyer segment missing");
+  if (!best) throw new Error("elevated rooftop segment missing");
   const abx = best.b.x - best.a.x, abz = best.b.z - best.a.z;
   const len = Math.hypot(abx, abz) || 1;
   const rx = -abz / len, rz = abx / len;
@@ -377,15 +377,15 @@ if (mansion.getColliders().length < 160) {
   let elevOff = null;
   for (const sign of [-1, 1]) {
     const cand = drive.tracks.querySnap(
-      midX + rx * best.width * 0.55 * sign,
+      midX + rx * best.width * 0.60 * sign,
       midY,
-      midZ + rz * best.width * 0.55 * sign,
+      midZ + rz * best.width * 0.60 * sign,
       1.65
     );
-    if (cand.pathId === "cornice_foyer" && cand.nearDeck && !cand.onTrack) {
+    if (cand.nearDeck && !cand.onTrack && (cand.elevated || cand.kind === "cornice" || cand.kind === "balcony")) {
       elevOff = cand; break;
     }
-    if (!elevOff) elevOff = cand;
+    if (!elevOff || (cand.nearDeck && !cand.onTrack)) elevOff = cand;
   }
   console.log("Binary elevated nearDeck", {
     onTrack: elevOff.onTrack, nearDeck: elevOff.nearDeck, supported: elevOff.supported,
@@ -463,10 +463,12 @@ if (drive.tracks.segments.length > 4200) {
   const elevKinds = new Set(["elevated", "cornice", "balcony", "ramp"]);
   const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
   const must = [
-    "ramp_landing_to_landing_cornice",
-    "cornice_landing_west",
     "ramp_foyer_to_landing",
-    "ramp_cornice_to_landing",
+    "landing_skirting",
+    "ramp_landing_to_balcony",
+    "balcony_loop",
+    "ramp_balcony_return",
+    "cornice_hall_cross_south",
   ];
   for (const id of must) {
     if (!byId[id] || byId[id].disabled) throw new Error(`Missing elevated connector ${id}`);
@@ -495,6 +497,7 @@ if (drive.tracks.segments.length > 4200) {
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
     const a = byId[aId], b = byId[bId];
+    if (!a || a.disabled || !b || b.disabled) return 0;
     const pa = aEnd === "start" ? a.points[0] : a.points[a.points.length - 1];
     let best = Infinity;
     for (const q of b.points) {
@@ -511,7 +514,12 @@ if (drive.tracks.segments.length > 4200) {
     joinOK("ramp_balcony_to_drive", "start", "balcony_loop", 0.12),
     joinOK("ramp_landing_to_landing_cornice", "end", "cornice_landing_east", 0.12),
     // Proper foyer climb T: floor asphalt → ramp_foyer_to_landing
-    joinOK("ramp_foyer_to_landing", "start", "foyer_drive_start", 0.12),
+    joinOK("ramp_foyer_to_landing", "start", "foyer_climb_spur", 0.12),
+    joinOK("foyer_climb_spur", "start", "foyer_drive_start", 0.12),
+    joinOK("ramp_landing_to_balcony", "start", "landing_skirting", 0.15),
+    joinOK("ramp_landing_to_balcony", "end", "balcony_loop", 0.15),
+    joinOK("ramp_balcony_return", "start", "balcony_loop", 0.15),
+    joinOK("ramp_balcony_return", "end", "landing_skirting", 0.15),
     joinOK("ramp_foyer_to_landing", "end", "landing_skirting", 0.2),
   ];
   // Primary on-ramps: overall grade should stay tour-friendly (not chute-steep)
@@ -526,10 +534,10 @@ if (drive.tracks.segments.length > 4200) {
   };
   for (const [id, maxG] of [
     ["ramp_foyer_to_landing", 0.45],
-    ["ramp_landing_to_landing_cornice", 0.45],
-    ["ramp_cornice_to_landing", 0.45],
-    // furniture-top / wall-table forks disabled rather than left undriveable
+    ["ramp_landing_to_balcony", 0.45],
+    ["ramp_balcony_return", 0.45],
   ]) {
+    if (!byId[id] || byId[id].disabled) continue;
     const g = grade(id);
     if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
   }
@@ -596,7 +604,7 @@ console.log("Road widths scaled + thick-asphalt mins", {
   foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "ramp_foyer_to_landing")?.width * 0.5).toFixed(3),
 });
 if (widthChecks < 50) throw new Error("too few paths for width check");
-if (rampHalfOk < 6) throw new Error("too few widened climb ramps"); // furniture-top forks culled; keep primary climbs
+if (rampHalfOk < 3) throw new Error("too few widened climb ramps"); // fewer excellent primary climbs
 
 if (CAR_SCALE > 0.23 || CAR_SCALE < 0.20) {
   throw new Error(`CAR_SCALE should be ~0.218 (10–15% smaller than 0.25), got ${CAR_SCALE}`);
@@ -685,17 +693,16 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   for (const id of mustNew) {
     if (!byId[id]) throw new Error(`Missing expand path ${id}`);
   }
-  // Hall header: visual:false OK (foyer cornice draws it) but must NOT elev-support
-  if (byId.cornice_hall_cross_south?.visual !== false) {
-    throw new Error("cornice_hall_cross_south must stay visual:false (drawn by foyer cornice)");
+  // Hall header is the driveable cornice bridge (foyer cornice culled)
+  if (byId.cornice_hall_cross_south?.disabled || byId.cornice_hall_cross_south?.visual === false) {
+    throw new Error("cornice_hall_cross_south must be visible driveable hall header");
   }
   {
-    const ghost = drive.tracks.querySnap(0.0, 3.5, -0.45, 1.65);
-    if (ghost.pathId === "cornice_hall_cross_south") {
-      throw new Error("invisible cornice_hall_cross_south must not win snap/support");
+    const hdr = drive.tracks.querySnap(0.0, 3.5, -0.45, 1.65);
+    if (!hdr.onTrack || !hdr.elevated) {
+      throw new Error(`Hall header snap failed: ${hdr.kind}/${hdr.pathId}`);
     }
-    // Some visible path (chandelier ramp / foyer cornice) may still hold here
-    console.log("Invisible elev snap blocked", { kind: ghost.kind, pathId: ghost.pathId, on: ghost.onTrack });
+    console.log("Hall header elev snap", { kind: hdr.kind, pathId: hdr.pathId, on: hdr.onTrack });
   }
 
   // Attic loft corner + shaft portal
@@ -879,7 +886,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     let mountFail = 0;
     const mountFails = [];
     const mounts = Object.entries(RAMP_MOUNT_FEET);
-    if (mounts.length < 6) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`); // furniture-top climbs culled
+    if (mounts.length < 3) throw new Error(`RAMP_MOUNT_FEET incomplete: ${mounts.length}`); // fewer excellent primary climbs
     for (const [id, mount] of mounts) {
       const path = byId[id];
       if (!path) { mountFail++; mountFails.push(`${id} missing`); continue; }

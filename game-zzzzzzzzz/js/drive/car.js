@@ -12,18 +12,18 @@ export const ASSIST_MAGNET = false;
 
 /** Handling / look presets (base values; tiny-car precision). */
 export const VEHICLE_PRESETS = {
-  // Driver-feel cruise sweet spot (not crawl ~1.05, not rocket ~1.72):
-  // car maxSpeed ~1.40, boost ~1.92, steerRate ~3.42, steer lerp ~2.85 (planted)
+  // Driver-feel cruise sweet spot — fun to wander (not crawl, not twitchy rocket)
+  // car maxSpeed ~1.38, boost ~1.88, steerRate ~3.28, steer lerp ~2.55 (planted)
   car: {
     id: "car",
     label: "Car",
     blurb: "Balanced · joyful cruise",
-    maxSpeed: 1.40,
-    boostMax: 1.92,
-    accel: 6.2,
-    brake: 14,
-    friction: 7.4,
-    steerRate: 3.42,
+    maxSpeed: 1.39,
+    boostMax: 1.90,
+    accel: 6.0,
+    brake: 13.5,
+    friction: 7.1,
+    steerRate: 3.28,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -82,12 +82,12 @@ export class RCCar {
     this.yaw = Math.PI;
     this.vy = 0;
     this.vehicleId = "car";
-    this.maxSpeed = 1.40;
-    this.boostMax = 1.92;
-    this.accel = 6.2;
-    this.brake = 16;
-    this.friction = 7.4;
-    this.steerRate = 3.42;
+    this.maxSpeed = 1.39;
+    this.boostMax = 1.90;
+    this.accel = 6.0;
+    this.brake = 15;
+    this.friction = 7.1;
+    this.steerRate = 3.28;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -415,6 +415,7 @@ export class RCCar {
     this.root.rotation.z = 0;
     this.vy = 0;
     this.speed = 0;
+    this._steerInput = 0; // kill residual steer so re-enter/pure-W does not yaw-drift
     this.airborne = false;
     this.crashed = false;
     this._unsupportedFrames = 0;
@@ -474,7 +475,7 @@ export class RCCar {
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
     // Higher input damping → smoother turn-in/out (less twitchy)
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.85 * dt));
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.55 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
@@ -632,9 +633,11 @@ export class RCCar {
       * lowBoost * highDamp * railGrip * wallSteerDamp * rimSteerDamp;
     // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
     const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
-    const maxYawRate = 2.45; // rad/s soft cap
+    const maxYawRate = 2.28; // rad/s soft cap — planted cruise, not twitchy
     const maxDyaw = maxYawRate * dt;
     this.yaw += THREE.MathUtils.clamp(yawDelta, -maxDyaw, maxDyaw);
+    while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+    while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
 
     this._driftTrail = THREE.MathUtils.lerp(
       this._driftTrail,
@@ -679,7 +682,7 @@ export class RCCar {
         || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
       // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
-      const yLock = snap.steep || kind === "ramp" ? 42
+      const yLock = snap.steep || kind === "ramp" ? 62
         : (sticky ? (nearRim ? 36 : 32) : 28);
       y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
 
@@ -689,9 +692,12 @@ export class RCCar {
       );
       if (rampAssist && snap.x != null && snap.z != null) {
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        // Stronger near rim; whisper near center — keeps free steer feel mid-ribbon
-        const rimFactor = em < 0.10 ? 1.85 : (em < 0.18 ? 1.25 : 0.7);
-        const pull = Math.min(0.28, (0.10 + 0.14 * rimFactor) * Math.min(1, 12 * dt));
+        // Strong climb hold — imperfect human steer still crests (not centerline magnet)
+        const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
+        const rimFactor = em < 0.14 ? (foyerClimb ? 2.85 : 2.45)
+          : (em < 0.26 ? (foyerClimb ? 2.05 : 1.75) : (foyerClimb ? 1.35 : 1.10));
+        const pull = Math.min(foyerClimb ? 0.68 : 0.58,
+          (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
       } else if (snap.onTrack && snap.x != null && snap.z != null
@@ -726,9 +732,10 @@ export class RCCar {
         while (dyawR > Math.PI) dyawR -= Math.PI * 2;
         while (dyawR < -Math.PI) dyawR += Math.PI * 2;
         if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
-        const yawLim = rampAssist ? 0.70 : 0.45;
-        const yawK = rampAssist ? 0.22 : 0.12;
-        const yawRate = rampAssist ? 2.0 : 1.2;
+        const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
+        const yawLim = rampAssist ? (foyerClimb ? 1.35 : 1.20) : 0.45;
+        const yawK = rampAssist ? (foyerClimb ? 0.52 : 0.44) : 0.12;
+        const yawRate = rampAssist ? (foyerClimb ? 4.6 : 4.0) : 1.2;
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }

@@ -218,27 +218,28 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   ];
   const stillOn = culled.filter((id) => byId[id] && !byId[id].disabled);
   ok("foyer console wall-fork disabled", stillOn.length === 0, stillOn.join(",") || "all off");
-  // Grand stair clearance: floor + climb midpoints must not sit in stair AABB
+  // Floor skirting stays out of stair AABB; climb MUST use stair/climb aperture (not solid slab)
   {
+    const aper = { minX: -8.2, maxX: -4.85, minZ: 1.7, maxZ: 8.2 };
     const stair = { minX: -8.2, maxX: -5.8, minZ: 2.5, maxZ: 8 };
     const ramp = byId["ramp_foyer_to_landing"];
     const skirt = byId["foyer_skirting"];
-    const half = (ramp?.width || 0.8) * 0.5;
     const bad = [];
-    for (const pt of (ramp?.points || [])) {
-      if (pt.y >= 4.05) continue;
-      if (pt.x + half > stair.minX && pt.x - half < stair.maxX
-          && pt.z + half > stair.minZ && pt.z - half < stair.maxZ) {
-        bad.push(`ramp@(${pt.x.toFixed(2)},${pt.y.toFixed(2)},${pt.z.toFixed(2)})`);
-      }
-    }
     for (const pt of (skirt?.points || [])) {
       if (pt.x + 0.5 > stair.minX && pt.x - 0.5 < stair.maxX
           && pt.z + 0.5 > stair.minZ && pt.z - 0.5 < stair.maxZ) {
         bad.push(`skirt@(${pt.x.toFixed(2)},${pt.z.toFixed(2)})`);
       }
     }
-    ok("foyer roads clear of grand stair volume", bad.length === 0, bad.slice(0, 4).join(";") || "clear");
+    let highInAper = 0, highTotal = 0;
+    for (const pt of (ramp?.points || [])) {
+      if (pt.y < 3.15) continue;
+      highTotal++;
+      if (pt.x >= aper.minX && pt.x <= aper.maxX && pt.z >= aper.minZ && pt.z <= aper.maxZ) highInAper++;
+      else bad.push(`rampHighOutsideAper@(${pt.x.toFixed(2)},${pt.y.toFixed(2)},${pt.z.toFixed(2)})`);
+    }
+    ok("foyer floor clear; climb through aperture", bad.length === 0 && highTotal > 0 && highInAper === highTotal,
+      bad.slice(0, 4).join(";") || `highInAper=${highInAper}/${highTotal}`);
   }
   // No snap-active climb ribbon at east wall behind console table
   const wall = tracks.querySnap(8.15, 0.35, 10.5, 1.2);

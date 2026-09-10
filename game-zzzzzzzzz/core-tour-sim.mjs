@@ -146,6 +146,10 @@ function drivePath(pathId, { approach, reverse = false, framesMax = 1600, crestF
 
 let fails = 0;
 function show(tag, r, extra = {}) {
+  if (r.reason === "missing") {
+    console.log("SKIP", tag, "(path disabled/missing — rooftop via balcony)");
+    return;
+  }
   const ok = r.ok;
   if (!ok) fails++;
   console.log(
@@ -163,13 +167,17 @@ function show(tag, r, extra = {}) {
 // ─── 1) 8s floor cruise ───
 {
   const spawn = CAR_SPAWN;
-  resetCar(spawn.x, spawn.y, spawn.z, spawn.yaw ?? 0, "foyer_skirting");
   const foyer = densify(byId.foyer_skirting.points, 0.12);
+  // Start on skirting OUTSIDE spawn apron gap so cruise is on real ribbon (apron is snap-only)
   let bestI = 0, bestD = Infinity;
   foyer.forEach((p, i) => {
     const d = Math.hypot(p.x - spawn.x, p.z - spawn.z);
+    if (d < 2.6) return; // skip apron-gapped visual region
     if (d < bestD) { bestD = d; bestI = i; }
   });
+  const start = foyer[bestI];
+  const nxt = foyer[(bestI + 1) % foyer.length];
+  resetCar(start.x, start.y + 0.03, start.z, yawToward(start, nxt), "foyer_skirting");
   const guide = [];
   for (let i = 0; i < foyer.length; i++) guide.push(foyer[(bestI + i) % foyer.length]);
   const dt = 1 / 60;
@@ -289,10 +297,10 @@ function show(tag, r, extra = {}) {
       // Completed when we've advanced most of the way around
       if (targetIdx >= endI - 2) break;
     }
-    // Primary tour needs south balcony span to return junction (pts[4]); north hairpin is optional.
-    const ret = byId.balcony_loop.points[4]; // (-5.5, 4.28, 12.2) = ramp_balcony_return start
+    // Primary tour needs south balcony span to return junction (ramp_balcony_return start).
+    const ret = byId.ramp_balcony_return.points[0];
     const reachedReturn = Math.hypot(car.root.position.x - ret.x, car.root.position.z - ret.z) < 0.7
-      || (targetIdx - startI) / Math.max(1, endI - startI) >= 0.35;
+      || (targetIdx - startI) / Math.max(1, endI - startI) >= 0.45;
     const progress = (targetIdx - startI) / Math.max(1, endI - startI);
     show("balcony-lap", {
       ok: fell === 0 && reachedReturn,

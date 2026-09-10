@@ -12,29 +12,37 @@ function makeCanvas(w, h) {
 }
 
 function makeAsphaltTexture() {
-  // Solid black asphalt + white shoulder dashes + yellow center lane
-  // (baked into one texture — no coplanar line meshes / no wood-plank look).
+  // Mario Kart clarity: solid near-black asphalt, crisp white edge lines,
+  // bold yellow center dashes — readable on dark wood / balcony plank.
   const c = makeCanvas(256, 256);
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-  ctx.fillStyle = "#1a1a22";
+  // Deep solid black base (not charcoal-gray tape)
+  ctx.fillStyle = "#0c0c10";
   ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 900; i++) {
-    const v = 22 + Math.random() * 38;
-    ctx.fillStyle = `rgba(${v},${v},${v + 3},0.38)`;
+  // Subtle grit only — keep mass of road black
+  for (let i = 0; i < 480; i++) {
+    const v = 18 + Math.random() * 28;
+    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  // Soft white shoulder dashes (texture-only — no junction star meshes)
-  ctx.strokeStyle = "rgba(230,230,235,0.55)";
-  ctx.lineWidth = 3.5;
-  ctx.setLineDash([10, 14]);
-  ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(22, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(234, 0); ctx.lineTo(234, 256); ctx.stroke();
-  // Yellow center lane dashes
-  ctx.strokeStyle = "rgba(235,195,45,0.85)";
-  ctx.lineWidth = 5;
-  ctx.setLineDash([16, 14]);
+  // Solid white edge shoulders (continuous — readable silhouette)
+  ctx.strokeStyle = "rgba(245,245,250,0.92)";
+  ctx.lineWidth = 7;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(18, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(238, 0); ctx.lineTo(238, 256); ctx.stroke();
+  // Inner soft white hash for depth
+  ctx.strokeStyle = "rgba(220,220,230,0.35)";
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([8, 12]);
+  ctx.beginPath(); ctx.moveTo(28, 0); ctx.lineTo(28, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(228, 0); ctx.lineTo(228, 256); ctx.stroke();
+  // Bold yellow center lane dashes
+  ctx.strokeStyle = "rgba(255,210,40,0.95)";
+  ctx.lineWidth = 7;
+  ctx.setLineDash([22, 16]);
   ctx.beginPath();
   ctx.moveTo(128, 0);
   ctx.lineTo(128, 256);
@@ -42,7 +50,7 @@ function makeAsphaltTexture() {
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
@@ -53,36 +61,46 @@ function makeChevronTexture() {
   const c = makeCanvas(128, 256);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  // Bright climb asphalt — readable on dark wood floors (not stealth black blocks)
-  ctx.fillStyle = "#3a424e";
+  // Bright climb asphalt — Mario Kart readable on dark wood (not stealth slate)
+  ctx.fillStyle = "#4a5568";
   ctx.fillRect(0, 0, 128, 256);
-  for (let i = 0; i < 400; i++) {
-    const v = 55 + Math.random() * 40;
-    ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.35)`;
+  for (let i = 0; i < 360; i++) {
+    const v = 70 + Math.random() * 45;
+    ctx.fillStyle = `rgba(${v},${v + 6},${v + 14},0.40)`;
     ctx.fillRect(Math.random() * 128, Math.random() * 256, 2, 2);
   }
-  // White shoulders
-  ctx.strokeStyle = "rgba(245,245,250,0.75)";
-  ctx.lineWidth = 5;
+  // Bright white shoulders
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineWidth = 7;
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(14, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(114, 0); ctx.lineTo(114, 256); ctx.stroke();
-  // Strong yellow chevrons (climb language)
-  ctx.strokeStyle = "#f0d24a";
-  ctx.lineWidth = 4.5;
-  ctx.globalAlpha = 0.95;
-  for (let y = 18; y < 256; y += 40) {
+  ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(12, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(116, 0); ctx.lineTo(116, 256); ctx.stroke();
+  // Bold gold chevrons (climb language — readable at distance)
+  ctx.strokeStyle = "#ffe066";
+  ctx.lineWidth = 7;
+  ctx.globalAlpha = 1;
+  for (let y = 14; y < 256; y += 36) {
     ctx.beginPath();
-    ctx.moveTo(32, y + 16);
+    ctx.moveTo(28, y + 18);
     ctx.lineTo(64, y);
-    ctx.lineTo(96, y + 16);
+    ctx.lineTo(100, y + 18);
     ctx.stroke();
+    // inner highlight
+    ctx.strokeStyle = "#fff3b0";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(36, y + 14);
+    ctx.lineTo(64, y + 2);
+    ctx.lineTo(92, y + 14);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffe066";
+    ctx.lineWidth = 7;
   }
   ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return tex;
 }
 
@@ -538,8 +556,9 @@ export class TrackSystem {
     // Continuous ribbon — skip door_* and visual:false
     // Gap foyer_skirting visuals under spawn apron (ONE mesh there — no z-fight)
     if (useRibbon && visualOk) {
-      const gap = (path.id === "foyer_skirting" || path.id === "foyer_drive_start" || path.id === "door_foyer_outdoor")
-        ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: (this._spawnApron?.r || 1.85) }
+      const gap = (path.id === "foyer_skirting" || path.id === "foyer_drive_start"
+        || path.id === "foyer_climb_spur" || path.id === "door_foyer_outdoor")
+        ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: Math.max(2.55, (this._spawnApron?.r || 2.25) + 0.35) }
         : null;
       this._addRibbonRoad(visualPts, width, kind, !!path.closed, gap, isRail);
     }
@@ -572,9 +591,15 @@ export class TrackSystem {
     if (kind === "flower") {
       this._addFlowerMarkers(pts, width);
     }
-    // One subtle chevron at low on-ramp feet only (no yellow triangle piles at junctions)
-    if (kind === "ramp" && path.id && path.id.startsWith("ramp_") && pts[0].y < 1.15) {
-      this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)]);
+    // Clear chevron at climb feet + landing→balcony mounts (no junction piles)
+    if (kind === "ramp" && path.id && path.id.startsWith("ramp_")) {
+      const footY = pts[0].y;
+      const primaryClimb = path.id === "ramp_foyer_to_landing"
+        || path.id === "ramp_landing_to_balcony"
+        || path.id === "ramp_balcony_return";
+      if (footY < 1.15 || primaryClimb) {
+        this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)], primaryClimb);
+      }
     }
     // Cornice showcase: start/finish stripe only (banners/posts culled for Drive FPS)
     // Guard: avoid boot crash if class body/load race omits the method briefly
@@ -589,7 +614,7 @@ export class TrackSystem {
     // Shared mats + depth bias: markings live in texture only (no coplanar line meshes)
     const bias = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, depthWrite: true };
     const asphalt = new THREE.MeshStandardMaterial({
-      color: asphaltMap ? 0xffffff : 0x1c1c22,
+      color: asphaltMap ? 0xffffff : 0x0c0c10,
       roughness: 0.82,
       metalness: 0.06,
       ...(asphaltMap ? { map: asphaltMap } : {}),
@@ -644,19 +669,21 @@ export class TrackSystem {
     if (kind === "ramp") {
       const rampMap = this._chevron || asphaltMap;
       mat = new THREE.MeshStandardMaterial({
-        color: rampMap ? 0xffffff : 0x3a424e,
-        roughness: 0.72,
-        metalness: 0.1,
-        emissive: 0x1a2030,
-        emissiveIntensity: 0.14,
+        color: rampMap ? 0xffffff : 0x4a5568,
+        roughness: 0.68,
+        metalness: 0.12,
+        emissive: 0x3a4560,
+        emissiveIntensity: 0.34,
         ...(rampMap ? { map: rampMap } : {}),
         ...asphaltBias,
       });
     } else if (kind === "elevated" || kind === "cornice" || kind === "balcony") {
       mat = new THREE.MeshStandardMaterial({
-        color: asphaltMap ? 0xffffff : 0x141418,
-        roughness: 0.84,
-        metalness: 0.08,
+        color: asphaltMap ? 0xffffff : 0x0c0c10,
+        roughness: 0.78,
+        metalness: 0.06,
+        emissive: 0x101018,
+        emissiveIntensity: 0.10, // slight lift so black asphalt reads in dim foyer light
         ...(asphaltMap ? { map: asphaltMap } : {}),
         ...asphaltBias,
       });
@@ -710,7 +737,7 @@ export class TrackSystem {
     if (gapOpts && gapOpts.r > 0) {
       const runs = [];
       let cur = [];
-      const inGap = (p) => Math.hypot(p.x - gapOpts.x, p.z - gapOpts.z) < gapOpts.r;
+      const inGap = (p) => Math.hypot(p.x - gapOpts.x, p.z - gapOpts.z) <= gapOpts.r;
       for (const p of pts) {
         if (inGap(p)) {
           if (cur.length >= 2) runs.push(cur);
@@ -794,8 +821,14 @@ export class TrackSystem {
     }
 
     let dist = 0;
-    // Solid asphalt slab: top + bottom + side walls (not paper-thin tape ribbons)
-    const slab = isDeck ? 0.055 : (kind === "ramp" ? 0.048 : (thickAsphalt ? 0.036 : 0.028));
+    // Solid asphalt slab: top + bottom + side walls (Mario Kart curb mass, not tape)
+    const slab = isDeck ? 0.085 : (kind === "ramp" ? 0.072 : (thickAsphalt ? 0.048 : 0.032));
+    // Ramp feet: plant underside on approach asphalt (no underground dig, no floating gap)
+    const footY0 = pts[0].y;
+    const groundFoot = kind === "ramp" && footY0 < 1.15;
+    const approachBot = groundFoot
+      ? Math.max(0.002, footY0 + 0.015 - 0.048) // match floor ribbon underside
+      : (footY0 + 0.016 - 0.085); // match elevated/balcony deck underside
     const vPer = thickAsphalt ? 4 : 2; // L-top R-top R-bot L-bot
     for (let i = 0; i < n; i++) {
       if (i > 0) dist += pts[i].distanceTo(pts[i - 1]);
@@ -805,10 +838,16 @@ export class TrackSystem {
       // Stable along-track UV (width-normalized) — no swimming edge shards
       const u = dist / Math.max(0.55, width);
       const y = p.y + yLift;
-      const lx = p.x - right.x * halfW;
-      const lz = p.z - right.z * halfW;
-      const rx = p.x + right.x * halfW;
-      const rz = p.z + right.z * halfW;
+      // Wider mount at foot (visual + easier imperfect steer onto climb)
+      let hw = halfW;
+      if (kind === "ramp" && n > 2) {
+        const flare = Math.max(0, 1 - i / Math.min(4, n - 1));
+        hw = halfW * (1 + 0.14 * flare); // +14% at foot → full width by ~4th sample
+      }
+      const lx = p.x - right.x * hw;
+      const lz = p.z - right.z * hw;
+      const rx = p.x + right.x * hw;
+      const rz = p.z + right.z * hw;
 
       positions.push(lx, y, lz);
       positions.push(rx, y, rz);
@@ -817,8 +856,17 @@ export class TrackSystem {
       uvs.push(0, u);
       uvs.push(1, u);
       if (thickAsphalt) {
-        positions.push(rx, y - slab, rz);
-        positions.push(lx, y - slab, lz);
+        let slabHere = slab;
+        if (kind === "ramp") {
+          const along = n <= 1 ? 1 : i / (n - 1);
+          const blend = Math.min(1, along / 0.20); // first ~20% of climb blends to full slab
+          const plantedBot = approachBot * (1 - blend) + (y - slab) * blend;
+          const botY = groundFoot ? Math.max(0.002, plantedBot) : plantedBot;
+          // Cap at design slab — plant thinner at foot, never chunkier mid-blend
+          slabHere = Math.min(slab, Math.max(0.038, y - botY));
+        }
+        positions.push(rx, y - slabHere, rz);
+        positions.push(lx, y - slabHere, lz);
         normals.push(-up.x, -up.y, -up.z);
         normals.push(-up.x, -up.y, -up.z);
         uvs.push(1, u);
@@ -1190,26 +1238,71 @@ export class TrackSystem {
     }
   }
 
-  _addArrowSign(from, to) {
+  _addArrowSign(from, to, prominent = false) {
     const dir = new THREE.Vector3().subVectors(to, from);
     if (dir.lengthSq() < 1e-6) return;
     dir.normalize();
     const yaw = Math.atan2(dir.x, dir.z);
     if (!this._rampArrowMats) this._rampArrowMats = [];
-    // Single quiet gold chevron at ramp foot — no dual neon triangle piles
+    // Bright gold chevron at climb foot — planted on asphalt top (not floating / buried)
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xc9a227, emissive: 0x8a6a1a, emissiveIntensity: 0.35, roughness: 0.45, metalness: 0.35,
+      color: prominent ? 0xfff59d : 0xc9a227,
+      emissive: prominent ? 0xffe066 : 0x8a6a1a,
+      emissiveIntensity: prominent ? 1.45 : 0.45,
+      roughness: 0.32,
+      metalness: 0.35,
     });
     this._rampArrowMats.push(mat);
-    const ox = from.x + dir.x * 0.08;
-    const oz = from.z + dir.z * 0.08;
-    const oy = from.y + 0.045;
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.038, 0.07, 3), mat);
-    head.position.set(ox + dir.x * 0.04, oy, oz + dir.z * 0.04);
+    const asphaltTop = from.y + ribbonYLift("ramp");
+    const ox = from.x + dir.x * 0.12;
+    const oz = from.z + dir.z * 0.12;
+    const oy = asphaltTop + (prominent ? 0.055 : 0.028);
+    const r = prominent ? 0.155 : 0.042;
+    const h = prominent ? 0.24 : 0.075;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(r, h, 3), mat);
+    head.position.set(ox + dir.x * 0.08, oy, oz + dir.z * 0.08);
     head.rotation.y = yaw;
     head.rotation.x = Math.PI / 2;
     head.frustumCulled = true;
     this.root.add(head);
+    if (prominent) {
+      // Solid foot curb under beacon — visible mount mass flush with asphalt
+      const curbMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a22,
+        roughness: 0.78,
+        metalness: 0.08,
+        emissive: 0x2a2208,
+        emissiveIntensity: 0.35,
+      });
+      this._rampArrowMats.push(curbMat);
+      const curbH = from.y < 1.15 ? 0.048 : 0.052;
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(0.92, curbH, 0.52), curbMat);
+      // Top of curb = asphaltTop; bottom plants on approach underside (~floor/deck)
+      curb.position.set(from.x, asphaltTop - curbH * 0.5, from.z);
+      curb.rotation.y = yaw;
+      curb.frustumCulled = true;
+      this.root.add(curb);
+      // Glow pad on curb top — "climb here" beacon
+      const padMat = new THREE.MeshStandardMaterial({
+        color: 0xffe082,
+        emissive: 0xffc107,
+        emissiveIntensity: 1.05,
+        roughness: 0.45,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.9,
+      });
+      this._rampArrowMats.push(padMat);
+      const pad = new THREE.Mesh(new THREE.CircleGeometry(0.32, 16), padMat);
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set(from.x, asphaltTop + 0.006, from.z);
+      pad.frustumCulled = true;
+      this.root.add(pad);
+      // Second chevron stacked ahead for approach readability
+      const head2 = head.clone();
+      head2.position.set(ox + dir.x * 0.34, oy + 0.012, oz + dir.z * 0.34);
+      this.root.add(head2);
+    }
   }
 
   /** Start/finish stripe only on main cornice circuits (banners/posts culled). */
@@ -1364,14 +1457,36 @@ export class TrackSystem {
       // signedBelow > 0 ⇒ segment surface is ABOVE the car (car is underneath)
       const signedBelow = py - y;
 
+      // Leave climb crest: once handed to floor/deck, ignore late ramp segments
+      // so rim magnets cannot glue the car to the final climb sample forever.
+      if (seg.kind === "ramp" && t > 0.72
+          && this._lastPathId && this._lastPathId !== seg.pathId
+          && (this._lastPathKind === "floor" || this._lastPathKind === "balcony"
+            || this._lastPathKind === "cornice" || this._lastPathKind === "elevated"
+            || this._lastPathKind === "outdoor")) {
+        continue;
+      }
+      // Foyer climb special: at landing height after handoff, never re-stick to climb ribbon
+      if (seg.pathId === "ramp_foyer_to_landing" && y >= 3.90
+          && (this._lastPathId === "landing_skirting"
+            || this._lastPathId === "ramp_landing_to_balcony"
+            || this._lastPathId === "balcony_loop"
+            || this._lastPathId === "ramp_balcony_return")) {
+        continue;
+      }
+
       // Invisible paths never engage — snap-active requires drawn asphalt.
       if (seg.visual === false) continue;
 
       // Half-width corridor (used by under≠on ramp exceptions + scoring)
       const halfApprox = seg.width * 0.5;
-      const inRampCorridor = seg.kind === "ramp" && (steep ? dist3 : dist) < halfApprox * 1.08;
+      // Foyer climb: wider corridor so imperfect human approach still engages
+      const foyerClimbSeg = seg.pathId === "ramp_foyer_to_landing";
+      const corridorMul = foyerClimbSeg ? 1.85 : 1.12;
+      const contMul = foyerClimbSeg ? 2.15 : 1.40;
+      const inRampCorridor = seg.kind === "ramp" && (steep ? dist3 : dist) < halfApprox * corridorMul;
       const rampContinuity = seg.kind === "ramp" && this._lastPathId === seg.pathId
-        && (steep ? dist3 : dist) < halfApprox * 1.35;
+        && (steep ? dist3 : dist) < halfApprox * contMul;
 
       // ── Strict under ≠ on ──────────────────────────────────────────
       // Flat elevated decks: ignore entirely when car is under the deck.
@@ -1418,6 +1533,10 @@ export class TrackSystem {
         && dy < 0.72)
         ? (-1.25 - Math.min(0.55, rampGrade * 0.85))
         : 0;
+      // Near-flat connector ramps (balcony lips) must not steal landing lap cruise
+      if (rampBias && rampGrade < 0.08 && seg.pathId !== "ramp_foyer_to_landing") {
+        rampBias *= 0.28;
+      }
       // Floor-cruise continuity: kissing ramp feet must NOT steal skirting loops /
       // T-junctions into furniture unless the car is aiming along the ramp.
       const lastIsFloor = this._lastPathKind === "floor"
@@ -1434,17 +1553,29 @@ export class TrackSystem {
           while (d1 > Math.PI) d1 -= Math.PI * 2;
           while (d1 < -Math.PI) d1 += Math.PI * 2;
           align = Math.max(Math.cos(d0), Math.cos(d1));
-          // Foyer climb foot: generous engage so browser approach mounts
+          // Foyer climb foot at (-4.70, 10.60) — NOT stale west stair (-7.15, 11.20)
           const foyerFoot = seg.pathId === "ramp_foyer_to_landing"
-            && Math.hypot(x - (-7.15), z - 11.20) < 1.85;
+            && Math.hypot(x - (-4.70), z - 10.60) < 2.85;
           if (foyerFoot) {
-            if (align < 0.25) rampBias *= 0.45;
-            else if (align < 0.55) rampBias *= 0.75;
-            // else keep full bias
+            // Human imperfect aim still mounts — keep strong bias unless nearly reverse
+            if (align < -0.05) rampBias *= 0.40;
+            else if (align < 0.18) rampBias *= 0.78;
+            else rampBias *= 1.12; // bonus pull onto climb foot
+          } else if (seg.pathId === "ramp_balcony_return") {
+            // Suppress steal when cruising east on landing south face toward east balcony
+            const eastboundLap = x > -5.2 && z >= 8.2 && z <= 9.6
+              && Math.cos(carYaw) > -0.15 && Math.sin(carYaw) > 0.35;
+            if (eastboundLap || align < 0.78) rampBias *= 0.04;
+            else if (align < 0.90) rampBias *= 0.30;
+          } else if (seg.pathId === "ramp_landing_to_balcony") {
+            // Allow east mount when aimed; ignore glancing south-face cruise
+            if (align < 0.55) rampBias *= 0.05;
+            else if (align < 0.75) rampBias *= 0.40;
+            else if (align < 0.88) rampBias *= 0.75;
           } else {
-            if (align < 0.50) rampBias *= 0.06;
-            else if (align < 0.72) rampBias *= 0.35;
-            else if (align < 0.88) rampBias *= 0.7;
+            if (align < 0.55) rampBias *= 0.05;
+            else if (align < 0.75) rampBias *= 0.32;
+            else if (align < 0.88) rampBias *= 0.68;
           }
         }
         // No carYaw (legacy sims / placement at foot): leave full rampBias
@@ -1459,8 +1590,20 @@ export class TrackSystem {
       // Off-ribbon elevated must not steal junctions from coplanar on-ribbon decks
       const offRibbonPenalty = ((elev || tube) && checkDist >= halfApprox
         && !(seg.kind === "ramp" && rampContinuity)) ? 1.15 : 0;
+      // Crest handoff: once near ramp end at destination height, prefer coplanar deck/floor
+      // so climb crest does not glue the car to the final ramp segment forever.
+      let crestPenalty = 0;
+      if (seg.kind === "ramp" && t > 0.72 && Math.abs(y - seg.b.y) < 0.35) {
+        crestPenalty = 1.85 + (t - 0.72) * 4.0;
+      }
+      // Destination deck at crest height: small bonus when leaving a climb
+      let crestDeckBonus = 0;
+      if ((isFloor || seg.kind === "balcony" || seg.kind === "cornice" || seg.kind === "elevated")
+          && this._lastPathKind === "ramp" && dy < 0.22 && checkDist < halfApprox * 1.25) {
+        crestDeckBonus = -0.95;
+      }
       const score = checkDist + dy * dyW + pathBias + floorBias + rampBias
-        + elevPenalty + underPenalty + offRibbonPenalty;
+        + elevPenalty + underPenalty + offRibbonPenalty + crestPenalty + crestDeckBonus;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
@@ -1509,7 +1652,8 @@ export class TrackSystem {
           const over = lateral - halfW * 0.50;
           // Stickier near absolute rim — casual play stays ON deck
           // Ramps: stronger rim push (climb assist) without full centerline magnet
-          const rampRim = seg.kind === "ramp" ? 1.55 : 1;
+          const rampRim = seg.pathId === "ramp_foyer_to_landing" ? 2.45
+            : (seg.kind === "ramp" ? 2.05 : 1);
           const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.55), 0, 1);
           const strength = Math.min(0.088 * rampRim, over * (0.13 + 0.20 * rimT) * rampRim);
           const bx = (pushDirX / plen) * strength;
@@ -1708,7 +1852,7 @@ export class TrackSystem {
     if (tick === this._visTick) return;
     this._visTick = tick;
     if (this._rampArrowMats && this._rampArrowMats.length) {
-      const rampGlow = 0.28 + 0.12 * Math.sin(t * 1.6);
+      const rampGlow = 0.85 + 0.45 * Math.sin(t * 2.2);
       for (const m of this._rampArrowMats) {
         if (m.emissiveIntensity != null) m.emissiveIntensity = rampGlow;
       }

@@ -1101,13 +1101,9 @@ export class Mansion {
 
     const isAttic = room.floor === "Attic";
     const floorMat = isAttic ? this._mat(p.floor, 0.88, 0.02) : this._floorMat(p.floor, 0.7);
-    // Floor slab: top face exactly at story Y (cy). No coplanar overlays on this plane.
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, d), floorMat);
-    floor.position.set(cx, cy - 0.1, cz);
-    floor.receiveShadow = true;
-    floor.userData.floorY = cy;
-    floor.frustumCulled = true;
-    g.add(floor);
+    // Floor slab: top face exactly at story Y (cy). Stair/climb aperture on landing.
+    const floorHole = this._storyAperture(room, "floor");
+    this._addSlabWithHole(g, floorMat, cx, cy - 0.1, cz, w, 0.2, d, floorHole, true, cy);
 
     // Perimeter floor frame (4 strips) — raised clear of plank top to kill shimmer
     // (never a full coplanar slab on the same Y as the floor)
@@ -1166,16 +1162,14 @@ export class Mansion {
       g.add(rug);
     }
 
-    const ceil = new THREE.Mesh(
-      new THREE.BoxGeometry(w, 0.12, d),
-      this._mat(room.glass ? 0x88aacc : 0x1a1410, room.glass ? 0.3 : 0.9, room.glass ? 0.2 : 0)
-    );
+    const ceilMat = this._mat(room.glass ? 0x88aacc : 0x1a1410, room.glass ? 0.3 : 0.9, room.glass ? 0.2 : 0);
     if (room.glass) {
-      ceil.material.transparent = true;
-      ceil.material.opacity = 0.35;
+      ceilMat.transparent = true;
+      ceilMat.opacity = 0.35;
     }
-    ceil.position.set(cx, cy + h, cz);
-    g.add(ceil);
+    // Foyer ceiling opens over stair/climb aperture so Drive ramp never smashes slab.
+    const ceilHole = this._storyAperture(room, "ceiling");
+    this._addSlabWithHole(g, ceilMat, cx, cy + h, cz, w, 0.12, d, ceilHole, false, null);
 
     // Conservatory mullions + moonlight feel
     if (room.glass) {
@@ -1223,31 +1217,21 @@ export class Mansion {
       { size: [thick, wallH, d], pos: [cx - w / 2, cy + wallH / 2, cz], side: "west" },
       { size: [thick, wallH, d], pos: [cx + w / 2, cy + wallH / 2, cz], side: "east" },
     ];
+    // Landing south = grand French-door aperture matching exterior balcony doors
+    // (balDoorW 11.2) so Drive east/west balcony ramps never dead-end into wall slabs.
+    if (room.id === "landing") {
+      const south = walls.find((w0) => w0.side === "south");
+      if (south) south.doorW = 11.0;
+    }
 
-    const doorways = this._doorwaysFor(room);
+    const doorways = this._doorwaysFor(room); // trim gaps still keyed by side
 
     for (const wall of walls) {
-      if (doorways[wall.side]) {
-        this._addWallWithDoor(g, wall, p.wall, thick, p.trim, true);
+      const openings = this._driveOpeningsForWall(room, wall.side);
+      if (openings.length) {
+        this._addWallWithOpenings(g, wall, p.wall, thick, p.trim, openings, true);
       } else {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), this._wallMat(p.wall, 0.78, 0.04));
-        mesh.position.set(...wall.pos);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        g.add(mesh);
-        // Inflate collider slightly so Explore/Drive never slip through seams
-        const [wsx, wsy, wsz] = wall.size;
-        const inflate = 0.06;
-        this.colliders.push(
-          new THREE.Box3().setFromCenterAndSize(
-            new THREE.Vector3(...wall.pos),
-            new THREE.Vector3(
-              wsx > wsz ? wsx : wsx + inflate,
-              wsy,
-              wsz > wsx ? wsz : wsz + inflate
-            )
-          )
-        );
+        this._addWallWithOpenings(g, wall, p.wall, thick, p.trim, null, true);
         this._addWindows(g, wall, p, cy, h);
       }
     }
@@ -1259,7 +1243,7 @@ export class Mansion {
     const chairY = cy + 0.94;
     const woodTrim = this._mat(0x3e2723, 0.5, 0.14);
     const brassTrim = this._brass(p.trim);
-    const doorGap = 3.1; // match doorW so baseboard/wainscot leave doorway clear
+    const doorGapDefault = 3.1; // match default doorW so trim leaves doorway clear
     const halfThick = thick * 0.5; // 0.14
     // Depth stack from plaster outward into room (mm-scale gaps, rock solid)
     const D_WAIN = halfThick + 0.018;   // wainscot face
@@ -1277,6 +1261,7 @@ export class Mansion {
       const [px, , pz] = wall.pos;
       const horiz = sx > sz;
       const hasDoor = !!doorways[wall.side];
+      const doorGap = wall.doorW || doorGapDefault;
       const segments = [];
       if (hasDoor && horiz) {
         const remain = (sx - doorGap) / 2;
@@ -1900,12 +1885,12 @@ export class Mansion {
       addArmchair(cx + 3.5, cz + 2, 0x5d4037, Math.PI * 0.15);
       addSideTable(cx + 4.5, cz + 1.2);
       addFloorLamp(cx + 6.2, cz + 2.5);
-      // Grandfather clock silhouette west of center (not on stair)
-      addBox(0.55, 2.2, 0.35, cx - 5.5, cy + 1.1, cz + 1, darkWood, true);
-      addBox(0.45, 0.4, 0.08, cx - 5.5, cy + 1.9, cz + 1.15, this._mat(0xffe0b2, 0.4));
-      addCyl(0.02, 0.02, 0.15, cx - 5.5, cy + 1.9, cz + 1.18, brass, 6);
-      // Umbrella stand
-      addCyl(0.18, 0.22, 0.55, cx - 2.5, cy + 0.28, cz + d / 2 - 0.7, this._mat(0x37474f, 0.45, 0.5), 10);
+      // Grandfather clock — east foyer, clear of west stair / climb aperture
+      addBox(0.55, 2.2, 0.35, cx + 4.8, cy + 1.1, cz - 0.2, darkWood, true);
+      addBox(0.45, 0.4, 0.08, cx + 4.8, cy + 1.9, cz - 0.05, this._mat(0xffe0b2, 0.4));
+      addCyl(0.02, 0.02, 0.15, cx + 4.8, cy + 1.9, cz - 0.02, brass, 6);
+      // Umbrella stand — SE corner, clear of foyer_drive_start / climb T
+      addCyl(0.18, 0.22, 0.55, cx + 7.2, cy + 0.28, cz + d / 2 - 0.75, this._mat(0x37474f, 0.45, 0.5), 10);
     }
 
     if (id === "cabinet") {
@@ -2768,8 +2753,11 @@ export class Mansion {
   _addWallWithDoor(group, wall, color, thick, trimColor, usePlaster = false) {
     const [sx, sy, sz] = wall.size;
     const [px, py, pz] = wall.pos;
-    const doorW = 3.05; // Explore-clear near doorway-edge Drive strips (radius 0.38)
-    const doorH = Math.min(sy * 0.88, 3.35);
+    // Per-wall override: landing south uses ~11m French-door aperture (matches facade).
+    const doorW = wall.doorW || 3.05; // Explore-clear near doorway-edge Drive strips
+    const doorH = wall.doorW && wall.doorW > 6
+      ? Math.min(sy * 0.92, 3.85) // tall grand opening onto balcony
+      : Math.min(sy * 0.88, 3.35);
     const horizontal = sx > sz;
     const wallMat = usePlaster ? this._wallMat(color, 0.74, 0.035) : this._mat(color, 0.8);
     if (horizontal) {
@@ -2857,6 +2845,295 @@ export class Mansion {
       thresh.position.set(px, floorY + 0.03, pz);
       group.add(thresh);
     }
+  }
+
+
+  /**
+   * Stair + Drive climb aperture shared by foyer ceiling / landing floor.
+   * Covers main_up stair footprint plus narrow east climb lane to landing crest.
+   */
+  _storyAperture(room, which) {
+    // Shared climb hole: stair void + soft S-weave climb (foot→crest) with margin
+    // Extra east/south margin so imperfect human climb never smashes slab lip
+    const hole = { minX: -8.35, maxX: -4.45, minZ: 1.45, maxZ: 9.15 };
+    if (which === "ceiling" && room.id === "foyer") return hole;
+    if (which === "floor" && room.id === "landing") return hole;
+    return null;
+  }
+
+  /**
+   * Drive asphalt passages through walls — real architectural openings (never ghost mesh).
+   * Returns [{ along, width, y0, y1 }] in wall-local along-axis (X for N/S, Z for E/W).
+   */
+  _driveOpeningsForWall(room, side) {
+    const cy = room.pos[1];
+    const doorH = Math.min((room.size[1] || 4) * 0.88, 3.35);
+    const tallH = Math.min((room.size[1] || 4) * 0.92, 3.85);
+    const out = [];
+    const add = (along, width, y0, y1) => out.push({ along, width, y0, y1 });
+
+    // Dual foyer ↔ hall jambs (door_foyer_hall_east/west at x≈±2.85)
+    if (room.id === "foyer" && side === "north") {
+      add(-2.85, 2.55, cy, cy + doorH);
+      add(2.85, 2.55, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "hall_ground" && side === "south") {
+      add(-2.85, 2.55, cy, cy + doorH);
+      add(2.85, 2.55, cy, cy + doorH);
+      return out;
+    }
+    // Front drive exit (door_foyer_outdoor near x≈-3.7)
+    if (room.id === "foyer" && side === "south") {
+      add(-3.70, 3.40, cy, cy + doorH);
+      return out;
+    }
+    // Landing French doors onto balcony (ramp_landing_to_balcony / return)
+    if (room.id === "landing" && side === "south") {
+      add(0, 11.0, cy, cy + tallH);
+      return out;
+    }
+    // Landing → library (north)
+    if (room.id === "landing" && side === "north") {
+      add(0, 3.40, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "library_hall" && side === "south") {
+      add(0, 3.40, cy, cy + doorH);
+      return out;
+    }
+    // Hall ↔ cabinet / armoury at skirt z≈-7.7
+    if (room.id === "hall_ground" && side === "west") {
+      add(-7.60, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "hall_ground" && side === "east") {
+      add(-7.60, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "cabinet" && side === "east") {
+      add(-7.70, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "armoury" && side === "west") {
+      add(-7.70, 2.60, cy, cy + doorH);
+      return out;
+    }
+    // Hall ↔ conservatory
+    if (room.id === "hall_ground" && side === "north") {
+      add(-2.50, 2.40, cy, cy + doorH);
+      add(2.50, 2.40, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "conservatory" && side === "south") {
+      add(-2.50, 2.40, cy, cy + doorH);
+      add(2.50, 2.40, cy, cy + doorH);
+      return out;
+    }
+    // Conservatory ↔ dining
+    if (room.id === "conservatory" && side === "west") {
+      add(-29.6, 2.80, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "dining" && side === "east") {
+      add(-29.6, 2.80, cy, cy + doorH);
+      return out;
+    }
+    // Library ↔ music / nursery / study
+    if (room.id === "library_hall" && side === "north") {
+      add(2.35, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "music" && side === "south") {
+      add(2.35, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "library_hall" && side === "east") {
+      add(-8.0, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "library_hall" && side === "west") {
+      add(-8.0, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "nursery" && side === "west") {
+      add(-8.0, 2.60, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "study" && side === "east") {
+      add(-8.0, 2.60, cy, cy + doorH);
+      return out;
+    }
+    // Music ↔ workshop / mezzanine
+    if (room.id === "music" && side === "west") {
+      add(-29.0, 2.80, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "workshop" && side === "east") {
+      add(-29.0, 2.80, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "music" && side === "east") {
+      add(-28.5, 2.80, cy, cy + doorH);
+      return out;
+    }
+    if (room.id === "study_annex" && side === "west") {
+      add(-28.5, 2.80, cy, cy + doorH);
+      return out;
+    }
+
+    // Fallback: single centered doorway from exits map
+    const dirs = this._doorwaysFor(room);
+    if (dirs[side]) {
+      const w = (room.id === "landing" && side === "south") ? 11.0 : 3.20;
+      add(0, w, cy, cy + (w > 6 ? tallH : doorH));
+    }
+    return out;
+  }
+
+  /** Build wall as panels around one or more Drive/Explore openings + brass portal frames. */
+  _addWallWithOpenings(group, wall, color, thick, trimColor, openings, usePlaster = false) {
+    if (!openings || !openings.length) {
+      // solid wall path
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), usePlaster ? this._wallMat(color, 0.78, 0.04) : this._mat(color, 0.8));
+      mesh.position.set(...wall.pos);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+      const [wsx, wsy, wsz] = wall.size;
+      const inflate = 0.06;
+      this.colliders.push(
+        new THREE.Box3().setFromCenterAndSize(
+          new THREE.Vector3(...wall.pos),
+          new THREE.Vector3(wsx > wsz ? wsx : wsx + inflate, wsy, wsz > wsx ? wsz : wsz + inflate)
+        )
+      );
+      return;
+    }
+    const [sx, sy, sz] = wall.size;
+    const [px, py, pz] = wall.pos;
+    const wallMat = usePlaster ? this._wallMat(color, 0.74, 0.035) : this._mat(color, 0.8);
+    const trimMat = this._brass(trimColor);
+    const horizontal = sx > sz; // N/S wall
+    const alongLen = horizontal ? sx : sz;
+    const wallMin = (horizontal ? px : pz) - alongLen / 2;
+    const wallMax = wallMin + alongLen;
+    const sorted = openings
+      .map((o) => ({
+        a0: Math.max(wallMin, o.along - o.width / 2),
+        a1: Math.min(wallMax, o.along + o.width / 2),
+        y0: o.y0,
+        y1: o.y1,
+        along: o.along,
+        width: o.width,
+      }))
+      .filter((o) => o.a1 - o.a0 > 0.08)
+      .sort((a, b) => a.a0 - b.a0);
+
+    const addPanel = (a0, a1, y0, y1) => {
+      const aw = a1 - a0;
+      const ah = y1 - y0;
+      if (aw < 0.04 || ah < 0.04) return;
+      const cy = (y0 + y1) / 2;
+      const ca = (a0 + a1) / 2;
+      let mesh;
+      if (horizontal) {
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(aw, ah, sz), wallMat);
+        mesh.position.set(ca, cy, pz);
+        this.colliders.push(
+          new THREE.Box3().setFromCenterAndSize(mesh.position.clone(), new THREE.Vector3(aw, ah, sz + 0.06))
+        );
+      } else {
+        mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, ah, aw), wallMat);
+        mesh.position.set(px, cy, ca);
+        this.colliders.push(
+          new THREE.Box3().setFromCenterAndSize(mesh.position.clone(), new THREE.Vector3(sx + 0.06, ah, aw))
+        );
+      }
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    };
+
+    // Vertical stacking per along-span: full-height slabs in gaps; open band only in openings
+    let cursor = wallMin;
+    const yBot = py - sy / 2;
+    const yTop = py + sy / 2;
+    for (const o of sorted) {
+      if (o.a0 > cursor + 0.04) addPanel(cursor, o.a0, yBot, yTop);
+      // below opening
+      if (o.y0 > yBot + 0.04) addPanel(o.a0, o.a1, yBot, o.y0);
+      // above opening (header)
+      if (yTop > o.y1 + 0.04) addPanel(o.a0, o.a1, o.y1, yTop);
+      cursor = Math.max(cursor, o.a1);
+    }
+    if (wallMax > cursor + 0.04) addPanel(cursor, wallMax, yBot, yTop);
+
+    // Brass portal frames (readable tunnels) — emissive gold, non-blocking
+    const portalBrass = this._brass(0xe8c547);
+    portalBrass.emissive = new THREE.Color(0xc9a227);
+    portalBrass.emissiveIntensity = 0.42;
+    for (const o of sorted) {
+      const jambD = horizontal ? sz + 0.10 : sx + 0.10;
+      const frameH = Math.max(0.2, o.y1 - o.y0);
+      for (const sign of [-1, 1]) {
+        const ja = o.along + sign * (o.width / 2);
+        const jamb = new THREE.Mesh(
+          new THREE.BoxGeometry(horizontal ? 0.14 : jambD, frameH, horizontal ? jambD : 0.14),
+          portalBrass
+        );
+        if (horizontal) jamb.position.set(ja, (o.y0 + o.y1) / 2, pz);
+        else jamb.position.set(px, (o.y0 + o.y1) / 2, ja);
+        group.add(jamb);
+      }
+      const lintel = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? o.width + 0.32 : jambD, 0.16, horizontal ? jambD : o.width + 0.32),
+        portalBrass
+      );
+      if (horizontal) lintel.position.set(o.along, o.y1 + 0.08, pz);
+      else lintel.position.set(px, o.y1 + 0.08, o.along);
+      group.add(lintel);
+      // Threshold lip — reads as tunnel portal at asphalt height
+      const thresh = new THREE.Mesh(
+        new THREE.BoxGeometry(horizontal ? o.width + 0.1 : jambD, 0.05, horizontal ? jambD : o.width + 0.1),
+        portalBrass
+      );
+      if (horizontal) thresh.position.set(o.along, o.y0 + 0.03, pz);
+      else thresh.position.set(px, o.y0 + 0.03, o.along);
+      group.add(thresh);
+    }
+  }
+
+  /** Build a room slab as one box, or four panels around a rectangular hole. */
+  _addSlabWithHole(group, mat, cx, cy, cz, w, thick, d, hole, isFloor, floorY) {
+    const addPanel = (pw, pd, px, pz) => {
+      if (pw < 0.04 || pd < 0.04) return;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(pw, thick, pd), mat);
+      mesh.position.set(px, cy, pz);
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = true;
+      if (isFloor) mesh.userData.floorY = floorY;
+      group.add(mesh);
+    };
+    if (!hole) {
+      addPanel(w, d, cx, cz);
+      return;
+    }
+    const minX = cx - w / 2, maxX = cx + w / 2;
+    const minZ = cz - d / 2, maxZ = cz + d / 2;
+    const hx0 = Math.max(minX, hole.minX);
+    const hx1 = Math.min(maxX, hole.maxX);
+    const hz0 = Math.max(minZ, hole.minZ);
+    const hz1 = Math.min(maxZ, hole.maxZ);
+    if (hx0 >= hx1 || hz0 >= hz1) {
+      addPanel(w, d, cx, cz);
+      return;
+    }
+    // North strip (maxZ side), south strip (minZ), and west/east between hole Z
+    addPanel(w, maxZ - hz1, cx, (hz1 + maxZ) / 2);
+    addPanel(w, hz0 - minZ, cx, (minZ + hz0) / 2);
+    addPanel(hx0 - minX, hz1 - hz0, (minX + hx0) / 2, (hz0 + hz1) / 2);
+    addPanel(maxX - hx1, hz1 - hz0, (hx1 + maxX) / 2, (hz0 + hz1) / 2);
   }
 
   _buildStair(s, room) {

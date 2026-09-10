@@ -19,7 +19,7 @@ export const TRACK_PATHS = [
   {
     id: "foyer_skirting",
     kind: "floor",
-    width: 1.15,
+    width: 1.28,
     tension: 0.12,
     closed: true,
     fancy: true,
@@ -66,29 +66,33 @@ export const TRACK_PATHS = [
     id: "foyer_drive_start",
     kind: "floor",
     width: 2.60,  // post ROAD_WIDTH_SCALE ≈2.26 — wide open-foyer asphalt
-    tension: 0.06,
+    tension: 0.02,
     fancy: true,
     points: [
-      // Wide straight lane into open foyer — pure W stays on asphalt (no early west kink).
+      // Spawn → open foyer → climb T (west) — NEVER terminate into north partition wall.
+      // Waypoint at z=10.60 kisses foyer_climb_spur; end kisses foyer_skirting bow.
       { x: -3.2, y: 0.06, z: 12.15, label: "Grand Foyer" },
-      { x: -3.2, y: 0.06, z: 11.10 },
+      { x: -3.2, y: 0.06, z: 11.40 },
+      { x: -3.2, y: 0.06, z: 10.60 }, // climb T / spur (ribbon stays straight -Z)
       { x: -3.2, y: 0.06, z: 9.80 },
-      { x: -3.2, y: 0.06, z: 8.40 },
-      { x: -3.2, y: 0.06, z: 6.80 },
-      { x: -3.2, y: 0.06, z: 5.20 },
+      { x: -3.2, y: 0.06, z: 8.60 },
+      { x: -3.2, y: 0.06, z: 7.40 },
+      { x: -3.2, y: 0.06, z: 6.40 },
+      { x: -3.2, y: 0.06, z: 5.80 }, // kiss foyer_skirting open bow (continuous loop)
     ],
   },
   // Short T spur: open lane → climb foot east of grand stair
   {
     id: "foyer_climb_spur",
     kind: "floor",
-    width: 1.80,
-    tension: 0.08,
+    width: 2.35, // wide T runway → climb foot (imperfect human steer)
+    tension: 0.06,
     fancy: true,
     points: [
       { x: -3.2, y: 0.06, z: 10.60 },
-      { x: -3.7, y: 0.06, z: 10.60 },
-      { x: -4.2, y: 0.06, z: 10.60 },
+      { x: -3.65, y: 0.06, z: 10.60 },
+      { x: -4.15, y: 0.06, z: 10.60 },
+      { x: -4.55, y: 0.06, z: 10.60 },
       { x: -4.70, y: 0.06, z: 10.60 }, // kiss ramp_foyer_to_landing foot
     ],
   },
@@ -150,9 +154,9 @@ export const TRACK_PATHS = [
     kind: "floor",
     width: 0.36,
     points: [
-      { x: -2.9, y: 0.06, z: -2.4 },
-      { x: 0.0, y: 0.06, z: -2.55 },
-      { x: 2.9, y: 0.06, z: -2.4 },
+      { x: -2.9, y: 0.06, z: -2.2 },
+      { x: 0.0, y: 0.06, z: -2.35 },
+      { x: 2.9, y: 0.06, z: -2.2 },
     ],
   },
   {
@@ -160,9 +164,9 @@ export const TRACK_PATHS = [
     kind: "floor",
     width: 0.36,
     points: [
-      { x: -2.9, y: 0.06, z: -21.0 },
+      { x: -2.9, y: 0.06, z: -21.2 },
       { x: 0.0, y: 0.06, z: -21.15 },
-      { x: 2.9, y: 0.06, z: -21.0 },
+      { x: 2.9, y: 0.06, z: -21.2 },
     ],
   },
   // Door edge: hall → conservatory
@@ -171,8 +175,8 @@ export const TRACK_PATHS = [
     kind: "floor",
     width: 0.38,
     points: [
-      { x: 2.5, y: 0.06, z: -21.2, label: "Hall of Echoes" },
-      { x: 2.4, y: 0.06, z: -21.8 },
+      { x: 2.9, y: 0.06, z: -21.2, label: "Hall of Echoes" },
+      { x: 2.5, y: 0.06, z: -21.8 },
       { x: 2.2, y: 0.06, z: -22.6, label: "Conservatory" },
     ],
   },
@@ -181,8 +185,8 @@ export const TRACK_PATHS = [
     kind: "floor",
     width: 0.38,
     points: [
-      { x: -2.5, y: 0.06, z: -21.2 },
-      { x: -2.4, y: 0.06, z: -21.8 },
+      { x: -2.9, y: 0.06, z: -21.2 },
+      { x: -2.5, y: 0.06, z: -21.8 },
       { x: -2.2, y: 0.06, z: -22.6, label: "Conservatory" },
     ],
   },
@@ -220,7 +224,7 @@ export const TRACK_PATHS = [
     kind: "floor",
     width: 0.38,
     points: [
-      { x: -10.2, y: 0.06, z: -29.2, label: "Conservatory" },
+      { x: -10.35, y: 0.06, z: -30.0, label: "Conservatory" },
       { x: -10.8, y: 0.06, z: -29.5 },
       { x: -11.6, y: 0.06, z: -29.8, label: "Breakfast Parlor" },
     ],
@@ -257,7 +261,8 @@ export const TRACK_PATHS = [
     width: 0.4,
     tension: 0.16,
     points: [
-      { x: -2.95, y: 0.06, z: -7.5, label: "Hall of Echoes" },
+      { x: -2.95, y: 0.06, z: -6.0, label: "Hall of Echoes" },
+      { x: -2.95, y: 0.06, z: -7.5 },
       { x: -3.6, y: 0.06, z: -7.6 },
       { x: -4.5, y: 0.06, z: -7.7 },
       { x: -5.5, y: 0.06, z: -7.8, label: "Cabinet of Curiosities" },
@@ -294,7 +299,8 @@ export const TRACK_PATHS = [
     width: 0.4,
     tension: 0.16,
     points: [
-      { x: 2.95, y: 0.06, z: -7.5, label: "Hall of Echoes" },
+      { x: 2.95, y: 0.06, z: -6.0, label: "Hall of Echoes" },
+      { x: 2.95, y: 0.06, z: -7.5 },
       { x: 3.6, y: 0.06, z: -7.6 },
       { x: 4.5, y: 0.06, z: -7.7 },
       { x: 5.5, y: 0.06, z: -7.8, label: "Armoury & Game Room" },
@@ -387,7 +393,7 @@ export const TRACK_PATHS = [
   {
     id: "landing_skirting",
     kind: "floor",
-    width: 0.4,
+    width: 1.18, // wide first-floor asphalt — Mario Kart readable on dark wood
     tension: 0.1,
     closed: true,
     fancy: true,
@@ -405,10 +411,12 @@ export const TRACK_PATHS = [
       { x: 7.2, y: 4.26, z: 1.0 },
       { x: 2.9, y: 4.26, z: -0.8 },
       { x: -2.9, y: 4.26, z: -0.8 },
-      { x: -3.7, y: 4.26, z: -0.40 }, // kiss ramp_foyer_to_landing crest
-      { x: -7.2, y: 4.26, z: 1.0 },
-      { x: -7.2, y: 4.26, z: 5.0 },
-      { x: -7.1, y: 4.26, z: 7.0 },
+      { x: -4.20, y: 4.26, z: 0.40 }, // clear of library door jamb
+      { x: -5.00, y: 4.26, z: 1.90 }, // kiss ramp_foyer_to_landing crest
+      { x: -5.80, y: 4.26, z: 2.60 }, // east of attic/main stair void
+      { x: -6.40, y: 4.26, z: 4.20 },
+      { x: -6.55, y: 4.26, z: 6.20 },
+      { x: -6.50, y: 4.26, z: 7.40 },
       { x: -6.8, y: 4.26, z: 8.8 },
     ],
   },
@@ -420,6 +428,7 @@ export const TRACK_PATHS = [
     points: [
       { x: 2.9, y: 4.26, z: -0.8, label: "Library Hall" },
       { x: 2.95, y: 4.26, z: -4 },
+      { x: 2.95, y: 4.26, z: -8 }, // kiss door_library_nursery
       { x: 2.95, y: 4.26, z: -10 },
       { x: 2.95, y: 4.26, z: -16 },
       { x: 2.9, y: 4.26, z: -19.5 },
@@ -433,6 +442,7 @@ export const TRACK_PATHS = [
     points: [
       { x: -2.9, y: 4.26, z: -0.8, label: "Library Hall" },
       { x: -2.95, y: 4.26, z: -4 },
+      { x: -2.95, y: 4.26, z: -8 }, // kiss door_library_study
       { x: -2.95, y: 4.26, z: -10 },
       { x: -2.95, y: 4.26, z: -16 },
       { x: -2.9, y: 4.26, z: -19.5 },
@@ -476,11 +486,11 @@ export const TRACK_PATHS = [
   {
     id: "door_music_workshop",
     kind: "floor",
-    width: 0.36,
+    width: 0.48,
     points: [
-      { x: -9.2, y: 4.26, z: -28, label: "Music Room" },
-      { x: -10.0, y: 4.26, z: -28 },
-      { x: -11.2, y: 4.26, z: -28, label: "Workshop" },
+      { x: -9.35, y: 4.26, z: -30.0, label: "Music Room" },
+      { x: -10.2, y: 4.26, z: -28.8 },
+      { x: -11.2, y: 4.26, z: -28.0, label: "Workshop" },
     ],
   },
   {
@@ -507,7 +517,7 @@ export const TRACK_PATHS = [
   {
     id: "door_library_nursery",
     kind: "floor",
-    width: 0.36,
+    width: 0.48,
     points: [
       { x: 2.95, y: 4.26, z: -8, label: "Library Hall" },
       { x: 4.0, y: 4.26, z: -8 },
@@ -541,7 +551,7 @@ export const TRACK_PATHS = [
   {
     id: "door_library_study",
     kind: "floor",
-    width: 0.36,
+    width: 0.48,
     points: [
       { x: -2.95, y: 4.26, z: -8, label: "Library Hall" },
       { x: -4.0, y: 4.26, z: -8 },
@@ -575,19 +585,20 @@ export const TRACK_PATHS = [
   {
     id: "music_to_mezzanine_skirt",
     kind: "floor",
-    width: 0.38,
+    width: 0.48,
     points: [
-      { x: 9.2, y: 4.26, z: -28, label: "Music Room" },
-      { x: 11.0, y: 4.26, z: -28 },
-      { x: 14.0, y: 4.26, z: -28, label: "East Mezzanine" },
+      { x: 9.35, y: 4.26, z: -30.0, label: "Music Room" },
+      { x: 11.0, y: 4.26, z: -28.5 },
+      { x: 14.0, y: 4.26, z: -28.0, label: "East Mezzanine" },
       { x: 14.0, y: 4.26, z: -24 },
       { x: 14.0, y: 4.26, z: -20 },
+      { x: 14.0, y: 4.26, z: -14 }, // kiss mezzanine_to_landing_skirt
     ],
   },
   {
     id: "mezzanine_to_landing_skirt",
     kind: "floor",
-    width: 0.38,
+    width: 0.48,
     points: [
       { x: 14.0, y: 4.26, z: -14 },
       { x: 11.5, y: 4.26, z: -6 },
@@ -632,24 +643,40 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
-    width: 0.78,
+    width: 0.90, // wide climb foot (post scale×ramp-mult → ~1.39) — easy mount
+    gentleStart: true, // ease-in first 20% of rise — soft mount, not wall
+    noLateralBow: true, // keep authored opening XZ; soften may even Y only
     points: [
-      // ONE clear climb EAST of grand stair. Long run for gentle grade.
-      // Crest on landing EAST of attic stair (attic AABB x[-7.6,-5.4] z[0.5,6]).
+      // HARD ≤30% grade, no hairpins — long gentle S-weave in aperture.
       { x: -4.70, y: 0.06, z: 10.60, label: "Grand Foyer" },
-      { x: -4.70, y: 0.30, z: 9.70 },
-      { x: -4.70, y: 0.60, z: 8.70 },
-      { x: -4.70, y: 0.95, z: 7.70 },
-      { x: -4.70, y: 1.35, z: 6.70 },
-      { x: -4.70, y: 1.80, z: 5.70 },
-      { x: -4.70, y: 2.25, z: 4.70 },
-      { x: -4.70, y: 2.70, z: 3.70 },
-      { x: -4.70, y: 3.15, z: 2.80 },
-      { x: -4.70, y: 3.55, z: 2.00 },
-      { x: -4.65, y: 3.90, z: 1.30 },
-      { x: -4.50, y: 4.12, z: 0.70 },
-      { x: -4.20, y: 4.22, z: 0.20 },
-      { x: -3.70, y: 4.26, z: -0.40, label: "Upper Landing" },
+      { x: -4.90, y: 0.07, z: 9.95 },
+      { x: -5.15, y: 0.10, z: 9.30 },
+      { x: -5.45, y: 0.15, z: 8.65 },
+      { x: -5.80, y: 0.22, z: 8.05 },
+      { x: -6.30, y: 0.32, z: 7.50 },
+      { x: -6.85, y: 0.44, z: 7.00 },
+      { x: -7.35, y: 0.58, z: 6.50 },
+      { x: -7.70, y: 0.74, z: 5.95 },
+      { x: -7.90, y: 0.92, z: 5.35 },
+      { x: -7.95, y: 1.12, z: 4.70 },
+      { x: -7.80, y: 1.34, z: 4.10 },
+      { x: -7.40, y: 1.56, z: 3.60 },
+      { x: -6.80, y: 1.78, z: 3.25 },
+      { x: -6.15, y: 2.00, z: 3.05 },
+      { x: -5.55, y: 2.22, z: 3.00 },
+      { x: -5.20, y: 2.44, z: 3.20 },
+      { x: -5.15, y: 2.66, z: 3.55 },
+      { x: -5.40, y: 2.88, z: 3.95 },
+      { x: -5.90, y: 3.08, z: 4.25 },
+      { x: -6.45, y: 3.26, z: 4.35 },
+      { x: -6.95, y: 3.44, z: 4.15 },
+      { x: -7.25, y: 3.60, z: 3.75 },
+      { x: -7.30, y: 3.76, z: 3.25 },
+      { x: -7.05, y: 3.90, z: 2.80 },
+      { x: -6.55, y: 4.02, z: 2.45 },
+      { x: -5.90, y: 4.12, z: 2.20 },
+      { x: -5.35, y: 4.20, z: 2.00 },
+      { x: -5.00, y: 4.26, z: 1.90, label: "Upper Landing" },
     ],
   },
   // ─── Furniture-top circuits + ramps (Toy Story vibe) ───
@@ -1116,6 +1143,7 @@ export const TRACK_PATHS = [
   // Hall east cornice — undulating elevation + link to conservatory
   {
     id: "cornice_hall_east",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.38,
     rail: true,
@@ -1139,6 +1167,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cornice_hall_west",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.38,
     rail: true,
@@ -1163,12 +1192,12 @@ export const TRACK_PATHS = [
   // Cross-hall bridge near foyer (railed header)
   {
     id: "cornice_hall_cross_south",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
-    width: 0.355,
+    width: 0.42, // visible driveable hall header (foyer cornice culled — this IS the bridge)
     rail: true,
     tension: 0.1,
     fancy: true,
-    visual: false, // foyer cornice draws this header — NO elev snap/support (invisible must not lift)
     points: [
       { x: -3.15, y: 3.4, z: -0.55 },
       { x: -1.5, y: 3.46, z: -0.48 },
@@ -1180,6 +1209,7 @@ export const TRACK_PATHS = [
   // Mid-hall cross bridge (smooth arch)
   {
     id: "cornice_hall_cross_mid",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -1196,6 +1226,7 @@ export const TRACK_PATHS = [
   // Cabinet header bridge + room-top circuit with hairpins
   {
     id: "cornice_cabinet_bridge",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1211,6 +1242,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cornice_cabinet",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1261,6 +1293,7 @@ export const TRACK_PATHS = [
   // Armoury header + room circuit (mirror of cabinet)
   {
     id: "cornice_armoury_bridge",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1276,6 +1309,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cornice_armoury",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1309,6 +1343,7 @@ export const TRACK_PATHS = [
   // Conservatory upper perimeter — chicanes on long glass sides
   {
     id: "cornice_conservatory",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1346,6 +1381,7 @@ export const TRACK_PATHS = [
   // Dining parlor cornice spur off conservatory west
   {
     id: "cornice_dining_bridge",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -1360,6 +1396,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cornice_dining",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -1517,14 +1554,17 @@ export const TRACK_PATHS = [
   // Architectural balcony track — loop with turnaround
   {
     id: "ramp_landing_to_balcony",
-    disabled: true, // primary-course: keep foyer readable — balcony climb secondary
     kind: "ramp",
-    width: 0.40,
+    width: 0.88, // wide mountable landing→balcony foot
     points: [
+      // Through widened landing-south French aperture (x∈[-5.5,5.5] @ z≈10) → balcony
+      // Mild lip then settle — readable on-ramp after foyer climb crest.
       { x: 6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
-      { x: 6.6, y: 4.26, z: 10.0 },
-      { x: 6.5, y: 4.26, z: 11.2 },
-      { x: 6.5, y: 4.28, z: 12.2, label: "Balcony" },
+      { x: 5.6, y: 4.28, z: 9.15 },
+      { x: 4.85, y: 4.32, z: 9.55 }, // slight crest lip (clear of east slab)
+      { x: 4.70, y: 4.30, z: 10.05 },
+      { x: 4.70, y: 4.28, z: 11.10 },
+      { x: 4.70, y: 4.28, z: 12.20, label: "Balcony" },
     ],
   },
   
@@ -1532,40 +1572,42 @@ export const TRACK_PATHS = [
   {
     id: "balcony_loop",
     kind: "balcony",
-    width: 0.46,
+    width: 0.95, // Mario Kart readable elevated asphalt (post-scale ≥ DECK_WIDTH_MIN)
     rail: true,
-    tension: 0.05,
+    tension: 0.04,
     closed: true,
     fancy: true,
     points: [
-      { x: 6.5, y: 4.28, z: 12.2, label: "Balcony" },
-      { x: 4.0, y: 4.28, z: 13.5 },
-      { x: 0.0, y: 4.28, z: 14.5 },
-      { x: -4.0, y: 4.28, z: 13.5 },
-      { x: -5.5, y: 4.28, z: 12.2 },
-      // Fillet softens ~130° west return kink
-      { x: -5.7, y: 4.28, z: 13.9 },
-      { x: -5.5, y: 4.28, z: 15.8 },
-      { x: -2.0, y: 4.28, z: 17.2 },
-      { x: 0.0, y: 4.28, z: 17.2 },
-      { x: 2.0, y: 4.28, z: 17.2 },
-      { x: 5.5, y: 4.28, z: 15.8 },
-      { x: 6.5, y: 4.28, z: 14.0 },
-      { x: 6.5, y: 4.28, z: 12.2 },
+      // Facade French doors open x∈[-5.6,5.6] @ z≈14.2 — NEVER cross outside that.
+      { x: 4.70, y: 4.28, z: 12.20, label: "Balcony" },
+      { x: 4.20, y: 4.28, z: 13.40 },
+      { x: 3.00, y: 4.28, z: 14.55 }, // cross facade → outer deck
+      { x: 1.00, y: 4.28, z: 15.90 },
+      { x: -1.20, y: 4.28, z: 16.80 },
+      { x: -3.20, y: 4.28, z: 16.60 },
+      { x: -4.50, y: 4.28, z: 15.50 },
+      { x: -4.40, y: 4.28, z: 14.55 }, // cross facade → approach
+      { x: -4.50, y: 4.28, z: 13.30 },
+      { x: -4.70, y: 4.28, z: 12.20 }, // ramp_balcony_return kiss
+      // Inner approach connector closes the loop (north of facade)
+      { x: -2.40, y: 4.28, z: 12.35 },
+      { x: 0.00, y: 4.28, z: 12.45 },
+      { x: 2.40, y: 4.28, z: 12.35 },
+      { x: 4.70, y: 4.28, z: 12.20 },
     ],
   },
-  // Return inside via west side of balcony
+  // Return inside via west side of balcony through same French aperture
   {
     id: "ramp_balcony_return",
-    disabled: true, // primary-course: keep foyer readable — balcony climb secondary
     kind: "ramp",
-    width: 0.40,
+    width: 0.88, // wide balcony→landing return foot
     points: [
-      // Ends at north landing center — clears attic_from_landing_access foot at (-6.8,8.8)
-      { x: -5.5, y: 4.28, z: 12.2, label: "Balcony" },
-      { x: -4.2, y: 4.26, z: 10.6 },
-      { x: -2.8, y: 4.26, z: 9.4 },
-      { x: -2.0, y: 4.26, z: 9.0, label: "Upper Landing" },
+      { x: -4.70, y: 4.28, z: 12.20, label: "Balcony" },
+      { x: -4.70, y: 4.27, z: 11.10 },
+      { x: -4.70, y: 4.26, z: 10.05 }, // aperture (clears west slab at x≤-5.5)
+      { x: -4.60, y: 4.26, z: 9.55 },
+      { x: -3.60, y: 4.26, z: 9.20 },
+      { x: -2.00, y: 4.26, z: 9.00, label: "Upper Landing" },
     ],
   },
   // Optional drop ramp: balcony → front drive gravel
@@ -1899,6 +1941,7 @@ export const TRACK_PATHS = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "flower_rose_weave",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.3,
@@ -1915,6 +1958,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "flower_hedge_tunnel",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.28,
@@ -1928,6 +1972,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "flower_beds_weave",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.3,
@@ -1945,6 +1990,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "flower_orchard_sneak",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.28,
@@ -1961,6 +2007,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "flower_fountain_arc",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.32,
@@ -1977,6 +2024,7 @@ export const TRACK_PATHS = [
   // Link terrace flower path → balcony drop landing / front drive connector
   {
     id: "flower_to_drive_connector",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "flower",
     width: 0.4,
     tension: 0.15,
@@ -2244,6 +2292,7 @@ export const TRACK_PATHS = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "attic_loft_skirting",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.355,
     rail: true,
@@ -2279,6 +2328,7 @@ export const TRACK_PATHS = [
   // Science attic perimeter (north loft)
   {
     id: "attic_science_skirting",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -2304,6 +2354,7 @@ export const TRACK_PATHS = [
   // Loft ↔ science connector (door threshold strip)
   {
     id: "attic_loft_to_science",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -2319,6 +2370,7 @@ export const TRACK_PATHS = [
   // shaft_service_west attic portal → loft west skirting
   {
     id: "attic_from_shaft_service",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -2364,6 +2416,7 @@ export const TRACK_PATHS = [
   // East loft corner spur (mirrors west shaft philosophy)
   {
     id: "attic_loft_east_spur",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2387,6 +2440,7 @@ export const TRACK_PATHS = [
   // ═══════════════════════════════════════════════════════════════
   {
     id: "cellar_skirting",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "floor",
     width: 0.4,
     tension: 0.16,
@@ -2414,6 +2468,7 @@ export const TRACK_PATHS = [
   // Connectors from skirting → existing shaft / pipe portals
   {
     id: "cellar_to_shaft_service",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "floor",
     width: 0.36,
     points: [
@@ -2424,6 +2479,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cellar_to_pipe_east",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "floor",
     width: 0.36,
     points: [
@@ -2434,6 +2490,7 @@ export const TRACK_PATHS = [
   },
   {
     id: "cellar_to_climb_tube",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "floor",
     width: 0.36,
     points: [
@@ -2445,6 +2502,7 @@ export const TRACK_PATHS = [
   // Light cross-aisle so the three stubs form a usable basement loop
   {
     id: "cellar_cross_mid",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "floor",
     width: 0.34,
     points: [
@@ -2541,6 +2599,7 @@ export const TRACK_PATHS = [
   // Attic loft inner cross — E–W spine intersecting perimeter (tourable loft highway)
   {
     id: "attic_loft_cross_ew",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -2557,6 +2616,7 @@ export const TRACK_PATHS = [
   // Attic loft inner cross — N–S spine (intersects E–W at center)
   {
     id: "attic_loft_cross_ns",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.34,
     rail: true,
@@ -2573,6 +2633,7 @@ export const TRACK_PATHS = [
   // First-floor library loft edge (east room rim at cornice height — hugs walls)
   {
     id: "loft_library_edge",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.33,
     rail: true,
@@ -2625,6 +2686,7 @@ export const TRACK_PATHS = [
   
   {
     id: "loft_music_edge",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2651,6 +2713,7 @@ export const TRACK_PATHS = [
   // Bridge: landing cornice east tip → library loft edge (was floating dead-end at z=1)
   {
     id: "loft_landing_to_library",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2665,6 +2728,7 @@ export const TRACK_PATHS = [
   // West twin: landing cornice west tip → library loft
   {
     id: "loft_landing_to_library_west",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2679,6 +2743,7 @@ export const TRACK_PATHS = [
   // Library loft south header → music loft north (closes 1.4 m void gap)
   {
     id: "loft_library_to_music",
+    disabled: true, // primary-circuit: orphan loop/deck — not on spawn circuit
     kind: "cornice",
     width: 0.32,
     rail: true,
@@ -2829,19 +2894,19 @@ export const TRACK_PATHS = [
  */
 export const ROAD_WIDTH_SCALE = 0.87;
 /** Extra multiplier for kind===ramp only (after ROAD_WIDTH_SCALE). */
-export const RAMP_WIDTH_MULT = 1.72;
+export const RAMP_WIDTH_MULT = 1.78;
 /** Minimum post-boost ramp width → halfW ≥ ~0.29. */
-export const RAMP_WIDTH_MIN = 0.58;
+export const RAMP_WIDTH_MIN = 0.62;
 /** Floor/outdoor post-scale min — thick readable asphalt (no wire-thin ribbons). */
 export const FLOOR_WIDTH_MIN = 0.78; // playable floor cruise (halfW ≥0.39)
 /** Doorway connector min width after scale. */
 export const DOOR_WIDTH_MIN = 0.48;
 /** Elevated/cornice/balcony/furniture decks min after scale. */
-export const DECK_WIDTH_MIN = 0.52; // solid elevated asphalt (not tape ribbons)
+export const DECK_WIDTH_MIN = 0.70; // solid elevated asphalt — Mario Kart clarity, not tape
 /** Soften lumpy / death-trap climb grades (rise/run per segment). */
-export const RAMP_MAX_GRADE = 0.44;
+export const RAMP_MAX_GRADE = 0.30; // HARD Ben: max |Δy|/run ≤ 30% every segment
 /** Mean grade above this after soften → path disabled (no invisible death traps). */
-export const RAMP_DISABLE_MEAN_GRADE = 0.48;
+export const RAMP_DISABLE_MEAN_GRADE = 0.305; // just above 0.30 — death-trap disable
 
 export const ROAD_WIDTH_DESIGN = Object.fromEntries(
   TRACK_PATHS.map((path) => [path.id, path.width])
@@ -2897,7 +2962,8 @@ function _softenRampGrades(path) {
   if (totalFlat < 1e-4 || rise < 1e-4) return;
 
   // Mild lateral bow to gain flat length when mean grade is too steep
-  if (rise / totalFlat > RAMP_MAX_GRADE) {
+  // Skip when authored path must hold a void/opening (noLateralBow).
+  if (!path.noLateralBow && rise / totalFlat > RAMP_MAX_GRADE) {
     const needFlat = rise / RAMP_MAX_GRADE;
     const chord = Math.hypot(crest.x - foot.x, crest.z - foot.z) || 1;
     const nx = -(crest.z - foot.z) / chord;
@@ -2934,6 +3000,46 @@ function _softenRampGrades(path) {
   for (let i = 1; i < pts.length - 1; i++) {
     const t = cum[i] / totalFlat;
     pts[i].y = Math.round((y0 + (y1 - y0) * t) * 1000) / 1000;
+  }
+
+  // Human mount: gentler first ~20% of flat distance (ease-in rise).
+  // First 20% run → ~9% of total rise; remaining 80% carries ~91% (still ≤0.30).
+  if (path.gentleStart && rise > 0.4 && totalFlat > 4) {
+    const sign = Math.sign(y1 - y0) || 1;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const t = cum[i] / totalFlat;
+      let frac;
+      if (t <= 0.20) frac = t * 0.45; // 0..0.20 → 0..0.09
+      else frac = 0.09 + (t - 0.20) / 0.80 * 0.91;
+      pts[i].y = Math.round((y0 + sign * rise * frac) * 1000) / 1000;
+    }
+    // If any segment exceeds cap, fall back to even Y (safety)
+    let over = false;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const run = Math.hypot(b.x - a.x, b.z - a.z);
+      if (run < 1e-6) continue;
+      if (Math.abs(b.y - a.y) / run > RAMP_MAX_GRADE + 1e-4) { over = true; break; }
+    }
+    if (over) {
+      for (let i = 1; i < pts.length - 1; i++) {
+        const t = cum[i] / totalFlat;
+        pts[i].y = Math.round((y0 + (y1 - y0) * t) * 1000) / 1000;
+      }
+    }
+  }
+
+  // HARD assert: every segment ≤ RAMP_MAX_GRADE after soften
+  let maxSeg = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const run = Math.hypot(b.x - a.x, b.z - a.z);
+    if (run < 1e-6) continue;
+    maxSeg = Math.max(maxSeg, Math.abs(b.y - a.y) / run);
+  }
+  if (maxSeg > RAMP_MAX_GRADE + 1e-4) {
+    path.disabled = true;
+    path._disabledReason = `segment grade ${maxSeg.toFixed(3)} > ${RAMP_MAX_GRADE}`;
   }
 }
 
@@ -3001,7 +3107,7 @@ export const RAMP_MOUNT_FEET = (() => {
       foot: { x: foot.x, y: foot.y, z: foot.z },
       crest: { x: crest.x, y: crest.y, z: crest.z },
       /** Meters behind foot along approach where ramp snap must win */
-      engageBack: 0.08,
+      engageBack: path.id === "ramp_foyer_to_landing" ? 0.75 : 0.08,
       /** Soft crest blend band (m) — avoid snap theft at deck kiss */
       crestSoft: 0.12,
       climbFracs: [0.25, 0.5, 0.75],

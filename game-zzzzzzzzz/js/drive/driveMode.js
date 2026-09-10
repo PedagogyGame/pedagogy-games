@@ -356,6 +356,8 @@ export class DriveMode {
     this.car.setLightsSubtle(false);
     this.tracks.setVisible(true);
     this._fxRoot.visible = true;
+    // Clear sticky path bias so spawn/re-enter is not glued to a prior climb spur
+    if (this.tracks) this.tracks._lastPathId = null;
     // Face along open road (snap yaw + wall probe), never into foyer south wall
     const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
     this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
@@ -649,12 +651,14 @@ export class DriveMode {
   _nearFoyerClimbCorridor(x, z) {
     // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
     const fx = -4.70, fz = 10.60;
-    if (Math.hypot(x - fx, z - fz) <= 1.65) return true;
-    // East-flank climb band (open asphalt → beside stair → landing)
-    if (x >= -5.60 && x <= -3.60 && z >= -0.8 && z <= 11.2) {
+    if (Math.hypot(x - fx, z - fz) <= 2.15) return true;
+    // East-flank climb band (open asphalt → beside stair → landing crest)
+    if (x >= -6.20 && x <= -3.40 && z >= 1.2 && z <= 11.4) {
       const along = Math.hypot(x - fx, z - fz);
-      if (along < 3.2) return true;
+      if (along < 4.2) return true;
     }
+    // Mid-climb S-weave west pocket (stair aperture)
+    if (x >= -8.10 && x <= -5.40 && z >= 2.0 && z <= 8.4) return true;
     return false;
   }
 

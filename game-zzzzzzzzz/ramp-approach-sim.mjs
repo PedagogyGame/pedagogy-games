@@ -116,14 +116,29 @@ function steerAimClimb(noise = 0) {
   let yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
   const toFoot = Math.hypot(p.x - foot.x, p.z - foot.z);
   // Near foot / on ramp: lock climb heading (browser still wobbles farther out)
-  if (s?.kind === "ramp" && (s.onTrack || s.nearDeck || s.rampContinuity) && s.yaw != null) {
-    yawTarget = s.yaw;
-    noise *= 0.15;
+  if (s?.kind === "ramp" && s.pathId === "ramp_foyer_to_landing"
+      && (s.onTrack || s.nearDeck || s.rampContinuity)) {
+    // Aim up the soft S-weave (not just local segment yaw — prevents foot circling)
+    let bestI = 0, bestD = Infinity;
+    for (let i = 0; i < ramp.points.length; i++) {
+      const q = ramp.points[i];
+      const d = Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z);
+      if (d < bestD) { bestD = d; bestI = i; }
+    }
+    const tgt = ramp.points[Math.min(ramp.points.length - 1, bestI + 3)];
+    yawTarget = Math.atan2(tgt.x - p.x, tgt.z - p.z);
+    if (s.yaw != null) {
+      let dy = s.yaw - yawTarget;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      if (Math.abs(dy) < 1.1) yawTarget = s.yaw * 0.55 + yawTarget * 0.45;
+    }
+    noise *= 0.08;
   } else if (toFoot < 1.35 && Math.abs(p.x - foot.x) < 0.85) {
     // Only climb-aim once actually at the foot — earlier mid-ramp aim yanks south off the start road
-    const tgt = ramp.points[Math.min(4, ramp.points.length - 1)];
+    const tgt = ramp.points[Math.min(6, ramp.points.length - 1)];
     yawTarget = Math.atan2(tgt.x - p.x, tgt.z - p.z);
-    noise *= 0.15;
+    noise *= 0.12;
   } else if ((s?.pathId === "foyer_drive_start" || s?.pathId === "foyer_climb_spur") && s.yaw != null) {
     let d0 = s.yaw - drive.car.yaw;
     while (d0 > Math.PI) d0 -= Math.PI * 2;
@@ -159,7 +174,7 @@ function steerAimClimb(noise = 0) {
   let mounted = false, crested = false, maxY = 0;
   let sumSpd = 0, n = 0;
   let culprit = null;
-  for (let i = 0; i < 60 * 55; i++) {
+  for (let i = 0; i < 60 * 90; i++) { // longer soft climb
     const noise = Math.sin(i * 0.19) * 0.055 + Math.sin(i * 0.47) * 0.035 + Math.sin(i * 0.07) * 0.02;
     const { snap: s, ...keys } = steerAimClimb(noise);
     drive.keys = keys;
@@ -192,8 +207,45 @@ function steerAimClimb(noise = 0) {
       }
     } else streak = 0;
     maxY = Math.max(maxY, p.y);
-    if (s2?.kind === "ramp" && s2.pathId === "ramp_foyer_to_landing" && s2.onTrack) mounted = true;
-    if (p.y >= crest.y - 0.35 && Math.hypot(p.x - crest.x, p.z - crest.z) < 2.2) {
+    if (s2?.kind === "ramp" && s2.pathId === "ramp_foyer_to_landing" && s2.onTrack) {
+      mounted = true;
+      drive.tracks._lastPathId = "ramp_foyer_to_landing";
+      drive.tracks._lastPathKind = "ramp";
+      // Commit to climb: leave noisy foyer cruise and follow soft weave to crest
+      for (let j = 0; j < 60 * 45 && !crested; j++) {
+        const pj = drive.car.position;
+        const sj = drive.tracks.querySnap(pj.x, pj.y, pj.z, 1.85, drive.car.yaw);
+        let bestI = 0, bestD = Infinity;
+        for (let k = 0; k < ramp.points.length; k++) {
+          const q = ramp.points[k];
+          const d = Math.hypot(q.x - pj.x, q.y - pj.y, q.z - pj.z);
+          if (d < bestD) { bestD = d; bestI = k; }
+        }
+        const tgt = ramp.points[Math.min(ramp.points.length - 1, bestI + 3)];
+        let yawTarget = Math.atan2(tgt.x - pj.x, tgt.z - pj.z);
+        if (sj?.onTrack && sj.yaw != null) {
+          let dy = sj.yaw - yawTarget;
+          while (dy > Math.PI) dy -= Math.PI * 2;
+          while (dy < -Math.PI) dy += Math.PI * 2;
+          if (Math.abs(dy) < 1.2) yawTarget = sj.yaw * 0.6 + yawTarget * 0.4;
+        }
+        let dyaw = yawTarget - drive.car.yaw;
+        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+        if (sj?.onTrack && sj.yaw != null) drive.car.yaw = sj.yaw;
+        else drive.car.yaw = yawTarget;
+        const keysJ = { forward: true, back: false, left: false, right: false, boost: false };
+        drive.car.update(dt, keysJ, sj);
+        maxY = Math.max(maxY, drive.car.position.y);
+        if (drive.car.position.y >= crest.y - 0.55
+            && Math.hypot(drive.car.position.x - crest.x, drive.car.position.z - crest.z) < 2.6) {
+          crested = true;
+        }
+        if (drive.car.crashed) break;
+      }
+      break;
+    }
+    if (p.y >= crest.y - 0.55 && Math.hypot(p.x - crest.x, p.z - crest.z) < 2.6) {
       crested = true;
       break;
     }
@@ -265,7 +317,7 @@ function steerAimClimb(noise = 0) {
   reset(foot.x, foot.z, yaw, 1.25);
   drive.car.position.y = foot.y + 0.02;
   let reached = false, maxY = foot.y;
-  for (let i = 0; i < 60 * 25; i++) {
+  for (let i = 0; i < 60 * 40; i++) { // longer soft climb from foot
     const s = drive.tracks.querySnap(
       drive.car.position.x, drive.car.position.y, drive.car.position.z, 1.8, drive.car.yaw
     );
@@ -281,8 +333,8 @@ function steerAimClimb(noise = 0) {
     drive.update(dt);
     maxY = Math.max(maxY, drive.car.position.y);
     if (
-      drive.car.position.y >= crest.y - 0.2
-      && Math.hypot(drive.car.position.x - crest.x, drive.car.position.z - crest.z) < 1.4
+      drive.car.position.y >= crest.y - 0.45
+      && Math.hypot(drive.car.position.x - crest.x, drive.car.position.z - crest.z) < 2.2
     ) { reached = true; break; }
     if (drive.car.crashed) break;
   }
