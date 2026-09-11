@@ -18,7 +18,7 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzzj`, next class is `.game-171`. Three pieces must match: folder name, `href`, CSS class.
+To add more later: next folder is `game-zzzzzzzzzk`, next class is `.game-172`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
@@ -61,3 +61,5 @@ Live: `game-zzzzzzzzzg/` / `.game-168` — CRUX (climbing vocabulary).
 Live: `game-zzzzzzzzzh/` / `.game-169` — Vocab System (engineering terminal).
 
 Live: `game-zzzzzzzzzi/` / `.game-170` — Zombie Characters (Dead Ahead Mandarin survival).
+
+Live: `game-zzzzzzzzzj/` / `.game-171` — Low Gravity (Calypso ice-moon combat).
