@@ -43,6 +43,11 @@ export class DriveMode {
     this.onCrash = null;
     this.onHud = null;
 
+    /** @type {null|{mode:string,t:number,duration:number,maxY:number,done:boolean,pass:boolean,foot:{x:number,y:number,z:number},logEl:HTMLElement|null,bannerEl:HTMLElement|null,logAcc:number,result:string}} */
+    this._autodrive = null;
+    /** Wall-clock anchor for autodrive catch-up (Chrome rAF throttle / dt clamp). */
+    this._autoLastWall = 0;
+
     // Crash state: null | 'falling' | 'smash' | 'restarting'
     this._crashPhase = null;
     this._crashTimer = 0;
@@ -73,7 +78,7 @@ export class DriveMode {
     this._jamHits = 0;
 
     // Temporary chase-cam fill so foyer spawn is not pitch black (room lights sit high/center)
-    this._fillLight = new THREE.PointLight(0xffe0b2, 4.2, 11, 2);
+    this._fillLight = new THREE.PointLight(0xffe0b2, 9.0, 16, 2);
     this._fillLight.name = "drive_fill";
     this._fillLight.visible = false;
     this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
@@ -357,13 +362,23 @@ export class DriveMode {
     this.tracks.setVisible(true);
     this._fxRoot.visible = true;
     // Clear sticky path bias so spawn/re-enter is not glued to a prior climb spur
-    if (this.tracks) this.tracks._lastPathId = null;
-    // Face along open road (snap yaw + wall probe), never into foyer south wall
-    const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
-    this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
-    this.car.speed = 0;
-    this.car.resetBoost();
-    this.keys = { forward: false, back: false, left: false, right: false, boost: false };
+    // But do NOT wipe an in-flight ?autodrive=climb harness (double enter / mode toggle).
+    const resumeAuto = !!(this._autodrive && !this._autodrive.done && this._autodrive.mode === "climb");
+    if (this.tracks && !resumeAuto) this.tracks._lastPathId = null;
+    if (!resumeAuto) {
+      // Face along open road (snap yaw + wall probe), never into foyer south wall
+      const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
+      this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
+      this.car.speed = 0;
+      this.car.resetBoost();
+      this.keys = { forward: false, back: false, left: false, right: false, boost: false };
+    } else {
+      this.keys.forward = true;
+      this.keys.back = false;
+      this.keys.boost = false;
+      this._inputsFrozen = false;
+      this._crashPhase = null;
+    }
     this._baseFov = this.camera.fov || 60;
     this._fov = this._driveFov;
     this.camera.fov = this._driveFov;
@@ -384,7 +399,8 @@ export class DriveMode {
     this._jamHits = 0;
     if (this._fillLight) {
       this._fillLight.visible = true;
-      this._fillLight.intensity = 4.2;
+      this._fillLight.intensity = 9.0;
+      this._fillLight.distance = 16;
       this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     }
     if (typeof document !== "undefined") {
@@ -414,6 +430,9 @@ export class DriveMode {
   }
 
   exit() {
+    this._clearAutodriveUI();
+    this._autodrive = null;
+    this._autoLastWall = 0;
     this.active = false;
     this.car.speed = 0;
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
@@ -650,15 +669,15 @@ export class DriveMode {
   /** Foyer climb approach corridor — stair/furniture must not pin before snap. */
   _nearFoyerClimbCorridor(x, z) {
     // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
-    const fx = -4.70, fz = 10.60;
-    if (Math.hypot(x - fx, z - fz) <= 2.15) return true;
-    // East-flank climb band (open asphalt → beside stair → landing crest)
-    if (x >= -6.20 && x <= -3.40 && z >= 1.2 && z <= 11.4) {
+    const fx = -4.55, fz = 10.55;
+    if (Math.hypot(x - fx, z - fz) <= 2.35) return true;
+    // East-flank climb band (open asphalt → east of stair → landing crest)
+    if (x >= -5.20 && x <= -2.20 && z >= 0.5 && z <= 11.6) {
       const along = Math.hypot(x - fx, z - fz);
-      if (along < 4.2) return true;
+      if (along < 5.5) return true;
     }
-    // Mid-climb S-weave west pocket (stair aperture)
-    if (x >= -8.10 && x <= -5.40 && z >= 2.0 && z <= 8.4) return true;
+    // Mid-climb east pocket (clear of west stair volume)
+    if (x >= -4.60 && x <= -2.20 && z >= 0.6 && z <= 8.6) return true;
     return false;
   }
 
@@ -1076,7 +1095,36 @@ export class DriveMode {
 
   update(dt) {
     if (!this.active) return;
+    // ?autodrive=climb: catch up wall clock with fixed steps. Chrome background
+    // tabs / long hitches clamp getDelta→0.05 and discard time, freezing maxY≈foot.
+    if (this._autodrive && !this._autodrive.done && this._autodrive.mode === "climb") {
+      const now = (typeof performance !== "undefined" && performance.now)
+        ? performance.now()
+        : Date.now();
+      if (!this._autoLastWall) this._autoLastWall = now;
+      const wallDt = Math.max(0, (now - this._autoLastWall) / 1000);
+      this._autoLastWall = now;
+      // Cap high enough that rare Chrome rAF (bg tab ~1–5s) still keeps realtime climb
+      let budget = Math.min(5.0, Math.max(wallDt, Number(dt) || 0));
+      const step = 1 / 60;
+      let guard = 0;
+      while (budget > 1e-6 && guard++ < 300) {
+        const s = Math.min(step, budget);
+        this._updateFrame(s);
+        budget -= s;
+        if (this._autodrive?.done) break;
+      }
+      return;
+    }
+    this._updateFrame(dt);
+  }
+
+  /** Single simulation frame (physics + cam + FX). */
+  _updateFrame(dt) {
+    if (!this.active) return;
     this._time += dt;
+    if (this._autodrive && !this._autodrive.done) this._tickAutodriveClimb(dt);
+
 
     // Crash / restart state machine
     if (this._crashPhase === "smash") {
@@ -1282,4 +1330,238 @@ export class DriveMode {
   get flashAmount() {
     return this._flash;
   }
+
+  /**
+   * Temporary URL-param live prove: hold W on foyer_climb_spur approach and log climb.
+   * Only used when main.js sees ?autodrive=climb — default Drive untouched.
+   */
+  beginClimbAutodrive() {
+    if (typeof document === "undefined") return;
+    // Foot of ramp_foyer_to_landing / end of foyer_climb_spur
+    const foot = { x: -4.55, y: 0.06, z: 10.55 };
+    // ~1m before foot on spur (authored point near (-3.65, 10.80))
+    const ax = -3.65;
+    const ay = 0.075;
+    const az = 10.80;
+    // Yaw toward foot, then slightly into first climb segment (-4.70, 10.00)
+    const aimX = -4.70;
+    const aimZ = 10.00;
+    const yaw = Math.atan2(aimX - ax, aimZ - az);
+
+    this._clearAutodriveUI();
+    this._autoLastWall = (typeof performance !== "undefined" && performance.now)
+      ? performance.now()
+      : Date.now();
+    this._autodrive = {
+      mode: "climb",
+      t: 0,
+      duration: 25,
+      maxY: ay,
+      done: false,
+      pass: false,
+      foot,
+      logEl: null,
+      bannerEl: null,
+      logAcc: 0,
+      result: "",
+    };
+
+    if (this.tracks) {
+      this.tracks._lastPathId = "foyer_climb_spur";
+      this.tracks._lastPathKind = "floor";
+    }
+    this._crashPhase = null;
+    this._crashTimer = 0;
+    this._inputsFrozen = false;
+    this._stuckTimer = 0;
+    this._jamHits = 0;
+    this._stuckNudgeCd = 0;
+    this.car.setPose(ax, ay, az, yaw);
+    this.car.speed = 0.45;
+    this.car.crashed = false;
+    this.car.airborne = false;
+    this.car.vy = 0;
+    if (typeof this.car.resetBoost === "function") this.car.resetBoost();
+    this.keys = { forward: true, back: false, left: false, right: false, boost: false };
+    this._snapCamera(true);
+
+    // Visible log + inject minimal styles (query-param harness only)
+    let style = document.getElementById("autodrive-style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "autodrive-style";
+      style.textContent = `
+#autodrive-log{position:fixed;left:12px;bottom:12px;z-index:9999;max-width:min(92vw,420px);
+  padding:10px 12px;border-radius:8px;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;
+  color:#e8f0ff;background:rgba(8,12,24,.82);border:1px solid rgba(120,160,255,.35);
+  white-space:pre-wrap;pointer-events:none}
+#autodrive-banner{position:fixed;top:18%;left:50%;transform:translateX(-50%);z-index:10000;
+  padding:14px 28px;border-radius:10px;font:700 22px/1.2 system-ui,sans-serif;
+  letter-spacing:.04em;pointer-events:none;display:none;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+#autodrive-banner.pass{display:block;color:#04140a;background:#3dff8a;border:2px solid #b6ffd4}
+#autodrive-banner.fail{display:block;color:#1a0505;background:#ff4d4d;border:2px solid #ffb0b0}
+`;
+      document.head.appendChild(style);
+    }
+    let log = document.getElementById("autodrive-log");
+    if (!log) {
+      log = document.createElement("div");
+      log.id = "autodrive-log";
+      document.body.appendChild(log);
+    }
+    log.textContent = "autodrive=climb armed… posing on foyer_climb_spur";
+    this._autodrive.logEl = log;
+
+    let banner = document.getElementById("autodrive-banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "autodrive-banner";
+      document.body.appendChild(banner);
+    }
+    banner.className = "";
+    banner.textContent = "";
+    this._autodrive.bannerEl = banner;
+
+    console.info("[autodrive] climb harness start @", { x: ax, y: ay, z: az, yaw: +yaw.toFixed(3) });
+  }
+
+  _clearAutodriveUI() {
+    if (typeof document === "undefined") return;
+    const log = document.getElementById("autodrive-log");
+    if (log) log.remove();
+    const banner = document.getElementById("autodrive-banner");
+    if (banner) banner.remove();
+  }
+
+  _showAutodriveBanner(pass) {
+    const ad = this._autodrive;
+    if (!ad) return;
+    const el = ad.bannerEl || (typeof document !== "undefined" ? document.getElementById("autodrive-banner") : null);
+    if (!el) return;
+    ad.bannerEl = el;
+    if (pass) {
+      el.textContent = "CLIMB AUTO PASS";
+      el.className = "pass";
+    } else {
+      el.textContent = "CLIMB AUTO FAIL";
+      el.className = "fail";
+    }
+  }
+
+  _tickAutodriveClimb(dt) {
+    const ad = this._autodrive;
+    if (!ad || ad.done || ad.mode !== "climb") return;
+    if (this._inputsFrozen || this._crashPhase) {
+      // Still accumulate time / y so a crash doesn't hide a fail
+      ad.t += dt;
+      const py = this.car?.position?.y ?? 0;
+      ad.maxY = Math.max(ad.maxY, py);
+      if (ad.t >= ad.duration) {
+        ad.done = true;
+        if (ad.maxY < 1.0) {
+          ad.pass = false;
+          ad.result = "CLIMB AUTO FAIL";
+          this._showAutodriveBanner(false);
+        } else if (ad.maxY >= 2.5) {
+          ad.pass = true;
+          ad.result = "CLIMB AUTO PASS";
+          this._showAutodriveBanner(true);
+        } else {
+          ad.result = `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)}`;
+        }
+      }
+      return;
+    }
+
+    ad.t += dt;
+    const p = this.car.position;
+    ad.maxY = Math.max(ad.maxY, p.y);
+
+    // Hold virtual forward every frame (do not rely on synthetic WASD events)
+    this.keys.forward = true;
+    this.keys.back = false;
+    this.keys.boost = false;
+
+    const snap = this.tracks.querySnap(p.x, p.y, p.z, 1.65, this.car.yaw);
+    let left = false;
+    let right = false;
+    let yawTarget = null;
+    if (snap && snap.onTrack && Number.isFinite(snap.yaw)) {
+      yawTarget = snap.yaw;
+      // Prefer heading that matches current travel (avoid 180° flip on bidirectional ribbon)
+      let d0 = yawTarget - this.car.yaw;
+      while (d0 > Math.PI) d0 -= Math.PI * 2;
+      while (d0 < -Math.PI) d0 += Math.PI * 2;
+      let d1 = d0 + Math.PI;
+      while (d1 > Math.PI) d1 -= Math.PI * 2;
+      while (d1 < -Math.PI) d1 += Math.PI * 2;
+      if (Math.abs(d1) < Math.abs(d0)) yawTarget += Math.PI;
+    } else {
+      // Aim toward foot / early climb weave
+      const foot = ad.foot;
+      const toFoot = Math.hypot(p.x - foot.x, p.z - foot.z);
+      if (toFoot > 0.35) yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
+      else yawTarget = Math.atan2(-4.70 - p.x, 10.00 - p.z);
+    }
+    // Slight lateral correction toward snap ribbon center
+    if (snap && snap.onTrack && snap.x != null && snap.z != null) {
+      const fx = Math.sin(this.car.yaw);
+      const fz = Math.cos(this.car.yaw);
+      const cross = fx * (snap.z - p.z) - fz * (snap.x - p.x);
+      if (cross > 0.06) left = true;
+      else if (cross < -0.06) right = true;
+    }
+    if (Number.isFinite(yawTarget)) {
+      let dyaw = yawTarget - this.car.yaw;
+      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      if (dyaw > 0.04) left = true;
+      if (dyaw < -0.04) right = true;
+    }
+    this.keys.left = left;
+    this.keys.right = right;
+
+    ad.logAcc += dt;
+    if (ad.logAcc >= 0.25 || ad.t < 0.05) {
+      ad.logAcc = 0;
+      const kmh = this.car.getSpeedKmh ? this.car.getSpeedKmh() : Math.abs(this.car.speed) * 3.6;
+      const pathId = (snap && snap.pathId) || this.tracks._lastPathId || "-";
+      const snapY = (snap && snap.y != null && Number.isFinite(snap.y)) ? snap.y.toFixed(2) : "-";
+      const onTrk = snap ? (snap.onTrack ? "1" : "0") : "-";
+      const line = `t=${ad.t.toFixed(1)}s y=${p.y.toFixed(2)} snap.y=${snapY} on=${onTrk} xz=${p.x.toFixed(2)},${p.z.toFixed(2)} spd=${Number(kmh).toFixed(0)} km/h path=${pathId} maxY=${ad.maxY.toFixed(2)}`;
+      console.log("[autodrive]", line);
+      if (ad.logEl) ad.logEl.textContent = line + (ad.result ? `\n${ad.result}` : "");
+    }
+
+    if (ad.maxY >= 2.5) {
+      ad.done = true;
+      ad.pass = true;
+      ad.result = "CLIMB AUTO PASS";
+      this._showAutodriveBanner(true);
+      if (ad.logEl) ad.logEl.textContent += `\n${ad.result}`;
+      console.info("[autodrive] PASS maxY=", ad.maxY.toFixed(2));
+      // Keep rolling but stop forcing steer spam; leave forward for a beat then release
+      this.keys.left = false;
+      this.keys.right = false;
+      return;
+    }
+
+    if (ad.t >= ad.duration) {
+      ad.done = true;
+      if (ad.maxY < 1.0) {
+        ad.pass = false;
+        ad.result = "CLIMB AUTO FAIL";
+        this._showAutodriveBanner(false);
+        console.warn("[autodrive] FAIL maxY=", ad.maxY.toFixed(2));
+      } else {
+        ad.result = `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)} (need ≥2.5)`;
+        console.warn("[autodrive]", ad.result);
+      }
+      this.keys.forward = false;
+      this.keys.left = false;
+      this.keys.right = false;
+      if (ad.logEl) ad.logEl.textContent += `\n${ad.result}`;
+    }
+  }
+
 }

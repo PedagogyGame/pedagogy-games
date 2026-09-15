@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACK_PATHS, CAR_SPAWN } from "../data/tracks.js";
+import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET } from "../data/tracks.js";
 
 function makeCanvas(w, h) {
   if (typeof document !== "undefined" && document.createElement) {
@@ -229,6 +229,16 @@ function ribbonYLift(kind) {
   if (kind === "elevated" || kind === "cornice" || kind === "balcony") return 0.016;
   return 0.015; // floor + default
 }
+
+/** Live climb foot — must match ramp_foyer_to_landing points[0] / foyer_climb_spur end. */
+const FOYER_CLIMB_FOOT = (RAMP_MOUNT_FEET.ramp_foyer_to_landing
+  && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
+  ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
+  : { x: -4.55, y: 0.06, z: 10.55 };
+const FOYER_CLIMB_ENGAGE_BACK = (RAMP_MOUNT_FEET.ramp_foyer_to_landing
+  && RAMP_MOUNT_FEET.ramp_foyer_to_landing.engageBack) || 1.10;
+/** Lateral+along radius where ramp snap must beat floor asphalt near the foot. */
+const FOYER_CLIMB_ENGAGE_R = FOYER_CLIMB_ENGAGE_BACK + 1.35; // ~2.45m
 
 /**
  * Builds road meshes from TRACK_PATHS and provides nearest-track snap queries.
@@ -600,6 +610,10 @@ export class TrackSystem {
       if (footY < 1.15 || primaryClimb) {
         this._addArrowSign(pts[0], pts[Math.min(1, pts.length - 1)], primaryClimb);
       }
+    }
+    // T-junction climb beacon: spur start points at foot so the turn is obvious from spawn road
+    if (path.id === "foyer_climb_spur" && pts.length >= 2) {
+      this._addArrowSign(pts[0], pts[pts.length - 1], true);
     }
     // Cornice showcase: start/finish stripe only (banners/posts culled for Drive FPS)
     // Guard: avoid boot crash if class body/load race omits the method briefly
@@ -1247,8 +1261,8 @@ export class TrackSystem {
     // Bright gold chevron at climb foot — planted on asphalt top (not floating / buried)
     const mat = new THREE.MeshStandardMaterial({
       color: prominent ? 0xfff59d : 0xc9a227,
-      emissive: prominent ? 0xffe066 : 0x8a6a1a,
-      emissiveIntensity: prominent ? 1.45 : 0.45,
+      emissive: prominent ? 0xffe082 : 0x8a6a1a,
+      emissiveIntensity: prominent ? 1.85 : 0.45,
       roughness: 0.32,
       metalness: 0.35,
     });
@@ -1256,9 +1270,9 @@ export class TrackSystem {
     const asphaltTop = from.y + ribbonYLift("ramp");
     const ox = from.x + dir.x * 0.12;
     const oz = from.z + dir.z * 0.12;
-    const oy = asphaltTop + (prominent ? 0.055 : 0.028);
-    const r = prominent ? 0.155 : 0.042;
-    const h = prominent ? 0.24 : 0.075;
+    const oy = asphaltTop + (prominent ? 0.072 : 0.028);
+    const r = prominent ? 0.185 : 0.042;
+    const h = prominent ? 0.30 : 0.075;
     const head = new THREE.Mesh(new THREE.ConeGeometry(r, h, 3), mat);
     head.position.set(ox + dir.x * 0.08, oy, oz + dir.z * 0.08);
     head.rotation.y = yaw;
@@ -1286,14 +1300,14 @@ export class TrackSystem {
       const padMat = new THREE.MeshStandardMaterial({
         color: 0xffe082,
         emissive: 0xffc107,
-        emissiveIntensity: 1.05,
+        emissiveIntensity: 1.35,
         roughness: 0.45,
         metalness: 0.2,
         transparent: true,
         opacity: 0.9,
       });
       this._rampArrowMats.push(padMat);
-      const pad = new THREE.Mesh(new THREE.CircleGeometry(0.32, 16), padMat);
+      const pad = new THREE.Mesh(new THREE.CircleGeometry(0.40, 16), padMat);
       pad.rotation.x = -Math.PI / 2;
       pad.position.set(from.x, asphaltTop + 0.006, from.z);
       pad.frustumCulled = true;
@@ -1436,7 +1450,15 @@ export class TrackSystem {
       const apz = z - seg.a.z;
       const steep = Math.abs(aby) > Math.abs(abx) * 0.45 + Math.abs(abz) * 0.45;
       let t;
-      if (steep || seg.kind === "shaft" || seg.kind === "chute" || seg.kind === "shortcut" || seg.kind === "ramp") {
+      // Foyer climb: XZ param while on spur/climb continuity so a lagging car Y
+      // cannot 3D-pin t at the foot (live Chrome hitch / dt-clamp recovery).
+      const foyerClimbXZ = seg.pathId === "ramp_foyer_to_landing"
+        && (this._lastPathId === "ramp_foyer_to_landing"
+          || this._lastPathId === "foyer_climb_spur");
+      if (foyerClimbXZ) {
+        const abLenSq = abx * abx + abz * abz;
+        t = abLenSq > 1e-8 ? (apx * abx + apz * abz) / abLenSq : 0;
+      } else if (steep || seg.kind === "shaft" || seg.kind === "chute" || seg.kind === "shortcut" || seg.kind === "ramp") {
         const abLenSq = abx * abx + aby * aby + abz * abz;
         t = abLenSq > 1e-8 ? (apx * abx + apy * aby + apz * abz) / abLenSq : 0;
       } else {
@@ -1482,8 +1504,8 @@ export class TrackSystem {
       const halfApprox = seg.width * 0.5;
       // Foyer climb: wider corridor so imperfect human approach still engages
       const foyerClimbSeg = seg.pathId === "ramp_foyer_to_landing";
-      const corridorMul = foyerClimbSeg ? 1.85 : 1.12;
-      const contMul = foyerClimbSeg ? 2.15 : 1.40;
+      const corridorMul = foyerClimbSeg ? 2.25 : 1.12;
+      const contMul = foyerClimbSeg ? 2.55 : 1.40;
       const inRampCorridor = seg.kind === "ramp" && (steep ? dist3 : dist) < halfApprox * corridorMul;
       const rampContinuity = seg.kind === "ramp" && this._lastPathId === seg.pathId
         && (steep ? dist3 : dist) < halfApprox * contMul;
@@ -1537,6 +1559,11 @@ export class TrackSystem {
       if (rampBias && rampGrade < 0.08 && seg.pathId !== "ramp_foyer_to_landing") {
         rampBias *= 0.28;
       }
+      // Foyer climb: extra foot pull even before yaw gate (legacy sims + live latch)
+      if (rampBias && foyerClimbSeg
+          && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R) {
+        rampBias -= 0.55;
+      }
       // Floor-cruise continuity: kissing ramp feet must NOT steal skirting loops /
       // T-junctions into furniture unless the car is aiming along the ramp.
       const lastIsFloor = this._lastPathKind === "floor"
@@ -1553,14 +1580,14 @@ export class TrackSystem {
           while (d1 > Math.PI) d1 -= Math.PI * 2;
           while (d1 < -Math.PI) d1 += Math.PI * 2;
           align = Math.max(Math.cos(d0), Math.cos(d1));
-          // Foyer climb foot at (-4.70, 10.60) — NOT stale west stair (-7.15, 11.20)
+          // Foyer climb foot — east of west grand stair (coords from RAMP_MOUNT_FEET)
           const foyerFoot = seg.pathId === "ramp_foyer_to_landing"
-            && Math.hypot(x - (-4.70), z - 10.60) < 2.85;
+            && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R + 0.55;
           if (foyerFoot) {
             // Human imperfect aim still mounts — keep strong bias unless nearly reverse
-            if (align < -0.05) rampBias *= 0.40;
-            else if (align < 0.18) rampBias *= 0.78;
-            else rampBias *= 1.12; // bonus pull onto climb foot
+            if (align < -0.15) rampBias *= 0.55;
+            else if (align < 0.10) rampBias *= 0.92;
+            else rampBias *= 1.48; // bonus pull onto climb foot (beat spur pathBias)
           } else if (seg.pathId === "ramp_balcony_return") {
             // Suppress steal when cruising east on landing south face toward east balcony
             const eastboundLap = x > -5.2 && z >= 8.2 && z <= 9.6
@@ -1587,9 +1614,27 @@ export class TrackSystem {
       // Hard penalty if somehow still scoring a flat deck from below (not ramps)
       const underPenalty = (flatDeck && signedBelow > 0.22) ? 2.4
         : (seg.kind === "ramp" && signedBelow > 0.55 && !inRampCorridor) ? 2.4 : 0;
-      // Off-ribbon elevated must not steal junctions from coplanar on-ribbon decks
-      const offRibbonPenalty = ((elev || tube) && checkDist >= halfApprox
+      // Off-ribbon elevated must not steal junctions from coplanar on-ribbon decks.
+      // Foyer climb foot EXCEPTION: within engageBack+lateral, corridor samples must
+      // beat floor asphalt even when checkDist >= halfW (approach runway / imperfect steer).
+      const foyerFootZone = foyerClimbSeg
+        && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R;
+      let offRibbonPenalty = ((elev || tube) && checkDist >= halfApprox
         && !(seg.kind === "ramp" && rampContinuity)) ? 1.15 : 0;
+      if (foyerFootZone && (inRampCorridor || rampContinuity) && offRibbonPenalty) {
+        offRibbonPenalty = 0; // engage corridor wins over spur/drive floor glue
+      }
+      // Approach floors near climb foot: soften continuity so ramp can steal the mount
+      let floorEngagePenalty = 0;
+      if (isFloor && onFloorCruise
+          && (seg.pathId === "foyer_climb_spur" || seg.pathId === "foyer_drive_start"
+            || seg.pathId === "foyer_skirting")
+          && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R) {
+        // Stronger closer to foot — circles on spur still hand off to ribbon
+        const dFoot = Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z);
+        const near = 1 - Math.min(1, dFoot / FOYER_CLIMB_ENGAGE_R);
+        floorEngagePenalty = 0.55 + 0.85 * near; // up to ~1.4 at foot
+      }
       // Crest handoff: once near ramp end at destination height, prefer coplanar deck/floor
       // so climb crest does not glue the car to the final ramp segment forever.
       let crestPenalty = 0;
@@ -1603,7 +1648,8 @@ export class TrackSystem {
         crestDeckBonus = -0.95;
       }
       const score = checkDist + dy * dyW + pathBias + floorBias + rampBias
-        + elevPenalty + underPenalty + offRibbonPenalty + crestPenalty + crestDeckBonus;
+        + elevPenalty + underPenalty + offRibbonPenalty + floorEngagePenalty
+        + crestPenalty + crestDeckBonus;
       if (score < bestScore) {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
@@ -1618,7 +1664,8 @@ export class TrackSystem {
         // nearDeck: rim Y-assist only when already at deck height — NEVER from underneath
         // (ramps in-corridor may use a slightly deeper band for climb glue)
         const nearDeckUnder = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)) ? 0.35 : 0.12;
-        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * 1.42
+        const nearDeckLatMul = foyerClimbSeg ? 2.35 : 1.42;
+        const nearDeck = (elev || tube) && !onTrack && lateral < halfW * nearDeckLatMul
           && dy < 0.55 && signedBelow <= nearDeckUnder && (y - py) < 0.55;
         const supportUnder = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)) ? 0.52 : 0.28;
         const supported = (onTrack || nearDeck) && dy < (elev || tube ? 0.72 : 0.9)
@@ -1652,7 +1699,7 @@ export class TrackSystem {
           const over = lateral - halfW * 0.50;
           // Stickier near absolute rim — casual play stays ON deck
           // Ramps: stronger rim push (climb assist) without full centerline magnet
-          const rampRim = seg.pathId === "ramp_foyer_to_landing" ? 2.45
+          const rampRim = seg.pathId === "ramp_foyer_to_landing" ? 2.85
             : (seg.kind === "ramp" ? 2.05 : 1);
           const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.55), 0, 1);
           const strength = Math.min(0.088 * rampRim, over * (0.13 + 0.20 * rimT) * rampRim);
@@ -1691,9 +1738,14 @@ export class TrackSystem {
     }
 
     if (best) {
-      // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising
+      // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising.
+      // Never demote foyer climb engage samples inside the foot radius — imperfect approach
+      // is outside halfW but still in corridor and must stay on the ramp snap.
+      const foyerEngageHold = best.pathId === "ramp_foyer_to_landing"
+        && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R;
       const farFromDeck = best.elevated || best.tube
-        ? (best.dist > (best.halfW || 0.2) * 1.42 && !best.nearDeck && !best.onTrack)
+        ? (best.dist > (best.halfW || 0.2) * 1.42 && !best.nearDeck && !best.onTrack
+          && !foyerEngageHold)
         : false;
       if (onFloorCruise && (best.elevated || best.tube) && farFromDeck) {
         best = {

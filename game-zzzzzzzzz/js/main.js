@@ -47,6 +47,15 @@ const boot = window.__MOTU_BOOT__ || (window.__MOTU_BOOT__ = {
   failed: false,
 });
 
+/** Temporary live prove harness — only when URL has ?autodrive=climb (or &autodrive=climb). */
+const AUTODRIVE_CLIMB = (() => {
+  try {
+    return new URLSearchParams(location.search).get("autodrive") === "climb";
+  } catch (_) {
+    return false;
+  }
+})();
+
 /** @type {'explore' | 'drive'} */
 let playMode = "explore";
 let mode = "title"; // title | roam | inspect | drive
@@ -186,6 +195,14 @@ function enterEstate() {
   titleScreen.setAttribute("aria-hidden", "true");
   if (bootErrorEl) bootErrorEl.classList.add("hidden");
   hud.classList.remove("hidden");
+  // autodrive=climb: always enter Drive (ignore title Explore toggle)
+  if (AUTODRIVE_CLIMB) {
+    playModeButtons.forEach((b) => {
+      b.classList.toggle("active", b.dataset.playMode === "drive");
+    });
+    setPlayMode("drive");
+    return;
+  }
   const titleActive = document.querySelector("#title-mode-toggle .play-mode-btn.active");
   const startMode = titleActive?.dataset?.playMode || "explore";
   setPlayMode(startMode === "drive" ? "drive" : "explore");
@@ -326,7 +343,19 @@ if (!boot.failed && mansion && drive && inspect && slice) {
 
   setEnterReady();
   console.info(`[motu] boot ready in ${(performance.now() - bootT0).toFixed(0)}ms`);
-  if (boot.pendingEnter) {
+  if (AUTODRIVE_CLIMB) {
+    // Prefer auto-enter into Drive — no click required for live Chrome prove
+    playModeButtons.forEach((b) => {
+      b.classList.toggle("active", b.dataset.playMode === "drive");
+    });
+    boot.pendingEnter = false;
+    enterEstate();
+    try {
+      drive.beginClimbAutodrive();
+    } catch (err) {
+      console.error("[autodrive] beginClimbAutodrive failed", err);
+    }
+  } else if (boot.pendingEnter) {
     boot.pendingEnter = false;
     enterEstate();
   }
@@ -683,14 +712,17 @@ window.addEventListener("resize", onResize);
 
 function tick() {
   requestAnimationFrame(tick);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 0.05);
   const t = clock.elapsedTime;
   if (!mansion || boot.failed) {
     renderer.render(scene, camera);
     return;
   }
   if ((mode === "drive" || playMode === "drive") && drive) {
-    drive.update(dt);
+    // Autodrive catch-up lives in DriveMode (wall clock). Pass rawDt so a
+    // single rare rAF still reports real elapsed time as a lower bound.
+    drive.update((drive._autodrive && !drive._autodrive.done) ? rawDt : dt);
     updateRoomBadge(drive.car.position);
     mansion.updateFireflies(t);
   } else if (mode === "roam") {

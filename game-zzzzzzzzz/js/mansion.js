@@ -2855,7 +2855,7 @@ export class Mansion {
   _storyAperture(room, which) {
     // Shared climb hole: stair void + soft S-weave climb (foot→crest) with margin
     // Extra east/south margin so imperfect human climb never smashes slab lip
-    const hole = { minX: -8.35, maxX: -4.45, minZ: 1.45, maxZ: 9.15 };
+    const hole = { minX: -8.35, maxX: -2.15, minZ: 0.55, maxZ: 9.50 };
     if (which === "ceiling" && room.id === "foyer") return hole;
     if (which === "floor" && room.id === "landing") return hole;
     return null;

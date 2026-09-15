@@ -28,6 +28,7 @@ export const TRACK_PATHS = [
       // Climb owns the east-of-stair corridor alone (no floor snap theft).
       { x: -7.9, y: 0.06, z: 12.2, label: "Grand Foyer" },
       { x: -4.0, y: 0.06, z: 12.35 },
+      { x: -3.2, y: 0.06, z: 12.35 }, // kiss door_foyer_outdoor
       { x: 0.0, y: 0.06, z: 12.4 },
       { x: 4.0, y: 0.06, z: 12.35 },
       { x: 7.9, y: 0.06, z: 12.2 },
@@ -46,16 +47,18 @@ export const TRACK_PATHS = [
       // North face → open foyer (east of climb lane)
       { x: -6.8, y: 0.06, z: 1.90 },
       { x: -4.2, y: 0.06, z: 2.40 },
-      { x: -3.2, y: 0.06, z: 3.80 },
-      { x: -3.2, y: 0.06, z: 5.80 },
-      { x: -3.2, y: 0.06, z: 7.80 },
-      { x: -3.2, y: 0.06, z: 9.40 },
-      // Climb spur / open lane — then across south face of stair
-      { x: -3.6, y: 0.06, z: 10.60 },
-      { x: -4.70, y: 0.06, z: 10.60 }, // climb T
-      { x: -6.2, y: 0.06, z: 9.40 },
-      { x: -7.5, y: 0.06, z: 9.20 },
-      { x: -8.45, y: 0.06, z: 9.40 },
+      { x: -1.20, y: 0.06, z: 3.80 },
+      { x: -1.20, y: 0.06, z: 5.80 },
+      { x: -1.20, y: 0.06, z: 7.80 },
+      { x: -1.20, y: 0.06, z: 9.40 },
+      // South of climb then classic west-wall fillet (inset, no Catmull blowout)
+      { x: -2.20, y: 0.06, z: 11.60 },
+      { x: -4.80, y: 0.06, z: 12.20 },
+      { x: -6.20, y: 0.06, z: 11.40 },
+      { x: -7.20, y: 0.06, z: 10.20 },
+      { x: -7.90, y: 0.06, z: 9.55 },
+      { x: -8.35, y: 0.06, z: 9.40 },
+      { x: -8.45, y: 0.06, z: 9.55 },
       { x: -8.45, y: 0.06, z: 10.6 },
       { x: -8.35, y: 0.06, z: 11.7 },
       { x: -7.9, y: 0.06, z: 12.2 },
@@ -69,31 +72,30 @@ export const TRACK_PATHS = [
     tension: 0.02,
     fancy: true,
     points: [
-      // Spawn → open foyer → climb T (west) — NEVER terminate into north partition wall.
-      // Waypoint at z=10.60 kisses foyer_climb_spur; end kisses foyer_skirting bow.
-      { x: -3.2, y: 0.06, z: 12.15, label: "Grand Foyer" },
-      { x: -3.2, y: 0.06, z: 11.40 },
-      { x: -3.2, y: 0.06, z: 10.60 }, // climb T / spur (ribbon stays straight -Z)
-      { x: -3.2, y: 0.06, z: 9.80 },
-      { x: -3.2, y: 0.06, z: 8.60 },
-      { x: -3.2, y: 0.06, z: 7.40 },
-      { x: -3.2, y: 0.06, z: 6.40 },
-      { x: -3.2, y: 0.06, z: 5.80 }, // kiss foyer_skirting open bow (continuous loop)
+      // Spawn on asphalt → climb T → open foyer (-Z). NOT aimed at south façade doors.
+      // Waypoint at z=11.05 kisses foyer_climb_spur; end kisses foyer_skirting bow.
+      { x: -2.55, y: 0.06, z: 11.50, label: "Grand Foyer" },
+      { x: -2.55, y: 0.06, z: 11.05 }, // climb T / spur
+      { x: -2.00, y: 0.06, z: 10.20 },
+      { x: -1.60, y: 0.06, z: 9.00 },
+      { x: -1.40, y: 0.06, z: 7.60 },
+      { x: -1.25, y: 0.06, z: 6.50 },
+      { x: -1.20, y: 0.06, z: 5.80 }, // kiss foyer_skirting open bow (continuous loop)
     ],
   },
   // Short T spur: open lane → climb foot east of grand stair
   {
     id: "foyer_climb_spur",
     kind: "floor",
-    width: 2.35, // wide T runway → climb foot (imperfect human steer)
+    width: 2.45, // wide T runway → climb foot east of grand stair
     tension: 0.06,
     fancy: true,
     points: [
-      { x: -3.2, y: 0.06, z: 10.60 },
-      { x: -3.65, y: 0.06, z: 10.60 },
-      { x: -4.15, y: 0.06, z: 10.60 },
-      { x: -4.55, y: 0.06, z: 10.60 },
-      { x: -4.70, y: 0.06, z: 10.60 }, // kiss ramp_foyer_to_landing foot
+      { x: -2.55, y: 0.06, z: 11.05 },
+      { x: -3.10, y: 0.06, z: 10.95 },
+      { x: -3.65, y: 0.06, z: 10.80 },
+      { x: -4.15, y: 0.06, z: 10.65 },
+      { x: -4.55, y: 0.06, z: 10.55 }, // kiss ramp_foyer_to_landing foot
     ],
   },
   // Doorway edge strip: foyer → hall (east jamb, not dead center)
@@ -645,37 +647,35 @@ export const TRACK_PATHS = [
     kind: "ramp",
     width: 0.90, // wide climb foot (post scale×ramp-mult → ~1.39) — easy mount
     gentleStart: true, // ease-in first 20% of rise — soft mount, not wall
-    noLateralBow: true, // keep authored opening XZ; soften may even Y only
+    noLateralBow: true, // keep authored east-of-stair XZ; soften may even Y only
     points: [
-      // HARD ≤30% grade, no hairpins — long gentle S-weave in aperture.
-      { x: -4.70, y: 0.06, z: 10.60, label: "Grand Foyer" },
-      { x: -4.90, y: 0.07, z: 9.95 },
-      { x: -5.15, y: 0.10, z: 9.30 },
-      { x: -5.45, y: 0.15, z: 8.65 },
-      { x: -5.80, y: 0.22, z: 8.05 },
-      { x: -6.30, y: 0.32, z: 7.50 },
-      { x: -6.85, y: 0.44, z: 7.00 },
-      { x: -7.35, y: 0.58, z: 6.50 },
-      { x: -7.70, y: 0.74, z: 5.95 },
-      { x: -7.90, y: 0.92, z: 5.35 },
-      { x: -7.95, y: 1.12, z: 4.70 },
-      { x: -7.80, y: 1.34, z: 4.10 },
-      { x: -7.40, y: 1.56, z: 3.60 },
-      { x: -6.80, y: 1.78, z: 3.25 },
-      { x: -6.15, y: 2.00, z: 3.05 },
-      { x: -5.55, y: 2.22, z: 3.00 },
-      { x: -5.20, y: 2.44, z: 3.20 },
-      { x: -5.15, y: 2.66, z: 3.55 },
-      { x: -5.40, y: 2.88, z: 3.95 },
-      { x: -5.90, y: 3.08, z: 4.25 },
-      { x: -6.45, y: 3.26, z: 4.35 },
-      { x: -6.95, y: 3.44, z: 4.15 },
-      { x: -7.25, y: 3.60, z: 3.75 },
-      { x: -7.30, y: 3.76, z: 3.25 },
-      { x: -7.05, y: 3.90, z: 2.80 },
-      { x: -6.55, y: 4.02, z: 2.45 },
-      { x: -5.90, y: 4.12, z: 2.20 },
-      { x: -5.35, y: 4.20, z: 2.00 },
+      // HARD ≤30% grade — east of stair; clear of skirting bow x≈-1.2 (gap ≥0.4m)
+      { x: -4.55, y: 0.06, z: 10.55, label: "Grand Foyer" },
+      { x: -4.70, y: 0.06, z: 10.00 },
+      { x: -4.65, y: 0.06, z: 9.40 },
+      { x: -4.40, y: 0.06, z: 8.80 },
+      { x: -4.05, y: 0.06, z: 8.20 },
+      { x: -3.70, y: 0.06, z: 7.60 },
+      { x: -3.40, y: 0.06, z: 7.00 },
+      { x: -3.15, y: 0.06, z: 6.35 },
+      { x: -3.00, y: 0.06, z: 5.65 },
+      { x: -2.95, y: 0.06, z: 4.95 },
+      { x: -3.10, y: 0.06, z: 4.30 },
+      { x: -3.40, y: 0.06, z: 3.75 },
+      { x: -3.75, y: 0.06, z: 3.25 },
+      { x: -4.05, y: 0.06, z: 2.80 },
+      { x: -4.30, y: 0.06, z: 2.35 },
+      { x: -4.40, y: 0.06, z: 1.90 },
+      { x: -4.20, y: 0.06, z: 1.50 },
+      { x: -3.80, y: 0.06, z: 1.20 },
+      { x: -3.40, y: 0.06, z: 0.95 },
+      { x: -3.10, y: 0.06, z: 0.70 },
+      { x: -3.00, y: 0.06, z: 0.45 },
+      { x: -3.30, y: 0.06, z: 0.35 },
+      { x: -3.75, y: 0.06, z: 0.45 },
+      { x: -4.20, y: 0.06, z: 0.75 },
+      { x: -4.55, y: 0.06, z: 1.15 },
+      { x: -4.85, y: 0.06, z: 1.50 },
       { x: -5.00, y: 4.26, z: 1.90, label: "Upper Landing" },
     ],
   },
@@ -3048,7 +3048,7 @@ for (const path of TRACK_PATHS) {
 }
 
 /** Spawn — west foyer asphalt (x≈-3.2), clear of center lantern/pillar; yaw into room + climb (NOT wall-hug). */
-export const CAR_SPAWN = { x: -3.2, y: 0.075, z: 12.15, yaw: Math.PI }; // straight into open foyer asphalt lane (pure W onTrack)
+export const CAR_SPAWN = { x: -2.55, y: 0.075, z: 11.50, yaw: Math.PI }; // asphalt → climb T / open foyer (-Z), not south door wall
 
 
 /**
@@ -3107,7 +3107,7 @@ export const RAMP_MOUNT_FEET = (() => {
       foot: { x: foot.x, y: foot.y, z: foot.z },
       crest: { x: crest.x, y: crest.y, z: crest.z },
       /** Meters behind foot along approach where ramp snap must win */
-      engageBack: path.id === "ramp_foyer_to_landing" ? 0.75 : 0.08,
+      engageBack: path.id === "ramp_foyer_to_landing" ? 1.10 : 0.08,
       /** Soft crest blend band (m) — avoid snap theft at deck kiss */
       crestSoft: 0.12,
       climbFracs: [0.25, 0.5, 0.75],

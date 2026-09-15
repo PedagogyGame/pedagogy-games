@@ -682,9 +682,27 @@ export class RCCar {
         || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
       );
       // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
-      const yLock = snap.steep || kind === "ramp" ? 62
+      // Foyer climb first segments: stronger Y-lock so foot mount does not drop back to asphalt
+      const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
+      const foyerFootHold = foyerClimb && (snap.y == null || snap.y < 1.35);
+      const yLock = snap.steep || kind === "ramp"
+        ? (foyerFootHold ? 92 : 62)
         : (sticky ? (nearRim ? 36 : 32) : 28);
-      y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
+      // Foyer climb: snap Y must lead — never let car Y trail rising ribbon
+      // (browser dt clamp / hitch used to leave Y at foot while XZ advanced).
+      if (foyerClimb && snap.y != null && Number.isFinite(snap.y)
+          && (snap.onTrack || snap.nearDeck || snap.rampContinuity || foyerFootHold)) {
+        const climbLock = Math.max(yLock, 140);
+        y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, climbLock * dt));
+        if (snap.y > y) {
+          // Keep wheels within 2cm under surface while ascending
+          const gap = snap.y - y;
+          if (gap > 0.02 && gap < 0.65) y = snap.y - 0.02;
+          else if (gap >= 0.65) y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, 0.85));
+        }
+      } else {
+        y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
+      }
 
       // Climb-only soft lateral magnet (NOT full floor ASSIST_MAGNET)
       const rampAssist = kind === "ramp" && (
@@ -693,10 +711,10 @@ export class RCCar {
       if (rampAssist && snap.x != null && snap.z != null) {
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
         // Strong climb hold — imperfect human steer still crests (not centerline magnet)
-        const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
-        const rimFactor = em < 0.14 ? (foyerClimb ? 2.85 : 2.45)
-          : (em < 0.26 ? (foyerClimb ? 2.05 : 1.75) : (foyerClimb ? 1.35 : 1.10));
-        const pull = Math.min(foyerClimb ? 0.68 : 0.58,
+        const rimFactor = em < 0.14 ? (foyerClimb ? 2.95 : 2.45)
+          : (em < 0.26 ? (foyerClimb ? 2.15 : 1.75) : (foyerClimb ? (foyerFootHold ? 1.55 : 1.35) : 1.10));
+        const pullCap = foyerFootHold ? 0.72 : (foyerClimb ? 0.68 : 0.58);
+        const pull = Math.min(pullCap,
           (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
@@ -723,19 +741,23 @@ export class RCCar {
       // Gentle yaw settle — climb ramps / decks only. Floor cruise: NO ribbon yaw magnet
       // (player must be able to hold W and go straight on skirting without constant correction).
       const floorAssist = false;
-      if ((sticky || rampAssist) && snap.onTrack && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
+      // Yaw settle on ribbon; foyer foot also settles while nearDeck so approach mounts turn uphill
+      if ((sticky || rampAssist) && (snap.onTrack || foyerFootHold) && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
         let dyaw = snap.yaw - this.yaw;
         while (dyaw > Math.PI) dyaw -= Math.PI * 2;
         while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        // Bidirectional ribbon yaw — reverse travel must not U-turn
-        let dyawR = dyaw + Math.PI;
-        while (dyawR > Math.PI) dyawR -= Math.PI * 2;
-        while (dyawR < -Math.PI) dyawR += Math.PI * 2;
-        if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
-        const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
-        const yawLim = rampAssist ? (foyerClimb ? 1.35 : 1.20) : 0.45;
-        const yawK = rampAssist ? (foyerClimb ? 0.52 : 0.44) : 0.12;
-        const yawRate = rampAssist ? (foyerClimb ? 4.6 : 4.0) : 1.2;
+        // Bidirectional ribbon yaw — reverse travel must not U-turn.
+        // EXCEPTION: foyer climb foot — always settle toward uphill segment yaw so a
+        // west/north approach does not glue to the foot facing the wrong way.
+        if (!foyerFootHold) {
+          let dyawR = dyaw + Math.PI;
+          while (dyawR > Math.PI) dyawR -= Math.PI * 2;
+          while (dyawR < -Math.PI) dyawR += Math.PI * 2;
+          if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
+        }
+        const yawLim = rampAssist ? (foyerClimb ? (foyerFootHold ? Math.PI : 1.35) : 1.20) : 0.45;
+        const yawK = rampAssist ? (foyerClimb ? (foyerFootHold ? 0.78 : 0.52) : 0.44) : 0.12;
+        const yawRate = rampAssist ? (foyerClimb ? (foyerFootHold ? 6.8 : 4.6) : 4.0) : 1.2;
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }
