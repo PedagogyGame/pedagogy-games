@@ -562,28 +562,13 @@ export class RCCar {
       // Any story floor / outdoor ground band → carpet crawl, never fall
       const onFloorBand = storyY != null
         && Math.abs(this.root.position.y - storyY) < 0.85;
-      const nearRibbon = !!(snap && snap.halfW && snap.dist != null
-        && snap.dist < snap.halfW * 2.4
-        && snap.y != null && Math.abs(this.root.position.y - snap.y) < 1.1);
-      if (nearRibbon) {
-        // Still next to asphalt — pull back onto it. Do not drop through the house.
-        this._unsupportedFrames = 0;
-        this._lastElevated = !!(snap.elevated || snap.kind === "ramp" || snap.kind === "elevated"
-          || snap.kind === "cornice" || snap.kind === "balcony");
-        if (snap.x != null && snap.z != null) {
-          this.root.position.x = THREE.MathUtils.lerp(this.root.position.x, snap.x, Math.min(1, 14 * dt));
-          this.root.position.z = THREE.MathUtils.lerp(this.root.position.z, snap.z, Math.min(1, 14 * dt));
-        }
-        if (snap.y != null) {
-          this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, snap.y, Math.min(1, 18 * dt));
-        }
-      } else if (onFloorBand && !(snap && (snap.elevated || snap.kind === "ramp" || snap.kind === "elevated"))) {
+      if (onFloorBand) {
         this._lastElevated = false;
         this.root.position.y = THREE.MathUtils.lerp(
           this.root.position.y, storyY, Math.min(1, 10 * dt)
         );
         this._unsupportedFrames = 0;
-      } else if (fromElev && this._unsupportedFrames >= 10) {
+      } else if (fromElev && this._unsupportedFrames >= 6) {
         // Brief grace after leaving deck — softens junction blips; hard crash only for true void
         this.airborne = true;
         this._fallStartY = this.root.position.y;
@@ -794,18 +779,15 @@ export class RCCar {
           (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
-      } else if (snap.x != null && snap.z != null
-        && (kind === "floor" || kind === "outdoor" || kind === "flower"
-            || kind === "elevated" || kind === "cornice" || kind === "balcony")) {
+      } else if (snap.onTrack && snap.x != null && snap.z != null
+        && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
+        // Whisper-only floor glue near absolute rim — no yaw-magnet cruise yank
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        const off = !snap.onTrack;
-        // Keep the car on the asphalt. Stronger at the rim / when leaving the ribbon.
-        const rim = off || em < 0.10;
-        const pull = rim
-          ? Math.min(off ? 0.42 : 0.22, (off ? 0.55 : 0.28) * Math.min(1, 16 * dt))
-          : Math.min(0.08, 0.10 * Math.min(1, 10 * dt));
-        x = THREE.MathUtils.lerp(x, snap.x, pull);
-        z = THREE.MathUtils.lerp(z, snap.z, pull);
+        if (em < 0.06) {
+          const pull = Math.min(0.10, 0.06 * Math.min(1, 10 * dt));
+          x = THREE.MathUtils.lerp(x, snap.x, pull);
+          z = THREE.MathUtils.lerp(z, snap.z, pull);
+        }
       } else if (ASSIST_MAGNET && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
         x = THREE.MathUtils.lerp(x, snap.x, whisper);

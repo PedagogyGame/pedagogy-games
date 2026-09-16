@@ -72,7 +72,7 @@ export class DriveMode {
     this._wallGridCell = 3.0;
     this._wallGridOriginX = 0;
     this._wallGridOriginZ = 0;
-    this._carRadius = 0.13;
+    this._carRadius = 0.09;
     this._passKinds = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
     this._stuckTimer = 0;
     this._stuckNudgeCd = 0;
@@ -743,9 +743,9 @@ export class DriveMode {
     if (!this._wallColliders || !this._wallColliders.length) return;
     const kind = snap?.kind || "";
     if (this._passKinds.has(kind) || snap?.tube) return;
-    // Ramps used to skip ALL collision so stair stringers would not pin the climb.
-    // That also let the car drive through house pillars and yellow columns.
-    // Keep hard solids. Only ignore stair/furniture on the ribbon.
+    // Pierce while climbing OR approaching foot (nearDeck / continuity) so stair
+    // stringers / underside never pin the ribbon path onto the ramp.
+    if (kind === "ramp" && (snap?.onTrack || snap?.nearDeck || snap?.rampContinuity)) return;
     const r = this._carRadius;
     const p = this.car.root.position;
     const y = p.y;
@@ -755,14 +755,7 @@ export class DriveMode {
     // furniture). NEVER pierce walls or pillars — freestanding posts stay solid.
     // Door/climb apertures are already cut in meshes; do not ghost thin pillars.
     const climbApproach = this._nearFoyerClimbCorridor(p.x, p.z);
-    let cols = this._wallsNear(p.x, p.z, r + 0.55);
-    const rampRibbon = kind === "ramp" && (snap?.onTrack || snap?.nearDeck || snap?.rampContinuity);
-    if (rampRibbon) {
-      cols = cols.filter((b) => {
-        const k = b.driveKind || "wall";
-        return k === "wall" || k === "pillar";
-      });
-    }
+    let cols = this._wallsNear(p.x, p.z, r + 0.35);
     if (climbApproach) {
       const climbRibbon = (kind === "ramp" || kind === "floor" || !kind
         || snap?.onTrack || snap?.nearDeck || snap?.rampContinuity);
@@ -1102,7 +1095,7 @@ export class DriveMode {
         slot.mesh.position.set(p.x - fwdX * 0.06, p.y + 0.02, p.z - fwdZ * 0.06);
         const petal = snap?.kind === "flower";
         slot.mesh.material.color.setHex(petal ? 0xf48fb1 : 0xd7ccc8);
-        slot.mesh.material.emissive.setHex(petal ? 0xe91e63 : 0x000000);
+        slot.mesh.material.emissive.setHex(petal ? 0xe91e63 : 0xffcc80);
       }
     }
     // Freeze / absV≈0: snuff bokeh dust immediately (no lingering orbs when pinned)
@@ -1124,9 +1117,7 @@ export class DriveMode {
       d.mesh.scale.setScalar(0.7 + (0.5 - d.life));
     }
 
-    // No scrape spark spray. Constant wall-clip was vomiting gold orbs ("coins")
-    // out of the car. Sparks stay off during drive; smash bits are crash-only.
-    if (false && (flags?.scrape > 0.001 || this.car.scrapeAmount > 0.15)) {
+    if (flags?.scrape > 0.001 || this.car.scrapeAmount > 0.15) {
       this._spawnSparks(flags?.scrape || this.car.scrapeAmount * 0.02);
     }
     for (const s of this._sparks) {
