@@ -42,7 +42,7 @@ Live: `game-zzzzzzzzx/` / `.game-159` — Beijing Pinball (Mandarin pinball + cl
 
 Live: `game-zzzzzzzzy/` / `.game-160` — Mandarin Mech (vocabulary arena).
 
-Live: `game-zzzzzzzzz/` / `.game-161` — Mansion of the Unseen (3D cutaway glossary).
+Unlisted (not on homepage): `game-zzzzzzzzz/` / `.game-161` — Mansion of the Unseen. Folder kept for private iteration.
 
 Live: `game-zzzzzzzzza/` / `.game-162` — 饿河马 Hungry Hippos (HSK 3–4 vocab race).
 
