@@ -1911,7 +1911,7 @@ export class TrackSystem {
           const rampRim = seg.pathId === "ramp_foyer_to_landing" ? 2.85
             : (seg.kind === "ramp" ? 2.05 : 1);
           const rimT = THREE.MathUtils.clamp(over / Math.max(1e-4, halfW * 0.55), 0, 1);
-          const strength = Math.min(0.088 * rampRim, over * (0.13 + 0.20 * rimT) * rampRim);
+          const strength = Math.min(0.16 * rampRim, over * (0.22 + 0.28 * rimT) * rampRim);
           const bx = (pushDirX / plen) * strength;
           const bz = (pushDirZ / plen) * strength;
           if (!wallBounce) wallBounce = { x: bx, z: bz };
