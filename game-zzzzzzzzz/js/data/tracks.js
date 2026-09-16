@@ -415,10 +415,10 @@ export const TRACK_PATHS = [
       { x: -2.9, y: 4.26, z: -0.8 },
       { x: -4.20, y: 4.26, z: 0.40 }, // clear of library door jamb
       { x: -5.00, y: 4.26, z: 1.90 }, // kiss ramp_foyer_to_landing crest
-      { x: -5.80, y: 4.26, z: 2.60 }, // east of attic/main stair void
-      { x: -6.40, y: 4.26, z: 4.20 },
-      { x: -6.55, y: 4.26, z: 6.20 },
-      { x: -6.50, y: 4.26, z: 7.40 },
+      { x: -4.95, y: 4.26, z: 2.85 }, // east of attic east-stringer AABB
+      { x: -5.05, y: 4.26, z: 4.40 },
+      { x: -4.95, y: 4.26, z: 6.25 }, // clear attic east stringer
+      { x: -5.85, y: 4.26, z: 7.50 },
       { x: -6.8, y: 4.26, z: 8.8 },
     ],
   },

@@ -666,18 +666,13 @@ export class DriveMode {
     return Number.isFinite(fallback) ? fallback : base;
   }
 
-  /** Foyer climb approach corridor — stair/furniture must not pin before snap. */
+  /** Foyer climb approach corridor — stair/furniture/junction walls must not pin. */
   _nearFoyerClimbCorridor(x, z) {
     // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
     const fx = -4.55, fz = 10.55;
-    if (Math.hypot(x - fx, z - fz) <= 2.35) return true;
-    // East-flank climb band (open asphalt → east of stair → landing crest)
-    if (x >= -5.20 && x <= -2.20 && z >= 0.5 && z <= 11.6) {
-      const along = Math.hypot(x - fx, z - fz);
-      if (along < 5.5) return true;
-    }
-    // Mid-climb east pocket (clear of west stair volume)
-    if (x >= -4.60 && x <= -2.20 && z >= 0.6 && z <= 8.6) return true;
+    if (Math.hypot(x - fx, z - fz) <= 2.55) return true;
+    // Full soft S-weave band (foot→crest), including crest loop z≈0.35
+    if (x >= -6.05 && x <= -1.55 && z >= -0.25 && z <= 11.8) return true;
     return false;
   }
 
@@ -702,12 +697,27 @@ export class DriveMode {
     // Ruthless: in foyer climb corridor, pierce ALL stair/furniture within 1.5m
     // so dark-pad / stringer / pillar cannot kill speed before ramp snap.
     const climbApproach = this._nearFoyerClimbCorridor(p.x, p.z);
-    if (climbApproach && (kind === "floor" || kind === "ramp" || !kind)) {
-      // Still collide with room walls — only soft kinds are pierced
-    }
     let cols = this._wallsNear(p.x, p.z, r + 0.35);
     if (climbApproach) {
-      cols = cols.filter((b) => (b.driveKind || "wall") === "wall");
+      // Climb corridor: pierce stair/furniture AND thin junction wall lips.
+      // Real drive openings exist; leftover AABB edges must not pin to 0 km/h.
+      const climbRibbon = (kind === "ramp" || kind === "floor" || !kind
+        || snap?.onTrack || snap?.nearDeck || snap?.rampContinuity);
+      if (climbRibbon) {
+        cols = cols.filter((b) => {
+          const k = b.driveKind || "wall";
+          if (k === "stair" || k === "furniture") return false;
+          if (k !== "wall") return true;
+          const bw = b.max.x - b.min.x;
+          const bd = b.max.z - b.min.z;
+          const thin = Math.min(bw, bd) < 0.55;
+          // Thin wall slabs in climb band = aperture lips / junction leftovers
+          if (thin && b.min.y < 4.5) return false;
+          return true;
+        });
+      } else {
+        cols = cols.filter((b) => (b.driveKind || "wall") === "wall");
+      }
     }
     if (!cols.length) return;
 
@@ -794,7 +804,8 @@ export class DriveMode {
           continue;
         }
         // Feed car scrape FX while sliding mansion walls off-ribbon / elevated
-        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.25 : 0.45));
+        // Softer scrape on-ribbon — reduces wall-pin jerk on primary circuit
+        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.18 : (onRibbon ? 0.22 : 0.38)));
 
         // Fresh forward each hit (yaw may have slid on prior collider)
         const fwdX = Math.sin(this.car.yaw);
@@ -822,13 +833,13 @@ export class DriveMode {
             this.car.yaw += dyaw * yawBlend;
             this.car.root.rotation.y = this.car.yaw;
             const loss = soft
-              ? (0.04 + headOn * 0.16)
-              : (0.07 + headOn * 0.28);
+              ? (0.03 + headOn * 0.12)
+              : (onRibbon ? (0.04 + headOn * 0.18) : (0.06 + headOn * 0.24));
             const signed = Math.sign(spd || 1);
             this.car.speed = signed * spd2 * (1 - Math.min(0.55, loss));
-            if (onRibbon && headOn < 0.55) {
-              const floor = Math.min(this.car.maxSpeed * 0.70, 0.85);
-              const keep = headOn < 0.25 ? 0.72 : 0.55;
+            if (onRibbon && headOn < 0.65) {
+              const floor = Math.min(this.car.maxSpeed * 0.78, 0.95);
+              const keep = headOn < 0.25 ? 0.82 : (headOn < 0.45 ? 0.68 : 0.58);
               if (Math.abs(this.car.speed) < floor * keep) {
                 this.car.speed = signed * Math.max(Math.abs(this.car.speed), floor * keep);
               }
