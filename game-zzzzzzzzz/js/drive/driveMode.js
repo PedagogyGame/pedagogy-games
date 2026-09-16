@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { RCCar, VEHICLE_PRESETS } from "./car.js";
 import { TrackSystem } from "./tracks.js";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE } from "../data/tracks.js";
+import { EngineAudio } from "./engineAudio.js";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -83,6 +84,28 @@ export class DriveMode {
     this._fillLight.visible = false;
     this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     scene.add(this._fillLight);
+
+    // Static fill at foyer climb left/foot — kills dark void under first ramp turn
+    const climbFoot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.ramp_foyer_to_landing
+      && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
+      ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
+      : { x: -4.55, y: 0.06, z: 10.55 };
+    this._climbFill = new THREE.PointLight(0xffd9a8, 7.5, 9.5, 2);
+    this._climbFill.name = "drive_climb_fill";
+    this._climbFill.visible = false;
+    // Bias slightly left/west of foot so the under-ramp corner reads
+    this._climbFill.position.set(climbFoot.x - 0.85, climbFoot.y + 1.15, climbFoot.z - 0.35);
+    scene.add(this._climbFill);
+
+    // Mid-climb fill — kills dark pocket halfway up S-weave (y≈1.5–3.0)
+    this._climbMidFill = new THREE.PointLight(0xffe0b8, 6.2, 8.5, 2);
+    this._climbMidFill.name = "drive_climb_mid_fill";
+    this._climbMidFill.visible = false;
+    this._climbMidFill.position.set(-3.55, 2.15, 4.6);
+    scene.add(this._climbMidFill);
+
+    this._engineAudio = new EngineAudio();
+    this._impactPulse = 0;
 
     this.parkForExplore();
   }
@@ -295,6 +318,9 @@ export class DriveMode {
     this.tracks.setVisible("explore");
     this._fxRoot.visible = false;
     if (this._fillLight) this._fillLight.visible = false;
+    if (this._climbFill) this._climbFill.visible = false;
+    if (this._climbMidFill) this._climbMidFill.visible = false;
+    if (this._engineAudio) this._engineAudio.stop();
     this._crashPhase = null;
     this._inputsFrozen = false;
     this._flash = 0;
@@ -404,6 +430,16 @@ export class DriveMode {
       this._fillLight.distance = 16;
       this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     }
+    if (this._climbFill) {
+      this._climbFill.visible = true;
+      this._climbFill.intensity = 7.5;
+    }
+    if (this._climbMidFill) {
+      this._climbMidFill.visible = true;
+      this._climbMidFill.intensity = 6.2;
+    }
+    // User gesture already happened (Enter/Drive click) — safe to resume AudioContext
+    if (this._engineAudio) this._engineAudio.start();
     if (typeof document !== "undefined") {
       const canvas = document.getElementById("c");
       if (canvas) {
@@ -440,6 +476,9 @@ export class DriveMode {
     this.camera.fov = this._baseFov;
     this.camera.updateProjectionMatrix();
     if (this._fillLight) this._fillLight.visible = false;
+    if (this._climbFill) this._climbFill.visible = false;
+    if (this._climbMidFill) this._climbMidFill.visible = false;
+    if (this._engineAudio) this._engineAudio.stop();
     if (typeof document !== "undefined") {
       const win = typeof window !== "undefined" ? window : null;
       if (win && typeof win.removeEventListener === "function") {
@@ -478,6 +517,7 @@ export class DriveMode {
     if (this._crashPhase) return;
     this._crashPhase = "smash";
     this._crashTimer = 0;
+    this._impactPulse = 0.2;
     this._inputsFrozen = true;
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
     this.car.crashed = true;
@@ -524,22 +564,22 @@ export class DriveMode {
     const spd = Math.abs(this.car.speed);
     const inWall = this._tunnelDark > 0.35;
     const elev = this._camElevated || 0;
-    // Leisure factor: slow sightseeing → higher / farther cinematic chase
+    // Leisure factor: slow sightseeing → mild push-out (kept close so car fills frame)
     const leisure = 1 - THREE.MathUtils.smoothstep(spd, 0.15, 1.35);
     // In-wall: tuck camera close + slightly above car so we never clip inside studs
-    // Elevated: slightly higher / calmer chase so cornice banks don't jitter the lens
-    const back = (inWall ? 0.16 : 0.4 + leisure * 0.22 + elev * 0.06) + Math.min(0.28, spd * 0.07);
-    const up = (inWall ? 0.12 : 0.14 + leisure * 0.1 + elev * 0.05) + Math.min(0.08, spd * 0.022);
+    // Open road: closer chase — car fills frame (not a speck); still clears walls
+    const back = (inWall ? 0.15 : 0.20 + leisure * 0.06 + elev * 0.03) + Math.min(0.12, spd * 0.045);
+    const up = (inWall ? 0.11 : 0.10 + leisure * 0.04 + elev * 0.028) + Math.min(0.045, spd * 0.014);
     const cx = p.x - Math.sin(yaw) * back;
     const cy = p.y + up;
     const cz = p.z - Math.cos(yaw) * back;
     this._camPos.set(cx, cy, cz);
 
     // Look along tube / track — shorter ahead in walls keeps view readable
-    const ahead = (inWall ? 0.28 : 0.32 + leisure * 0.28 + elev * 0.06) + Math.min(0.4, spd * 0.09);
+    const ahead = (inWall ? 0.26 : 0.22 + leisure * 0.10 + elev * 0.03) + Math.min(0.22, spd * 0.055);
     this._lookAhead.set(
       p.x + Math.sin(yaw) * ahead,
-      p.y + (inWall ? 0.06 : 0.04 + leisure * 0.03 + elev * 0.02) + Math.min(0.03, spd * 0.007),
+      p.y + (inWall ? 0.055 : 0.032 + leisure * 0.018 + elev * 0.012) + Math.min(0.022, spd * 0.005),
       p.z + Math.cos(yaw) * ahead
     );
     this._camTarget.copy(this._lookAhead);
@@ -1271,6 +1311,21 @@ export class DriveMode {
     if (this._fillLight && this._fillLight.visible) {
       const p = this.car.position;
       this._fillLight.position.set(p.x, p.y + 1.55, p.z);
+    }
+
+    if (this._engineAudio && this.active) {
+      const thr = (this.keys.forward ? 1 : 0) - (this.keys.back ? 1 : 0);
+      const scrapeAmt = this.car.scrapeAmount || 0;
+      const impact = this._impactPulse > 0;
+      if (impact) this._impactPulse = Math.max(0, this._impactPulse - dt);
+      this._engineAudio.update({
+        speed: this.car.speed,
+        maxSpeed: this.car.maxSpeed || 1.4,
+        throttle: thr,
+        boost: !!this.keys.boost || !!this.car.isBoosting,
+        scrape: scrapeAmt,
+        impact,
+      });
     }
 
     this._labelCooldown = Math.max(0, this._labelCooldown - dt);

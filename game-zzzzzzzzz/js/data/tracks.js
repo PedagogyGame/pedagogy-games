@@ -411,9 +411,9 @@ export const TRACK_PATHS = [
       { x: 7.1, y: 4.26, z: 7.0 },
       { x: 7.2, y: 4.26, z: 5.0 },
       { x: 7.2, y: 4.26, z: 1.0 },
-      { x: 2.9, y: 4.26, z: -0.8 },
-      { x: -2.9, y: 4.26, z: -0.8 },
-      { x: -4.20, y: 4.26, z: 0.40 }, // clear of library door jamb
+      { x: 2.75, y: 4.26, z: -0.95 }, // east fillet — clear of library east tip
+      { x: -2.75, y: 4.26, z: -0.95 }, // stay in landing north of library south slab
+      { x: -4.35, y: 4.26, z: 0.55 }, // west of library jamb / west-wall tip
       { x: -5.00, y: 4.26, z: 1.90 }, // kiss ramp_foyer_to_landing crest
       { x: -4.95, y: 4.26, z: 2.85 }, // east of attic east-stringer AABB
       { x: -5.05, y: 4.26, z: 4.40 },
@@ -428,7 +428,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.16,
     points: [
-      { x: 2.9, y: 4.26, z: -0.8, label: "Library Hall" },
+      { x: 2.75, y: 4.26, z: -0.95, label: "Library Hall" },
       { x: 2.95, y: 4.26, z: -4 },
       { x: 2.95, y: 4.26, z: -8 }, // kiss door_library_nursery
       { x: 2.95, y: 4.26, z: -10 },
@@ -442,7 +442,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.16,
     points: [
-      { x: -2.9, y: 4.26, z: -0.8, label: "Library Hall" },
+      { x: -2.75, y: 4.26, z: -0.95, label: "Library Hall" },
       { x: -2.95, y: 4.26, z: -4 },
       { x: -2.95, y: 4.26, z: -8 }, // kiss door_library_study
       { x: -2.95, y: 4.26, z: -10 },

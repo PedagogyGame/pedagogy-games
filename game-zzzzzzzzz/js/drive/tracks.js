@@ -557,7 +557,9 @@ export class TrackSystem {
       const climbPath = kind === "ramp" || (typeof path.id === "string" && path.id.includes("climb"));
       const doorJoin = isDoorStrip
         || (typeof path.id === "string" && (path.id.startsWith("door_") || path.id.includes("_portal")));
-      const visDense = climbPath ? (path.fancy ? 8 : 7)
+      // Foyer climb / ramps: denser ribbon kills faceted creases + sharp rail joins
+      const foyerClimb = typeof path.id === "string" && path.id === "ramp_foyer_to_landing";
+      const visDense = climbPath ? (foyerClimb ? 11 : (path.fancy ? 9 : 8))
         : doorJoin ? 6
         : elevFancy ? (path.fancy ? 5 : 4)
         : tubeish ? 3
@@ -567,7 +569,7 @@ export class TrackSystem {
       const snapDense = elevFancy ? (path.fancy ? 5 : (path.closed ? 4 : 3))
         : tubeish ? 3
           : floorish ? 2 : 2;
-      const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (climbPath ? 32 : (doorJoin ? 22 : (useRibbon && visualOk ? 18 : 10))));
+      const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (foyerClimb ? 56 : (climbPath ? 40 : (doorJoin ? 22 : (useRibbon && visualOk ? 18 : 10)))));
       const snapN = Math.max(pts.length * snapDense, path.fancy ? 14 : (useRibbon ? 10 : 8));
       visualPts = curve.getPoints(visN);
       snapPts = curve.getPoints(snapN);
@@ -768,8 +770,8 @@ export class TrackSystem {
         color: rampMap ? 0xffffff : 0x14161c,
         roughness: 0.74,
         metalness: 0.08,
-        emissive: 0x1a2030,
-        emissiveIntensity: 0.16, // soft lift — matches asphalt family, not gray sheet
+        emissive: 0x1c2434,
+        emissiveIntensity: 0.20, // soft lift — left corner / under-ramp reads, not gray sheet
         ...(rampMap ? { map: rampMap } : {}),
         ...asphaltBias,
       });
@@ -894,7 +896,8 @@ export class TrackSystem {
     }
     const smoothR = rights.map((r) => r.clone());
     // Extra passes on ramps/decks/floor joins — damps sawtooth at feet / crest kisses / door_*
-    const rightPasses = (kind === "ramp" || kind === "cornice" || kind === "balcony" || kind === "elevated") ? 7
+    const rightPasses = (kind === "ramp") ? 10
+      : (kind === "cornice" || kind === "balcony" || kind === "elevated") ? 7
       : (kind === "floor" || kind === "outdoor" || kind === "flower") ? 5
         : 3;
     for (let pass = 0; pass < rightPasses; pass++) {
@@ -930,13 +933,14 @@ export class TrackSystem {
 
     let dist = 0;
     // Solid asphalt slab: top + bottom + side walls (Mario Kart curb mass, not tape)
-    const slab = isDeck ? 0.085 : (kind === "ramp" ? 0.072 : (thickAsphalt ? 0.048 : 0.032));
+    // Ramps: thicker slab so under-deck reads solid (kills dark void / paper look)
+    const slab = kind === "ramp" ? 0.095 : (isDeck ? 0.085 : (thickAsphalt ? 0.048 : 0.032));
     // Ramp feet: plant underside on approach asphalt (no underground dig, no floating gap)
     const footY0 = pts[0].y;
     const groundFoot = kind === "ramp" && footY0 < 1.15;
     const approachBot = groundFoot
       ? Math.max(0.002, footY0 + 0.015 - 0.048) // match floor ribbon underside
-      : (footY0 + 0.016 - 0.085); // match elevated/balcony deck underside
+      : (footY0 + 0.016 - slab); // match deck underside
     const vPer = thickAsphalt ? 4 : 2; // L-top R-top R-bot L-bot
     for (let i = 0; i < n; i++) {
       if (i > 0) dist += pts[i].distanceTo(pts[i - 1]);
@@ -1019,35 +1023,47 @@ export class TrackSystem {
     if (wantRails) {
       this._addRibbonRails(pts, rights, ups, width, kind);
     }
+    // Foyer / climb: soft under-skirt + fill panels kill black void under first rise
+    if (kind === "ramp" && groundFoot) {
+      this._addRampUnderFill(pts, rights, ups, width, slab, yLift);
+    }
   }
 
-  /** Thin continuous rail strips along ribbon edges (replaces BoxGeometry rail stacks). */
+  /** Continuous rail strips along ribbon edges — flush to asphalt, no facet gaps. */
   _addRibbonRails(pts, rights, ups, width, kind) {
     if (!pts || pts.length < 2) return;
     if (!this._railMats) this._railMats = {};
     let railMat = this._railMats[kind];
     if (!railMat) {
       const fancyRail = kind === "cornice" || kind === "balcony";
+      const isRamp = kind === "ramp";
       const railColor =
         kind === "cornice" ? 0xcfd8dc
           : kind === "balcony" ? 0xb0bec5
-            : kind === "ramp" ? 0x90a4ae
+            : isRamp ? 0xa8b8c4
               : 0x78909c;
       railMat = new THREE.MeshStandardMaterial({
         color: railColor,
-        roughness: fancyRail ? 0.35 : 0.42,
-        metalness: fancyRail ? 0.55 : 0.4,
-        emissive: 0x000000,
-        emissiveIntensity: 0,
+        roughness: fancyRail ? 0.35 : (isRamp ? 0.38 : 0.42),
+        metalness: fancyRail ? 0.55 : (isRamp ? 0.48 : 0.4),
+        emissive: isRamp ? 0x2a3540 : 0x000000,
+        emissiveIntensity: isRamp ? 0.12 : 0,
         transparent: true,
-        opacity: kind === "balcony" ? 0.9 : fancyRail ? 0.85 : 0.7,
+        opacity: kind === "balcony" ? 0.9 : fancyRail ? 0.85 : (isRamp ? 0.88 : 0.7),
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+        depthWrite: true,
       });
       this._railMats[kind] = railMat;
     }
     const fancyRail = kind === "cornice" || kind === "balcony";
-    const railHalf = fancyRail ? 0.016 : 0.012;
-    const railUp = fancyRail ? 0.055 : 0.045;
-    const halfW = width * 0.5 + 0.012;
+    const isRamp = kind === "ramp";
+    // Taller / slightly thicker on climb — continuous ribbon, not segmented posts
+    const railHalf = fancyRail ? 0.016 : (isRamp ? 0.015 : 0.012);
+    const railUp = fancyRail ? 0.055 : (isRamp ? 0.062 : 0.045);
+    const yBase = isRamp ? 0.022 : 0.03; // plant closer to asphalt top (less sharp float join)
+    const halfW = width * 0.5 + (isRamp ? 0.008 : 0.012);
     for (const side of [-1, 1]) {
       const positions = [];
       const normals = [];
@@ -1056,30 +1072,109 @@ export class TrackSystem {
         const p = pts[i];
         const r = rights[i];
         const up = ups[i];
-        const cx = p.x + r.x * side * halfW;
-        const cy = p.y + 0.03;
-        const cz = p.z + r.z * side * halfW;
-        // Two verts across rail width (along right)
-        positions.push(cx - r.x * railHalf, cy, cz - r.z * railHalf);
-        positions.push(cx + r.x * railHalf, cy + railUp * 0.15, cz + r.z * railHalf);
-        normals.push(up.x, up.y, up.z, up.x, up.y, up.z);
+        // Foot flare match: widen rail mount with ramp foot flare
+        let hw = halfW;
+        if (isRamp && pts.length > 2) {
+          const flare = Math.max(0, 1 - i / Math.min(4, pts.length - 1));
+          hw = halfW * (1 + 0.14 * flare);
+        }
+        const cx = p.x + r.x * side * hw;
+        const cy = p.y + yBase;
+        const cz = p.z + r.z * side * hw;
+        // Quad cross-section: outer bottom / outer top / inner top / inner bottom — solid rail mass
+        const ox = r.x * side;
+        const oz = r.z * side;
+        const ux = up.x, uy = up.y, uz = up.z;
+        positions.push(cx + ox * railHalf, cy, cz + oz * railHalf);
+        positions.push(cx + ox * railHalf, cy + railUp, cz + oz * railHalf);
+        positions.push(cx - ox * railHalf * 0.35, cy + railUp * 0.92, cz - oz * railHalf * 0.35);
+        positions.push(cx - ox * railHalf * 0.35, cy + 0.006, cz - oz * railHalf * 0.35);
+        normals.push(ox, 0, oz, ox, 0.15, oz, -ox, 0.2, -oz, -ox, -0.1, -oz);
         if (i < pts.length - 1) {
-          const a = i * 2;
-          const b = (i + 1) * 2;
+          const a = i * 4;
+          const b = (i + 1) * 4;
+          // outer wall, top, inner, bottom
           indices.push(a, a + 1, b + 1, a, b + 1, b);
+          indices.push(a + 1, a + 2, b + 2, a + 1, b + 2, b + 1);
+          indices.push(a + 2, a + 3, b + 3, a + 2, b + 3, b + 2);
+          indices.push(a + 3, a, b, a + 3, b, b + 3);
         }
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
       geo.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
       geo.setIndex(indices);
+      geo.computeVertexNormals();
       geo.computeBoundingSphere();
       const mesh = new THREE.Mesh(geo, railMat);
       mesh.castShadow = false;
       mesh.frustumCulled = true;
+      mesh.renderOrder = 3;
       mesh.name = `ribbon_rail_${kind}`;
       this.root.add(mesh);
     }
+  }
+
+  /**
+   * Soft under-ramp fill panels — lifts the black void under the first rise so the
+   * left corner reads without gray sheets. Uses dark asphalt-family emissive.
+   */
+  _addRampUnderFill(pts, rights, ups, width, slab, yLift) {
+    if (!pts || pts.length < 3) return;
+    if (!this._rampUnderMat) {
+      this._rampUnderMat = new THREE.MeshStandardMaterial({
+        color: 0x12151c,
+        roughness: 0.92,
+        metalness: 0.04,
+        emissive: 0x1a2230,
+        emissiveIntensity: 0.22,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+    }
+    const halfW = width * 0.5;
+    // Cover first ~45% of climb (void under early elevated path in Ben shot)
+    const nUse = Math.max(3, Math.ceil(pts.length * 0.45));
+    const positions = [];
+    const indices = [];
+    for (let i = 0; i < nUse; i++) {
+      const p = pts[i];
+      const r = rights[i];
+      const yTop = p.y + yLift - 0.004;
+      // Hang skirt toward floor — never dig below approach asphalt
+      const bot = Math.max(0.01, Math.min(yTop - 0.04, p.y + yLift - slab * 1.35));
+      let hw = halfW * 0.98;
+      if (nUse > 2) {
+        const flare = Math.max(0, 1 - i / Math.min(4, nUse - 1));
+        hw = halfW * (1 + 0.14 * flare) * 0.98;
+      }
+      positions.push(p.x - r.x * hw, bot, p.z - r.z * hw);
+      positions.push(p.x + r.x * hw, bot, p.z + r.z * hw);
+      positions.push(p.x + r.x * hw, yTop, p.z + r.z * hw);
+      positions.push(p.x - r.x * hw, yTop, p.z - r.z * hw);
+      if (i < nUse - 1) {
+        const a = i * 4;
+        const b = (i + 1) * 4;
+        // bottom deck
+        indices.push(a, b, b + 1, a, b + 1, a + 1);
+        // left + right skirts
+        indices.push(a, a + 3, b + 3, a, b + 3, b);
+        indices.push(a + 1, b + 1, b + 2, a + 1, b + 2, a + 2);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, this._rampUnderMat);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = true;
+    mesh.name = "ribbon_ramp_underfill";
+    this.root.add(mesh);
   }
 
   _addFlowerRibbonEdges(pts, rights, ups, width, thick, yLift) {

@@ -608,14 +608,17 @@ export class RCCar {
       fric *= 1.18;
     }
 
-    // Soft throttle ease — less snappy punch on primary circuit, still responsive
+    // Soft throttle ease — responsive on climb, calm on floor cruise (upright caps unchanged)
     if (this._throttleSmooth == null) this._throttleSmooth = 0;
-    this._throttleSmooth = THREE.MathUtils.lerp(this._throttleSmooth, throttle, Math.min(1, 5.8 * dt));
+    const thrRate = (kind === "ramp" || snap?.steep) ? 6.8 : 5.8;
+    this._throttleSmooth = THREE.MathUtils.lerp(this._throttleSmooth, throttle, Math.min(1, thrRate * dt));
     const thr = this._throttleSmooth;
     if (thr > 0.02) {
       const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
       const curve = 0.45 + 0.55 * headroom * headroom;
-      this.speed += this.accel * thr * curve * dt;
+      // Climb-only plant — floor cruise torque unchanged so ribbon onRate stays green
+      const climbPlant = (kind === "ramp" || snap?.steep) ? 1.06 : 1;
+      this.speed += this.accel * thr * curve * climbPlant * dt;
     } else if (thr < -0.02) {
       this.speed -= this.brake * Math.abs(thr) * dt;
     } else {

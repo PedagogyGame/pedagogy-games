@@ -2943,21 +2943,27 @@ export class Mansion {
       add(0, 11.0, cy, cy + tallH);
       return out;
     }
-    // Landing → library (north)
+    // Landing → library (north): center door + west/east skirting portals so
+    // landing_skirting fillets never pin on leftover jamb slabs.
     if (room.id === "landing" && side === "north") {
-      add(0, 3.40, cy, cy + doorH);
+      add(0, 3.0, cy, cy + doorH);
+      add(-2.75, 2.90, cy, cy + doorH); // west asphalt / climb crest approach
+      add(2.75, 2.90, cy, cy + doorH);  // east fillet mirror
       return out;
     }
     if (room.id === "library_hall" && side === "south") {
-      add(0, 3.40, cy, cy + doorH);
+      add(0, 3.0, cy, cy + doorH);
+      add(-2.75, 2.90, cy, cy + doorH);
+      add(2.75, 2.90, cy, cy + doorH);
       return out;
     }
     // Hall ↔ cabinet / armoury at skirt z≈-7.7
     if (room.id === "hall_ground" && side === "west") {
       add(-7.60, 2.60, cy, cy + doorH);
-      // Climb S-weave tunnel through hall west slab — full story (no header clip)
+      // Climb S-weave tunnel through hall west slab — full story (no header clip).
+      // Slightly wider/south so imperfect steer (±0.5m) clears wall lip near z≈0.
       const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
-      add(1.05, 3.60, cy, fullH);
+      add(0.85, 4.20, cy, fullH);
       return out;
     }
     if (room.id === "hall_ground" && side === "east") {
@@ -2966,6 +2972,9 @@ export class Mansion {
     }
     if (room.id === "cabinet" && side === "east") {
       add(-7.70, 2.60, cy, cy + doorH);
+      // Match hall_ground west climb tunnel — dual wall at x≈-4 otherwise pins S-weave
+      const fullH = cy + (room.size[1] || 4) + 0.02;
+      add(0.85, 4.20, cy, fullH);
       return out;
     }
     if (room.id === "armoury" && side === "west") {
@@ -3009,10 +3018,14 @@ export class Mansion {
     }
     if (room.id === "library_hall" && side === "east") {
       add(-8.0, 2.60, cy, cy + doorH);
+      // South tip near z≈0 — mirror west; clears landing_skirting east fillet
+      add(-0.55, 2.40, cy, cy + doorH);
       return out;
     }
     if (room.id === "library_hall" && side === "west") {
       add(-8.0, 2.60, cy, cy + doorH);
+      // South tip near z≈0 — clears landing_skirting west fillet past library jamb
+      add(-0.55, 2.40, cy, cy + doorH);
       return out;
     }
     if (room.id === "nursery" && side === "west") {
@@ -3312,7 +3325,16 @@ export class Mansion {
       "stair"
     );
 
+    // Continuous brass handrails + fewer posts — kills z-fight/gap seams at yellow frames
+    railMat.polygonOffset = true;
+    railMat.polygonOffsetFactor = -1;
+    railMat.polygonOffsetUnits = -1;
+    const railTopMat = this._mat(0xc9a227, 0.32, 0.58);
+    railTopMat.polygonOffset = true;
+    railTopMat.polygonOffsetFactor = -2;
+    railTopMat.polygonOffsetUnits = -2;
     for (const side of [-1, 1]) {
+      const railPts = [];
       for (let i = 0; i < steps; i++) {
         const y = s.fromY + rise * (i + 0.5) + 0.55;
         let x = s.x;
@@ -3330,9 +3352,30 @@ export class Mansion {
           x = s.x - run * (i + 0.5);
           z = s.z + side * (w / 2 - 0.08);
         }
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), railMat);
-        post.position.set(x, y, z);
-        g.add(post);
+        railPts.push({ x, y, z });
+        // Every 2nd post only — continuous rail carries the yellow frame read
+        if (i % 2 === 0 || i === steps - 1) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.88, 6), railMat);
+          post.position.set(x, y, z);
+          post.frustumCulled = true;
+          g.add(post);
+        }
+      }
+      // Continuous top rail as overlapping short boxes along climb (no seam gaps)
+      for (let i = 0; i < railPts.length - 1; i++) {
+        const a = railPts[i];
+        const b = railPts[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        const len = Math.hypot(dx, dy, dz);
+        if (len < 0.02) continue;
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(0.045, 0.04, len + 0.04), // slight overlap kills junction gaps
+          railTopMat
+        );
+        rail.position.set((a.x + b.x) / 2, (a.y + b.y) / 2 + 0.38, (a.z + b.z) / 2);
+        rail.lookAt(b.x, b.y + 0.38, b.z);
+        rail.frustumCulled = true;
+        g.add(rail);
       }
     }
 
