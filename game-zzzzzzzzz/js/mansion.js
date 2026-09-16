@@ -488,6 +488,14 @@ export class Mansion {
       const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.2, 0.7), pillarMat);
       pillar.position.set(sx, 1.6, gateZ);
       g.add(pillar);
+      // Hard pillar — never soft-shrink / never climb-pierce
+      this._pushCollider(
+        new THREE.Box3(
+          new THREE.Vector3(sx - 0.38, 0.0, gateZ - 0.38),
+          new THREE.Vector3(sx + 0.38, 3.2, gateZ + 0.38)
+        ),
+        "pillar"
+      );
       const lamp = this._allocPointLight(0xffcc80, 4, 12, 2);
       if (lamp) { lamp.position.set(sx, 3.1, gateZ); g.add(lamp); }
       const bulb = new THREE.Mesh(
@@ -990,13 +998,13 @@ export class Mansion {
     );
     post.position.set(x, 1.2, z);
     g.add(post);
-    // Soft furniture AABB so Drive probes never treat a post as clear asphalt
+    // Hard pillar post — Drive must bounce (never soft-raise under car height)
     this._pushCollider(
       new THREE.Box3(
-        new THREE.Vector3(x - 0.14, 0.0, z - 0.14),
-        new THREE.Vector3(x + 0.14, 2.35, z + 0.14)
+        new THREE.Vector3(x - 0.16, 0.0, z - 0.16),
+        new THREE.Vector3(x + 0.16, 2.35, z + 0.16)
       ),
-      "furniture"
+      "pillar"
     );
     const lamp = new THREE.Mesh(
       new THREE.BoxGeometry(0.35, 0.45, 0.35),
@@ -1493,6 +1501,13 @@ export class Mansion {
         for (const z of [22, 30, 38]) {
           addCyl(0.08, 0.1, 1.1, x, cy + 0.55, z, this._mat(0x37474f, 0.5, 0.4), 8);
           addCyl(0.14, 0.14, 0.08, x, cy + 1.15, z, this._brass(0xc9a227), 8);
+          this._pushCollider(
+            new THREE.Box3(
+              new THREE.Vector3(x - 0.16, cy, z - 0.16),
+              new THREE.Vector3(x + 0.16, cy + 1.2, z + 0.16)
+            ),
+            "pillar"
+          );
         }
       }
       // Low stone curb rings near fountain approach
@@ -3707,7 +3722,7 @@ export class Mansion {
   }
 
 
-  /** Push a collider AABB. driveKind: "wall" (default) | "furniture" | "stair" (Drive softens). */
+  /** Push a collider AABB. driveKind: "wall"|"pillar" (hard) | "furniture"|"stair" (Drive softens). */
   _pushCollider(box, driveKind = "wall") {
     box.driveKind = driveKind;
     this.colliders.push(box);

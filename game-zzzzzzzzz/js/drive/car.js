@@ -29,12 +29,12 @@ export const VEHICLE_PRESETS = {
     id: "car",
     label: "Car",
     blurb: "Balanced · joyful cruise",
-    maxSpeed: 1.39,
-    boostMax: 1.90,
-    accel: 6.0,
-    brake: 13.5,
-    friction: 7.1,
-    steerRate: 3.26,
+    maxSpeed: 1.38,
+    boostMax: 1.88,
+    accel: 5.9,
+    brake: 14.0,
+    friction: 7.6,
+    steerRate: 3.18,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -157,39 +157,40 @@ export class RCCar {
   }
 
   _mats(preset) {
+    // Toy RC paint: glossy lacquer, clear glass, rubber tires — not candy boxes
     const candy = new THREE.MeshStandardMaterial({
-      color: preset.bodyColor, roughness: 0.28, metalness: 0.42,
+      color: preset.bodyColor, roughness: 0.22, metalness: 0.38,
     });
     const cream = new THREE.MeshStandardMaterial({
-      color: preset.accent, roughness: 0.4, metalness: 0.18,
+      color: preset.accent, roughness: 0.36, metalness: 0.22,
     });
     const glass = new THREE.MeshStandardMaterial({
-      color: 0xb3e5fc, roughness: 0.08, metalness: 0.35,
-      transparent: true, opacity: 0.55,
-      emissive: 0x81d4fa, emissiveIntensity: 0.08,
+      color: 0x88c9e8, roughness: 0.06, metalness: 0.55,
+      transparent: true, opacity: 0.42,
+      emissive: 0x4fc3f7, emissiveIntensity: 0.04,
     });
     const dark = new THREE.MeshStandardMaterial({
-      color: 0x1a1a1a, roughness: 0.75, metalness: 0.15,
+      color: 0x141418, roughness: 0.72, metalness: 0.22,
     });
     const chrome = new THREE.MeshStandardMaterial({
-      color: 0xeceff1, roughness: 0.18, metalness: 0.92,
+      color: 0xf5f7fa, roughness: 0.14, metalness: 0.95,
     });
     const rubber = new THREE.MeshStandardMaterial({
-      color: 0x212121, roughness: 0.92, metalness: 0.05,
+      color: 0x1a1a1c, roughness: 0.95, metalness: 0.02,
     });
     const hubMat = new THREE.MeshStandardMaterial({
-      color: 0xb0bec5, roughness: 0.3, metalness: 0.8,
+      color: 0xcfd8dc, roughness: 0.28, metalness: 0.85,
     });
     const headMat = new THREE.MeshStandardMaterial({
-      color: 0xfffde7, emissive: 0xffecb3, emissiveIntensity: 0.35,
-      roughness: 0.25,
+      color: 0xfffde7, emissive: 0xffe082, emissiveIntensity: 0.55,
+      roughness: 0.18, metalness: 0.35,
     });
     const tailMat = new THREE.MeshStandardMaterial({
-      color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 0.25, roughness: 0.35,
+      color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 0.4, roughness: 0.3,
     });
     const underglow = new THREE.MeshStandardMaterial({
-      color: preset.bodyColor, emissive: preset.bodyColor, emissiveIntensity: 0.12,
-      transparent: true, opacity: 0.28, roughness: 0.5,
+      color: preset.bodyColor, emissive: preset.bodyColor, emissiveIntensity: 0.08,
+      transparent: true, opacity: 0.18, roughness: 0.55,
     });
     this._headMats = [headMat, tailMat];
     this._glowMat = underglow;
@@ -197,9 +198,10 @@ export class RCCar {
   }
 
   _addWheels(m, layout, tireR = 0.048, tireW = 0.038) {
-    const tireGeo = new THREE.CylinderGeometry(tireR, tireR, tireW, 14);
-    const hubGeo = new THREE.CylinderGeometry(tireR * 0.46, tireR * 0.46, tireW + 0.004, 10);
-    const rimGeo = new THREE.CylinderGeometry(tireR * 0.67, tireR * 0.67, tireW + 0.002, 12);
+    const tireGeo = new THREE.CylinderGeometry(tireR, tireR, tireW, 16);
+    const sidewallGeo = new THREE.CylinderGeometry(tireR * 0.92, tireR * 0.92, tireW + 0.006, 16);
+    const hubGeo = new THREE.CylinderGeometry(tireR * 0.42, tireR * 0.42, tireW + 0.008, 12);
+    const rimGeo = new THREE.CylinderGeometry(tireR * 0.62, tireR * 0.62, tireW + 0.003, 14);
     this._wheelRadius = tireR * CAR_SCALE;
     for (const [x, z] of layout) {
       const wheelGroup = new THREE.Group();
@@ -208,16 +210,20 @@ export class RCCar {
       tire.rotation.z = Math.PI / 2;
       tire.castShadow = true;
       wheelGroup.add(tire);
+      // Slightly inset sidewall ring — reads as real tire depth
+      const side = new THREE.Mesh(sidewallGeo, m.dark);
+      side.rotation.z = Math.PI / 2;
+      wheelGroup.add(side);
       const rim = new THREE.Mesh(rimGeo, m.chrome);
       rim.rotation.z = Math.PI / 2;
       wheelGroup.add(rim);
       const hub = new THREE.Mesh(hubGeo, m.hubMat);
       hub.rotation.z = Math.PI / 2;
       wheelGroup.add(hub);
-      for (let i = 0; i < 4; i++) {
-        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.006, tireR * 0.58, 0.008), m.chrome);
+      for (let i = 0; i < 5; i++) {
+        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.005, tireR * 0.55, 0.007), m.chrome);
         spoke.rotation.z = Math.PI / 2;
-        spoke.rotation.x = (i / 4) * Math.PI;
+        spoke.rotation.x = (i / 5) * Math.PI;
         wheelGroup.add(spoke);
       }
       this.root.add(wheelGroup);
@@ -227,48 +233,78 @@ export class RCCar {
 
   _buildCar(m) {
     const b = this.bodyPivot;
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.045, 0.44), m.candy);
-    lower.position.y = 0.055;
-    lower.castShadow = true;
-    b.add(lower);
-    const mid = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.05, 0.40), m.candy);
-    mid.position.y = 0.095;
-    mid.castShadow = true;
-    b.add(mid);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 0.12), m.candy);
-    nose.position.set(0, 0.09, -0.18);
-    b.add(nose);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.012, 0.42), m.cream);
-    stripe.position.set(0, 0.122, -0.01);
+    // Chassis tub (low, wide — planted RC proportions)
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.028, 0.46), m.dark);
+    chassis.position.y = 0.042;
+    chassis.castShadow = true;
+    b.add(chassis);
+    // Main body shell — single cohesive volume (not stacked candy boxes)
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.235, 0.055, 0.42), m.candy);
+    body.position.y = 0.078;
+    body.castShadow = true;
+    b.add(body);
+    // Hood (slightly lower / tapered nose)
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.032, 0.14), m.candy);
+    hood.position.set(0, 0.088, -0.175);
+    hood.castShadow = true;
+    b.add(hood);
+    // Wheel-arch lips
+    for (const [sx, sz] of [[-0.12, -0.13], [0.12, -0.13], [-0.12, 0.13], [0.12, 0.13]]) {
+      const arch = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.022, 0.07), m.dark);
+      arch.position.set(sx, 0.058, sz);
+      b.add(arch);
+    }
+    // Racing stripe
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.01, 0.40), m.cream);
+    stripe.position.set(0, 0.108, -0.02);
     b.add(stripe);
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.07, 0.16), m.glass);
-    cabin.position.set(0, 0.155, -0.02);
-    b.add(cabin);
-    const cabinFrame = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.015, 0.175), m.dark);
-    cabinFrame.position.set(0, 0.125, -0.02);
-    b.add(cabinFrame);
-    const spoilerPostL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.02), m.dark);
-    spoilerPostL.position.set(-0.07, 0.145, 0.17);
-    b.add(spoilerPostL);
-    const spoilerPostR = spoilerPostL.clone();
-    spoilerPostR.position.x = 0.07;
-    b.add(spoilerPostR);
-    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.018, 0.055), m.cream);
-    spoiler.position.set(0, 0.175, 0.17);
+    // Cabin greenhouse — framed glass (toy RC windshield/roof)
+    const cabinBase = new THREE.Mesh(new THREE.BoxGeometry(0.188, 0.018, 0.175), m.dark);
+    cabinBase.position.set(0, 0.112, 0.01);
+    b.add(cabinBase);
+    const wind = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.055, 0.012), m.glass);
+    wind.position.set(0, 0.148, -0.065);
+    wind.rotation.x = -0.35;
+    b.add(wind);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(0.165, 0.012, 0.12), m.candy);
+    roof.position.set(0, 0.178, 0.02);
+    b.add(roof);
+    const sideGlassL = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.045, 0.11), m.glass);
+    sideGlassL.position.set(-0.09, 0.148, 0.015);
+    b.add(sideGlassL);
+    const sideGlassR = sideGlassL.clone();
+    sideGlassR.position.x = 0.09;
+    b.add(sideGlassR);
+    const rearGlass = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.04, 0.01), m.glass);
+    rearGlass.position.set(0, 0.155, 0.085);
+    rearGlass.rotation.x = 0.28;
+    b.add(rearGlass);
+    // Compact rear wing
+    for (const sx of [-0.065, 0.065]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.04, 0.014), m.dark);
+      post.position.set(sx, 0.155, 0.175);
+      b.add(post);
+    }
+    const spoiler = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.014, 0.048), m.cream);
+    spoiler.position.set(0, 0.178, 0.175);
     b.add(spoiler);
-    this._addBumpersLights(m, 0.078);
-    this._addWheels(m, [[-0.125, -0.13], [0.125, -0.13], [-0.125, 0.13], [0.125, 0.13]]);
+    this._addBumpersLights(m, 0.082);
+    this._addWheels(m, [[-0.128, -0.135], [0.128, -0.135], [-0.128, 0.135], [0.128, 0.135]], 0.05, 0.04);
   }
 
   _buildSuv(m) {
     const b = this.bodyPivot;
-    // Taller boxy cabin
-    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.055, 0.46), m.candy);
-    lower.position.y = 0.07;
+    // Tall wagon — chassis + shell (less candy-stack)
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.03, 0.47), m.dark);
+    chassis.position.y = 0.05;
+    chassis.castShadow = true;
+    b.add(chassis);
+    const lower = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.05, 0.45), m.candy);
+    lower.position.y = 0.078;
     lower.castShadow = true;
     b.add(lower);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.1, 0.42), m.candy);
-    body.position.y = 0.14;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.245, 0.095, 0.40), m.candy);
+    body.position.y = 0.145;
     body.castShadow = true;
     b.add(body);
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.28), m.glass);
@@ -488,8 +524,8 @@ export class RCCar {
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    // Higher input damping → smoother turn-in/out (less twitchy)
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.30 * dt));
+    // Planted steer — readable turn-in, no float/veer junk
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.55 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
@@ -642,7 +678,7 @@ export class RCCar {
 
     const absV = Math.abs(this.speed);
     // Milder low-speed steer boost — planted, not twitchy at crawl
-    const lowBoost = 1.12 - 0.12 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
+    const lowBoost = 1.08 - 0.08 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
     const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
     const railGrip = (onRailDeck && snap?.onTrack) ? 1.05 : 1;
     // Near-wall / scrape: damp steering so corners don't yaw harder into the stud
@@ -654,7 +690,7 @@ export class RCCar {
       * lowBoost * highDamp * railGrip * wallSteerDamp * rimSteerDamp;
     // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
     const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
-    const maxYawRate = 2.18; // rad/s soft cap — smoother turn-in, not mushy
+    const maxYawRate = 2.05; // rad/s soft cap — planted turn-in, no veer
     const maxDyaw = maxYawRate * dt;
     this.yaw += THREE.MathUtils.clamp(yawDelta, -maxDyaw, maxDyaw);
     while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;

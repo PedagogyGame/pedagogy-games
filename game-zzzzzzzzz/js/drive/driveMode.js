@@ -127,6 +127,7 @@ export class DriveMode {
   /**
    * Soft copy for Drive: furniture shrink XZ ~26% and raise min.y so floor cruise
    * (car height band ~0..0.12) slips under tabletops / past chair bases.
+   * Pillars/columns/posts and structural walls stay HARD (no shrink, no raise).
    * Stair underside slabs raise above the *story* RC band so ramp-foot approach is not
    * pinned (foyer y≈0, landing y≈4.2, cellar y≈-4.2). Absolute 0.52 only fixed ground;
    * stringers stay (already inset inside stair footprint in mansion build).
@@ -134,6 +135,20 @@ export class DriveMode {
   _driveSoftCollider(box) {
     const out = box.clone();
     out.driveKind = box.driveKind || "wall";
+    // Pillar / column / post — never soft-shrink or raise (car must bounce)
+    if (out.driveKind === "pillar") return out;
+    // Heuristic: tall skinny "furniture" posts that should have been pillars
+    if (out.driveKind === "furniture") {
+      const bw = out.max.x - out.min.x;
+      const bd = out.max.z - out.min.z;
+      const bh = out.max.y - out.min.y;
+      const maxXZ = Math.max(bw, bd);
+      const minXZ = Math.min(bw, bd);
+      if (bh >= 1.2 && maxXZ <= 0.55 && minXZ <= 0.45) {
+        out.driveKind = "pillar";
+        return out;
+      }
+    }
     if (out.driveKind === "stair") {
       const bw = out.max.x - out.min.x;
       const bd = out.max.z - out.min.z;
@@ -736,29 +751,27 @@ export class DriveMode {
     const y = p.y;
     const y0 = y - 0.02;
     const y1 = y + 0.12;
-    // Ruthless: in foyer climb corridor, pierce ALL stair/furniture within 1.5m
-    // so dark-pad / stringer / pillar cannot kill speed before ramp snap.
+    // Climb corridor: pierce ONLY intentional soft volumes (stair underside /
+    // furniture). NEVER pierce walls or pillars — freestanding posts stay solid.
+    // Door/climb apertures are already cut in meshes; do not ghost thin pillars.
     const climbApproach = this._nearFoyerClimbCorridor(p.x, p.z);
     let cols = this._wallsNear(p.x, p.z, r + 0.35);
     if (climbApproach) {
-      // Climb corridor: pierce stair/furniture AND thin junction wall lips.
-      // Real drive openings exist; leftover AABB edges must not pin to 0 km/h.
       const climbRibbon = (kind === "ramp" || kind === "floor" || !kind
         || snap?.onTrack || snap?.nearDeck || snap?.rampContinuity);
       if (climbRibbon) {
         cols = cols.filter((b) => {
           const k = b.driveKind || "wall";
+          // Soft only — walls + pillars always collide
           if (k === "stair" || k === "furniture") return false;
-          if (k !== "wall") return true;
-          const bw = b.max.x - b.min.x;
-          const bd = b.max.z - b.min.z;
-          const thin = Math.min(bw, bd) < 0.55;
-          // Thin wall slabs in climb band = aperture lips / junction leftovers
-          if (thin && b.min.y < 4.5) return false;
           return true;
         });
       } else {
-        cols = cols.filter((b) => (b.driveKind || "wall") === "wall");
+        // Off-ribbon in climb band: keep hard solids (wall + pillar)
+        cols = cols.filter((b) => {
+          const k = b.driveKind || "wall";
+          return k === "wall" || k === "pillar";
+        });
       }
     }
     if (!cols.length) return;
@@ -809,7 +822,7 @@ export class DriveMode {
         accNX += nx;
         accNZ += nz;
         this._frameWallHits = (this._frameWallHits || 0) + 1;
-        const soft = box.driveKind === "furniture" || box.driveKind === "stair";
+        const soft = box.driveKind === "furniture" || box.driveKind === "stair"; // pillar/wall = hard
         if (!soft) this._jamHits = (this._jamHits || 0) + 1;
         // Floor asphalt onTrack: positional depenetrate ONLY — no speed scrub / yaw yank
         // (aggressive scrub was killing W cruise to ~3 km/h / pin on apron edge).

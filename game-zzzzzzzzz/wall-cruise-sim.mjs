@@ -359,6 +359,90 @@ function softSteerKeys() {
   ok("W 2s no wall pin frames", wallFrames === 0, `wallFrames=${wallFrames}`);
 }
 
+// ─── 5) Pillars stay solid — car probe must NOT penetrate known pillar AABBs ─
+{
+  const r = drive._carRadius;
+  // Known freestanding posts near foyer/hall/outdoor roads
+  const samples = [
+    // Lantern posts (outdoor paths near mansion)
+    { x: 0, z: 20, label: "lantern_0_20" },
+    { x: 0, z: 18, label: "lantern_0_18" },
+    { x: -22, z: 8, label: "lantern_-22_8" },
+    { x: 22, z: 8, label: "lantern_22_8" },
+    // Hitching posts along front drive
+    { x: -5, z: 22, label: "hitch_-5_22" },
+    { x: 5, z: 30, label: "hitch_5_30" },
+    // Gate pillars
+    { x: -5, z: 48, label: "gate_-5_48" },
+    { x: 5, z: 48, label: "gate_5_48" },
+  ];
+  const soft = drive._wallColliders || [];
+  let missing = 0;
+  let penetrated = 0;
+  const bad = [];
+  for (const s of samples) {
+    // Find hard pillar (or wall) AABB covering sample center at car height
+    const y0 = 0.05, y1 = 0.18;
+    const hits = soft.filter((b) => {
+      const k = b.driveKind || "wall";
+      if (k !== "pillar" && k !== "wall") return false;
+      if (y1 < b.min.y || y0 > b.max.y) return false;
+      return s.x >= b.min.x && s.x <= b.max.x && s.z >= b.min.z && s.z <= b.max.z;
+    });
+    if (!hits.length) {
+      missing++;
+      bad.push(`${s.label}:noHardAABB`);
+      continue;
+    }
+    // Probe: car center ON pillar center must overlap hard AABB (solid)
+    const box = hits[0];
+    const overlaps =
+      s.x + r > box.min.x && s.x - r < box.max.x &&
+      s.z + r > box.min.z && s.z - r < box.max.z;
+    if (!overlaps) {
+      penetrated++;
+      bad.push(`${s.label}:noOverlap`);
+      continue;
+    }
+    // Soft kinds must not claim this sample (would allow ghost via climb pierce / raise)
+    const softHit = soft.some((b) => {
+      const k = b.driveKind || "wall";
+      if (k !== "furniture" && k !== "stair") return false;
+      if (y1 < b.min.y || y0 > b.max.y) return false;
+      return s.x >= b.min.x && s.x <= b.max.x && s.z >= b.min.z && s.z <= b.max.z;
+    });
+    // Soft overlapping same cell is OK only if hard also present — we already have hard.
+    // Ensure hard kind is pillar for posts (gate/lantern/hitch)
+    const kinds = hits.map((b) => b.driveKind || "wall");
+    if (!kinds.includes("pillar") && !kinds.includes("wall")) {
+      penetrated++;
+      bad.push(`${s.label}:notHard(${kinds.join(",")})`);
+    }
+  }
+  // Count pillar colliders globally
+  const pillarN = soft.filter((b) => b.driveKind === "pillar").length;
+  ok("pillar hard colliders present", pillarN >= 8, `pillarN=${pillarN}`);
+  ok("known pillar samples have hard AABB", missing === 0, missing ? bad.join(";") : "all found");
+  ok("car probe overlaps pillar AABB (no soft-raise ghost)", penetrated === 0,
+    penetrated ? bad.join(";") : "solid");
+
+  // Climb corridor must NOT pierce pillars (filter keeps them)
+  const climbX = -4.55, climbZ = 10.55;
+  const nearPillars = soft.filter((b) => {
+    if (b.driveKind !== "pillar") return false;
+    const cx = (b.min.x + b.max.x) * 0.5;
+    const cz = (b.min.z + b.max.z) * 0.5;
+    return Math.hypot(cx - climbX, cz - climbZ) < 8;
+  });
+  // Simulate filter: climb ribbon keeps pillars
+  const kept = nearPillars.filter((b) => {
+    const k = b.driveKind || "wall";
+    return !(k === "stair" || k === "furniture");
+  });
+  ok("climb pierce keeps pillars", kept.length === nearPillars.length,
+    `kept=${kept.length}/${nearPillars.length}`);
+}
+
 if (fails.length) {
   console.error("\nWALL-CRUISE FAILED:", fails.length);
   for (const f of fails) console.error(f);

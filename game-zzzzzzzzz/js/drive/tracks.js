@@ -12,37 +12,48 @@ function makeCanvas(w, h) {
 }
 
 function makeAsphaltTexture() {
-  // Mario Kart clarity: solid near-black asphalt, crisp white edge lines,
-  // bold yellow center dashes — readable on dark wood / balcony plank.
+  // Rich dark asphalt + crisp white edges + clean lane dashes (no paper-tape gray)
   const c = makeCanvas(256, 256);
   if (!c) return null;
   c.width = 256; c.height = 256;
   const ctx = c.getContext("2d");
-  // Deep solid black base (not charcoal-gray tape)
-  ctx.fillStyle = "#0c0c10";
+  // Deep warm-black asphalt base
+  ctx.fillStyle = "#0a0a0e";
   ctx.fillRect(0, 0, 256, 256);
-  // Subtle grit only — keep mass of road black
-  for (let i = 0; i < 480; i++) {
-    const v = 18 + Math.random() * 28;
-    ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
+  // Layered grit — fine + coarser chips for mass
+  for (let i = 0; i < 900; i++) {
+    const v = 14 + Math.random() * 22;
+    ctx.fillStyle = `rgba(${v},${v},${v + 3},0.32)`;
+    ctx.fillRect(Math.random() * 256, Math.random() * 256, 1 + (Math.random() > 0.7 ? 1 : 0), 1);
+  }
+  for (let i = 0; i < 180; i++) {
+    const v = 22 + Math.random() * 18;
+    ctx.fillStyle = `rgba(${v + 4},${v},${v - 2},0.18)`;
     ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
   }
-  // Solid white edge shoulders (continuous — readable silhouette)
-  ctx.strokeStyle = "rgba(245,245,250,0.92)";
-  ctx.lineWidth = 7;
+  // Soft center darken (road crown read)
+  const g = ctx.createLinearGradient(0, 0, 256, 0);
+  g.addColorStop(0, "rgba(0,0,0,0.18)");
+  g.addColorStop(0.5, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.18)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 256);
+  // Crisp white edge shoulders (continuous)
+  ctx.strokeStyle = "rgba(248,248,252,0.95)";
+  ctx.lineWidth = 6;
   ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(18, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(238, 0); ctx.lineTo(238, 256); ctx.stroke();
-  // Inner soft white hash for depth
-  ctx.strokeStyle = "rgba(220,220,230,0.35)";
-  ctx.lineWidth = 2.5;
-  ctx.setLineDash([8, 12]);
-  ctx.beginPath(); ctx.moveTo(28, 0); ctx.lineTo(28, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(228, 0); ctx.lineTo(228, 256); ctx.stroke();
-  // Bold yellow center lane dashes
-  ctx.strokeStyle = "rgba(255,210,40,0.95)";
-  ctx.lineWidth = 7;
-  ctx.setLineDash([22, 16]);
+  ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(16, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(240, 0); ctx.lineTo(240, 256); ctx.stroke();
+  // Thin inner shoulder hash
+  ctx.strokeStyle = "rgba(210,210,220,0.28)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 10]);
+  ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(26, 256); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(230, 0); ctx.lineTo(230, 256); ctx.stroke();
+  // Clean yellow center lane dashes
+  ctx.strokeStyle = "rgba(255,204,40,0.98)";
+  ctx.lineWidth = 5.5;
+  ctx.setLineDash([18, 14]);
   ctx.beginPath();
   ctx.moveTo(128, 0);
   ctx.lineTo(128, 256);
@@ -61,13 +72,13 @@ function makeChevronTexture() {
   const c = makeCanvas(128, 256);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  // Climb asphalt near floor black — gold chevrons carry read; no sudden gray sheet
-  ctx.fillStyle = "#14161c";
+  // Climb asphalt matches floor black — gold chevrons carry read; no gray sheet
+  ctx.fillStyle = "#0c0e14";
   ctx.fillRect(0, 0, 128, 256);
-  for (let i = 0; i < 360; i++) {
-    const v = 28 + Math.random() * 36;
-    ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.36)`;
-    ctx.fillRect(Math.random() * 128, Math.random() * 256, 2, 2);
+  for (let i = 0; i < 420; i++) {
+    const v = 16 + Math.random() * 24;
+    ctx.fillStyle = `rgba(${v},${v + 2},${v + 6},0.30)`;
+    ctx.fillRect(Math.random() * 128, Math.random() * 256, 1, 1);
   }
   // Bright white shoulders
   ctx.strokeStyle = "rgba(255,255,255,0.95)";
@@ -434,22 +445,22 @@ export class TrackSystem {
     const c = makeCanvas(256, 256);
     if (c) {
       const ctx = c.getContext("2d");
-      ctx.fillStyle = "#1a1a20";
+      ctx.fillStyle = "#0a0a0e";
       ctx.fillRect(0, 0, 256, 256);
-      for (let i = 0; i < 500; i++) {
-        const v = 26 + Math.random() * 40;
-        ctx.fillStyle = `rgba(${v},${v},${v + 4},0.28)`;
-        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
+      for (let i = 0; i < 700; i++) {
+        const v = 14 + Math.random() * 22;
+        ctx.fillStyle = `rgba(${v},${v},${v + 3},0.30)`;
+        ctx.fillRect(Math.random() * 256, Math.random() * 256, 1, 1);
       }
-      // Real road markings: white shoulders + yellow center
-      ctx.strokeStyle = "rgba(230,230,235,0.60)";
-      ctx.lineWidth = 4;
-      ctx.setLineDash([12, 14]);
-      ctx.beginPath(); ctx.moveTo(28, 8); ctx.lineTo(28, 248); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(228, 8); ctx.lineTo(228, 248); ctx.stroke();
-      ctx.strokeStyle = "rgba(235,195,45,0.88)";
-      ctx.lineWidth = 6;
-      ctx.setLineDash([20, 14]);
+      // Crisp shoulders + yellow center (match ribbon language)
+      ctx.strokeStyle = "rgba(248,248,252,0.90)";
+      ctx.lineWidth = 5;
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(22, 8); ctx.lineTo(22, 248); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(234, 8); ctx.lineTo(234, 248); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,204,40,0.95)";
+      ctx.lineWidth = 5;
+      ctx.setLineDash([18, 14]);
       ctx.beginPath();
       ctx.moveTo(128, 8);
       ctx.lineTo(128, 248);
@@ -463,7 +474,7 @@ export class TrackSystem {
       map.magFilter = THREE.LinearFilter;
     }
     const mat = new THREE.MeshStandardMaterial({
-      color: map ? 0xffffff : 0x1a1a20,
+      color: map ? 0xffffff : 0x0a0a0e,
       roughness: 0.86,
       metalness: 0.05,
       ...(map ? { map } : {}),
@@ -896,9 +907,9 @@ export class TrackSystem {
     }
     const smoothR = rights.map((r) => r.clone());
     // Extra passes on ramps/decks/floor joins — damps sawtooth at feet / crest kisses / door_*
-    const rightPasses = (kind === "ramp") ? 10
-      : (kind === "cornice" || kind === "balcony" || kind === "elevated") ? 7
-      : (kind === "floor" || kind === "outdoor" || kind === "flower") ? 5
+    const rightPasses = (kind === "ramp") ? 12
+      : (kind === "cornice" || kind === "balcony" || kind === "elevated") ? 8
+      : (kind === "floor" || kind === "outdoor" || kind === "flower") ? 6
         : 3;
     for (let pass = 0; pass < rightPasses; pass++) {
       for (let i = 1; i < n - 1; i++) {
@@ -1037,19 +1048,20 @@ export class TrackSystem {
     if (!railMat) {
       const fancyRail = kind === "cornice" || kind === "balcony";
       const isRamp = kind === "ramp";
+      // Dark steel rails — continuous curb, not yellow beam junk
       const railColor =
-        kind === "cornice" ? 0xcfd8dc
-          : kind === "balcony" ? 0xb0bec5
-            : isRamp ? 0xa8b8c4
-              : 0x78909c;
+        kind === "cornice" ? 0x90a4ae
+          : kind === "balcony" ? 0x78909c
+            : isRamp ? 0x546e7a
+              : 0x455a64;
       railMat = new THREE.MeshStandardMaterial({
         color: railColor,
-        roughness: fancyRail ? 0.35 : (isRamp ? 0.38 : 0.42),
-        metalness: fancyRail ? 0.55 : (isRamp ? 0.48 : 0.4),
-        emissive: isRamp ? 0x2a3540 : 0x000000,
-        emissiveIntensity: isRamp ? 0.12 : 0,
-        transparent: true,
-        opacity: kind === "balcony" ? 0.9 : fancyRail ? 0.85 : (isRamp ? 0.88 : 0.7),
+        roughness: fancyRail ? 0.38 : (isRamp ? 0.42 : 0.48),
+        metalness: fancyRail ? 0.62 : (isRamp ? 0.55 : 0.48),
+        emissive: isRamp ? 0x1a2228 : 0x000000,
+        emissiveIntensity: isRamp ? 0.06 : 0,
+        transparent: false,
+        opacity: 1,
         polygonOffset: true,
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
@@ -1059,10 +1071,10 @@ export class TrackSystem {
     }
     const fancyRail = kind === "cornice" || kind === "balcony";
     const isRamp = kind === "ramp";
-    // Taller / slightly thicker on climb — continuous ribbon, not segmented posts
-    const railHalf = fancyRail ? 0.016 : (isRamp ? 0.015 : 0.012);
-    const railUp = fancyRail ? 0.055 : (isRamp ? 0.062 : 0.045);
-    const yBase = isRamp ? 0.022 : 0.03; // plant closer to asphalt top (less sharp float join)
+    // Continuous dark curb rails — flush joins at ramp feet
+    const railHalf = fancyRail ? 0.015 : (isRamp ? 0.014 : 0.011);
+    const railUp = fancyRail ? 0.052 : (isRamp ? 0.055 : 0.042);
+    const yBase = isRamp ? 0.016 : 0.024; // plant flush to asphalt (smooth foot joins)
     const halfW = width * 0.5 + (isRamp ? 0.008 : 0.012);
     for (const side of [-1, 1]) {
       const positions = [];
