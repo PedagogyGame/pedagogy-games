@@ -385,6 +385,7 @@ export class DriveMode {
     this.camera.updateProjectionMatrix();
     this._tunnelDark = 0;
     this._camVel.set(0, 0, 0);
+    this._camLookSmooth = null;
     this._crashPhase = null;
     this._crashTimer = 0;
     this._inputsFrozen = false;
@@ -464,6 +465,7 @@ export class DriveMode {
     this._flash = 0;
     this._fade = 0;
     this._camVel.set(0, 0, 0);
+    this._camLookSmooth = null;
     this._snapCamera(true);
     this._edgeWarn = 0;
     this._stuckTimer = 0;
@@ -804,8 +806,8 @@ export class DriveMode {
           continue;
         }
         // Feed car scrape FX while sliding mansion walls off-ribbon / elevated
-        // Softer scrape on-ribbon — reduces wall-pin jerk on primary circuit
-        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.18 : (onRibbon ? 0.22 : 0.38)));
+        // Softer scrape on-ribbon — cruise stays smooth, less speed-kill jerk
+        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.12 : (onRibbon ? 0.12 : 0.34)));
 
         // Fresh forward each hit (yaw may have slid on prior collider)
         const fwdX = Math.sin(this.car.yaw);
@@ -833,8 +835,8 @@ export class DriveMode {
             this.car.yaw += dyaw * yawBlend;
             this.car.root.rotation.y = this.car.yaw;
             const loss = soft
-              ? (0.03 + headOn * 0.12)
-              : (onRibbon ? (0.04 + headOn * 0.18) : (0.06 + headOn * 0.24));
+              ? (0.02 + headOn * 0.10)
+              : (onRibbon ? (0.025 + headOn * 0.12) : (0.05 + headOn * 0.22));
             const signed = Math.sign(spd || 1);
             this.car.speed = signed * spd2 * (1 - Math.min(0.55, loss));
             if (onRibbon && headOn < 0.65) {
@@ -1210,24 +1212,36 @@ export class DriveMode {
 
     const onElevDeck = !!(snap && (snap.elevated || snap.nearDeck || snap.kind === "cornice"
       || snap.kind === "balcony" || snap.kind === "ramp"));
-    this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, Math.min(1, 3.2 * dt));
+    this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, Math.min(1, 2.4 * dt));
     this._snapCamera(false);
+
+    // Low-pass look target Y — grade creases / crest kisses must not tip the lens
+    if (!this._camLookSmooth) this._camLookSmooth = this._camTarget.clone();
+    this._camLookSmooth.x = THREE.MathUtils.lerp(this._camLookSmooth.x, this._camTarget.x, Math.min(1, 6.5 * dt));
+    this._camLookSmooth.z = THREE.MathUtils.lerp(this._camLookSmooth.z, this._camTarget.z, Math.min(1, 6.5 * dt));
+    this._camLookSmooth.y = THREE.MathUtils.lerp(this._camLookSmooth.y, this._camTarget.y, Math.min(1, 3.0 * dt));
 
     const spdAbs = Math.abs(this.car.speed);
     const leisureCam = 1 - THREE.MathUtils.smoothstep(spdAbs, 0.15, 1.3);
     const elevCam = this._camElevated || 0;
-    const spring = 10.5 + leisureCam * 3.5 - elevCam * 2.2; // softer follow on elevated decks
-    const damp = 4.2 + leisureCam * 0.8 + elevCam * 0.9;
+    const spring = 9.2 + leisureCam * 3.0 - elevCam * 2.4; // softer follow on elevated decks
+    const damp = 4.6 + leisureCam * 0.9 + elevCam * 1.0;
+    // Vertical spring softer than XZ — grade steps don't pitch the chase cam
+    const springY = spring * 0.55;
+    const dampY = damp * 1.15;
     const dx = this._camPos.x - this.camera.position.x;
     const dy = this._camPos.y - this.camera.position.y;
     const dz = this._camPos.z - this.camera.position.z;
     this._camVel.x += (dx * spring - this._camVel.x * damp) * dt;
-    this._camVel.y += (dy * spring - this._camVel.y * damp) * dt;
+    this._camVel.y += (dy * springY - this._camVel.y * dampY) * dt;
     this._camVel.z += (dz * spring - this._camVel.z * damp) * dt;
+    // Clamp vertical velocity spike at crease crossings
+    const maxVy = 2.8 + elevCam * 0.6;
+    this._camVel.y = THREE.MathUtils.clamp(this._camVel.y, -maxVy, maxVy);
     this.camera.position.x += this._camVel.x * dt;
     this.camera.position.y += this._camVel.y * dt;
     this.camera.position.z += this._camVel.z * dt;
-    this.camera.lookAt(this._camTarget);
+    this.camera.lookAt(this._camLookSmooth);
 
     const inDark =
       snap?.kind === "shortcut" || snap?.kind === "mouse" || snap?.kind === "shaft"

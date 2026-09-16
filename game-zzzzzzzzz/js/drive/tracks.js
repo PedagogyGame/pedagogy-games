@@ -61,12 +61,12 @@ function makeChevronTexture() {
   const c = makeCanvas(128, 256);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  // Bright climb asphalt — Mario Kart readable on dark wood (not stealth slate)
-  ctx.fillStyle = "#4a5568";
+  // Climb asphalt near floor black — gold chevrons carry read; no sudden gray sheet
+  ctx.fillStyle = "#14161c";
   ctx.fillRect(0, 0, 128, 256);
   for (let i = 0; i < 360; i++) {
-    const v = 70 + Math.random() * 45;
-    ctx.fillStyle = `rgba(${v},${v + 6},${v + 14},0.40)`;
+    const v = 28 + Math.random() * 36;
+    ctx.fillStyle = `rgba(${v},${v + 4},${v + 10},0.36)`;
     ctx.fillRect(Math.random() * 128, Math.random() * 256, 2, 2);
   }
   // Bright white shoulders
@@ -241,6 +241,30 @@ const FOYER_CLIMB_ENGAGE_BACK = (RAMP_MOUNT_FEET.ramp_foyer_to_landing
 const FOYER_CLIMB_ENGAGE_R = FOYER_CLIMB_ENGAGE_BACK + 1.35; // ~2.45m
 
 /**
+ * Visual lateral bank caps (radians). Grade (along-track pitch) is separate —
+ * never dump atan2(Δy, flatLen) into roll or the car tips sideways at creases.
+ *   floor/ramp/deck ≈ ±1.1° upright cruise; chute allows a mild barrel lean ≈ ±8°.
+ */
+const VISUAL_BANK_CAP = {
+  chute: 0.14,
+  ramp: 0.020,
+  cornice: 0.022,
+  balcony: 0.022,
+  elevated: 0.020,
+  shortcut: 0.08,
+  mouse: 0.08,
+  shaft: 0.08,
+  tunnel: 0.05,
+  floor: 0.018,
+  outdoor: 0.018,
+  flower: 0.018,
+};
+const DEFAULT_BANK_CAP = 0.018; // ~±1°
+/** Visual grade→pitch scale / hard cap (car applies further damping). */
+const GRADE_VISUAL_SCALE = 0.48;
+const GRADE_ABS_CAP = 0.20; // ~11.5° raw grade before car pitch scale
+
+/**
  * Builds road meshes from TRACK_PATHS and provides nearest-track snap queries.
  */
 export class TrackSystem {
@@ -282,6 +306,7 @@ export class TrackSystem {
       if (path.disabled || path._disabledReason) continue;
       this._buildPath(path);
     }
+    this._assignSegmentGradeBank();
     this._buildSnapGrid();
     const cells = this._snapGrid.size;
     let meshCount = 0;
@@ -290,6 +315,51 @@ export class TrackSystem {
       `[TrackSystem] segments=${this.segments.length} meshes=${meshCount} snapGrid=${cells} cells @ ${this._gridCell}m (querySnap uses grid, not full scan)`
     );
     this._meshCount = meshCount;
+  }
+
+  /**
+   * Precompute per-segment grade (along-track pitch) and visual bank (lateral).
+   * Neighbor-average grade so ribbon joins / short sawtooth segments cannot spike
+   * atan2(Δy, flatLen) into a sideways tip. Ramps/floors → bank≈0; chute keeps mild lean.
+   */
+  _assignSegmentGradeBank() {
+    const segs = this.segments;
+    if (!segs.length) return;
+    const rawGrade = new Array(segs.length);
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      const flatLen = Math.hypot(seg.b.x - seg.a.x, seg.b.z - seg.a.z) || 1e-6;
+      const aby = seg.b.y - seg.a.y;
+      rawGrade[i] = Math.atan2(aby, flatLen);
+    }
+    // 3-tap average along same pathId (segment list is path-contiguous)
+    // Extra pass damps crease / crest grade spikes feeding car pitch + cam
+    for (let pass = 0; pass < 3; pass++) {
+      const next = rawGrade.slice();
+      for (let i = 0; i < segs.length; i++) {
+        const id = segs[i].pathId;
+        let sum = rawGrade[i];
+        let n = 1;
+        if (i > 0 && segs[i - 1].pathId === id) { sum += rawGrade[i - 1]; n++; }
+        if (i < segs.length - 1 && segs[i + 1].pathId === id) { sum += rawGrade[i + 1]; n++; }
+        next[i] = sum / n;
+      }
+      for (let i = 0; i < segs.length; i++) rawGrade[i] = next[i];
+    }
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      const g = THREE.MathUtils.clamp(rawGrade[i] * GRADE_VISUAL_SCALE, -GRADE_ABS_CAP, GRADE_ABS_CAP);
+      seg.grade = g;
+      const cap = VISUAL_BANK_CAP[seg.kind] ?? DEFAULT_BANK_CAP;
+      // Lateral bank: NOT grade. Chute/tubes get a small fraction; ramps/floors stay upright.
+      if (seg.kind === "chute") {
+        seg.bank = THREE.MathUtils.clamp(g * 0.45, -cap, cap);
+      } else if (TUBE_KINDS.has(seg.kind) && seg.kind !== "tunnel") {
+        seg.bank = THREE.MathUtils.clamp(g * 0.18, -cap, cap);
+      } else {
+        seg.bank = 0;
+      }
+    }
   }
 
   /** XZ uniform grid so querySnap only tests nearby segment indices. */
@@ -483,16 +553,21 @@ export class TrackSystem {
       const elevFancy = kind === "elevated" || kind === "cornice" || kind === "ramp" || kind === "balcony";
       const tubeish = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "chute";
       const floorish = kind === "floor" || kind === "outdoor";
-      // Visual densify kept low for draw-call/FPS; snap stays reliable on curves
-      const visDense = elevFancy ? (path.fancy ? 3 : 2)
-        : tubeish ? 2
-          : kind === "flower" || kind === "tunnel" ? 2
-            : floorish ? 2 : 2;
-      // Snap densify: elevated/tube need curve support; floor coarser
+      // Visual densify: ramps + door/room joins denser to kill giant triangular creases
+      const climbPath = kind === "ramp" || (typeof path.id === "string" && path.id.includes("climb"));
+      const doorJoin = isDoorStrip
+        || (typeof path.id === "string" && (path.id.startsWith("door_") || path.id.includes("_portal")));
+      const visDense = climbPath ? (path.fancy ? 8 : 7)
+        : doorJoin ? 6
+        : elevFancy ? (path.fancy ? 5 : 4)
+        : tubeish ? 3
+          : kind === "flower" || kind === "tunnel" ? 4
+            : floorish ? 4 : 3;
+      // Snap densify: elevated/tube need curve support; floor coarser (unchanged cost)
       const snapDense = elevFancy ? (path.fancy ? 5 : (path.closed ? 4 : 3))
         : tubeish ? 3
           : floorish ? 2 : 2;
-      const visN = Math.max(pts.length * visDense, path.fancy ? 20 : (useRibbon && visualOk ? 12 : 8));
+      const visN = Math.max(pts.length * visDense, path.fancy ? 36 : (climbPath ? 32 : (doorJoin ? 22 : (useRibbon && visualOk ? 18 : 10))));
       const snapN = Math.max(pts.length * snapDense, path.fancy ? 14 : (useRibbon ? 10 : 8));
       visualPts = curve.getPoints(visN);
       snapPts = curve.getPoints(snapN);
@@ -507,7 +582,14 @@ export class TrackSystem {
       }
     } else if (useRibbon && pts.length === 2) {
       const a = pts[0], b = pts[1];
-      const visSteps = Math.max(2, Math.ceil(a.distanceTo(b) * 2.5));
+      // Ramps/decks/door strips: denser samples so feet + room joins aren't one giant facet
+      const doorJoin2 = isDoorStrip
+        || (typeof path.id === "string" && path.id.startsWith("door_"));
+      const visPerM = (kind === "ramp") ? 6.2
+        : (kind === "cornice" || kind === "balcony") ? 5.5
+        : doorJoin2 ? 5.8
+          : 4.0;
+      const visSteps = Math.max(2, Math.ceil(a.distanceTo(b) * visPerM));
       const snapSteps = Math.max(1, Math.ceil(a.distanceTo(b) * 1.2));
       visualPts = [];
       for (let i = 0; i <= visSteps; i++) {
@@ -683,11 +765,11 @@ export class TrackSystem {
     if (kind === "ramp") {
       const rampMap = this._chevron || asphaltMap;
       mat = new THREE.MeshStandardMaterial({
-        color: rampMap ? 0xffffff : 0x4a5568,
-        roughness: 0.68,
-        metalness: 0.12,
-        emissive: 0x3a4560,
-        emissiveIntensity: 0.34,
+        color: rampMap ? 0xffffff : 0x14161c,
+        roughness: 0.74,
+        metalness: 0.08,
+        emissive: 0x1a2030,
+        emissiveIntensity: 0.16, // soft lift — matches asphalt family, not gray sheet
         ...(rampMap ? { map: rampMap } : {}),
         ...asphaltBias,
       });
@@ -811,22 +893,34 @@ export class TrackSystem {
       }
     }
     const smoothR = rights.map((r) => r.clone());
-    for (let pass = 0; pass < 2; pass++) {
+    // Extra passes on ramps/decks/floor joins — damps sawtooth at feet / crest kisses / door_*
+    const rightPasses = (kind === "ramp" || kind === "cornice" || kind === "balcony" || kind === "elevated") ? 7
+      : (kind === "floor" || kind === "outdoor" || kind === "flower") ? 5
+        : 3;
+    for (let pass = 0; pass < rightPasses; pass++) {
       for (let i = 1; i < n - 1; i++) {
+        // Heavier blend near ends (ramp feet / crest / room portal tips)
+        const endW = (i < 3 || i > n - 4) ? 0.55 : 0.33;
+        const midW = 1 - 2 * endW;
         const avg = new THREE.Vector3()
-          .add(smoothR[i - 1])
-          .add(smoothR[i])
-          .add(smoothR[i + 1])
-          .multiplyScalar(1 / 3);
+          .addScaledVector(smoothR[i - 1], endW)
+          .addScaledVector(smoothR[i], midW)
+          .addScaledVector(smoothR[i + 1], endW);
         // Re-orthogonalize to tangent in XZ
         const t = tangents[i];
         avg.sub(t.clone().multiplyScalar(avg.dot(t)));
         if (avg.lengthSq() > 1e-8) smoothR[i].copy(avg.normalize());
       }
-      // Keep end continuity
+      // Keep end continuity + pull ends toward neighbor (kills foot/crest facet flip)
       if (n > 2) {
         if (smoothR[0].dot(smoothR[1]) < 0) smoothR[0].multiplyScalar(-1);
         if (smoothR[n - 1].dot(smoothR[n - 2]) < 0) smoothR[n - 1].multiplyScalar(-1);
+        const e0 = smoothR[0].clone().lerp(smoothR[1], 0.35);
+        e0.sub(tangents[0].clone().multiplyScalar(e0.dot(tangents[0])));
+        if (e0.lengthSq() > 1e-8) smoothR[0].copy(e0.normalize());
+        const e1 = smoothR[n - 1].clone().lerp(smoothR[n - 2], 0.35);
+        e1.sub(tangents[n - 1].clone().multiplyScalar(e1.dot(tangents[n - 1])));
+        if (e1.lengthSq() > 1e-8) smoothR[n - 1].copy(e1.normalize());
       }
     }
     for (let i = 0; i < n; i++) {
@@ -1654,7 +1748,15 @@ export class TrackSystem {
         bestScore = score;
         const flatLen = Math.hypot(abx, abz) || 1e-6;
         const yaw = Math.atan2(abx, abz);
-        const bank = Math.atan2(aby, flatLen) * (seg.kind === "chute" ? 0.75 : seg.kind === "cornice" || seg.kind === "balcony" ? 0.62 : seg.kind === "ramp" ? 0.52 : 0.45);
+        // Prefer pre-smoothed seg.grade/bank (neighbor-averaged). Fallback: live grade.
+        // CRITICAL: grade ≠ lateral bank — ramps stay upright; only chute barrels a little.
+        const liveGrade = Math.atan2(aby, flatLen);
+        const grade = (typeof seg.grade === "number" && Number.isFinite(seg.grade))
+          ? seg.grade
+          : THREE.MathUtils.clamp(liveGrade * GRADE_VISUAL_SCALE, -GRADE_ABS_CAP, GRADE_ABS_CAP);
+        const bankCap = VISUAL_BANK_CAP[seg.kind] ?? DEFAULT_BANK_CAP;
+        let bank = (typeof seg.bank === "number" && Number.isFinite(seg.bank)) ? seg.bank : 0;
+        bank = THREE.MathUtils.clamp(bank, -bankCap, bankCap);
         const halfW = seg.width * 0.5;
         const lateral = steep ? dist3 : dist;
         // BINARY onTrack: half-width ribbon. Ramps allow slightly deeper under-surface
@@ -1717,7 +1819,7 @@ export class TrackSystem {
           // Ride height = segment Y + ribbon yLift so wheels sit on asphalt top (not hover/sink)
           // Plant wheels on asphalt top: tiny -2mm sink hides mesh faceting; carpet matches lift
           x: px, y: (carpet ? py + ribbonYLift(seg.kind) : py + ribbonYLift(seg.kind) - 0.002), z: pz,
-          yaw, bank,
+          yaw, bank, grade,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
           softPull: false,
@@ -1750,7 +1852,7 @@ export class TrackSystem {
       if (onFloorCruise && (best.elevated || best.tube) && farFromDeck) {
         best = {
           x, y: storyY, z,
-          yaw: null, bank: 0,
+          yaw: null, bank: 0, grade: 0,
           onTrack: false, supported: true, softPull: false,
           carpet: true, dist: best.dist, kind: "floor", pathId: null, label: null,
           wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
@@ -1793,7 +1895,7 @@ export class TrackSystem {
       if (adx * adx + adz * adz <= this._spawnApron.r * this._spawnApron.r) {
         return {
           x, y: carpetStoryY, z,
-          yaw: CAR_SPAWN.yaw, bank: 0,
+          yaw: CAR_SPAWN.yaw, bank: 0, grade: 0,
           onTrack: true, supported: true, softPull: false,
           carpet: false, dist: 0, kind: "floor", pathId: "foyer_drive_start", label: null,
           wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
@@ -1806,7 +1908,7 @@ export class TrackSystem {
     if (carpetStoryY != null && Math.abs(y - carpetStoryY) < 0.95) {
       return {
         x, y: carpetStoryY, z,
-        yaw: null, bank: 0,
+        yaw: null, bank: 0, grade: 0,
         onTrack: false, supported: true, softPull: false,
         carpet: true, dist: 0, kind: "floor", pathId: null, label: null,
         wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
@@ -1817,7 +1919,7 @@ export class TrackSystem {
     // No support — fall candidate (car tracks _lastElevated for balcony/cornice)
     return {
       x, y, z,
-      yaw: null, bank: 0,
+      yaw: null, bank: 0, grade: 0,
       onTrack: false, supported: false, softPull: false,
       carpet: false, dist: 99, kind: "void", pathId: null, label: null,
       wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,

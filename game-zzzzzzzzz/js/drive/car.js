@@ -10,10 +10,21 @@ export const CAR_SCALE = 0.218; // ~0.42 m → ~0.092 m length (~13% smaller to 
 /** Optional whisper of road grip when wheels on surface. OFF by default. */
 export const ASSIST_MAGNET = false;
 
+/**
+ * Visual orientation caps (radians) — keep car planted/upright.
+ * Bank = lateral roll only (NOT climb grade). Grade drives subtle pitch separately.
+ * Hard caps kill sideways tip at ramp creases / ribbon joins.
+ */
+export const VISUAL_BANK_MAX = 0.020;       // ±1.15° normal floor/ramp/deck (upright cruise)
+export const VISUAL_BANK_MAX_CHUTE = 0.14;  // ±8° intentional chute barrel
+export const GRADE_PITCH_SCALE = 0.18;      // visual pitch from snap.grade (softer)
+export const GRADE_PITCH_MAX = 0.085;       // ±4.9° body pitch cap
+export const STEER_LEAN_MAX = 0.028;        // ±1.6° steer lean (softened)
+
 /** Handling / look presets (base values; tiny-car precision). */
 export const VEHICLE_PRESETS = {
   // Driver-feel cruise sweet spot — fun to wander (not crawl, not twitchy rocket)
-  // car maxSpeed ~1.38, boost ~1.88, steerRate ~3.28, steer lerp ~2.55 (planted)
+  // car maxSpeed ~1.38, boost ~1.88, steerRate ~3.26, steer lerp ~2.30 (smooth cruise)
   car: {
     id: "car",
     label: "Car",
@@ -23,7 +34,7 @@ export const VEHICLE_PRESETS = {
     accel: 6.0,
     brake: 13.5,
     friction: 7.1,
-    steerRate: 3.28,
+    steerRate: 3.26,
     bodyColor: 0xd32f2f,
     accent: 0xfff3e0,
   },
@@ -87,7 +98,7 @@ export class RCCar {
     this.accel = 6.0;
     this.brake = 15;
     this.friction = 7.1;
-    this.steerRate = 3.28;
+    this.steerRate = 3.26;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
@@ -96,6 +107,8 @@ export class RCCar {
     this._fallStartY = 0;
     this._lastElevated = false;
     this._smoothBank = 0;
+    this._smoothGrade = 0;
+    this._throttleSmooth = 0;
     this._steerInput = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
@@ -422,6 +435,7 @@ export class RCCar {
     this._fallStartY = 0;
     this._lastElevated = false;
     this._smoothBank = 0;
+    this._smoothGrade = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
@@ -465,7 +479,7 @@ export class RCCar {
 
   /**
    * Manual RC step.
-   * snap: {x,y,z,yaw,onTrack,supported,bank,kind,wallBounce,carpet,elevated,steep?}
+   * snap: {x,y,z,yaw,onTrack,supported,bank,grade,kind,wallBounce,carpet,elevated,steep?}
    * Returns { scrape, landed, fell } flags for FX.
    */
   update(dt, keys, snap) {
@@ -475,7 +489,7 @@ export class RCCar {
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
     const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
     // Higher input damping → smoother turn-in/out (less twitchy)
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.55 * dt));
+    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.30 * dt));
 
     const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
     const elevated = !!(snap?.elevated);
@@ -594,12 +608,16 @@ export class RCCar {
       fric *= 1.18;
     }
 
-    if (throttle > 0) {
+    // Soft throttle ease — less snappy punch on primary circuit, still responsive
+    if (this._throttleSmooth == null) this._throttleSmooth = 0;
+    this._throttleSmooth = THREE.MathUtils.lerp(this._throttleSmooth, throttle, Math.min(1, 5.8 * dt));
+    const thr = this._throttleSmooth;
+    if (thr > 0.02) {
       const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
       const curve = 0.45 + 0.55 * headroom * headroom;
-      this.speed += this.accel * throttle * curve * dt;
-    } else if (throttle < 0) {
-      this.speed -= this.brake * dt;
+      this.speed += this.accel * thr * curve * dt;
+    } else if (thr < -0.02) {
+      this.speed -= this.brake * Math.abs(thr) * dt;
     } else {
       if (this.speed > 0) this.speed = Math.max(0, this.speed - fric * dt);
       else if (this.speed < 0) this.speed = Math.min(0, this.speed + fric * dt);
@@ -633,7 +651,7 @@ export class RCCar {
       * lowBoost * highDamp * railGrip * wallSteerDamp * rimSteerDamp;
     // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
     const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
-    const maxYawRate = 2.28; // rad/s soft cap — planted cruise, not twitchy
+    const maxYawRate = 2.18; // rad/s soft cap — smoother turn-in, not mushy
     const maxDyaw = maxYawRate * dt;
     this.yaw += THREE.MathUtils.clamp(yawDelta, -maxDyaw, maxDyaw);
     while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
@@ -658,8 +676,12 @@ export class RCCar {
       z += snap.wallBounce.z;
       const scrape = Math.hypot(snap.wallBounce.x, snap.wallBounce.z);
       if (scrape > 0.0005) {
-        this.speed *= 1 - Math.min(0.45, scrape * 18 * dt);
-        this._scrape = Math.min(1, this._scrape + scrape * 40);
+        // On-ribbon: light scrape speed kill so cruise stays smooth
+        const onRibbon = !!snap.onTrack;
+        const kill = onRibbon ? 7.5 : 16;
+        const cap = onRibbon ? 0.20 : 0.42;
+        this.speed *= 1 - Math.min(cap, scrape * kill * dt);
+        this._scrape = Math.min(1, this._scrape + scrape * (onRibbon ? 22 : 40));
         flags.scrape = scrape;
       }
     } else {
@@ -733,11 +755,17 @@ export class RCCar {
         z = THREE.MathUtils.lerp(z, snap.z, whisper);
       }
 
-      // Smooth bank across segment joins — no pitch/roll jitter on cornice/balcony/ramp
-      const rawBank = snap.bank || 0;
-      const bankSmooth = sticky || rampAssist ? 14 : 11;
+      // Lateral bank ONLY (hard-capped). Grade is separate — never tip sideways on climbs.
+      const bankCap = kind === "chute" ? VISUAL_BANK_MAX_CHUTE : VISUAL_BANK_MAX;
+      const rawBank = THREE.MathUtils.clamp(snap.bank || 0, -bankCap, bankCap);
+      // Heavy low-pass — crease / ribbon-join spikes must not twitch roll
+      const bankSmooth = sticky || rampAssist ? 2.6 : 2.1;
       this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
-      const bank = this._smoothBank;
+      const bank = THREE.MathUtils.clamp(this._smoothBank, -bankCap, bankCap);
+      // Along-track grade → subtle pitch (not roll)
+      const rawGrade = (snap.grade != null && Number.isFinite(snap.grade)) ? snap.grade : 0;
+      const gradeSmooth = sticky || rampAssist ? 3.0 : 2.4;
+      this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade, rawGrade, Math.min(1, gradeSmooth * dt));
       // Gentle yaw settle — climb ramps / decks only. Floor cruise: NO ribbon yaw magnet
       // (player must be able to hold W and go straight on skirting without constant correction).
       const floorAssist = false;
@@ -762,10 +790,14 @@ export class RCCar {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }
       }
-      const targetRoll = bank - this._steerInput * 0.12 * Math.min(1, absV / 1.2);
-      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 13 * dt));
+      // Steer lean subtle; bank already capped — do NOT add grade into roll
+      const steerLean = -this._steerInput * STEER_LEAN_MAX * Math.min(1, absV / 1.2);
+      const targetRoll = THREE.MathUtils.clamp(bank + steerLean, -(bankCap + STEER_LEAN_MAX), bankCap + STEER_LEAN_MAX);
+      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 3.4 * dt));
     } else {
-      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 6 * dt));
+      this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, 0, Math.min(1, 4 * dt));
+      this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade, 0, Math.min(1, 4 * dt));
+      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 5 * dt));
     }
 
     if (this._justLanded > 0) {
@@ -779,11 +811,18 @@ export class RCCar {
 
     this.root.position.set(x, y, z);
     this.root.rotation.y = this.yaw;
+    // Roll = lateral bank + steer lean ONLY (never grade)
     this.bodyPivot.rotation.z = this._bodyRoll;
+    // Pitch = along-track grade (capped) — not a second copy of bank
+    const pitchFromGrade = THREE.MathUtils.clamp(
+      -(this._smoothGrade || 0) * GRADE_PITCH_SCALE,
+      -GRADE_PITCH_MAX,
+      GRADE_PITCH_MAX
+    );
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(
       this.bodyPivot.rotation.x,
-      -(this._smoothBank || snap?.bank || 0) * 0.32 - this._landingDamp * 0.08,
-      Math.min(1, 10 * dt)
+      pitchFromGrade - this._landingDamp * 0.08,
+      Math.min(1, 3.8 * dt)
     );
 
     if (inTube) {
