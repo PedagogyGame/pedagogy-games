@@ -56,11 +56,30 @@ export class Player {
   }
 
   lock() {
-    this.controls.lock();
+    // Canvas (not body) + swallow Promise rejection — Chrome rejects
+    // requestPointerLock with WrongDocumentError / no-gesture as pageerror,
+    // which can nuke automation tabs and leave a blank gray desktop.
+    try {
+      const el = this.controls?.domElement;
+      if (!el || typeof el.requestPointerLock !== "function") {
+        this.controls.lock();
+        return;
+      }
+      const ret = el.requestPointerLock();
+      if (ret && typeof ret.then === "function") {
+        ret.catch(() => {
+          /* expected when gesture was on a button, not the canvas */
+        });
+      }
+    } catch (_) {
+      /* ignore — canvas click path will retry */
+    }
   }
 
   unlock() {
-    this.controls.unlock();
+    try {
+      this.controls.unlock();
+    } catch (_) {}
   }
 
   get locked() {

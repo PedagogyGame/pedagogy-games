@@ -5,7 +5,7 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_SCALE = 0.188; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
+export const CAR_SCALE = 0.190; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
 /** Optional whisper of road grip when wheels on surface. OFF by default. */
 export const ASSIST_MAGNET = false;
@@ -208,7 +208,7 @@ export class RCCar {
       wheelGroup.position.set(x, tireR, z);
       const tire = new THREE.Mesh(tireGeo, m.rubber);
       tire.rotation.z = Math.PI / 2;
-      tire.castShadow = true;
+      tire.castShadow = false;
       wheelGroup.add(tire);
       // Slightly inset sidewall ring — reads as real tire depth
       const side = new THREE.Mesh(sidewallGeo, m.dark);
@@ -236,17 +236,17 @@ export class RCCar {
     // Chassis tub (low, wide — planted RC proportions)
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.028, 0.46), m.dark);
     chassis.position.y = 0.042;
-    chassis.castShadow = true;
+    chassis.castShadow = false;
     b.add(chassis);
     // Main body shell — single cohesive volume (not stacked candy boxes)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.235, 0.055, 0.42), m.candy);
     body.position.y = 0.078;
-    body.castShadow = true;
+    body.castShadow = false;
     b.add(body);
     // Hood (slightly lower / tapered nose)
     const hood = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.032, 0.14), m.candy);
     hood.position.set(0, 0.088, -0.175);
-    hood.castShadow = true;
+    hood.castShadow = false;
     b.add(hood);
     // Wheel-arch lips
     for (const [sx, sz] of [[-0.12, -0.13], [0.12, -0.13], [-0.12, 0.13], [0.12, 0.13]]) {
@@ -297,15 +297,15 @@ export class RCCar {
     // Tall wagon — chassis + shell (less candy-stack)
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.03, 0.47), m.dark);
     chassis.position.y = 0.05;
-    chassis.castShadow = true;
+    chassis.castShadow = false;
     b.add(chassis);
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.05, 0.45), m.candy);
     lower.position.y = 0.078;
-    lower.castShadow = true;
+    lower.castShadow = false;
     b.add(lower);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.245, 0.095, 0.40), m.candy);
     body.position.y = 0.145;
-    body.castShadow = true;
+    body.castShadow = false;
     b.add(body);
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.28), m.glass);
     cabin.position.set(0, 0.22, 0.02);
@@ -331,11 +331,11 @@ export class RCCar {
     // Chunky short wheelbase, open cage
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.4), m.candy);
     lower.position.y = 0.08;
-    lower.castShadow = true;
+    lower.castShadow = false;
     b.add(lower);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.36), m.candy);
     body.position.y = 0.14;
-    body.castShadow = true;
+    body.castShadow = false;
     b.add(body);
     const hood = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.12), m.candy);
     hood.position.set(0, 0.15, -0.16);
@@ -372,11 +372,11 @@ export class RCCar {
     // Low sleek open-top
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.46), m.candy);
     lower.position.y = 0.05;
-    lower.castShadow = true;
+    lower.castShadow = false;
     b.add(lower);
     const mid = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.04, 0.4), m.candy);
     mid.position.y = 0.085;
-    mid.castShadow = true;
+    mid.castShadow = false;
     b.add(mid);
     const nose = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.14), m.candy);
     nose.position.set(0, 0.08, -0.2);
@@ -849,7 +849,12 @@ export class RCCar {
       this.speed *= 1 - Math.min(0.4, 1.2 * dt);
     }
 
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)) {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)
+        || !Number.isFinite(this.speed) || !Number.isFinite(this.vy)) {
+      // Do not write NaN into the scene graph — reset planted pose
+      this.speed = 0;
+      this.vy = 0;
+      if (!Number.isFinite(this.yaw)) this.yaw = 0;
       return flags;
     }
 

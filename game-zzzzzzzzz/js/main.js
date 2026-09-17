@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { Player } from "./player.js";
-import { Mansion } from "./mansion.js";
-import { InspectMode } from "./inspect.js";
-import { SliceSystem } from "./slice.js";
-import { DriveMode } from "./drive/driveMode.js";
-import { VEHICLE_PRESETS } from "./drive/car.js";
-import { OBJECTS } from "./data/objects.js";
-import { ROOM_PURPOSES } from "./data/rooms.js";
+import { Player } from "./player.js?v=drivefix3";
+import { Mansion } from "./mansion.js?v=drivefix3";
+import { InspectMode } from "./inspect.js?v=drivefix3";
+import { SliceSystem } from "./slice.js?v=drivefix3";
+import { DriveMode } from "./drive/driveMode.js?v=drivefix3";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=drivefix3";
+import { OBJECTS } from "./data/objects.js?v=drivefix3";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=drivefix3";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -137,6 +137,7 @@ function setPlayMode(next) {
     return;
   }
 
+  try {
   if (mode === "inspect") exitInspect(false);
 
   if (next === "drive") {
@@ -147,6 +148,7 @@ function setPlayMode(next) {
       "#vehicle-picker .vehicle-btn.active, #drive-vehicle-picker .vehicle-btn.active"
     );
     if (vBtn?.dataset?.vehicle) drive.vehicleId = vBtn.dataset.vehicle;
+    applyDriveGpuProfile(true);
     drive.enter();
     syncVehicleUI(drive.vehicleId);
     playMode = "drive";
@@ -166,6 +168,7 @@ function setPlayMode(next) {
     }
   } else {
     if (drive.active) drive.exit();
+    applyDriveGpuProfile(false);
     playMode = "explore";
     mode = "roam";
     player.enabled = true;
@@ -180,35 +183,69 @@ function setPlayMode(next) {
     camera.position.copy(player.position);
     camera.fov = 68;
     camera.updateProjectionMatrix();
-    player.lock();
-    promptEl.textContent = "Wander & wonder · Walk to a curiosity · Shift brisk walk";
+    // Prefer canvas click for pointer lock (Enter gesture is on the button).
+    // Safe lock() swallows Chrome WrongDocumentError so Enter never blanks the tab.
+    try { player.lock(); } catch (_) {}
+    promptEl.textContent = "Click to look around · WASD stroll · Shift brisk";
     promptEl.classList.remove("lit", "hidden");
     lastRoomId = null;
   }
   syncPlayModeUI();
+  } catch (err) {
+    console.error("[motu] setPlayMode failed", err, next);
+    try { syncPlayModeUI(); } catch (_) {}
+  }
 }
 
 /** Hide title and start explore/drive. Safe only after boot.ready. */
 function enterEstate() {
   if (boot.failed || !boot.ready || !mansion || !drive) return;
-  titleScreen.classList.add("hidden");
-  titleScreen.setAttribute("aria-hidden", "true");
-  if (bootErrorEl) bootErrorEl.classList.add("hidden");
-  hud.classList.remove("hidden");
-  // autodrive=climb: always enter Drive (ignore title Explore toggle)
-  if (AUTODRIVE_CLIMB) {
-    playModeButtons.forEach((b) => {
-      b.classList.toggle("active", b.dataset.playMode === "drive");
-    });
-    setPlayMode("drive");
-    return;
+  try {
+    titleScreen?.classList.add("hidden");
+    titleScreen?.setAttribute("aria-hidden", "true");
+    if (bootErrorEl) bootErrorEl.classList.add("hidden");
+    hud?.classList.remove("hidden");
+    // autodrive=climb: always enter Drive (ignore title Explore toggle)
+    if (AUTODRIVE_CLIMB) {
+      playModeButtons.forEach((b) => {
+        b.classList.toggle("active", b.dataset.playMode === "drive");
+      });
+      setPlayMode("drive");
+      return;
+    }
+    const titleActive = document.querySelector("#title-mode-toggle .play-mode-btn.active");
+    const startMode = titleActive?.dataset?.playMode || "explore";
+    setPlayMode(startMode === "drive" ? "drive" : "explore");
+  } catch (err) {
+    console.error("[motu] enterEstate failed", err);
+    // Keep HUD up if title already hid — do not leave a dead blank tab
+    try { hud?.classList.remove("hidden"); } catch (_) {}
+    try {
+      playMode = "explore";
+      mode = "roam";
+      if (player) player.enabled = true;
+      syncPlayModeUI();
+    } catch (_) {}
   }
-  const titleActive = document.querySelector("#title-mode-toggle .play-mode-btn.active");
-  const startMode = titleActive?.dataset?.playMode || "explore";
-  setPlayMode(startMode === "drive" ? "drive" : "explore");
 }
 
 window.__MOTU_ENTER__ = enterEstate;
+
+window.__MOTU_DUMP__ = () => ({
+  boot: { ...boot },
+  mode,
+  playMode,
+  cam: camera ? {
+    x: camera.position.x, y: camera.position.y, z: camera.position.z,
+    fov: camera.fov,
+    finite: Number.isFinite(camera.position.x) && Number.isFinite(camera.position.y) && Number.isFinite(camera.position.z),
+  } : null,
+  driveActive: !!(drive && drive.active),
+  playerEnabled: !!(player && player.enabled),
+  playerLocked: !!(player && player.locked),
+  titleHidden: !!(titleScreen && titleScreen.classList.contains("hidden")),
+  hudHidden: !!(hud && hud.classList.contains("hidden")),
+});
 setEnterLoading();
 
 // Enter wired immediately (also via HTML stub → window.__MOTU_ENTER__)
@@ -238,26 +275,48 @@ playModeButtons.forEach((btn) => {
   });
 });
 
+// SwiftShader-safe from first frame: no soft shadows, DPR≤1, no MSAA.
+// Enter→Explore first paint previously OOM'd GPU with soft map + DPR2 + road meshes.
 const renderer = new THREE.WebGLRenderer({
   canvas,
-  antialias: true,
-  powerPreference: "high-performance" /* HD pass */,
+  antialias: false,
+  powerPreference: "low-power",
 });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const _safeDpr = Math.min(devicePixelRatio || 1, 1);
+renderer.setPixelRatio(_safeDpr);
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// No casters with budgeted spots=0; keep maps off — soft/PCF was Enter-death on SwiftShader
+renderer.shadowMap.enabled = false;
+renderer.shadowMap.type = THREE.BasicShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.12;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.localClippingEnabled = true;
 
+/** Explore + Drive share lite GPU; Drive may tighten further later. */
+const _gpuExplore = {
+  pixelRatio: _safeDpr,
+  shadowType: THREE.BasicShadowMap,
+  shadowsEnabled: true,
+};
+function applyDriveGpuProfile(on) {
+  try {
+    // Always keep DPR≤1 and BasicShadowMap — Explore restoring soft/DPR2 killed Enter
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1));
+    renderer.shadowMap.type = THREE.BasicShadowMap;
+    renderer.shadowMap.enabled = false;
+    renderer.shadowMap.needsUpdate = true;
+  } catch (err) {
+    console.warn("[motu] applyDriveGpuProfile failed", err);
+  }
+}
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1224);
-scene.fog = new THREE.FogExp2(0x1a1830, 0.0068);
+scene.fog = new THREE.FogExp2(0x1a1830, 0.0095); // denser = less far draw on SwiftShader
 
 const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.08, 240);
-const player = new Player(camera, document.body);
+const player = new Player(camera, canvas || document.body);
 const hemi = new THREE.HemisphereLight(0xc5d8f0, 0x1a2a18, 0.55);
 scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xd0e4ff, 0.55);
@@ -275,6 +334,15 @@ await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 try {
   const tBuild = performance.now();
   mansion = new Mansion(scene);
+  // SwiftShader: drop all mesh shadow flags (no lights cast anyway)
+  try {
+    mansion.root.traverse((o) => {
+      if (o.isMesh || o.isSkinnedMesh) {
+        o.castShadow = false;
+        o.receiveShadow = false;
+      }
+    });
+  } catch (_) {}
   console.info(
     `[motu] mansion build ${(performance.now() - tBuild).toFixed(0)}ms (pre-build wait ${(tBuild - bootT0).toFixed(0)}ms)`
   );
@@ -719,24 +787,38 @@ function tick() {
     renderer.render(scene, camera);
     return;
   }
-  if ((mode === "drive" || playMode === "drive") && drive) {
-    // Autodrive catch-up lives in DriveMode (wall clock). Pass rawDt so a
-    // single rare rAF still reports real elapsed time as a lower bound.
-    drive.update((drive._autodrive && !drive._autodrive.done) ? rawDt : dt);
-    updateRoomBadge(drive.car.position);
-    mansion.updateFireflies(t);
-  } else if (mode === "roam") {
-    player.update(dt, mansion.getColliders());
-    updateHover();
-    updateRoomBadge(player.position, { whisper: true });
-    updateCuriosityGlints(player.position, t);
-    mansion.updateFireflies(t);
-  } else if (mode === "inspect" && inspect && slice) {
-    inspect.update(dt);
-    slice.update(t, dt);
-  } else {
-    mansion.updateFireflies(t);
+  try {
+    if ((mode === "drive" || playMode === "drive") && drive) {
+      // Autodrive catch-up lives in DriveMode (wall clock). Pass rawDt so a
+      // single rare rAF still reports real elapsed time as a lower bound.
+      drive.update((drive._autodrive && !drive._autodrive.done) ? rawDt : dt);
+      updateRoomBadge(drive.car.position);
+      mansion.updateFireflies(t);
+    } else if (mode === "roam") {
+      player.update(dt, mansion.getColliders());
+      updateHover();
+      updateRoomBadge(player.position, { whisper: true });
+      updateCuriosityGlints(player.position, t);
+      mansion.updateFireflies(t);
+    } else if (mode === "inspect" && inspect && slice) {
+      inspect.update(dt);
+      slice.update(t, dt);
+    } else {
+      mansion.updateFireflies(t);
+    }
+  } catch (err) {
+    if (!tick._errLogged) {
+      tick._errLogged = true;
+      console.error("[motu] tick update error (render continues)", err);
+    }
   }
-  renderer.render(scene, camera);
+  try {
+    renderer.render(scene, camera);
+  } catch (err) {
+    if (!tick._renderErr) {
+      tick._renderErr = true;
+      console.error("[motu] render error", err);
+    }
+  }
 }
 tick();

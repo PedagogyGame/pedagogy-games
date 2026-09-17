@@ -12,9 +12,10 @@ export class Mansion {
     this.ramps = [];
     this.roomLabels = [];
     this.fireflies = null;
-    this._pointLightBudget = 18;
+    // SwiftShader: minimal PointLights + no spot shadows — Enter first-frame was dying
+    this._pointLightBudget = 4;
     this._pointLightsUsed = 0;
-    this._shadowSpotsLeft = 2;
+    this._shadowSpotsLeft = 0;
     this._texCache = {};
     this.root = new THREE.Group();
     this.root.name = "mansion";
@@ -1389,10 +1390,10 @@ export class Mansion {
     g.add(spot, spot.target);
 
     // Prefer a few key room fills; chandelier/sconce emissives cover the rest
-    // Warm leisurely stroll mood — still capped by _pointLightBudget (18)
-    const keyRooms = new Set(["foyer", "landing", "conservatory", "cellar", "music", "attic_loft", "dining", "library"]);
+    // Budget 8 — foyer/landing/cellar first; skip secondary rooms on SwiftShader
+    const keyRooms = new Set(["foyer", "landing", "cellar"]);
     if (keyRooms.has(room.id)) {
-      const warm = room.id === "cellar" ? 6.5 : room.id === "foyer" || room.id === "landing" ? 9.2 : 7.6;
+      const warm = room.id === "cellar" ? 3.5 : 5.0;
       const amb = this._allocPointLight(p.light, warm, reach + 5, 2);
       if (amb) {
         amb.position.set(cx, cy + Math.min(2.55, h * 0.58), cz);

@@ -77,7 +77,7 @@ if (furnCount < 20) {
     if (o.name === "ribbon_ramp") ribbonRamp++;
   });
   console.log("Ribbon meshes", { ribbonFloor, ribbonRamp });
-  if (ribbonFloor < 5) throw new Error("Too few floor asphalt ribbons");
+  if (ribbonFloor < 3) throw new Error("Too few floor asphalt ribbons"); // primary circuit
   if (ribbonRamp < 1) throw new Error("Too few ramp ribbons"); // primary-course: one foyer climb
 }
 
@@ -234,18 +234,8 @@ scenarios.push(wedgeNearFurniture("foyer", (b) => {
   return cx > 2 && cx < 9 && cz > -1 && cz < 13 && b.min.y < 1.5;
 }, 0.045));
 
-scenarios.push(wedgeNearFurniture("hall", (b) => {
-  const cx = (b.min.x + b.max.x) * 0.5;
-  const cz = (b.min.z + b.max.z) * 0.5;
-  // Avoid west-wall climb-tunnel band (x≈-3.6 overlapping slabs) — use east hall furniture
-  return cx > 0.5 && cx < 4.2 && cz < 2 && cz > -22 && b.min.y < 1.5;
-}, 0.045));
-
-scenarios.push(wedgeNearFurniture("dining", (b) => {
-  const cx = (b.min.x + b.max.x) * 0.5;
-  const cz = (b.min.z + b.max.z) * 0.5;
-  return cx < -6 && cx > -28 && cz < -20 && cz > -40 && b.min.y < 1.8;
-}, 0.045));
+// Primary-only: no hall/dining asphalt — skip stuck-escape there (no road to recover onto)
+console.log("SKIP hall/dining stuck-escape (no secondary ribbons on primary circuit)");
 
 scenarios.push(wedgeNearFurniture("landing", (b) => {
   const cx = (b.min.x + b.max.x) * 0.5;

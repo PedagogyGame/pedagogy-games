@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS } from "./car.js";
-import { TrackSystem } from "./tracks.js";
-import { EngineAudio } from "./engineAudio.js";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js";
+import { RCCar, VEHICLE_PRESETS } from "./car.js?v=drivefix3";
+import { TrackSystem } from "./tracks.js?v=drivefix3";
+import { EngineAudio } from "./engineAudio.js?v=drivefix3";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=drivefix3";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -78,30 +78,35 @@ export class DriveMode {
     this._stuckNudgeCd = 0;
     this._jamHits = 0;
 
-    // Temporary chase-cam fill so foyer spawn is not pitch black (room lights sit high/center)
-    this._fillLight = new THREE.PointLight(0xffe0b2, 9.0, 16, 2);
+    // SwiftShader: only TWO low-intensity Drive lights (fill + climb foot).
+    // High-intensity moving PointLights + mid-climb third killed GPU while holding W.
+    this._liteGpu = true;
+    this._fillLight = new THREE.PointLight(0xffe0b2, 2.4, 7.5, 2);
     this._fillLight.name = "drive_fill";
     this._fillLight.visible = false;
+    this._fillLight.castShadow = false;
     this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     scene.add(this._fillLight);
 
-    // Static fill at foyer climb left/foot — kills dark void under first ramp turn
+    // Static fill at foyer climb left/foot — low intensity, does not move with car
     const climbFoot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.ramp_foyer_to_landing
       && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
       ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
       : { x: -5.05, y: 0.06, z: 11.75 };
-    this._climbFill = new THREE.PointLight(0xffd9a8, 7.5, 9.5, 2);
+    this._climbFill = new THREE.PointLight(0xffd9a8, 1.8, 6.5, 2);
     this._climbFill.name = "drive_climb_fill";
     this._climbFill.visible = false;
+    this._climbFill.castShadow = false;
     // Bias slightly left/west of foot so the under-ramp corner reads
     this._climbFill.position.set(climbFoot.x - 0.85, climbFoot.y + 1.15, climbFoot.z - 0.35);
     scene.add(this._climbFill);
 
-    // Mid-climb fill — kills dark pocket halfway up straightened climb (y≈1.5–3.0)
-    this._climbMidFill = new THREE.PointLight(0xffe0b8, 6.2, 8.5, 2);
+    // Allocated but NEVER enabled — third Drive PointLight = GPU death on move (sims still expect object)
+    this._climbMidFill = new THREE.PointLight(0xffe0b8, 0, 0.1, 2);
     this._climbMidFill.name = "drive_climb_mid_fill";
     this._climbMidFill.visible = false;
-    this._climbMidFill.position.set(-3.40, 2.15, 4.70);
+    this._climbMidFill.castShadow = false;
+    this._climbMidFill.position.set(-4.85, 2.15, 4.70);
     scene.add(this._climbMidFill);
 
     this._engineAudio = new EngineAudio();
@@ -263,41 +268,44 @@ export class DriveMode {
   }
 
   _buildFx() {
+    // Lite GPU: tiny BasicMaterial pools only. No MeshStandard dust/smash (lit every frame
+    // by moving fill = SwiftShader death while holding W). Speed/dust/sparks capped off.
     const lineMat = new THREE.MeshBasicMaterial({
       color: 0xffffff, transparent: true, opacity: 0.0, depthWrite: false,
     });
-    for (let i = 0; i < 14; i++) {
+    const lineN = this._liteGpu ? 0 : 14;
+    for (let i = 0; i < lineN; i++) {
       const line = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.008, 0.22), lineMat.clone());
       line.visible = false;
       this._fxRoot.add(line);
       this._speedLines.push(line);
     }
-    const dustMat = new THREE.MeshStandardMaterial({
-      color: 0xd7ccc8, emissive: 0xffcc80, emissiveIntensity: 0.4,
-      transparent: true, opacity: 0.0, roughness: 0.8,
+    const dustMat = new THREE.MeshBasicMaterial({
+      color: 0xd7ccc8, transparent: true, opacity: 0.0, depthWrite: false,
     });
-    for (let i = 0; i < 10; i++) {
+    const dustN = this._liteGpu ? 0 : 10;
+    for (let i = 0; i < dustN; i++) {
       const d = new THREE.Mesh(new THREE.SphereGeometry(0.015, 6, 6), dustMat.clone());
       d.visible = false;
       this._fxRoot.add(d);
       this._dust.push({ mesh: d, life: 0, vx: 0, vy: 0, vz: 0 });
     }
-    // Ember sparks when scraping wall
     const sparkMat = new THREE.MeshBasicMaterial({
       color: 0xffab40, transparent: true, opacity: 0, depthWrite: false,
     });
-    for (let i = 0; i < 16; i++) {
+    const sparkN = this._liteGpu ? 0 : 16;
+    for (let i = 0; i < sparkN; i++) {
       const s = new THREE.Mesh(new THREE.SphereGeometry(0.012, 4, 4), sparkMat.clone());
       s.visible = false;
       this._fxRoot.add(s);
       this._sparks.push({ mesh: s, life: 0, vx: 0, vy: 0, vz: 0 });
     }
-    // Crash smash particles
-    const smashMat = new THREE.MeshStandardMaterial({
-      color: 0xff5252, emissive: 0xff1744, emissiveIntensity: 1.2,
-      transparent: true, opacity: 0, roughness: 0.4,
+    // Crash smash — Basic only, few bits
+    const smashMat = new THREE.MeshBasicMaterial({
+      color: 0xff5252, transparent: true, opacity: 0, depthWrite: false,
     });
-    for (let i = 0; i < 18; i++) {
+    const smashN = this._liteGpu ? 6 : 18;
+    for (let i = 0; i < smashN; i++) {
       const b = new THREE.Mesh(
         new THREE.BoxGeometry(0.02, 0.02, 0.02),
         smashMat.clone()
@@ -324,6 +332,7 @@ export class DriveMode {
   }
 
   parkForExplore() {
+    // FROM_SCRATCH_HANDOFF: Explore must not see Drive asphalt / hear engine / keep Drive FOV
     this.active = false;
     this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
     this.car.speed = 0;
@@ -397,10 +406,18 @@ export class DriveMode {
 
   enter() {
     this.active = true;
-    this.car.setVehicle(this.vehicleId);
+    try { this.car.setVehicle(this.vehicleId); } catch (err) {
+      console.warn("[DriveMode] setVehicle failed", err);
+    }
     this.car.root.visible = true;
-    this.car.setLightsSubtle(false);
-    this.tracks.setVisible(true);
+    try { this.car.setLightsSubtle(false); } catch (_) {}
+    // First Drive enter pays road mesh cost — Explore never does
+    try { this.tracks.ensureMeshes(); } catch (err) {
+      console.warn("[DriveMode] tracks.ensureMeshes failed", err);
+    }
+    try { this.tracks.setVisible(true); } catch (err) {
+      console.warn("[DriveMode] tracks.setVisible failed", err);
+    }
     this._fxRoot.visible = true;
     // Clear sticky path bias so spawn/re-enter is not glued to a prior climb spur
     // But do NOT wipe an in-flight ?autodrive=climb harness (double enter / mode toggle).
@@ -441,20 +458,24 @@ export class DriveMode {
     this._jamHits = 0;
     if (this._fillLight) {
       this._fillLight.visible = true;
-      this._fillLight.intensity = 9.0;
-      this._fillLight.distance = 16;
+      this._fillLight.intensity = 2.4;
+      this._fillLight.distance = 7.5;
       this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     }
     if (this._climbFill) {
       this._climbFill.visible = true;
-      this._climbFill.intensity = 7.5;
+      this._climbFill.intensity = 1.8;
+      this._climbFill.distance = 6.5;
     }
-    if (this._climbMidFill) {
-      this._climbMidFill.visible = true;
-      this._climbMidFill.intensity = 6.2;
+    // climbMidFill intentionally never enabled (SwiftShader: 3rd Drive PointLight)
+    // User gesture already happened (Enter/Drive click) — safe to resume AudioContext.
+    // Never let audio failures kill the tab.
+    try {
+      if (this._engineAudio) this._engineAudio.start();
+    } catch (err) {
+      console.warn("[DriveMode] engineAudio.start failed", err);
+      try { this._engineAudio?.stop?.(); } catch (_) {}
     }
-    // User gesture already happened (Enter/Drive click) — safe to resume AudioContext
-    if (this._engineAudio) this._engineAudio.start();
     if (typeof document !== "undefined") {
       const canvas = document.getElementById("c");
       if (canvas) {
@@ -603,6 +624,42 @@ export class DriveMode {
       this.camera.position.copy(this._camPos);
       this.camera.lookAt(this._camTarget);
     }
+    this._sanitizeCamera();
+  }
+
+  /** Recover from NaN/Inf camera (would black-screen / destabilize WebGL). */
+  _sanitizeCamera() {
+    const p = this.camera.position;
+    const ok = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)
+      && Number.isFinite(this.camera.fov)
+      && Number.isFinite(this._camVel.x) && Number.isFinite(this._camVel.y) && Number.isFinite(this._camVel.z);
+    if (ok) return;
+    console.warn("[DriveMode] non-finite camera — resetting to spawn chase");
+    const y = Number.isFinite(CAR_SPAWN?.yaw) ? CAR_SPAWN.yaw : 0;
+    p.set(CAR_SPAWN.x - Math.sin(y) * 0.35, CAR_SPAWN.y + 0.22, CAR_SPAWN.z - Math.cos(y) * 0.35);
+    this._camPos.copy(p);
+    this._camTarget.set(CAR_SPAWN.x, CAR_SPAWN.y + 0.06, CAR_SPAWN.z);
+    this._camVel.set(0, 0, 0);
+    this._camLookSmooth = null;
+    this.camera.fov = this._driveFov || 68;
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(this._camTarget);
+  }
+
+  /** Recover from NaN/Inf car pose (cascades into cam → WebGL death). */
+  _sanitizeCar() {
+    const c = this.car;
+    if (!c) return;
+    const p = c.position;
+    const ok = Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)
+      && Number.isFinite(c.yaw) && Number.isFinite(c.speed) && Number.isFinite(c.vy);
+    if (ok) return;
+    console.warn("[DriveMode] non-finite car — resetting to spawn");
+    const yaw = Number.isFinite(CAR_SPAWN?.yaw) ? CAR_SPAWN.yaw : 0;
+    c.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, yaw);
+    c.speed = 0;
+    c.vy = 0;
+    this._camVel.set(0, 0, 0);
   }
 
   /**
@@ -1077,6 +1134,20 @@ export class DriveMode {
     const reallyMoving = movedFx > 0.004 && spd > 0.35;
     this._fxStuck = reallyMoving ? 0 : Math.min(1, (this._fxStuck || 0) + dt * 3);
 
+    // Lite GPU: only tick smash bits (crash). No speed lines / dust / sparks while moving.
+    if (this._liteGpu) {
+      for (const b of this._smashBits) {
+        if (b.life <= 0) { b.mesh.visible = false; continue; }
+        b.life -= dt;
+        b.mesh.position.x += b.vx * dt;
+        b.mesh.position.y += b.vy * dt;
+        b.mesh.position.z += b.vz * dt;
+        b.vy -= 6 * dt;
+        b.mesh.material.opacity = Math.max(0, b.life * 2);
+      }
+      return;
+    }
+
     // Speed lines — boost OR fast wall run, ONLY while actually translating
     const showLines = reallyMoving && this._fxStuck < 0.2
       && ((boosting && spd > 1.4) || (inWall && spd > 1.8));
@@ -1264,6 +1335,7 @@ export class DriveMode {
     const prevX = pos.x;
     const prevZ = pos.z;
     const flags = this.car.update(dt, driveKeys, snap);
+    this._sanitizeCar();
     this._resolveDriveWalls(prevX, prevZ, snap);
     // Guarantee: holding W on floor asphalt keeps cruise — but NOT while wall-pinned
     // (forcing 0.55 during a freeze made HUD read 17 km/h with zero translation).
@@ -1317,6 +1389,7 @@ export class DriveMode {
     this.camera.position.y += this._camVel.y * dt;
     this.camera.position.z += this._camVel.z * dt;
     this.camera.lookAt(this._camLookSmooth);
+    this._sanitizeCamera();
 
     const inDark =
       snap?.kind === "shortcut" || snap?.kind === "mouse" || snap?.kind === "shaft"
@@ -1343,9 +1416,16 @@ export class DriveMode {
 
     if (this.onSpeed) this.onSpeed(this.car.getSpeedKmh());
 
+    // Fill follows car but only every other frame + short range (avoids full-scene
+    // StandardMaterial re-light storms every tick on SwiftShader while holding W).
     if (this._fillLight && this._fillLight.visible) {
-      const p = this.car.position;
-      this._fillLight.position.set(p.x, p.y + 1.55, p.z);
+      this._fillFollowTick = (this._fillFollowTick || 0) + 1;
+      if ((this._fillFollowTick & 1) === 0) {
+        const p = this.car.position;
+        if (Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+          this._fillLight.position.set(p.x, p.y + 1.55, p.z);
+        }
+      }
     }
 
     if (this._engineAudio && this.active) {

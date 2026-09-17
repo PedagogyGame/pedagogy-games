@@ -45,7 +45,11 @@ export class EngineAudio {
       }
       this._muted = false;
       this._started = true;
-      if (this._master) this._master.gain.setTargetAtTime(0.20, this._ctx.currentTime, 0.06);
+      try {
+        if (this._master) this._master.gain.setTargetAtTime(0.20, this._ctx.currentTime, 0.06);
+      } catch (_) {
+        try { if (this._master) this._master.gain.value = 0.20; } catch (_) {}
+      }
     } catch (_) {
       this._muted = true;
       this._started = false;
@@ -68,6 +72,7 @@ export class EngineAudio {
    */
   update(s = {}) {
     if (!this._ctx || this._muted || !this._started) return;
+    if (!this._oscIdle || !this._master) { this._muted = true; return; }
     try {
       if (this._ctx.state === "suspended") {
         this._ctx.resume().catch(() => { this._muted = true; });
@@ -83,6 +88,7 @@ export class EngineAudio {
     const boost = s.boost ? 1 : 0;
     const scrape = Math.max(0, Math.min(1, s.scrape || 0));
 
+    try {
     // Smooth RPM — idle present, rises with speed (not throttle spikes)
     const speedNorm = Math.min(1, spd / maxV);
     const wantRpm = Math.min(1, 0.10 + speedNorm * 0.78 + thr * 0.14 + boost * 0.12);
@@ -129,6 +135,9 @@ export class EngineAudio {
     this._safeSet(this._midLP.frequency, 520 + rpm * 480 + this._boostAmt * 120, t);
 
     if (s.impact) this._blipImpact();
+    } catch (_) {
+      this._muted = true;
+    }
   }
 
   _safeSet(param, value, t, tau = 0.07) {

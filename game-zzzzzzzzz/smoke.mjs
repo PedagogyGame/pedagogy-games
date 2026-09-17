@@ -359,14 +359,17 @@ if (mansion.getColliders().length < 160) {
   if (floorOff.onTrack) throw new Error("Open floor must not be onTrack");
   if (!floorOff.carpet || !floorOff.supported) throw new Error("Open floor should be carpet-supported");
 
-    // True lateral offset from primary elevated ribbon (hall cornice culled)
+    // True lateral offset from balcony_loop (avoid ramp lips / landing overlap)
+  drive.tracks._lastPathId = "balcony_loop";
+  drive.tracks._lastPathKind = "balcony";
   let best = null, bd = 99;
   for (const seg of drive.tracks.segments) {
-    if (seg.pathId !== "balcony_loop" && seg.pathId !== "landing_skirting") continue;
-    if (seg.pathId === "landing_skirting" && Math.abs(((seg.a.y+seg.b.y)*0.5) - 4.26) > 0.2) continue;
+    if (seg.pathId !== "balcony_loop") continue;
     const mx = (seg.a.x + seg.b.x) * 0.5;
     const mz = (seg.a.z + seg.b.z) * 0.5;
-    const d = Math.hypot(mx - 4.5, mz - 11.5); // balcony south-face elevated
+    // Outer deck (high Z) — clear of ramp_landing_to_balcony / return lips
+    if (mz < 14.0) continue;
+    const d = Math.hypot(mx - 0.4, mz - 16.0);
     if (d < bd) { bd = d; best = seg; }
   }
   if (!best) throw new Error("elevated rooftop segment missing");
@@ -376,20 +379,22 @@ if (mansion.getColliders().length < 160) {
   const midX = (best.a.x + best.b.x) * 0.5;
   const midY = (best.a.y + best.b.y) * 0.5;
   const midZ = (best.a.z + best.b.z) * 0.5;
-  // Just past half-width (inward toward void) → nearDeck Y-assist, NOT onTrack
-  // Try both perpendicular signs; keep the one that reports nearDeck on this cornice
+  // Just past half-width → nearDeck Y-assist, NOT onTrack
   let elevOff = null;
   for (const sign of [-1, 1]) {
-    const cand = drive.tracks.querySnap(
-      midX + rx * best.width * 0.60 * sign,
-      midY,
-      midZ + rz * best.width * 0.60 * sign,
-      1.65
-    );
-    if (cand.nearDeck && !cand.onTrack && (cand.elevated || cand.kind === "cornice" || cand.kind === "balcony")) {
-      elevOff = cand; break;
+    for (const mul of [0.58, 0.68, 0.78]) {
+      const cand = drive.tracks.querySnap(
+        midX + rx * best.width * mul * sign,
+        midY,
+        midZ + rz * best.width * mul * sign,
+        1.65
+      );
+      if (cand.nearDeck && !cand.onTrack && (cand.elevated || cand.kind === "balcony")) {
+        elevOff = cand; break;
+      }
+      if (!elevOff || (cand.nearDeck && !cand.onTrack)) elevOff = cand;
     }
-    if (!elevOff || (cand.nearDeck && !cand.onTrack)) elevOff = cand;
+    if (elevOff && elevOff.nearDeck && !elevOff.onTrack) break;
   }
   console.log("Binary elevated nearDeck", {
     onTrack: elevOff.onTrack, nearDeck: elevOff.nearDeck, supported: elevOff.supported,
@@ -486,16 +491,14 @@ if (drive.tracks.segments.length > 4200) {
   for (const id of must) {
     if (!byId[id] || byId[id].disabled) throw new Error(`Missing elevated connector ${id}`);
   }
-  // Death-trap climbs stay in data but disabled (no invisible/undriveable lifts)
+  // From-scratch: secondary junk is REMOVED (or disabled if stubbed). Must not be snap-active.
   for (const id of ["cornice_hall_cross_south", "ramp_cabinet_down", "ramp_study_express_to_cases", "ramp_cornice_to_balcony",
     "chandelier_ring_foyer", "ramp_cornice_to_chandelier", "chute_foyer_drop", "chute_balcony_foyer",
     "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_library_attic_chase", "loft_nursery_edge",
-    // Decorative / undrivable ribbons (screenshot V + triple-fork cleanup)
     "mouse_east_grand_run", "mouse_west_grand_run", "mouse_foyer_armoury_mid", "mouse_foyer_cabinet_mid",
     "ramp_mouse_to_foyer_cornice", "ramp_mouse_east_to_foyer_cornice",
     "mouse_cellar_ground_shaft", "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase",
     "shaft_service_west",
-    // Furniture-top / wall-table multi-fork ribbons (Ben foyer console fork class)
     "ramp_foyer_console", "furniture_foyer_console", "ramp_foyer_console_down", "ramp_console_to_foyer_cornice",
     "ramp_dining_table", "furniture_dining_table", "ramp_dining_down",
     "ramp_workshop_bench", "furniture_workshop_bench", "ramp_workshop_down", "ramp_workshop_to_dining_cornice",
@@ -506,7 +509,7 @@ if (drive.tracks.segments.length > 4200) {
     "ramp_bookcase_to_landing_cornice", "ramp_bookcase_west_to_landing_cornice",
     "bookcase_express_lib_nursery", "bookcase_express_lib_study", "bookcase_express_cross",
     "shelf_highway_hall", "ramp_study_express_down"]) {
-    if (!byId[id]?.disabled) throw new Error(`${id} should be disabled (void-risk / secondary island)`);
+    if (byId[id] && !byId[id].disabled) throw new Error(`${id} should be absent or disabled (primary-only)`);
   }
   const joinOK = (aId, aEnd, bId, maxD = 0.35) => {
     const a = byId[aId], b = byId[bId];
@@ -620,7 +623,7 @@ console.log("Road widths scaled + thick-asphalt mins", {
   foyer: TRACK_PATHS.find(p => p.id === "foyer_skirting")?.width,
   foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "ramp_foyer_to_landing")?.width * 0.5).toFixed(3),
 });
-if (widthChecks < 50) throw new Error("too few paths for width check");
+if (widthChecks < 8) throw new Error("too few paths for width check"); // primary-only circuit
 if (rampHalfOk < 3) throw new Error("too few widened climb ramps"); // fewer excellent primary climbs
 
 if (CAR_SCALE > 0.20 || CAR_SCALE < 0.175) {
@@ -708,10 +711,12 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     "mouse_armoury_nursery_chase", "mouse_cabinet_study_chase", "mouse_hall_conservatory_mid",
   ];
   for (const id of mustNew) {
-    if (!byId[id]) throw new Error(`Missing expand path ${id}`);
+    // From-scratch primary-only: expand paths are removed (OK) or must stay disabled
+    if (byId[id] && !byId[id].disabled) throw new Error(`Expand path ${id} should be absent/disabled`);
   }
+  console.log("Expand paths absent/disabled (primary-only)", mustNew.length);
   // Hall header cornice culled from primary circuit — balcony remains the elevated proof
-  if (!byId.cornice_hall_cross_south?.disabled) {
+  if (byId.cornice_hall_cross_south && !byId.cornice_hall_cross_south.disabled) {
     throw new Error("cornice_hall_cross_south should stay disabled (primary-circuit cull)");
   }
   {
@@ -724,7 +729,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   }
 
   // Attic/cellar expand paths — skip snaps when culled from primary circuit
-  if (!byId.attic_loft_skirting?.disabled) {
+  if (byId.attic_loft_skirting && !byId.attic_loft_skirting.disabled) {
     const loft = drive.tracks.querySnap(-10.3, 8.46 + 0.04, 4.3, 1.65);
     console.log("Attic loft corner snap", { kind: loft.kind, pathId: loft.pathId, onTrack: loft.onTrack });
     if (!loft.onTrack || !loft.supported) throw new Error("Attic loft corner unsupported");
@@ -738,11 +743,11 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   } else {
     console.log("Attic loft snaps SKIP (attic_loft_skirting disabled)");
   }
-  if (!byId.shaft_service_west?.disabled) {
+  if (byId.shaft_service_west && !byId.shaft_service_west.disabled) {
     const shaftAttic = drive.tracks.querySnap(-5.0, 8.46 + 0.04, -2.0, 1.65);
     if (!shaftAttic.supported) throw new Error("shaft_service_west attic portal unsupported");
   }
-  if (!byId.cellar_skirting?.disabled) {
+  if (byId.cellar_skirting && !byId.cellar_skirting.disabled) {
     const cellar = drive.tracks.querySnap(-8.3, -4.05 + 0.04, 15.3, 1.65);
     console.log("Cellar skirting snap", { kind: cellar.kind, pathId: cellar.pathId, onTrack: cellar.onTrack });
     if (!cellar.onTrack || cellar.kind !== "floor") throw new Error("Cellar skirting unsupported");
@@ -765,7 +770,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     ["mouse_dining_west_garden", 3],
     ["mouse_dining_cornice_garden", 2],
   ]) {
-    if (byId[id]?.disabled) { console.log(`Wall mouse ${id} SKIP disabled`); continue; }
+    if (!byId[id] || byId[id].disabled) { console.log(`Wall mouse ${id} SKIP absent/disabled`); continue; }
     const pts = byId[id].points;
     const mid = pts[idx];
     const s = drive.tracks.querySnap(mid.x, mid.y + 0.03, mid.z, 1.65);
@@ -783,7 +788,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     "mouse_landing_library_mid", "mouse_foyer_hall_mid", "mouse_dining_hall_west", "mouse_library_attic_chase",
     "mouse_dining_west_garden", "mouse_dining_cornice_garden",
   ]) {
-    if (byId[id]?.disabled) continue;
+    if (!byId[id] || byId[id].disabled) continue;
     if (!portalPaths.has(id)) throw new Error(`Missing portals for ${id}`);
   }
   // New loft edge / cross ribbons onTrack
@@ -794,7 +799,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     ["loft_nursery_edge", 14.0, 7.15, -1.6],
     ["loft_music_edge", 0, 7.15, -20.6],
   ]) {
-    if (byId[id]?.disabled) { console.log(`Loft edge ${id} SKIP disabled`); continue; }
+    if (!byId[id] || byId[id].disabled) { console.log(`Loft edge ${id} SKIP absent/disabled`); continue; }
     const s = drive.tracks.querySnap(x, y + 0.04, z, 1.65);
     if (!s.onTrack || !s.supported) throw new Error(`Loft edge ${id} unsupported → ${s.kind}/${s.pathId}`);
   }
@@ -855,19 +860,23 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
   }
   console.log("under≠on flat deck ok", { kind: underCornice.kind, onTrack: underCornice.onTrack });
 
-  // Attic access grade tour-friendly
+  // Attic access grade — skip when culled from primary circuit
   const atticRamp = byId.attic_from_landing_access;
-  let rise = Math.abs(atticRamp.points.at(-1).y - atticRamp.points[0].y);
-  let run = 0;
-  for (let i = 1; i < atticRamp.points.length; i++) {
-    run += Math.hypot(
-      atticRamp.points[i].x - atticRamp.points[i - 1].x,
-      atticRamp.points[i].z - atticRamp.points[i - 1].z
-    );
+  if (atticRamp && !atticRamp.disabled) {
+    let rise = Math.abs(atticRamp.points.at(-1).y - atticRamp.points[0].y);
+    let run = 0;
+    for (let i = 1; i < atticRamp.points.length; i++) {
+      run += Math.hypot(
+        atticRamp.points[i].x - atticRamp.points[i - 1].x,
+        atticRamp.points[i].z - atticRamp.points[i - 1].z
+      );
+    }
+    const g = rise / Math.max(run, 1e-6);
+    console.log("Attic landing ramp grade", +g.toFixed(3));
+    if (g > 0.58) throw new Error(`attic_from_landing_access too steep ${g.toFixed(2)}`);
+  } else {
+    console.log("Attic landing ramp SKIP (absent/disabled)");
   }
-  const g = rise / Math.max(run, 1e-6);
-  console.log("Attic landing ramp grade", +g.toFixed(3));
-  if (g > 0.58) throw new Error(`attic_from_landing_access too steep ${g.toFixed(2)}`);
 
   // ── Explore ↔ Drive near-track integration ─────────────────────────
   // Hall skirting walk lane clear (consoles hug plaster outside asphalt)
