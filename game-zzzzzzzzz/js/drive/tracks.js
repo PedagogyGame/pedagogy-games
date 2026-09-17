@@ -245,7 +245,7 @@ function ribbonYLift(kind) {
 const FOYER_CLIMB_FOOT = (RAMP_MOUNT_FEET.ramp_foyer_to_landing
   && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
   ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
-  : { x: -4.55, y: 0.06, z: 10.55 };
+  : { x: -5.05, y: 0.06, z: 11.75 };
 const FOYER_CLIMB_ENGAGE_BACK = (RAMP_MOUNT_FEET.ramp_foyer_to_landing
   && RAMP_MOUNT_FEET.ramp_foyer_to_landing.engageBack) || 1.10;
 /** Lateral+along radius where ramp snap must beat floor asphalt near the foot. */
@@ -1620,6 +1620,8 @@ export class TrackSystem {
   querySnap(x, y, z, radius = 2.4, carYaw = null) {
     let best = null;
     let bestScore = Infinity;
+    let lastBest = null;
+    let lastBestScore = Infinity;
     // Story floors — narrow band for carpet preference (was 0.85: stole cornice ~3.5)
     const storyFloors = [8.46, 4.26, 0.075, -4.05];
     let storyY = null;
@@ -1742,7 +1744,7 @@ export class TrackSystem {
 
       // HEIGHT DOMINATES: coplanar ramp/bridge/cornice always beats distant-Y floor
       const dyW = (elev || tube) ? 3.4 : (isFloor ? 0.55 : 1.1);
-      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.48 : 0;
+      const pathBias = (this._lastPathId && seg.pathId === this._lastPathId) ? -0.92 : 0;
       // Mild floor prefer only when both car AND segment are at story asphalt height
       const floorBias = (onFloorCruise && isFloor && dy < 0.28) ? -0.22 : 0;
       // Snap engagement at ramp feet / climb: beat skirting pathBias+floorBias
@@ -1751,19 +1753,37 @@ export class TrackSystem {
       const rampGrade = seg.kind === "ramp"
         ? Math.abs(aby) / Math.max(1e-4, Math.hypot(abx, abz))
         : 0;
-      let rampBias = (seg.kind === "ramp" && (inRampCorridor || rampContinuity)
-        && signedBelow <= ((inRampCorridor || rampContinuity) ? 0.55 : 0.28)
-        && dy < 0.72)
-        ? (-1.25 - Math.min(0.55, rampGrade * 0.85))
-        : 0;
-      // Near-flat connector ramps (balcony lips) must not steal landing lap cruise
-      if (rampBias && rampGrade < 0.08 && seg.pathId !== "ramp_foyer_to_landing") {
-        rampBias *= 0.28;
+      // Foyer climb: rampBias ONLY inside foot engage radius (or same-ramp continuity).
+      // Mid-foyer cruise must NOT get corridor pull onto climb / distant ramps.
+      const foyerFootDist = foyerClimbSeg
+        ? Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z)
+        : Infinity;
+      const foyerFootEngage = foyerClimbSeg && foyerFootDist < FOYER_CLIMB_ENGAGE_R;
+      let rampBias = 0;
+      if (seg.kind === "ramp"
+          && signedBelow <= ((inRampCorridor || rampContinuity) ? 0.55 : 0.28)
+          && dy < 0.72) {
+        if (foyerClimbSeg) {
+          // Continuity while already climbing, OR intentional foot engage only
+          if (rampContinuity || (foyerFootEngage && inRampCorridor)) {
+            rampBias = -1.05 - Math.min(0.45, rampGrade * 0.75);
+          }
+        } else if (inRampCorridor || rampContinuity) {
+          rampBias = -1.25 - Math.min(0.55, rampGrade * 0.85);
+        }
       }
-      // Foyer climb: extra foot pull even before yaw gate (legacy sims + live latch)
-      if (rampBias && foyerClimbSeg
-          && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R) {
-        rampBias -= 0.55;
+      // Near-flat connector ramps (balcony lips) must not steal landing lap cruise
+      // when merely glancing — but if wheels are already ON the ribbon, keep mount bias.
+      if (rampBias && rampGrade < 0.08 && seg.pathId !== "ramp_foyer_to_landing") {
+        if (inRampCorridor && checkDist < halfApprox) {
+          rampBias *= 0.88; // planted on connector — still beat sticky deck pathBias
+        } else {
+          rampBias *= 0.28;
+        }
+      }
+      // Foyer climb: modest extra foot pull only inside engage (no mid-room yank)
+      if (rampBias && foyerFootEngage) {
+        rampBias -= 0.35;
       }
       // Floor-cruise continuity: kissing ramp feet must NOT steal skirting loops /
       // T-junctions into furniture unless the car is aiming along the ramp.
@@ -1785,10 +1805,10 @@ export class TrackSystem {
           const foyerFoot = seg.pathId === "ramp_foyer_to_landing"
             && Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z) < FOYER_CLIMB_ENGAGE_R + 0.55;
           if (foyerFoot) {
-            // Human imperfect aim still mounts — keep strong bias unless nearly reverse
-            if (align < -0.15) rampBias *= 0.55;
-            else if (align < 0.10) rampBias *= 0.92;
-            else rampBias *= 1.48; // bonus pull onto climb foot (beat spur pathBias)
+            // Human imperfect aim still mounts — gated pull (no mid-foyer ×1.48 yank)
+            if (align < -0.15) rampBias *= 0.35;
+            else if (align < 0.10) rampBias *= 0.70;
+            else rampBias *= 1.12; // modest foot bonus (hysteresis + spur junction handle steal)
           } else if (seg.pathId === "ramp_balcony_return") {
             // Suppress steal when cruising east on landing south face toward east balcony
             const eastboundLap = x > -5.2 && z >= 8.2 && z <= 9.6
@@ -1851,8 +1871,8 @@ export class TrackSystem {
       const score = checkDist + dy * dyW + pathBias + floorBias + rampBias
         + elevPenalty + underPenalty + offRibbonPenalty + floorEngagePenalty
         + crestPenalty + crestDeckBonus;
-      if (score < bestScore) {
-        bestScore = score;
+      const isLastPath = !!(this._lastPathId && seg.pathId === this._lastPathId);
+      if (score < bestScore || (isLastPath && score < lastBestScore)) {
         const flatLen = Math.hypot(abx, abz) || 1e-6;
         const yaw = Math.atan2(abx, abz);
         // Prefer pre-smoothed seg.grade/bank (neighbor-averaged). Fallback: live grade.
@@ -1922,10 +1942,13 @@ export class TrackSystem {
         // Carpet = off-ribbon floor support/slow only — must NOT claim onTrack
         const carpet = isFloor && !onTrack && dy < 0.55;
         const edgeMargin = halfW - lateral;
-        best = {
+        const cand = {
           // Ride height = segment Y + ribbon yLift so wheels sit on asphalt top (not hover/sink)
           // Plant wheels on asphalt top: tiny -2mm sink hides mesh faceting; carpet matches lift
-          x: px, y: (carpet ? py + ribbonYLift(seg.kind) : py + ribbonYLift(seg.kind) - 0.002), z: pz,
+          // Carpet: ride height only — XZ stays at car (never magnet to a parallel ribbon)
+          x: carpet ? x : px,
+          y: (carpet ? py + ribbonYLift(seg.kind) : py + ribbonYLift(seg.kind) - 0.002),
+          z: carpet ? z : pz,
           yaw, bank, grade,
           onTrack: onTrack && !exitedTube,
           supported: (supported && !exitedTube) || carpet,
@@ -1943,10 +1966,77 @@ export class TrackSystem {
           nearDeck: !!nearDeck,
           rampContinuity: !!(seg.kind === "ramp" && rampContinuity),
         };
+        if (score < bestScore) {
+          bestScore = score;
+          best = cand;
+        }
+        if (isLastPath && score < lastBestScore) {
+          lastBestScore = score;
+          lastBest = cand;
+        }
       }
     }
 
     if (best) {
+      // ── Strong path hysteresis ──────────────────────────────────────────
+      // Prefer current _lastPathId unless challenger is clearly closer / on-ribbon
+      // OR intentional spur→climb foot engage. Never teleport XYZ onto a distant ribbon.
+      if (lastBest && best.pathId && lastBest.pathId && best.pathId !== lastBest.pathId) {
+        const footD = Math.hypot(x - FOYER_CLIMB_FOOT.x, z - FOYER_CLIMB_FOOT.z);
+        const spurToClimb = lastBest.pathId === "foyer_climb_spur"
+          && best.pathId === "ramp_foyer_to_landing"
+          && footD < FOYER_CLIMB_ENGAGE_R;
+        const driveToClimb = (lastBest.pathId === "foyer_drive_start"
+            || lastBest.pathId === "foyer_skirting")
+          && best.pathId === "ramp_foyer_to_landing"
+          && footD < FOYER_CLIMB_ENGAGE_R
+          && (best.onTrack || best.nearDeck || best.dist < (best.halfW || 0.5) * 1.35);
+        // Any intentional ramp foot mount: car already on/near the ramp ribbon
+        const rampFootMount = best.kind === "ramp"
+          && (best.onTrack || best.nearDeck || best.rampContinuity
+            || best.dist < (best.halfW || 0.5) * 1.12)
+          && lastBest.kind !== "ramp";
+        const climbCrestHandoff = lastBest.kind === "ramp"
+          && (best.kind === "floor" || best.kind === "balcony" || best.kind === "cornice"
+            || best.kind === "elevated" || best.kind === "outdoor")
+          && best.onTrack && best.dist < (best.halfW || 0.5) * 1.15;
+        const challengerNear = best.onTrack || best.nearDeck
+          || best.dist < (best.halfW || 0.5) * 1.05;
+        const clearlyCloser = best.dist + 0.35 < lastBest.dist
+          && (best.onTrack || lastBest.dist > (lastBest.halfW || 0.5) * 1.05);
+        const lastStillOk = lastBest.onTrack
+          || lastBest.dist < (lastBest.halfW || 0.5) * 1.15
+          || lastBest.rampContinuity
+          || lastBest.nearDeck;
+        // Re-engage same-kind floor when drifted onto carpet but another coplanar ribbon is under wheels
+        const floorReengage = best.onTrack
+          && (best.kind === "floor" || best.kind === "outdoor" || best.kind === "flower"
+            || best.kind === "balcony" || best.kind === "cornice" || best.kind === "elevated")
+          && best.dist < (best.halfW || 0.5) * 0.98
+          && (!lastBest.onTrack || lastBest.dist > (lastBest.halfW || 0.5) * 1.02);
+        const allowSwitch = spurToClimb || driveToClimb || rampFootMount || climbCrestHandoff
+          || floorReengage
+          || (challengerNear && clearlyCloser)
+          || (challengerNear && !lastStillOk && best.onTrack);
+        if (!allowSwitch && lastStillOk) {
+          best = lastBest;
+          bestScore = lastBestScore;
+        } else if (!allowSwitch && !challengerNear) {
+          // Off both ribbons: carpet at car — do not aim at a parallel track centerline
+          if (onFloorCruise && (best.kind === "floor" || best.kind === "outdoor"
+              || best.kind === "flower" || best.carpet)) {
+            best = {
+              x, y: storyY ?? best.y, z,
+              yaw: null, bank: 0, grade: 0,
+              onTrack: false, supported: true, softPull: false,
+              carpet: true, dist: best.dist, kind: "floor", pathId: null, label: null,
+              wallBounce: null, magnet: false, elevated: false, wasElevated: false, steep: false,
+              edgeMargin: 1, halfW: 1, nearDeck: false, rampContinuity: false,
+            };
+          }
+        }
+      }
+
       // Only demote elevated→carpet when FAR from the deck laterally while floor-cruising.
       // Never demote foyer climb engage samples inside the foot radius — imperfect approach
       // is outside halfW but still in corridor and must stay on the ramp snap.
@@ -1966,30 +2056,37 @@ export class TrackSystem {
           edgeMargin: 1, halfW: 1, nearDeck: false,
         };
       } else {
-        // Only latch path continuity when actually on the ribbon (avoids junction theft)
-        if (best.pathId && best.onTrack) {
+        // Latch only when truly on that ribbon (and near its centerline — no apron false latch)
+        if (best.pathId && best.onTrack && best.dist <= (best.halfW || 0.5) * 1.02) {
           this._lastPathId = best.pathId;
           this._lastPathKind = best.kind || null;
         }
       }
-      // Spawn apron = visual asphalt must count as onTrack (no carpet penalty at pad edge)
+      // Spawn apron = visual asphalt onTrack, but NEVER steal pathId / XYZ to a distant ribbon.
+      // Keep car XZ; latch only foyer_drive_start (the pad's road).
       if (this._spawnApron && onFloorCruise && !best.onTrack
           && (best.kind === "floor" || best.carpet || best.kind === "outdoor")) {
         const adx = x - this._spawnApron.x;
         const adz = z - this._spawnApron.z;
         if (adx * adx + adz * adz <= this._spawnApron.r * this._spawnApron.r) {
+          const nearDrive = best.pathId === "foyer_drive_start"
+            && best.dist <= (best.halfW || 1.1) * 1.05;
           best = {
             ...best,
+            x: nearDrive ? best.x : x,
+            z: nearDrive ? best.z : z,
             onTrack: true,
             supported: true,
             carpet: false,
-            kind: best.kind === "outdoor" ? "outdoor" : "floor",
-            pathId: best.pathId || "foyer_drive_start",
-            edgeMargin: Math.max(0.2, best.edgeMargin || 0.2),
+            kind: "floor",
+            pathId: "foyer_drive_start",
+            edgeMargin: Math.max(0.2, nearDrive ? (best.edgeMargin || 0.2) : 0.35),
             y: best.y != null ? best.y : (storyY ?? 0.075),
+            wallBounce: null,
+            magnet: false,
           };
-          this._lastPathId = best.pathId;
-          this._lastPathKind = best.kind;
+          this._lastPathId = "foyer_drive_start";
+          this._lastPathKind = "floor";
         }
       }
       return best;
@@ -2042,8 +2139,11 @@ export class TrackSystem {
   findEscapeSnap(x, y, z, radius = 4.5) {
     let bestFloor = null;
     let bestFloorD = Infinity;
+    let bestSame = null;
+    let bestSameD = Infinity;
     let bestAny = null;
     let bestAnyD = Infinity;
+    const lastId = this._lastPathId;
     const candidates = this._snapGrid && this._snapGrid.size
       ? this._segmentsNear(x, z, radius)
       : this.segments;
@@ -2064,6 +2164,8 @@ export class TrackSystem {
       // Prefer centers of thick ribbons (clear of furniture cages)
       const halfW = seg.width * 0.5;
       if (halfW < 0.16) continue; // skip wire-thin leftovers
+      // Never escape-yank more than ~1.15m onto a different path (parallel track jump)
+      if (lastId && seg.pathId !== lastId && dist > 1.15) continue;
       const yaw = Math.atan2(abx, abz);
       const cand = {
         x: px, y: py + ribbonYLift(seg.kind), z: pz, yaw,
@@ -2071,12 +2173,19 @@ export class TrackSystem {
         dist, elevated: ELEV_KINDS.has(seg.kind),
       };
       const score = dist + dy * 0.35;
+      if (lastId && seg.pathId === lastId && score < bestSameD) {
+        bestSameD = score; bestSame = cand;
+      }
       if (FLOOR_KINDS.has(seg.kind) && dy < 0.85) {
         if (score < bestFloorD) { bestFloorD = score; bestFloor = cand; }
       }
       if (score < bestAnyD) { bestAnyD = score; bestAny = cand; }
     }
-    return bestFloor || bestAny;
+    // Same path first, then nearby floor, then any — never a room-crossing teleport
+    if (bestSame && bestSame.dist < 1.35) return bestSame;
+    if (bestFloor && bestFloor.dist < 1.15) return bestFloor;
+    if (bestAny && bestAny.dist < 1.15) return bestAny;
+    return bestSame || null;
   }
 
   nearestCheckpoint(x, z, maxDist = 3.5, y = null) {

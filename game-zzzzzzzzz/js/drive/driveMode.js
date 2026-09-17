@@ -89,7 +89,7 @@ export class DriveMode {
     const climbFoot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.ramp_foyer_to_landing
       && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
       ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
-      : { x: -4.55, y: 0.06, z: 10.55 };
+      : { x: -5.05, y: 0.06, z: 11.75 };
     this._climbFill = new THREE.PointLight(0xffd9a8, 7.5, 9.5, 2);
     this._climbFill.name = "drive_climb_fill";
     this._climbFill.visible = false;
@@ -97,11 +97,11 @@ export class DriveMode {
     this._climbFill.position.set(climbFoot.x - 0.85, climbFoot.y + 1.15, climbFoot.z - 0.35);
     scene.add(this._climbFill);
 
-    // Mid-climb fill — kills dark pocket halfway up S-weave (y≈1.5–3.0)
+    // Mid-climb fill — kills dark pocket halfway up straightened climb (y≈1.5–3.0)
     this._climbMidFill = new THREE.PointLight(0xffe0b8, 6.2, 8.5, 2);
     this._climbMidFill.name = "drive_climb_mid_fill";
     this._climbMidFill.visible = false;
-    this._climbMidFill.position.set(-3.55, 2.15, 4.6);
+    this._climbMidFill.position.set(-3.40, 2.15, 4.70);
     scene.add(this._climbMidFill);
 
     this._engineAudio = new EngineAudio();
@@ -726,10 +726,10 @@ export class DriveMode {
   /** Foyer climb approach corridor — stair/furniture/junction walls must not pin. */
   _nearFoyerClimbCorridor(x, z) {
     // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
-    const fx = -4.55, fz = 10.55;
+    const fx = -5.05, fz = 11.75;
     if (Math.hypot(x - fx, z - fz) <= 2.55) return true;
-    // Full soft S-weave band (foot→crest), including crest loop z≈0.35
-    if (x >= -6.05 && x <= -1.55 && z >= -0.25 && z <= 11.8) return true;
+    // Straightened climb band (foot→crest)
+    if (x >= -5.55 && x <= -1.85 && z >= -2.25 && z <= 12.4) return true;
     return false;
   }
 
@@ -999,14 +999,30 @@ export class DriveMode {
     if (this._stuckTimer < stuckNeed || this._stuckNudgeCd > 0) return;
 
     const escape = this.tracks.findEscapeSnap
-      ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 4.5)
+      ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 2.4)
       : null;
-    // Prefer road center + forward along ribbon (not sideways into furniture/stairs)
-    const target = (escape && escape.onTrack) ? escape : (snap && snap.onTrack ? snap : escape);
+    // Prefer SAME ribbon / continuous junction — never jump to a parallel track across the room
+    const lastId = this.tracks._lastPathId;
+    let target = null;
+    if (snap && snap.onTrack && snap.x != null) target = snap;
+    else if (escape && escape.onTrack && escape.x != null) {
+      const jump = Math.hypot(escape.x - p.x, escape.z - p.z);
+      const samePath = !lastId || escape.pathId === lastId;
+      if (samePath && jump < 1.25) target = escape;
+      else if (!samePath && jump < 0.55) target = escape; // tiny adjacent junction only
+    }
     if (!target || target.x == null) {
+      // Local forward nudge along current facing — no distant asphalt teleport
+      const fx = Math.sin(this.car.yaw);
+      const fz = Math.cos(this.car.yaw);
+      const cleared = this._clearPointFromWalls(p.x + fx * 0.28, p.z + fz * 0.28, p.y, 0.04);
+      p.x = cleared.x;
+      p.z = cleared.z;
+      this.car.speed = Math.max(0.55, Math.min(this.car.maxSpeed * 0.45, Math.abs(this.car.speed) + 0.35));
       this._stuckTimer = 0;
       this._jamHits = 0;
       this._stuckNudgeCd = 0.85;
+      if (this.onHint) this.onHint("Unstuck — keep moving");
       return;
     }
     let yaw = (target.yaw != null && Number.isFinite(target.yaw)) ? target.yaw : this.car.yaw;
@@ -1018,13 +1034,19 @@ export class DriveMode {
     while (dYawR > Math.PI) dYawR -= Math.PI * 2;
     while (dYawR < -Math.PI) dYawR += Math.PI * 2;
     if (Math.abs(dYawR) < Math.abs(dYaw)) yaw += Math.PI;
-    // Nudge to centerline then along road forward (away from pin), then clear walls
-    let nx = target.x + Math.sin(yaw) * 0.35;
-    let nz = target.z + Math.cos(yaw) * 0.35;
+    // Soft nudge toward nearby centerline (cap step) then along road — never hard teleport
+    const toX = target.x - p.x;
+    const toZ = target.z - p.z;
+    const toLen = Math.hypot(toX, toZ) || 1;
+    const step = Math.min(0.32, toLen * 0.55);
+    let nx = p.x + (toX / toLen) * step + Math.sin(yaw) * 0.18;
+    let nz = p.z + (toZ / toLen) * step + Math.cos(yaw) * 0.18;
     const cleared = this._clearPointFromWalls(nx, nz, p.y, 0.04);
     p.x = cleared.x;
     p.z = cleared.z;
-    if (target.y != null) p.y = Math.max(p.y, target.y);
+    if (target.y != null && Math.abs(target.y - p.y) < 0.45) {
+      p.y = Math.max(p.y, Math.min(target.y, p.y + 0.08));
+    }
     this.car.yaw = yaw;
     this.car.root.rotation.y = this.car.yaw;
     this.car.speed = Math.max(0.75, Math.min(this.car.maxSpeed * 0.60, Math.abs(this.car.speed) + 0.60));
@@ -1431,14 +1453,17 @@ export class DriveMode {
   beginClimbAutodrive() {
     if (typeof document === "undefined") return;
     // Foot of ramp_foyer_to_landing / end of foyer_climb_spur
-    const foot = { x: -4.55, y: 0.06, z: 10.55 };
-    // ~1m before foot on spur (authored point near (-3.65, 10.80))
-    const ax = -3.65;
+    const foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.ramp_foyer_to_landing
+      && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
+      ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
+      : { x: -4.45, y: 0.06, z: 12.30 };
+    // ~1m before foot on spur
+    const ax = -3.90;
     const ay = 0.075;
-    const az = 10.80;
-    // Yaw toward foot, then slightly into first climb segment (-4.70, 10.00)
-    const aimX = -4.70;
-    const aimZ = 10.00;
+    const az = 11.30;
+    // Yaw toward foot, then slightly into first climb segment
+    const aimX = -4.95;
+    const aimZ = 10.35;
     const yaw = Math.atan2(aimX - ax, aimZ - az);
 
     this._clearAutodriveUI();
@@ -1594,7 +1619,7 @@ export class DriveMode {
       const foot = ad.foot;
       const toFoot = Math.hypot(p.x - foot.x, p.z - foot.z);
       if (toFoot > 0.35) yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
-      else yawTarget = Math.atan2(-4.70 - p.x, 10.00 - p.z);
+      else yawTarget = Math.atan2(-4.95 - p.x, 10.35 - p.z);
     }
     // Slight lateral correction toward snap ribbon center
     if (snap && snap.onTrack && snap.x != null && snap.z != null) {

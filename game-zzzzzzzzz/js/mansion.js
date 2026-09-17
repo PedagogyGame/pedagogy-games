@@ -1657,8 +1657,8 @@ export class Mansion {
     const brass = this._brass(p.trim);
     const wood = this._mat(0x3e2723, 0.5, 0.15);
     // Climb corridor gap — hall south triple crown was Ben's "three stacked tan slabs"
-    // spanning the asphalt; also clear foyer/landing lips over the S-weave.
-    const climbGap = { minX: -5.35, maxX: -1.75, minZ: -0.15, maxZ: 11.0 };
+    // spanning the asphalt; also clear foyer/landing lips over straightened climb.
+    const climbGap = { minX: -5.65, maxX: -1.65, minZ: -2.25, maxZ: 12.15 };
     const addBox = (sx, sy, sz, px, py, pz, mat) => {
       if (sx < 0.04 || sy < 0.04 || sz < 0.04) return;
       const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
@@ -2910,14 +2910,14 @@ export class Mansion {
    * Covers main_up stair footprint plus narrow east climb lane to landing crest.
    */
   _storyAperture(room, which) {
-    // Shared climb hole: stair void + full soft S-weave (foot→crest) with car margin.
-    // Authored weave X∈[-5.00,-2.95] Z∈[0.35,10.55] — hole must cover lips + imperfect steer.
-    const hole = { minX: -8.55, maxX: -1.85, minZ: -0.05, maxZ: 10.85 };
+    // Shared climb hole: stair void + straightened foyer climb (foot→crest) with car margin.
+    // Authored climb X∈[-5.05,-2.75] Z∈[-1.95,11.75] — hole must cover lips + imperfect steer.
+    const hole = { minX: -8.55, maxX: -1.75, minZ: -2.25, maxZ: 12.15 };
     if (which === "ceiling" && room.id === "foyer") return hole;
     if (which === "floor" && room.id === "landing") return hole;
-    // Hall ceiling overlaps climb near foyer/hall junction (z≲2) — punch SW climb lane
+    // Hall ceiling overlaps climb near foyer/hall junction — punch climb lane
     if (which === "ceiling" && room.id === "hall_ground") {
-      return { minX: -3.70, maxX: -1.85, minZ: -0.05, maxZ: 2.15 };
+      return { minX: -3.70, maxX: -1.75, minZ: -2.25, maxZ: 2.15 };
     }
     return null;
   }
@@ -2975,7 +2975,7 @@ export class Mansion {
     // Hall ↔ cabinet / armoury at skirt z≈-7.7
     if (room.id === "hall_ground" && side === "west") {
       add(-7.60, 2.60, cy, cy + doorH);
-      // Climb S-weave tunnel through hall west slab — full story (no header clip).
+      // Climb corridor tunnel through hall west slab — full story (no header clip).
       // Slightly wider/south so imperfect steer (±0.5m) clears wall lip near z≈0.
       const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
       add(0.85, 4.20, cy, fullH);
@@ -2987,7 +2987,7 @@ export class Mansion {
     }
     if (room.id === "cabinet" && side === "east") {
       add(-7.70, 2.60, cy, cy + doorH);
-      // Match hall_ground west climb tunnel — dual wall at x≈-4 otherwise pins S-weave
+      // Match hall_ground west climb tunnel — dual wall at x≈-4 otherwise pins climb
       const fullH = cy + (room.size[1] || 4) + 0.02;
       add(0.85, 4.20, cy, fullH);
       return out;
@@ -2996,10 +2996,10 @@ export class Mansion {
       add(-7.70, 2.60, cy, cy + doorH);
       return out;
     }
-    // Cabinet south near x≈-4 kisses climb crest loop — full-story tunnel
+    // Cabinet south near climb diagonal — full-story tunnel
     if (room.id === "cabinet" && side === "south") {
       const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
-      add(-4.35, 3.20, cy, fullH);
+      add(-3.40, 3.60, cy, fullH);
       return out;
     }
     // Hall ↔ conservatory

@@ -571,10 +571,10 @@ if (drive.tracks.segments.length > 4200) {
   });
 }
 
-// Roadway width scale (~13% smaller) — preserve every path, shrink widths only.
+// Roadway width scale (~20% smaller) — preserve every path, shrink widths only.
 // Climb ramps get RAMP_WIDTH_MULT after scale (halfW ≥ ~0.29) so real cars do not slide off.
-if (Math.abs(ROAD_WIDTH_SCALE - 0.87) > 0.001) {
-  throw new Error(`ROAD_WIDTH_SCALE want 0.87, got ${ROAD_WIDTH_SCALE}`);
+if (Math.abs(ROAD_WIDTH_SCALE - 0.80) > 0.001) {
+  throw new Error(`ROAD_WIDTH_SCALE want 0.80, got ${ROAD_WIDTH_SCALE}`);
 }
 if (!(RAMP_WIDTH_MULT >= 1.5) || !(RAMP_WIDTH_MIN >= 0.55)) {
   throw new Error(`Ramp width boost missing/weak: mult=${RAMP_WIDTH_MULT} min=${RAMP_WIDTH_MIN}`);
@@ -623,8 +623,8 @@ console.log("Road widths scaled + thick-asphalt mins", {
 if (widthChecks < 50) throw new Error("too few paths for width check");
 if (rampHalfOk < 3) throw new Error("too few widened climb ramps"); // fewer excellent primary climbs
 
-if (CAR_SCALE > 0.23 || CAR_SCALE < 0.20) {
-  throw new Error(`CAR_SCALE should be ~0.218 (10–15% smaller than 0.25), got ${CAR_SCALE}`);
+if (CAR_SCALE > 0.20 || CAR_SCALE < 0.175) {
+  throw new Error(`CAR_SCALE should be ~0.188 (small mouse RC), got ${CAR_SCALE}`);
 }
 console.log("CAR_SCALE", CAR_SCALE);
 

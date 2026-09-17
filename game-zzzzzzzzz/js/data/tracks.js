@@ -19,56 +19,55 @@ export const TRACK_PATHS = [
   {
     id: "foyer_skirting",
     kind: "floor",
-    width: 1.28,
+    width: 1.36,
     tension: 0.12,
     closed: true,
     fancy: true,
     points: [
-      // Perimeter ROUTES AROUND grand west stair — open-foyer bow, NOT under the climb.
-      // Climb owns the east-of-stair corridor alone (no floor snap theft).
-      { x: -7.9, y: 0.06, z: 12.2, label: "Grand Foyer" },
-      { x: -4.0, y: 0.06, z: 12.35 },
-      { x: -3.2, y: 0.06, z: 12.35 }, // kiss door_foyer_outdoor
-      { x: 0.0, y: 0.06, z: 12.4 },
-      { x: 4.0, y: 0.06, z: 12.35 },
-      { x: 7.9, y: 0.06, z: 12.2 },
-      { x: 8.05, y: 0.06, z: 11.3 },
-      { x: 8.10, y: 0.06, z: 10.5 },
-      { x: 8.15, y: 0.06, z: 9.0 },
-      { x: 8.15, y: 0.06, z: 5.0 },
-      { x: 8.15, y: 0.06, z: 1.0 },
-      { x: 8.00, y: 0.06, z: -0.30 },
-      { x: 2.85, y: 0.06, z: -0.35 },
-      { x: -2.85, y: 0.06, z: -0.35 },
-      { x: -8.00, y: 0.06, z: -0.30 },
-      // West wall only NORTH of stair
-      { x: -8.45, y: 0.06, z: 1.0 },
-      { x: -8.45, y: 0.06, z: 1.85 },
-      // North face → open foyer (east of climb lane)
-      { x: -6.8, y: 0.06, z: 1.90 },
-      { x: -4.2, y: 0.06, z: 2.40 },
-      { x: -1.20, y: 0.06, z: 3.80 },
-      { x: -1.20, y: 0.06, z: 5.80 },
-      { x: -1.20, y: 0.06, z: 7.80 },
-      { x: -1.20, y: 0.06, z: 9.40 },
-      // South of climb then classic west-wall fillet (inset, no Catmull blowout)
-      { x: -2.20, y: 0.06, z: 11.60 },
-      { x: -4.80, y: 0.06, z: 12.20 },
-      { x: -6.20, y: 0.06, z: 11.40 },
-      { x: -7.20, y: 0.06, z: 10.20 },
-      { x: -7.90, y: 0.06, z: 9.55 },
-      { x: -8.35, y: 0.06, z: 9.40 },
-      { x: -8.45, y: 0.06, z: 9.55 },
-      { x: -8.45, y: 0.06, z: 10.6 },
-      { x: -8.35, y: 0.06, z: 11.7 },
+      // Clockwise skirting. South-wall gap at climb foot (x≈-5.05); bow east of climb.
+      { x: -5.55, y: 0.06, z: 12.20, label: "Grand Foyer" }, // west stub end (clear of foot)
+      { x: -6.5, y: 0.06, z: 12.25 },
       { x: -7.9, y: 0.06, z: 12.2 },
+      { x: -8.35, y: 0.06, z: 11.7 },
+      { x: -8.45, y: 0.06, z: 10.6 },
+      { x: -8.45, y: 0.06, z: 9.55 },
+      { x: -8.35, y: 0.06, z: 9.40 },
+      { x: -7.90, y: 0.06, z: 9.55 },
+      { x: -8.45, y: 0.06, z: 1.85 },
+      { x: -8.45, y: 0.06, z: 1.0 },
+      { x: -8.00, y: 0.06, z: -0.30 },
+      { x: -2.85, y: 0.06, z: -0.35 },
+      { x: 2.85, y: 0.06, z: -0.35 },
+      { x: 8.00, y: 0.06, z: -0.30 },
+      { x: 8.15, y: 0.06, z: 1.0 },
+      { x: 8.15, y: 0.06, z: 5.0 },
+      { x: 8.15, y: 0.06, z: 9.0 },
+      { x: 8.10, y: 0.06, z: 10.5 },
+      { x: 8.05, y: 0.06, z: 11.3 },
+      { x: 7.9, y: 0.06, z: 12.2 },
+      { x: 4.0, y: 0.06, z: 12.35 },
+      { x: 0.0, y: 0.06, z: 12.4 },
+      { x: -3.2, y: 0.06, z: 12.35 }, // door — east of climb
+      { x: -1.70, y: 0.06, z: 11.00 },
+      { x: -1.20, y: 0.06, z: 9.40 },
+      { x: -1.20, y: 0.06, z: 7.80 },
+      { x: -1.20, y: 0.06, z: 5.80 },
+      { x: -1.20, y: 0.06, z: 3.80 },
+      { x: -1.50, y: 0.06, z: 1.70 },
+      { x: -6.8, y: 0.06, z: 1.55 },
+      { x: -8.45, y: 0.06, z: 1.85 },
+      { x: -8.45, y: 0.06, z: 9.55 },
+      { x: -7.9, y: 0.06, z: 12.2 },
+      { x: -6.5, y: 0.06, z: 12.25 },
+      { x: -5.55, y: 0.06, z: 12.20 },
+    
     ],
   },
   // Wide start road: open-foyer spawn → clear climb foot (NOT wall-hug tape)
   {
     id: "foyer_drive_start",
     kind: "floor",
-    width: 2.60,  // post ROAD_WIDTH_SCALE ≈2.26 — wide open-foyer asphalt
+    width: 2.45,  // post ROAD_WIDTH_SCALE — open-foyer asphalt (not freeway)
     tension: 0.02,
     fancy: true,
     points: [
@@ -87,15 +86,15 @@ export const TRACK_PATHS = [
   {
     id: "foyer_climb_spur",
     kind: "floor",
-    width: 2.45, // wide T runway → climb foot east of grand stair
+    width: 2.30, // T runway → climb foot east of grand stair
     tension: 0.06,
     fancy: true,
     points: [
-      { x: -2.55, y: 0.06, z: 11.05 },
-      { x: -3.10, y: 0.06, z: 10.95 },
-      { x: -3.65, y: 0.06, z: 10.80 },
-      { x: -4.15, y: 0.06, z: 10.65 },
-      { x: -4.55, y: 0.06, z: 10.55 }, // kiss ramp_foyer_to_landing foot
+      { x: -2.55, y: 0.06, z: 11.05 }, // kiss foyer_drive_start T
+      { x: -3.25, y: 0.06, z: 11.15 },
+      { x: -3.90, y: 0.06, z: 11.30 },
+      { x: -4.50, y: 0.06, z: 11.50 },
+      { x: -5.05, y: 0.06, z: 11.75 }, // kiss ramp_foyer_to_landing foot
     ],
   },
   // Doorway edge strip: foyer → hall (east jamb, not dead center)
@@ -395,12 +394,12 @@ export const TRACK_PATHS = [
   {
     id: "landing_skirting",
     kind: "floor",
-    width: 1.18, // wide first-floor asphalt — Mario Kart readable on dark wood
-    tension: 0.1,
+    width: 1.20, // first-floor asphalt — readable, fits landing
+    tension: 0.08,
     closed: true,
     fancy: true,
     points: [
-      // Extra NW/NE fillets + lower tension keep Catmull on asphalt
+      // Clear skirting cruise — no corkscrew; crest kiss at west library fillet
       { x: -6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
       { x: -4.5, y: 4.26, z: 8.95 },
       { x: -2.0, y: 4.26, z: 9.0 },
@@ -411,11 +410,10 @@ export const TRACK_PATHS = [
       { x: 7.1, y: 4.26, z: 7.0 },
       { x: 7.2, y: 4.26, z: 5.0 },
       { x: 7.2, y: 4.26, z: 1.0 },
-      { x: 2.75, y: 4.26, z: -0.95 }, // east fillet — clear of library east tip
-      { x: -2.75, y: 4.26, z: -0.95 }, // stay in landing north of library south slab
-      { x: -4.35, y: 4.26, z: 0.55 }, // west of library jamb / west-wall tip
-      { x: -5.00, y: 4.26, z: 1.90 }, // kiss ramp_foyer_to_landing crest
-      { x: -4.95, y: 4.26, z: 2.85 }, // east of attic east-stringer AABB
+      { x: 2.75, y: 4.26, z: -1.95 }, // east fillet — clear of library east tip
+      { x: -2.75, y: 4.26, z: -1.95 }, // kiss ramp_foyer_to_landing crest
+      { x: -4.40, y: 4.26, z: 0.80 }, // west skirting — simple fillet
+      { x: -5.05, y: 4.26, z: 2.60 }, // east of attic east-stringer AABB
       { x: -5.05, y: 4.26, z: 4.40 },
       { x: -4.95, y: 4.26, z: 6.25 }, // clear attic east stringer
       { x: -5.85, y: 4.26, z: 7.50 },
@@ -428,7 +426,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.16,
     points: [
-      { x: 2.75, y: 4.26, z: -0.95, label: "Library Hall" },
+      { x: 2.75, y: 4.26, z: -1.95, label: "Library Hall" },
       { x: 2.95, y: 4.26, z: -4 },
       { x: 2.95, y: 4.26, z: -8 }, // kiss door_library_nursery
       { x: 2.95, y: 4.26, z: -10 },
@@ -442,7 +440,7 @@ export const TRACK_PATHS = [
     width: 0.38,
     tension: 0.16,
     points: [
-      { x: -2.75, y: 4.26, z: -0.95, label: "Library Hall" },
+      { x: -2.75, y: 4.26, z: -1.95, label: "Library Hall" }, // kiss landing crest / climb
       { x: -2.95, y: 4.26, z: -4 },
       { x: -2.95, y: 4.26, z: -8 }, // kiss door_library_study
       { x: -2.95, y: 4.26, z: -10 },
@@ -645,38 +643,23 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
-    width: 0.90, // wide climb foot (post scale×ramp-mult → ~1.39) — easy mount
+    width: 0.82, // climb foot (post scale×ramp-mult) — mountable, not fat
     gentleStart: true, // ease-in first 20% of rise — soft mount, not wall
     noLateralBow: true, // keep authored east-of-stair XZ; soften may even Y only
     points: [
-      // HARD ≤30% grade — east of stair; clear of skirting bow x≈-1.2 (gap ≥0.4m)
-      { x: -4.55, y: 0.06, z: 10.55, label: "Grand Foyer" },
-      { x: -4.70, y: 0.06, z: 10.00 },
-      { x: -4.65, y: 0.06, z: 9.40 },
-      { x: -4.40, y: 0.06, z: 8.80 },
-      { x: -4.05, y: 0.06, z: 8.20 },
-      { x: -3.70, y: 0.06, z: 7.60 },
-      { x: -3.40, y: 0.06, z: 7.00 },
-      { x: -3.15, y: 0.06, z: 6.35 },
-      { x: -3.00, y: 0.06, z: 5.65 },
-      { x: -2.95, y: 0.06, z: 4.95 },
-      { x: -3.10, y: 0.06, z: 4.30 },
-      { x: -3.40, y: 0.06, z: 3.75 },
-      { x: -3.75, y: 0.06, z: 3.25 },
-      { x: -4.05, y: 0.06, z: 2.80 },
-      { x: -4.30, y: 0.06, z: 2.35 },
-      { x: -4.40, y: 0.06, z: 1.90 },
-      { x: -4.20, y: 0.06, z: 1.50 },
-      { x: -3.80, y: 0.06, z: 1.20 },
-      { x: -3.40, y: 0.06, z: 0.95 },
-      { x: -3.10, y: 0.06, z: 0.70 },
-      { x: -3.00, y: 0.06, z: 0.45 },
-      { x: -3.30, y: 0.06, z: 0.35 },
-      { x: -3.75, y: 0.06, z: 0.45 },
-      { x: -4.20, y: 0.06, z: 0.75 },
-      { x: -4.55, y: 0.06, z: 1.15 },
-      { x: -4.85, y: 0.06, z: 1.50 },
-      { x: -5.00, y: 4.26, z: 1.90, label: "Upper Landing" },
+      // Straightened Mario Kart climb — mostly west corridor then gentle SE to crest.
+      // Holds x≲-4.3 until low Z so foyer skirting can cruise east of climb.
+      { x: -5.05, y: 0.06, z: 11.75, label: "Grand Foyer" },
+      { x: -4.95, y: 0.06, z: 10.35 },
+      { x: -4.85, y: 0.06, z: 8.70 },
+      { x: -4.75, y: 0.06, z: 6.80 },
+      { x: -4.60, y: 0.06, z: 4.80 },
+      { x: -4.40, y: 0.06, z: 2.80 },
+      { x: -4.00, y: 0.06, z: 0.90 },
+      { x: -3.50, y: 0.06, z: -0.45 },
+      { x: -3.05, y: 0.06, z: -1.30 },
+      { x: -2.75, y: 4.26, z: -1.95, label: "Upper Landing" },
+    
     ],
   },
   // ─── Furniture-top circuits + ramps (Toy Story vibe) ───
@@ -1578,21 +1561,20 @@ export const TRACK_PATHS = [
     closed: true,
     fancy: true,
     points: [
-      // Facade French doors open x∈[-5.6,5.6] @ z≈14.2 — NEVER cross outside that.
+      // Clear balcony cruise — facade French doors x∈[-5.6,5.6] @ z≈14.2
       { x: 4.70, y: 4.28, z: 12.20, label: "Balcony" },
-      { x: 4.20, y: 4.28, z: 13.40 },
-      { x: 3.00, y: 4.28, z: 14.55 }, // cross facade → outer deck
-      { x: 1.00, y: 4.28, z: 15.90 },
-      { x: -1.20, y: 4.28, z: 16.80 },
-      { x: -3.20, y: 4.28, z: 16.60 },
-      { x: -4.50, y: 4.28, z: 15.50 },
-      { x: -4.40, y: 4.28, z: 14.55 }, // cross facade → approach
-      { x: -4.50, y: 4.28, z: 13.30 },
+      { x: 4.10, y: 4.28, z: 13.50 },
+      { x: 2.60, y: 4.28, z: 14.70 }, // cross facade → outer deck
+      { x: 0.40, y: 4.28, z: 16.00 },
+      { x: -1.80, y: 4.28, z: 16.70 },
+      { x: -3.60, y: 4.28, z: 16.20 },
+      { x: -4.50, y: 4.28, z: 15.20 },
+      { x: -4.55, y: 4.28, z: 13.80 }, // cross facade → approach
       { x: -4.70, y: 4.28, z: 12.20 }, // ramp_balcony_return kiss
-      // Inner approach connector closes the loop (north of facade)
-      { x: -2.40, y: 4.28, z: 12.35 },
-      { x: 0.00, y: 4.28, z: 12.45 },
-      { x: 2.40, y: 4.28, z: 12.35 },
+      // Inner approach closes the loop (north of facade) — no corkscrew
+      { x: -2.20, y: 4.28, z: 12.35 },
+      { x: 0.00, y: 4.28, z: 12.40 },
+      { x: 2.20, y: 4.28, z: 12.35 },
       { x: 4.70, y: 4.28, z: 12.20 },
     ],
   },
@@ -2892,17 +2874,17 @@ export const TRACK_PATHS = [
  * Climb ramps get an extra width boost AFTER scale so post-scale halfW
  * lands ~0.29–0.35 (real car has lateral drift; centerline smoke lied).
  */
-export const ROAD_WIDTH_SCALE = 0.87;
+export const ROAD_WIDTH_SCALE = 0.80;
 /** Extra multiplier for kind===ramp only (after ROAD_WIDTH_SCALE). */
-export const RAMP_WIDTH_MULT = 1.78;
+export const RAMP_WIDTH_MULT = 1.70;
 /** Minimum post-boost ramp width → halfW ≥ ~0.29. */
-export const RAMP_WIDTH_MIN = 0.62;
+export const RAMP_WIDTH_MIN = 0.58;
 /** Floor/outdoor post-scale min — thick readable asphalt (no wire-thin ribbons). */
-export const FLOOR_WIDTH_MIN = 0.78; // playable floor cruise (halfW ≥0.39)
+export const FLOOR_WIDTH_MIN = 0.68; // playable floor cruise (halfW ≥0.34)
 /** Doorway connector min width after scale. */
 export const DOOR_WIDTH_MIN = 0.48;
 /** Elevated/cornice/balcony/furniture decks min after scale. */
-export const DECK_WIDTH_MIN = 0.70; // solid elevated asphalt — Mario Kart clarity, not tape
+export const DECK_WIDTH_MIN = 0.62; // solid elevated asphalt — fits rooms, still readable
 /** Soften lumpy / death-trap climb grades (rise/run per segment). */
 export const RAMP_MAX_GRADE = 0.30; // HARD Ben: max |Δy|/run ≤ 30% every segment
 /** Mean grade above this after soften → path disabled (no invisible death traps). */

@@ -1,26 +1,37 @@
-# Workable Drive — solid / polish pass (2026-09-16)
+# Workable Drive — no-teleport + scale balance (2026-09-16)
 
-Ben feedback pass: solids stay solid, car/audio/tracks not crap. Not claiming ready.
+Ben: car jumped between track ribbons — unacceptable. Also: smaller car/roads, house clarity over fat toys. Not claiming ready.
 
-## Root cause — pillar ghosting
-1. **Lantern posts tagged `furniture`** → `_driveSoftCollider` raised `min.y` by ~0.36 so car height band (~0–0.12) slipped under.
-2. **Climb corridor pierce** treated thin walls (`min(bw,bd) < 0.55`) as aperture lips and dropped them — freestanding thin posts/columns ghosted.
-3. **Gate pillars / hitching posts** had mesh only — **no Drive AABB**.
+## Root cause — track-to-track jumps
+1. **Spawn apron false onTrack** kept distant `pathId` (e.g. `door_foyer_outdoor`) and latched `_lastPathId`, then sticky bias + snap XYZ yanked the car ~1m+.
+2. **Weak path hysteresis** (`pathBias -0.48`) + **foyer rampBias ×1.48** let overlapping floor/climb ribbons steal mid-cruise.
+3. **`findEscapeSnap` / stuck escape** hard-teleported to nearest asphalt within 4.5m (parallel tracks across the room).
+4. **Near-flat connector crush** (`rampBias ×0.28`) blocked intentional `balcony→ramp_balcony_return` when sticky on deck — separate from foyer jumps but fixed in same pass.
 
-## Hard classification
-- New `driveKind: "pillar"` — never soft-shrink, never raise, never climb-pierce.
-- Lantern posts, hitching posts, gate pillars → `"pillar"`.
-- Heuristic: tall skinny furniture (h≥1.2, maxXZ≤0.55) promoted to pillar in soft copy.
-- Climb corridor pierces **only** `stair` / `furniture`. Walls + pillars always collide.
-- Soft-slide still OK for furniture bases; pillars = hard bounce.
+## Hysteresis rules (querySnap)
+- Prefer `_lastPathId` unless challenger is clearly closer / on-ribbon, OR intentional junction:
+  - spur/drive/skirting → foyer climb inside engage radius
+  - any ramp foot mount when already on/near that ramp ribbon
+  - climb crest → coplanar deck handoff
+  - floor re-engage when drifted off last ribbon onto another under the wheels
+- Spawn apron: onTrack asphalt feel with **car XZ** + latch **only** `foyer_drive_start` (never door_*/skirting steal).
+- Carpet off-ribbon: XZ stays at car (no parallel-centerline magnet target).
+- Foyer `rampBias` only inside foot engage (or same-ramp continuity); ×1.48 → ×1.12 gated.
+- Escape: same-path / ≤~1.15m only; stuck nudge soft-capped (~0.32m), no room-crossing teleport.
+- Car lateral lerp refused if snap centerline >0.55m away.
 
-## Car / audio / tracks
-- `_buildCar`: proper toy RC proportions (chassis, shell, greenhouse glass, wheel arches, tires) — not stacked candy boxes. Light SUV chassis tweak. Planted steer (friction/steer lerp/yaw cap).
-- `engineAudio.js`: triangle/sine + brown rumble bed; no harsh saw; smooth RPM; quiet scrape; mute on Explore.
-- Asphalt: richer dark grit + crisp white edges + clean yellow dashes. Dark steel continuous rails (not translucent beige/yellow beams). Smoother ramp-foot joins.
+## Scale (before → after)
+| | before | after |
+|---|---|---|
+| CAR_SCALE | 0.218 | **0.188** |
+| ROAD_WIDTH_SCALE | 0.87 | **0.80** |
+| foyer_drive_start (post-scale) | ~2.26 | **~1.96** |
+| foyer_skirting | ~1.11 | **~1.09** |
+| foyer_climb_spur | ~2.13 | **~1.84** |
+| ramp_foyer_to_landing | ~1.39 | **~1.12** |
 
 ## Sims (green)
-`smoke`, `ramp-approach-sim`, `hostile-climb-sim`, `core-tour-sim`, `wall-cruise-sim` (+ pillar penetration samples).
+`no-teleport-sim`, `smoke`, `ramp-approach-sim`, `hostile-climb-sim`, `core-tour-sim`, `wall-cruise-sim`.
 
 ## Intact
-≤30% grade, holes/tunnels, connected circuit, runway before feet, climb apertures, upright bank caps.
+≤30% grade, holes/tunnels, connected circuit, pillars hard, climb mount, no track jumps.

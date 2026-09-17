@@ -118,7 +118,7 @@ function steerAimClimb(noise = 0) {
   // Near foot / on ramp: lock climb heading (browser still wobbles farther out)
   if (s?.kind === "ramp" && s.pathId === "ramp_foyer_to_landing"
       && (s.onTrack || s.nearDeck || s.rampContinuity)) {
-    // Aim up the soft S-weave (not just local segment yaw — prevents foot circling)
+    // Aim up the straightened climb (not just local segment yaw — prevents foot circling)
     let bestI = 0, bestD = Infinity;
     for (let i = 0; i < ramp.points.length; i++) {
       const q = ramp.points[i];
@@ -279,10 +279,10 @@ function steerAimClimb(noise = 0) {
 {
   const fx = foot.x, fz = foot.z;
   const cases = [
-    { label: "clear_foot_aim_climb", x: fx, z: fz + 0.15, yaw: Math.PI },
-    { label: "stringer_endcap_z8", x: -7.4, z: 9.0, yaw: Math.PI * 0.95 },
-    { label: "into_stair_from_room", x: -6.4, z: 9.2, yaw: -Math.PI / 2 },
-    { label: "former_wall_wedge", x: -8.2, z: 9.5, yaw: Math.PI },
+    { label: "clear_foot_aim_climb", x: fx, z: fz + 0.15, yaw: Math.atan2(ramp.points[1].x - fx, ramp.points[1].z - fz) },
+    { label: "stringer_endcap_z8", x: -5.55, z: 11.10, yaw: Math.atan2(fx + 5.55, fz - 11.10) },
+    { label: "into_stair_from_room", x: -5.25, z: 10.80, yaw: Math.atan2(fx + 5.25, fz - 10.80) },
+    { label: "former_wall_wedge", x: -5.75, z: 11.30, yaw: Math.atan2(fx + 5.75, fz - 11.30) },
   ];
   for (const c of cases) {
     reset(c.x, c.z, c.yaw, 0.35);

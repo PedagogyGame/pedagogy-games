@@ -1,10 +1,11 @@
 /**
  * Proof: full DriveMode.update WITH mansion wall colliders for 25s from
- * beginClimbAutodrive pose (-3.65,0.075,10.80) keys.forward — must reach maxY≥2.5.
+ * beginClimbAutodrive pose on foyer_climb_spur keys.forward — must reach maxY≥2.5.
  */
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
+import { RAMP_MOUNT_FEET, TRACK_PATHS } from "./js/data/tracks.js";
 
 if (typeof globalThis.document === "undefined") {
   const makeCtx = () => ({
@@ -45,8 +46,14 @@ const drive = new DriveMode(scene, camera);
 drive.setWallColliders(mansion.getColliders());
 drive.enter();
 
-const ax = -3.65, ay = 0.075, az = 10.80;
-const yaw = Math.atan2(-4.70 - ax, 10.00 - az);
+const ramp = TRACK_PATHS.find((q) => q.id === "ramp_foyer_to_landing");
+const spur = TRACK_PATHS.find((q) => q.id === "foyer_climb_spur");
+const foot = (RAMP_MOUNT_FEET.ramp_foyer_to_landing && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
+  ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
+  : ramp.points[0];
+const ax = spur.points[2].x, ay = 0.075, az = spur.points[2].z;
+const aim = ramp.points[1];
+const yaw = Math.atan2(aim.x - ax, aim.z - az);
 drive.tracks._lastPathId = "foyer_climb_spur";
 drive.tracks._lastPathKind = "floor";
 drive._crashPhase = null;
@@ -61,7 +68,7 @@ drive.keys = { forward: true, back: false, left: false, right: false, boost: fal
 drive._autoLastWall = performance.now();
 drive._autodrive = {
   mode: "climb", t: 0, duration: 25, maxY: ay, done: false, pass: false,
-  foot: { x: -4.55, y: 0.06, z: 10.55 },
+  foot: { x: foot.x, y: foot.y, z: foot.z },
   logEl: null, bannerEl: null, logAcc: 0, result: "",
 };
 

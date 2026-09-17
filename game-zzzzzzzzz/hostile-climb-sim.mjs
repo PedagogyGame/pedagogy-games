@@ -182,7 +182,8 @@ const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
     const flags = car.update(dt, keys, snap);
     if (pos.y > maxY) maxY = pos.y;
     if (flags.fell || car.crashed) fell++;
-    if (pos.y >= crestY - 0.15 && Math.hypot(pos.x - (-5), pos.z - 1.9) < 1.8) {
+    const crestPt0 = byId.ramp_foyer_to_landing.points.at(-1);
+    if (pos.y >= crestY - 0.15 && Math.hypot(pos.x - crestPt0.x, pos.z - crestPt0.z) < 2.2) {
       crest = true;
       break;
     }
@@ -200,9 +201,11 @@ const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
     const crestPt = byId.ramp_foyer_to_landing.points.at(-1);
     const shortGuide = densify([
       crestPt,
-      { x: -5.6, y: 4.26, z: 3.5 },
-      { x: -6.2, y: 4.26, z: 5.5 },
-      { x: -6.5, y: 4.26, z: 7.4 },
+      { x: -4.40, y: 4.26, z: 0.80 },
+      { x: -5.05, y: 4.26, z: 2.60 },
+      { x: -5.05, y: 4.26, z: 4.40 },
+      { x: -4.95, y: 4.26, z: 6.25 },
+      { x: -5.85, y: 4.26, z: 7.50 },
       { x: -6.5, y: 4.26, z: 8.7 },
       { x: -4.0, y: 4.26, z: 8.95 },
       { x: -1.0, y: 4.26, z: 9.0 },

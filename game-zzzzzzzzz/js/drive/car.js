@@ -5,7 +5,7 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_SCALE = 0.218; // ~0.42 m → ~0.092 m length (~13% smaller to match narrower roads)
+export const CAR_SCALE = 0.188; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
 /** Optional whisper of road grip when wheels on surface. OFF by default. */
 export const ASSIST_MAGNET = false;
@@ -769,7 +769,12 @@ export class RCCar {
       const rampAssist = kind === "ramp" && (
         !!snap.onTrack || !!snap.nearDeck || !!snap.rampContinuity
       );
-      if (rampAssist && snap.x != null && snap.z != null) {
+      // Hard gate: never lerp XZ toward a snap centerline more than ~0.55m away
+      // (path-label flips / apron ghosts must not teleport the car onto another ribbon).
+      const snapJump = (snap.x != null && snap.z != null)
+        ? Math.hypot(snap.x - x, snap.z - z) : 99;
+      const snapNear = snapJump < 0.55;
+      if (rampAssist && snapNear && snap.x != null && snap.z != null) {
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
         // Strong climb hold — imperfect human steer still crests (not centerline magnet)
         const rimFactor = em < 0.14 ? (foyerClimb ? 2.95 : 2.45)
@@ -779,16 +784,16 @@ export class RCCar {
           (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
         x = THREE.MathUtils.lerp(x, snap.x, pull);
         z = THREE.MathUtils.lerp(z, snap.z, pull);
-      } else if (snap.onTrack && snap.x != null && snap.z != null
+      } else if (snapNear && snap.onTrack && snap.x != null && snap.z != null
         && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
-        // Whisper-only floor glue near absolute rim — no yaw-magnet cruise yank
+        // Soft rim hold — keep cruise on ribbon without centerline yank / path teleport
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        if (em < 0.06) {
-          const pull = Math.min(0.10, 0.06 * Math.min(1, 10 * dt));
+        if (em < 0.10) {
+          const pull = Math.min(0.14, (0.05 + (0.10 - em) * 0.8) * Math.min(1, 12 * dt));
           x = THREE.MathUtils.lerp(x, snap.x, pull);
           z = THREE.MathUtils.lerp(z, snap.z, pull);
         }
-      } else if (ASSIST_MAGNET && snap.onTrack) {
+      } else if (ASSIST_MAGNET && snapNear && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
         x = THREE.MathUtils.lerp(x, snap.x, whisper);
         z = THREE.MathUtils.lerp(z, snap.z, whisper);
