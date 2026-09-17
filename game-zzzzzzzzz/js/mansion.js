@@ -1658,7 +1658,7 @@ export class Mansion {
     const wood = this._mat(0x3e2723, 0.5, 0.15);
     // Climb corridor gap — hall south triple crown was Ben's "three stacked tan slabs"
     // spanning the asphalt; also clear foyer/landing lips over straightened climb.
-    const climbGap = { minX: -5.65, maxX: -1.65, minZ: -2.25, maxZ: 12.15 };
+    const climbGap = { minX: -5.65, maxX: -2.40, minZ: -2.55, maxZ: 12.40 };
     const addBox = (sx, sy, sz, px, py, pz, mat) => {
       if (sx < 0.04 || sy < 0.04 || sz < 0.04) return;
       const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
@@ -2910,14 +2910,14 @@ export class Mansion {
    * Covers main_up stair footprint plus narrow east climb lane to landing crest.
    */
   _storyAperture(room, which) {
-    // Shared climb hole: stair void + straightened foyer climb (foot→crest) with car margin.
-    // Authored climb X∈[-5.05,-2.75] Z∈[-1.95,11.75] — hole must cover lips + imperfect steer.
-    const hole = { minX: -8.55, maxX: -1.75, minZ: -2.25, maxZ: 12.15 };
+    // Shared climb hole: stair void + east-of-stair foyer climb (foot→crest) with car margin.
+    // Authored climb X∈[-4.85,-3.55] Z∈[-1.35,12.55] — hole covers lips + imperfect steer.
+    const hole = { minX: -8.55, maxX: -2.40, minZ: -2.55, maxZ: 12.40 };
     if (which === "ceiling" && room.id === "foyer") return hole;
     if (which === "floor" && room.id === "landing") return hole;
     // Hall ceiling overlaps climb near foyer/hall junction — punch climb lane
     if (which === "ceiling" && room.id === "hall_ground") {
-      return { minX: -3.70, maxX: -1.75, minZ: -2.25, maxZ: 2.15 };
+      return { minX: -5.70, maxX: -2.80, minZ: -2.55, maxZ: 2.15 };
     }
     return null;
   }
@@ -2962,13 +2962,14 @@ export class Mansion {
     // landing_skirting fillets never pin on leftover jamb slabs.
     if (room.id === "landing" && side === "north") {
       add(0, 3.0, cy, cy + doorH);
-      add(-2.75, 2.90, cy, cy + doorH); // west asphalt / climb crest approach
+      // West crest portal: asphalt climb arrives here — no gold jamb pillars
+      out.push({ along: -2.75, width: 3.20, y0: cy, y1: cy + doorH, noFrame: true });
       add(2.75, 2.90, cy, cy + doorH);  // east fillet mirror
       return out;
     }
     if (room.id === "library_hall" && side === "south") {
       add(0, 3.0, cy, cy + doorH);
-      add(-2.75, 2.90, cy, cy + doorH);
+      out.push({ along: -2.75, width: 3.20, y0: cy, y1: cy + doorH, noFrame: true });
       add(2.75, 2.90, cy, cy + doorH);
       return out;
     }
@@ -3033,14 +3034,14 @@ export class Mansion {
     }
     if (room.id === "library_hall" && side === "east") {
       add(-8.0, 2.60, cy, cy + doorH);
-      // South tip near z≈0 — mirror west; clears landing_skirting east fillet
-      add(-0.55, 2.40, cy, cy + doorH);
+      // South tip mirror of west crest handoff opening
+      out.push({ along: -1.10, width: 3.80, y0: cy, y1: cy + doorH, noFrame: true });
       return out;
     }
     if (room.id === "library_hall" && side === "west") {
       add(-8.0, 2.60, cy, cy + doorH);
-      // South tip near z≈0 — clears landing_skirting west fillet past library jamb
-      add(-0.55, 2.40, cy, cy + doorH);
+      // South tip: cover climb crest handoff (z≈-2.1) — no gold jamb in asphalt
+      out.push({ along: -1.10, width: 3.80, y0: cy, y1: cy + doorH, noFrame: true });
       return out;
     }
     if (room.id === "nursery" && side === "west") {
@@ -3113,6 +3114,7 @@ export class Mansion {
         y1: o.y1,
         along: o.along,
         width: o.width,
+        noFrame: !!o.noFrame,
       }))
       .filter((o) => o.a1 - o.a0 > 0.08)
       .sort((a, b) => a.a0 - b.a0);
@@ -3156,11 +3158,16 @@ export class Mansion {
     }
     if (wallMax > cursor + 0.04) addPanel(cursor, wallMax, yBot, yTop);
 
-    // Brass portal frames (readable tunnels) — emissive gold, non-blocking
+    // Brass portal frames (readable tunnels) — emissive gold, non-blocking.
+    // SKIP full-height climb tunnels: gold jambs read as pillars the climb ribbon
+    // clips through (Ben trust-fail screenshot). Ordinary doors keep frames.
     const portalBrass = this._brass(0xe8c547);
     portalBrass.emissive = new THREE.Color(0xc9a227);
     portalBrass.emissiveIntensity = 0.42;
+    const storyTop = yTop - 0.05;
     for (const o of sorted) {
+      const fullHeightClimb = (o.y1 >= storyTop) && (o.width >= 3.2);
+      if (fullHeightClimb || o.noFrame) continue; // hole only — no floating gold posts
       const jambD = horizontal ? sz + 0.10 : sx + 0.10;
       const frameH = Math.max(0.2, o.y1 - o.y0);
       for (const sign of [-1, 1]) {

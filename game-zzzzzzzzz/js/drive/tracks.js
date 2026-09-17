@@ -945,7 +945,7 @@ export class TrackSystem {
     let dist = 0;
     // Solid asphalt slab: top + bottom + side walls (Mario Kart curb mass, not tape)
     // Ramps: thicker slab so under-deck reads solid (kills dark void / paper look)
-    const slab = kind === "ramp" ? 0.095 : (isDeck ? 0.085 : (thickAsphalt ? 0.048 : 0.032));
+    const slab = kind === "ramp" ? 0.112 : (isDeck ? 0.085 : (thickAsphalt ? 0.048 : 0.032)); // thick climb deck — not paper chevron strip
     // Ramp feet: plant underside on approach asphalt (no underground dig, no floating gap)
     const footY0 = pts[0].y;
     const groundFoot = kind === "ramp" && footY0 < 1.15;

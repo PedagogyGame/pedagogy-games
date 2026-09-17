@@ -91,10 +91,10 @@ export const TRACK_PATHS = [
     fancy: true,
     points: [
       { x: -2.55, y: 0.06, z: 11.05 }, // kiss foyer_drive_start T
-      { x: -3.25, y: 0.06, z: 11.15 },
-      { x: -3.90, y: 0.06, z: 11.30 },
-      { x: -4.50, y: 0.06, z: 11.50 },
-      { x: -5.05, y: 0.06, z: 11.75 }, // kiss ramp_foyer_to_landing foot
+      { x: -3.20, y: 0.06, z: 11.20 },
+      { x: -3.80, y: 0.06, z: 11.40 },
+      { x: -4.35, y: 0.06, z: 11.65 },
+      { x: -4.85, y: 0.06, z: 11.85 }, // kiss ramp_foyer_to_landing foot (clear of south facade)
     ],
   },
   // Doorway edge strip: foyer → hall (east jamb, not dead center)
@@ -411,11 +411,12 @@ export const TRACK_PATHS = [
       { x: 7.2, y: 4.26, z: 5.0 },
       { x: 7.2, y: 4.26, z: 1.0 },
       { x: 2.75, y: 4.26, z: -1.95 }, // east fillet — clear of library east tip
-      { x: -2.75, y: 4.26, z: -1.95 }, // kiss ramp_foyer_to_landing crest
-      { x: -4.40, y: 4.26, z: 0.80 }, // west skirting — simple fillet
-      { x: -5.05, y: 4.26, z: 2.60 }, // east of attic east-stringer AABB
-      { x: -5.05, y: 4.26, z: 4.40 },
-      { x: -4.95, y: 4.26, z: 6.25 }, // clear attic east stringer
+      { x: -2.75, y: 4.26, z: -1.95 }, // library west skirting kiss
+      { x: -3.55, y: 4.26, z: -2.10 }, // kiss ramp_foyer_to_landing crest
+      { x: -4.55, y: 4.26, z: 0.20 }, // west skirting — east of stair void
+      { x: -5.00, y: 4.26, z: 2.60 }, // east of attic east-stringer AABB
+      { x: -5.00, y: 4.26, z: 4.40 },
+      { x: -4.90, y: 4.26, z: 6.25 }, // clear attic east stringer
       { x: -5.85, y: 4.26, z: 7.50 },
       { x: -6.8, y: 4.26, z: 8.8 },
     ],
@@ -643,23 +644,28 @@ export const TRACK_PATHS = [
   {
     id: "ramp_foyer_to_landing",
     kind: "ramp",
-    width: 0.82, // climb foot (post scale×ramp-mult) — mountable, not fat
+    width: 0.95, // thick asphalt deck (post scale×ramp-mult ≈1.29) — not a hazard stripe
     gentleStart: true, // ease-in first 20% of rise — soft mount, not wall
-    noLateralBow: true, // keep authored east-of-stair XZ; soften may even Y only
+    noLateralBow: true, // keep east-of-stair corridor XZ; soften may even Y only
     points: [
-      // Straightened Mario Kart climb — mostly west corridor then gentle SE to crest.
-      // Holds x≲-4.3 until low Z so foyer skirting can cruise east of climb.
-      { x: -5.05, y: 0.06, z: 11.75, label: "Grand Foyer" },
-      { x: -4.95, y: 0.06, z: 10.35 },
-      { x: -4.85, y: 0.06, z: 8.70 },
-      { x: -4.75, y: 0.06, z: 6.80 },
-      { x: -4.60, y: 0.06, z: 4.80 },
-      { x: -4.40, y: 0.06, z: 2.80 },
-      { x: -4.00, y: 0.06, z: 0.90 },
-      { x: -3.50, y: 0.06, z: -0.45 },
-      { x: -3.05, y: 0.06, z: -1.30 },
-      { x: -2.75, y: 4.26, z: -1.95, label: "Upper Landing" },
-    
+      // Restored east-of-stair corridor (proven foyer-drive family). Readable climb
+      // in open volume — NOT a fake straight line through gold door frames.
+      // Foot flush on foyer asphalt (clear of south facade); crest on landing_skirting.
+      // Flat run ≥14m so soften can hold ≤30% without lateral bow.
+      { x: -4.85, y: 0.06, z: 11.85, label: "Grand Foyer" },
+      { x: -4.85, y: 0.06, z: 10.60 },
+      { x: -4.85, y: 0.06, z: 9.20 },
+      { x: -4.85, y: 0.06, z: 7.70 },
+      { x: -4.85, y: 0.06, z: 6.20 },
+      { x: -4.85, y: 0.06, z: 4.70 },
+      { x: -4.85, y: 0.06, z: 3.30 },
+      { x: -4.75, y: 0.06, z: 2.00 },
+      { x: -4.55, y: 0.06, z: 0.80 },
+      { x: -4.25, y: 0.06, z: -0.20 },
+      { x: -3.95, y: 0.06, z: -0.90 },
+      { x: -3.75, y: 0.06, z: -1.40 },
+      { x: -3.60, y: 0.06, z: -1.75 },
+      { x: -3.55, y: 4.26, z: -2.10, label: "Upper Landing" },
     ],
   },
   // ─── Furniture-top circuits + ramps (Toy Story vibe) ───
