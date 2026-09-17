@@ -18,7 +18,9 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-To add more later: next folder is `game-zzzzzzzzzk`, next class is `.game-172`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzk/` / `.game-172` — Kelvin House (The Last Bus from Kelvin House).
+
+To add more later: next folder is `game-zzzzzzzzzl`, next class is `.game-173`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
