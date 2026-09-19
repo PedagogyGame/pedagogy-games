@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { Player } from "./player.js?v=drivefix3";
-import { Mansion } from "./mansion.js?v=drivefix3";
-import { InspectMode } from "./inspect.js?v=drivefix3";
-import { SliceSystem } from "./slice.js?v=drivefix3";
-import { DriveMode } from "./drive/driveMode.js?v=drivefix3";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=drivefix3";
-import { OBJECTS } from "./data/objects.js?v=drivefix3";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=drivefix3";
+import { Player } from "./player.js?v=polish10c";
+import { Mansion } from "./mansion.js?v=polish10c";
+import { InspectMode } from "./inspect.js?v=polish10c";
+import { SliceSystem } from "./slice.js?v=polish10c";
+import { DriveMode } from "./drive/driveMode.js?v=polish10c";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=polish10c";
+import { OBJECTS } from "./data/objects.js?v=polish10c";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=polish10c";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -47,12 +47,17 @@ const boot = window.__MOTU_BOOT__ || (window.__MOTU_BOOT__ = {
   failed: false,
 });
 
-/** Temporary live prove harness — only when URL has ?autodrive=climb (or &autodrive=climb). */
+/** Temporary live prove harness — ?autodrive=climb|climb_a|climb_b or ?climb=a|b. */
 const AUTODRIVE_CLIMB = (() => {
   try {
-    return new URLSearchParams(location.search).get("autodrive") === "climb";
+    const q = new URLSearchParams(location.search);
+    const ad = (q.get("autodrive") || "").toLowerCase();
+    const climb = (q.get("climb") || "").toLowerCase();
+    if (ad === "climb_b" || ad === "climb-b" || climb === "b") return "b";
+    if (ad === "climb" || ad === "climb_a" || ad === "climb-a" || climb === "a") return "a";
+    return null;
   } catch (_) {
-    return false;
+    return null;
   }
 })();
 
@@ -357,6 +362,7 @@ if (mansion && !boot.failed) {
     inspect = new InspectMode(camera, canvas);
     slice = new SliceSystem();
     drive = new DriveMode(scene, camera);
+    window.__MOTU_DRIVE__ = drive;
     drive.setWallColliders(mansion.getColliders());
   } catch (err) {
     showBootError(err);
@@ -419,7 +425,7 @@ if (!boot.failed && mansion && drive && inspect && slice) {
     boot.pendingEnter = false;
     enterEstate();
     try {
-      drive.beginClimbAutodrive();
+      drive.beginClimbAutodrive(AUTODRIVE_CLIMB);
     } catch (err) {
       console.error("[autodrive] beginClimbAutodrive failed", err);
     }

@@ -1,201 +1,208 @@
 /**
- * Drive tracks — PRIMARY CIRCUIT ONLY (from-scratch 2026-09-17).
+ * Drive tracks — EXPERT FIGURE-8 LAP (2026-09-17).
  *
- * Circuit: foyer asphalt → climb spur runway → climb to landing →
- * landing skirting → balcony loop → return to landing.
+ * LAP: (1) foyer oval S/F mid-foyer long axis
+ *      (2) Climb A foyer→landing dedicated asphalt corridor EAST of west scenic stairs
+ *      (3) landing hairpin 180 around solid newel
+ *      (4) balcony loop — outer rail = wall, marked inner edge
+ *      (5) Climb B balcony→foyer EAST hole (opposite Climb A)
+ *      (6) short foyer straight into start — fully kissed junctions
  *
- * No secondary ribbons, furniture tops, cornice junk, mouse tubes, or outdoor forks.
- * Roads sit IN rooms (thick asphalt on floors; climb through real ceiling holes).
+ * LANE: clear 2.2–2.8 m, straights ≤3.0, never >3.5; curb visual 0.35–0.5
+ * CAR_SCALE≈0.19. Grade ≤30%. Real dual floor holes. No freeways / floating roads.
  */
-export const ROAD_WIDTH_SCALE = 0.80;
-export const RAMP_WIDTH_MULT = 1.70;
-export const RAMP_WIDTH_MIN = 0.58;
-export const FLOOR_WIDTH_MIN = 0.68;
-export const DOOR_WIDTH_MIN = 0.48;
-export const DECK_WIDTH_MIN = 0.62;
+export const ROAD_WIDTH_SCALE = 1.0;
+export const RAMP_WIDTH_MULT = 1.0;
+export const RAMP_WIDTH_MIN = 2.2;
+export const FLOOR_WIDTH_MIN = 2.2;
+export const DOOR_WIDTH_MIN = 2.2;
+export const DECK_WIDTH_MIN = 2.2;
 export const RAMP_MAX_GRADE = 0.30;
 export const RAMP_DISABLE_MEAN_GRADE = 0.305;
+export const CAR_LENGTH_U = 0.19;
 
-/** Authored design widths (pre-scale). */
 const _PATHS = [
-  // ── Foyer open asphalt (spawn + cruise) ──────────────────────────
+  // ── 1) FOYER OVAL ───────────────────────────────────────────────
   {
-    id: "foyer_drive_start",
+    id: "foyer_oval",
     kind: "floor",
-    width: 2.45,
-    tension: 0.02,
-    fancy: true,
-    points: [
-      { x: -2.55, y: 0.06, z: 11.50, label: "Grand Foyer" },
-      { x: -2.55, y: 0.06, z: 11.05 },
-      { x: -2.00, y: 0.06, z: 10.20 },
-      { x: -1.60, y: 0.06, z: 9.00 },
-      { x: -1.40, y: 0.06, z: 7.60 },
-      { x: -1.25, y: 0.06, z: 6.50 },
-      { x: -1.20, y: 0.06, z: 5.80 },
-    ],
-  },
-  // Short runway T → climb foot (east of grand stair)
-  {
-    id: "foyer_climb_spur",
-    kind: "floor",
-    width: 2.30,
-    tension: 0.06,
-    fancy: true,
-    points: [
-      { x: -2.55, y: 0.06, z: 11.05 },
-      { x: -3.20, y: 0.06, z: 11.20 },
-      { x: -3.80, y: 0.06, z: 11.40 },
-      { x: -4.35, y: 0.06, z: 11.65 },
-      { x: -4.85, y: 0.06, z: 11.85 },
-    ],
-  },
-  // Foyer skirting loop — readable wall-hug asphalt (not secondary junk)
-  {
-    id: "foyer_skirting",
-    kind: "floor",
-    width: 1.36,
-    tension: 0.12,
-    closed: true,
-    fancy: true,
-    points: [
-      { x: -5.55, y: 0.06, z: 12.20, label: "Grand Foyer" },
-      { x: -6.5, y: 0.06, z: 12.25 },
-      { x: -7.9, y: 0.06, z: 12.2 },
-      { x: -8.35, y: 0.06, z: 11.7 },
-      { x: -8.45, y: 0.06, z: 10.6 },
-      { x: -8.45, y: 0.06, z: 9.55 },
-      { x: -8.45, y: 0.06, z: 1.85 },
-      { x: -8.00, y: 0.06, z: -0.30 },
-      { x: -2.85, y: 0.06, z: -0.35 },
-      { x: 2.85, y: 0.06, z: -0.35 },
-      { x: 8.00, y: 0.06, z: -0.30 },
-      { x: 8.15, y: 0.06, z: 1.0 },
-      { x: 8.15, y: 0.06, z: 5.0 },
-      { x: 8.15, y: 0.06, z: 9.0 },
-      { x: 8.10, y: 0.06, z: 10.5 },
-      { x: 7.9, y: 0.06, z: 12.2 },
-      { x: 4.0, y: 0.06, z: 12.35 },
-      { x: 0.0, y: 0.06, z: 12.4 },
-      { x: -3.2, y: 0.06, z: 12.35 },
-      // Open bow east of climb (kiss drive_start)
-      { x: -1.70, y: 0.06, z: 11.00 },
-      { x: -1.20, y: 0.06, z: 9.40 },
-      { x: -1.20, y: 0.06, z: 7.80 },
-      { x: -1.20, y: 0.06, z: 5.80 },
-      { x: -1.50, y: 0.06, z: 1.70 },
-      { x: -6.8, y: 0.06, z: 1.55 },
-      { x: -8.45, y: 0.06, z: 1.85 },
-      { x: -8.45, y: 0.06, z: 9.55 },
-      { x: -7.9, y: 0.06, z: 12.2 },
-      { x: -6.5, y: 0.06, z: 12.25 },
-      { x: -5.55, y: 0.06, z: 12.20 },
-    ],
-  },
-  // Climb: east-of-stair corridor — straight readable, ≤30% grade, ≪100° turn
-  // Y values are PRE-softened along flat arc (gentleStart first 20%).
-  {
-    id: "ramp_foyer_to_landing",
-    kind: "ramp",
-    width: 0.95,
-    gentleStart: true,
-    noLateralBow: true,
-    tension: 0.22,
-    points: [
-      { x: -4.85, y: 0.060, z: 11.85, label: "Grand Foyer" },
-      { x: -4.85, y: 0.168, z: 10.60 },
-      { x: -4.85, y: 0.336, z: 9.20 },
-      { x: -4.85, y: 0.546, z: 7.70 },
-      { x: -4.85, y: 0.798, z: 6.20 },
-      { x: -4.85, y: 1.092, z: 4.70 },
-      { x: -4.85, y: 1.428, z: 3.30 },
-      { x: -4.75, y: 1.806, z: 2.00 },
-      { x: -4.55, y: 2.226, z: 0.80 },
-      { x: -4.25, y: 2.688, z: -0.20 },
-      { x: -3.95, y: 3.150, z: -0.90 },
-      { x: -3.75, y: 3.570, z: -1.40 },
-      { x: -3.60, y: 3.906, z: -1.75 },
-      { x: -3.55, y: 4.260, z: -2.10, label: "Upper Landing" },
-    ],
-  },
-  // Landing skirting — crest kiss + balcony mounts
-  {
-    id: "landing_skirting",
-    kind: "floor",
-    width: 1.20,
+    width: 2.50,
     tension: 0.08,
     closed: true,
     fancy: true,
     points: [
-      { x: -6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
-      { x: -4.5, y: 4.26, z: 8.95 },
-      { x: -2.0, y: 4.26, z: 9.0 },
-      { x: 0.0, y: 4.26, z: 9.0 },
-      { x: 2.0, y: 4.26, z: 9.0 },
-      { x: 4.5, y: 4.26, z: 8.95 },
-      { x: 6.8, y: 4.26, z: 8.8 },
-      { x: 7.1, y: 4.26, z: 7.0 },
-      { x: 7.2, y: 4.26, z: 5.0 },
-      { x: 7.2, y: 4.26, z: 1.0 },
-      { x: 2.75, y: 4.26, z: -1.95 },
-      { x: -2.75, y: 4.26, z: -1.95 },
-      { x: -3.55, y: 4.26, z: -2.10 }, // climb crest kiss
-      { x: -4.55, y: 4.26, z: 0.20 },
-      { x: -5.00, y: 4.26, z: 2.60 },
-      { x: -5.00, y: 4.26, z: 4.40 },
-      { x: -4.90, y: 4.26, z: 6.25 },
-      { x: -5.85, y: 4.26, z: 7.50 },
-      { x: -6.8, y: 4.26, z: 8.8 },
+      { x: 0.00, y: 0.0, z: 10.40, label: "Start / Finish" },
+      { x: -2.20, y: 0.0, z: 10.40 },
+      { x: -4.00, y: 0.0, z: 10.55 },
+      { x: -5.40, y: 0.0, z: 11.20 },
+      { x: -6.40, y: 0.0, z: 11.90 },
+      { x: -7.00, y: 0.0, z: 12.20 }, // west wall cruise (scenic stairs)
+      { x: -7.00, y: 0.0, z: 9.00 },
+      { x: -7.00, y: 0.0, z: 5.50 },
+      { x: -6.40, y: 0.0, z: 2.80 },
+      { x: -4.80, y: 0.0, z: 1.20 },
+      { x: -2.40, y: 0.0, z: 0.55 },
+      { x: 0.00, y: 0.0, z: 0.45 },
+      { x: 2.40, y: 0.0, z: 0.55 },
+      { x: 4.80, y: 0.0, z: 1.20 },
+      { x: 6.40, y: 0.0, z: 2.80 },
+      { x: 7.00, y: 0.0, z: 5.50 },
+      { x: 7.00, y: 0.0, z: 9.00 },
+      { x: 7.00, y: 0.0, z: 12.40 }, // kiss climb_b / finish
+      { x: 5.20, y: 0.0, z: 12.05 },
+      { x: 3.00, y: 0.0, z: 10.85 },
+      { x: 1.40, y: 0.0, z: 10.50 },
+      { x: 0.00, y: 0.0, z: 10.40 },
     ],
   },
+
+  // Spur oval → Climb A (kiss)
   {
-    id: "ramp_landing_to_balcony",
-    kind: "ramp",
-    width: 0.88,
+    id: "foyer_to_climb_a",
+    kind: "floor",
+    width: 2.45,
+    tension: 0.03,
+    fancy: true,
     points: [
-      { x: 6.8, y: 4.26, z: 8.8, label: "Upper Landing" },
-      { x: 5.6, y: 4.28, z: 9.15 },
-      { x: 4.85, y: 4.32, z: 9.55 },
-      { x: 4.70, y: 4.30, z: 10.05 },
-      { x: 4.70, y: 4.28, z: 11.10 },
-      { x: 4.70, y: 4.28, z: 12.20, label: "Balcony" },
+      { x: -5.40, y: 0.0, z: 11.20 }, // from oval
+      { x: -5.25, y: 0.0, z: 11.55 },
+      { x: -5.15, y: 0.0, z: 11.90 },
+      { x: -5.05, y: 0.0, z: 12.15 },
+      { x: -5.00, y: 0.0, z: 12.40 }, // kiss climb_a foot
     ],
   },
+
+    // ── 2) Climb A — dedicated asphalt EAST of west scenic stairs ───
+  // Corridor x≈-5.0 (stairs scenery at x≈-7.6). Flat run ≥14 m; rise 4.2; grade ≤30%.
+  {
+    id: "climb_a",
+    kind: "ramp",
+    width: 2.40,
+    gentleStart: false,
+    noLateralBow: true,
+    tension: 0.10,
+    points: [
+      // Asphalt corridor x=-5.0 east of scenic stairs (x≈-7.6). Crest east of newel.
+      { x: -5.00, y: 0.0, z: 12.40, label: "Grand Foyer" },
+      { x: -5.00, y: 0.55, z: 10.50 },
+      { x: -5.00, y: 1.10, z: 8.60 },
+      { x: -5.00, y: 1.65, z: 6.70 },
+      { x: -5.00, y: 2.20, z: 4.80 },
+      { x: -5.00, y: 2.75, z: 2.90 },
+      { x: -5.00, y: 3.30, z: 1.00 },
+      { x: -5.00, y: 3.75, z: -0.50 },
+      { x: -5.00, y: 4.20, z: -1.80, label: "Upper Landing" }, // east of newel, kiss hairpin
+    ],
+  },
+
+  // ── 3) Landing hairpin 180 around solid newel ───────────────────
+  // Newel ≈ (-5.50, 4.2, -0.20); inner R ≥ 1.5
+  {
+    id: "landing_hairpin",
+    kind: "floor",
+    width: 2.40,
+    tension: 0.10,
+    fancy: true,
+    points: [
+      // Kiss climb_a crest east of newel; 180° around newel (-5.50,-0.20); R≥1.5
+      { x: -5.00, y: 4.20, z: -1.80 },
+      { x: -4.20, y: 4.20, z: -0.40 },
+      { x: -3.60, y: 4.20, z: 1.00 },
+      { x: -4.20, y: 4.20, z: 2.20 },
+      { x: -5.50, y: 4.20, z: 2.40 }, // north of newel
+      { x: -6.60, y: 4.20, z: 1.20 },
+      { x: -6.60, y: 4.20, z: -0.40 },
+      { x: -5.80, y: 4.20, z: -1.40 },
+      { x: -4.80, y: 4.20, z: -1.20 },
+      { x: -4.00, y: 4.20, z: 0.20 },
+      { x: -3.40, y: 4.20, z: 1.80 },
+      { x: -2.40, y: 4.20, z: 3.40 },
+      { x: -1.20, y: 4.20, z: 5.00 },
+      { x: 0.40, y: 4.20, z: 6.60 },
+      { x: 2.20, y: 4.20, z: 7.80 },
+      { x: 4.00, y: 4.20, z: 8.80 },
+      { x: 5.00, y: 4.20, z: 9.55, label: "Balcony Approach" },
+    ],
+  },
+
+  // ── 4) Balcony loop ─────────────────────────────────────────────
   {
     id: "balcony_loop",
     kind: "balcony",
-    width: 0.95,
+    width: 2.40,
     rail: true,
-    tension: 0.04,
+    tension: 0.05,
     closed: true,
     fancy: true,
     points: [
-      { x: 4.70, y: 4.28, z: 12.20, label: "Balcony" },
-      { x: 4.10, y: 4.28, z: 13.50 },
-      { x: 2.60, y: 4.28, z: 14.70 },
-      { x: 0.40, y: 4.28, z: 16.00 },
-      { x: -1.80, y: 4.28, z: 16.70 },
-      { x: -3.60, y: 4.28, z: 16.20 },
-      { x: -4.50, y: 4.28, z: 15.20 },
-      { x: -4.55, y: 4.28, z: 13.80 },
-      { x: -4.70, y: 4.28, z: 12.20 },
-      { x: -2.20, y: 4.28, z: 12.35 },
-      { x: 0.00, y: 4.28, z: 12.40 },
-      { x: 2.20, y: 4.28, z: 12.35 },
-      { x: 4.70, y: 4.28, z: 12.20 },
+      { x: 5.00, y: 4.20, z: 9.55 },
+      { x: 5.40, y: 4.20, z: 11.20 },
+      { x: 5.50, y: 4.20, z: 13.00 },
+      { x: 5.20, y: 4.20, z: 14.80 },
+      { x: 3.80, y: 4.20, z: 16.40 },
+      { x: 1.80, y: 4.20, z: 17.00 },
+      { x: 0.00, y: 4.20, z: 17.15 },
+      { x: -1.80, y: 4.20, z: 17.00 },
+      { x: -3.80, y: 4.20, z: 16.40 },
+      { x: -5.00, y: 4.20, z: 14.80 },
+      { x: -5.10, y: 4.20, z: 13.00 },
+      { x: -4.70, y: 4.20, z: 11.20 },
+      { x: -3.20, y: 4.20, z: 10.00 },
+      { x: -1.00, y: 4.20, z: 9.60 },
+      { x: 1.50, y: 4.20, z: 9.50 },
+      { x: 3.60, y: 4.20, z: 9.50 },
+      { x: 5.00, y: 4.20, z: 9.55 },
     ],
   },
+
   {
-    id: "ramp_balcony_return",
-    kind: "ramp",
-    width: 0.88,
+    id: "balcony_to_climb_b",
+    kind: "floor",
+    width: 2.40,
+    tension: 0.06,
+    fancy: true,
     points: [
-      { x: -4.70, y: 4.28, z: 12.20, label: "Balcony" },
-      { x: -4.70, y: 4.27, z: 11.10 },
-      { x: -4.70, y: 4.26, z: 10.05 },
-      { x: -4.60, y: 4.26, z: 9.55 },
-      { x: -3.60, y: 4.26, z: 9.20 },
-      { x: -2.00, y: 4.26, z: 9.00, label: "Upper Landing" },
+      { x: 5.00, y: 4.20, z: 14.80 },
+      { x: 5.60, y: 4.20, z: 11.00 },
+      { x: 6.40, y: 4.20, z: 6.50 },
+      { x: 6.90, y: 4.20, z: 2.50 },
+      { x: 7.00, y: 4.20, z: -1.80 },
+    ],
+  },
+
+    // ── 5) Climb B — EAST asphalt hole (scenic stairs at x≈8.6 beside) ─
+  // Straight corridor x=7.00; flat ≥14 m; drop 4.2 → grade ≤0.30; landmark pylons at foot/crest
+  {
+    id: "climb_b",
+    kind: "ramp",
+    width: 2.40,
+    gentleStart: false,
+    noLateralBow: true,
+    tension: 0.16,
+    points: [
+      { x: 7.00, y: 4.20, z: -1.80, label: "Upper Landing" },
+      { x: 7.00, y: 3.60, z: 0.20 },
+      { x: 7.00, y: 3.00, z: 2.20 },
+      { x: 7.00, y: 2.40, z: 4.20 },
+      { x: 7.00, y: 1.80, z: 6.20 },
+      { x: 7.00, y: 1.20, z: 8.20 },
+      { x: 7.00, y: 0.60, z: 10.20 },
+      { x: 7.00, y: 0.00, z: 12.40, label: "Grand Foyer" },
+    ],
+  },
+
+  // ── 6) Short foyer straight into start ──────────────────────────
+  {
+    id: "foyer_finish",
+    kind: "floor",
+    width: 2.50,
+    tension: 0.04,
+    fancy: true,
+    points: [
+      { x: 7.00, y: 0.0, z: 12.40 }, // kiss climb_b foot
+      { x: 4.20, y: 0.0, z: 11.40 },
+      { x: 1.80, y: 0.0, z: 10.60 },
+      { x: 0.00, y: 0.0, z: 10.40, label: "Start / Finish" },
     ],
   },
 ];
@@ -206,7 +213,6 @@ export const ROAD_WIDTH_DESIGN = Object.fromEntries(
   TRACK_PATHS.map((p) => [p.id, p.width])
 );
 
-// Apply width scale + ramp boost + floors/decks mins
 for (const path of TRACK_PATHS) {
   if (typeof path.width === "number") {
     path.width = Math.round(path.width * ROAD_WIDTH_SCALE * 1000) / 1000;
@@ -216,9 +222,11 @@ for (const path of TRACK_PATHS) {
   if (path.kind !== "ramp" || typeof path.width !== "number") continue;
   path.width = Math.round(path.width * RAMP_WIDTH_MULT * 1000) / 1000;
   if (path.width < RAMP_WIDTH_MIN) path.width = RAMP_WIDTH_MIN;
+  if (path.width > 3.5) path.width = 3.5;
 }
 for (const path of TRACK_PATHS) {
   if (path.disabled || path.visual === false || typeof path.width !== "number") continue;
+  if (path.width > 3.5) path.width = 3.5;
   if (path.kind === "floor" || path.kind === "outdoor" || path.kind === "flower") {
     if (path.width < FLOOR_WIDTH_MIN) path.width = FLOOR_WIDTH_MIN;
   } else if (path.kind === "elevated" || path.kind === "cornice" || path.kind === "balcony") {
@@ -226,7 +234,6 @@ for (const path of TRACK_PATHS) {
   }
 }
 
-/** Soften / assert ramp grades (safety net — climb Y already authored evenly). */
 function _softenRampGrades(path) {
   if (path.kind !== "ramp" || path.disabled || !path.points || path.points.length < 3) return;
   const pts = path.points;
@@ -246,20 +253,24 @@ function _softenRampGrades(path) {
     path._disabledReason = `mean grade ${mean.toFixed(2)} > ${RAMP_DISABLE_MEAN_GRADE}`;
     return;
   }
-  // Re-even Y along flat (keep gentleStart if flagged)
-  if (path.gentleStart && rise > 0.4 && totalFlat > 4) {
-    const sign = Math.sign(y1 - y0) || 1;
-    for (let i = 1; i < pts.length - 1; i++) {
-      const t = cum[i] / totalFlat;
-      const frac = t <= 0.20 ? t * 0.45 : 0.09 + ((t - 0.20) / 0.80) * 0.91;
-      pts[i].y = Math.round((y0 + sign * rise * frac) * 1000) / 1000;
+  // Identify authored flat pads (y≈y0 at start, y≈y1 at end)
+  let i0 = 0;
+  while (i0 + 1 < pts.length && Math.abs(pts[i0 + 1].y - y0) < 0.05) i0++;
+  let i1 = pts.length - 1;
+  while (i1 - 1 > i0 && Math.abs(pts[i1 - 1].y - y1) < 0.05) i1--;
+  const climbLen = cum[i1] - cum[i0];
+  if (climbLen < 1e-3) return;
+  const sign = Math.sign(y1 - y0) || 1;
+  for (let i = i0 + 1; i < i1; i++) {
+    const t = (cum[i] - cum[i0]) / climbLen;
+    let frac = t;
+    if (path.gentleStart && rise > 0.4) {
+      frac = t <= 0.20 ? t * 0.45 : 0.09 + ((t - 0.20) / 0.80) * 0.91;
     }
-  } else {
-    for (let i = 1; i < pts.length - 1; i++) {
-      const t = cum[i] / totalFlat;
-      pts[i].y = Math.round((y0 + (y1 - y0) * t) * 1000) / 1000;
-    }
+    pts[i].y = Math.round((y0 + sign * rise * frac) * 1000) / 1000;
   }
+  for (let i = 0; i <= i0; i++) pts[i].y = y0;
+  for (let i = i1; i < pts.length; i++) pts[i].y = y1;
   let maxSeg = 0;
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i];
@@ -267,23 +278,22 @@ function _softenRampGrades(path) {
     if (run < 1e-6) continue;
     maxSeg = Math.max(maxSeg, Math.abs(b.y - a.y) / run);
   }
-  if (maxSeg > RAMP_MAX_GRADE + 1e-4) {
-    // Fall back to even Y
-    for (let i = 1; i < pts.length - 1; i++) {
-      const t = cum[i] / totalFlat;
+  if (maxSeg > RAMP_MAX_GRADE + 0.02) {
+    for (let i = i0 + 1; i < i1; i++) {
+      const t = (cum[i] - cum[i0]) / climbLen;
       pts[i].y = Math.round((y0 + (y1 - y0) * t) * 1000) / 1000;
     }
   }
 }
 for (const path of TRACK_PATHS) _softenRampGrades(path);
 
-export const CAR_SPAWN = { x: -2.55, y: 0.075, z: 11.50, yaw: Math.PI };
+// Spawn on S/F, facing west toward Climb A
+export const CAR_SPAWN = { x: 0.00, y: 0.012, z: 10.40, yaw: -Math.PI / 2 };
 
 export const RAMP_MOUNT_FEET = (() => {
   const APPROACH = {
-    ramp_foyer_to_landing: "foyer_climb_spur",
-    ramp_landing_to_balcony: "landing_skirting",
-    ramp_balcony_return: "balcony_loop",
+    climb_a: "foyer_to_climb_a",
+    climb_b: "balcony_to_climb_b",
   };
   const out = {};
   for (const path of TRACK_PATHS) {
@@ -294,7 +304,7 @@ export const RAMP_MOUNT_FEET = (() => {
       approach: APPROACH[path.id] || null,
       foot: { x: foot.x, y: foot.y, z: foot.z },
       crest: { x: crest.x, y: crest.y, z: crest.z },
-      engageBack: path.id === "ramp_foyer_to_landing" ? 1.10 : 0.08,
+      engageBack: path.id === "climb_a" || path.id === "climb_b" ? 1.25 : 0.08,
       crestSoft: 0.12,
       climbFracs: [0.25, 0.5, 0.75],
     };
@@ -304,14 +314,13 @@ export const RAMP_MOUNT_FEET = (() => {
 
 export const SHORTCUT_TOAST_RE = /mouse run|wall hollow|pipe shaft|service shaft|drop chute|climb tube|safe landing|start \/ finish/i;
 
-/** Primary circuit path ids (for sims / docs). */
 export const PRIMARY_CIRCUIT = [
-  "foyer_drive_start",
-  "foyer_climb_spur",
-  "foyer_skirting",
-  "ramp_foyer_to_landing",
-  "landing_skirting",
-  "ramp_landing_to_balcony",
+  "foyer_oval",
+  "foyer_to_climb_a",
+  "climb_a",
+  "landing_hairpin",
   "balcony_loop",
-  "ramp_balcony_return",
+  "balcony_to_climb_b",
+  "climb_b",
+  "foyer_finish",
 ];

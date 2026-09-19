@@ -86,7 +86,7 @@ function carHeightHits(x, z, r = 0.12) {
       }
       want -= lens[j];
     }
-    const snap = drive.tracks.querySnap(x, 0.075, z, 1.8);
+    const snap = drive.tracks.querySnap(x, CAR_SPAWN.y, z, 1.8);
     if (!snap?.onTrack) off++;
     if (carHeightHits(x, z, 0.14).length) choke++;
   }
@@ -103,7 +103,7 @@ function carHeightHits(x, z, r = 0.12) {
   for (const d of [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]) {
     const x = CAR_SPAWN.x + Math.sin(yaw) * d;
     const z = CAR_SPAWN.z + Math.cos(yaw) * d;
-    const s = drive.tracks.querySnap(x, 0.075, z, 1.8, yaw);
+    const s = drive.tracks.querySnap(x, CAR_SPAWN.y, z, 1.8, yaw);
     if (!s?.onTrack && firstOff == null) firstOff = d;
   }
   ok("straight-W corridor onTrack ≥2.0m", firstOff == null || firstOff > 2.0, `firstOff=${firstOff}`);

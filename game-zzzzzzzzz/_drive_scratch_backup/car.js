@@ -5,7 +5,7 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_SCALE = 0.190; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
+export const CAR_SCALE = 0.188; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
 /** Optional whisper of road grip when wheels on surface. OFF by default. */
 export const ASSIST_MAGNET = false;
@@ -108,11 +108,6 @@ export class RCCar {
     this._lastElevated = false;
     this._smoothBank = 0;
     this._smoothGrade = 0;
-    this._kissY = null;
-    this._crestSquat = 0;
-    this._prevGrade = 0;
-    this._brakeLight = 0; // #4 reactive brakes IGNORED — static tails only
-    this._baseTailEmissive = 0.55;
     this._throttleSmooth = 0;
     this._steerInput = 0;
     this._bodyRoll = 0;
@@ -213,7 +208,7 @@ export class RCCar {
       wheelGroup.position.set(x, tireR, z);
       const tire = new THREE.Mesh(tireGeo, m.rubber);
       tire.rotation.z = Math.PI / 2;
-      tire.castShadow = false;
+      tire.castShadow = true;
       wheelGroup.add(tire);
       // Slightly inset sidewall ring — reads as real tire depth
       const side = new THREE.Mesh(sidewallGeo, m.dark);
@@ -241,17 +236,17 @@ export class RCCar {
     // Chassis tub (low, wide — planted RC proportions)
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.028, 0.46), m.dark);
     chassis.position.y = 0.042;
-    chassis.castShadow = false;
+    chassis.castShadow = true;
     b.add(chassis);
     // Main body shell — single cohesive volume (not stacked candy boxes)
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.235, 0.055, 0.42), m.candy);
     body.position.y = 0.078;
-    body.castShadow = false;
+    body.castShadow = true;
     b.add(body);
     // Hood (slightly lower / tapered nose)
     const hood = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.032, 0.14), m.candy);
     hood.position.set(0, 0.088, -0.175);
-    hood.castShadow = false;
+    hood.castShadow = true;
     b.add(hood);
     // Wheel-arch lips
     for (const [sx, sz] of [[-0.12, -0.13], [0.12, -0.13], [-0.12, 0.13], [0.12, 0.13]]) {
@@ -302,15 +297,15 @@ export class RCCar {
     // Tall wagon — chassis + shell (less candy-stack)
     const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.03, 0.47), m.dark);
     chassis.position.y = 0.05;
-    chassis.castShadow = false;
+    chassis.castShadow = true;
     b.add(chassis);
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.255, 0.05, 0.45), m.candy);
     lower.position.y = 0.078;
-    lower.castShadow = false;
+    lower.castShadow = true;
     b.add(lower);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.245, 0.095, 0.40), m.candy);
     body.position.y = 0.145;
-    body.castShadow = false;
+    body.castShadow = true;
     b.add(body);
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.28), m.glass);
     cabin.position.set(0, 0.22, 0.02);
@@ -336,11 +331,11 @@ export class RCCar {
     // Chunky short wheelbase, open cage
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.4), m.candy);
     lower.position.y = 0.08;
-    lower.castShadow = false;
+    lower.castShadow = true;
     b.add(lower);
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.36), m.candy);
     body.position.y = 0.14;
-    body.castShadow = false;
+    body.castShadow = true;
     b.add(body);
     const hood = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.12), m.candy);
     hood.position.set(0, 0.15, -0.16);
@@ -377,11 +372,11 @@ export class RCCar {
     // Low sleek open-top
     const lower = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.04, 0.46), m.candy);
     lower.position.y = 0.05;
-    lower.castShadow = false;
+    lower.castShadow = true;
     b.add(lower);
     const mid = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.04, 0.4), m.candy);
     mid.position.y = 0.085;
-    mid.castShadow = false;
+    mid.castShadow = true;
     b.add(mid);
     const nose = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.14), m.candy);
     nose.position.set(0, 0.08, -0.2);
@@ -453,22 +448,12 @@ export class RCCar {
     const tail = subtle ? 0.15 : 0.55;
     const glow = subtle ? 0.06 : 0.28;
     const glowOp = subtle ? 0.12 : 0.35;
-    this._lightsSubtle = !!subtle;
-    this._baseTailEmissive = tail;
     if (this._headMats[0]) this._headMats[0].emissiveIntensity = head;
-    if (this._headMats[1]) this._headMats[1].emissiveIntensity = tail; // #4 static — no reactive brake punch
+    if (this._headMats[1]) this._headMats[1].emissiveIntensity = tail;
     if (this._glowMat) {
       this._glowMat.emissiveIntensity = glow;
       this._glowMat.opacity = glowOp;
     }
-  }
-
-  /** Reactive brake lights (#4) — IGNORED / no-op; leave static or minimal. */
-  _updateBrakeLights(_braking, _dt) {
-    this._brakeLight = 0;
-    if (this._lightsSubtle || !this._headMats[1]) return;
-    const base = this._baseTailEmissive != null ? this._baseTailEmissive : 0.55;
-    this._headMats[1].emissiveIntensity = base; // static cruise tails only
   }
 
   setPose(x, y, z, yaw) {
@@ -487,10 +472,6 @@ export class RCCar {
     this._lastElevated = false;
     this._smoothBank = 0;
     this._smoothGrade = 0;
-    this._kissY = null;
-    this._crestSquat = 0;
-    this._prevGrade = 0;
-    this._brakeLight = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
@@ -507,8 +488,9 @@ export class RCCar {
   }
 
   _storyFloors() {
-    // Match asphalt ride height (pathY = plank top + ASPHALT_RIDE 0.012)
-    return [8.412, 4.212, 0.012, -4.188];
+    // Match ground asphalt ride height (pathY 0.06 + yLift 0.015) — carpet must
+    // NOT settle 3cm below ribbon or the car bobs / looks like it floats at edges.
+    return [8.46, 4.26, 0.075, -4.05];
   }
 
   /** Nearest walkable story floor within band, or null if mid-air between stories. */
@@ -528,7 +510,7 @@ export class RCCar {
     for (const f of this._storyFloors()) {
       if (f < start - 0.35) return f;
     }
-    return 0.012;
+    return 0.075;
   }
 
   /**
@@ -656,14 +638,6 @@ export class RCCar {
       else if (elevated || kind === "ramp") fric *= 1.58;
       else fric *= 1.18;
     }
-
-    // Surface feel — asphalt vs carpet (strengthened #8; still binary on-road)
-    const onAsphalt = !!(snap?.onTrack && !snap?.carpet);
-    const onCarpet = !!(snap?.carpet && !snap?.onTrack);
-    let accelMul = 1;
-    if (onCarpet) { fric *= 1.34; accelMul = 0.74; maxV *= 0.88; }
-    else if (onAsphalt) { fric *= 0.93; accelMul = 1.08; }
-    this._surfaceCarpet = onCarpet ? 1 : 0;
     // Extra grip when soft rim fence is active (casual play stays ON deck)
     // Rim fence grip while onTrack OR brief nearDeck Y-assist (still not "on road")
     if (onRailDeck && snap?.wallBounce && (snap?.onTrack || snap?.nearDeck)) {
@@ -680,7 +654,7 @@ export class RCCar {
       const curve = 0.45 + 0.55 * headroom * headroom;
       // Climb-only plant — floor cruise torque unchanged so ribbon onRate stays green
       const climbPlant = (kind === "ramp" || snap?.steep) ? 1.06 : 1;
-      this.speed += this.accel * thr * curve * climbPlant * accelMul * dt;
+      this.speed += this.accel * thr * curve * climbPlant * dt;
     } else if (thr < -0.02) {
       this.speed -= this.brake * Math.abs(thr) * dt;
     } else {
@@ -770,7 +744,7 @@ export class RCCar {
       );
       // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
       // Foyer climb first segments: stronger Y-lock so foot mount does not drop back to asphalt
-      const foyerClimb = snap.pathId === "climb_a" || snap.pathId === "climb_b";
+      const foyerClimb = snap.pathId === "ramp_foyer_to_landing";
       const foyerFootHold = foyerClimb && (snap.y == null || snap.y < 1.35);
       const yLock = snap.steep || kind === "ramp"
         ? (foyerFootHold ? 92 : 62)
@@ -825,18 +799,6 @@ export class RCCar {
         z = THREE.MathUtils.lerp(z, snap.z, whisper);
       }
 
-
-      // Kiss handoff polish (#9) — tighter soft-settle, no hitch / no snapJump yank
-      if (this._kissY == null) this._kissY = y;
-      const yDelta = y - this._kissY;
-      if (Math.abs(yDelta) > 0.08 && !foyerClimb) {
-        // Soft settle only — never teleport Y at ribbon kisses
-        y = this._kissY + Math.sign(yDelta) * Math.min(Math.abs(yDelta), 0.032 + absV * 0.022);
-      } else if (Math.abs(yDelta) > 0.22 && foyerClimb) {
-        y = this._kissY + Math.sign(yDelta) * Math.min(Math.abs(yDelta), 0.078 + absV * 0.032);
-      }
-      this._kissY = THREE.MathUtils.lerp(this._kissY, y, Math.min(1, 18 * dt));
-
       // Lateral bank ONLY (hard-capped). Grade is separate — never tip sideways on climbs.
       const bankCap = kind === "chute" ? VISUAL_BANK_MAX_CHUTE : VISUAL_BANK_MAX;
       const rawBank = THREE.MathUtils.clamp(snap.bank || 0, -bankCap, bankCap);
@@ -848,17 +810,6 @@ export class RCCar {
       const rawGrade = (snap.grade != null && Number.isFinite(snap.grade)) ? snap.grade : 0;
       const gradeSmooth = sticky || rampAssist ? 3.0 : 2.4;
       this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade, rawGrade, Math.min(1, gradeSmooth * dt));
-      // Crest compression (#5) — fire on RAW grade drop. Smoothed grade never spans
-      // 0.10→0.06 in one frame (prev tracked smooth too), so crest never armed.
-      const gPrev = this._prevGrade || 0;
-      const leavingClimb = gPrev > 0.10 && rawGrade < 0.06 && absV > 0.20
-        && (kind === "floor" || kind === "balcony" || kind === "elevated" || !snap.steep);
-      if (leavingClimb && this._crestSquat < 0.20) this._crestSquat = 1;
-      this._prevGrade = rawGrade;
-      if (this._crestSquat > 0) {
-        // Slightly longer settle so the "compression" reads
-        this._crestSquat = Math.max(0, this._crestSquat - 2.2 * dt);
-      }
       // Gentle yaw settle — climb ramps / decks only. Floor cruise: NO ribbon yaw magnet
       // (player must be able to hold W and go straight on skirting without constant correction).
       const floorAssist = false;
@@ -898,12 +849,7 @@ export class RCCar {
       this.speed *= 1 - Math.min(0.4, 1.2 * dt);
     }
 
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)
-        || !Number.isFinite(this.speed) || !Number.isFinite(this.vy)) {
-      // Do not write NaN into the scene graph — reset planted pose
-      this.speed = 0;
-      this.vy = 0;
-      if (!Number.isFinite(this.yaw)) this.yaw = 0;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)) {
       return flags;
     }
 
@@ -917,11 +863,9 @@ export class RCCar {
       -GRADE_PITCH_MAX,
       GRADE_PITCH_MAX
     );
-    const crestDip = (this._crestSquat || 0) * 0.040; // brief squat (strengthened #5), not a jump
-    this.bodyPivot.position.y = THREE.MathUtils.lerp(this.bodyPivot.position.y || 0, -crestDip, Math.min(1, 12 * dt));
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(
       this.bodyPivot.rotation.x,
-      pitchFromGrade - this._landingDamp * 0.08 + crestDip * 0.9,
+      pitchFromGrade - this._landingDamp * 0.08,
       Math.min(1, 3.8 * dt)
     );
 
@@ -931,10 +875,6 @@ export class RCCar {
 
     const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
-
-    // Reactive brake lights: braking OR reverse-intent coast
-    const brakingNow = (thr < -0.05) || (thr < 0.02 && this.speed > 0.15 && !keys.boost);
-    this._updateBrakeLights(brakingNow, dt);
 
     this._idlePhase += dt;
     return flags;

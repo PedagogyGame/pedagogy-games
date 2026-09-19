@@ -28,10 +28,6 @@ export class EngineAudio {
     this._rpm = 0;
     this._boostAmt = 0;
     this._scrapeAmt = 0;
-    this._loadAmt = 0;
-    this._screechAmt = 0;
-    this._voidAmt = 0;
-    this._surfaceAmt = 0; // 0 asphalt, 1 carpet bed
   }
 
   /** Call on Drive enter (after user gesture via Enter/Drive click). */
@@ -49,11 +45,7 @@ export class EngineAudio {
       }
       this._muted = false;
       this._started = true;
-      try {
-        if (this._master) this._master.gain.setTargetAtTime(0.20, this._ctx.currentTime, 0.06);
-      } catch (_) {
-        try { if (this._master) this._master.gain.value = 0.20; } catch (_) {}
-      }
+      if (this._master) this._master.gain.setTargetAtTime(0.20, this._ctx.currentTime, 0.06);
     } catch (_) {
       this._muted = true;
       this._started = false;
@@ -76,7 +68,6 @@ export class EngineAudio {
    */
   update(s = {}) {
     if (!this._ctx || this._muted || !this._started) return;
-    if (!this._oscIdle || !this._master) { this._muted = true; return; }
     try {
       if (this._ctx.state === "suspended") {
         this._ctx.resume().catch(() => { this._muted = true; });
@@ -91,43 +82,27 @@ export class EngineAudio {
     const thr = Math.max(0, Math.min(1, Math.abs(s.throttle != null ? s.throttle : (spd > 0.05 ? 0.5 : 0))));
     const boost = s.boost ? 1 : 0;
     const scrape = Math.max(0, Math.min(1, s.scrape || 0));
-    const grade = (s.grade != null && Number.isFinite(s.grade)) ? s.grade : 0;
-    const steer = Math.max(0, Math.min(1, Math.abs(s.steer || 0)));
-    const voidEdge = Math.max(0, Math.min(1, s.voidEdge || 0));
-    const carpet = s.carpet ? 1 : 0;
-    const braking = !!(s.braking);
 
-    try {
-    // Smooth RPM — idle present, rises with speed; engine load strains on climb+throttle, freewheels downhill
+    // Smooth RPM — idle present, rises with speed (not throttle spikes)
     const speedNorm = Math.min(1, spd / maxV);
-    // Load: climbing grade>0.1 with throttle → strain; descending + low throttle → freewheel
-    const climbStrain = (grade > 0.08 && thr > 0.15) ? Math.min(1, (grade - 0.08) / 0.18) * thr : 0;
-    const freewheel = (grade < -0.06 && thr < 0.18 && spd > 0.20) ? Math.min(1, (-grade - 0.06) / 0.14) : 0;
-    const wantLoad = climbStrain * 1.05 - freewheel * 0.72;
-    this._loadAmt += (wantLoad - this._loadAmt) * 0.12;
-    const wantRpm = Math.min(1, 0.10 + speedNorm * 0.78 + thr * 0.14 + boost * 0.12 + Math.max(0, this._loadAmt) * 0.22);
+    const wantRpm = Math.min(1, 0.10 + speedNorm * 0.78 + thr * 0.14 + boost * 0.12);
     this._rpm += (wantRpm - this._rpm) * 0.12; // slower = smoother pitch glide
     this._boostAmt += (boost - this._boostAmt) * 0.10;
     this._scrapeAmt += (scrape - this._scrapeAmt) * 0.22;
-    // Tire screech (#3) — IGNORED / muted (polish10c focus set)
-    this._screechAmt = 0;
-    this._voidAmt += (voidEdge - this._voidAmt) * 0.14;
-    this._surfaceAmt += (carpet - this._surfaceAmt) * 0.12;
 
     const t = this._ctx.currentTime;
     const rpm = this._rpm;
-    // Warm idle ~42 Hz → cruise ~78 → boost ~95; load strains pitch up, freewheel drops
-    const load = this._loadAmt || 0;
-    const baseHz = 40 + rpm * 42 + this._boostAmt * 16 + Math.max(0, load) * 18 + Math.min(0, load) * 14;
+    // Warm idle ~42 Hz → cruise ~78 → boost ~95 (triangle/sine, not saw)
+    const baseHz = 40 + rpm * 42 + this._boostAmt * 16;
     const midHz = baseHz * 1.98;
-    const highHz = baseHz * 2.97 + this._boostAmt * 6 + Math.max(0, load) * 11;
+    const highHz = baseHz * 2.97 + this._boostAmt * 6;
 
     this._safeSet(this._oscIdle.frequency, baseHz, t, 0.08);
     this._safeSet(this._oscMid.frequency, midHz, t, 0.08);
     this._safeSet(this._oscHigh.frequency, highHz, t, 0.09);
 
-    // Body loudness: quiet idle, gentle rise; load strains louder, freewheel softer
-    const engVol = 0.07 + rpm * 0.20 + this._boostAmt * 0.06 + Math.max(0, load) * 0.075 + Math.min(0, load) * 0.045;
+    // Body loudness: quiet idle, gentle rise
+    const engVol = 0.07 + rpm * 0.20 + this._boostAmt * 0.06;
     this._safeSet(this._engGain.gain, engVol, t, 0.05);
 
     // Warm rumble bed (filtered noise) — the "engine mass"
@@ -149,26 +124,11 @@ export class EngineAudio {
     this._safeSet(this._scrapeGain.gain, scVol, t, 0.04);
     this._safeSet(this._scrapeFilter.frequency, 700 + this._scrapeAmt * 1400, t);
 
-    // Soft procedural tire screech (#3) — always silent (no-op)
-    if (this._screechGain) this._safeSet(this._screechGain.gain, 0, t, 0.05);
-
-    // Void-edge rumble (balcony inner lip) — strengthened (#7)
-    const voidVol = this._voidAmt * 0.052;
-    if (this._voidGain) this._safeSet(this._voidGain.gain, voidVol, t, 0.06);
-
-    // Surface feel bed — asphalt hiss vs carpet hush (strengthened #8)
-    const surfVol = (0.014 + speedNorm * 0.028) * (1 - this._surfaceAmt * 0.70) + this._surfaceAmt * (0.005 + speedNorm * 0.008);
-    if (this._surfaceGain) this._safeSet(this._surfaceGain.gain, spd > 0.08 ? surfVol : 0, t, 0.08);
-    if (this._surfaceFilter) this._safeSet(this._surfaceFilter.frequency, this._surfaceAmt > 0.5 ? 180 + speedNorm * 140 : 420 + speedNorm * 620, t);
-
     // Tone filters open slightly with RPM (still warm)
     this._safeSet(this._idleLP.frequency, 280 + rpm * 220, t);
     this._safeSet(this._midLP.frequency, 520 + rpm * 480 + this._boostAmt * 120, t);
 
     if (s.impact) this._blipImpact();
-    } catch (_) {
-      this._muted = true;
-    }
   }
 
   _safeSet(param, value, t, tau = 0.07) {
@@ -296,43 +256,6 @@ export class EngineAudio {
     this._scrapeFilter.connect(this._scrapeGain);
     this._scrapeGain.connect(this._master);
     this._scrapeSrc.start();
-
-    // Soft tire screech (#3) — IGNORED: nodes created muted, NOT connected to master
-    this._screechSrc = null;
-    this._screechFilter = null;
-    this._screechGain = ctx.createGain();
-    this._screechGain.gain.value = 0;
-    // intentionally not connected — mute/remove calls
-
-    // Soft void-edge rumble (very low)
-    this._voidSrc = ctx.createBufferSource();
-    this._voidSrc.buffer = buf;
-    this._voidSrc.loop = true;
-    this._voidFilter = ctx.createBiquadFilter();
-    this._voidFilter.type = "lowpass";
-    this._voidFilter.frequency.value = 55;
-    this._voidFilter.Q.value = 0.8;
-    this._voidGain = ctx.createGain();
-    this._voidGain.gain.value = 0;
-    this._voidSrc.connect(this._voidFilter);
-    this._voidFilter.connect(this._voidGain);
-    this._voidGain.connect(this._master);
-    this._voidSrc.start();
-
-    // Surface noise bed (asphalt hiss vs carpet hush)
-    this._surfaceSrc = ctx.createBufferSource();
-    this._surfaceSrc.buffer = buf;
-    this._surfaceSrc.loop = true;
-    this._surfaceFilter = ctx.createBiquadFilter();
-    this._surfaceFilter.type = "bandpass";
-    this._surfaceFilter.frequency.value = 420;
-    this._surfaceFilter.Q.value = 0.6;
-    this._surfaceGain = ctx.createGain();
-    this._surfaceGain.gain.value = 0;
-    this._surfaceSrc.connect(this._surfaceFilter);
-    this._surfaceFilter.connect(this._surfaceGain);
-    this._surfaceGain.connect(this._master);
-    this._surfaceSrc.start();
   }
 
   _blipImpact() {

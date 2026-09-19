@@ -91,6 +91,6 @@ const yaw = CAR_SPAWN.yaw;
 for (let d=0; d<=4; d+=0.25) {
   const x = CAR_SPAWN.x + Math.sin(yaw)*d;
   const z = CAR_SPAWN.z + Math.cos(yaw)*d;
-  const s = drive.tracks.querySnap(x,0.075,z,2.0,yaw);
+  const s = drive.tracks.querySnap(x,CAR_SPAWN.y,z,2.0,yaw);
   console.log(`d=${d.toFixed(2)} lat=${s?.dist?.toFixed(3)} on=${!!s?.onTrack} half≈${((s?.edgeMargin??0)+(s?.dist??0)).toFixed(3)}`);
 }

@@ -56,7 +56,7 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
 
 // ── 1) Nose · travel (bodyPivot 180 + yaw travel) ─────────────────
 {
-  car.setPose(0, 0.075, 0, 0); // yaw 0 → travel +Z
+  car.setPose(0, CAR_SPAWN.y, 0, 0); // yaw 0 → travel +Z
   car.updateMatrixWorld?.(true);
   car.root.updateMatrixWorld(true);
   // Mesh nose is modeled toward -Z in bodyPivot; bodyPivot.y = π flips it to +Z
@@ -82,7 +82,7 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   // (wheels positioned at y=tireR local, radius=tireR, scale=CAR_SCALE)
   let maxGap = -Infinity;
   let minGap = Infinity;
-  const surfaceY = snap?.y ?? 0.075;
+  const surfaceY = snap?.y ?? CAR_SPAWN.y;
   for (const w of car.wheels) {
     const wp = new THREE.Vector3();
     w.getWorldPosition(wp);
@@ -112,7 +112,7 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
   ok("landing floor Y preserved (~4.26)", landingY != null && Math.abs(landingY - 4.26) < 0.05, `y=${landingY}`);
   const foyerSegs = tracks.segments.filter((s) => s.pathId === "foyer_skirting");
   const foyerY = foyerSegs.length ? foyerSegs[0].a.y : null;
-  ok("foyer floor Y ~0.06 (matches ramp feet)", foyerY != null && Math.abs(foyerY - 0.06) < 0.02, `y=${foyerY}`);
+  ok("foyer floor Y ~0.0 (matches ramp feet)", foyerY != null && Math.abs(foyerY - 0.0) < 0.02, `y=${foyerY}`);
 }
 
 // ── 3) Ramp feet kiss floor asphalt Y ─────────────────────────────
@@ -148,7 +148,7 @@ const enabled = TRACK_PATHS.filter((p) => !p.disabled && p.visual !== false);
 {
   car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, Math.PI); // face along west wall toward -Z-ish; use yaw toward hall
   // Face along foyer east skirting (south wall → +X then down west)
-  car.setPose(-7.9, 0.075, 12.2, Math.atan2(0 - (-7.9), 12.35 - 12.2)); // toward east along south wall
+  car.setPose(-7.9, CAR_SPAWN.y, 12.2, Math.atan2(0 - (-7.9), 12.35 - 12.2)); // toward east along south wall
   car.speed = 1.1;
   tracks._lastPathId = "foyer_skirting";
   const dt = 1 / 60;

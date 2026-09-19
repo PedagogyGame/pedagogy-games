@@ -94,7 +94,7 @@ const crest = ramp.points[ramp.points.length - 1];
 }
 
 function reset(x, z, yaw, spd = 0.32) {
-  drive.car.setPose(x, 0.075, z, yaw);
+  drive.car.setPose(x, CAR_SPAWN.y, z, yaw);
   drive.car.speed = spd;
   drive.car.crashed = false;
   drive.car.airborne = false;

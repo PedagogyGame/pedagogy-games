@@ -13,10 +13,12 @@ export const ROOMS = {
     palette: { wall: 0x3e2723, floor: 0x5d4037, trim: 0xc9a227, light: 0xffe0b2 },
     exits: { north: "hall_ground", south: "front_drive", up: "landing", down: "cellar" },
     stairs: [
-      // West-wall stair: keeps foyer center flat; climbs north onto landing
-      { id: "main_up", fromY: 0, toY: 4.2, x: -7.0, z: 8, dir: "north", width: 2.4, length: 5.5 },
-      // East-wall cellar stair: short run along side wall
-      { id: "cellar_down", fromY: 0, toY: -4.2, x: 7.0, z: 3, dir: "south", width: 2.2, length: 5.0 },
+      // Scenic west stairs — BESIDE Climb A asphalt (not the road). Explore walk only.
+      { id: "main_up", fromY: 0, toY: 4.2, x: -7.6, z: 10.5, dir: "north", width: 2.2, length: 8.5, scenic: true },
+      // Scenic east stairs — BESIDE Climb B asphalt corridor (x≈7). Landmark companion.
+      { id: "climb_b_east", fromY: 0, toY: 4.2, x: 9.0, z: 10.5, dir: "north", width: 1.5, length: 8.5, scenic: true },
+      // Cellar — SE corner, clear of dual climb corridors
+      { id: "cellar_down", fromY: 0, toY: -4.2, x: 8.4, z: 12.3, dir: "east", width: 1.8, length: 2.4 },
     ],
   },
   hall_ground: {
@@ -347,7 +349,7 @@ export const ROOMS = {
 };
 /** Room purpose blurbs for leisurely Explore prompts — keyed by room id. */
 export const ROOM_PURPOSES = {
-  foyer: "The welcome hall — west stairs climb up; the front door opens to gardens",
+  foyer: "The welcome hall — west Climb A + east Climb B stairs; front door to gardens",
   hall_ground: "A long echo of doorways — curios west, games east, glasshouse north",
   cabinet: "Museum quiet — pedestals invite a closer look",
   armoury: "Toys and gadgets on the shelves — click anything that glints",

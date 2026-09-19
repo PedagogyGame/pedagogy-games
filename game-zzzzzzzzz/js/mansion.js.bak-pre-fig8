@@ -397,7 +397,6 @@ export class Mansion {
         for (const s of room.stairs) this._buildStair(s, room);
       }
     }
-    this._addClimbLandmarks();
     this._buildDoorConnectors();
     this._buildExteriorFacade();
     this._buildBalcony();
@@ -1112,8 +1111,8 @@ export class Mansion {
     const isAttic = room.floor === "Attic";
     const floorMat = isAttic ? this._mat(p.floor, 0.88, 0.02) : this._floorMat(p.floor, 0.7);
     // Floor slab: top face exactly at story Y (cy). Stair/climb aperture on landing.
-    const floorHoles = this._storyApertures(room, "floor");
-    this._addSlabWithHole(g, floorMat, cx, cy - 0.1, cz, w, 0.2, d, floorHoles.length ? floorHoles : null, true, cy);
+    const floorHole = this._storyAperture(room, "floor");
+    this._addSlabWithHole(g, floorMat, cx, cy - 0.1, cz, w, 0.2, d, floorHole, true, cy);
 
     // Perimeter floor frame (4 strips) — raised clear of plank top to kill shimmer
     // (never a full coplanar slab on the same Y as the floor)
@@ -1130,13 +1129,15 @@ export class Mansion {
         { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx - w / 2 + inset + strip / 2, frameY, cz] },
         { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx + w / 2 - inset - strip / 2, frameY, cz] },
       ];
-      const climbHoles = this._storyApertures(room, room.id === "landing" ? "floor" : "ceiling");
+      const climbHole = this._storyAperture(room, room.id === "landing" ? "floor" : "ceiling");
       for (const s of strips) {
-        // Skip perimeter frame segments that cross climb apertures (slab lips)
-        if (climbHoles.length) {
+        // Skip perimeter frame segments that cross the climb aperture (slab lips)
+        if (climbHole) {
           const hx0 = s.p[0] - s.s[0] / 2, hx1 = s.p[0] + s.s[0] / 2;
           const hz0 = s.p[2] - s.s[2] / 2, hz1 = s.p[2] + s.s[2] / 2;
-          if (climbHoles.some((h) => hx1 > h.minX && hx0 < h.maxX && hz1 > h.minZ && hz0 < h.maxZ)) continue;
+          if (hx1 > climbHole.minX && hx0 < climbHole.maxX && hz1 > climbHole.minZ && hz0 < climbHole.maxZ) {
+            continue;
+          }
         }
         const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), woodF);
         m.position.set(...s.p);
@@ -1163,11 +1164,11 @@ export class Mansion {
       let rw = Math.min(w * 0.48, 9);
       let rd = Math.min(d * 0.42, 7);
       let rx = cx, rz = cz;
-      const climbHolesRug = this._storyApertures(room, room.id === "landing" ? "floor" : "ceiling");
-      if (climbHolesRug.length && room.id === "landing") {
-        // Keep rug in clear center between dual climb voids
-        rw = Math.min(rw, 5.5);
-        rx = cx;
+      const climbHole = this._storyAperture(room, room.id === "landing" ? "floor" : "ceiling");
+      if (climbHole && room.id === "landing") {
+        // Shift rug east of climb lane so it never reads as a slab across asphalt
+        rw = Math.min(rw, 6.2);
+        rx = Math.max(cx, (climbHole.maxX + (cx + w / 2)) / 2);
       }
       const rugTex = this._rugTex(p.trim, p.wall);
       const rugMat = this._stdMat({
@@ -1192,8 +1193,8 @@ export class Mansion {
       ceilMat.opacity = 0.35;
     }
     // Foyer ceiling opens over stair/climb aperture so Drive ramp never smashes slab.
-    const ceilHoles = this._storyApertures(room, "ceiling");
-    this._addSlabWithHole(g, ceilMat, cx, cy + h, cz, w, 0.12, d, ceilHoles.length ? ceilHoles : null, false, null);
+    const ceilHole = this._storyAperture(room, "ceiling");
+    this._addSlabWithHole(g, ceilMat, cx, cy + h, cz, w, 0.12, d, ceilHole, false, null);
 
     // Conservatory mullions + moonlight feel
     if (room.glass) {
@@ -1658,11 +1659,7 @@ export class Mansion {
     const wood = this._mat(0x3e2723, 0.5, 0.15);
     // Climb corridor gap — hall south triple crown was Ben's "three stacked tan slabs"
     // spanning the asphalt; also clear foyer/landing lips over straightened climb.
-    const climbGaps = [
-      { minX: -8.80, maxX: -3.70, minZ: -2.20, maxZ: 12.80 }, // Climb A asphalt + west scenic stairs
-      { minX: 5.40, maxX: 9.90, minZ: -2.20, maxZ: 12.80 }, // Climb B asphalt + east scenic stairs
-    ];
-    const climbGap = climbGaps[0]; // legacy single for split helpers below (west Climb A)
+    const climbGap = { minX: -5.65, maxX: -2.40, minZ: -2.55, maxZ: 12.40 };
     const addBox = (sx, sy, sz, px, py, pz, mat) => {
       if (sx < 0.04 || sy < 0.04 || sz < 0.04) return;
       const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
@@ -1672,41 +1669,31 @@ export class Mansion {
     };
     // Split a world-X strip around climbGap when it crosses the climb band in Z
     const addXStripSplit = (fullW, thick, depth, px, py, pz, mat) => {
-      let segs = [{ x0: px - fullW / 2, x1: px + fullW / 2 }];
       const z0 = pz - depth / 2, z1 = pz + depth / 2;
-      for (const gap of climbGaps) {
-        if (!(z1 > gap.minZ && z0 < gap.maxZ)) continue;
-        const next = [];
-        for (const s of segs) {
-          if (s.x1 < gap.minX || s.x0 > gap.maxX) { next.push(s); continue; }
-          if (gap.minX - s.x0 > 0.04) next.push({ x0: s.x0, x1: gap.minX });
-          if (s.x1 - gap.maxX > 0.04) next.push({ x0: gap.maxX, x1: s.x1 });
-        }
-        segs = next;
+      const crossesZ = z1 > climbGap.minZ && z0 < climbGap.maxZ;
+      const x0 = px - fullW / 2, x1 = px + fullW / 2;
+      if (!crossesZ || x1 < climbGap.minX || x0 > climbGap.maxX) {
+        addBox(fullW, thick, depth, px, py, pz, mat);
+        return;
       }
-      for (const s of segs) {
-        const ww = s.x1 - s.x0;
-        if (ww > 0.04) addBox(ww, thick, depth, (s.x0 + s.x1) / 2, py, pz, mat);
-      }
+      const leftW = Math.max(0, climbGap.minX - x0);
+      const rightW = Math.max(0, x1 - climbGap.maxX);
+      if (leftW > 0.04) addBox(leftW, thick, depth, x0 + leftW / 2, py, pz, mat);
+      if (rightW > 0.04) addBox(rightW, thick, depth, x1 - rightW / 2, py, pz, mat);
     };
     // Split a world-Z strip around climbGap when it crosses the climb band in X
     const addZStripSplit = (width, thick, fullD, px, py, pz, mat) => {
-      let segs = [{ z0: pz - fullD / 2, z1: pz + fullD / 2 }];
       const x0 = px - width / 2, x1 = px + width / 2;
-      for (const gap of climbGaps) {
-        if (!(x1 > gap.minX && x0 < gap.maxX)) continue;
-        const next = [];
-        for (const s of segs) {
-          if (s.z1 < gap.minZ || s.z0 > gap.maxZ) { next.push(s); continue; }
-          if (gap.minZ - s.z0 > 0.04) next.push({ z0: s.z0, z1: gap.minZ });
-          if (s.z1 - gap.maxZ > 0.04) next.push({ z0: gap.maxZ, z1: s.z1 });
-        }
-        segs = next;
+      const crossesX = x1 > climbGap.minX && x0 < climbGap.maxX;
+      const z0 = pz - fullD / 2, z1 = pz + fullD / 2;
+      if (!crossesX || z1 < climbGap.minZ || z0 > climbGap.maxZ) {
+        addBox(width, thick, fullD, px, py, pz, mat);
+        return;
       }
-      for (const s of segs) {
-        const dd = s.z1 - s.z0;
-        if (dd > 0.04) addBox(width, thick, dd, px, py, (s.z0 + s.z1) / 2, mat);
-      }
+      const southD = Math.max(0, climbGap.minZ - z0);
+      const northD = Math.max(0, z1 - climbGap.maxZ);
+      if (southD > 0.04) addBox(width, thick, southD, px, py, z0 + southD / 2, mat);
+      if (northD > 0.04) addBox(width, thick, northD, px, py, z1 - northD / 2, mat);
     };
     // Crown steps sit CLEARLY below ceiling underside (ceiling bottom ≈ cy+h-0.06)
     const layers = [
@@ -1956,12 +1943,12 @@ export class Mansion {
       addArmchair(cx + 3.5, cz + 2, 0x5d4037, Math.PI * 0.15);
       addSideTable(cx + 4.5, cz + 1.2);
       addFloorLamp(cx + 6.2, cz + 2.5);
-      // Grandfather clock — mid-east foyer, clear of Climb B east corridor (x≈7)
-      addBox(0.55, 2.2, 0.35, cx + 3.6, cy + 1.1, cz - 0.2, darkWood, true);
-      addBox(0.45, 0.4, 0.08, cx + 3.6, cy + 1.9, cz - 0.05, this._mat(0xffe0b2, 0.4));
-      addCyl(0.02, 0.02, 0.15, cx + 3.6, cy + 1.9, cz - 0.02, brass, 6);
-      // Umbrella stand — south wall, clear of dual climb feet (x±7)
-      addCyl(0.18, 0.22, 0.55, cx + 2.4, cy + 0.28, cz + d / 2 - 0.75, this._mat(0x37474f, 0.45, 0.5), 10);
+      // Grandfather clock — east foyer, clear of west stair / climb aperture
+      addBox(0.55, 2.2, 0.35, cx + 4.8, cy + 1.1, cz - 0.2, darkWood, true);
+      addBox(0.45, 0.4, 0.08, cx + 4.8, cy + 1.9, cz - 0.05, this._mat(0xffe0b2, 0.4));
+      addCyl(0.02, 0.02, 0.15, cx + 4.8, cy + 1.9, cz - 0.02, brass, 6);
+      // Umbrella stand — SE corner, clear of foyer_drive_start / climb T
+      addCyl(0.18, 0.22, 0.55, cx + 7.2, cy + 0.28, cz + d / 2 - 0.75, this._mat(0x37474f, 0.45, 0.5), 10);
     }
 
     if (id === "cabinet") {
@@ -2312,27 +2299,6 @@ export class Mansion {
     }
 
     if (id === "landing") {
-      // Solid newel / pillar for Drive landing hairpin (hard collider)
-      {
-        const nx = -5.50, nz = -0.20, ny = 4.2;
-        const newelMat = this._mat(0x4e342e, 0.55, 0.25);
-        const post = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.35, 0.55), newelMat);
-        post.position.set(nx, ny + 0.675, nz);
-        post.castShadow = false;
-        post.receiveShadow = true;
-        group.add(post);
-        const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.28, 0.14, 10), this._brass());
-        cap.position.set(nx, ny + 1.40, nz);
-        group.add(cap);
-        this._pushCollider(
-          new THREE.Box3(
-            new THREE.Vector3(nx - 0.30, ny - 0.02, nz - 0.30),
-            new THREE.Vector3(nx + 0.30, ny + 1.55, nz + 0.30)
-          ),
-          "pillar"
-        );
-      }
-
       addCyl(0.22, 0.28, 0.45, cx + w * 0.3, cy + 0.22, cz - d * 0.3, this._mat(0x8d6e63, 0.8), 10);
       const plant = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), this._mat(0x2e7d32, 0.88));
       plant.position.set(cx + w * 0.3, cy + 0.7, cz - d * 0.3);
@@ -2944,27 +2910,17 @@ export class Mansion {
    * Stair + Drive climb aperture shared by foyer ceiling / landing floor.
    * Covers main_up stair footprint plus narrow east climb lane to landing crest.
    */
-  /**
-   * Dual figure-8 climb voids: Climb A west stair footprint, Climb B east opposite.
-   * Returns one hole (legacy) — prefer _storyApertures for multi-cut slabs.
-   */
   _storyAperture(room, which) {
-    const holes = this._storyApertures(room, which);
-    return holes[0] || null;
-  }
-
-  _storyApertures(room, which) {
-    // Climb A — west stair band (widened for 2.4 clear + curb)
-    // Climb A asphalt corridor (x≈-5) + west scenic stairs (x≈-7.6)
-    const holeA = { minX: -8.80, maxX: -3.70, minZ: -2.20, maxZ: 12.80 };
-    // Climb B asphalt (x≈7) + east scenic stairs (x≈8.6)
-    const holeB = { minX: 5.40, maxX: 9.90, minZ: -2.20, maxZ: 12.80 };
-    if (which === "ceiling" && room.id === "foyer") return [holeA, holeB];
-    if (which === "floor" && room.id === "landing") return [holeA, holeB];
+    // Shared climb hole: stair void + east-of-stair foyer climb (foot→crest) with car margin.
+    // Authored climb X∈[-4.85,-3.55] Z∈[-1.35,12.55] — hole covers lips + imperfect steer.
+    const hole = { minX: -8.55, maxX: -2.40, minZ: -2.55, maxZ: 12.40 };
+    if (which === "ceiling" && room.id === "foyer") return hole;
+    if (which === "floor" && room.id === "landing") return hole;
+    // Hall ceiling overlaps climb near foyer/hall junction — punch climb lane
     if (which === "ceiling" && room.id === "hall_ground") {
-      return [{ minX: -6.40, maxX: -3.70, minZ: -2.20, maxZ: 2.15 }]; // Climb A corridor
+      return { minX: -5.70, maxX: -2.80, minZ: -2.55, maxZ: 2.15 };
     }
-    return [];
+    return null;
   }
 
   /**
@@ -2980,18 +2936,17 @@ export class Mansion {
 
     // Dual foyer ↔ hall jambs (door_foyer_hall_east/west at x≈±2.85)
     if (room.id === "foyer" && side === "north") {
-      // Dual climb voids (west Climb A / east Climb B) + center hall door
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(-5.00, 3.60, cy, fullH); // Climb A asphalt corridor
-      add(7.00, 3.80, cy, fullH);  // Climb B east
-      add(0.00, 2.80, cy, cy + doorH);
+      // Wide west climb+hall portal (full story) + east hall door
+      const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
+      add(-3.40, 4.20, cy, fullH);
+      add(2.85, 2.55, cy, cy + doorH);
       return out;
     }
     if (room.id === "hall_ground" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(-5.00, 3.60, cy, fullH); // Climb A
-      add(7.00, 3.80, cy, fullH);
-      add(0.00, 2.80, cy, cy + doorH);
+      // Wide west climb+foyer portal (full story) + east foyer door
+      const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
+      add(-3.40, 4.20, cy, fullH);
+      add(2.85, 2.55, cy, cy + doorH);
       return out;
     }
     // Front drive exit (door_foyer_outdoor near x≈-3.7)
@@ -2999,28 +2954,24 @@ export class Mansion {
       add(-3.70, 3.40, cy, cy + doorH);
       return out;
     }
-    // Landing French doors onto balcony + full-height Climb A/B asphalt voids.
-    // Prior 11m door only cleared x∈[-5.5,5.5] — Climb A (x≈-5) fit, Climb B (x≈7) did not
-    // and left a hard slab at z≈-1 that killed east descent / SwiftShader east look.
+    // Landing French doors onto balcony (ramp_landing_to_balcony / return)
     if (room.id === "landing" && side === "south") {
       add(0, 11.0, cy, cy + tallH);
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      out.push({ along: -5.00, width: 3.60, y0: cy, y1: fullH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.80, y0: cy, y1: fullH, noFrame: true });  // Climb B
       return out;
     }
     // Landing → library (north): center door + west/east skirting portals so
     // landing_skirting fillets never pin on leftover jamb slabs.
     if (room.id === "landing" && side === "north") {
       add(0, 3.0, cy, cy + doorH);
-      out.push({ along: -5.00, width: 3.50, y0: cy, y1: cy + doorH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.60, y0: cy, y1: cy + doorH, noFrame: true });  // Climb B
+      // West crest portal: asphalt climb arrives here — no gold jamb pillars
+      out.push({ along: -2.75, width: 3.20, y0: cy, y1: cy + doorH, noFrame: true });
+      add(2.75, 2.90, cy, cy + doorH);  // east fillet mirror
       return out;
     }
     if (room.id === "library_hall" && side === "south") {
       add(0, 3.0, cy, cy + doorH);
-      out.push({ along: -5.00, width: 3.50, y0: cy, y1: cy + doorH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.60, y0: cy, y1: cy + doorH, noFrame: true });
+      out.push({ along: -2.75, width: 3.20, y0: cy, y1: cy + doorH, noFrame: true });
+      add(2.75, 2.90, cy, cy + doorH);
       return out;
     }
     // Hall ↔ cabinet / armoury at skirt z≈-7.7
@@ -3051,12 +3002,6 @@ export class Mansion {
     if (room.id === "cabinet" && side === "south") {
       const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
       add(-3.40, 3.60, cy, fullH);
-      return out;
-    }
-    // Armoury south — Climb B asphalt (x≈7) punches through east ground wing
-    if (room.id === "armoury" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(7.00, 3.80, cy, fullH);
       return out;
     }
     // Hall ↔ conservatory
@@ -3102,12 +3047,6 @@ export class Mansion {
     }
     if (room.id === "nursery" && side === "west") {
       add(-8.0, 2.60, cy, cy + doorH);
-      return out;
-    }
-    // Nursery south — Climb B crest corridor (x≈7) through east first-floor wing
-    if (room.id === "nursery" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(7.00, 3.80, cy, fullH);
       return out;
     }
     if (room.id === "study" && side === "east") {
@@ -3271,60 +3210,37 @@ export class Mansion {
       if (isFloor) mesh.userData.floorY = floorY;
       group.add(mesh);
     };
-    const holes = !hole ? [] : (Array.isArray(hole) ? hole : [hole]);
-    if (!holes.length) {
+    if (!hole) {
       addPanel(w, d, cx, cz);
       return;
     }
-    // Recursive multi-hole: cut first hole, then cut remaining from each panel via AABB clips
     const minX = cx - w / 2, maxX = cx + w / 2;
     const minZ = cz - d / 2, maxZ = cz + d / 2;
-    let panels = [{ x0: minX, x1: maxX, z0: minZ, z1: maxZ }];
-    for (const h of holes) {
-      const next = [];
-      for (const pan of panels) {
-        const hx0 = Math.max(pan.x0, h.minX);
-        const hx1 = Math.min(pan.x1, h.maxX);
-        const hz0 = Math.max(pan.z0, h.minZ);
-        const hz1 = Math.min(pan.z1, h.maxZ);
-        if (hx0 >= hx1 || hz0 >= hz1) {
-          next.push(pan);
-          continue;
-        }
-        // North / south full-width remainders + west/east between hole Z
-        if (pan.z1 - hz1 > 0.04) next.push({ x0: pan.x0, x1: pan.x1, z0: hz1, z1: pan.z1 });
-        if (hz0 - pan.z0 > 0.04) next.push({ x0: pan.x0, x1: pan.x1, z0: pan.z0, z1: hz0 });
-        if (hx0 - pan.x0 > 0.04) next.push({ x0: pan.x0, x1: hx0, z0: hz0, z1: hz1 });
-        if (pan.x1 - hx1 > 0.04) next.push({ x0: hx1, x1: pan.x1, z0: hz0, z1: hz1 });
-      }
-      panels = next;
+    const hx0 = Math.max(minX, hole.minX);
+    const hx1 = Math.min(maxX, hole.maxX);
+    const hz0 = Math.max(minZ, hole.minZ);
+    const hz1 = Math.min(maxZ, hole.maxZ);
+    if (hx0 >= hx1 || hz0 >= hz1) {
+      addPanel(w, d, cx, cz);
+      return;
     }
-    for (const pan of panels) {
-      addPanel(pan.x1 - pan.x0, pan.z1 - pan.z0, (pan.x0 + pan.x1) / 2, (pan.z0 + pan.z1) / 2);
-    }
+    // North strip (maxZ side), south strip (minZ), and west/east between hole Z
+    addPanel(w, maxZ - hz1, cx, (hz1 + maxZ) / 2);
+    addPanel(w, hz0 - minZ, cx, (minZ + hz0) / 2);
+    addPanel(hx0 - minX, hz1 - hz0, (minX + hx0) / 2, (hz0 + hz1) / 2);
+    addPanel(maxX - hx1, hz1 - hz0, (hx1 + maxX) / 2, (hz0 + hz1) / 2);
   }
 
   _buildStair(s, room) {
     const g = new THREE.Group();
     g.name = `stairs_${s.id}`;
-    // Scenic stairs (Climb A/B companions) — lite mesh budget so east look doesn't kill SwiftShader.
-    // Explore-only scenery; asphalt corridor is the Drive road.
-    const scenic = !!s.scenic;
-    const steps = scenic ? 7 : 14;
+    const steps = 14;
     const rise = (s.toY - s.fromY) / steps;
     const run = s.length / steps;
     const w = s.width;
     const dir = s.dir;
-    const trim = scenic
-      ? new THREE.MeshLambertMaterial({ color: 0x8d6e63 })
-      : this._mat(0x8d6e63, 0.7);
-    const railMat = scenic
-      ? new THREE.MeshLambertMaterial({ color: 0xc9a227 })
-      : this._mat(0xc9a227, 0.35, 0.55);
-    let scenicRunner = null;
-    if (scenic) {
-      scenicRunner = new THREE.MeshLambertMaterial({ color: 0x6a1b9a, emissive: 0x2a0840, emissiveIntensity: 0.08 });
-    }
+    const trim = this._mat(0x8d6e63, 0.7);
+    const railMat = this._mat(0xc9a227, 0.35, 0.55);
 
     for (let i = 0; i < steps; i++) {
       const y = s.fromY + rise * (i + 0.5);
@@ -3341,38 +3257,24 @@ export class Mansion {
       );
       step.position.set(x, y, z);
       step.castShadow = false;
-      step.receiveShadow = !scenic;
+      step.receiveShadow = true;
       step.frustumCulled = true;
       g.add(step);
-      // Runner: full Standard per-step only on walkable stairs; scenic shares one Lambert strip every other tread
-      if (!scenic) {
-        const runner = new THREE.Mesh(
-          new THREE.BoxGeometry(
-            dir === "east" || dir === "west" ? run * 0.9 : w * 0.45,
-            0.025,
-            dir === "east" || dir === "west" ? w * 0.45 : run * 0.9
-          ),
-          new THREE.MeshStandardMaterial({
-            color: 0x6a1b9a, roughness: 0.95, metalness: 0.02,
-            emissive: 0x4a148c, emissiveIntensity: 0.05,
-          })
-        );
-        runner.position.set(x, y + Math.abs(rise) * 0.48, z);
-        runner.frustumCulled = true;
-        g.add(runner);
-      } else if (i % 2 === 0 && scenicRunner) {
-        const runner = new THREE.Mesh(
-          new THREE.BoxGeometry(
-            dir === "east" || dir === "west" ? run * 0.9 : w * 0.45,
-            0.025,
-            dir === "east" || dir === "west" ? w * 0.45 : run * 0.9
-          ),
-          scenicRunner
-        );
-        runner.position.set(x, y + Math.abs(rise) * 0.48, z);
-        runner.frustumCulled = true;
-        g.add(runner);
-      }
+      // Staircase runner (carpet strip)
+      const runner = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          dir === "east" || dir === "west" ? run * 0.9 : w * 0.45,
+          0.025,
+          dir === "east" || dir === "west" ? w * 0.45 : run * 0.9
+        ),
+        new THREE.MeshStandardMaterial({
+          color: 0x6a1b9a, roughness: 0.95, metalness: 0.02,
+          emissive: 0x4a148c, emissiveIntensity: 0.05,
+        })
+      );
+      runner.position.set(x, y + Math.abs(rise) * 0.48, z);
+      runner.frustumCulled = true;
+      g.add(runner);
     }
 
     let minX, maxX, minZ, maxZ;
@@ -3390,7 +3292,7 @@ export class Mansion {
       minZ = s.z - w / 2; maxZ = s.z + w / 2;
     }
 
-    if (!s.scenic) this.ramps.push({
+    this.ramps.push({
       minX, maxX, minZ, maxZ,
       fromY: s.fromY,
       toY: s.toY,
@@ -3474,19 +3376,16 @@ export class Mansion {
           z = s.z + side * (w / 2 - 0.08);
         }
         railPts.push({ x, y, z });
-        // Sparse posts — scenic every 3rd (east GPU); walkable every 2nd
-        const postEvery = scenic ? 3 : 2;
-        if (i % postEvery === 0 || i === steps - 1) {
-          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.88, scenic ? 5 : 6), railMat);
+        // Every 2nd post only — continuous rail carries the yellow frame read
+        if (i % 2 === 0 || i === steps - 1) {
+          const post = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.88, 6), railMat);
           post.position.set(x, y, z);
           post.frustumCulled = true;
           g.add(post);
         }
       }
       // Continuous top rail as overlapping short boxes along climb (no seam gaps)
-      // Scenic: every other segment — halves east stair draw calls
       for (let i = 0; i < railPts.length - 1; i++) {
-        if (scenic && i % 2 === 1) continue;
         const a = railPts[i];
         const b = railPts[i + 1];
         const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -3724,68 +3623,6 @@ export class Mansion {
 
     this.root.add(g);
   }
-
-
-  /** Bright Climb B landmark — asphalt mouth + chevron pylons, findable from foyer/landing. */
-  _addClimbLandmarks() {
-    const g = new THREE.Group();
-    g.name = "climb_landmarks";
-    const asphalt = this._mat(0x0a0a0e, 0.95, 0.05);
-    asphalt.emissive = new THREE.Color(0x111118);
-    asphalt.emissiveIntensity = 0.08;
-    const paint = this._mat(0xffdd22, 0.45, 0.2);
-    paint.emissive = new THREE.Color(0xffaa00);
-    paint.emissiveIntensity = 0.55;
-    const white = this._mat(0xffffff, 0.55, 0.05);
-    white.emissive = new THREE.Color(0xffffff);
-    white.emissiveIntensity = 0.35;
-    const brass = this._brass(0xc9a227);
-
-    const addPylon = (x, z, y0) => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.55, 0.18), brass);
-      post.position.set(x, y0 + 0.78, z);
-      g.add(post);
-      for (let i = 0; i < 4; i++) {
-        const chev = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.06), i % 2 ? paint : white);
-        chev.position.set(x, y0 + 0.35 + i * 0.28, z + 0.12);
-        g.add(chev);
-      }
-      // Box lamp (no Sphere tessellation) — SwiftShader-safe east look
-      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.14), this._emissiveGlow(0xffe082, 0.85));
-      lamp.position.set(x, y0 + 1.62, z);
-      g.add(lamp);
-    };
-
-    // Climb B foot (foyer east) — twin pylons + asphalt threshold lip
-    addPylon(5.55, 12.55, 0);
-    addPylon(8.35, 12.55, 0);
-    const lipB = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipB.position.set(7.00, 0.04, 12.55);
-    g.add(lipB);
-    const stripeB = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), paint);
-    stripeB.position.set(7.00, 0.08, 12.55);
-    g.add(stripeB);
-
-    // Climb B crest (landing east) — pylons visible from balcony approach
-    addPylon(5.55, -1.55, 4.2);
-    addPylon(8.35, -1.55, 4.2);
-    const lipBc = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipBc.position.set(7.00, 4.24, -1.55);
-    g.add(lipBc);
-
-    // Climb A foot marker (smaller) — confirms asphalt corridor east of scenic stairs
-    addPylon(-6.35, 12.55, 0);
-    addPylon(-3.65, 12.55, 0);
-    const lipA = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipA.position.set(-5.00, 0.04, 12.55);
-    g.add(lipA);
-    const stripeA = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), white);
-    stripeA.position.set(-5.00, 0.08, 12.55);
-    g.add(stripeA);
-
-    this.root.add(g);
-  }
-
 
   getFloorY(x, z, currentY = 0) {
     if (!Number.isFinite(currentY)) currentY = 0;
