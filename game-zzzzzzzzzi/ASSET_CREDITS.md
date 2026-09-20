@@ -9,3 +9,5 @@ All model assets below are licensed under [Creative Commons Attribution 4.0 Inte
 Menu artwork, asphalt, brick, storm sky, and timber textures were generated specifically for Dead Ahead. Environment geometry and game systems are original. Icons: Lucide, ISC license. Rendering: Three.js, MIT license.
 
 Survivor protective suits reuse Zombie Hazmat with a blue material adaptation and its grounded walking animation. Character cloth and skin materials are adapted to remain non-metallic under the street lighting.
+
+Version 1.0.1 stores the generated artwork and street textures as lossless WebP files. Pixel data is unchanged from the original PNG files.

@@ -1,4 +1,14 @@
-# Upload Dead Ahead to your website
+# Upload Dead Ahead to your website — version 1.0.1
+
+## Update pedagogygame.com
+
+The site-specific ZIP contains `game-zzzzzzzzzi/`. Copy that folder into the root of your existing website repository and replace the files inside the existing folder. Commit and push using the same publishing method your website already uses. Keep the site's home page, `CNAME`, other games, and deployment workflow.
+
+The game URL remains <https://pedagogygame.com/game-zzzzzzzzzi/>. Upload the complete folder, including all new `.webp` textures and the new JavaScript and CSS files. Uploading only `index.html` will not update the complete game.
+
+After the site finishes publishing, reload with Command–Shift–R on Mac or Ctrl–Shift–R on Windows/Linux. The new loading button shows a percentage, with download progress below it. Missing or stalled files display a readable message and **Retry loading**.
+
+The instructions below apply when hosting the game by itself instead of updating your existing multi-game site.
 
 This folder contains a ready-built static website. No build command or server application is needed on your host.
 
@@ -17,7 +27,7 @@ Do not upload the ZIP itself or put the whole game inside an extra wrapper folde
 
 Upload everything in this folder to your website's public folder, or to a subfolder such as `games/dead-ahead/`. Keep `assets/`, `models/`, `art/`, `fonts/`, `licenses/`, credits, and `index.html` together.
 
-Visit the hosted folder with a trailing slash, for example `https://your-domain.com/games/dead-ahead/`. Your host should serve JavaScript, CSS, PNG, WOFF2, and GLB files as static files. No PHP, database, environment variables, or API keys are needed.
+Visit the hosted folder with a trailing slash, for example `https://your-domain.com/games/dead-ahead/`. Your host should serve JavaScript, CSS, WebP, WOFF2, and GLB files as static files. No PHP, database, environment variables, or API keys are needed.
 
 To show the game within another page, use an iframe pointing to its hosted address:
 
