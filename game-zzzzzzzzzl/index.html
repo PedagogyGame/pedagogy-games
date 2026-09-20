@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dragon Bone — Square-Pallet Chain Pump</title>
+<style>
+:root{
+  --ink:#eae4d8; --ink-dim:#9aa398; --ink-faint:#5e6b60;
+  --panel:rgba(12,18,16,.78); --panel-solid:#0b1210;
+  --line:rgba(180,200,185,.16);
+  --accent:#7fd8a8;        /* jade */
+  --warn:#e0a24a;
+  --bad:#d9635c;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#0b1210;
+  font-family:var(--sans);color:var(--ink);overscroll-behavior:none}
+canvas{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+
+/* ---------- underwater wash (CSS only, not a post pass) ---------- */
+#uw{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;
+  background:
+    radial-gradient(120% 90% at 50% 38%, rgba(40,120,120,0) 26%, rgba(6,40,44,.56) 100%),
+    linear-gradient(180deg, rgba(50,140,140,.16), rgba(8,46,50,.40));
+  mix-blend-mode:multiply}
+#uw.on{opacity:1}
+#uw2{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;
+  background:linear-gradient(180deg,rgba(150,225,220,.09),rgba(40,120,120,.03));
+  mix-blend-mode:screen}
+#uw2.on{opacity:1}
+
+/* ---------- panels ---------- */
+.pane{position:fixed;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+
+#hud{top:12px;right:12px;width:240px;padding:11px 12px 10px;font-size:12px;z-index:6}
+#hud h2{margin:0 0 8px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:600}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  padding:3px 0;border-bottom:1px solid rgba(180,200,185,.06)}
+.row:last-of-type{border-bottom:0}
+.row .k{color:var(--ink-dim);font-size:11px}
+.row .v{font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em}
+.row .v small{color:var(--ink-faint);font-size:9.5px;margin-left:3px}
+.big .v{font-size:16px;color:var(--accent)}
+.src{color:var(--ink-faint);font-size:9.5px;font-style:italic}
+
+#band{margin-top:9px}
+#band .cap{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-faint);margin-bottom:4px}
+.bandbar{position:relative;height:16px;border-radius:3px;background:rgba(255,255,255,.05);
+  border:1px solid var(--line);overflow:hidden}
+.bandbar .hist{position:absolute;top:0;bottom:0;background:rgba(127,216,168,.20);
+  border-left:1px solid rgba(127,216,168,.5);border-right:1px solid rgba(127,216,168,.5)}
+.bandbar .mark{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);
+  box-shadow:0 0 6px rgba(255,255,255,.6);transition:left .12s linear}
+.bandbar .mark.out{background:var(--bad);box-shadow:0 0 6px rgba(217,99,92,.9)}
+.ticks{display:flex;justify-content:space-between;font-family:var(--mono);
+  font-size:8.5px;color:var(--ink-faint);margin-top:2px}
+
+/* shared 0–30 m lift axis, identical in all three sims */
+#axis{margin-top:9px}
+
+/* ---------- parameter panel ---------- */
+#params{top:12px;left:12px;width:250px;max-height:calc(100vh - 24px);
+  display:flex;flex-direction:column;z-index:6}
+#params header{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px;cursor:pointer;user-select:none}
+#params header b{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  font-weight:600;color:var(--ink-dim)}
+#params header span{font-family:var(--mono);color:var(--ink-faint);font-size:13px}
+#pbody{overflow-y:auto;padding:0 12px 12px;scrollbar-width:thin}
+#params.closed #pbody{display:none}
+.ctl{margin:9px 0}
+.ctl label{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:11px;color:var(--ink-dim);margin-bottom:3px}
+.ctl label i{font-style:normal;font-family:var(--mono);color:var(--ink);font-size:11.5px;
+  font-variant-numeric:tabular-nums}
+.ctl label i.hot{color:var(--warn)}
+.ctl label i.crit{color:var(--bad)}
+input[type=range]{width:100%;height:16px;-webkit-appearance:none;appearance:none;
+  background:transparent;margin:0;cursor:ew-resize}
+input[type=range]::-webkit-slider-runnable-track{height:2px;background:rgba(200,215,205,.22)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;
+  border-radius:50%;background:var(--ink);margin-top:-5.5px;border:0}
+input[type=range]::-moz-range-track{height:2px;background:rgba(200,215,205,.22)}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;
+  background:var(--ink);border:0}
+.seg{display:flex;gap:3px;margin-top:4px}
+.seg button{flex:1;padding:5px 2px;font-size:10px;font-family:var(--sans);
+  background:rgba(255,255,255,.04);color:var(--ink-dim);border:1px solid var(--line);
+  border-radius:5px;cursor:pointer}
+.seg button.on{background:rgba(127,216,168,.16);color:var(--accent);
+  border-color:rgba(127,216,168,.4)}
+.note{font-size:10px;line-height:1.45;color:var(--ink-faint);margin:7px 0 0;
+  padding-top:7px;border-top:1px solid var(--line)}
+.grp{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);
+  margin:14px 0 2px;padding-top:9px;border-top:1px solid var(--line)}
+.grp:first-child{border-top:0;padding-top:0;margin-top:4px}
+
+/* ---------- comparison panel ---------- */
+#cmp{bottom:12px;right:12px;width:240px;padding:10px 12px 8px;z-index:6}
+#cmp .cap{font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-faint);display:flex;justify-content:space-between;align-items:center}
+#cmp .cap button{background:none;border:1px solid var(--line);border-radius:4px;
+  color:var(--ink-dim);font-size:9px;padding:2px 5px;cursor:pointer;letter-spacing:.06em}
+#cmp svg{display:block;width:100%;height:120px;margin-top:5px}
+#cmp .leg{display:flex;gap:9px;font-size:9.5px;color:var(--ink-dim);margin-top:2px}
+#cmp .leg i{width:7px;height:2px;display:inline-block;vertical-align:middle;margin-right:3px}
+
+/* ---------- labels ---------- */
+#lyr{position:fixed;inset:0;pointer-events:none;z-index:4;opacity:0;transition:opacity .25s}
+#lyr.on{opacity:1}
+#lyr svg{position:absolute;inset:0;width:100%;height:100%}
+.lab{position:absolute;transform:translate(0,-50%);white-space:nowrap;
+  font-size:10.5px;letter-spacing:.02em;color:var(--ink);
+  text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 10px rgba(0,0,0,.7);padding-left:5px}
+.lab em{font-style:normal;color:var(--accent);font-size:9.5px;margin-left:5px;opacity:.85}
+
+/* ---------- bottom bar ---------- */
+#bar{bottom:12px;left:12px;padding:7px 10px;display:flex;gap:4px;align-items:center;
+  z-index:6;flex-wrap:wrap;max-width:min(580px,calc(100vw - 24px))}
+#bar button{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:5px;
+  color:var(--ink-dim);font-size:10.5px;padding:5px 8px;cursor:pointer;font-family:var(--sans);
+  white-space:nowrap}
+#bar button.on{background:rgba(127,216,168,.16);color:var(--accent);
+  border-color:rgba(127,216,168,.4)}
+#bar .sep{width:1px;height:16px;background:var(--line);margin:0 3px}
+kbd{font-family:var(--mono);font-size:8.5px;opacity:.5;margin-left:3px}
+
+/* ---------- ghost prompt + help ---------- */
+#prompt{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);z-index:7;
+  font-size:12px;color:var(--ink);background:var(--panel);border:1px solid var(--line);
+  border-radius:20px;padding:8px 16px;backdrop-filter:blur(14px);
+  box-shadow:0 6px 30px rgba(0,0,0,.5);transition:opacity .5s;text-align:center}
+#prompt b{color:var(--accent);font-weight:600}
+#prompt.gone{opacity:0;pointer-events:none}
+
+#help{position:fixed;inset:0;z-index:20;background:rgba(6,10,9,.90);
+  backdrop-filter:blur(8px);display:none;padding:24px;overflow:auto}
+#help.on{display:flex;align-items:center;justify-content:center}
+#help .card{max-width:640px;width:100%;font-size:13px;line-height:1.6}
+#help h1{font-size:17px;margin:0 0 3px;font-weight:600}
+#help h1 span{font-size:12px;color:var(--ink-faint);font-weight:400;margin-left:8px}
+#help .sub{color:var(--ink-dim);margin:0 0 18px;font-size:12.5px;line-height:1.55}
+#help .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:560px){#help .cols{grid-template-columns:1fr}}
+#help h3{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-faint);margin:0 0 7px;font-weight:600}
+#help dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px}
+#help dt{font-family:var(--mono);color:var(--accent);font-size:11px}
+#help dd{margin:0;color:var(--ink-dim)}
+#help .close{margin-top:20px;background:rgba(255,255,255,.06);border:1px solid var(--line);
+  color:var(--ink);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px}
+
+/* ---------- touch ---------- */
+#stick{position:fixed;left:18px;bottom:110px;width:104px;height:104px;z-index:8;
+  border-radius:50%;background:rgba(255,255,255,.05);border:1px solid var(--line);
+  display:none;touch-action:none}
+#stick i{position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;
+  border-radius:50%;background:rgba(234,228,216,.28);border:1px solid rgba(255,255,255,.35)}
+#vert{position:fixed;right:18px;bottom:110px;z-index:8;display:none;flex-direction:column;gap:7px}
+#vert button{width:46px;height:40px;border-radius:9px;background:rgba(255,255,255,.06);
+  border:1px solid var(--line);color:var(--ink);font-size:15px}
+body.ghost.touch #stick{display:block}
+body.ghost.touch #vert{display:flex}
+
+/* ---------- 380px ---------- */
+@media(max-width:560px){
+  #hud{width:142px;padding:7px 8px;top:8px;right:8px;font-size:11px}
+  .row .k{font-size:9px}.row .v{font-size:10.5px}.big .v{font-size:13px}
+  .row .v small{font-size:8px}
+  #hud h2{font-size:9px;margin-bottom:6px}
+  #cmp{display:none}
+  #params{width:min(224px,calc(100vw - 20px));left:8px;top:8px}
+  #params.closed{width:auto}
+  #pbody{max-height:58vh}
+  #bar{left:8px;bottom:8px;max-width:calc(100vw - 16px);gap:3px;padding:6px 7px}
+  #bar button{font-size:10px;padding:4px 6px}
+  #bar kbd{display:none}
+  #prompt{font-size:11px;padding:7px 12px;bottom:92px;max-width:calc(100vw - 32px)}
+}
+
+/* ---- 3D observation controls ---- */
+#bar input.slicer{width:84px;height:16px;display:none;margin:0 1px;vertical-align:middle}
+#bar input.slicer.on{display:inline-block}
+#viewhint{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);z-index:5;
+  font-size:10.5px;color:var(--ink-faint);letter-spacing:.04em;pointer-events:none;
+  transition:opacity .4s}
+#viewhint.gone{opacity:0}
+@media(max-width:560px){#viewhint{display:none}}
+
+/* ---- live figures pinned to the point of action ---- */
+#figs{position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0;transition:opacity .25s}
+#figs.on{opacity:1}
+#figs svg{position:absolute;inset:0;width:100%;height:100%}
+.fig{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
+  background:rgba(8,12,16,.80);border:1px solid var(--line);border-radius:6px;
+  padding:3px 8px;font-size:10px;line-height:1.35;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+  box-shadow:0 2px 12px rgba(0,0,0,.45)}
+.fig i{font-style:normal;color:var(--ink-dim);display:block;font-size:9px;
+  letter-spacing:.06em;text-transform:uppercase}
+.fig b{font-family:var(--mono);color:var(--accent);font-weight:600;font-size:12px;
+  font-variant-numeric:tabular-nums}
+.fig b small{color:var(--ink-faint);font-size:9px;margin-left:2px;font-weight:400}
+.fig.warn b{color:var(--warn)} .fig.bad b{color:var(--bad)}
+@media(max-width:560px){.fig{font-size:9px;padding:2px 6px}.fig b{font-size:10.5px}}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="uw"></div><div id="uw2"></div>
+<div id="figs"><svg id="figleaders"></svg></div>
+<div id="lyr"><svg id="leaders"></svg></div>
+
+<div class="pane" id="params">
+  <header id="phead"><b>Parameters</b><span>−</span></header>
+  <div id="pbody">
+    <div class="grp">Trough</div>
+    <div class="ctl"><label>Trough width <i id="v_w">15 cm</i></label>
+      <input type="range" id="s_w" min="10" max="25" step="0.5" value="15"></div>
+    <div class="ctl"><label>Trough height <i id="v_h">12 cm</i></label>
+      <input type="range" id="s_h" min="8" max="20" step="0.5" value="12"></div>
+    <div class="ctl"><label>Trough length <i id="v_L">5.0 m</i></label>
+      <input type="range" id="s_L" min="2" max="12" step="0.1" value="5"></div>
+    <div class="ctl"><label>Slope θ <i id="v_th">25°</i></label>
+      <input type="range" id="s_th" min="10" max="45" step="0.5" value="25"></div>
+
+    <div class="grp">Chain</div>
+    <div class="ctl"><label>Pallet pitch <i id="v_p">25 cm</i></label>
+      <input type="range" id="s_p" min="15" max="40" step="1" value="25"></div>
+    <div class="ctl"><label>Pallet clearance <i id="v_c">3.0 mm</i></label>
+      <input type="range" id="s_c" min="0.5" max="15" step="0.1" value="3">
+      <div class="note" id="wear" style="margin-top:4px;padding-top:4px">new</div></div>
+
+    <div class="grp">Drive</div>
+    <div class="seg" id="drive">
+      <button data-d="0">Crank</button><button data-d="1" class="on">Treadle</button>
+      <button data-d="2">Ox</button><button data-d="3">Water</button></div>
+    <div class="ctl" style="margin-top:8px"><label>Input power P <i id="v_P">150 W</i></label>
+      <input type="range" id="s_P" min="40" max="600" step="5" value="150"></div>
+    <div class="ctl"><label>Bearing friction µ <i id="v_mu">0.15</i></label>
+      <input type="range" id="s_mu" min="0.05" max="0.45" step="0.01" value="0.15"></div>
+    <p class="note" id="diag">—</p>
+  </div>
+</div>
+
+<div class="pane" id="hud">
+  <h2>Dragon bone 龍骨車</h2>
+  <div class="row"><span class="k">Lift H</span><span class="v" id="o_H">—</span></div>
+  <div class="row"><span class="k">Input P <span class="src" id="o_src">two men</span></span>
+    <span class="v" id="o_P">—</span></div>
+  <div class="row"><span class="k">Efficiency η</span><span class="v" id="o_eta">—</span></div>
+  <div class="row"><span class="k">Volumetric η<sub>v</sub></span><span class="v" id="o_ev">—</span></div>
+  <div class="row"><span class="k">Pocket fill</span><span class="v" id="o_fill">—</span></div>
+  <div class="row"><span class="k">Chain speed</span><span class="v" id="o_v">—</span></div>
+  <div class="row big"><span class="k">Output Q</span><span class="v" id="o_Q">—</span></div>
+  <div class="row"><span class="k">&nbsp;</span><span class="v" id="o_Qd">—</span></div>
+  <div id="band">
+    <div class="cap" id="bandcap">vs. historical range</div>
+    <div class="bandbar"><div class="hist" id="hb"></div><div class="mark" id="hm"></div></div>
+    <div class="ticks"><span>0</span><span>55 m³/h</span></div>
+  </div>
+  <div id="axis">
+    <div class="cap">shared lift axis</div>
+    <div class="bandbar"><div class="hist" id="ab"></div><div class="mark" id="am"></div></div>
+    <div class="ticks"><span>0</span><span>15</span><span>30 m</span></div>
+  </div>
+</div>
+
+<div class="pane" id="cmp">
+  <div class="cap"><span>Lift vs flow</span><button id="perw">per watt</button></div>
+  <svg viewBox="0 0 220 120" id="plot"></svg>
+  <div class="leg">
+    <span><i style="background:#7fd8a8"></i>dragon</span>
+    <span><i style="background:#e0a24a"></i>saqiyah</span>
+    <span><i style="background:#8fb8e0"></i>shaduf</span>
+  </div>
+</div>
+
+<div class="pane" id="bar">
+  <button id="b_cam">Elevation<kbd>V</kbd></button>
+  <button id="b_ghost">Walk<kbd>G</kbd></button>
+  <span class="sep"></span>
+  <button id="b_cut">Cutaway<kbd>C</kbd></button>
+  <button id="b_lab">Labels<kbd>L</kbd></button>
+  <button id="b_fig">Figures<kbd>F</kbd></button>
+  <button id="b_slice">Slice<kbd>S</kbd></button><input type="range" id="s_slice" class="slicer" min="-1" max="1" step="0.004" value="0"><button id="b_turn">Turn<kbd>O</kbd></button>
+  <button id="b_exp">Explode<kbd>X</kbd></button>
+  <span class="sep"></span>
+  <button id="b_slow">0.25×</button><button id="b_norm" class="on">1×</button>
+  <button id="b_fast">4×</button><button id="b_pause">❚❚</button>
+  <span class="sep"></span>
+  <button id="b_help">?<kbd>H</kbd></button>
+</div>
+
+<div id="viewhint">drag to orbit · scroll to zoom · right-drag to pan</div>
+<div id="prompt">Press <b>G</b> to walk the field as a ghost — you pass through everything, including the water</div>
+
+<div id="stick"><i></i></div>
+<div id="vert"><button id="vu">▲</button><button id="vd">▼</button></div>
+
+<div id="help"><div class="card">
+  <h1>Dragon bone <span>龍骨車 lónggǔchē · 翻車 fānchē, "the overturning cart"</span></h1>
+  <p class="sub">A jointed chain of square pallets in an inclined trough. No pots, no valves, no
+  gearing. Each pallet nearly fills the section and pushes a pocket of water ahead of it up the
+  slope. It trades lift for volume and for the fact that a farmer can carve a replacement pallet
+  with a hand tool — which is why it stayed in service into the twentieth century.</p>
+  <div class="cols">
+    <div>
+      <h3>Camera</h3>
+      <dl>
+        <dt>V</dt><dd>cycle elevation → orbit → ghost</dd>
+        <dt>G</dt><dd>jump straight to ghost walk</dd>
+        <dt>W A S D</dt><dd>move (ghost)</dd>
+        <dt>Space / Z</dt><dd>rise / sink</dd>
+        <dt>Shift</dt><dd>drift faster</dd>
+        <dt>drag</dt><dd>look around</dd>
+        <dt>1 – 5</dt><dd>vantage points</dd>
+      </dl>
+      <h3 style="margin-top:14px">Display</h3>
+      <dl>
+        <dt>C</dt><dd>cutaway — fade the near wall</dd>
+        <dt>L</dt><dd>component labels</dd>
+        <dt>S</dt><dd>slice plane — <kbd style="font-size:9px">,</kbd> <kbd style="font-size:9px">.</kbd> sweep it through</dd>
+        <dt>O</dt><dd>turntable — let it rotate while it runs</dd>
+        <dt>X</dt><dd>take it apart</dd>
+        <dt>[ ]</dt><dd>slower / faster</dd>
+        <dt>P</dt><dd>pause</dd>
+        <dt>H</dt><dd>this panel</dd>
+      </dl>
+    </div>
+    <div>
+      <h3>Three things to find</h3>
+      <p class="sub" style="font-size:12px;margin:0 0 11px">
+      <b style="color:var(--accent)">The slope optimum.</b> Watch the pocket, not the readout:
+      its surface stays level while the trough tilts away beneath it, so every degree of slope
+      thins the wedge each pallet carries. Steeper buys lift and costs volume. Somewhere in
+      between, the water actually delivered — height times flow — is greatest. Nothing is
+      labelled.</p>
+      <p class="sub" style="font-size:12px;margin:0 0 11px">
+      <b style="color:var(--accent)">Pitch and slope are one decision.</b> A long pitch at a
+      steep angle spills over each pallet before the next arrives. Set the pitch to 40 cm and
+      walk θ up: the pump dies around 25°. At 15 cm it survives the whole range. The two
+      sliders cannot be set independently, and no drawing of the machine tells you that.</p>
+      <p class="sub" style="font-size:12px;margin:0 0 11px">
+      <b style="color:var(--accent)">The speed window.</b> Too slow and leaked water falls back
+      past the pallet behind. Too fast and the pallets entrain air instead of filling. Change
+      power and clearance and watch η<sub>v</sub>.</p>
+      <h3>And one thing to break</h3>
+      <p class="sub" style="font-size:12px;margin:0">
+      Push the trough past about four metres of lift, or drag clearance to "derelict", and
+      leakage overwhelms delivery. Flow collapses and the water runs back down the trough.
+      That one interaction answers "why not use this on a well" better than a paragraph can.</p>
+    </div>
+  </div>
+  <button class="close" id="b_close">Close</button>
+</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ═══════════════════════════════════════════════════════════════════
+   DEFINITION AT CLOSE RANGE
+   Three things make a low-poly machine hold up when you zoom into it:
+   a chamfer on every timber so each arris catches a highlight, texture
+   anisotropy so grain stays sharp at grazing angles, and a shadow map
+   tight enough that contact shadows read at centimetre scale. Real
+   timber has an arris; a hard 90-degree box edge is the single biggest
+   tell that you are looking at a primitive.
+   Textures are built before the renderer exists, so they register here
+   and have their anisotropy set once it does.
+   ═══════════════════════════════════════════════════════════════════ */
+const TEXREG=[];
+function sharpen(t){ TEXREG.push(t); t.needsUpdate=true; return t; }
+function chamfer(w,h,d,r){
+  const m=Math.min(Math.abs(w),Math.abs(h),Math.abs(d));
+  const rad=Math.min(r===undefined ? m*0.13 : r, m*0.32);
+  if(!(rad>0.0016)) return new THREE.BoxGeometry(w,h,d);
+  return new RoundedBoxGeometry(w,h,d,2,rad);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   0.  CONSTANTS + PARAMETERS
+   ═══════════════════════════════════════════════════════════════════ */
+const RHO = 1000, G = 9.81, CD = 0.62;
+const ETA_MECH  = 0.95;     // sprocket slip and shaft bearings only; trough drag is µ
+const RECOVERY  = 0.35;     // leaked water swept back up by the pallet a pitch behind
+const FREEBOARD = 0.95;     // the pocket rides just short of the trough brim
+const V_OPT_K   = 0.855;    // normaliser for the speed curve (peak ≈ 1.0)
+const CHURN     = 0.5*1.2*5;// ½·Cd·(pallets working through the submerged intake)
+
+const DRIVES = [
+  {name:'hand crank',  src:'one man',   P:75,  min:40,  max:120, band:[3,9]},
+  {name:'foot treadle',src:'two men',   P:150, min:90,  max:260, band:[8,25]},
+  {name:'ox capstan',  src:'one ox',    P:400, min:250, max:520, band:[20,50]},
+  {name:'waterwheel',  src:'stream',    P:350, min:150, max:600, band:[18,45]}
+];
+
+const P = {
+  w:0.15, h:0.12, L:5.0, theta:25, pitch:0.25, clear:0.003,
+  drive:1, power:150, mu:0.15
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   1.  PHYSICS  —  every number below is computed, none hardcoded
+   ═══════════════════════════════════════════════════════════════════ */
+function speedEfficiency(v){
+  // Low end: leaked water has time to fall back past the following pallet.
+  // High end: pallets entrain air at the lip and the pocket cavitates.
+  // Sweet spot lands near 0.5 m/s, as the chain-pump literature reports.
+  return (1 / (1 + 0.06/Math.max(v,0.02) + Math.pow(v/1.3,3))) / V_OPT_K;
+}
+
+/* How much water a pallet actually carries.
+   The surface of the pocket behind each pallet is HORIZONTAL. Seen in the tilted
+   trough it therefore falls at tanθ against the floor. In steady running the rear
+   of the pocket rides just short of the brim; the front, up-slope, is shallower by
+   pitch·tanθ. Two regimes:
+
+     TRAPEZOID  (pitch·tanθ ≤ d_rear)  the pocket spans the whole pitch
+                mean depth = d_rear − pitch·tanθ/2
+     TRIANGLE   (pitch·tanθ >  d_rear)  the surface meets the floor before the next
+                pallet; the pocket is a wedge over part of the pitch only
+                mean depth = d_rear² / (2·pitch·tanθ)
+
+   Both give d_rear/2 at the crossover, so the curve is continuous. The pocket
+   thins without limit as the trough steepens but never quite vanishes — which is
+   why a dragon bone at a steep angle is feeble rather than dead. Pitch and slope
+   are one decision, not two. This is the term the usual account leaves out. */
+function pocketFill(p, th){
+  const dR = FREEBOARD*p.h, drop = p.pitch*Math.tan(th);
+  if(drop <= 1e-9) return FREEBOARD;
+  return (drop <= dR ? dR - drop/2 : dR*dR/(2*drop)) / p.h;
+}
+
+function solve(p){
+  const th   = p.theta * Math.PI/180;
+  const H    = p.L * Math.sin(th);
+  const A    = p.w * p.h;                  // trough section
+  const fill = pocketFill(p, th);
+  const Aeff = A * fill;                   // section actually carrying water
+  const dRear= FREEBOARD*p.h, drop = p.pitch*Math.tan(th);
+  const dFront = Math.max(0, dRear - drop);          // 0 once the pocket is a triangle
+  const reach  = Math.min(1, dRear/Math.max(drop,1e-9)); // fraction of the pitch wetted
+
+  const nPal   = Math.max(4, Math.round(2*p.L/p.pitch));
+  const mWater = RHO * Aeff * p.L;                    // ascending run only
+  const mChain = nPal*0.35 + p.L*1.6;                 // pallets + jointed spine
+
+  // Power balance in chain speed v — linear terms plus a cubic churn term:
+  //   P·η_mech = [ρ g H A_eff + µ g cosθ (m_w+m_c)]·v  +  CHURN·ρ·(w·h)·v³
+  // The cubic is the pallets thrashing through the water at the intake. It is
+  // negligible in normal running and is what stops the chain from running away
+  // when the pockets go empty.
+  const lin = RHO*G*H*Aeff + p.mu*G*Math.cos(th)*(mWater + mChain);
+  const cub = CHURN * RHO * A;
+  let v = lin > 0 ? p.power*ETA_MECH/lin : 1;
+  for(let i=0;i<24;i++){                              // Newton on  cub·v³+lin·v−Pη = 0
+    const f  = cub*v*v*v + lin*v - p.power*ETA_MECH;
+    const fp = 3*cub*v*v + lin;
+    const step = f/fp; v -= step;
+    if(v < 1e-6){ v = 1e-6; break; }
+    if(Math.abs(step) < 1e-9) break;
+  }
+
+  const etaV  = speedEfficiency(v);
+  const Qth   = Aeff * v;                             // swept (theoretical) flow
+
+  // Leakage past one pallet, driven by the head difference across it
+  const dh    = p.pitch * Math.sin(th);
+  const Agap  = 2*p.clear*p.h + p.clear*p.w;          // two sides + top gap
+  const Qleak = CD * Agap * Math.sqrt(2*G*dh);
+
+  const Qnet  = Math.max(0, (Qth - Qleak*(1-RECOVERY)) * etaV);
+  const etaVol= Qth > 0 ? Qnet/Qth : 0;
+  const etaTot= p.power > 0 ? RHO*G*H*Qnet / p.power : 0;
+
+  return {H, A, Aeff, fill, dRear, dFront, reach, v, Qth, Qleak, Qnet, etaVol, etaTot,
+          etaV, dh, nPal, starved: fill <= 0.06,
+          dead: Qnet <= 1e-6, Lh: Qnet*3.6e6, m3d: Qnet*86400};
+}
+let S = solve(P);
+
+/* ═══════════════════════════════════════════════════════════════════
+   2.  PROCEDURAL TEXTURES  (no external assets, no loading screen)
+   ═══════════════════════════════════════════════════════════════════ */
+function cnv(n){const c=document.createElement('canvas');c.width=c.height=n;return [c,c.getContext('2d')];}
+function noise(ctx,n,a){const d=ctx.getImageData(0,0,n,n);
+  for(let i=0;i<d.data.length;i+=4){const k=(Math.random()-.5)*a;
+    d.data[i]+=k;d.data[i+1]+=k;d.data[i+2]+=k;}ctx.putImageData(d,0,0);}
+
+/* Textures carry the albedo; materials keep color white. A tinted map times a
+   tinted `color` multiplies in linear space and lands near 4% reflectance, which
+   renders as near-black however much light is on it. */
+function woodTex(base='#b58f5c', dark='#7a5c34', grain=1){
+  const n=512,[c,x]=cnv(n);
+  x.fillStyle=base;x.fillRect(0,0,n,n);
+  for(let i=0;i<70*grain;i++){
+    x.strokeStyle=`rgba(60,42,24,${0.04+Math.random()*0.10})`;
+    x.lineWidth=0.5+Math.random()*2.2;x.beginPath();
+    const y=Math.random()*n;x.moveTo(0,y);
+    for(let px=0;px<=n;px+=16)x.lineTo(px,y+Math.sin(px*0.05+i)*2.5+(Math.random()-.5)*2);
+    x.stroke();
+  }
+  for(let i=0;i<7;i++){ // knots
+    const kx=Math.random()*n,ky=Math.random()*n,r=3+Math.random()*7;
+    const g=x.createRadialGradient(kx,ky,0,kx,ky,r);
+    g.addColorStop(0,dark);g.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=g;x.beginPath();x.arc(kx,ky,r,0,7);x.fill();
+  }
+  noise(x,n,16);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.colorSpace=THREE.SRGBColorSpace;return sharpen(t);
+}
+function mudTex(base=[148,134,106], rep=16){
+  const n=512,[c,x]=cnv(n);
+  x.fillStyle=`rgb(${base[0]},${base[1]},${base[2]})`;x.fillRect(0,0,n,n);
+  for(let i=0;i<900;i++){
+    x.fillStyle=`rgba(${base[0]-16+Math.random()*26|0},${base[1]-14+Math.random()*24|0},${base[2]-12+Math.random()*22|0},.45)`;
+    x.beginPath();x.arc(Math.random()*n,Math.random()*n,1+Math.random()*7,0,7);x.fill();
+  }
+  noise(x,n,20);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  t.repeat.set(rep,rep);t.colorSpace=THREE.SRGBColorSpace;return sharpen(t);
+}
+const TEX = {wood:woodTex(), woodDark:woodTex('#9a7848','#5e4526',1.4),
+             mud:mudTex(), mudDry:mudTex([164,148,116],10)};
+TEX.wood.repeat.set(1,1);
+
+/* ═══════════════════════════════════════════════════════════════════
+   3.  RENDERER / SCENE / LIGHTS
+   ═══════════════════════════════════════════════════════════════════ */
+const canvas   = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputColorSpace   = THREE.SRGBColorSpace;
+renderer.toneMapping        = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure= 1.05;
+renderer.shadowMap.enabled  = true;
+renderer.shadowMap.type     = THREE.PCFSoftShadowMap;
+
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
+for(const t of TEXREG) t.anisotropy = MAX_ANISO;
+
+
+/* a box with a chamfered edge; falls back to a plain box when the piece is
+   so small that the chamfer would swallow it */
+
+
+const scene = new THREE.Scene();
+const SKY_LO = new THREE.Color('#cfe0d4'), SKY_HI = new THREE.Color('#5d7f93');
+scene.fog = new THREE.Fog('#b9cdc5', 26, 132);
+
+/* dawn over a paddy: one warm key, cool sky fill, faint bounce off the water */
+const key = new THREE.DirectionalLight('#ffe8ca', 2.25);
+key.position.set(-16, 13, 11);
+key.castShadow = true;
+key.shadow.mapSize.set(3072,3072);
+Object.assign(key.shadow.camera,{left:-16,right:16,top:14,bottom:-8,near:1,far:60});
+key.shadow.bias = -0.00035; key.shadow.normalBias = 0.008;
+key.shadow.camera.updateProjectionMatrix();
+/* the shadow frustum is small and follows the machine, so its resolution goes
+   where it is read — on the chain, the trestle and the crew */
+const keyTarget = new THREE.Object3D(); scene.add(keyTarget); key.target = keyTarget;
+function aimKey(){
+  const th = P.theta*Math.PI/180;
+  const cx = pump.position.x + P.L*Math.cos(th)*0.5;
+  const cy = pump.position.y + P.L*Math.sin(th)*0.5;
+  keyTarget.position.set(cx, cy, 0); keyTarget.updateMatrixWorld();
+  key.position.set(cx-13, cy+11, 10);
+}
+scene.add(key, new THREE.HemisphereLight('#a8c8dc','#4d5a44',1.15));
+/* Fill from the shaded side and a rim from behind. A single key light flattens a
+   mechanism into a silhouette; these two are what let you read its form while it
+   turns. */
+const fillL=new THREE.DirectionalLight('#bcd8ee',0.50);
+fillL.position.set(11,6,-8); scene.add(fillL);
+const rimL=new THREE.DirectionalLight('#fff6e6',0.75);
+rimL.position.set(1,4,-14); scene.add(rimL);
+const bounce = new THREE.DirectionalLight('#9fd8d0',0.35); bounce.position.set(6,-4,-8);
+scene.add(bounce);
+
+/* gradient sky dome */
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(260,24,14),
+  new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,
+    uniforms:{lo:{value:SKY_LO},hi:{value:SKY_HI}},
+    vertexShader:`varying float vy;void main(){vy=normalize(position).y;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying float vy;uniform vec3 lo,hi;
+      void main(){float t=smoothstep(-0.08,0.62,vy);
+      gl_FragColor=vec4(mix(lo,hi,t),1.);}`}));
+scene.add(sky);
+
+/* ═══════════════════════════════════════════════════════════════════
+   4.  WATER  —  two levels, a shared shader, viewable from below
+   ═══════════════════════════════════════════════════════════════════ */
+const waterUni = {t:{value:0}, tint:{value:new THREE.Color('#2f6b63')},
+                  sun:{value:new THREE.Color('#ffe2b4')}};
+function waterMat(){
+  return new THREE.ShaderMaterial({
+    transparent:true, side:THREE.DoubleSide, uniforms:waterUni,
+    vertexShader:`uniform float t;varying vec3 vP;varying float vR;
+      void main(){vec3 p=position;
+        float r=sin(p.x*1.7+t*1.3)*0.012+sin(p.y*2.3-t*1.7)*0.010
+               +sin((p.x+p.y)*3.1+t*0.9)*0.006;
+        p.z+=r;vR=r;vP=(modelMatrix*vec4(p,1.)).xyz;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+    fragmentShader:`uniform vec3 tint,sun;uniform float t;varying vec3 vP;varying float vR;
+      void main(){
+        vec3 V=normalize(cameraPosition-vP);
+        float f=pow(1.0-abs(V.y),3.0);                  // fresnel-ish rim
+        float glint=smoothstep(0.004,0.013,vR)*0.55;
+        vec3 col=mix(tint,vec3(0.74,0.85,0.86),f*0.72)+sun*glint*0.30;
+        gl_FragColor=vec4(col,0.80+f*0.17);}`});
+}
+function waterPlane(w,d,y,x=0,z=0){
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d,Math.min(64,w|0),Math.min(64,d|0)),waterMat());
+  m.rotation.x=-Math.PI/2; m.position.set(x,y,z); m.renderOrder=2; return m;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   5.  THE SCENE: paddy terrace, bund walls, reeds, hills
+   ═══════════════════════════════════════════════════════════════════ */
+const world = new THREE.Group(); scene.add(world);
+
+const LOWER_Y = 0;                               // source water surface
+let   UPPER_Y = S.H;                             // field water surface (tracks lift)
+
+const groundMat = new THREE.MeshStandardMaterial({map:TEX.mud, roughness:.97});
+/* The big ground slabs do NOT receive shadows. They are tens of metres across and
+   fall outside the shadow camera, which would otherwise sample a clamped edge texel
+   and render them black. Shadow work stays on the machine and its trestle. */
+// deep enough that a tall portrait viewport never sees under it
+const lowerBed = new THREE.Mesh(new THREE.BoxGeometry(260,9,260), groundMat);
+lowerBed.position.set(0,-4.6,0); lowerBed.receiveShadow=false; world.add(lowerBed);
+
+const lowerWater = waterPlane(260,260,LOWER_Y-0.02); world.add(lowerWater);
+
+/* upper terrace: a raised pad the discharge runs into */
+const terrace = new THREE.Group(); world.add(terrace);
+const pad = new THREE.Mesh(new THREE.BoxGeometry(60,7,120), groundMat);
+pad.receiveShadow=false; pad.castShadow=false; terrace.add(pad);
+const upperWater = waterPlane(57,116,0); terrace.add(upperWater);
+const bund = new THREE.Mesh(new THREE.BoxGeometry(0.55,1.4,120),
+  new THREE.MeshStandardMaterial({map:TEX.mudDry,roughness:.98}));
+bund.castShadow=false; bund.receiveShadow=false; terrace.add(bund);
+
+/* The terrace is the high ground the machine discharges into, so its edge sits at
+   the lip — not centred on the machine, which would bury it. */
+function layoutTerrace(){
+  // the field surface sits a little below the lip, so the discharge falls into it
+  UPPER_Y = Math.max(0.18, S.H - 0.25);
+  const th = P.theta*Math.PI/180;
+  const lipX = pump.position.x + P.L*Math.cos(th) + 0.45;
+  terrace.position.set(lipX, UPPER_Y, 0);
+  // both slabs start AT the lip and run away from the machine, never back over it
+  pad.position.set(30.3, -3.60, 0);          // 60 wide, 7 deep: top at UPPER_Y−0.10
+  upperWater.position.set(29.2, 0, 0);       // 57 wide: the field surface itself
+  // the retaining wall runs from above the field down past the source waterline
+  const bTop = 0.15, bBot = LOWER_Y - UPPER_Y - 0.6;
+  bund.scale.y = (bTop - bBot)/1.4;
+  bund.position.set(0.30, (bTop + bBot)/2, 0);
+}
+// not called here: it needs `pump`, which is built below. rebuild() runs it at boot.
+
+/* reeds — instanced, swaying in the vertex shader */
+/* Scene dressing that sits between the camera and the machine in side elevation.
+   Orthographic projection draws a reed 30 m in front at exactly the size of one
+   beside the trough, so this whole group is hidden in elevation and restored for
+   orbit and ghost, where depth reads normally. */
+const frontDressing = new THREE.Group(); world.add(frontDressing);
+
+/* Two crossed blades per reed. A single quad disappears edge-on, which is what
+   turns a reed bed into a field of dark sticks as the ghost walks past it. */
+function reedGeo(w=0.085, h=0.95){
+  const t=w*0.16, pos=[], idx=[];
+  const quad=(ax,az)=>{
+    const b=pos.length/3;
+    pos.push(-ax*w/2,0,-az*w/2,  ax*w/2,0,az*w/2,  ax*t,h,az*t,  -ax*t,h,-az*t);
+    idx.push(b,b+1,b+2, b,b+2,b+3);
+  };
+  quad(1,0); quad(0,1);
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+
+function reeds(n, spread, y, group, tint='#5d7a4a', zFrom=null, zTo=null,
+               xFrom=null, xTo=null){
+  const g = reedGeo();
+  const m = new THREE.MeshStandardMaterial({color:tint,side:THREE.DoubleSide,
+    roughness:.92});
+  m.onBeforeCompile = s=>{
+    s.uniforms.t = waterUni.t;
+    s.vertexShader = 'uniform float t;\n' + s.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float sw = transformed.y*transformed.y*0.16;
+       float ph = instanceMatrix[3][0]*1.7 + instanceMatrix[3][2]*1.1;
+       transformed.x += sin(t*1.25+ph)*sw;
+       transformed.z += cos(t*0.95+ph*1.3)*sw*0.6;`);
+  };
+  const im = new THREE.InstancedMesh(g,m,n);
+  const d = new THREE.Object3D(), c = new THREE.Color();
+  const base = new THREE.Color(tint);
+  for(let i=0;i<n;i++){
+    const z = zFrom===null ? (Math.random()-.5)*spread.z
+                           : zFrom + Math.random()*(zTo-zFrom);
+    const x = xFrom===null ? (Math.random()-.5)*spread.x
+                           : xFrom + Math.random()*(xTo-xFrom);
+    d.position.set(x, y, z);
+    d.rotation.set(0, Math.random()*6.28, (Math.random()-.5)*0.22);
+    const s = 0.6+Math.random()*0.9; d.scale.set(s*(0.8+Math.random()*0.5),s,s);
+    d.updateMatrix(); im.setMatrixAt(i,d.matrix);
+    c.copy(base).offsetHSL((Math.random()-.5)*0.06,(Math.random()-.5)*0.18,
+                           (Math.random()-.5)*0.22);
+    im.setColorAt(i,c);
+  }
+  im.instanceMatrix.needsUpdate=true;
+  if(im.instanceColor) im.instanceColor.needsUpdate=true;
+  im.castShadow=true; group.add(im); return im;
+}
+// behind the machine — always visible, reads as the far bank
+reeds(300,{x:0,z:0},LOWER_Y-0.05,world,'#84a163',-34,-2.4,-26,34);
+// on the terrace, and only on it: the pad starts at the lip, not before it
+reeds(150,{x:0,z:0},-0.05,terrace,'#93ad6b',-26,-2.4,0.8,33);
+// in front of the machine — hidden in elevation
+reeds(240,{x:0,z:0},LOWER_Y-0.05,frontDressing,'#89a668',2.6,32,-26,34);
+
+/* karst silhouette — the shape of the Guangxi/Guilin paddy country */
+function hills(){
+  const g=new THREE.Group();
+  for(let i=0;i<9;i++){
+    const hgt=9+Math.random()*17, rad=4+Math.random()*4.5;
+    const m=new THREE.Mesh(new THREE.ConeGeometry(rad,hgt,7,1),
+      new THREE.MeshBasicMaterial({color:new THREE.Color('#8ba6ab').lerp(new THREE.Color('#c4d5d0'),0.25+Math.random()*0.5),
+        fog:true}));
+    m.position.set(-90+Math.random()*180, hgt/2-2, -68-Math.random()*40);
+    m.rotation.y=Math.random()*3; g.add(m);
+  }
+  return g;
+}
+/* Distant scenery only makes sense under perspective. Orthographic projection
+   gives no diminishment with distance, so a karst peak 90 m back would be drawn
+   at its true height and swallow the sky. Hills and mist ride with the front
+   dressing and appear only in orbit and ghost. */
+frontDressing.add(hills());
+
+/* morning mist */
+function mist(){
+  const n=520,pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){pos[i*3]=(Math.random()-.5)*80;pos[i*3+1]=Math.random()*1.9;
+    pos[i*3+2]=(Math.random()-.5)*80;}
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const [c,x]=cnv(64); const rg=x.createRadialGradient(32,32,0,32,32,32);
+  rg.addColorStop(0,'rgba(255,255,255,.55)');rg.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=rg;x.fillRect(0,0,64,64);
+  const pts=new THREE.Points(g,new THREE.PointsMaterial({
+    size:1.5,map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,
+    opacity:.15,color:'#dfeef0',blending:THREE.NormalBlending,sizeAttenuation:true}));
+  frontDressing.add(pts); return pts;
+}
+const mistPts = mist();
+
+/* ═══════════════════════════════════════════════════════════════════
+   6.  THE MACHINE
+   ═══════════════════════════════════════════════════════════════════
+   Built in trough-local coordinates: +X runs up the slope, +Y is the
+   trough normal, the chain loop lies in the XY plane. The whole group
+   is then rotated by θ and dropped so the intake sits under water.
+   ═══════════════════════════════════════════════════════════════════ */
+const pump = new THREE.Group(); world.add(pump);
+const chainGrp = new THREE.Group(); pump.add(chainGrp);
+
+const matWood     = new THREE.MeshStandardMaterial({map:TEX.wood, roughness:.88});
+const matWoodDark = new THREE.MeshStandardMaterial({map:TEX.woodDark, roughness:.92});
+const matWet      = new THREE.MeshStandardMaterial({map:TEX.woodDark, roughness:.40, color:'#cfc4ad'});
+const matNear     = matWood.clone(); matNear.transparent=true;   // the wall the cutaway fades
+/* a streak that fades out at both ends, so the leak reads as running water
+   rather than as a row of paper tickets */
+const leakTex=(()=>{
+  const [c,x]=cnv(64);
+  const g=x.createLinearGradient(0,0,64,0);
+  g.addColorStop(0,'rgba(255,255,255,0)'); g.addColorStop(0.35,'rgba(255,255,255,.85)');
+  g.addColorStop(0.7,'rgba(255,255,255,.55)'); g.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=g; x.fillRect(0,0,64,64);
+  const v=x.createLinearGradient(0,0,0,64);
+  v.addColorStop(0,'rgba(0,0,0,1)'); v.addColorStop(0.5,'rgba(0,0,0,0)');
+  v.addColorStop(1,'rgba(0,0,0,1)');
+  x.globalCompositeOperation='destination-out'; x.fillStyle=v; x.fillRect(0,0,64,64);
+  const t=new THREE.CanvasTexture(c); return sharpen(t);
+})();
+const matLeak = new THREE.MeshBasicMaterial({color:'#cdf3ea',transparent:true,
+  opacity:.25,side:THREE.DoubleSide,depthWrite:false,map:leakTex});
+const matPocket   = new THREE.MeshStandardMaterial({color:'#4f9c92',transparent:true,opacity:.80,
+                      roughness:.18,metalness:.0,emissive:'#12403c',emissiveIntensity:.35});
+
+let SPROCKET_R = 0.22;
+const parts = {};   // named handles for the label layer
+
+function box(w,h,d,mat){const m=new THREE.Mesh(chamfer(w,h,d),mat);
+  m.castShadow=m.receiveShadow=true;return m;}
+
+/* ---- trough: floor + far wall + near wall (near wall is the cutaway) ---- */
+function buildTrough(){
+  ['floor','farWall','nearWall','lip','frame'].forEach(k=>{
+    const o = parts[k]; if(!o) return;
+    pump.remove(o);
+    // `frame` is a Group, not a Mesh — it has no geometry of its own
+    o.traverse(n=>{ if(n.geometry) n.geometry.dispose(); });
+  });
+  const L=P.L, w=P.w, h=P.h, t=0.022;
+  const floor = box(L+0.5, t, w+2*t, matWet);
+  floor.position.set(L/2, -SPROCKET_R-t/2, 0); pump.add(floor); parts.floor=floor;
+
+  const far = box(L+0.5, h, t, matWood);
+  far.position.set(L/2, -SPROCKET_R+h/2, -(w/2+t/2)); pump.add(far); parts.farWall=far;
+
+  const near = box(L+0.5, h, t, matNear);
+  near.position.set(L/2, -SPROCKET_R+h/2, (w/2+t/2)); pump.add(near); parts.nearWall=near;
+
+  // discharge lip — a short flared chute at the top
+  const lip = box(0.34, 0.02, w+0.10, matWoodDark);
+  lip.position.set(L+0.30, -SPROCKET_R-0.02, 0); lip.rotation.z=-0.18;
+  pump.add(lip); parts.lip=lip;
+
+  /* Capping rails along the tops of both walls, and cross-ties under the floor.
+     A trough is a built object, not an extruded channel — and from any angle but
+     dead-on side elevation, its construction is most of what there is to look at. */
+  const frame = new THREE.Group();
+  for(const s of [-1,1]){
+    const rail = box(L+0.5, 0.018, 0.040, matWoodDark);
+    rail.position.set(L/2, -SPROCKET_R+h+0.009, s*(w/2+t/2));
+    frame.add(rail);
+  }
+  const nTie = Math.max(3, Math.round(L/0.65));
+  for(let i=0;i<=nTie;i++){
+    const x = 0.18 + (L-0.22)*i/nTie;
+    // a tie under the floor, standing proud of the trough on both sides
+    const tie = box(0.05, 0.05, w+0.30, matWoodDark);
+    tie.position.set(x, -SPROCKET_R-t-0.026, 0); frame.add(tie);
+    // and a lashing wrapped over the trough at the same station
+    const lash = new THREE.Mesh(
+      new THREE.TorusGeometry((w+h)*0.44, 0.011, 5, 12),
+      new THREE.MeshStandardMaterial({color:'#b09a72',roughness:.98}));
+    lash.rotation.y = Math.PI/2;
+    lash.position.set(x, -SPROCKET_R+h*0.34, 0);
+    lash.scale.set(1, (h+0.10)/((w+h)*0.88), 1);
+    frame.add(lash);
+  }
+  /* trestle legs with a spread pair and a diagonal brace across the width, so
+     the machine has a footprint rather than a centre line */
+  for(let i=1;i<=3;i++){
+    const x=L*i/4, legH=0.35+x*0.25;
+    for(const s of [-1,1]){
+      const leg = box(0.055,legH,0.055,matWoodDark);
+      leg.position.set(x, -SPROCKET_R-legH/2-t, s*(w*0.5+0.16));
+      leg.rotation.x = -s*0.14;
+      frame.add(leg);
+    }
+    const sill = box(0.05,0.05,w+0.60,matWoodDark);
+    sill.position.set(x, -SPROCKET_R-legH-t+0.03, 0); frame.add(sill);
+    const diag = box(0.038,0.038,Math.hypot(legH,w*0.5),matWoodDark);
+    diag.position.set(x, -SPROCKET_R-legH*0.55-t, 0);
+    diag.rotation.x = Math.atan2(w*0.5, legH) + Math.PI/2;
+    frame.add(diag);
+  }
+  frame.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  pump.add(frame); parts.frame=frame;
+}
+
+/* ---- the jointed chain: pallets, spine links, water pockets ---- */
+let palletIM=null, linkIM=null, pocketIM=null, leakIM=null, nPalletsDrawn=0;
+function buildChain(){
+  [palletIM,linkIM,pocketIM,leakIM].forEach(m=>{if(m){chainGrp.remove(m);m.geometry.dispose();}});
+  const L=P.L, n = Math.max(6, Math.round(loopLength()/P.pitch));
+  nPalletsDrawn = n;
+
+  const pw = P.w - 2*P.clear, ph = P.h*0.80;
+  const pg = new THREE.BoxGeometry(0.018, ph, pw);
+  palletIM = new THREE.InstancedMesh(pg, matWet, n);
+  palletIM.castShadow = true; chainGrp.add(palletIM);
+
+  const lg = new THREE.BoxGeometry(P.pitch*0.72, 0.030, 0.034);
+  linkIM = new THREE.InstancedMesh(lg, matWoodDark, n);
+  linkIM.castShadow = true; chainGrp.add(linkIM);
+
+  pocketIM = new THREE.InstancedMesh(wedgeGeo(), matPocket, n);
+  pocketIM.renderOrder = 3; chainGrp.add(pocketIM);
+
+  /* ---- the leak, which is the whole story of this machine ----
+     Water escapes round the edge of every pallet and runs back down the trough.
+     One thin sheet per pallet, on each side, its length set by how far the leak
+     falls before the next pallet catches it and its thickness by the clearance.
+     The volume it represents is the Qleak the HUD reports, so what you see at
+     the pallet edge and the number in the readout are the same quantity. */
+  const jg = new THREE.PlaneGeometry(1,1);
+  jg.translate(0, -0.5, 0);
+  leakIM = new THREE.InstancedMesh(jg, matLeak, n*2);
+  leakIM.renderOrder = 4; chainGrp.add(leakIM);
+}
+
+/* The pocket is a trapezoidal prism, not a box: its top face is the water
+   surface, which is level in the world however far the trough is tilted.
+   Built with its floor at y=0 so a per-instance Y-scale (leakage depletion)
+   pivots on the trough floor. */
+function wedgeGeo(){
+  const th = P.theta*Math.PI/180;
+  const pl = loopLength()/Math.max(6, Math.round(loopLength()/P.pitch));
+  const zw = (P.w - 2*P.clear)*0.97/2;
+  const dR = FREEBOARD*P.h;                          // rear (down-slope) depth
+  const drop = pl*Math.tan(th);
+  // trapezoid while the surface still clears the floor at the next pallet;
+  // otherwise a triangle that only reaches part-way up the pitch
+  const len = drop <= dR ? pl : Math.max(0.004, pl*dR/Math.max(drop,1e-9));
+  const dF  = drop <= dR ? dR - drop : 0.0008;
+  const v = new Float32Array([
+    0,0,-zw,   0,0,zw,   len,0,zw,   len,0,-zw,      // floor      0..3
+    0,dR,-zw,  0,dR,zw,  len,dF,zw,  len,dF,-zw      // surface    4..7
+  ]);
+  const idx = [
+    0,1,2, 0,2,3,        // floor
+    4,6,5, 4,7,6,        // water surface
+    0,4,5, 0,5,1,        // rear face (against the pallet behind)
+    3,2,6, 3,6,7,        // front face (against the pallet ahead)
+    1,5,6, 1,6,2,        // +z side
+    0,3,7, 0,7,4         // -z side
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(v,3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+function loopLength(){ return 2*P.L + 2*Math.PI*SPROCKET_R; }
+
+/* position + tangent at arc-length s around the closed loop */
+const _v2 = new THREE.Vector2();
+function loopPoint(s, out){
+  const L=P.L, r=SPROCKET_R, arc=Math.PI*r, total=2*L+2*arc;
+  s = ((s % total)+total)%total;
+  if(s < L){                                  // ascending, along the trough floor
+    out.set(s, -r); return 0;                 // tangent angle 0 (up-slope)
+  }
+  s -= L;
+  if(s < arc){                                // over the upper sprocket
+    const a = -Math.PI/2 + s/r;
+    out.set(L + r*Math.cos(a), r*Math.sin(a));
+    return a + Math.PI/2;
+  }
+  s -= arc;
+  if(s < L){                                  // descending, the return run above
+    out.set(L - s, r); return Math.PI;
+  }
+  s -= L;
+  const a = Math.PI/2 + s/r;                  // around the lower sprocket
+  out.set(r*Math.cos(a), r*Math.sin(a));
+  return a + Math.PI/2;
+}
+
+/* ---- sprockets: octagonal star wheels with pegs ---- */
+function starWheel(r, wdt, teeth=8){
+  const g = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(r*0.42,r*0.42,wdt,10), matWoodDark);
+  hub.rotation.x = Math.PI/2; hub.castShadow=true; g.add(hub);
+  for(let i=0;i<teeth;i++){
+    const a = i/teeth*Math.PI*2;
+    const arm = box(r*0.9, 0.030, wdt*0.55, matWoodDark);
+    arm.position.set(Math.cos(a)*r*0.48, Math.sin(a)*r*0.48, 0);
+    arm.rotation.z = a; g.add(arm);
+    const peg = new THREE.Mesh(new THREE.CylinderGeometry(0.019,0.019,wdt*1.5,7), matWood);
+    peg.rotation.x=Math.PI/2; peg.castShadow=true;
+    peg.position.set(Math.cos(a)*r*0.92, Math.sin(a)*r*0.92, 0); g.add(peg);
+  }
+  return g;
+}
+let sprocketTop, sprocketBot;
+function buildSprockets(){
+  [sprocketTop,sprocketBot].forEach(m=>{if(m)pump.remove(m);});
+  sprocketBot = starWheel(SPROCKET_R, P.w*0.9); sprocketBot.position.set(0,0,0); pump.add(sprocketBot);
+  sprocketTop = starWheel(SPROCKET_R, P.w*0.9); sprocketTop.position.set(P.L,0,0); pump.add(sprocketTop);
+  parts.sprocketTop=sprocketTop; parts.sprocketBot=sprocketBot;
+}
+
+/* ---- drive assemblies (one visible at a time) ---- */
+/* Drives live in world space, NOT inside `pump` — a man treading a wheel stands
+   upright whatever angle the trough is laid at. Each drive is built about its own
+   origin (the upper sprocket) and the group is then placed at the trough head. */
+const drives = [new THREE.Group(),new THREE.Group(),new THREE.Group(),new THREE.Group()];
+drives.forEach(d=>world.add(d));
+const figures = [];
+const legParts = [];          // uprights whose length tracks the head height
+
+function lowPoly(colour='#40506a'){
+  const g=new THREE.Group();
+  const M=new THREE.MeshStandardMaterial({color:colour,roughness:.85});
+  const Mk=new THREE.MeshStandardMaterial({color:'#b98d64',roughness:.9});
+  const torso=box(0.20,0.46,0.15,M); torso.position.y=1.14; g.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.098,10,8),Mk);
+  head.position.y=1.47; head.castShadow=true; g.add(head);
+  const hat=new THREE.Mesh(new THREE.ConeGeometry(0.22,0.11,10),
+    new THREE.MeshStandardMaterial({color:'#c8b183',roughness:.95}));
+  hat.position.y=1.545; hat.castShadow=true; g.add(hat);   // 斗笠, the conical field hat
+  const legs=[],arms=[];
+  for(const s of [-1,1]){
+    const th=box(0.085,0.40,0.085,M); th.position.set(0,0.72,s*0.062);
+    const sh=box(0.075,0.40,0.075,M); sh.position.set(0,-0.40,0); th.add(sh);
+    g.add(th); legs.push({th,sh});
+    const ua=box(0.070,0.34,0.070,M); ua.position.set(0,1.32,s*0.135);
+    g.add(ua); arms.push(ua);
+  }
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  return {g,legs,arms};
+}
+
+/* an upright whose top is at y=0 and whose length is set later by layoutDrives */
+function upright(w,mat){
+  const m = box(w,1,w,mat); m.geometry.translate(0,-0.5,0);
+  legParts.push(m); return m;
+}
+
+function buildDrives(){
+  drives.forEach(d=>{while(d.children.length)d.remove(d.children[0]);});
+  figures.length=0; legParts.length=0;
+  const r=SPROCKET_R;
+
+  /* 0 — one man on a hand crank */
+  {
+    const d=drives[0];
+    const deck=box(1.05,0.07,1.5,matWoodDark); deck.position.set(0.66,-0.34,0);
+    d.add(deck);
+    for(const sx of [0.22,1.08])for(const sz of [-0.62,0.62]){
+      const lg=upright(0.075,matWoodDark); lg.position.set(sx,-0.36,sz); d.add(lg);
+    }
+    const arm=box(0.32,0.04,0.04,matWoodDark); arm.position.set(0,0,P.w*0.55+0.09);
+    const hdl=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.15,8),matWood);
+    hdl.rotation.x=Math.PI/2; hdl.position.set(0.16,0,0.09); arm.add(hdl);
+    d.add(arm); d.userData.crank=arm;
+    const f=lowPoly('#3d5a52'); f.g.position.set(0.62,-0.30,P.w*0.55+0.30);
+    f.g.rotation.y=-Math.PI*0.75; d.add(f.g); d.userData.fig=f;
+  }
+
+  /* 1 — two men treading pegged wheels: the iconic arrangement.
+     The men stand on a trestle deck at the head of the trough, hands on a rail,
+     feet walking the pegs that project from the sprocket shaft. */
+  {
+    const d=drives[1], pegR=0.30;
+    const shaft=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.5,10),matWoodDark);
+    shaft.rotation.x=Math.PI/2; shaft.castShadow=true; d.add(shaft);
+    for(const s of [-1,1]){
+      const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.10,0.07,10),matWood);
+      hub.rotation.x=Math.PI/2; hub.position.z=s*0.42; d.add(hub);
+      const pegs=new THREE.Group(); pegs.position.z=s*0.42; d.add(pegs);
+      for(let i=0;i<6;i++){
+        const a=i/6*Math.PI*2;
+        const pg=new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.028,0.22,7),matWood);
+        pg.rotation.x=Math.PI/2; pg.castShadow=true;
+        pg.position.set(Math.cos(a)*pegR, Math.sin(a)*pegR, 0);
+        pegs.add(pg);
+      }
+      d.userData['pegs'+s]=pegs;
+    }
+    const deck=box(0.95,0.07,1.9,matWoodDark); deck.position.set(0.86,-0.40,0); d.add(deck);
+    for(const sx of [0.46,1.26])for(const sz of [-0.82,0.82]){
+      const lg=upright(0.08,matWoodDark); lg.position.set(sx,-0.42,sz); d.add(lg);
+    }
+    const railH=1.32;
+    const rail=new THREE.Mesh(new THREE.CylinderGeometry(0.040,0.040,1.95,8),matWood);
+    rail.rotation.x=Math.PI/2; rail.position.set(0.50,railH,0);
+    rail.castShadow=true; d.add(rail);
+    for(const sz of [-0.88,0.88]){
+      const post=box(0.065,railH+0.42,0.065,matWoodDark);
+      post.position.set(0.50,(railH-0.42)/2,sz); post.castShadow=true; d.add(post);
+    }
+    for(const s of [-1,1]){
+      const f=lowPoly(s>0?'#43566e':'#4d4438');
+      f.g.position.set(0.30,-0.30,s*0.42); f.g.rotation.y=-Math.PI/2;
+      d.add(f.g); figures.push({...f,phase:s>0?0:Math.PI,side:s,baseY:-0.30});
+    }
+  }
+
+  /* 2 — ox walking a sweep, geared up to the head shaft.
+     Schematic here on purpose: the saqiyah is where right-angle gearing is the
+     subject rather than the supporting cast. */
+  {
+    const d=drives[2];
+    const crown=new THREE.Mesh(new THREE.CylinderGeometry(0.46,0.46,0.06,16),matWoodDark);
+    crown.position.set(0.72,-0.05,0); d.add(d.userData.crown=crown);
+    for(let i=0;i<14;i++){
+      const a=i/14*Math.PI*2;
+      const tooth=new THREE.Mesh(new THREE.CylinderGeometry(0.026,0.026,0.15,6),matWood);
+      tooth.position.set(Math.cos(a)*0.40,0.08,Math.sin(a)*0.40); crown.add(tooth);
+    }
+    const lantern=new THREE.Group(); lantern.position.set(0.30,0.0,0);
+    for(let i=0;i<7;i++){
+      const a=i/7*Math.PI*2;
+      const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.17,6),matWood);
+      rod.rotation.x=Math.PI/2;
+      rod.position.set(Math.cos(a)*0.17,Math.sin(a)*0.17,0); lantern.add(rod);
+    }
+    d.add(lantern); d.userData.lantern=lantern;
+    const mast=upright(0.09,matWoodDark); mast.position.set(0.72,-0.06,0);
+    mast.scale.y=1; d.add(mast);
+    const sweepPivot=new THREE.Group(); d.add(sweepPivot); d.userData.sweep=sweepPivot;
+    const ox=new THREE.Group();
+    const M=new THREE.MeshStandardMaterial({color:'#6d5a48',roughness:.92});
+    const body=box(1.30,0.66,0.56,M); body.position.y=0.94; ox.add(body);
+    const neck=box(0.40,0.32,0.30,M); neck.position.set(0.80,1.02,0); ox.add(neck);
+    const muz =box(0.26,0.22,0.22,M); muz.position.set(1.06,0.92,0); ox.add(muz);
+    const oxLegs=[];
+    for(const hx of [-0.44,0.44])for(const hz of [-0.21,0.21]){
+      const lg=box(0.10,0.62,0.10,M); lg.position.set(hx,0.31,hz); ox.add(lg); oxLegs.push(lg);
+    }
+    ox.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    d.userData.ox=ox; d.userData.oxLegs=oxLegs; world.add(ox);   // ox walks on the ground
+    const beam=box(2.9,0.07,0.07,matWoodDark); beam.position.set(1.45,0,0);
+    sweepPivot.add(beam);
+  }
+
+  /* 3 — overshot wheel on a flume off the higher channel */
+  {
+    const d=drives[3];
+    const wr=0.92, wheel=new THREE.Group();
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(wr,0.035,6,24),matWoodDark));
+    wheel.add(new THREE.Mesh(new THREE.TorusGeometry(wr*0.32,0.03,6,16),matWoodDark));
+    for(let i=0;i<14;i++){
+      const a=i/14*Math.PI*2;
+      const bkt=box(0.26,0.022,0.34,matWood);
+      bkt.position.set(Math.cos(a)*wr*0.86,Math.sin(a)*wr*0.86,0); bkt.rotation.z=a+0.5;
+      wheel.add(bkt);
+      const spoke=box(wr*0.64,0.020,0.020,matWoodDark);
+      spoke.position.set(Math.cos(a)*wr*0.64,Math.sin(a)*wr*0.64,0); spoke.rotation.z=a;
+      wheel.add(spoke);
+    }
+    wheel.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    wheel.position.set(0,0,P.w*0.55+0.30); d.add(wheel); d.userData.wheel=wheel;
+    const flume=box(2.2,0.06,0.34,matWoodDark);
+    flume.position.set(1.30,wr*0.86,P.w*0.55+0.30); flume.rotation.z=-0.10;
+    d.add(flume);
+  }
+
+  drives.forEach((d,i)=>d.visible = (i===P.drive));
+  if(drives[2].userData.ox) drives[2].userData.ox.visible = (P.drive===2);
+}
+
+/* place the whole machine: intake submerged, lip over the bund */
+/* The lower sprocket sits ON the source surface, so the rise from that surface to
+   the discharge lip is exactly L·sinθ — the H the HUD reports. The trough floor,
+   a sprocket-radius below, gives the intake its submergence. */
+function layoutPump(){
+  const th=P.theta*Math.PI/180;
+  pump.rotation.z = th;
+  pump.position.set(-P.L*Math.cos(th) + 9.5, LOWER_Y, 0);
+}
+
+/* put the drive at the trough head and stretch its legs down to the ground */
+function headPos(){
+  const th=P.theta*Math.PI/180;
+  return {x: pump.position.x + P.L*Math.cos(th),
+          y: pump.position.y + P.L*Math.sin(th)};
+}
+function layoutDrives(){
+  const h = headPos();
+  drives.forEach(d=>d.position.set(h.x, h.y, 0));
+  for(const lg of legParts){
+    // the box's top sits at its own origin, so scale.y is simply the drop to ground
+    const dropTo = LOWER_Y - 0.25;
+    lg.scale.y = Math.max(0.15, h.y + lg.position.y - dropTo);
+  }
+  const ox = drives[2].userData.ox;
+  if(ox) ox.position.y = LOWER_Y;
+}
+
+function rebuild(){
+  // tight enough that the return run rides just clear of the trough brim
+  SPROCKET_R = Math.max(0.105, P.h*0.95);
+  buildTrough(); buildSprockets(); buildChain(); buildDrives();
+  layoutPump(); layoutDrives(); layoutTerrace(); aimKey(); buildLabels(); armClip();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EXPLODED VIEW
+   The trough walls swing out, the floor drops, and the pallet chain with
+   its pockets of water lifts clear — so the one thing this machine is,
+   a chain of boards in a box, can be seen as two separate objects.
+   ═══════════════════════════════════════════════════════════════════ */
+let exploded=false, expT=0;
+function setExplode(v){
+  exploded=v; const b=$('b_exp'); if(b) b.classList.toggle('on',v);
+  if(v){ setMode('orbit'); spd(0.25,'b_slow'); }
+}
+function updateExplode(dt){
+  expT += ((exploded?1:0)-expT)*Math.min(1,dt*2.8);
+  const t=expT, hw=P.w/2+0.011;
+  if(parts.nearWall) parts.nearWall.position.z =  hw + t*0.42;
+  if(parts.farWall)  parts.farWall.position.z  = -hw - t*0.42;
+  if(parts.floor)    parts.floor.position.y    = -SPROCKET_R-0.011 - t*0.34;
+  if(parts.frame)    parts.frame.visible       = t<0.5;
+  chainGrp.position.y = t*0.46;
+  if(sprocketTop) sprocketTop.position.z =  t*0.70;
+  if(sprocketBot) sprocketBot.position.z = -t*0.70;
+  drives.forEach((d,i)=>{ if(i===P.drive) d.visible = t<0.4; });
+
+  // come in close on the middle of the run, where the chain sits in the trough
+  if(exploded && mode==='orbit'){
+    const th=P.theta*Math.PI/180, run=P.L*Math.cos(th);
+    _camTarget.set(pump.position.x+run*0.45, pump.position.y+P.L*0.45*Math.sin(th), 0);
+    controls.target.lerp(_camTarget, Math.min(1,dt*2.0));
+    _camWant.set(_camTarget.x-1.05, _camTarget.y+0.85, 1.75);
+    persp.position.lerp(_camWant, Math.min(1,dt*2.0));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   7.  GHOST  —  a translucent walker, third person, no collision
+   ═══════════════════════════════════════════════════════════════════ */
+const ghost = new THREE.Group();
+const ghostBits = (()=>{
+  const M = new THREE.MeshStandardMaterial({color:'#e6fbf6', transparent:true, opacity:.52,
+    roughness:.22, emissive:'#6fe2cd', emissiveIntensity:.95, depthWrite:false,
+    fog:false});
+  const g={mat:M};
+  const torso=new THREE.Mesh(new THREE.CapsuleGeometry(0.135,0.38,5,12),M);
+  torso.position.y=1.14; ghost.add(torso);
+  const neck=new THREE.Mesh(new THREE.CapsuleGeometry(0.045,0.07,3,8),M);
+  neck.position.y=1.42; ghost.add(neck);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(0.125,14,12),M);
+  head.position.y=1.575; ghost.add(head);
+  g.legs=[];g.arms=[];
+  for(const s of [-1,1]){
+    const leg=new THREE.Mesh(new THREE.CapsuleGeometry(0.062,0.44,4,10),M);
+    leg.position.set(0,0.60,s*0.105); ghost.add(leg); g.legs.push(leg);
+    const arm=new THREE.Mesh(new THREE.CapsuleGeometry(0.048,0.36,4,10),M);
+    arm.position.set(0,1.18,s*0.205); ghost.add(arm); g.arms.push(arm);
+  }
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(0.50,14,12),
+    new THREE.MeshBasicMaterial({color:'#7fd8c8',transparent:true,opacity:.035,
+      side:THREE.BackSide,depthWrite:false,fog:false}));
+  halo.position.y=1.05; ghost.add(halo);
+  ghost.traverse(o=>{ if(o.isMesh) o.renderOrder = 6; });
+  return g;
+})();
+ghost.position.set(3.2, LOWER_Y, 6.4);
+ghost.visible=false; world.add(ghost);
+
+// yaw is measured so that the view direction is (sin yaw, ·, cos yaw);
+// this one looks back across the water at the trough
+const gState = {yaw:2.53, pitch:-0.06, vel:new THREE.Vector3(), walk:0};
+
+/* ═══════════════════════════════════════════════════════════════════
+   8.  CAMERAS: elevation (ortho) · orbit · ghost
+   ═══════════════════════════════════════════════════════════════════ */
+let mode = 'elev';
+const aspect = ()=> innerWidth/innerHeight;
+const ortho  = new THREE.OrthographicCamera(-8,8,5,-5,-600,1400);
+const persp  = new THREE.PerspectiveCamera(50, aspect(), 0.015, 620);
+const gcam   = new THREE.PerspectiveCamera(62, aspect(), 0.02, 620);
+let cam = ortho;
+
+const controls = new OrbitControls(persp, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.07;
+controls.maxPolarAngle = Math.PI*0.495; controls.enabled=false;
+const SLICE_SPAN=0.75;
+/* Observation defaults: close approach, wide retreat, and a slow turntable so a
+   machine can be watched running from every side without touching the mouse. */
+controls.minDistance=0.12; controls.maxDistance=90;
+controls.screenSpacePanning=true; controls.autoRotateSpeed=0.55;
+let turning=false;
+function setTurn(v){
+  turning=v; controls.autoRotate=v;
+  const b=$('b_turn'); if(b) b.classList.toggle('on',v);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   A SLICE PLANE THROUGH THE MACHINE
+   A binary cutaway shows one fixed interior. A movable plane lets you
+   cut anywhere and watch the section travel through the mechanism, which
+   is the thing an elevation drawing cannot do. The plane's normal faces
+   the viewer, so sweeping it peels the machine open from the near side.
+   Parked at a huge constant it clips nothing, which means the materials
+   never change their clipping-plane COUNT and so never recompile.
+   ═══════════════════════════════════════════════════════════════════ */
+renderer.localClippingEnabled = true;
+const clipPlane = new THREE.Plane(new THREE.Vector3(0,0,-1), 1e4);
+const CLIP_ARR  = [clipPlane];
+let slicing=false, sliceT=0;
+// the slice cuts the MACHINE, not the landscape: a plane through the
+// paddy would just delete the near half of the scene
+const clipRoots=()=>[pump].concat(drives);
+function armClip(){
+  const inGhost=o=>{let p=o; while(p){ if(p===ghost) return true; p=p.parent; } return false;};
+  for(const root of clipRoots()){
+    if(!root) continue;
+    root.traverse(o=>{
+      if(!o.material || inGhost(o)) return;
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms){
+        if(m.clippingPlanes!==CLIP_ARR){
+          m.clippingPlanes=CLIP_ARR; m.clipShadows=true; m.needsUpdate=true;
+        }
+      }
+    });
+  }
+}
+function applySlice(){
+  clipPlane.constant = slicing ? sliceT*SLICE_SPAN : 1e4;
+  const b=$('b_slice'); if(b) b.classList.toggle('on',slicing);
+  const s=$('s_slice'); if(s) s.classList.toggle('on',slicing);
+}
+function setSlice(v){ slicing=v; applySlice(); }
+function nudgeSlice(d){
+  if(!slicing) setSlice(true);
+  sliceT=Math.max(-1,Math.min(1,sliceT+d));
+  const s=$('s_slice'); if(s) s.value=sliceT;
+  applySlice();
+}
+
+
+function frameElevation(){
+  const th = P.theta*Math.PI/180;
+  const run = P.L*Math.cos(th);
+  const a    = aspect();
+  const tall = a < 1;                              // portrait: hug the trough
+  const cx  = pump.position.x + run*0.5 + (tall ? 0.35 : 0.9);
+  const cy  = LOWER_Y + S.H*0.5 + (tall ? 0.30 : 0.55);
+  const pad = tall ? 0.35 : 1.0;
+  let hw = run/2 + (tall ? 0.7 : 1.7) + pad, hh = (S.H + 2.4)/2 + pad;
+  if(hw/hh < a) hw = hh*a; else hh = hw/a;
+  ortho.left=-hw; ortho.right=hw; ortho.top=hh; ortho.bottom=-hh;
+  ortho.position.set(cx, cy, 40);
+  ortho.lookAt(cx, cy, 0);
+  ortho.updateProjectionMatrix();
+}
+/* Look up the trough from the source side. Sitting on the far side would put the
+   levee between the camera and the machine. */
+function resetOrbit(){
+  const th=P.theta*Math.PI/180, run=P.L*Math.cos(th);
+  controls.target.set(pump.position.x + run*0.5, S.H*0.42, 0);
+  persp.position.set(pump.position.x - run*0.42 - 1.2, S.H*0.75 + 2.1,
+                     Math.max(5.5, run*1.35));
+  controls.update();
+}
+frameElevation();
+
+/* named vantage points, keys 1–5 */
+function vantages(){
+  const th=P.theta*Math.PI/180, c=Math.cos(th), s=Math.sin(th);
+  const base=pump.position;
+  return [
+    {n:'at the intake',   p:new THREE.Vector3(base.x+0.4, LOWER_Y-0.55, 1.2), yaw:-1.9, pitch:0.05},
+    {n:'inside the trough',p:new THREE.Vector3(base.x+P.L*0.5*c, base.y+P.L*0.5*s+0.05, 0), yaw:-Math.PI/2+0.02, pitch:0.02},
+    {n:'at the discharge',p:new THREE.Vector3(base.x+P.L*c+1.1, base.y+P.L*s+0.2, 1.4), yaw:2.3, pitch:-0.15},
+    {n:'beside the treadle',p:new THREE.Vector3(base.x+P.L*c+1.5, base.y+P.L*s-0.2, 2.3), yaw:2.5, pitch:-0.05},
+    {n:'under the water', p:new THREE.Vector3(base.x+2.0, LOWER_Y-1.1, 2.6), yaw:-2.1, pitch:0.22}
+  ];
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   9.  LABELS  —  HTML text + SVG leader lines
+   ═══════════════════════════════════════════════════════════════════ */
+const lyr=document.getElementById('lyr'), leaders=document.getElementById('leaders');
+let labels=[];
+function buildLabels(){
+  labels.forEach(l=>l.el.remove()); labels=[];
+  const th=P.theta*Math.PI/180, c=Math.cos(th), s=Math.sin(th), b=pump.position;
+  const defs=[
+    ['pallet','刮板 guābǎn', new THREE.Vector3(b.x+P.L*0.34*c+0.1, b.y+P.L*0.34*s+0.10, P.w/2), 62,-34],
+    ['pocket — surface stays level','', new THREE.Vector3(b.x+P.L*0.47*c, b.y+P.L*0.47*s-SPROCKET_R+P.h*0.5, 0), 84,14],
+    ['jointed spine','龍骨 lónggǔ', new THREE.Vector3(b.x+P.L*0.62*c, b.y+P.L*0.62*s+SPROCKET_R*1.1, 0), 70,-58],
+    ['trough','水槽', new THREE.Vector3(b.x+P.L*0.20*c, b.y+P.L*0.20*s-SPROCKET_R, -P.w/2), -78,34],
+    ['upper sprocket','', new THREE.Vector3(b.x+P.L*c, b.y+P.L*s, 0), 58,-44],
+    ['lower sprocket · submerged','', new THREE.Vector3(b.x, b.y, 0), -86,42],
+    ['discharge lip','', new THREE.Vector3(b.x+P.L*c+0.3, b.y+P.L*s-SPROCKET_R, 0), 64,26],
+    ['treadle rail','', new THREE.Vector3(b.x+P.L*c+0.62, b.y+P.L*s-SPROCKET_R-P.h+1.42, 0), 74,-30],
+    ['bund wall','', new THREE.Vector3(terrace.position.x+0.30, terrace.position.y+0.15, 0), -74,-28],
+    ['field surface','', new THREE.Vector3(terrace.position.x+3.2, terrace.position.y, 0), 50,-22],
+    ['intake · 進水口','', new THREE.Vector3(b.x-0.2, LOWER_Y-0.30, 0), -92,20]
+  ];
+  for(const [txt,cn,pos,dx,dy] of defs){
+    const el=document.createElement('div'); el.className='lab';
+    el.innerHTML = txt + (cn?`<em>${cn}</em>`:'');
+    lyr.appendChild(el);
+    labels.push({el,pos,dx,dy,line:null});
+  }
+  leaders.innerHTML = labels.map((_,i)=>
+    `<line id="ld${i}" stroke="rgba(234,228,216,.42)" stroke-width="1"/>`).join('');
+  labels.forEach((l,i)=> l.line=document.getElementById('ld'+i));
+}
+const _pv=new THREE.Vector3();
+function updateLabels(){
+  if(!lyr.classList.contains('on')) return;
+  const W=innerWidth,Hh=innerHeight;
+  for(const l of labels){
+    _pv.copy(l.pos).project(cam);
+    const x=(_pv.x*0.5+0.5)*W, y=(-_pv.y*0.5+0.5)*Hh;
+    const vis = _pv.z<1 && x>-60 && x<W+60 && y>-40 && y<Hh+40;
+    l.el.style.display = vis?'block':'none';
+    l.line.style.display = vis?'block':'none';
+    if(!vis) continue;
+    const tx=x+l.dx, ty=y+l.dy;
+    l.el.style.left = tx+'px'; l.el.style.top = ty+'px';
+    if(l.dx<0) l.el.style.transform='translate(-100%,-50%)', l.el.style.paddingRight='5px';
+    l.line.setAttribute('x1',x); l.line.setAttribute('y1',y);
+    l.line.setAttribute('x2',tx); l.line.setAttribute('y2',ty);
+  }
+}
+
+/* where each reported quantity actually arises on this machine */
+function figureDefs(){
+  const th=P.theta*Math.PI/180, c=Math.cos(th), sn=Math.sin(th), b=pump.position;
+  const at=(u,off)=>new THREE.Vector3(b.x+u*c-(off||0)*sn, b.y+u*sn+(off||0)*c, 0);
+  const d=DRIVES[P.drive];
+  const wear = P.clear*1000;
+  return [
+    {p:at(P.L*0.30, -SPROCKET_R+P.h*0.3), dx:-96, dy:44,
+     k:'clearance · leak back', s: wear>9?'bad': wear>5?'warn':'',
+     v:fmt(wear,1)+' mm <small>→</small> '+fmt(S.Qleak*3600,1)+' <small>m³/h</small>'},
+    {p:at(P.L*0.56, -SPROCKET_R+P.h*0.55), dx:88, dy:-52,
+     k:'pocket · surface stays level',
+     v:(S.fill*100).toFixed(0)+' <small>% of section</small>'},
+    {p:at(P.L*0.80, SPROCKET_R*0.6), dx:-104, dy:-46,
+     k:'chain speed', s:(S.v<0.20||S.v>1.1)?'warn':'',
+     v:fmt(S.v,2)+' <small>m/s</small>'},
+    {p:at(P.L+0.30, -SPROCKET_R), dx:92, dy:34,
+     k:'delivered', s:S.dead||S.starved?'bad':'',
+     v:(S.dead||S.starved)?'nothing':Math.round(S.Lh).toLocaleString()+' <small>L/h</small>'},
+    {p:at(P.L+0.62, -SPROCKET_R-P.h+1.1), dx:96, dy:-30,
+     k:'input · '+d.src, v:P.power.toFixed(0)+' <small>W</small>'}
+  ];
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIVE FIGURES
+   Every number the HUD reports comes from somewhere on the machine.
+   These pin each one to the place it actually arises — the leak to the
+   pallet edge it escapes through, the torque to the shaft that carries
+   it, the force to the rope the man is holding — so the readout and the
+   mechanism stop being two separate things you have to reconcile.
+   ═══════════════════════════════════════════════════════════════════ */
+const figLayer=document.getElementById('figs');
+const figLeaders=document.getElementById('figleaders');
+let figNodes=[], figFrame=0;
+function buildFigs(n){
+  figNodes.forEach(f=>f.el.remove()); figNodes=[];
+  figLeaders.innerHTML = Array.from({length:n},(_,i)=>
+    `<line id="fl${i}" stroke="rgba(255,255,255,.30)" stroke-width="1" stroke-dasharray="3 2"/>`
+  ).join('');
+  for(let i=0;i<n;i++){
+    const el=document.createElement('div'); el.className='fig';
+    figLayer.appendChild(el);
+    figNodes.push({el, line:document.getElementById('fl'+i)});
+  }
+}
+const _fp=new THREE.Vector3();
+function updateFigs(){
+  if(!figLayer.classList.contains('on')) return;
+  const defs = figureDefs();
+  if(defs.length !== figNodes.length) buildFigs(defs.length);
+  const W=innerWidth, H=innerHeight;
+  const refresh = (figFrame++ % 5)===0;
+  for(let i=0;i<defs.length;i++){
+    const d=defs[i], f=figNodes[i];
+    _fp.copy(d.p).project(cam);
+    const x=(_fp.x*0.5+0.5)*W, y=(-_fp.y*0.5+0.5)*H;
+    const vis = _fp.z<1 && x>-140 && x<W+140 && y>-90 && y<H+90;
+    f.el.style.display = vis?'block':'none';
+    f.line.style.display = vis?'block':'none';
+    if(!vis) continue;
+    if(refresh){
+      f.el.innerHTML = '<i>'+d.k+'</i><b>'+d.v+'</b>';
+      f.el.className = 'fig'+(d.s?' '+d.s:'');
+    }
+    /* keep the callout out from under the two panels: if the natural offset
+       would drop it behind one, mirror it to the other side of its anchor */
+    const narrow = W<560;
+    const LP = narrow?0:286, RP = narrow?0:W-268;
+    let tx=x+(d.dx||70), ty=y+(d.dy||-40);
+    const halfW=78;
+    if(tx+halfW > RP && x-Math.abs(d.dx||70)-halfW > LP) tx = x-Math.abs(d.dx||70);
+    else if(tx-halfW < LP && x+Math.abs(d.dx||70)+halfW < RP) tx = x+Math.abs(d.dx||70);
+    tx=Math.max(LP+halfW+4, Math.min(RP-halfW-4, tx));
+    ty=Math.max(26, Math.min(H-92, ty));
+    f.el.style.left=tx+'px'; f.el.style.top=ty+'px';
+    f.line.setAttribute('x1',x); f.line.setAttribute('y1',y);
+    f.line.setAttribute('x2',tx); f.line.setAttribute('y2',ty);
+  }
+}
+function setFigs(v){
+  figLayer.classList.toggle('on',v);
+  const b=$('b_fig'); if(b) b.classList.toggle('on',v);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   10.  COMPARISON PLOT  —  Q = ηP/(ρgH) for all three machines
+   ═══════════════════════════════════════════════════════════════════ */
+const ENV = [                     // {k = η·P·3600/(ρg) in m³/h·m}, lift span
+  {id:'shaduf', col:'#8fb8e0', eta:0.60, P:75,  lo:0.5, hi:3.0},
+  {id:'saqiyah',col:'#e0a24a', eta:0.51, P:400, lo:3.0, hi:30},
+  {id:'dragon', col:'#7fd8a8', eta:0.52, P:150, lo:0.3, hi:4.0}
+];
+let perWatt=false;
+function drawPlot(){
+  const svg=document.getElementById('plot');
+  const W=220,Hh=120,ml=26,mb=16,mt=6,mr=6;
+  const X=h=>ml+(Math.log10(Math.max(h,0.3))-Math.log10(0.3))/(Math.log10(32)-Math.log10(0.3))*(W-ml-mr);
+  const qmax = perWatt?0.30:34;
+  const Y=q=>Hh-mb-Math.min(q,qmax)/qmax*(Hh-mb-mt);
+  let out=`<line x1="${ml}" y1="${Hh-mb}" x2="${W-mr}" y2="${Hh-mb}" stroke="rgba(180,200,185,.25)"/>
+           <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${Hh-mb}" stroke="rgba(180,200,185,.25)"/>`;
+  for(const h of [0.5,1,3,10,30]) out+=
+    `<text x="${X(h)}" y="${Hh-4}" fill="#5e6b60" font-size="7" text-anchor="middle"
+      font-family="ui-monospace,monospace">${h}</text>`;
+  out+=`<text x="2" y="${mt+7}" fill="#5e6b60" font-size="7"
+      font-family="ui-monospace,monospace">${perWatt?'m³/h/W':'m³/h'}</text>`;
+  for(const e of ENV){
+    const cur = e.id==='dragon';
+    let d='';
+    for(let i=0;i<=40;i++){
+      const h=e.lo*Math.pow(e.hi/e.lo,i/40);
+      const q=(e.eta*e.P*3600/(RHO*G*h)) / (perWatt?e.P:1);
+      d+=(i?'L':'M')+X(h).toFixed(1)+' '+Y(q).toFixed(1);
+    }
+    out+=`<path d="${d}" fill="none" stroke="${e.col}" stroke-width="${cur?1.8:1}"
+           opacity="${cur?1:.42}" ${cur?'':'stroke-dasharray="2 2"'}/>`;
+  }
+  const q = perWatt ? (S.Qnet*3600/P.power) : S.Qnet*3600;
+  out+=`<circle cx="${X(S.H).toFixed(1)}" cy="${Y(q).toFixed(1)}" r="3.4"
+        fill="#fff" stroke="#7fd8a8" stroke-width="1.4"/>`;
+  svg.innerHTML=out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   11.  UI WIRING
+   ═══════════════════════════════════════════════════════════════════ */
+const $ = id=>document.getElementById(id);
+const fmt = (n,d=1)=> n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+function wearWord(mm){
+  return mm<1.5?'new — tight-fitting pallets, freshly carved'
+       : mm<5 ?'worked in — a season or two of silt'
+       : mm<10?'worn — the pallets rattle in the trough'
+       :       'derelict — you can see daylight past every board';
+}
+
+function refresh(geom){
+  S = solve(P);
+  const d = DRIVES[P.drive];
+
+  $('v_w').textContent  = fmt(P.w*100,1)+' cm';
+  $('v_h').textContent  = fmt(P.h*100,1)+' cm';
+  $('v_L').textContent  = fmt(P.L,1)+' m';
+  $('v_th').textContent = fmt(P.theta,1)+'°';
+  $('v_p').textContent  = (P.pitch*100).toFixed(0)+' cm';
+  $('v_c').textContent  = fmt(P.clear*1000,1)+' mm';
+  $('v_P').textContent  = P.power.toFixed(0)+' W';
+  $('v_mu').textContent = P.mu.toFixed(2);
+  $('wear').textContent = wearWord(P.clear*1000);
+
+  $('o_H').innerHTML  = fmt(S.H,2)+' <small>m</small>';
+  $('o_P').innerHTML  = P.power.toFixed(0)+' <small>W</small>';
+  $('o_src').textContent = d.src;
+  $('o_eta').innerHTML= (S.etaTot*100).toFixed(0)+' <small>%</small>';
+  $('o_ev').innerHTML = (S.etaVol*100).toFixed(0)+' <small>%</small>';
+  $('o_fill').innerHTML = S.starved
+      ? '<span style="color:var(--bad)">empty</span>'
+      : (S.fill*100).toFixed(0)+' <small>% of section</small>';
+  $('o_v').innerHTML  = fmt(S.v,2)+' <small>m/s</small>';
+  $('o_Q').innerHTML  = (S.dead||S.starved) ? '<span style="color:var(--bad)">collapsed</span>'
+                      : Math.round(S.Lh).toLocaleString()+' <small>L/h</small>';
+  $('o_Qd').innerHTML = S.starved ? '<small style="color:var(--bad)">the pallets carry nothing</small>'
+                      : S.dead ? '<small style="color:var(--bad)">leakage exceeds delivery</small>'
+                      : fmt(S.m3d,0)+' <small>m³/day</small>';
+
+  // historical band — different drives are historically different machines
+  const bmax=55, q=S.Qnet*3600, bd=d.band;
+  $('bandcap').textContent = 'vs. range for '+d.name;
+  $('hb').style.left=(bd[0]/bmax*100)+'%'; $('hb').style.width=((bd[1]-bd[0])/bmax*100)+'%';
+  $('hm').style.left=Math.min(100,q/bmax*100)+'%';
+  $('hm').classList.toggle('out', q<bd[0]||q>bd[1]);
+
+  // shared 0–30 m lift axis
+  $('ab').style.left='1%'; $('ab').style.width=(4/30*100)+'%';   // this machine's span
+  $('am').style.left=Math.min(100,S.H/30*100)+'%';
+
+  // warnings on the sliders that are doing the damage
+  const hot = (el,cond,crit)=>{const i=$(el);i.className=crit?'crit':cond?'hot':'';};
+  hot('v_c', P.clear>0.006, P.clear>0.011);
+  hot('v_th',S.fill<0.30, S.fill<0.12);
+  hot('v_p', S.fill<0.30, S.fill<0.12);
+  hot('v_L', S.H>3.2, S.H>4.0);
+
+  // the angle past which the pocket stops spanning the pitch and becomes a wedge
+  const thWedge = Math.atan(FREEBOARD*P.h/P.pitch)*180/Math.PI;
+
+  let msg;
+  if(S.starved)
+    msg='The pockets are all but empty — '+(S.fill*100).toFixed(0)+'% of the section. At '
+       +fmt(P.theta,0)+'° a '+(P.pitch*100).toFixed(0)+' cm pitch is far too long to hold '
+       +'water. Shorten the pitch, deepen the trough, or lay it flatter.';
+  else if(S.dead)
+    msg='Flow has collapsed. Every pallet loses more past its edges than it carries, and the '
+       +'water is running back down the trough.';
+  else if(S.reach<0.999)
+    msg='The pocket no longer reaches the pallet behind — it is a wedge over '
+       +(S.reach*100).toFixed(0)+'% of the pitch, '+(S.fill*100).toFixed(0)+'% of the section. '
+       +'Past '+fmt(thWedge,0)+'° this pitch stops spanning.';
+  else if(S.H>4.0)
+    msg='Past four metres the leakage term wins. This is a low-lift machine; that is not a '
+       +'flaw, it is the design.';
+  else if(S.v<0.20)
+    msg='Chain speed is low — leaked water has time to fall back past the pallet behind. '
+       +'More power, or a smaller section.';
+  else if(S.v>1.1)
+    msg='Chain speed is high — the pallets are entraining air at the lip rather than filling.';
+  else if(S.etaVol>0.86 && S.fill>0.5)
+    msg='Tight pallets, full pockets, shallow head across each one. This is about as well as '
+       +'the machine runs.';
+  else
+    msg='Pocket runs '+fmt(S.dRear*100,1)+' cm deep at the back, '+fmt(S.dFront*100,1)
+       +' cm at the front. Leakage '+fmt(S.Qleak*3600,1)+' m³/h against '
+       +fmt(S.Qth*3600,1)+' m³/h swept.';
+  $('diag').textContent=msg;
+
+  if(geom) rebuild(); else { layoutPump(); layoutDrives(); layoutTerrace(); aimKey(); }
+  if(mode==='elev') frameElevation();
+  drawPlot();
+}
+
+/* sliders */
+const bind=(id,key,scale=1,geom=false)=>{
+  $(id).addEventListener('input',e=>{P[key]=parseFloat(e.target.value)*scale; refresh(geom);});
+};
+bind('s_w','w',0.01,true); bind('s_h','h',0.01,true); bind('s_L','L',1,true);
+bind('s_th','theta',1,false); bind('s_p','pitch',0.01,true); bind('s_c','clear',0.001,true);
+bind('s_P','power',1,false); bind('s_mu','mu',1,false);
+$('s_th').addEventListener('input',()=>{
+  // the pocket's wedge angle is the slope angle, so its geometry follows θ
+  if(pocketIM){ pocketIM.geometry.dispose(); pocketIM.geometry = wedgeGeo(); }
+  layoutPump(); layoutDrives(); layoutTerrace(); aimKey();
+});
+
+document.querySelectorAll('#drive button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('#drive button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    P.drive=+b.dataset.d;
+    const d=DRIVES[P.drive];
+    P.power=d.P; $('s_P').min=d.min; $('s_P').max=d.max; $('s_P').value=d.P;
+    drives.forEach((g,i)=>g.visible=(i===P.drive));
+    if(drives[2].userData.ox) drives[2].userData.ox.visible=(P.drive===2);
+    refresh(false);
+  });
+});
+$('phead').addEventListener('click',()=>{
+  const p=$('params'); p.classList.toggle('closed');
+  p.querySelector('span').textContent = p.classList.contains('closed')?'+':'−';
+});
+$('perw').addEventListener('click',()=>{perWatt=!perWatt;$('perw').classList.toggle('on',perWatt);drawPlot();});
+
+/* camera + display buttons */
+function setMode(m){
+  mode=m;
+  document.body.classList.toggle('ghost', m==='ghost');
+  ghost.visible = (m==='ghost');
+  controls.enabled = (m==='orbit');
+  controls.autoRotate = (turning && m==='orbit');
+  cam = m==='elev'?ortho : m==='orbit'?persp : gcam;
+  frontDressing.visible = (m!=='elev');   // see the note where it is built
+  $('b_cam').textContent = m==='elev'?'Elevation':m==='orbit'?'Observe':'Ghost';
+  $('b_cam').innerHTML += '<kbd>V</kbd>';
+  $('b_ghost').classList.toggle('on', m==='ghost');
+  if(m==='elev') frameElevation();
+  if(m==='orbit') resetOrbit();
+  if(m==='ghost') $('prompt').classList.add('gone');
+}
+$('b_cam').addEventListener('click',()=>setMode(mode==='orbit'?'elev':mode==='elev'?'ghost':'orbit'));
+$('b_ghost').addEventListener('click',()=>setMode(mode==='ghost'?'elev':'ghost'));
+
+let cutaway=false;
+function setCut(v){
+  cutaway=v; $('b_cut').classList.toggle('on',v);
+  matNear.opacity = v?0.10:1.0; matNear.transparent = true;
+  matNear.depthWrite = !v;
+  lowerWater.material.uniforms; // (water stays; the ghost can swim under it)
+}
+$('b_cut').addEventListener('click',()=>setCut(!cutaway));
+$('b_lab').addEventListener('click',()=>{
+  lyr.classList.toggle('on'); $('b_lab').classList.toggle('on',lyr.classList.contains('on'));
+});
+
+/* observation controls */
+$('b_slice').addEventListener('click',()=>setSlice(!slicing));
+$('s_slice').addEventListener('input',e=>{sliceT=parseFloat(e.target.value);
+  if(!slicing)setSlice(true); else applySlice();});
+$('b_turn').addEventListener('click',()=>setTurn(!turning));
+$('b_fig').addEventListener('click',()=>setFigs(!figLayer.classList.contains('on')));
+
+let speed=1;
+const spd=(v,btn)=>{speed=v;['b_slow','b_norm','b_fast','b_pause'].forEach(i=>$(i).classList.remove('on'));
+  $(btn).classList.add('on');};
+$('b_slow').onclick=()=>spd(0.25,'b_slow'); $('b_norm').onclick=()=>spd(1,'b_norm');
+$('b_fast').onclick=()=>spd(4,'b_fast');    $('b_pause').onclick=()=>spd(0,'b_pause');
+$('b_help').onclick=()=>$('help').classList.add('on');
+$('b_close').onclick=()=>$('help').classList.remove('on');
+
+/* keyboard */
+const keys={};
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase(); keys[k]=true;
+  if(k==='v') setMode(mode==='orbit'?'elev':mode==='elev'?'ghost':'orbit');
+  else if(k==='g') setMode(mode==='ghost'?'elev':'ghost');
+  else if(k==='c') setCut(!cutaway);
+  else if(k==='l') $('b_lab').click();
+  else if(k==='s')setSlice(!slicing);
+  else if(k==='o')setTurn(!turning);
+  else if(k==='f')setFigs(!figLayer.classList.contains('on'));
+  else if(k===',')nudgeSlice(-0.045);
+  else if(k==='.')nudgeSlice(0.045);
+  else if(k==='x')setExplode(!exploded);
+  else if(k==='h') $('help').classList.toggle('on');
+  else if(k==='p') spd(speed===0?1:0, speed===0?'b_norm':'b_pause');
+  else if(k==='[') spd(0.25,'b_slow');
+  else if(k===']') spd(4,'b_fast');
+  else if(k==='escape') $('help').classList.remove('on');
+  else if('12345'.includes(k)){
+    const v=vantages()[+k-1]; if(!v) return;
+    setMode('ghost'); ghost.position.copy(v.p); gState.yaw=v.yaw; gState.pitch=v.pitch;
+  }
+  if(['w','a','s','d',' '].includes(k)) e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+
+/* pointer look */
+let dragging=false,lastX=0,lastY=0;
+canvas.addEventListener('pointerdown',e=>{
+  if(mode!=='ghost')return; dragging=true; lastX=e.clientX; lastY=e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!dragging||mode!=='ghost')return;
+  gState.yaw   -= (e.clientX-lastX)*0.0042;
+  gState.pitch  = THREE.MathUtils.clamp(gState.pitch-(e.clientY-lastY)*0.0035,-1.25,0.95);
+  lastX=e.clientX; lastY=e.clientY;
+});
+canvas.addEventListener('pointerup',()=>dragging=false);
+canvas.addEventListener('pointercancel',()=>dragging=false);
+
+/* touch stick */
+const stick=$('stick'), knob=stick.querySelector('i'); let stickV={x:0,y:0}, stickId=null;
+if(matchMedia('(pointer:coarse)').matches) document.body.classList.add('touch');
+stick.addEventListener('pointerdown',e=>{stickId=e.pointerId;stick.setPointerCapture(e.pointerId);});
+stick.addEventListener('pointermove',e=>{
+  if(e.pointerId!==stickId)return;
+  const r=stick.getBoundingClientRect();
+  let dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+  const m=Math.hypot(dx,dy), lim=r.width/2-18;
+  if(m>lim){dx*=lim/m;dy*=lim/m;}
+  knob.style.transform=`translate(${dx}px,${dy}px)`;
+  stickV={x:dx/lim,y:dy/lim};
+});
+const endStick=()=>{stickId=null;stickV={x:0,y:0};knob.style.transform='';};
+stick.addEventListener('pointerup',endStick); stick.addEventListener('pointercancel',endStick);
+let vUp=0; $('vu').onpointerdown=()=>vUp=1; $('vd').onpointerdown=()=>vUp=-1;
+addEventListener('pointerup',()=>vUp=0);
+
+/* ═══════════════════════════════════════════════════════════════════
+   12.  ANIMATION LOOP
+   ═══════════════════════════════════════════════════════════════════ */
+const clock=new THREE.Clock();
+let chainS=0, driveAngle=0, simT=0;
+const _ry90=new THREE.Matrix4().makeRotationY(Math.PI/2);
+const HIDE_M=new THREE.Matrix4().makeScale(1e-4,1e-4,1e-4).setPosition(0,9e3,0);
+const _lp=new THREE.Vector2(), _m=new THREE.Matrix4(), _q=new THREE.Quaternion(),
+      _pos=new THREE.Vector3(), _scl=new THREE.Vector3(), _e=new THREE.Euler();
+const _camTarget=new THREE.Vector3(), _camWant=new THREE.Vector3();
+
+function updateChain(){
+  if(!palletIM) return;
+  const total = loopLength();
+  const nP    = nPalletsDrawn;
+  const pw    = P.w - 2*P.clear;
+  const topFill = S.Qth>0 ? S.Qnet/S.Qth : 0;
+
+  for(let i=0;i<nP;i++){
+    const s = (chainS + i*(total/nP)) % total;
+    const ang = loopPoint(s,_lp);
+
+    // pallet: a board standing normal to the chain path
+    _e.set(0,0,ang); _q.setFromEuler(_e);
+    _pos.set(_lp.x,_lp.y,0);
+    _m.compose(_pos,_q,_scl.set(1,1,1));
+    palletIM.setMatrixAt(i,_m);
+
+    // spine link, sitting between this pallet and the next
+    const s2 = s + total/nP*0.5;
+    const a2 = loopPoint(s2,_lp);
+    _e.set(0,0,a2); _q.setFromEuler(_e);
+    _pos.set(_lp.x,_lp.y,0);
+    _m.compose(_pos,_q,_scl.set(1,1,1));
+    linkIM.setMatrixAt(i,_m);
+
+    // water pocket — a level-topped wedge riding the ascending run
+    const pitch = total/nP;
+    const onRun = s < P.L;
+    if(onRun && !S.dead && !S.starved){
+      const frac = s/P.L;                       // leakage thins it as it climbs
+      const yS   = Math.max(0.02, 1 - frac*(1-topFill));
+      _e.set(0,0,0); _q.setFromEuler(_e);
+      _pos.set(s, -SPROCKET_R, 0);
+      _m.compose(_pos,_q,_scl.set(1, yS, 1));
+      pocketIM.setMatrixAt(i,_m);
+    } else if(onRun && (S.dead || S.starved)){
+      // failed: a little water slops near the intake and runs back down
+      const frac = s/P.L;
+      const yS = Math.max(0.004, (1-frac*3.2)) * (0.7+0.3*Math.sin(simT*4+frac*9));
+      _e.set(0,0,0); _q.setFromEuler(_e);
+      _pos.set(s, -SPROCKET_R, 0);
+      _m.compose(_pos,_q,_scl.set(1, Math.max(0.004,yS), 1));
+      pocketIM.setMatrixAt(i,_m);
+    } else {
+      _m.makeScale(0.0001,0.0001,0.0001);
+      _m.setPosition(0,3,0);
+      pocketIM.setMatrixAt(i,_m);
+    }
+
+    /* The leak, running back down the trough floor.
+       Water forced past the pallet edge does not vanish — it runs back down the
+       slope until the pallet a pitch behind catches it again, which is exactly
+       the RECOVERY term in the model. Two lanes, one against each wall, flowing
+       the opposite way to the chain at the jet velocity sqrt(2·g·Δh) that the
+       leakage equation itself uses. Turn the clearance up and watch the whole
+       floor start running backwards. */
+    const leaking = onRun && S.Qleak>1e-7 && !S.starved && !S.dead;
+    const jetV = Math.sqrt(2*G*Math.max(S.dh,1e-4));
+    for(let side=0; side<2; side++){
+      const li=i*2+side;
+      if(leaking){
+        const sgn = side? 1 : -1;
+        const trail = ((simT*jetV*0.55 + i*0.41 + side*0.19) % pitch);
+        const x = s - trail;
+        if(x > 0.04){
+          _e.set(-Math.PI/2,0,0); _q.setFromEuler(_e);
+          _pos.set(x, -SPROCKET_R + 0.004, sgn*(pw*0.5 - 0.010));
+          _m.compose(_pos,_q,_scl.set(0.11, 0.016, 1));
+          leakIM.setMatrixAt(li,_m);
+        } else leakIM.setMatrixAt(li,HIDE_M);
+      } else leakIM.setMatrixAt(li,HIDE_M);
+    }
+  }
+  leakIM.instanceMatrix.needsUpdate=true;
+  // opacity tracks the computed leak, so the film you see IS the Qleak figure
+  // opacity tracks the computed leak, so the film you see IS the Qleak figure
+  matLeak.opacity = Math.max(0.10, Math.min(0.80, 0.10 + S.Qleak*190));
+  palletIM.instanceMatrix.needsUpdate=true;
+  linkIM.instanceMatrix.needsUpdate=true;
+  pocketIM.instanceMatrix.needsUpdate=true;
+}
+
+function updateDrive(dt){
+  const d=drives[P.drive], omega = S.v/SPROCKET_R;
+  driveAngle += omega*dt;
+  if(sprocketTop) sprocketTop.rotation.z = driveAngle;
+  if(sprocketBot) sprocketBot.rotation.z = driveAngle;
+
+  if(P.drive===0 && d.userData.crank){
+    d.userData.crank.rotation.z = driveAngle;
+    const f=d.userData.fig;
+    if(f) f.arms.forEach((a,i)=>a.rotation.x = -0.6 + Math.sin(driveAngle+i*3.1)*0.45);
+  }
+
+  if(P.drive===1){
+    // the pegged wheels turn with the sprocket; the men walk them
+    for(const s of [-1,1]){
+      const pg=d.userData['pegs'+s];
+      if(pg) pg.rotation.z = driveAngle + (s>0?0:Math.PI/6);
+    }
+    figures.forEach(f=>{
+      const a = driveAngle + f.phase;
+      const step = Math.sin(a);
+      f.g.position.y = f.baseY + Math.max(0, step)*0.075;      // rides up on the peg
+      f.legs[0].th.rotation.z =  step*0.62;
+      f.legs[1].th.rotation.z = -step*0.62;
+      f.legs[0].sh.rotation.z = -Math.abs(step)*0.48;
+      f.legs[1].sh.rotation.z = -Math.abs(Math.cos(a))*0.48;
+      f.arms.forEach(ar=>ar.rotation.x = -1.15 + step*0.05);   // hands on the rail
+      f.g.rotation.z = step*0.03;
+    });
+  }
+
+  if(P.drive===2 && d.userData.sweep){
+    const gear = 5.5;                                   // sweep turns 5.5× slower
+    const a = -driveAngle/gear;
+    d.userData.sweep.rotation.y = a;
+    if(d.userData.crown)   d.userData.crown.rotation.y = a;
+    if(d.userData.lantern) d.userData.lantern.rotation.z = driveAngle;
+    const ox=d.userData.ox, R=2.9, h=headPos();
+    ox.position.set(h.x + 0.72 + Math.cos(a)*R, LOWER_Y, Math.sin(a)*R);
+    ox.rotation.y = -a + Math.PI/2;
+    const gait = -a*R*1.7;
+    (d.userData.oxLegs||[]).forEach((lg,i)=>{
+      lg.rotation.z = Math.sin(gait + i*1.9)*0.30;
+    });
+  }
+
+  if(P.drive===3 && d.userData.wheel) d.userData.wheel.rotation.z = -driveAngle*0.55;
+}
+
+function updateGhost(dt){
+  if(mode!=='ghost') return;
+  const fast = keys['shift']?2.6:1;
+  const base = 3.1*fast;
+  let fx=0, fz=0;
+  if(keys['w']||keys['arrowup'])   fz+=1;
+  if(keys['s']||keys['arrowdown']) fz-=1;
+  if(keys['a']||keys['arrowleft']) fx-=1;
+  if(keys['d']||keys['arrowright'])fx+=1;
+  fz -= stickV.y; fx += stickV.x;
+  const m=Math.hypot(fx,fz); if(m>1){fx/=m;fz/=m;}
+
+  const sy=Math.sin(gState.yaw), cy=Math.cos(gState.yaw);
+  const wx = ( fz*sy + fx*cy)*base;
+  const wz = ( fz*cy - fx*sy)*base;
+  let wy = 0;
+  if(keys[' ']) wy += 2.2*fast;
+  if(keys['z']) wy -= 2.2*fast;
+  wy += vUp*2.2;
+
+  gState.vel.lerp(new THREE.Vector3(wx,wy,wz), 1-Math.pow(0.0012,dt));
+  ghost.position.addScaledVector(gState.vel, dt);
+  ghost.position.y = Math.max(LOWER_Y-2.6, Math.min(26, ghost.position.y));
+
+  // face the direction of travel; bob and swing when moving
+  const sp = Math.hypot(gState.vel.x,gState.vel.z);
+  if(sp>0.12){
+    const want = Math.atan2(gState.vel.x, gState.vel.z);
+    let dA = want - ghost.rotation.y;
+    while(dA> Math.PI) dA-=Math.PI*2; while(dA<-Math.PI) dA+=Math.PI*2;
+    ghost.rotation.y += dA*Math.min(1, dt*9);
+  }
+  gState.walk += sp*dt*3.1;
+  const sw=Math.sin(gState.walk)*Math.min(1,sp/2.6);
+  ghostBits.legs[0].rotation.x =  sw*0.55; ghostBits.legs[1].rotation.x = -sw*0.55;
+  ghostBits.arms[0].rotation.x = -sw*0.42; ghostBits.arms[1].rotation.x =  sw*0.42;
+  ghost.children[0].position.y = 1.16 + Math.sin(gState.walk*2)*0.018 + Math.sin(simT*1.1)*0.012;
+
+  // third-person camera, smoothed, sitting behind and above
+  const dist=4.05, hgt=1.72;
+  _camWant.set(
+    ghost.position.x - Math.sin(gState.yaw)*dist*Math.cos(gState.pitch),
+    ghost.position.y + hgt - Math.sin(gState.pitch)*dist,
+    ghost.position.z - Math.cos(gState.yaw)*dist*Math.cos(gState.pitch));
+  gcam.position.lerp(_camWant, 1-Math.pow(0.0006,dt));
+  _camTarget.set(ghost.position.x, ghost.position.y+1.28, ghost.position.z);
+  gcam.lookAt(_camTarget);
+
+  // underwater wash — the ghost can stand on the bed and look up
+  // terrace.position.x is the terrace's LEFT EDGE (the discharge lip), not its centre
+  const submerged = gcam.position.y < LOWER_Y-0.04 ||
+    (gcam.position.x > terrace.position.x && gcam.position.y < UPPER_Y-0.04);
+  $('uw').classList.toggle('on', submerged);
+  $('uw2').classList.toggle('on', submerged);
+  scene.fog.near = submerged?1.8:26;
+  scene.fog.far  = submerged?30:132;
+  scene.fog.color.set(submerged?'#20575c':'#b9cdc5');
+}
+
+function tick(){
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const sdt = dt*speed;
+  simT += dt;
+  waterUni.t.value = simT;
+
+  chainS += S.v*sdt;
+  updateChain();
+  updateDrive(sdt);
+  updateExplode(dt);
+  updateGhost(dt);
+
+  mistPts.rotation.y = simT*0.004;
+  if(mode==='orbit') controls.update();
+
+  renderer.render(scene, cam);
+  updateLabels();
+  updateFigs();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   13.  BOOT
+   ═══════════════════════════════════════════════════════════════════ */
+function resize(){
+  renderer.setSize(innerWidth,innerHeight,false);
+  persp.aspect=gcam.aspect=aspect();
+  persp.updateProjectionMatrix(); gcam.updateProjectionMatrix();
+  frameElevation();
+}
+addEventListener('resize',resize);
+resize();
+rebuild();
+refresh(false);
+armClip(); applySlice(); setTurn(false);
+setMode('orbit');   // open in 3D; V still gives the exact elevation           // the brief's hard constraint: open in side elevation
+
+/* On a phone the two panels together are wider than the screen, so the parameter
+   panel starts collapsed to its header and the machine gets the full width. */
+if(innerWidth < 560){
+  const pp=$('params'); pp.classList.add('closed');
+  pp.querySelector('span').textContent='+';
+}
+/* the figures are the point of this file, so they start on */
+setFigs(true);
+setTimeout(()=>$('prompt').classList.add('gone'), 11000);
+tick();
+</script>
+</body>
+</html>

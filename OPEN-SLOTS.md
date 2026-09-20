@@ -20,7 +20,9 @@ Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
 Live: `game-zzzzzzzzzk/` / `.game-172` — Kelvin House (The Last Bus from Kelvin House).
 
-To add more later: next folder is `game-zzzzzzzzzl`, next class is `.game-173`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzl/` / `.game-173` — Dragon Bone (square-pallet chain pump).
+
+To add more later: next folder is `game-zzzzzzzzzm`, next class is `.game-174`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
