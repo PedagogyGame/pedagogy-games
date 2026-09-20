@@ -1,4 +1,4 @@
-# Upload Dead Ahead to your website — version 1.0.1
+# Upload Dead Ahead to your website — version 1.0.2
 
 ## Update pedagogygame.com
 
