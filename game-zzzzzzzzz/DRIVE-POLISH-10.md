@@ -2,30 +2,31 @@
 
 Ben: “polish the driving, find ten ways, innovative and profound, to do so.”
 
-**Focus pass (polish10c):** keep & strengthen **1, 2, 5, 6, 7, 8, 9** — **ignore/disable 3, 4, 10**.
+**Focus pass (polish10d):** keep & strengthen **1, 2, 5, 6, 7, 8, 9** — **ignore/disable 3, 4, 10**.
 
 **Not claiming ready for Ben** — parent live-proves before any ready claim.
 
-Cache bust: `?v=polish10c`
+Cache bust: `?v=polish10d`
 
-## Repass audit (polish10c) — items 1,2,5,6,7,8,9
+## Repass audit (polish10d) — items 1,2,5,6,7,8,9 + Climb B tip
 
 | # | Item | Result | Notes |
 |---|------|--------|-------|
-| 1 | Look-into-turn cam | **OK** | Steer-blended lookYaw; camD≈0.30 (close). |
-| 2 | Engine load | **OK** | Climb strain on grade+throttle; freewheel on descent+light throttle. |
-| 5 | Crest compression | **FIXED** | Was dead: smoothed `_prevGrade` never spanned 0.10→0.06; climb_a tip magnet blocked hairpin handoff. Now raw-grade arm + crest tip release. |
-| 6 | Junction chevrons | **OK** | 12 instances; all 6 junctions present. |
-| 7 | Void edge warning | **OK** | Inner lip voidE fires (~0.16–0.8); center quiet. |
+| 1 | Look-into-turn cam | **OK** | Steer-blended lookYaw; camD≈0.30 (close). Left alone. |
+| 2 | Engine load | **OK** | Climb strain + descent freewheel. Left alone. |
+| 5 | Crest compression | **OK** | Live force-step maxCrest≈0.96 + hairpin handoff. |
+| 6 | Junction chevrons | **OK** | 12 instances; all 6 junctions; live cam readable (B→finish). |
+| 7 | Void edge warning | **OK** | Live voidE≈0.79 on balcony inner lip. |
 | 8 | Asphalt vs carpet | **OK** | Traction/noise contrast; both surfaces sampled. |
-| 9 | Kiss handoffs | **FIXED** | Climb A crest was sticky (path magnet). Crest tip release restores hairpin kiss; maxΔY/frame low. |
+| 9 | Kiss handoffs | **FIXED** | Climb B tip→foyer_finish magnet + oval steal. |
+| — | Climb B tip release | **FIXED** | Mirror of Climb A crest: tip soften + finish bias beats coplanar foyer_oval east wall. |
+| — | Planted Y | **OK** | gap=0 on spawn asphalt. |
+| — | Climb surface | **OK** | climb_a/b kind=ramp (asphalt, not stairs). |
+| — | Chrome/GPU | **OK** | Chrome alive; meshes=31 deferred. |
 
-Also: planted Y / no float OK · Chrome alive · Climb A/B `kind=ramp` (asphalt, not stairs).
+## Fixes in polish10d (only confirmed failures)
 
-## Fixes in polish10c (only confirmed failures)
-
-1. **`js/drive/car.js`** — crest (#5) arms on **raw** grade drop; `_prevGrade` stores raw (smoothed grade never spanned the threshold in one frame).
-2. **`js/drive/tracks.js`** — climb_a crest / climb_b foot tip release (soften ramp+path bias past tip) + stronger `landing_hairpin` / `foyer_finish` junction bias so handoff can win (#5/#9).
+1. **`js/drive/tracks.js`** — Climb B foot tip release: `tRaw > 0.82` (was 0.90; last seg ~2.2m). Stronger `foyer_finish` junction bias (−1.85). **Penalty** on `foyer_oval` while latched to `climb_b` so the coplanar oval east wall at x=7 cannot steal the kiss before finish.
 
 ## Constraints held
 
@@ -33,9 +34,9 @@ Also: planted Y / no float OK · Chrome alive · Climb A/B `kind=ramp` (asphalt,
 |------|--------|
 | CAR_SCALE ≈ 0.19 | 0.190 |
 | Grades ≤ 30% | climb_a/b mean ≈ 0.296 |
-| Planted Y / no fly | crest squat is visual body dip only |
+| Planted Y / no fly | gap=0; crest squat visual only |
 | Pillars hard | climb collider 0 hard hits |
-| No track jumps | kiss Y soft-settle; crest tip release is snap choice only |
+| No track jumps | tip release is snap choice only |
 | Deferred meshes | Explore never pays road GPU |
 
 ## Sims (agent box)
@@ -47,7 +48,10 @@ node --import ./smoke-register.mjs no-teleport-sim.mjs          # ALL PASS
 node --import ./smoke-register.mjs smoke.mjs                    # ALL SMOKE CHECKS PASSED
 ```
 
-Crest unit proof: `CREST_PROOF PASS maxCrest≈0.96 seen hairpin`.
+Crest unit + live force-step: `CREST_PROOF PASS maxCrest≈0.96 seenHair`.
+Climb B tip live force-step: handoff at z≈12.33 → sustained `foyer_finish` (no oval-first).
+
+Screenshots: `/workspace/playtest-keep/`
 
 ## Archive
 

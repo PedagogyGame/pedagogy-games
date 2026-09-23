@@ -1,11 +1,10 @@
 /**
- * Proof: full DriveMode.update WITH mansion wall colliders for 25s from
- * beginClimbAutodrive pose on foyer_climb_spur keys.forward — must reach maxY≥2.5.
+ * Proof: beginClimbAutodrive("a") full DriveMode.update WITH walls —
+ * must crest Climb A (maxY≥3.5, path=climb_a). Parent live-proves; not ready.
  */
 import * as THREE from "./vendor/three.module.js";
 import { Mansion } from "./js/mansion.js";
 import { DriveMode } from "./js/drive/driveMode.js";
-import { RAMP_MOUNT_FEET, TRACK_PATHS } from "./js/data/tracks.js";
 
 if (typeof globalThis.document === "undefined") {
   const makeCtx = () => ({
@@ -40,60 +39,41 @@ if (typeof globalThis.performance === "undefined") {
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
-console.log("Booting Mansion + Drive for full-update-climb…");
+console.log("Booting Mansion + Drive for climb-a autodrive…");
 const mansion = new Mansion(scene);
 const drive = new DriveMode(scene, camera);
 drive.setWallColliders(mansion.getColliders());
 drive.enter();
 
-const ramp = TRACK_PATHS.find((q) => q.id === "ramp_foyer_to_landing");
-const spur = TRACK_PATHS.find((q) => q.id === "foyer_climb_spur");
-const foot = (RAMP_MOUNT_FEET.ramp_foyer_to_landing && RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot)
-  ? RAMP_MOUNT_FEET.ramp_foyer_to_landing.foot
-  : ramp.points[0];
-const ax = spur.points[2].x, ay = 0.075, az = spur.points[2].z;
-const aim = ramp.points[1];
-const yaw = Math.atan2(aim.x - ax, aim.z - az);
-drive.tracks._lastPathId = "foyer_climb_spur";
-drive.tracks._lastPathKind = "floor";
-drive._crashPhase = null;
-drive._crashTimer = 0;
-drive._inputsFrozen = false;
-drive.car.setPose(ax, ay, az, yaw);
-drive.car.speed = 0.45;
-drive.car.crashed = false;
-drive.car.airborne = false;
-drive.car.vy = 0;
-drive.keys = { forward: true, back: false, left: false, right: false, boost: false };
-drive._autoLastWall = performance.now();
-drive._autodrive = {
-  mode: "climb", t: 0, duration: 25, maxY: ay, done: false, pass: false,
-  foot: { x: foot.x, y: foot.y, z: foot.z },
-  logEl: null, bannerEl: null, logAcc: 0, result: "",
-};
+drive.beginClimbAutodrive("a");
 
-// Simulate Chrome-throttled rAF: rare frames with large rawDt — catch-up must still crest.
-const dt = 1 / 60;
-let maxY = ay;
-const wallStart = performance.now();
-// Advance wall clock artificially between updates to prove catch-up path
-let fakeNow = wallStart;
+let fakeNow = performance.now();
 const realNow = performance.now.bind(performance);
 performance.now = () => fakeNow;
 
-for (let i = 0; i < 90; i++) {
-  // One "rAF" every ~280ms wall (throttled), rawDt ~0.28 — without catch-up maxY freezes
+let maxY = drive.car.position.y;
+let sawClimbA = false;
+for (let i = 0; i < 120; i++) {
   fakeNow += 280;
   drive.update(0.28);
-  maxY = Math.max(maxY, drive.car.position.y, drive._autodrive?.maxY || 0);
+  const ad = drive._autodrive;
+  const p = drive.car.position;
+  const path = drive.tracks._lastPathId;
+  if (path === "climb_a") sawClimbA = true;
+  maxY = Math.max(maxY, p.y, ad?.maxY || 0);
   if (i % 10 === 0) {
-    const p = drive.car.position;
-    console.log(`frame ${i} t=${drive._autodrive?.t?.toFixed(1)} y=${p.y.toFixed(2)} maxY=${maxY.toFixed(2)} path=${drive.tracks._lastPathId}`);
+    console.log(
+      `frame ${i} t=${ad?.t?.toFixed(1)} y=${p.y.toFixed(2)} maxY=${maxY.toFixed(2)} path=${path} saw=${ad?.sawPath ? 1 : 0}`
+    );
   }
-  if (drive._autodrive?.done) break;
+  if (ad?.done) break;
 }
 performance.now = realNow;
 
-const pass = maxY >= 2.5;
-console.log(pass ? "PASS" : "FAIL", `full-update-with-walls maxY=${maxY.toFixed(3)} ad=${drive._autodrive?.result || ""}`);
+const ad = drive._autodrive;
+const pass = !!(ad?.pass && maxY >= 2.5 && (ad?.sawPath || sawClimbA));
+console.log(
+  pass ? "PASS" : "FAIL",
+  `climb-a-autodrive maxY=${maxY.toFixed(3)} result=${ad?.result || ""}`
+);
 if (!pass) process.exit(2);

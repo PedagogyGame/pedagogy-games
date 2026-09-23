@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { Player } from "./player.js?v=polish10c";
-import { Mansion } from "./mansion.js?v=polish10c";
-import { InspectMode } from "./inspect.js?v=polish10c";
-import { SliceSystem } from "./slice.js?v=polish10c";
-import { DriveMode } from "./drive/driveMode.js?v=polish10c";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=polish10c";
-import { OBJECTS } from "./data/objects.js?v=polish10c";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=polish10c";
+import { Player } from "./player.js?v=ramps1";
+import { Mansion } from "./mansion.js?v=ramps1";
+import { InspectMode } from "./inspect.js?v=ramps1";
+import { SliceSystem } from "./slice.js?v=ramps1";
+import { DriveMode } from "./drive/driveMode.js?v=ramps1";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=ramps1";
+import { OBJECTS } from "./data/objects.js?v=ramps1";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=ramps1";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;

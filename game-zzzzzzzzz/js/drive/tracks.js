@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET } from "../data/tracks.js?v=polish10c";
+import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET } from "../data/tracks.js?v=ramps1";
 
 function makeCanvas(w, h) {
   if (typeof document !== "undefined" && document.createElement) {
@@ -105,7 +105,7 @@ const FLOOR_KINDS = new Set(["floor", "outdoor", "flower"]);
 export const ASPHALT_RIDE = 0.012;
 /** Floor asphalt slab thickness (extends DOWN into planks — no floating air gap). */
 export const ASPHALT_THICK_FLOOR = 0.055;
-export const ASPHALT_THICK_RAMP = 0.112;
+export const ASPHALT_THICK_RAMP = 0.168;
 export const ASPHALT_THICK_BALCONY = 0.055;
 
 function ribbonYLift(kind) {
@@ -175,11 +175,12 @@ export class TrackSystem {
     const t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
     this._asphalt = makeAsphaltTexture();
     this._chevron = makeChevronTexture();
-    // Start/finish checkered landmark (#10) — IGNORED / hidden (polish10c)
+    // Start/finish checkered landmark (#10) — IGNORED / hidden (ramps1)
     this._startFinish = null;
     this._sharedMats = this._makeSharedRoadMats();
     this._railPostPositions = [];
     this._curbSegmentPositions = [];
+    this._underfillPositions = [];
     this._addSpawnPadMesh();
     for (const job of this._pendingVisuals) {
       this._addRibbonRoad(job.visualPts, job.width, job.kind, job.closed, job.gap, job.isRail);
@@ -191,6 +192,7 @@ export class TrackSystem {
     this._addJunctionFlowChevrons();
     this._flushRailPosts();
     this._flushCurbSegments();
+    this._flushUnderfill();
     let meshCount = 0;
     this.root.traverse((o) => { if (o.isMesh) meshCount++; });
     const ms = ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0;
@@ -401,7 +403,7 @@ export class TrackSystem {
       dash.name = "spawn_apron_lane";
       this.root.add(dash);
     }
-    // Start/finish checkered band (#10) — IGNORED: mesh not added (polish10c)
+    // Start/finish checkered band (#10) — IGNORED: mesh not added (ramps1)
     // (this._startFinish forced null in ensureMeshes)
   }
 
@@ -530,7 +532,9 @@ export class TrackSystem {
       geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
       geo.setIndex(idx);
       geo.computeVertexNormals();
-      const mat = kind === "ramp" ? this._sharedMats.chevron : this._sharedMats.asphalt;
+      // Ramps: dark asphalt + white edges + yellow center (Mario Kart readable).
+      // Chevrons are foot markers only — never the whole ribbon.
+      const mat = this._sharedMats.asphalt;
       const mesh = new THREE.Mesh(geo, mat);
       mesh.name = kind === "ramp" ? "ribbon_ramp" : (kind === "balcony" ? "ribbon_balcony" : "ribbon_floor");
       mesh.userData.ribbon = true;
@@ -560,6 +564,49 @@ export class TrackSystem {
       sideGeo.setIndex(sideIdx);
       sideGeo.computeVertexNormals();
       this.root.add(new THREE.Mesh(sideGeo, this._sharedMats.side));
+
+      // Ramp-only: bottom face + queued under-fill keels (InstancedMesh flush — GPU-lite)
+      if (kind === "ramp") {
+        const botPos = [];
+        const botIdx = [];
+        for (let i = 0; i < left.length; i++) {
+          botPos.push(left[i].x, left[i].y - thick, left[i].z);
+          botPos.push(right[i].x, right[i].y - thick, right[i].z);
+          if (i > 0) {
+            const a = (i - 1) * 2, b = a + 1, c = i * 2, d = c + 1;
+            botIdx.push(a, c, b, b, c, d);
+          }
+        }
+        const botGeo = new THREE.BufferGeometry();
+        botGeo.setAttribute("position", new THREE.Float32BufferAttribute(botPos, 3));
+        botGeo.setIndex(botIdx);
+        botGeo.computeVertexNormals();
+        const botMesh = new THREE.Mesh(botGeo, this._sharedMats.side);
+        botMesh.name = "ramp_bottom";
+        this.root.add(botMesh);
+
+        const bucket = this._underfillPositions || (this._underfillPositions = []);
+        // Sparse keels — ~6 per climb, one InstancedMesh later
+        const step = Math.max(3, Math.floor(left.length / 6));
+        for (let i = 0; i < left.length - 1; i += step) {
+          const j = Math.min(left.length - 1, i + step);
+          const deckY = Math.min(tops[i], tops[j]);
+          const yTop = deckY - thick;
+          const pathY = Math.min(slice[i].y, slice[j].y);
+          const plantY = pathY >= 2.1 ? 4.20 : 0.0;
+          let keelH = Math.max(0.16, Math.min(1.05, yTop - plantY - 0.02));
+          const midX = (left[i].x + right[i].x + left[j].x + right[j].x) * 0.25;
+          const midZ = (left[i].z + right[i].z + left[j].z + right[j].z) * 0.25;
+          const midY = yTop - keelH * 0.5;
+          const span = Math.hypot(slice[j].x - slice[i].x, slice[j].z - slice[i].z) || 0.4;
+          const yaw = Math.atan2(slice[j].x - slice[i].x, slice[j].z - slice[i].z);
+          bucket.push({
+            x: midX, y: midY, z: midZ,
+            sx: width * 0.90, sy: keelH, sz: Math.max(0.45, span * 0.92),
+            yaw,
+          });
+        }
+      }
 
       if (isRail && (kind === "balcony" || kind === "ramp")) {
         // Sparse posts → batched in _flushRailPosts as one InstancedMesh
@@ -687,15 +734,15 @@ export class TrackSystem {
   _addJunctionFlowChevrons() {
     const marks = [
       // foyer_oval → Climb A
-      { x: -5.20, y: 0.0, z: 11.55, yaw: Math.atan2(-0.15, 0.85) },
+      { x: -5.00, y: 0.0, z: 11.70, yaw: Math.atan2(0.0, 1.0) },
       // Climb A crest → landing_hairpin
-      { x: -5.00, y: 4.20, z: -1.55, yaw: Math.atan2(0.8, 1.2) },
+      { x: -5.00, y: 4.20, z: -2.10, yaw: Math.atan2(0.8, 1.2) },
       // landing_hairpin → balcony_loop
       { x: 4.70, y: 4.20, z: 9.40, yaw: Math.atan2(0.4, 1.0) },
       // balcony_loop → balcony_to_climb_b
       { x: 5.20, y: 4.20, z: 14.40, yaw: Math.atan2(0.2, -1.0) },
       // Climb B foot → foyer_finish
-      { x: 7.00, y: 0.0, z: 12.15, yaw: Math.atan2(-1.0, -0.35) },
+      { x: 7.00, y: 0.0, z: 12.50, yaw: Math.atan2(-1.0, -0.35) },
       // foyer_finish → foyer_oval start
       { x: 1.20, y: 0.0, z: 10.45, yaw: Math.atan2(-1.0, 0.0) },
     ];
@@ -731,19 +778,65 @@ export class TrackSystem {
   }
 
 
-  _addClimbChevrons(pts, width) {
-    // Already using chevron material on ramp ribbon — optional arrow markers at foot
-    if (!pts.length) return;
-    const foot = pts[0];
-    const marker = new THREE.Mesh(
-      new THREE.ConeGeometry(width * 0.18, 0.08, 3),
-      new THREE.MeshLambertMaterial({
-        color: 0xffe066, emissive: 0xaa8800, emissiveIntensity: 0.35,
-      })
-    );
-    marker.rotation.x = Math.PI / 2;
-    marker.position.set(foot.x, foot.y + 0.05, foot.z);
-    this.root.add(marker);
+  _flushUnderfill() {
+    const list = this._underfillPositions || [];
+    this._underfillPositions = [];
+    if (!list.length || !this._sharedMats) return;
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    const inst = new THREE.InstancedMesh(geo, this._sharedMats.side, list.length);
+    inst.name = "ramp_underfill";
+    inst.castShadow = false;
+    inst.receiveShadow = false;
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < list.length; i++) {
+      const u = list[i];
+      dummy.position.set(u.x, u.y, u.z);
+      dummy.rotation.set(0, u.yaw || 0, 0);
+      dummy.scale.set(u.sx, u.sy, u.sz);
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    this.root.add(inst);
+  }
+
+    _addClimbChevrons(pts, width) {
+    // Chevrons at FEET only (vision) — 3 painted arrows along first ~1.4 m of ribbon
+    if (!pts || pts.length < 2) return;
+    const mat = new THREE.MeshLambertMaterial({
+      color: 0xffe066, emissive: 0xaa8800, emissiveIntensity: 0.42,
+    });
+    let acc = 0;
+    const marks = [];
+    for (let i = 0; i < pts.length - 1 && marks.length < 2; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const seg = a.distanceTo(b);
+      const need = [0.18, 0.85]; // 2 arrows at foot only
+      for (const d of need) {
+        if (marks.length >= 2) break;
+        if (acc <= d && acc + seg >= d) {
+          const u = (d - acc) / Math.max(1e-6, seg);
+          marks.push({
+            x: a.x + (b.x - a.x) * u,
+            y: a.y + (b.y - a.y) * u,
+            z: a.z + (b.z - a.z) * u,
+            yaw: Math.atan2(b.x - a.x, b.z - a.z),
+          });
+        }
+      }
+      acc += seg;
+      if (acc > 1.45) break;
+    }
+    for (const m of marks) {
+      const marker = new THREE.Mesh(new THREE.ConeGeometry(width * 0.16, 0.09, 3), mat);
+      marker.rotation.order = "YXZ";
+      marker.rotation.set(Math.PI / 2, m.yaw, 0);
+      marker.position.set(m.x, m.y + 0.055, m.z);
+      marker.name = "climb_foot_chevron";
+      marker.castShadow = false;
+      marker.receiveShadow = false;
+      this.root.add(marker);
+    }
   }
 
   /**
@@ -883,9 +976,12 @@ export class TrackSystem {
         rampBias *= 0.12;
         pathBias *= 0.20;
       }
-      // Climb B foot release into foyer_finish
+      // Climb B foot release into foyer_finish (mirror Climb A crest #9).
+      // Must stay magnetized until near tip — foyer_oval east wall shares x=7 z≈9..12.4,
+      // so early soften lets oval steal before foyer_finish kiss. Soften only near tip,
+      // slightly earlier than Climb A (tRaw>0.82 vs 0.90) because last seg is longer (~2.2m).
       if (seg.pathId === "climb_b" && this._lastPathId === "climb_b"
-          && y <= 0.35 && tRaw > 0.90) {
+          && y <= 0.35 && tRaw > 0.82) {
         rampBias *= 0.12;
         pathBias *= 0.20;
       }
@@ -917,7 +1013,14 @@ export class TrackSystem {
         if (seg.pathId === "foyer_finish"
             && this._lastPathId === "climb_b"
             && y < 0.55 && dist < halfApprox * 1.4) {
-          junctionBias = y <= 0.35 ? -1.55 : -0.70;
+          // Beat climb_b tip magnet AND coplanar foyer_oval east wall at x=7
+          junctionBias = y <= 0.35 ? -1.85 : -0.85;
+        }
+        if (seg.pathId === "foyer_oval"
+            && this._lastPathId === "climb_b"
+            && y < 0.55 && dist < halfApprox * 1.2) {
+          // Block oval steal at Climb B foot — finish must win the kiss first
+          junctionBias = 0.95;
         }
         if (seg.pathId === "foyer_oval"
             && this._lastPathId === "foyer_finish"

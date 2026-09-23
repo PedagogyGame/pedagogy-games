@@ -109,7 +109,7 @@ export class EngineAudio {
     this._rpm += (wantRpm - this._rpm) * 0.12; // slower = smoother pitch glide
     this._boostAmt += (boost - this._boostAmt) * 0.10;
     this._scrapeAmt += (scrape - this._scrapeAmt) * 0.22;
-    // Tire screech (#3) — IGNORED / muted (polish10c focus set)
+    // Tire screech (#3) — IGNORED / muted (polish10d focus set)
     this._screechAmt = 0;
     this._voidAmt += (voidEdge - this._voidAmt) * 0.14;
     this._surfaceAmt += (carpet - this._surfaceAmt) * 0.12;

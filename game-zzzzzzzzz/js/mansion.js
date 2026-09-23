@@ -1659,8 +1659,8 @@ export class Mansion {
     // Climb corridor gap — hall south triple crown was Ben's "three stacked tan slabs"
     // spanning the asphalt; also clear foyer/landing lips over straightened climb.
     const climbGaps = [
-      { minX: -8.80, maxX: -3.70, minZ: -2.20, maxZ: 12.80 }, // Climb A asphalt + west scenic stairs
-      { minX: 5.40, maxX: 9.90, minZ: -2.20, maxZ: 12.80 }, // Climb B asphalt + east scenic stairs
+      { minX: -8.80, maxX: -3.70, minZ: -3.00, maxZ: 13.10 }, // Climb A asphalt + west scenic stairs
+      { minX: 5.40, maxX: 9.90, minZ: -3.00, maxZ: 13.10 }, // Climb B asphalt + east scenic stairs
     ];
     const climbGap = climbGaps[0]; // legacy single for split helpers below (west Climb A)
     const addBox = (sx, sy, sz, px, py, pz, mat) => {
@@ -2956,13 +2956,13 @@ export class Mansion {
   _storyApertures(room, which) {
     // Climb A — west stair band (widened for 2.4 clear + curb)
     // Climb A asphalt corridor (x≈-5) + west scenic stairs (x≈-7.6)
-    const holeA = { minX: -8.80, maxX: -3.70, minZ: -2.20, maxZ: 12.80 };
+    const holeA = { minX: -8.80, maxX: -3.70, minZ: -3.00, maxZ: 13.10 };
     // Climb B asphalt (x≈7) + east scenic stairs (x≈8.6)
-    const holeB = { minX: 5.40, maxX: 9.90, minZ: -2.20, maxZ: 12.80 };
+    const holeB = { minX: 5.40, maxX: 9.90, minZ: -3.00, maxZ: 13.10 };
     if (which === "ceiling" && room.id === "foyer") return [holeA, holeB];
     if (which === "floor" && room.id === "landing") return [holeA, holeB];
     if (which === "ceiling" && room.id === "hall_ground") {
-      return [{ minX: -6.40, maxX: -3.70, minZ: -2.20, maxZ: 2.15 }]; // Climb A corridor
+      return [{ minX: -6.40, maxX: -3.70, minZ: -3.00, maxZ: 2.15 }]; // Climb A corridor
     }
     return [];
   }
@@ -3757,30 +3757,30 @@ export class Mansion {
     };
 
     // Climb B foot (foyer east) — twin pylons + asphalt threshold lip
-    addPylon(5.55, 12.55, 0);
-    addPylon(8.35, 12.55, 0);
+    addPylon(5.55, 12.90, 0);
+    addPylon(8.35, 12.90, 0);
     const lipB = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipB.position.set(7.00, 0.04, 12.55);
+    lipB.position.set(7.00, 0.04, 12.90);
     g.add(lipB);
     const stripeB = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), paint);
-    stripeB.position.set(7.00, 0.08, 12.55);
+    stripeB.position.set(7.00, 0.08, 12.90);
     g.add(stripeB);
 
     // Climb B crest (landing east) — pylons visible from balcony approach
-    addPylon(5.55, -1.55, 4.2);
-    addPylon(8.35, -1.55, 4.2);
+    addPylon(5.55, -2.10, 4.2);
+    addPylon(8.35, -2.10, 4.2);
     const lipBc = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipBc.position.set(7.00, 4.24, -1.55);
+    lipBc.position.set(7.00, 4.24, -2.10);
     g.add(lipBc);
 
     // Climb A foot marker (smaller) — confirms asphalt corridor east of scenic stairs
-    addPylon(-6.35, 12.55, 0);
-    addPylon(-3.65, 12.55, 0);
+    addPylon(-6.35, 12.90, 0);
+    addPylon(-3.65, 12.90, 0);
     const lipA = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipA.position.set(-5.00, 0.04, 12.55);
+    lipA.position.set(-5.00, 0.04, 12.90);
     g.add(lipA);
     const stripeA = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), white);
-    stripeA.position.set(-5.00, 0.08, 12.55);
+    stripeA.position.set(-5.00, 0.08, 12.90);
     g.add(stripeA);
 
     this.root.add(g);

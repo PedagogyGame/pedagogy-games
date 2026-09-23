@@ -1,5 +1,5 @@
 /**
- * Drive tracks — EXPERT FIGURE-8 LAP (2026-09-17).
+ * Drive tracks — EXPERT FIGURE-8 LAP · RAMPS REBUILD (ramps1).
  *
  * LAP: (1) foyer oval S/F mid-foyer long axis
  *      (2) Climb A foyer→landing dedicated asphalt corridor EAST of west scenic stairs
@@ -48,7 +48,7 @@ const _PATHS = [
       { x: 6.40, y: 0.0, z: 2.80 },
       { x: 7.00, y: 0.0, z: 5.50 },
       { x: 7.00, y: 0.0, z: 9.00 },
-      { x: 7.00, y: 0.0, z: 12.40 }, // kiss climb_b / finish
+      { x: 7.00, y: 0.0, z: 12.75 }, // kiss climb_b / finish
       { x: 5.20, y: 0.0, z: 12.05 },
       { x: 3.00, y: 0.0, z: 10.85 },
       { x: 1.40, y: 0.0, z: 10.50 },
@@ -64,34 +64,38 @@ const _PATHS = [
     tension: 0.03,
     fancy: true,
     points: [
-      { x: -5.40, y: 0.0, z: 11.20 }, // from oval
-      { x: -5.25, y: 0.0, z: 11.55 },
-      { x: -5.15, y: 0.0, z: 11.90 },
-      { x: -5.05, y: 0.0, z: 12.15 },
-      { x: -5.00, y: 0.0, z: 12.40 }, // kiss climb_a foot
+      // ≥2u flat runway into Climb A foot (Mario Kart readable approach)
+      { x: -4.00, y: 0.0, z: 10.55 }, // from oval
+      { x: -4.60, y: 0.0, z: 10.75 },
+      { x: -5.00, y: 0.0, z: 10.75 }, // align west corridor
+      { x: -5.00, y: 0.0, z: 11.40 },
+      { x: -5.00, y: 0.0, z: 12.05 },
+      { x: -5.00, y: 0.0, z: 12.75 }, // kiss climb_a foot
     ],
   },
 
     // ── 2) Climb A — dedicated asphalt EAST of west scenic stairs ───
   // Corridor x≈-5.0 (stairs scenery at x≈-7.6). Flat run ≥14 m; rise 4.2; grade ≤30%.
   {
+    // FROM SCRATCH (ramps1): thick asphalt ribbon, constant-X silhouette east of scenic stairs.
+    // Flat pads at tips; climb run ≈14.0 → mean grade ≤0.30 for rise 4.2.
     id: "climb_a",
     kind: "ramp",
     width: 2.40,
     gentleStart: false,
     noLateralBow: true,
-    tension: 0.10,
+    tension: 0.08,
     points: [
-      // Asphalt corridor x=-5.0 east of scenic stairs (x≈-7.6). Crest east of newel.
-      { x: -5.00, y: 0.0, z: 12.40, label: "Grand Foyer" },
-      { x: -5.00, y: 0.55, z: 10.50 },
-      { x: -5.00, y: 1.10, z: 8.60 },
-      { x: -5.00, y: 1.65, z: 6.70 },
-      { x: -5.00, y: 2.20, z: 4.80 },
-      { x: -5.00, y: 2.75, z: 2.90 },
-      { x: -5.00, y: 3.30, z: 1.00 },
-      { x: -5.00, y: 3.75, z: -0.50 },
-      { x: -5.00, y: 4.20, z: -1.80, label: "Upper Landing" }, // east of newel, kiss hairpin
+      { x: -5.00, y: 0.00, z: 12.75, label: "Grand Foyer" }, // foot
+      { x: -5.00, y: 0.00, z: 12.20 }, // tip flat
+      { x: -5.00, y: 0.60, z: 10.20 },
+      { x: -5.00, y: 1.20, z: 8.20 },
+      { x: -5.00, y: 1.80, z: 6.20 },
+      { x: -5.00, y: 2.40, z: 4.20 },
+      { x: -5.00, y: 3.00, z: 2.20 },
+      { x: -5.00, y: 3.60, z: 0.20 },
+      { x: -5.00, y: 4.20, z: -1.80 }, // crest tip flat start
+      { x: -5.00, y: 4.20, z: -2.35, label: "Upper Landing" }, // kiss hairpin
     ],
   },
 
@@ -104,18 +108,20 @@ const _PATHS = [
     tension: 0.10,
     fancy: true,
     points: [
-      // Kiss climb_a crest east of newel; 180° around newel (-5.50,-0.20); R≥1.5
-      { x: -5.00, y: 4.20, z: -1.80 },
-      { x: -4.20, y: 4.20, z: -0.40 },
-      { x: -3.60, y: 4.20, z: 1.00 },
-      { x: -4.20, y: 4.20, z: 2.20 },
-      { x: -5.50, y: 4.20, z: 2.40 }, // north of newel
-      { x: -6.60, y: 4.20, z: 1.20 },
-      { x: -6.60, y: 4.20, z: -0.40 },
-      { x: -5.80, y: 4.20, z: -1.40 },
-      { x: -4.80, y: 4.20, z: -1.20 },
-      { x: -4.00, y: 4.20, z: 0.20 },
-      { x: -3.40, y: 4.20, z: 1.80 },
+      // ≥2u flat tip-release off Climb A crest, then 180° around newel (-5.50,-0.20)
+      { x: -5.00, y: 4.20, z: -2.35 }, // kiss climb_a crest
+      { x: -4.85, y: 4.20, z: -1.35 },
+      { x: -4.55, y: 4.20, z: -0.35 }, // ~2.1u flat release
+      { x: -4.15, y: 4.20, z: 0.70 },
+      { x: -3.80, y: 4.20, z: 1.55 },
+      { x: -4.35, y: 4.20, z: 2.40 },
+      { x: -5.50, y: 4.20, z: 2.50 }, // north of newel
+      { x: -6.60, y: 4.20, z: 1.30 },
+      { x: -6.60, y: 4.20, z: -0.30 },
+      { x: -5.80, y: 4.20, z: -1.55 },
+      { x: -4.80, y: 4.20, z: -1.35 },
+      { x: -4.00, y: 4.20, z: 0.15 },
+      { x: -3.40, y: 4.20, z: 1.75 },
       { x: -2.40, y: 4.20, z: 3.40 },
       { x: -1.20, y: 4.20, z: 5.00 },
       { x: 0.40, y: 4.20, z: 6.60 },
@@ -162,32 +168,38 @@ const _PATHS = [
     tension: 0.06,
     fancy: true,
     points: [
+      // ≥2u flat runway into Climb B crest (east corridor x=7)
       { x: 5.00, y: 4.20, z: 14.80 },
-      { x: 5.60, y: 4.20, z: 11.00 },
-      { x: 6.40, y: 4.20, z: 6.50 },
-      { x: 6.90, y: 4.20, z: 2.50 },
-      { x: 7.00, y: 4.20, z: -1.80 },
+      { x: 5.70, y: 4.20, z: 10.50 },
+      { x: 6.50, y: 4.20, z: 5.50 },
+      { x: 7.00, y: 4.20, z: 1.50 },
+      { x: 7.00, y: 4.20, z: -0.35 }, // flat runway start
+      { x: 7.00, y: 4.20, z: -2.35 }, // kiss climb_b crest
     ],
   },
 
     // ── 5) Climb B — EAST asphalt hole (scenic stairs at x≈8.6 beside) ─
   // Straight corridor x=7.00; flat ≥14 m; drop 4.2 → grade ≤0.30; landmark pylons at foot/crest
   {
+    // FROM SCRATCH (ramps1): east descent mirror of Climb A — constant-X vs east wall.
+    // Scenic stairs at x≈9.0 stay BESIDE; tip flats + ≤0.30 grade; tip→foyer_finish kiss.
     id: "climb_b",
     kind: "ramp",
     width: 2.40,
     gentleStart: false,
     noLateralBow: true,
-    tension: 0.16,
+    tension: 0.08,
     points: [
-      { x: 7.00, y: 4.20, z: -1.80, label: "Upper Landing" },
+      { x: 7.00, y: 4.20, z: -2.35, label: "Upper Landing" }, // crest (path start)
+      { x: 7.00, y: 4.20, z: -1.80 }, // tip flat
       { x: 7.00, y: 3.60, z: 0.20 },
       { x: 7.00, y: 3.00, z: 2.20 },
       { x: 7.00, y: 2.40, z: 4.20 },
       { x: 7.00, y: 1.80, z: 6.20 },
       { x: 7.00, y: 1.20, z: 8.20 },
       { x: 7.00, y: 0.60, z: 10.20 },
-      { x: 7.00, y: 0.00, z: 12.40, label: "Grand Foyer" },
+      { x: 7.00, y: 0.00, z: 12.20 }, // tip flat
+      { x: 7.00, y: 0.00, z: 12.75, label: "Grand Foyer" }, // foot → foyer_finish
     ],
   },
 
@@ -199,9 +211,9 @@ const _PATHS = [
     tension: 0.04,
     fancy: true,
     points: [
-      { x: 7.00, y: 0.0, z: 12.40 }, // kiss climb_b foot
-      { x: 4.20, y: 0.0, z: 11.40 },
-      { x: 1.80, y: 0.0, z: 10.60 },
+      { x: 7.00, y: 0.0, z: 12.75 }, // kiss climb_b foot
+      { x: 4.20, y: 0.0, z: 11.55 },
+      { x: 1.80, y: 0.0, z: 10.65 },
       { x: 0.00, y: 0.0, z: 10.40, label: "Start / Finish" },
     ],
   },

@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS } from "./car.js?v=polish10c";
-import { TrackSystem } from "./tracks.js?v=polish10c";
-import { EngineAudio } from "./engineAudio.js?v=polish10c";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=polish10c";
+import { RCCar, VEHICLE_PRESETS } from "./car.js?v=ramps1";
+import { TrackSystem } from "./tracks.js?v=ramps1";
+import { EngineAudio } from "./engineAudio.js?v=ramps1";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=ramps1";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -1573,10 +1573,10 @@ export class DriveMode {
       // Climb B foot on landing (upper end of ramp) — descend +Z toward foyer
       foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.climb_b && RAMP_MOUNT_FEET.climb_b.foot)
         ? RAMP_MOUNT_FEET.climb_b.foot
-        : { x: 7.00, y: 4.20, z: -1.80 };
+        : { x: 7.00, y: 4.20, z: -2.35 };
       ax = 7.00;
       ay = 4.22;
-      az = -2.55; // just before foot on balcony_to_climb_b
+      az = -3.10; // just before crest on balcony_to_climb_b
       const aimX = 7.00;
       const aimZ = 0.50; // down the asphalt corridor
       yaw = Math.atan2(aimX - ax, aimZ - az);
@@ -1584,22 +1584,22 @@ export class DriveMode {
       latchKind = "floor";
       mode = "climb_b";
       armMsg = "autodrive=climb_b armed… posing at Climb B foot on landing";
-      aimFallback = { x: 7.00, z: 12.40 };
+      aimFallback = { x: 7.00, z: 12.75 };
     } else {
       foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.climb_a && RAMP_MOUNT_FEET.climb_a.foot)
         ? RAMP_MOUNT_FEET.climb_a.foot
-        : { x: -4.45, y: 0.0, z: 12.30 };
-      ax = -3.90;
+        : { x: -5.00, y: 0.0, z: 12.75 };
+      ax = -4.20;
       ay = 0.012;
-      az = 11.30;
-      const aimX = -4.95;
-      const aimZ = 10.35;
+      az = 10.90;
+      const aimX = -5.00;
+      const aimZ = 12.75;
       yaw = Math.atan2(aimX - ax, aimZ - az);
       latchPath = "foyer_to_climb_a";
       latchKind = "floor";
       mode = "climb";
       armMsg = "autodrive=climb armed… posing on foyer_to_climb_a";
-      aimFallback = { x: -4.95, z: 10.35 };
+      aimFallback = { x: -5.00, z: 12.75 };
     }
 
     this._clearAutodriveUI();
