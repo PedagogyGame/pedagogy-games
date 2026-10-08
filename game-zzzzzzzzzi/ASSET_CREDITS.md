@@ -1,6 +1,6 @@
 # Dead Ahead — asset credits
 
-All model assets below are licensed under [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
+The zombie and vehicle model assets below are licensed under [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
 
 - [Zombie Walk Test](https://sketchfab.com/3d-models/zombie-walk-test-165fd9342c364216bfdd8c2f1102223c) by [OSCAR CREATIVO](https://sketchfab.com/oscar_creativo). Materials adapted from specular-glossiness to metallic-roughness; horizontal root motion removed for an in-place walk. Original geometry, textures, and skeletal movement preserved.
 - [Zombie Hazmat](https://sketchfab.com/3d-models/zombie-hazmat-49b3b4307f6a4d2386fdb02354158d04) by [LxNazarov](https://sketchfab.com/LxNazarov). Optimized model; scaled for the game and horizontal root drift removed from its walking clip.
@@ -8,6 +8,6 @@ All model assets below are licensed under [Creative Commons Attribution 4.0 Inte
 
 Menu artwork, asphalt, brick, storm sky, and timber textures were generated specifically for Dead Ahead. Environment geometry and game systems are original. Icons: Lucide, ISC license. Rendering: Three.js, MIT license.
 
-Survivor protective suits reuse Zombie Hazmat with a blue material adaptation and its grounded walking animation. Character cloth and skin materials are adapted to remain non-metallic under the street lighting.
+Civilian characters use [Gorgehold Scout](https://3dassets.dev/assets/gorgehold-survivor-gallery-and-operations-gorgehold-sc-5418288a) by 3D Assets, licensed [CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/), built on MakeHuman CC0 anatomy and rig weights. Adaptations include clothing palettes, scale, fear and hiding poses, and grounded following. See `licenses/civilian-scout-CC0.md`. Character cloth and skin remain non-metallic under the street lighting.
 
 Version 1.0.1 stores the generated artwork and street textures as lossless WebP files. Pixel data is unchanged from the original PNG files.

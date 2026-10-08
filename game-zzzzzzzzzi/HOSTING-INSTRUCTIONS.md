@@ -1,10 +1,10 @@
-# Upload Dead Ahead to your website — version 1.0.2
+# Upload Dead Ahead to your website — version 1.0.5
 
 ## Update pedagogygame.com
 
 The site-specific ZIP contains `game-zzzzzzzzzi/`. Copy that folder into the root of your existing website repository and replace the files inside the existing folder. Commit and push using the same publishing method your website already uses. Keep the site's home page, `CNAME`, other games, and deployment workflow.
 
-The game URL remains <https://pedagogygame.com/game-zzzzzzzzzi/>. Upload the complete folder, including all new `.webp` textures and the new JavaScript and CSS files. Uploading only `index.html` will not update the complete game.
+The game URL remains <https://pedagogygame.com/game-zzzzzzzzzi/>. Upload the complete folder, including the new `models/civilian.glb` model, all `.webp` textures and the new JavaScript and CSS files. Uploading only `index.html` will not update the complete game.
 
 After the site finishes publishing, reload with Command–Shift–R on Mac or Ctrl–Shift–R on Windows/Linux. The new loading button shows a percentage, with download progress below it. Missing or stalled files display a readable message and **Retry loading**.
 
@@ -41,7 +41,7 @@ Click inside the game before using the keyboard. Use HTTPS for your public websi
 
 ## Play and edit
 
-Use WASD/arrow keys to move, E to rescue nearby civilians, pinyin plus Enter to fight, and Escape to pause. Sound starts after interaction; Mandarin speech uses voices available on the player's device.
+Use WASD/arrow keys to move, Q/R or drag to look around, Space to face forward, E to rescue nearby civilians, pinyin plus Enter to fight, and Escape to pause. Sound starts after interaction; Mandarin speech uses voices available on the player's device.
 
 Test through a web server, not by double-clicking `index.html`. The game needs a current browser with WebGL 2.
 
