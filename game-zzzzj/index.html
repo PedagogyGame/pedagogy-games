@@ -61,6 +61,10 @@ button:hover{background:#2c353b;border-color:var(--brass)}
 button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 button.on{background:#31403f;border-color:var(--patina);color:#cdece4}
 button.wide{flex:1 1 auto}
+.legend{display:flex;flex-direction:column;gap:4px;margin-top:9px}
+.legend span{display:flex;align-items:center;gap:7px;font-family:var(--font-u);
+  font-size:10px;letter-spacing:.06em;color:var(--paper-dim)}
+.legend i{width:16px;height:3px;border-radius:2px;flex:none}
 #readout{margin-top:10px}
 .ro{display:flex;justify-content:space-between;align-items:baseline;gap:8px;
   font-family:var(--font-u);font-size:10.5px;color:var(--paper-dim);padding:2px 0;
@@ -180,6 +184,7 @@ button.wide{flex:1 1 auto}
       <button class="wide" data-view="facade">Street level</button>
       <button class="wide" data-view="demo">Working sections</button>
       <button class="wide" data-view="engine">The engine</button>
+      <button class="wide" data-view="village">The valley</button>
     </div>
   </div>
 
@@ -192,7 +197,19 @@ button.wide{flex:1 1 auto}
       <button class="on wide" data-layer="air">Air current</button>
       <button class="on wide" data-layer="carriers">Carriers</button>
       <button class="on wide" data-layer="labels">Station names</button>
+      <button class="on wide" data-layer="land">Landscape</button>
+      <button class="on wide" data-layer="props">People &amp; traffic</button>
       <button class="wide" id="tourBtn">Guided tour</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>The air</h2>
+    <button class="wide" id="flowBtn" style="width:100%">Reveal the air flow</button>
+    <div class="legend">
+      <span><i style="background:#ff5a3c"></i>Druckluft &middot; outward</span>
+      <span><i style="background:#4fa8dd"></i>Saugluft &middot; inward</span>
+      <span><i style="background:#74e0a8"></i>Signalling</span>
     </div>
   </div>
 
@@ -243,7 +260,7 @@ button.wide{flex:1 1 auto}
   </div>
 </div>
 
-<div id="hint">DRAG orbit &middot; RIGHT-DRAG or SHIFT-DRAG pan &middot; SCROLL zoom &middot; W A S D move &middot; HOVER any part &middot; CLICK to pin &middot; DOUBLE-CLICK to fly in &middot; SLOW THE ENGINE in the MACHINERY panel</div>
+<div id="hint">DRAG orbit &middot; RIGHT-DRAG or SHIFT-DRAG pan &middot; SCROLL zoom &middot; W A S D move &middot; HOVER any part &middot; CLICK to pin &middot; DOUBLE-CLICK to fly in &middot; SLOW THE ENGINE or REVEAL THE AIR FLOW in the left panel</div>
 <div id="scalebar"><div class="ln"></div><span id="scaleTxt">20 m</span></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -253,55 +270,84 @@ button.wide{flex:1 1 auto}
    1 unit = 1 metre.  Ground (street) level = y 0.
    ===================================================================== */
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x3b3b36, 150, 500);
 
-const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 1400);
+const camera = new THREE.PerspectiveCamera(48, innerWidth/innerHeight, 0.1, 3400);
 const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.04;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('stage').appendChild(renderer.domElement);
 
-/* ---------------- a coal-smoke sky --------------------------------- */
+/* ---------------- the valley sky -------------------------------------
+   Late afternoon, high summer, with the town's own smoke lying in a
+   band along the valley floor. The fog colour matches the horizon so
+   that distance dissolves into haze instead of into a wall.          */
+const HAZE = 0xbcb3a2;
+scene.fog = new THREE.FogExp2(HAZE, 0.00118);
 (function sky(){
-  const cv = document.createElement('canvas'); cv.width = 8; cv.height = 256;
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 512;
   const c = cv.getContext('2d');
-  const g = c.createLinearGradient(0,0,0,256);
-  g.addColorStop(0.00,'#131b24');      // zenith
-  g.addColorStop(0.42,'#2d3540');
-  g.addColorStop(0.62,'#55514a');
-  g.addColorStop(0.80,'#7d6c56');      // smog band
-  g.addColorStop(0.92,'#8a7458');
-  g.addColorStop(1.00,'#3b3832');      // below horizon
-  c.fillStyle = g; c.fillRect(0,0,8,256);
+  const g = c.createLinearGradient(0,0,0,512);
+  g.addColorStop(0.00,'#2d4f72');     // zenith
+  g.addColorStop(0.22,'#4a6e8d');
+  g.addColorStop(0.44,'#7b94a4');
+  g.addColorStop(0.60,'#a9ab9f');
+  g.addColorStop(0.70,'#c7b79e');     // haze band over the valley
+  g.addColorStop(0.760,'#d8c3a4');
+  g.addColorStop(0.790,'#b5a894');    // horizon line
+  g.addColorStop(0.84,'#8e8676');
+  g.addColorStop(1.00,'#5c564a');
+  c.fillStyle = g; c.fillRect(0,0,16,512);
+  /* a soft bank of cloud, and the sun's glow where it sits */
+  for(let i=0;i<70;i++){
+    const y = 60 + Math.random()*250, h = 4 + Math.random()*16;
+    c.fillStyle = `rgba(${225+Math.random()*30|0},${222+Math.random()*28|0},215,${(Math.random()*0.13).toFixed(3)})`;
+    c.fillRect(0, y, 16, h);
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.minFilter = THREE.LinearFilter;
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(620, 24, 24),
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1650, 32, 24),
     new THREE.MeshBasicMaterial({map:tex, side:THREE.BackSide, fog:false, depthWrite:false}));
   dome.renderOrder = -1000;
   scene.add(dome);
+  /* the sun itself, low over the far ridge */
+  const sg = document.createElement('canvas'); sg.width = sg.height = 128;
+  const sc2 = sg.getContext('2d');
+  const rg = sc2.createRadialGradient(64,64,0,64,64,64);
+  rg.addColorStop(0,'rgba(255,246,220,0.95)');
+  rg.addColorStop(0.22,'rgba(255,226,165,0.52)');
+  rg.addColorStop(1,'rgba(255,210,150,0)');
+  sc2.fillStyle = rg; sc2.fillRect(0,0,128,128);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(sg),
+    transparent:true, depthWrite:false, depthTest:false, fog:false,
+    blending:THREE.AdditiveBlending}));
+  sp.scale.set(360,360,1);
+  sp.position.set(-900, 300, 520);
+  sp.renderOrder = -999;
+  scene.add(sp);
 })();
 
 /* ---------------- lighting ------------------------------------------
    A low late-afternoon sun across the street, a cool sky fill, a warm
    bounce off the paving, and separate practical lights underground —
    the basement gets no daylight, and the machinery has to read.      */
-scene.add(new THREE.HemisphereLight(0x93aec6, 0x4a3b2c, 0.62));
-const sun = new THREE.DirectionalLight(0xffd8a4, 1.45);
-sun.position.set(-96, 72, 54);
+const hemi = new THREE.HemisphereLight(0xa8c2d8, 0x5c4a34, 0.78);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffdfb0, 1.70);
+sun.position.set(-150, 100, 86);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048,2048);
 const sc = sun.shadow.camera;
-sc.left=-110; sc.right=110; sc.top=110; sc.bottom=-110; sc.near=10; sc.far=300;
+sc.left=-130; sc.right=130; sc.top=130; sc.bottom=-130; sc.near=10; sc.far=420;
 sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.02;
 sc.updateProjectionMatrix();
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0x7d9cba, 0.42);
-fill.position.set(72, 46, -84); scene.add(fill);
+const fill = new THREE.DirectionalLight(0x89a9c6, 0.46);
+fill.position.set(110, 60, -120); scene.add(fill);
 const bounce = new THREE.DirectionalLight(0xc9a378, 0.22);
 bounce.position.set(20, -30, 36); scene.add(bounce);
 
@@ -323,7 +369,7 @@ class Controls{
     this.tgtD=this.target.clone();
     this.sph=new THREE.Spherical(150, 1.02, 0.72);
     this.sphD=this.sph.clone();
-    this.min=3; this.max=380;
+    this.min=2.2; this.max=1050;
     this.keys={}; this.drag=null; this.px=0; this.py=0; this.enabled=true;
     dom.addEventListener('contextmenu', e=>e.preventDefault());
     dom.addEventListener('pointerdown', e=>{
@@ -507,16 +553,219 @@ function collars(from, to, every, r, m, parent){
   }
   return out;
 }
-/* small human, 1.75 m, for scale */
-function figure(x,y,z,parent,rot){
+/* ---------------------------------------------------------------------
+   GEOMETRY MERGING
+   A person built from thirty little boxes is thirty draw calls. Baking
+   each material's colour into vertex colours lets the whole figure
+   collapse into one mesh, so a crowd costs about what one man did.
+   --------------------------------------------------------------------- */
+const MAT_VC = new THREE.MeshStandardMaterial({vertexColors:true, roughness:.92, metalness:.04});
+const MAT_VC_M = new THREE.MeshStandardMaterial({vertexColors:true, roughness:.52, metalness:.45});
+function mergeGeoms(list){
+  let total = 0;
+  const parts = [];
+  for(const p of list){
+    const g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
+    g.applyMatrix4(p.matrix);
+    total += g.attributes.position.count;
+    parts.push({g, c:p.color});
+  }
+  const pos = new Float32Array(total*3), nor = new Float32Array(total*3),
+        col = new Float32Array(total*3);
+  let o = 0;
+  for(const p of parts){
+    const n = p.g.attributes.position.count;
+    pos.set(p.g.attributes.position.array, o*3);
+    if(p.g.attributes.normal) nor.set(p.g.attributes.normal.array, o*3);
+    for(let i=0;i<n;i++){
+      col[(o+i)*3] = p.c.r; col[(o+i)*3+1] = p.c.g; col[(o+i)*3+2] = p.c.b;
+    }
+    o += n;
+    p.g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  out.setAttribute('normal',   new THREE.Float32BufferAttribute(nor,3));
+  out.setAttribute('color',    new THREE.Float32BufferAttribute(col,3));
+  return out;
+}
+/* collapse a group's own meshes into one, without descending into the
+   sub-groups listed in `stops` (which must keep moving on their own) */
+function collapse(group, stops, metal){
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+  const list = [], doomed = [];
+  (function walk(o){
+    for(const c of o.children){
+      if(stops && stops.indexOf(c) >= 0) continue;
+      if(c.isMesh && !c.isInstancedMesh){
+        list.push({geo:c.geometry,
+          matrix:new THREE.Matrix4().multiplyMatrices(inv, c.matrixWorld),
+          color:c.material.color});
+        doomed.push(c);
+      }
+      if(c.children && c.children.length) walk(c);
+    }
+  })(group);
+  for(const o of doomed) if(o.parent) o.parent.remove(o);
+  if(!list.length) return null;
+  const mesh = new THREE.Mesh(mergeGeoms(list), metal ? MAT_VC_M : MAT_VC);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  group.add(mesh);
+  return mesh;
+}
+
+/* ---------------------------------------------------------------------
+   PEOPLE
+   1.75 m, and dressed for 1925: three-piece suits and bowlers for the
+   clerks, flat caps and waistcoats for the working men, long coats and
+   cloche hats for the women, plus the odd child. Built from real limbs
+   on hip and shoulder pivots so some of them can walk.
+   --------------------------------------------------------------------- */
+G.people = new THREE.Group(); G.people.name = 'people'; scene.add(G.people);
+const WALKERS = [];
+
+mat.skin   = M(0xc39a76,{roughness:.86,metalness:0});
+mat.suitA  = M(0x2b3138,{roughness:.96,metalness:0});
+mat.suitB  = M(0x3b3a33,{roughness:.96,metalness:0});
+mat.suitC  = M(0x4a4038,{roughness:.96,metalness:0});
+mat.coatA  = M(0x5b4a3a,{roughness:.97,metalness:0});
+mat.coatB  = M(0x3d4a42,{roughness:.97,metalness:0});
+mat.coatC  = M(0x6a4a44,{roughness:.97,metalness:0});
+mat.shirt  = M(0xd9d3c4,{roughness:.93,metalness:0});
+mat.apron  = M(0x9a8f74,{roughness:.98,metalness:0});
+mat.hatBlk = M(0x1d2024,{roughness:.9,metalness:0});
+mat.postal = M(0x253a52,{roughness:.95,metalness:0});
+mat.hiVis  = M(0x8e4a2c,{roughness:.96,metalness:0});
+const COATS = ['suitA','suitB','suitC','coatA','coatB','coatC','postal','hiVis'];
+
+/**
+ * person(x,y,z,parent,rot,opt)
+ * opt: {kind:'clerk'|'worker'|'woman'|'child'|'postman'|'stoker',
+ *       walk:true, carry:'case'|'sack'|'tray'|null, scale, seed}
+ */
+function person(x,y,z,parent,rot,opt){
+  opt = opt || {};
+  const seed = opt.seed === undefined ? Math.random()*1000 : opt.seed;
+  const R = n => { const v = Math.sin(seed*12.9898 + n*78.233)*43758.5453; return v-Math.floor(v); };
+  const kind = opt.kind || ['clerk','worker','woman','clerk','worker'][Math.floor(R(1)*5)];
+  const sc = (opt.scale || 1) * (kind==='child' ? 0.64 : 0.95 + R(2)*0.11);
   const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0;
-  const c = mat.cloth;
-  box(.42,.62,.24,c,0,1.15,0,g);
-  box(.34,.46,.22,c,0,.62,0,g);
-  box(.14,.5,.16,c,-.11,.24,0,g); box(.14,.5,.16,c,.11,.24,0,g);
-  sph(.13,mat.felt,0,1.56,0,g);
-  box(.15,.42,.13,c,-.27,1.12,.02,g); box(.15,.42,.13,c,.27,1.12,.02,g);
-  (parent||scene).add(g); return g;
+  g.scale.setScalar(sc);
+  (parent || G.people).add(g);
+
+  let coat = mat[COATS[Math.floor(R(3)*COATS.length)]];
+  if(kind==='postman') coat = mat.postal;
+  if(kind==='stoker')  coat = mat.suitC;
+  if(kind==='woman')   coat = mat[['coatA','coatB','coatC'][Math.floor(R(4)*3)]];
+  const trous = kind==='woman' ? coat : mat[['suitA','suitB','suitC'][Math.floor(R(5)*3)]];
+
+  /* torso: chest, waist, and a little shoulder slope */
+  box(.40,.40,.23, coat, 0, 1.27, 0, g);
+  box(.355,.30,.21, coat, 0, 0.96, 0, g);
+  if(kind!=='woman' && R(6) < .55){                   // waistcoat and shirt front
+    box(.17,.30,.235, mat.shirt, 0, 1.24, .005, g);
+    box(.12,.10,.24, mat.shirt, 0, 1.40, .005, g);    // collar
+  }
+  if(kind==='stoker' || kind==='worker'){
+    if(R(7) < .5) box(.34,.52,.225, mat.apron, 0, 0.92, .012, g);
+  }
+  /* neck and head */
+  cyl(.055,.062,.09, mat.skin, 0,1.49,0, g, 8);
+  const head = new THREE.Group(); head.position.set(0,1.585,0); g.add(head);
+  sph(.098, mat.skin, 0,0,0, head).scale.set(1,1.14,.95);
+  box(.035,.05,.03, mat.skin, 0,-.01,.095, head);     // nose
+  if(kind==='woman'){
+    sph(.108, mat.hatBlk, 0,.045,0, head).scale.set(1,.72,1);   // cloche
+    cyl(.125,.125,.016, mat.hatBlk, 0,.012,0, head, 14);
+    sph(.085, mat.felt, 0,-.015,-.055, head).scale.set(1.1,.8,.7);
+  } else if(kind==='worker' || kind==='stoker'){
+    cyl(.108,.112,.045, mat.hatBlk, 0,.062,0, head, 14);        // flat cap
+    box(.17,.022,.10, mat.hatBlk, 0,.045,.085, head);
+  } else if(kind==='child'){
+    sph(.092, mat.hatBlk, 0,.05,0, head).scale.set(1,.6,1);
+  } else {
+    cyl(.082,.092,.10, mat.hatBlk, 0,.082,0, head, 16);         // bowler
+    sph(.088, mat.hatBlk, 0,.128,0, head).scale.set(1,.5,1);
+    cyl(.142,.142,.016, mat.hatBlk, 0,.036,0, head, 18);
+  }
+  if(kind!=='child' && kind!=='woman' && R(8) < .3)
+    box(.07,.025,.02, mat.felt, 0,-.045,.093, head);            // moustache
+
+  /* legs on hip pivots */
+  const legs = [];
+  for(const sgn of [-1,1]){
+    const hip = new THREE.Group(); hip.position.set(sgn*.098, .80, 0); g.add(hip);
+    if(kind==='woman'){
+      cyl(.155,.115,.56, coat, 0,-.28,0, hip, 10);
+      cyl(.052,.046,.30, mat.skin, 0,-.70,0, hip, 8);
+    } else {
+      box(.145,.44,.155, trous, 0,-.22,0, hip);
+      box(.13,.40,.145, trous, 0,-.62,0, hip);
+    }
+    box(.115,.065,.235, mat.hatBlk, 0, kind==='woman'? -.86 : -.80, .038, hip);  // shoe
+    legs.push(hip);
+  }
+  /* arms on shoulder pivots */
+  const arms = [];
+  for(const sgn of [-1,1]){
+    const sh = new THREE.Group(); sh.position.set(sgn*.215, 1.40, 0); g.add(sh);
+    box(.105,.34,.115, coat, 0,-.17,0, sh);
+    box(.095,.30,.105, coat, 0,-.47,0, sh);
+    sph(.052, mat.skin, 0,-.645,0, sh);
+    arms.push(sh);
+  }
+  arms[0].rotation.x = -0.12 + R(9)*0.3;
+  arms[1].rotation.x =  0.12 - R(10)*0.3;
+
+  /* what they are carrying */
+  const carry = opt.carry;
+  if(carry === 'case'){
+    box(.10,.26,.34, mat.leather, 0,-.78,.04, arms[1]);
+    arms[1].rotation.x = 0.06;
+  } else if(carry === 'sack'){
+    sph(.26, mat.oakum, 0, 1.70, -.26, g).scale.set(1,.8,.85);
+    arms[0].rotation.x = -2.0; arms[1].rotation.x = -2.0;
+  } else if(carry === 'tray'){
+    box(.46,.04,.30, mat.panelWood, 0,-.70,.16, arms[1]);
+    arms[0].rotation.x = -1.35; arms[1].rotation.x = -1.35;
+  } else if(carry === 'carrier'){
+    cyl(.029,.029,.19, mat.alum, 0,-.72,.05, arms[1], 10).rotation.z = Math.PI/2;
+    arms[1].rotation.x = -0.5;
+  } else if(carry === 'shovel'){
+    cyl(.022,.022,1.1, mat.trunk, 0,-.60,.12, arms[1], 8).rotation.x = 0.5;
+    box(.20,.26,.03, mat.steel, 0,-1.08,.40, arms[1]);
+    arms[0].rotation.x = -0.9; arms[1].rotation.x = -0.45;
+  }
+  if(opt.walk){
+    const limbs = legs.concat(arms);
+    collapse(g, limbs);
+    for(const L of limbs) collapse(L);
+    WALKERS.push({g, legs, arms, ph:R(11)*6.28, sp:0.9+R(12)*0.5});
+  } else {
+    collapse(g);
+  }
+  g.userData.isPerson = true;
+  return g;
+}
+/* keep the old name working for everything already placed */
+function figure(x,y,z,parent,rot){
+  return person(x,y,z,parent,rot,{});
+}
+
+/* a stray dog or two, because every street had them */
+function dog(x,y,z,parent,rot){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0;
+  (parent||G.people).add(g);
+  box(.19,.21,.50, mat.felt, 0,.44,0, g);
+  box(.14,.15,.17, mat.felt, 0,.52,-.31, g);
+  box(.07,.07,.10, mat.felt, 0,.48,-.42, g);
+  for(const sx of [-1,1]) for(const sz of [-1,1])
+    box(.055,.30,.055, mat.felt, sx*.07, .25, sz*.18, g);
+  cyl(.028,.016,.26, mat.felt, 0,.56,.28, g, 6).rotation.x = -0.9;
+  for(const sx of [-1,1]) box(.045,.09,.02, mat.felt, sx*.055,.60,-.30, g);
+  collapse(g);
+  return g;
 }
 /* enamel station name-plate that always faces the camera */
 const labelSprites = [];
@@ -577,11 +826,27 @@ function ic(group, m, rad,h, x,y,z, r){ _push('c',_uCyl,group,m,[rad*2,h,rad*2],
 function ip(group, m, rad,h, x,y,z, r){ _push('p',_uPyr,group,m,[rad*2,h,rad*2],[x,y,z],r); }
 function is(group, m, rad, x,y,z){ _push('s',_uSph,group,m,[rad*2,rad*2,rad*2],[x,y,z],null); }
 function icone(group, m, rad,h, x,y,z, r){ _push('n',_uCone,group,m,[rad*2,h,rad*2],[x,y,z],r); }
+/* How much each material's instances vary in tone, and how much they
+   darken toward the ground. Real masonry is never one flat colour: it is
+   a thousand slightly different stones, sootier at the bottom where the
+   traffic throws up dirt and rain splashes back off the pavement.      */
+const VARY = {
+  brick:[.11,.20], brickDk:[.11,.20], brickRed:[.13,.26], brickBrown:[.13,.26],
+  brickSoot:[.10,.16], stone:[.08,.22], stoneDk:[.08,.22], stoneWarm:[.09,.24],
+  stoneGrey:[.11,.18], stoneSoot:[.08,.16], slate:[.13,.07], paving:[.16,.05],
+  concrete:[.07,.14], plaster:[.07,.22], panelWood:[.12,.05], wood:[.12,.05],
+  canvas:[.10,.04], lead2:[.09,.05], ironWork:[.07,.08], castIron:[.06,.08],
+  ironDark:[.06,.08], roofTile:[.17,.08], vine:[.20,.04], foliage:[.22,.05],
+  trunk:[.14,.06], soil:[.12,.03], soilTop:[.12,.03]
+};
+const _matName = m => { for(const k in mat) if(mat[k] === m) return k; return ''; };
+const _c3 = new THREE.Color();
 function buildBatches(){
   let n = 0, inst = 0;
   for(const k in _batches){
     const b = _batches[k];
     const im = new THREE.InstancedMesh(b.geo, b.mat, b.list.length);
+    const vr = VARY[_matName(b.mat)];
     b.list.forEach((t,i)=>{
       if(!t[2]) _q4.identity();
       else if(t[2].isQuaternion) _q4.copy(t[2]);
@@ -590,8 +855,19 @@ function buildBatches(){
       _s4.set(t[0][0], t[0][1], t[0][2]);
       _m4.compose(_v4, _q4, _s4);
       im.setMatrixAt(i, _m4);
+      if(vr){
+        /* a stable pseudo-random from the position, so the same stone is
+           the same colour every time the page loads                    */
+        const h = Math.sin(_v4.x*12.99 + _v4.y*78.23 + _v4.z*37.71)*43758.55;
+        const rnd = h - Math.floor(h);
+        const tone = 1 + (rnd - 0.5)*2*vr[0];
+        const grime = 1 - vr[1]*Math.max(0, Math.min(1, (6.5 - _v4.y)/9));
+        _c3.setScalar(1).multiplyScalar(tone*grime);
+        im.setColorAt(i, _c3);
+      }
     });
     im.instanceMatrix.needsUpdate = true;
+    if(im.instanceColor) im.instanceColor.needsUpdate = true;
     im.castShadow = true; im.receiveShadow = true;
     im.frustumCulled = false;
     b.group.add(im);
@@ -618,28 +894,273 @@ mat.panelWood  = M(0x54371f,{roughness:.85,metalness:0});
 mat.canvas     = M(0x7d6a4f,{roughness:1,metalness:0});
 mat.gilt       = M(0xc9a94e,{roughness:.3,metalness:.9});
 
-/* ---------------- surface grain --------------------------------------
-   One noise map shared by the masonry, paving and ironwork. Pure noise
-   has no scale of its own, so it survives being stretched across slabs
-   of very different sizes without ever showing a seam.                */
-const grain = (()=>{
-  const n = 128, cv = document.createElement('canvas');
+/* ---------------- procedural surfaces --------------------------------
+   Canvas-drawn maps with matching bump maps. The fine ones (grit, rust,
+   weave) carry no scale of their own, so they survive being stretched
+   across objects of very different sizes; the coursed ones (brick,
+   ashlar, setts, slate) are used only where the scale is known.      */
+function texCanvas(n, draw){
+  const cv = document.createElement('canvas');
   cv.width = cv.height = n;
-  const c = cv.getContext('2d');
-  for(let y=0;y<n;y++) for(let x=0;x<n;x++){
-    const v = 200 + Math.floor(Math.random()*55);
-    c.fillStyle = 'rgb('+v+','+v+','+v+')';
-    c.fillRect(x,y,1,1);
-  }
+  draw(cv.getContext('2d'), n);
   const t = new THREE.CanvasTexture(cv);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(7,7);
+  t.anisotropy = 4;
   return t;
-})();
-['paving','soil','soilTop','stone','stoneDk','stoneWarm','stoneGrey','stoneSoot',
- 'brick','brickDk','brickRed','brickBrown','brickSoot','concrete','slate','castIron',
- 'ironDark','plaster','panelWood','wood','canvas','felt','leather','fibre','oakum']
- .forEach(k=>{ if(mat[k]){ mat[k].map = grain; mat[k].needsUpdate = true; } });
+}
+const rnd = (a,b) => a + Math.random()*(b-a);
+
+/* fine grit: the universal one */
+const texGrit = texCanvas(256, (c,n)=>{
+  c.fillStyle = '#808080'; c.fillRect(0,0,n,n);
+  for(let i=0;i<24000;i++){
+    const v = 128 + (Math.random()-0.5)*116;
+    c.fillStyle = `rgb(${v|0},${v|0},${v|0})`;
+    c.fillRect(Math.random()*n, Math.random()*n, 1+Math.random()*1.6, 1+Math.random()*1.6);
+  }
+  for(let i=0;i<120;i++){      // larger blotches: damp, lichen, wear
+    const g = c.createRadialGradient(0,0,0,0,0,1);
+    c.save(); c.translate(Math.random()*n, Math.random()*n);
+    const r = rnd(6,26), v = 128 + (Math.random()-0.5)*44;
+    const gr = c.createRadialGradient(0,0,0,0,0,r);
+    gr.addColorStop(0, `rgba(${v|0},${v|0},${v|0},0.55)`);
+    gr.addColorStop(1, 'rgba(128,128,128,0)');
+    c.fillStyle = gr; c.beginPath(); c.arc(0,0,r,0,7); c.fill(); c.restore();
+  }
+});
+texGrit.repeat.set(5,5);
+
+/* brick courses, with a mortar bed and per-brick tone */
+function brickTex(bump){
+  return texCanvas(512, (c,n)=>{
+    const rows = 16, h = n/rows, w = n/6;
+    c.fillStyle = bump ? '#5a5a5a' : '#6d5345';            // mortar
+    c.fillRect(0,0,n,n);
+    for(let r=0;r<rows;r++){
+      const off = (r%2) ? w/2 : 0;
+      for(let i=-1;i<7;i++){
+        const x = i*w + off, y = r*h;
+        if(bump){ const v = 190 + Math.random()*40;
+          c.fillStyle = `rgb(${v|0},${v|0},${v|0})`; }
+        else { const t = rnd(.78,1.14);
+          c.fillStyle = `rgb(${(170*t)|0},${(104*t)|0},${(80*t)|0})`; }
+        c.fillRect(x+1.4, y+1.4, w-2.8, h-2.8);
+      }
+    }
+    if(!bump) for(let i=0;i<2600;i++){            // grit over the top
+      const v = Math.random()*255;
+      c.fillStyle = `rgba(${v|0},${v|0},${v|0},0.055)`;
+      c.fillRect(Math.random()*n, Math.random()*n, 2, 2);
+    }
+  });
+}
+const texBrick = brickTex(false), texBrickB = brickTex(true);
+texBrick.repeat.set(3,3); texBrickB.repeat.set(3,3);
+
+/* ashlar: big squared stone with fine joints */
+function ashlarTex(bump){
+  return texCanvas(512, (c,n)=>{
+    const rows = 7, h = n/rows;
+    c.fillStyle = bump ? '#606060' : '#8e8574';
+    c.fillRect(0,0,n,n);
+    for(let r=0;r<rows;r++){
+      const cols = 3 + (r%2), w = n/cols, off = (r%2)? -w/3 : 0;
+      for(let i=-1;i<=cols;i++){
+        const x = i*w + off, y = r*h;
+        if(bump){ const v = 186 + Math.random()*52;
+          c.fillStyle = `rgb(${v|0},${v|0},${v|0})`; }
+        else { const t = rnd(.86,1.10);
+          c.fillStyle = `rgb(${(196*t)|0},${(186*t)|0},${(163*t)|0})`; }
+        c.fillRect(x+2.6, y+2.6, w-5.2, h-5.2);
+      }
+    }
+    if(!bump) for(let i=0;i<2200;i++){
+      const v = Math.random()*255;
+      c.fillStyle = `rgba(${v|0},${v|0},${v|0},0.05)`;
+      c.fillRect(Math.random()*n, Math.random()*n, 2.4, 2.4);
+    }
+  });
+}
+const texAshlar = ashlarTex(false), texAshlarB = ashlarTex(true);
+texAshlar.repeat.set(2,2); texAshlarB.repeat.set(2,2);
+
+/* granite setts, laid in the fan courses a cobbled street actually had */
+function settTex(bump){
+  return texCanvas(512, (c,n)=>{
+    c.fillStyle = bump ? '#4e4e4e' : '#34383a'; c.fillRect(0,0,n,n);
+    const rows = 20, h = n/rows;
+    for(let r=0;r<rows;r++){
+      const cols = 20, w = n/cols, off = (r%2)? w/2 : 0;
+      for(let i=-1;i<=cols;i++){
+        const x = i*w+off, y = r*h;
+        c.save();
+        c.translate(x+w/2, y+h/2); c.rotate(rnd(-.07,.07));
+        if(bump){ const v = 168 + Math.random()*76;
+          c.fillStyle = `rgb(${v|0},${v|0},${v|0})`; }
+        else { const t = rnd(.68,1.26);
+          c.fillStyle = `rgb(${(104*t)|0},${(108*t)|0},${(110*t)|0})`; }
+        c.fillRect(-w/2+1.1, -h/2+1.1, w-2.2, h-2.2);
+        c.restore();
+      }
+    }
+    if(!bump){                      // wheel ruts and damp
+      for(let i=0;i<70;i++){
+        const r = rnd(10,44), v = rnd(40,90);
+        const gr = c.createRadialGradient(0,0,0,0,0,r);
+        gr.addColorStop(0,`rgba(${v|0},${v|0},${v|0},0.42)`);
+        gr.addColorStop(1,'rgba(0,0,0,0)');
+        c.save(); c.translate(Math.random()*n, Math.random()*n);
+        c.fillStyle = gr; c.beginPath(); c.arc(0,0,r,0,7); c.fill(); c.restore();
+      }
+    }
+  });
+}
+const texSett = settTex(false), texSettB = settTex(true);
+texSett.repeat.set(9,9); texSettB.repeat.set(9,9);
+
+/* slate: overlapping courses */
+function slateTex(bump){
+  return texCanvas(512, (c,n)=>{
+    c.fillStyle = bump ? '#4a4a4a' : '#2b3237'; c.fillRect(0,0,n,n);
+    const rows = 13, h = n/rows;
+    for(let r=0;r<rows;r++){
+      const cols = 8, w = n/cols, off = (r%2)? w/2 : 0;
+      for(let i=-1;i<=cols;i++){
+        const x = i*w+off, y = r*h;
+        if(bump){ const v = 150 + Math.random()*70 + (1-r/rows)*14;
+          c.fillStyle = `rgb(${v|0},${v|0},${v|0})`; }
+        else { const t = rnd(.74,1.24);
+          c.fillStyle = `rgb(${(70*t)|0},${(80*t)|0},${(88*t)|0})`; }
+        c.fillRect(x+1, y, w-2, h*1.5);
+        c.fillStyle = bump ? 'rgba(40,40,40,.5)' : 'rgba(10,14,16,.45)';
+        c.fillRect(x+1, y+h*1.42, w-2, 2.2);
+      }
+    }
+  });
+}
+const texSlate = slateTex(false), texSlateB = slateTex(true);
+texSlate.repeat.set(9,4); texSlateB.repeat.set(9,4);
+
+/* pantiles: the red clay roof of a Rhine village */
+function tileTex(bump){
+  return texCanvas(512, (c,n)=>{
+    c.fillStyle = bump ? '#505050' : '#7e3c28'; c.fillRect(0,0,n,n);
+    const cols = 11, w = n/cols, rows = 9, h = n/rows;
+    for(let r=0;r<rows;r++) for(let i=0;i<cols;i++){
+      const x = i*w, y = r*h + ((i%2)?1.5:0);
+      if(bump){
+        const g = c.createLinearGradient(x,0,x+w,0);
+        g.addColorStop(0,'#3a3a3a'); g.addColorStop(.42,'#f0f0f0'); g.addColorStop(1,'#3a3a3a');
+        c.fillStyle = g;
+      } else { const t = rnd(.72,1.22);
+        c.fillStyle = `rgb(${(176*t)|0},${(82*t)|0},${(54*t)|0})`; }
+      c.fillRect(x, y, w-1, h*1.35);
+      c.fillStyle = bump ? 'rgba(30,30,30,.6)' : 'rgba(42,18,12,.4)';
+      c.fillRect(x, y+h*1.26, w-1, 2);
+    }
+  });
+}
+const texTile = tileTex(false), texTileB = tileTex(true);
+texTile.repeat.set(4,3); texTileB.repeat.set(4,3);
+
+/* rolled, riveted, slightly rusted iron */
+const texIron = texCanvas(256, (c,n)=>{
+  c.fillStyle = '#4a4e52'; c.fillRect(0,0,n,n);
+  for(let i=0;i<9000;i++){
+    const v = 74 + (Math.random()-.5)*58;
+    c.fillStyle = `rgb(${v|0},${(v*1.01)|0},${(v*1.04)|0})`;
+    c.fillRect(Math.random()*n, Math.random()*n, 1.5, 1.5);
+  }
+  for(let i=0;i<34;i++){            // rust bloom
+    const r = rnd(5,22);
+    const gr = c.createRadialGradient(0,0,0,0,0,r);
+    gr.addColorStop(0,'rgba(128,66,32,.5)'); gr.addColorStop(1,'rgba(128,66,32,0)');
+    c.save(); c.translate(Math.random()*n, Math.random()*n);
+    c.fillStyle = gr; c.beginPath(); c.arc(0,0,r,0,7); c.fill(); c.restore();
+  }
+});
+texIron.repeat.set(3,3);
+
+/* coarse weave for canvas, felt and sacking */
+const texWeave = texCanvas(128, (c,n)=>{
+  c.fillStyle = '#8a8a8a'; c.fillRect(0,0,n,n);
+  for(let i=0;i<n;i+=3){
+    c.fillStyle = 'rgba(60,60,60,.30)'; c.fillRect(i,0,1.4,n);
+    c.fillStyle = 'rgba(210,210,210,.22)'; c.fillRect(0,i,n,1.4);
+  }
+  for(let i=0;i<2600;i++){
+    const v = Math.random()*255;
+    c.fillStyle = `rgba(${v|0},${v|0},${v|0},.08)`;
+    c.fillRect(Math.random()*n, Math.random()*n, 2, 2);
+  }
+});
+texWeave.repeat.set(6,6);
+
+/* plank and end-grain timber */
+const texPlank = texCanvas(256, (c,n)=>{
+  c.fillStyle = '#6a4826'; c.fillRect(0,0,n,n);
+  for(let p=0;p<7;p++){
+    const y = p*n/7, t = rnd(.8,1.18);
+    c.fillStyle = `rgb(${(108*t)|0},${(74*t)|0},${(40*t)|0})`;
+    c.fillRect(0, y+1, n, n/7-2);
+    for(let g=0;g<16;g++){          // grain lines
+      c.strokeStyle = `rgba(48,30,14,${rnd(.10,.30).toFixed(2)})`;
+      c.lineWidth = rnd(.6,1.7); c.beginPath();
+      const gy = y + rnd(2, n/7-3);
+      c.moveTo(0, gy);
+      for(let x=0;x<=n;x+=16) c.lineTo(x, gy + Math.sin(x*.05+p)*1.7);
+      c.stroke();
+    }
+    c.fillStyle = 'rgba(28,18,8,.5)'; c.fillRect(0, y, n, 1.4);
+  }
+});
+texPlank.repeat.set(3,3);
+
+/* assign: map, bump, and a sensible bump scale */
+function surf(key, map, bump, bs, rough){
+  const m = mat[key]; if(!m) return;
+  if(map)  m.map = map;
+  if(bump){ m.bumpMap = bump; m.bumpScale = bs === undefined ? .35 : bs; }
+  if(rough !== undefined) m.roughness = rough;
+  m.needsUpdate = true;
+}
+surf('paving',   texSett,   texSettB,  .55, 1.0);
+surf('brick',    texBrick,  texBrickB, .60, .97);
+surf('brickDk',  texBrick,  texBrickB, .60, .97);
+surf('brickRed', texBrick,  texBrickB, .65, .97);
+surf('brickBrown',texBrick, texBrickB, .65, .97);
+surf('brickSoot',texBrick,  texBrickB, .50, 1.0);
+surf('stone',    texAshlar, texAshlarB,.42, .92);
+surf('stoneDk',  texAshlar, texAshlarB,.42, .92);
+surf('stoneWarm',texAshlar, texAshlarB,.46, .92);
+surf('stoneGrey',texAshlar, texAshlarB,.46, .93);
+surf('stoneSoot',texAshlar, texAshlarB,.40, .95);
+surf('slate',    texSlate,  texSlateB, .50, .86);
+surf('roofTile', texTile,   texTileB,  .60, .88);
+surf('concrete', texGrit,   texGrit,   .26, .96);
+surf('plaster',  texGrit,   texGrit,   .20, .97);
+surf('soil',     texGrit,   texGrit,   .60, 1.0);
+surf('soilTop',  texGrit,   texGrit,   .60, 1.0);
+surf('castIron', texIron,   texIron,   .20, .80);
+surf('ironDark', texIron,   texIron,   .20, .82);
+surf('ironWork', texIron,   texIron,   .18, .72);
+surf('wood',     texPlank,  texPlank,  .35, .86);
+surf('panelWood',texPlank,  texPlank,  .35, .84);
+surf('canvas',   texWeave,  texWeave,  .40, 1.0);
+surf('felt',     texWeave,  texWeave,  .30, .99);
+surf('oakum',    texWeave,  texWeave,  .40, 1.0);
+surf('fibre',    texWeave,  texWeave,  .30, .95);
+surf('leather',  texGrit,   texGrit,   .18, .88);
+surf('lead',     texGrit,   texGrit,   .14, .62);
+surf('lead2',    texGrit,   texGrit,   .14, .62);
+surf('rubber',   texGrit,   texGrit,   .16, .95);
+surf('enamel',   null,      texGrit,   .06, .42);
+surf('steel',    null,      texIron,   .06, .38);
+surf('brass',    null,      texGrit,   .05, .26);
+surf('copper',   null,      texGrit,   .07, .33);
+surf('patina',   texGrit,   texGrit,   .22, .64);
+
+
 
 /* =====================================================================
    1.  GROUND, STREET AND THE OPEN TRENCH
@@ -647,42 +1168,142 @@ const grain = (()=>{
 G.cutwall = new THREE.Group(); G.cutwall.name='cutwall';
 G.cutwall.visible = false; scene.add(G.cutwall);   /* the near elevations */
 
-function paving(x0,x1,z0,z1){
-  const b = box(x1-x0, .34, z1-z0, mat.paving, (x0+x1)/2, -.17, (z0+z1)/2, G.street);
-  b.receiveShadow = true; return b;
-}
-paving(-70,-62, 3.2, 40); paving(-32, 64, 3.2, 40);
-paving(-70, 64, 40, 52);
-paving(-70, 27, -48, -3.2); paving(33, 66, -48, -3.2); paving(27,33,-48,-19);
+/* ---------------------------------------------------------------------
+   The ground plane.
+   Every slab here used to top out at exactly y = 0, buildings included,
+   so the paving and the interior floors fought for the same pixels and
+   the whole street shimmered. The roadway is therefore laid as genuine
+   non-overlapping tiles with the building footprints cut out of it, and
+   each class of surface is given a height of its own.
+   --------------------------------------------------------------------- */
+const Y_ROAD = 0.000, Y_FOOT = 0.085, Y_TRENCH_CAP = -0.015, Y_INLAY = 0.028;
 
-/* granite setts, kerbs, gutters */
-function kerb(x0,x1,z,flip){
-  for(let x=x0; x<x1; x+=1.4) ib(G.street, mat.stoneGrey, 1.32,.30,.55, x+.7, -.02, z);
-  ib(G.street, mat.stoneSoot, x1-x0,.06,.42, (x0+x1)/2, -.30, z + (flip?-.55:.55));
+/* plan footprints that no paving may run beneath */
+const FOOTPRINT = [
+  [-62.6,-31.4,  3.4, 30.6],   // Central Telegraph Office
+  [ -2.6, 16.6,  7.4, 26.6],   // District Post Office
+  [ 33.4, 52.6,  5.4, 22.6],   // Stock Exchange
+  [ 21.4, 58.6,-40.6,-17.4],   // Railway Mail Terminal
+  [-38.6,-15.4,-34.6,-13.4],   // Department Store
+  [  1.3, 25.7,-25.7,-14.3],   // demonstration bay plinth
+  [-71.0, 67.0, -3.55, 3.55],  // the open trench along the street
+  [ 26.9, 33.1,-19.20,-3.50]   // the branch trench to the mail terminal
+];
+/* out of doors, and clear of every building? */
+function freeSpot(x,z,pad){
+  pad = pad === undefined ? 1.0 : pad;
+  for(const f of FOOTPRINT)
+    if(x > f[0]-pad && x < f[1]+pad && z > f[2]-pad && z < f[3]+pad) return false;
+  return x > -71 && x < 67 && z > -49 && z < 53;
 }
-kerb(-70,64, 3.55, false); kerb(-70,27, -3.55, true); kerb(33,64, -3.55, true);
+/* guillotine subtraction: split a rectangle around every footprint it
+   meets, so the result is a set of tiles that touch but never overlap */
+function subtract(r, list, i){
+  i = i || 0;
+  if(i >= list.length) return [r];
+  const [ax0,ax1,az0,az1] = r, [bx0,bx1,bz0,bz1] = list[i];
+  if(bx1 <= ax0 || bx0 >= ax1 || bz1 <= az0 || bz0 >= az1)
+    return subtract(r, list, i+1);
+  const out = [];
+  if(bz0 > az0) out.push([ax0,ax1,az0,bz0]);
+  if(bz1 < az1) out.push([ax0,ax1,bz1,az1]);
+  const z0 = Math.max(az0,bz0), z1 = Math.min(az1,bz1);
+  if(bx0 > ax0) out.push([ax0,bx0,z0,z1]);
+  if(bx1 < ax1) out.push([bx1,ax1,z0,z1]);
+  let res = [];
+  for(const t of out) res = res.concat(subtract(t, list, i+1));
+  return res;
+}
+let _paveTiles = 0;
+/* A box's faces are each mapped 0..1, so a 140 m slab and a 2 m slab
+   would show the same number of setts. Each tile therefore gets its own
+   material with the maps repeated to a fixed size on the ground: the
+   setts come out 150 mm across wherever they are laid.               */
+const _gmCache = {};
+function groundMat(base, metres, w, d){
+  const key = base + '|' + Math.round(w*4) + '|' + Math.round(d*4);
+  if(_gmCache[key]) return _gmCache[key];
+  const src = mat[base];
+  const m = src.clone();
+  if(src.map){ m.map = src.map.clone(); m.map.needsUpdate = true;
+               m.map.repeat.set(Math.max(w/metres,.4), Math.max(d/metres,.4)); }
+  if(src.bumpMap){ m.bumpMap = src.bumpMap.clone(); m.bumpMap.needsUpdate = true;
+               m.bumpMap.repeat.copy(m.map ? m.map.repeat : new THREE.Vector2(1,1)); }
+  _gmCache[key] = m; return m;
+}
+function pave(x0,x1,z0,z1, matKey, y, h, grp){
+  const key = matKey || 'paving';
+  const metres = key === 'paving' ? 3.0 : 6.3;
+  for(const t of subtract([x0,x1,z0,z1], FOOTPRINT)){
+    const w = t[1]-t[0], d = t[3]-t[2];
+    if(w < 0.12 || d < 0.12) continue;
+    const b = box(w, h||.34, d, groundMat(key, metres, w, d),
+                  (t[0]+t[1])/2, (y===undefined?Y_ROAD:y) - (h||.34)/2, (t[2]+t[3])/2,
+                  grp||G.street);
+    b.receiveShadow = true; b.castShadow = false;
+    _paveTiles++;
+  }
+}
+/* The buildings front almost directly onto the street here, so the
+   north side gets only a narrow margin while the south carries the
+   carriageway and the tramway. The bands are disjoint in z, and the
+   footprints are cut out of each, so no two slabs share a plane.    */
+pave(-72, 68,   3.55,  4.90, 'stoneGrey', Y_FOOT, .42);   // north margin
+pave(-72, 68,   4.90, 54.00);                             // north quarter
+pave(-72, 68, -11.40, -3.55);                             // south carriageway
+pave(-72, 68, -13.70,-11.40, 'stoneGrey', Y_FOOT, .42);   // south footway
+pave(-72, 68, -50.00,-13.70);                             // south quarter
+
+/* granite kerb and channel stone, laid stone by stone and skipping
+   anywhere a building stands */
+function kerb(x0,x1,z,flip){
+  for(let x=x0; x<x1; x+=1.4){
+    const cx = x+.7;
+    if(!freeSpot(cx, z, 0.15)) continue;
+    ib(G.street, mat.stoneGrey, 1.34,.46,.56, cx, Y_FOOT-.23, z);
+    ib(G.street, mat.stoneSoot, 1.34,.44,.44, cx, Y_FOOT-.22, z + (flip?-.51:.51));
+  }
+}
+kerb(-72,68,   3.84, false);   // north margin, at the trench lip
+kerb(-72,68, -11.66, true);    // south, between carriageway and footway
 
 function soilFace(w,h,d,x,y,z,ry){
   const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = ry||0;
-  box(w,.30,d,mat.paving, 0, h/2-.15, 0, g);
+  box(w,.30,d,mat.paving, 0, h/2-.15+Y_TRENCH_CAP, 0, g);
   box(w,.55,d*.98,mat.stoneDk, 0, h/2-.55, 0, g);
   box(w,h-.85,d*.96, mat.soil, 0, -.42, 0, g);
   box(w,1.1,d*.94, mat.soilTop, 0, -h/2+.55, 0, g);
   G.soil.add(g); return g;
 }
 const TRENCH_D = 5.6;
-soilFace(132, TRENCH_D, .5, -3, -TRENCH_D/2,  3.35);
-soilFace(96, TRENCH_D, .5, -21, -TRENCH_D/2, -3.35);
-soilFace(30, TRENCH_D, .5, 48, -TRENCH_D/2, -3.35);
+soilFace(132, TRENCH_D, .5, -3, -TRENCH_D/2,  3.25);
+soilFace(96, TRENCH_D, .5, -21, -TRENCH_D/2, -3.25);
+soilFace(30, TRENCH_D, .5, 48, -TRENCH_D/2, -3.25);
 soilFace(16, TRENCH_D, .5, 27.25, -TRENCH_D/2, -11, Math.PI/2);
 soilFace(16, TRENCH_D, .5, 32.75, -TRENCH_D/2, -11, Math.PI/2);
 box(132,.4,7.0, mat.soilTop, -3, -TRENCH_D-.2, 0, G.soil);
-box(6,.4,16, mat.soilTop, 30, -TRENCH_D-.2, -11, G.soil);
+box(6,.4,15.5, mat.soilTop, 30, -TRENCH_D-.2, -11.25, G.soil);
 
-/* tram track */
-for(const z of [4.9, 6.4]) ib(G.street, mat.steel, 120,.13,.10, -5, .07, z);
-for(let x=-62; x<62; x+=2.2) ib(G.street, mat.wood, .22,.09,2.1, x, -.01, 5.65);
+/* The branch trench is open, so the tramway crosses it on steel plates,
+   as any street with the road up had to.                              */
+ib(G.street, mat.steel, 6.6,.14,6.4, 30, Y_ROAD+.01, -7.05);
+for(let i=0;i<7;i++) ib(G.street, mat.ironWork, 6.4,.05,.14, 30, Y_ROAD+.09, -10.0+i*1.0);
+for(const sx of [-1,1]) ib(G.street, mat.ironWork, .22,.5,6.4, 30+sx*3.3, Y_ROAD-.18, -7.05);
 
+/* tramway, laid in the south carriageway clear of every building */
+for(const z of [-6.0, -8.1]){
+  ib(G.street, mat.steel, 136,.14,.105, -2, Y_ROAD+.055, z);
+  ib(G.street, mat.steel, 136,.05,.19, -2, Y_ROAD-.01, z);   // chair plates
+}
+for(let x=-68; x<64; x+=2.1) ib(G.street, mat.stoneSoot, .26,.10,2.5, x, Y_ROAD+.01, -7.05);
+/* overhead trolley wire on bracket arms */
+for(let x=-66; x<62; x+=14){
+  ic(G.street, mat.ironWork, .17, 7.4, x, 3.7, -11.9);
+  ic(G.street, mat.ironWork, .34, .5, x, .25, -11.9);
+  ib(G.street, mat.ironWork, 4.6,.11,.11, x-2.3, 7.1, -11.9);
+  ic(G.street, mat.ironWork, .05, 2.4, x-1.2, 6.2, -11.9, [0,0,-0.52]);
+}
+ic(G.street, mat.copper, .035, 132, -2, 6.9, -7.05, [0,0,Math.PI/2]);
 /* =====================================================================
    2.  PERIOD ELEVATIONS
        Built as real openings: plinth, spandrels, piers, sills, heads,
@@ -803,8 +1424,8 @@ function elevation(g, F, len, storeys, st){
         fb(g, st.trim, len, .10, WT+.09, 0, y+.26+b*.52, WT/2-.045, F);
     for(let i=0;i<nb;i++){
       const cx = -half + EP + bay*(i+0.5);
-      fb(g, st.trim, ow+.46, .16, WT+.24, cx, y+sh-.06, WT/2-.12, F);
-      fb(g, st.trim, ow+.32, .10, WT+.14, cx, y+sh+.03, WT/2-.07, F);
+      fb(g, st.trim, ow+.46, .24, WT+.24, cx, y+sh+.02, WT/2-.12, F);
+      fb(g, st.trim, ow+.32, .10, WT+.14, cx, y+sh+.19, WT/2-.07, F);
       if(arch){
         sash(g, st, cx, y+sh+wh/2, ow, wh, F, 3);
         archHead(g, st.trim, cx, y+sh+wh, ow/2, F);
@@ -909,20 +1530,46 @@ function slateRoof(o, y, opt){
   }
 }
 
+/* ---------------------------------------------------------------------
+   Wall panels get coursed materials; mouldings get only a fine grit.
+   The same stone cannot carry an ashlar pattern on a 30 m wall and on a
+   250 mm dentil, so the two are separated here.
+   --------------------------------------------------------------------- */
+function panelMat(src, map, bump, rx, ry, bs){
+  const m = mat[src].clone();
+  m.map = map.clone(); m.map.needsUpdate = true; m.map.repeat.set(rx, ry);
+  m.bumpMap = bump.clone(); m.bumpMap.needsUpdate = true; m.bumpMap.repeat.set(rx, ry);
+  m.bumpScale = bs === undefined ? .7 : bs;
+  return m;
+}
+mat.pnlAshlarWarm = panelMat('stoneWarm', texAshlar, texAshlarB, 2.6, 2.6, .55);
+mat.pnlAshlarGrey = panelMat('stoneGrey', texAshlar, texAshlarB, 2.6, 2.6, .55);
+mat.pnlBrickRed   = panelMat('brickRed',  texBrick,  texBrickB,  3.2, 3.2, .80);
+mat.pnlBrickBrown = panelMat('brickBrown',texBrick,  texBrickB,  3.2, 3.2, .80);
+mat.pnlBrickSoot  = panelMat('brickSoot', texBrick,  texBrickB,  3.2, 3.2, .65);
+mat.pnlIron       = panelMat('ironWork',  texIron,   texIron,    2.0, 2.0, .22);
+/* mouldings keep the fine grit only */
+['stoneWarm','stoneGrey','stoneSoot','brick','brickDk','brickRed','brickBrown','brickSoot']
+  .forEach(k=>{ mat[k].map = texGrit; mat[k].bumpMap = texGrit;
+                mat[k].bumpScale = .22; mat[k].needsUpdate = true; });
+VARY.pnlAshlarWarm = [.055,.20]; VARY.pnlAshlarGrey = [.055,.18];
+VARY.pnlBrickRed = [.07,.24];    VARY.pnlBrickBrown = [.07,.24];
+VARY.pnlBrickSoot = [.055,.16];  VARY.pnlIron = [.05,.08];
+
 /* ---------- style sheets -------------------------------------------- */
-const ST_GOV = {wall:mat.stoneWarm, base:mat.stoneGrey, trim:mat.stoneWarm, sashM:mat.sash,
+const ST_GOV = {wall:mat.pnlAshlarWarm, base:mat.pnlAshlarGrey, trim:mat.stoneWarm, sashM:mat.sash,
   bay:4.3, pier:1.05, endPier:1.6, arches:true, rustic:true, quoins:true,
   corniceKind:'classical', balusters:true, giant:false, maxWin:2.35};
-const ST_PO  = {wall:mat.brickRed, base:mat.stoneGrey, trim:mat.stoneWarm, sashM:mat.sash,
+const ST_PO  = {wall:mat.pnlBrickRed, base:mat.pnlAshlarGrey, trim:mat.stoneWarm, sashM:mat.sash,
   bay:3.4, pier:.95, endPier:1.3, arches:true, rustic:true, quoins:true,
   corniceKind:'classical', balusters:false, maxWin:2.15};
-const ST_EXC = {wall:mat.stoneWarm, base:mat.stoneGrey, trim:mat.stoneWarm, sashM:mat.sash,
+const ST_EXC = {wall:mat.pnlAshlarWarm, base:mat.pnlAshlarGrey, trim:mat.stoneWarm, sashM:mat.sash,
   bay:4.2, pier:1.2, endPier:1.7, arches:true, rustic:true, quoins:false,
   corniceKind:'classical', balusters:true, giant:true, maxWin:2.6};
-const ST_IND = {wall:mat.brickBrown, base:mat.brickSoot, trim:mat.stoneSoot, sashM:mat.ironWork,
+const ST_IND = {wall:mat.pnlBrickBrown, base:mat.pnlBrickSoot, trim:mat.stoneSoot, sashM:mat.ironWork,
   bay:3.0, pier:.85, endPier:1.5, arches:true, rustic:false, quoins:false,
   corniceKind:'industrial', balusters:false, maxWin:2.2};
-const ST_STORE = {wall:mat.stoneWarm, base:mat.ironWork, trim:mat.stoneWarm, sashM:mat.ironWork,
+const ST_STORE = {wall:mat.pnlAshlarWarm, base:mat.pnlIron, trim:mat.stoneWarm, sashM:mat.ironWork,
   bay:3.6, pier:.7, endPier:1.2, arches:false, rustic:false, quoins:true,
   corniceKind:'classical', balusters:true, maxWin:3.2};
 
@@ -957,7 +1604,7 @@ chimney(-60.0, 8.0, 16.7, 2.2, 1.6, 5.2, mat.stoneSoot, 4);
 chimney(-60.0, 26.0, 16.7, 2.2, 1.6, 4.2, mat.stoneSoot, 4);
 chimney(-34.5, 8.0, 16.7, 1.8, 1.4, 3.6, mat.stoneSoot, 3);
 /* portico and steps on the street front */
-for(let i=0;i<4;i++) ib(G.walls, mat.stoneGrey, 9.4-i*.5, .22, 2.6-i*.5, -47, -.11+i*.22, 2.1+i*.28);
+for(let i=0;i<4;i++) ib(G.walls, mat.stoneGrey, 9.4-i*.5, .22, 2.6-i*.5, -47, -.05+i*.22, 2.1+i*.28);
 for(const px of [-50.6,-48.2,-45.8,-43.4]){
   ic(G.walls, mat.stoneWarm, .46, 5.4, px, 2.7, 3.0);
   ic(G.walls, mat.stoneWarm, .58, .3, px, .15, 3.0);
@@ -1005,7 +1652,7 @@ for(const px of [36.4,39.2,42.0,44.8,47.6,50.4]){
 ib(G.walls, mat.stoneWarm, 16.4,.72,2.0, 43, 7.95, 4.6);
 ib(G.walls, mat.stoneWarm, 15.2,.5,1.6, 43, 8.55, 4.6);
 ip(G.walls, mat.stoneWarm, 8.6, 2.3, 43, 9.9, 4.65, [0,Math.PI/4,0]);
-for(let i=0;i<3;i++) ib(G.walls, mat.stoneGrey, 17-i*.6, .24, 3.0-i*.5, 43, -.12+i*.24, 3.4+i*.3);
+for(let i=0;i<3;i++) ib(G.walls, mat.stoneGrey, 17-i*.6, .24, 3.0-i*.5, 43, -.06+i*.24, 3.4+i*.3);
 /* trading floor gallery */
 ib(G.buildings, mat.panelWood, 16.4,.30,.6, 43, 4.2, 8.4);
 for(let i=0;i<20;i++) ic(G.buildings, mat.ironWork, .05,.85, 35.0+i*.85, 4.72, 8.4);
@@ -1215,12 +1862,12 @@ function barrel(r, len, m, x, y, z, parent){
 }
 
 /* ---------- bedplate and foundations -------------------------------- */
-const bed = P(box(13.5,.75,11.4, mat.ironDark, -44.6, FLR+.52, 16.6, MS), {
+const bed = P(box(13.5,.75,11.4, mat.ironDark, -44.6, FLR+.62, 16.6, MS), {
   name:'Engine and pump bedplate', de:'Luftpumpmaschine', cat:'Air machinery',
   desc:'Berlin frequently built the steam engine, the compressor and the vacuum pump into one great reciprocating assembly on a single bedplate and called the whole thing a Luftpumpmaschine — an air-pumping machine. One crankshaft therefore drives both pneumatic utilities at once, and the three cranks are set at a hundred and twenty degrees to each other so that the shaft is never without turning effort.',
   meta:'one crankshaft · three lines · cranks at 120°'});
-ib(G.machine, mat.stoneDk, 15.0,.95,12.6, -44.6, FLR+.42, 16.6);
-ib(G.machine, mat.stoneDk, 4.6,.95,4.2, CX, FLR+.42, 9.8);
+ib(G.machine, mat.stoneDk, 15.0,.95,12.6, -44.6, FLR+.36, 16.6);
+ib(G.machine, mat.stoneDk, 4.6,.95,3.0, CX, FLR+.36, 8.6);
 
 /* ---------- the rotating assembly ----------------------------------- */
 const shaftG = new THREE.Group();
@@ -2232,10 +2879,10 @@ P(box(10,5.6,.05, mat.soil, -5, -2.8, 3.36, G.soil), {
   name:'Tube trench and made ground', de:'', cat:'Street & context',
   desc:'The cut face of the roadway: setts, road bed, made ground, then clay. Tubes were laid two or three feet down for the small lines and as much as eighteen feet for the American mains, often threaded above a subway tunnel and always between the sewer, the water and the gas. Depth was not chosen; it was whatever the other services left over.',
   meta:'2 ft to 18 ft, depending on what was already there'});
-P(box(10,.34,3.2, mat.paving, -5, -.16, 5.0, G.street), {
+P(box(3.4,.12,2.6, mat.paving, -16.5, Y_INLAY-.06, 7.2, G.street), {
   name:'Street surface', de:'', cat:'Street & context',
-  desc:'Granite setts and a tram track. Worth one moment of attention: the whole point of the installation below is that a carrier under this pavement moves at twenty to thirty-five miles an hour, while everything on top of it in 1925 is doing perhaps eight.',
-  meta:'the tubes were faster than the street'});
+  desc:'Granite setts, laid in courses, with a gutter channel at the kerb and a tramway in the southern carriageway. Worth one moment of attention: the whole point of the installation below is that a carrier under this pavement moves at twenty to thirty-five miles an hour, while everything on top of it in 1925 \u2014 the tram, the carts, the pedestrians \u2014 is doing perhaps eight.',
+  meta:'the tubes were faster than the street above them'});
 /* =====================================================================
    7c.  THE DEMONSTRATION BAY
    Three mechanisms sectioned and working, at four times full size.
@@ -2251,7 +2898,7 @@ const ph = (a,b) => clamp01((KIN.cyc - a)/(b - a));
 const ease = t => t*t*(3-2*t);
 
 /* plinth, rail and signage */
-box(24,.9,11, mat.stoneDk, 13.5, .45, -20, DB).receiveShadow = true;
+box(24,2.6,11, mat.stoneDk, 13.5, -0.40, -20, DB).receiveShadow = true;
 ib(DB, mat.stoneWarm, 24.4,.16,11.4, 13.5, .95, -20);
 for(let i=0;i<=12;i++) ic(DB, mat.brass, .05, 1.0, 1.8+i*2.0, 1.5, -14.6);
 ic(DB, mat.brass, .055, 24.0, 13.5, 2.0, -14.6, [0,0,Math.PI/2]);
@@ -2295,15 +2942,17 @@ P(box(.1,.1,.1, mat.ironDark, E1C, AXY, DZ, DB), {
   desc:'The near half of the pipe has been taken away. What you are looking at is the entire transport system: a bore, and a loose cylinder in it. There are no rails, no wheels, no motor on the carrier and no moving part in the tube at all. The only machinery is the pressure difference across the carrier, and everything else in this model — boiler, engine, compressor, mains, air-locks — exists to maintain that difference.',
   meta:'shown 4× full size', mech:'piston'});
 const e1c = bigCarrier(DB);
-const airBehind = cyl(BR-.015, BR-.015, 1, mat.druck, 0,0,0, DB, 20);
+const airBehind = cyl(BR-.05, BR-.05, 1, mat.druck, 0,0,0, DB, 20);
 airBehind.rotation.z = Math.PI/2;
 airBehind.material = mat.druck.clone();
-Object.assign(airBehind.material, {transparent:true, opacity:.26});
+Object.assign(airBehind.material, {transparent:true, opacity:.26, depthWrite:false});
 airBehind.material.emissive = new THREE.Color(0x4a140c);
-const airAhead = cyl(BR-.015, BR-.015, 1, mat.saug, 0,0,0, DB, 20);
+airBehind.renderOrder = 10;
+const airAhead = cyl(BR-.05, BR-.05, 1, mat.saug, 0,0,0, DB, 20);
 airAhead.rotation.z = Math.PI/2;
 airAhead.material = mat.saug.clone();
-Object.assign(airAhead.material, {transparent:true, opacity:.20});
+Object.assign(airAhead.material, {transparent:true, opacity:.20, depthWrite:false});
+airAhead.renderOrder = 10;
 P(airBehind, {
   name:'The driving air', de:'Druckluft', cat:'Demonstration bay', mode:'druck',
   desc:'Red is the compressed air behind the carrier; blue ahead of it is the Vorluft, the air already standing in the line, which must be vented or drawn away before the carrier can advance. This is the part of the technology that is easiest to forget: a long tube holds an enormous mass of air, and the engine is not merely moving a small can — it is accelerating and compressing a whole pipeful of atmosphere in front of it.',
@@ -2364,10 +3013,11 @@ const slotHost = P(box(1.5,.26,.7, mat.brass, E3X+.5, AXY+BR+.42, DZ-.3, e3), {
   name:'Exhaust slots and side passage', de:'', cat:'Demonstration bay',
   desc:'Slots cut in the tube just short of the stopping chamber. The driving air escapes sideways through them into this passage while the carrier runs on past — so the air is taken away from the carrier before the carrier has to be taken out of the air. Without them the chamber would simply fill with compressed air and the gate could not be opened at all.',
   meta:'take the air off before taking the carrier out'});
-const cushion = cyl(BR-.015, BR-.015, 1, mat.druck, 0,0,0, e3, 20);
+const cushion = cyl(BR-.05, BR-.05, 1, mat.druck, 0,0,0, e3, 20);
 cushion.rotation.z = Math.PI/2;
 cushion.material = mat.druck.clone();
-Object.assign(cushion.material, {transparent:true, opacity:.3});
+Object.assign(cushion.material, {transparent:true, opacity:.3, depthWrite:false});
+cushion.renderOrder = 10;
 P(cushion, {
   name:'The air cushion', de:'Luftpuffer', cat:'Demonstration bay', mode:'druck',
   desc:'The blind end of the chamber is shut. The air trapped in front of the arriving carrier has nowhere to go, so it compresses, and a compressed gas is a spring: it pushes back harder the further it is squeezed. The carrier is therefore brought to rest over a foot or two by a force that rises exactly as it needs to. American engineers called it, quite plainly, an air-cushion — and nothing else in the apparatus does so much with so few parts.',
@@ -2768,6 +3418,845 @@ DIAG.block = (c,W,H)=>{
 };
 
 /* =====================================================================
+   THE VALLEY
+   The town stands on the left bank of a river gorge. The ground rises
+   behind it into orchards, falls to the water, and climbs the far bank
+   in the terraced vineyards that make this country what it is, with a
+   ruined Burg on the crag and a village under its own church spire.
+   One continuous mesh with the town's footprint cut out of it, so the
+   open trench is never roofed over.
+   ===================================================================== */
+G.land = new THREE.Group(); G.land.name = 'land'; scene.add(G.land);
+
+mat.roofTile = M(0xa8512f,{roughness:.88,metalness:0});
+mat.vine     = M(0x6e7f43,{roughness:.95,metalness:0});
+mat.foliage  = M(0x3f5733,{roughness:.96,metalness:0});
+mat.trunk    = M(0x4e3a26,{roughness:.95,metalness:0});
+mat.crag     = M(0x8d8476,{roughness:.95,metalness:0});
+mat.render   = M(0xd8cdb4,{roughness:.93,metalness:0});
+mat.riverMat = new THREE.MeshStandardMaterial({color:0x4c6472, roughness:.16,
+  metalness:.42, transparent:true, opacity:.90});
+
+const sstep = (a,b,t)=>{ t = (t-a)/(b-a); t = t<0?0:t>1?1:t; return t*t*(3-2*t); };
+/* cheap value noise, deterministic */
+function vn(x,z){
+  const s = Math.sin(x*127.1 + z*311.7)*43758.5453;
+  return s - Math.floor(s);
+}
+function smoothNoise(x,z){
+  const xi = Math.floor(x), zi = Math.floor(z), xf = x-xi, zf = z-zi;
+  const u = xf*xf*(3-2*xf), v = zf*zf*(3-2*zf);
+  const a = vn(xi,zi), b = vn(xi+1,zi), c = vn(xi,zi+1), d = vn(xi+1,zi+1);
+  return (a*(1-u)+b*u)*(1-v) + (c*(1-u)+d*u)*v;
+}
+function fbm(x,z,oct){
+  let v = 0, amp = 0.5, f = 1;
+  for(let i=0;i<(oct||4);i++){ v += amp*smoothNoise(x*f, z*f); amp *= 0.5; f *= 2.07; }
+  return v;
+}
+
+/* the profile across the valley, as a function of distance away from
+   the viewer. rz is -z, so it grows toward the far bank.             */
+const PROFILE = [[-900,-0.55],[56,-0.55],[96,7],[142,5.5],[176,-3],[196,-6.2],[248,-6.2],
+                 [266,3],[300,30],[348,62],[402,88],[470,104],[560,94],
+                 [700,118],[900,132],[1400,150]];
+function profileAt(rz){
+  for(let i=0;i<PROFILE.length-1;i++){
+    const [a,ya] = PROFILE[i], [b,yb] = PROFILE[i+1];
+    if(rz >= a && rz <= b) return ya + (yb-ya)*sstep(a,b,rz);
+  }
+  return rz < PROFILE[0][0] ? PROFILE[0][1] : PROFILE[PROFILE.length-1][1];
+}
+const RIVER_Y = -3.4;
+const TERR_LO = 266, TERR_HI = 408, TERR_STEP = 7.5;
+
+function hAt(x,z){
+  const rz = -z;
+  let y = profileAt(rz);
+  /* the valley narrows: walls rise to east and west */
+  const ax = Math.abs(x);
+  y += 86*sstep(190, 620, ax) * (0.55 + 0.45*sstep(-60, 260, rz));
+  /* a side valley cut on the west, so the wall is not a plain ramp */
+  y -= 26*Math.exp(-Math.pow((x+300)/120,2)) * sstep(40, 240, rz);
+  /* broken ground, held back near the town so the streets stay flat */
+  const away = sstep(50, 150, Math.max(rz, ax - 70));
+  y += (fbm(x/190, z/190, 5) - 0.5) * 46 * away;
+  y += (fbm(x/46,  z/46,  3) - 0.5) * 7.5 * away;
+  /* terraces on the far bank: the hillside is cut into level benches */
+  if(rz > TERR_LO && rz < TERR_HI && ax < 560){
+    const band = sstep(TERR_LO, TERR_LO+26, rz) * (1 - sstep(TERR_HI-30, TERR_HI, rz));
+    const stepped = Math.round(y/TERR_STEP)*TERR_STEP;
+    y = y*(1-band*0.86) + stepped*(band*0.86);
+  }
+  /* the river bed is dredged flat */
+  if(rz > 178 && rz < 250) y = Math.min(y, RIVER_Y - 2.4);
+  return y;
+}
+
+/* ---- one mesh, with the town cut out ------------------------------- */
+(function terrain(){
+  const EX = 900, CELL = 10;
+  const NX = Math.round(2*EX/CELL), NZ = NX;
+  const HOLE = [-71, 67, -49, 53];   // inside the paving, so no seam shows
+  const pos = [], col = [], idx = [];
+  const C = new THREE.Color();
+  const vY = new Float32Array((NX+1)*(NZ+1));
+  for(let j=0;j<=NZ;j++) for(let i=0;i<=NX;i++){
+    const x = -EX + i*CELL, z = -EX + j*CELL;
+    const y = hAt(x,z);
+    vY[j*(NX+1)+i] = y;
+    pos.push(x, y, z);
+    /* slope, from neighbours */
+    const sl = Math.abs(hAt(x+CELL,z) - y) + Math.abs(hAt(x,z+CELL) - y);
+    const slope = sl / (2*CELL);
+    const rz = -z, ax = Math.abs(x);
+    const terrace = rz > TERR_LO && rz < TERR_HI && ax < 560;
+    if(y < RIVER_Y + 1.2){                       // shingle and mud at the water
+      C.setRGB(0.38, 0.35, 0.29);
+    } else if(slope > 1.05){                      // crag
+      C.setRGB(0.52, 0.49, 0.45).multiplyScalar(0.86 + 0.28*fbm(x/18, z/18, 2));
+    } else if(terrace && slope < 0.72){           // vineyard: planted rows
+      const rows = 0.5 + 0.5*Math.sin(x*0.52);
+      C.setRGB(0.40 + rows*0.10, 0.47 + rows*0.09, 0.22 + rows*0.05);
+    } else if(slope > 0.56){                      // woodland on the steeper ground
+      C.setRGB(0.17, 0.25, 0.15).multiplyScalar(0.80 + 0.40*fbm(x/26, z/26, 2));
+    } else {                                      // meadow and tillage
+      const t = fbm(x/70, z/70, 3);
+      C.setRGB(0.30 + t*0.16, 0.40 + t*0.14, 0.20 + t*0.09);
+    }
+    const shade = 0.88 + 0.24*fbm(x/11, z/11, 2);
+    col.push(C.r*shade, C.g*shade, C.b*shade);
+  }
+  for(let j=0;j<NZ;j++) for(let i=0;i<NX;i++){
+    const x0 = -EX + i*CELL, x1 = x0 + CELL;
+    const z0 = -EX + j*CELL, z1 = z0 + CELL;
+    if(x1 > HOLE[0] && x0 < HOLE[1] && z1 > HOLE[2] && z0 < HOLE[3]) continue;
+    const a = j*(NX+1)+i, b = a+1, c = a+NX+1, d = c+1;
+    idx.push(a,c,b, b,c,d);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col,3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  const m = new THREE.MeshStandardMaterial({vertexColors:true, roughness:.97, metalness:0});
+  const mesh = new THREE.Mesh(g, m);
+  mesh.receiveShadow = true;
+  G.land.add(mesh);
+  /* a coped retaining edge where the paved quarter meets the fields */
+  const PE = [-72.4, 68.4, -50.4, 54.4];
+  for(const e of [[ (PE[0]+PE[1])/2, PE[2]-0.6, PE[1]-PE[0]+1.4, 1.2 ],
+                  [ (PE[0]+PE[1])/2, PE[3]+0.6, PE[1]-PE[0]+1.4, 1.2 ]]){
+    ib(G.land, mat.stoneGrey, e[2], 1.5, e[3], e[0], -0.70, e[1]);
+    ib(G.land, mat.stoneWarm, e[2], .16, e[3]+.3, e[0], 0.08, e[1]);
+  }
+  for(const e of [[PE[0]-0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]+1.4],
+                  [PE[1]+0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]+1.4]]){
+    ib(G.land, mat.stoneGrey, e[2], 1.5, e[3], e[0], -0.70, e[1]);
+    ib(G.land, mat.stoneWarm, e[2]+.3, .16, e[3], e[0], 0.08, e[1]);
+  }
+  /* made ground under every footprint, so nothing is seen to float.
+     The Telegraph Office is skipped: its basement is the machine room. */
+  FOOTPRINT.forEach((f,i)=>{
+    if(i === 0 || f[2] === -3.55 || f[0] === 26.9) return;
+    ib(G.land, mat.soilTop, f[1]-f[0]-0.6, 2.5, f[3]-f[2]-0.6,
+       (f[0]+f[1])/2, -1.35, (f[2]+f[3])/2);
+  });
+})();
+
+/* ---- the river ----------------------------------------------------- */
+const riverTex = texCanvas(512, (c,n)=>{
+  c.fillStyle = '#56707e'; c.fillRect(0,0,n,n);
+  for(let i=0;i<1400;i++){
+    const w = 6 + Math.random()*54, y = Math.random()*n;
+    c.strokeStyle = `rgba(${150+Math.random()*90|0},${175+Math.random()*70|0},190,${(Math.random()*0.16).toFixed(3)})`;
+    c.lineWidth = 0.6 + Math.random()*1.8;
+    c.beginPath(); c.moveTo(Math.random()*n, y); c.lineTo(Math.random()*n + w, y + (Math.random()-.5)*3); c.stroke();
+  }
+});
+riverTex.repeat.set(16,7);
+const riverBump = texCanvas(256, (c,n)=>{
+  c.fillStyle = '#808080'; c.fillRect(0,0,n,n);
+  for(let i=0;i<2800;i++){
+    const v = 128 + (Math.random()-.5)*150;
+    c.fillStyle = `rgb(${v|0},${v|0},${v|0})`;
+    c.fillRect(Math.random()*n, Math.random()*n, 2+Math.random()*16, 1+Math.random()*2);
+  }
+});
+riverBump.repeat.set(22,9);
+mat.riverMat.map = riverTex;
+mat.riverMat.bumpMap = riverBump; mat.riverMat.bumpScale = .42;
+const river = new THREE.Mesh(new THREE.PlaneGeometry(1800, 86, 1, 1), mat.riverMat);
+river.rotation.x = -Math.PI/2;
+river.position.set(0, RIVER_Y, -213);
+river.receiveShadow = false;
+G.land.add(river);
+ANIM.push(dt=>{
+  riverTex.offset.x -= dt*0.0085;
+  riverBump.offset.x -= dt*0.013;
+  riverBump.offset.y += dt*0.002;
+});
+
+/* ---- a village on the far bank, under its own spire ----------------- */
+function cottage(x, z, w, d, hgt, rot){
+  const y = hAt(x,z);
+  const wall = Math.random() < .45 ? mat.render : mat.plaster;
+  ib(G.land, wall, w, hgt, d, x, y+hgt/2, z, [0,rot,0]);
+  /* a gabled pantile roof, two pitched slabs */
+  for(const s of [-1,1]){
+    const q = qYX(rot, s*0.74);
+    _push('b', _uBox, G.land, mat.roofTile, [w*1.1, .34, d*0.80],
+          [x + Math.sin(rot)*0 - s*Math.sin(rot+Math.PI/2)*d*0.26,
+           y+hgt+d*0.26, z - s*Math.cos(rot+Math.PI/2)*d*0.26], q);
+  }
+  ib(G.land, mat.brickSoot, .5, 1.5, .5, x + w*0.3, y+hgt+1.1, z, [0,rot,0]);
+  /* half-timbering on some of them */
+  if(Math.random() < .4){
+    for(let i=0;i<3;i++)
+      ib(G.land, mat.panelWood, w*1.01, .16, .1, x, y+hgt*(0.3+i*0.26), z - d/2*Math.cos(rot)-0.06, [0,rot,0]);
+    for(let i=0;i<4;i++)
+      ib(G.land, mat.panelWood, .14, hgt*0.8, .1, x - w/2 + w*(i+0.5)/4, y+hgt*0.5, z - d/2*Math.cos(rot)-0.06, [0,rot,0]);
+  }
+}
+/* the village clusters along a lane climbing the far bank */
+for(let i=0;i<46;i++){
+  const t = i/45;
+  const lx = -150 + t*300 + Math.sin(i*2.3)*26;
+  const lz = -268 - Math.cos(t*3.1)*22 - (i%3)*9;
+  cottage(lx, lz, 7+Math.random()*5, 6+Math.random()*4, 5.5+Math.random()*3.4,
+          (Math.random()-.5)*0.6);
+}
+/* a second hamlet on the near bank, down by the water */
+for(let i=0;i<22;i++){
+  const lx = 150 + Math.sin(i*1.7)*70 + i*3.2;
+  const lz = -120 - (i%4)*13 - Math.random()*16;
+  cottage(lx, lz, 6+Math.random()*4, 5+Math.random()*3, 5+Math.random()*2.6,
+          (Math.random()-.5)*0.8);
+}
+/* the village church: nave, tower, and a tall slated spire */
+(function church(){
+  const x = -16, z = -284, y = hAt(x,z);
+  ib(G.land, mat.render, 13, 11, 25, x, y+5.5, z);
+  for(const s of [-1,1])
+    _push('b', _uBox, G.land, mat.slate, [8.6,.4,26], [x - s*3.5, y+12.4, z], qYX(0, s*0.78));
+  ib(G.land, mat.stoneWarm, 9, 30, 9, x, y+15, z+16);
+  ib(G.land, mat.stoneWarm, 10.4, .8, 10.4, x, y+30.4, z+16);
+  ip(G.land, mat.slate, 6.6, 26, x, y+43.6, z+16);
+  is(G.land, mat.gilt, .8, x, y+57.6, z+16);
+  for(const s of [-1,1]) ib(G.land, mat.glassLit, .4, 5, 2.4, x+s*4.6, y+24, z+16);
+  /* churchyard wall */
+  for(let i=0;i<22;i++){
+    const a = i/22*Math.PI*2;
+    ib(G.land, mat.stoneGrey, 2.2,1.3,.7, x+Math.cos(a)*23, y+0.6, z+Math.sin(a)*23, [0,a+Math.PI/2,0]);
+  }
+})();
+
+/* ---- the Burg on its crag ------------------------------------------- */
+(function burg(){
+  const bx = -232, bz = -352;
+  const by = hAt(bx,bz);
+  /* the crag itself, pushed up through the hillside */
+  for(let i=0;i<11;i++){
+    const a = i/11*Math.PI*2, r = 20 - i*0.5;
+    ic(G.land, mat.crag, r*0.6, 26 + (i%3)*7, bx+Math.cos(a)*7, by+10+(i%3)*3, bz+Math.sin(a)*7);
+  }
+  const wy = by + 24;
+  /* curtain wall on an irregular plan, with merlons */
+  const PLAN = [[-19,-13],[-6,-19],[12,-16],[20,-2],[15,13],[0,19],[-14,14],[-21,2]];
+  for(let i=0;i<PLAN.length;i++){
+    const p = PLAN[i], q = PLAN[(i+1)%PLAN.length];
+    const mx = (p[0]+q[0])/2, mz = (p[1]+q[1])/2;
+    const len = Math.hypot(q[0]-p[0], q[1]-p[1]);
+    const ang = Math.atan2(q[0]-p[0], q[1]-p[1]);
+    ib(G.land, mat.stoneGrey, 2.2, 13, len, bx+mx, wy+6.5, bz+mz, [0,-ang,0]);
+    const n = Math.max(2, Math.round(len/3.2));
+    for(let k=0;k<n;k++){
+      const u = (k+0.5)/n;
+      ib(G.land, mat.stoneGrey, 2.4, 2.1, 1.5,
+         bx + p[0] + (q[0]-p[0])*u, wy+14, bz + p[1] + (q[1]-p[1])*u, [0,-ang,0]);
+    }
+  }
+  /* towers: one great keep, three lesser, one broken */
+  ic(G.land, mat.stoneGrey, 7.0, 44, bx-3, wy+22, bz+2, null);
+  ic(G.land, mat.stoneGrey, 7.9, 2.2, bx-3, wy+45, bz+2);
+  for(let k=0;k<12;k++){ const a=k/12*Math.PI*2;
+    ib(G.land, mat.stoneGrey, 1.8,2.6,1.8, bx-3+Math.cos(a)*7.1, wy+47.4, bz+2+Math.sin(a)*7.1, [0,a,0]); }
+  const TOW = [[-19,-13,5.2,26],[20,-2,4.6,22],[0,19,4.2,18]];
+  TOW.forEach(t=>{
+    ic(G.land, mat.stoneGrey, t[2], t[3], bx+t[0], wy+t[3]/2, bz+t[1]);
+    ic(G.land, mat.stoneGrey, t[2]+0.7, 1.4, bx+t[0], wy+t[3]+0.7, bz+t[1]);
+    icone(G.land, mat.slate, t[2]+0.5, t[2]*2.4, bx+t[0], wy+t[3]+t[2]*1.2+1, bz+t[1]);
+  });
+  /* a tower broken off, as the real ones are */
+  ic(G.land, mat.stoneGrey, 4.8, 14, bx-14, wy+7, bz+14);
+  ib(G.land, mat.stoneGrey, 6.4,2.0,3.2, bx-14, wy+14.6, bz+14, [0.22,0.4,0.12]);
+  /* hall buildings inside the walls */
+  ib(G.land, mat.stoneGrey, 15, 16, 9, bx+4, wy+8, bz-6);
+  for(const s of [-1,1])
+    _push('b', _uBox, G.land, mat.slate, [16,.5,6.4], [bx+4, wy+17.6, bz-6-s*3.0], qYX(0, s*0.8));
+})();
+
+/* ---- trees, hedges and vine rows ----------------------------------- */
+function tree(x,z,sc){
+  const y = hAt(x,z);
+  if(y < RIVER_Y+1.5) return;
+  ic(G.land, mat.trunk, .36*sc, 4.4*sc, x, y+2.2*sc, z);
+  const kind = Math.random();
+  if(kind < .34){                              // poplar
+    for(let i=0;i<3;i++) icone(G.land, mat.foliage, 2.1*sc-i*0.45, 9*sc, x, y+6*sc+i*2.6*sc, z);
+  } else if(kind < .7){                        // round-headed
+    is(G.land, mat.foliage, 3.1*sc, x, y+6.4*sc, z);
+    is(G.land, mat.foliage, 2.2*sc, x+1.7*sc, y+5.2*sc, z-1.2*sc);
+    is(G.land, mat.foliage, 2.0*sc, x-1.5*sc, y+5.6*sc, z+1.4*sc);
+  } else {                                     // conifer
+    icone(G.land, mat.foliage, 3.0*sc, 13*sc, x, y+8*sc, z);
+  }
+}
+for(let i=0;i<340;i++){
+  const a = Math.random()*Math.PI*2, r = 110 + Math.random()*620;
+  const x = Math.cos(a)*r, z = -Math.abs(Math.sin(a))*r - 40;
+  if(Math.abs(x) > 880 || z < -880) continue;
+  const rz = -z;
+  if(rz > 170 && rz < 258) continue;                      // not in the river
+  if(rz > TERR_LO && rz < TERR_HI && Math.abs(x) < 420 && Math.random() < .86) continue;
+  tree(x, z, 0.8 + Math.random()*0.9);
+}
+/* a windbreak of poplars along the near bank */
+for(let i=0;i<26;i++) tree(-330 + i*27, -158 + Math.sin(i)*5, 1.1);
+/* vine rows: posts and wire on the terraces, close enough to read */
+for(let r=0;r<16;r++){
+  const rz = TERR_LO + 12 + r*8.4;
+  const z = -rz;
+  for(let i=0;i<30;i++){
+    const x = -190 + i*13 + (r%2)*5;
+    const y = hAt(x,z);
+    if(y < RIVER_Y+2) continue;
+    ib(G.land, mat.vine, 10.5, 1.5, .55, x, y+0.8, z);
+    ic(G.land, mat.trunk, .10, 2.1, x-5, y+1.0, z);
+    ic(G.land, mat.trunk, .10, 2.1, x+5, y+1.0, z);
+  }
+}
+/* hedgerows dividing the near fields */
+for(let f=0;f<9;f++){
+  const z = -64 - f*13;
+  for(let i=0;i<22;i++){
+    const x = -200 + i*19 + f*7;
+    const y = hAt(x,z);
+    if(y < RIVER_Y+2) continue;
+    ib(G.land, mat.foliage, 17, 2.3, 1.7, x, y+1.1, z);
+  }
+}
+/* a road climbing away from the town, and a ferry slip at the water */
+for(let i=0;i<44;i++){
+  const t = i/43;
+  const x = -4 + Math.sin(t*3.4)*54 + t*30;
+  const z = -56 - t*118;
+  const y = hAt(x,z);
+  ib(G.land, mat.paving, 9.5, .3, 5.0, x, y+0.14, z, [0,Math.atan2(30+Math.cos(t*3.4)*54*0.1, -118)*0.22,0]);
+}
+(function ferry(){
+  const x = 30, z = -170, y = RIVER_Y;
+  ib(G.land, mat.panelWood, 13, .5, 7, x, y+0.3, z);
+  for(let i=0;i<6;i++) ic(G.land, mat.trunk, .32, 4.2, x-6+i*2.4, y-1.2, z+3.2);
+  ib(G.land, mat.panelWood, 8.4, 1.1, 3.6, x+16, y+0.5, z-8);
+  ib(G.land, mat.canvas, 7.0, 2.6, .3, x+16, y+2.4, z-8);
+  ic(G.land, mat.trunk, .16, 6.2, x+16, y+3.4, z-8);
+})();
+
+/* =====================================================================
+   STREET LIFE
+   The model is a machine, but it stood in a town. Everything here is
+   dressing — it carries no part numbers — except a few fittings that
+   are too characteristic of 1925 to leave unlabelled.
+   ===================================================================== */
+G.props = new THREE.Group(); G.props.name = 'props'; scene.add(G.props);
+const PR = G.props;
+
+const rr = (a,b) => a + Math.random()*(b-a);
+
+/* ---- horse ---------------------------------------------------------- */
+function horse(x,y,z,parent,rot,coat){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0;
+  (parent||PR).add(g);
+  const c = coat || mat[['felt','leather','trunk'][Math.floor(Math.random()*3)]];
+  box(.56,.78,1.70, c, 0,1.18,0, g);                      // barrel
+  box(.50,.52,.46, c, 0,1.30,-1.00, g);                   // chest
+  cyl(.15,.19,.78, c, 0,1.52,-1.24, g, 10).rotation.x = 0.62;   // neck
+  box(.22,.26,.56, c, 0,1.76,-1.56, g).rotation.x = 0.22;       // head
+  box(.17,.14,.20, c, 0,1.62,-1.82, g);                   // muzzle
+  for(const sx of [-1,1]){
+    box(.07,.13,.05, c, sx*.08,1.92,-1.48, g);            // ears
+    for(const sz of [-0.62, 0.68]){
+      cyl(.09,.07,.62, c, sx*.21,.75,sz, g, 8);
+      cyl(.055,.05,.46, c, sx*.21,.24,sz+.02, g, 8);
+      cyl(.075,.075,.09, mat.hatBlk, sx*.21,.03,sz+.02, g, 8);
+    }
+  }
+  cyl(.05,.02,.60, c, 0,1.42,.92, g, 6).rotation.x = -0.5;      // tail
+  box(.30,.26,.60, mat.leather, 0,1.56,-.16, g);                 // harness pad
+  box(.06,.30,.06, mat.leather, 0,1.38,-1.04, g);
+  for(const sx of [-1,1]) box(.035,.035,1.5, mat.leather, sx*.30,1.40,.60, g);   // traces
+  collapse(g);
+  return g;
+}
+
+/* ---- carts and wagons ---------------------------------------------- */
+function cartWheel(g, x,y,z, r, w){
+  const t = new THREE.Mesh(new THREE.TorusGeometry(r, w||.045, 7, 18), mat.ironWork);
+  t.position.set(x,y,z); t.rotation.y = Math.PI/2; g.add(t);
+  cyl(r*0.9, r*0.9, .055, mat.panelWood, x,y,z, g, 16).rotation.z = Math.PI/2;
+  for(let i=0;i<9;i++){
+    const a = i*Math.PI*2/9;
+    const sp = cyl(.022,.022,r*1.8, mat.panelWood, x, y+0, z, g, 5);
+    sp.rotation.z = Math.PI/2; sp.rotation.x = a;
+    sp.position.set(x, y + 0, z);
+    sp.rotation.set(0,0,Math.PI/2); sp.rotateX(a);
+  }
+  cyl(.075,.075,.16, mat.ironWork, x,y,z, g, 10).rotation.z = Math.PI/2;
+}
+/* a brewer's dray loaded with barrels */
+function dray(x,y,z,rot){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0; PR.add(g);
+  box(2.10,.22,4.30, mat.panelWood, 0,.86,0, g);
+  for(const s of [-1,1]) box(.10,.42,4.30, mat.panelWood, s*1.00,1.08,0, g);
+  box(2.10,.42,.10, mat.panelWood, 0,1.08,-2.10, g);
+  box(1.90,.16,.60, mat.panelWood, 0,1.44,-1.90, g);          // driver's seat
+  box(.10,.10,2.60, mat.panelWood, 0,.80,-3.30, g);           // shafts
+  for(const s of [-1,1]) box(.08,.08,2.40, mat.trunk, s*.46,.80,-3.40, g);
+  for(const s of [-1,1]){
+    cartWheel(g, s*1.06, .54, 1.30, .54);
+    cartWheel(g, s*1.00, .40, -1.50, .40);
+  }
+  for(let r=0;r<2;r++) for(let i=0;i<4;i++){
+    const b = cyl(.33,.28,.80, mat.panelWood, -0.5+ (i%2)*1.0, 1.42+r*.70, -1.1+Math.floor(i/2)*1.5, g, 14);
+    b.rotation.z = Math.PI/2;
+    for(const hz of [-.24,0,.24])
+      cyl(.335,.335,.045, mat.ironWork, -0.5+(i%2)*1.0 + hz, 1.42+r*.70, -1.1+Math.floor(i/2)*1.5, g, 14)
+        .rotation.z = Math.PI/2;
+  }
+  horse(0, 0, -5.4, g, 0);
+  person(1.05, 0.98, -1.86, g, 0.1, {kind:'worker', seed:x*7});
+  collapse(g);
+  return g;
+}
+/* a post office mail van */
+function mailVan(x,y,z,rot){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0; PR.add(g);
+  box(2.0,1.70,3.40, mat.postal, 0,1.65,0, g);
+  box(2.06,.18,3.46, mat.hatBlk, 0,2.56,0, g);
+  box(1.80,.70,.08, mat.hatBlk, 0,2.00,-1.74, g);
+  for(const s of [-1,1]) box(.08,.60,1.20, mat.glassLit, s*1.01,2.10,-.40, g);
+  box(1.20,.30,.05, mat.gilt, 0,1.80,1.73, g);
+  box(1.6,.16,.70, mat.panelWood, 0,1.52,-2.10, g);
+  box(.10,.10,2.20, mat.panelWood, 0,.86,-3.10, g);
+  for(const s of [-1,1]){ cartWheel(g, s*1.04,.50,1.10,.50); cartWheel(g, s*1.00,.40,-1.40,.40); }
+  horse(0,0,-5.0,g,0);
+  person(0.9,1.06,-2.06,g,0,{kind:'postman', seed:x*3});
+  collapse(g);
+  return g;
+}
+/* a two-wheeled handcart with sacks */
+function handcart(x,y,z,rot){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0; PR.add(g);
+  box(1.10,.14,1.70, mat.panelWood, 0,.60,0, g);
+  for(const s of [-1,1]) box(.07,.34,1.70, mat.panelWood, s*.54,.80,0, g);
+  box(1.10,.34,.07, mat.panelWood, 0,.80,-.86, g);
+  for(const s of [-1,1]) box(.06,.06,1.40, mat.panelWood, s*.40,.62,1.40, g);
+  for(const s of [-1,1]) cartWheel(g, s*.60,.40,.10,.40,.035);
+  for(let i=0;i<3;i++)
+    sph(.26, mat.oakum, rr(-.3,.3), .88+Math.floor(i/2)*.34, rr(-.5,.5), g).scale.set(1,.72,.86);
+  collapse(g);
+  return g;
+}
+/* a 1925 motor lorry, new and rare */
+function lorry(x,y,z,rot){
+  const g = new THREE.Group(); g.position.set(x,y,z); g.rotation.y = rot||0; PR.add(g);
+  box(1.94,1.00,2.70, mat.green, 0,1.22,.90, g);
+  for(const s of [-1,1]) box(.08,.46,2.70, mat.panelWood, s*.98,1.90,.90, g);
+  box(1.94,.46,.08, mat.panelWood, 0,1.90,2.22, g);
+  box(1.80,1.30,1.40, mat.green, 0,1.70,-1.10, g);
+  box(1.60,.70,.07, mat.glassLit, 0,2.06,-1.78, g);
+  box(1.20,.80,1.00, mat.hatBlk, 0,1.30,-2.30, g);             // bonnet
+  box(1.70,.22,.30, mat.ironWork, 0,.82,-2.84, g);
+  for(const s of [-1,1]) is(PR, mat.glassLit, .001, 0,0,0);     // (keep key)
+  for(const s of [-1,1]){
+    sph(.16, mat.brass, s*.66, 1.32, -2.76, g);
+    cartWheel(g, s*1.00,.52,-1.60,.52,.085);
+    cartWheel(g, s*1.00,.52, 1.30,.52,.085);
+  }
+  for(let i=0;i<5;i++) box(.80,.52,.52, mat.panelWood, rr(-.5,.5),1.98+Math.floor(i/3)*.54, rr(0,1.8), g);
+  person(0.55,1.52,-1.30,g,0,{kind:'worker', seed:x*11});
+  collapse(g);
+  return g;
+}
+
+/* ---- the tram ------------------------------------------------------- */
+const TRAM_Z = -7.05;
+function tramCar(){
+  const g = new THREE.Group(); PR.add(g);
+  const L = 9.4, W = 2.3;
+  box(W,1.90,L, mat.red, 0,1.62,0, g);
+  box(W+.12,.20,L+.18, mat.ironWork, 0,2.64,0, g);            // roof edge
+  box(W-.18,.26,L-.30, mat.enamel, 0,2.80,0, g);              // clerestory
+  for(let i=0;i<6;i++) for(const s of [-1,1])
+    box(.06,.84,1.08, mat.glassLit, s*(W/2+.01), 2.00, -L/2+1.0+i*1.52, g);
+  for(const s of [-1,1]) box(1.70,.92,.07, mat.glassLit, 0,2.02,s*(L/2+.01), g);
+  box(W-.2,.10,.90, mat.gilt, 0,2.52,-L/2-.02, g);            // destination board
+  for(const s of [-1,1]){                                      // platforms and steps
+    box(W,.14,.9, mat.ironWork, 0,.74,s*(L/2+.42), g);
+    box(W-.4,.10,.7, mat.ironWork, 0,.46,s*(L/2+.52), g);
+    cyl(.04,.04,1.6, mat.brass, (W/2-.1),1.5,s*(L/2+.40), g);
+    cyl(.04,.04,1.6, mat.brass,-(W/2-.1),1.5,s*(L/2+.40), g);
+  }
+  box(W-.2,.52,L, mat.hatBlk, 0,.80,0, g);                    // skirt
+  for(const s of [-1,1]) for(const sz of [-2.6,2.6]){
+    const t = new THREE.Mesh(new THREE.TorusGeometry(.42,.09,7,16), mat.steel);
+    t.position.set(s*(W/2-.26), .42, sz); t.rotation.y = Math.PI/2; g.add(t);
+  }
+  /* trolley pole to the overhead wire */
+  const pole = cyl(.045,.045,4.4, mat.ironWork, 0,3.0,1.6, g, 8);
+  pole.rotation.x = 0.62; pole.position.set(0, 4.0, 2.9);
+  box(.34,.07,.10, mat.copper, 0,5.95,4.9, g);
+  for(let i=0;i<9;i++) person(rr(-.6,.6), .88, rr(-4,4), g, rr(0,6.3),
+    {kind:['clerk','woman','worker'][i%3], seed:i*31});
+  collapse(g);
+  return g;
+}
+const tram = tramCar();
+let tramX = -40;
+ANIM.push(dt=>{
+  if(!G.props.visible) return;
+  tramX += dt * 3.4;
+  if(tramX > 86) tramX = -86;
+  tram.position.set(tramX, 0.0, TRAM_Z);
+  tram.rotation.y = -Math.PI/2;
+});
+/* a tram stop with a flag and a bench */
+ic(PR, mat.ironWork, .07, 3.2, 18, 1.6, -12.6);
+ib(PR, mat.enamel, 1.1,.5,.08, 18, 3.3, -12.6);
+P(box(.9,.42,.07, mat.red, 18, 3.3, -12.66, PR), {
+  name:'Tram stop', de:'Haltestelle', cat:'Street & context',
+  desc:'The competition, and eventually part of the reason the tubes closed. A tram could take a sack of letters across town for almost nothing; what it could not do was take one letter across town in four minutes. The pneumatic post survived exactly as long as that distinction was worth paying for.',
+  meta:'the tube sold speed, not capacity'});
+
+/* ---- street furniture ---------------------------------------------- */
+/* the advertising column, the most Continental object on the street */
+P(cyl(.78,.82,3.3, mat.red, -24.5, 1.65, 17.4, PR, 20), {
+  name:'Advertising column', de:'Litfa\\u00dfs\\u00e4ule', cat:'Street & context',
+  desc:'Berlin\\u2019s own invention, and worth a glance in a model about moving paper: before the tubes, this was how a message reached a city \\u2014 printed, pasted up, and waited for. The pneumatic post belongs to the same appetite for faster news, and so do the telegram, the telephone and the ticker.',
+  meta:'the slow way to move a message'});
+icone(PR, mat.ironWork, .95, .7, -24.5, 3.65, 17.4);
+is(PR, mat.ironWork, .14, -24.5, 4.06, 17.4);
+for(let i=0;i<5;i++){
+  const a = i*Math.PI*2/5;
+  ib(PR, mat.enamel, .86,1.5,.05, -24.5+Math.cos(a)*.80, 2.0, 17.4+Math.sin(a)*.80, [0,-a+Math.PI/2,0]);
+}
+/* pillar box */
+P(cyl(.34,.36,1.42, mat.red, -18.4, .71, 4.35, PR, 18), {
+  name:'Pillar box', de:'Briefkasten', cat:'Street & context',
+  desc:'Where ordinary mail began. In Berlin you could hand a letter in at a Rohrpost counter and have it blown across town in minutes for a premium; everything posted here went by cart and on foot. The tube was never the whole post \\u2014 it was the express lane.',
+  meta:'the tube was the express lane'});
+icone(PR, mat.red, .40, .34, -18.4, 1.56, 4.35);
+is(PR, mat.hatBlk, .09, -18.4, 1.76, 4.35);
+ib(PR, mat.hatBlk, .34,.07,.04, -18.4, 1.24, 4.01);
+/* newspaper kiosk */
+(function kiosk(){
+  const x = -9, z = 17.8;
+  ib(PR, mat.panelWood, 2.4, 2.5, 2.0, x, 1.25, z);
+  ib(PR, mat.slate, 2.9, .22, 2.5, x, 2.52, z);
+  icone(PR, mat.slate, 1.9, .9, x, 3.0, z);
+  ib(PR, mat.glassLit, 1.9, 1.1, .07, x, 1.6, z-1.02);
+  ib(PR, mat.canvas, 2.7, .12, 1.3, x, 2.3, z-1.60, [-0.26,0,0]);
+  for(let i=0;i<8;i++)
+    ib(PR, mat.enamel, .30,.42,.03, x-0.9+ (i%4)*0.58, 0.95+Math.floor(i/4)*0.5, z-1.12, [0.2,0,0]);
+  person(x+1.6, 0, z-0.6, PR, -1.2, {kind:'worker', seed:88});
+})();
+/* benches, bins, hydrants, horse trough */
+for(const b of [[-20,4.35],[-26,16.5],[-12,16.5],[22,16.5],[56,16.5],
+                [-30,-12.55],[0,-12.55],[30,-12.55],[-52,33],[10,33]]
+                .filter(p=>freeSpot(p[0],p[1],1.2))){
+  ib(PR, mat.panelWood, 1.9,.09,.46, b[0], .60, b[1]);
+  ib(PR, mat.panelWood, 1.9,.46,.08, b[0], .86, b[1]+.22);
+  for(const s of [-1,1]){
+    ib(PR, mat.ironWork, .09,.52,.44, b[0]+s*.84, .34, b[1]);
+    ic(PR, mat.ironWork, .05,.52, b[0]+s*.84, 1.0, b[1]+.22);
+  }
+}
+for(const t of [[-44,16.6],[20,16.6],[-20,-12.6],[-6,4.35]].filter(p=>freeSpot(p[0],p[1],1.0))){
+  ic(PR, mat.ironWork, .34,.80, t[0], .48, t[1], null);
+  ic(PR, mat.hatBlk, .30,.06, t[0], .90, t[1]);
+}
+(function trough(){
+  const x = 36, z = -12.2;
+  ib(PR, mat.stoneGrey, 3.0,.80,1.0, x, .48, z);
+  ib(PR, mat.water, 2.7,.10,.76, x, .88, z);
+  ic(PR, mat.ironWork, .12, 1.9, x+1.8, .95, z);
+  is(PR, mat.brass, .14, x+1.8, 1.92, z);
+  horse(x-0.4, 0, z-1.9, PR, Math.PI);
+})();
+/* gas lamps already exist; add street trees in iron guards */
+for(const t of [[-26,4.4],[-10,4.4],[20,4.4],[28,4.4],[-40,-12.9],[8,-12.9],
+                [44,-12.9],[-56,18],[-18,19],[26,19],[58,19]]
+                .filter(p=>freeSpot(p[0],p[1],1.6))){
+  const y = 0;
+  ic(PR, mat.trunk, .20, 4.6, t[0], y+2.3, t[1]);
+  is(PR, mat.foliage, 2.0, t[0], y+5.4, t[1]);
+  is(PR, mat.foliage, 1.5, t[0]+1.1, y+4.7, t[1]-0.7);
+  is(PR, mat.foliage, 1.4, t[0]-1.0, y+4.9, t[1]+0.6);
+  for(let i=0;i<6;i++){
+    const a = i*Math.PI*2/6;
+    ic(PR, mat.ironWork, .035, 1.1, t[0]+Math.cos(a)*.48, y+.55, t[1]+Math.sin(a)*.48);
+  }
+  ic(PR, mat.ironWork, .50,.05, t[0], y+1.05, t[1]);
+}
+/* bicycles leaning on the kerb */
+function bicycle(x,z,rot){
+  const g = new THREE.Group(); g.position.set(x,0,z); g.rotation.y = rot||0;
+  g.rotation.z = 0.12; PR.add(g);
+  for(const sz of [-.55,.55]){
+    const t = new THREE.Mesh(new THREE.TorusGeometry(.34,.025,6,18), mat.hatBlk);
+    t.position.set(0,.34,sz); t.rotation.y = Math.PI/2; g.add(t);
+    for(let i=0;i<8;i++){ const a=i*Math.PI/4;
+      const sp = cyl(.006,.006,.66, mat.steel, 0,.34,sz, g, 4);
+      sp.rotation.set(0,0,Math.PI/2); sp.rotateX(a); }
+  }
+  cyl(.018,.018,1.00, mat.ironWork, 0,.52,0, g, 6).rotation.x = Math.PI/2;
+  cyl(.018,.018,.52, mat.ironWork, 0,.60,-.30, g, 6).rotation.x = 0.5;
+  cyl(.018,.018,.60, mat.ironWork, 0,.62,.30, g, 6).rotation.x = -0.4;
+  cyl(.016,.016,.60, mat.ironWork, 0,.62,-.55, g, 6).rotation.x = 0.16;
+  box(.42,.02,.03, mat.hatBlk, 0,.94,-.60, g);
+  box(.06,.04,.18, mat.leather, 0,.92,.26, g);
+  collapse(g);
+  return g;
+}
+bicycle(-13.5, 4.3, 0.1); bicycle(-12.6, 4.3, -0.06); bicycle(31, -12.1, 3.2);
+
+/* ---- a market on the north side ------------------------------------- */
+function stall(x,z,rot,col){
+  const g = new THREE.Group(); g.position.set(x,0,z); g.rotation.y = rot||0; PR.add(g);
+  for(const sx of [-1,1]) for(const sz of [-1,1])
+    cyl(.05,.05,2.3, mat.trunk, sx*1.3, 1.15, sz*.85, g, 6);
+  box(2.9,.10,1.9, mat.panelWood, 0,.92,0, g);
+  box(3.3,.08,2.3, col || mat.canvas, 0,2.34,0, g);
+  box(3.3,.5,.08, col || mat.canvas, 0,2.10,1.14, g);
+  for(let i=0;i<16;i++){
+    const r = rr(.07,.13);
+    is(PR, i%3? mat.red : mat.green, .001, 0,0,0);
+    sph(r, i%4===0 ? mat.red : i%4===1 ? mat.green : i%4===2 ? mat.gilt : mat.foliage,
+        rr(-1.2,1.2), 1.0+r, rr(-.7,.7), g);
+  }
+  for(let i=0;i<3;i++)
+    box(.52,.22,.38, mat.panelWood, -1.0+i*1.0, .70, -1.2, g);
+  person(0, 0, -1.5, g, Math.PI, {kind:'woman', carry:'tray', seed:x*5});
+  collapse(g);
+  return g;
+}
+/* a market on the open square beyond the Telegraph Office */
+stall(-52, 35.5, 0.08); stall(-45.5, 35.0, -0.1, mat.red);
+stall(-39, 35.6, 0.2);  stall(-52, 40.5, 0.0, mat.green);
+stall(-45.5, 40.2, -0.14); stall(-39, 40.8, 0.1, mat.red);
+for(let i=0;i<22;i++){
+  const x = rr(-58,-32), z = rr(32,45);
+  if(!freeSpot(x,z,1.2)) continue;
+  person(x, 0, z, PR, rr(0,6.28),
+    {kind:['woman','clerk','worker','child'][i%4], walk:i<7,
+     carry: i%4===0 ? 'sack' : null, seed:i*17});
+}
+/* produce crates and a weighing beam at the market edge */
+for(let i=0;i<16;i++)
+  ib(PR, mat.panelWood, .70,.44,.52, rr(-58,-34), .22+(i%2)*.45, rr(31,33), [0,rr(-.5,.5),0]);
+ic(PR, mat.ironWork, .07, 2.4, -35.5, 1.2, 38);
+ib(PR, mat.ironWork, 1.6,.07,.07, -35.5, 2.3, 38);
+/* barrels, crates and sacks stacked against the terminal */
+for(let i=0;i<16;i++){
+  const x = rr(22,56), z = rr(-16.5,-14.6);
+  const b = cyl(.30,.26,.80, mat.panelWood, x, .40, z, PR, 12);
+  for(const hz of [-.22,.22]) ic(PR, mat.ironWork, .305,.05, x, .40+hz*0, z);
+}
+for(let i=0;i<22;i++){
+  const x = rr(-68,-64), z = rr(6,40);
+  ib(PR, mat.panelWood, .72,.56,.52, x, .28 + (i%3)*.57, z, [0,rr(-.4,.4),0]);
+}
+for(let i=0;i<14;i++)
+  sph(.30, mat.oakum, rr(60,66), .26+(i%2)*.52, rr(-44,-24), PR).scale.set(1,.72,.9);
+
+/* ---- traffic and crowds -------------------------------------------- */
+dray(-10, 0, -5.2, Math.PI/2);
+mailVan(24, 0, -4.9, -Math.PI/2);
+mailVan(-30, 0, -4.7, -Math.PI/2);
+lorry(52, 0, -6.0, -Math.PI/2);
+handcart(2, 0, 4.2, 0.4);
+handcart(-56, 0, 17.6, -1.1);
+horse(-66, 0, -4.6, PR, Math.PI/2);
+dog(-20, 0, 17.4, PR, 1.2); dog(14, 0, -9.0, PR, -2.0);
+dog(-46, 0, 22.0, PR, 0.4);
+
+/* people, laid along the footways and the open ground */
+const CROWD = [];
+for(let i=0;i<120;i++){
+  let x, z, tries = 0;
+  do {
+    const lane = Math.floor(Math.random()*6);
+    if(lane===0){ x = rr(-70,66); z = rr(3.75,4.75); }       // north margin
+    else if(lane===1){ x = rr(-70,66); z = rr(-13.4,-11.9); } // south footway
+    else if(lane===2){ x = rr(-70,66); z = rr(-11.0,-4.2); }  // carriageway
+    else if(lane===3){ x = rr(-70,66); z = rr(5.2,20); }       // north square
+    else if(lane===4){ x = rr(-70,66); z = rr(20,40); }
+    else { x = rr(-70,66); z = rr(-46,-15); }
+  } while(!freeSpot(x,z,1.4) && ++tries < 14);
+  if(tries >= 14) continue;
+  const kinds = ['clerk','clerk','worker','woman','woman','child','postman'];
+  const carries = [null,null,null,'case','sack',null,'carrier',null];
+  CROWD.push(person(x, 0, z, PR, rr(0,6.28), {
+    kind: kinds[Math.floor(Math.random()*kinds.length)],
+    carry: carries[Math.floor(Math.random()*carries.length)],
+    walk: i < 34, seed: i*13+1
+  }));
+}
+/* a queue at the post office counter and a knot at the Exchange steps */
+for(let i=0;i<7;i++) person(-1.2 - i*0.75, 0, 4.3 + (i%2)*0.5, PR, 1.5,
+  {kind:i%3?'clerk':'woman', carry:i%4?null:'case', seed:200+i});
+for(let i=0;i<9;i++){
+  const px = rr(36,50), pz = rr(3.7,4.8);
+  if(!freeSpot(px,pz,0.8)) continue;
+  person(px, 0, pz, PR, rr(2.4,3.9), {kind:'clerk', carry:i%3?null:'case', seed:300+i});
+}
+/* stokers at the coal chute, and a gang at the trench */
+person(-66.5, 0, -6.2, PR, 1.4, {kind:'stoker', carry:'shovel', seed:401});
+person(-64.6, 0, -7.4, PR, 1.9, {kind:'stoker', seed:402});
+for(let i=0;i<4;i++) person(-26+i*6, 0, -4.3, PR, 0, {kind:'worker', seed:410+i});
+/* a timber guard rail along the open lip of the trench */
+for(let i=0;i<22;i++){
+  const gx = -68 + i*6.2;
+  if(!freeSpot(gx, 3.9, 0.3)) continue;
+  ic(PR, mat.trunk, .06, 1.1, gx, .55, 3.78);
+  ib(PR, mat.trunk, 6.2,.09,.09, gx+3.1, 1.02, 3.78);
+}
+for(let i=0;i<20;i++){
+  const gx = -68 + i*6.2;
+  ic(PR, mat.trunk, .06, 1.1, gx, .55, -3.78);
+  ib(PR, mat.trunk, 6.2,.09,.09, gx+3.1, 1.02, -3.78);
+}
+
+/* pigeons, on the ground and on the cornices */
+for(let i=0;i<34;i++){
+  const onRoof = Math.random() < .4;
+  const x = rr(-64,62), z = onRoof ? rr(2,6) : rr(-44,44);
+  const y = onRoof ? rr(6,18) : 0.06;
+  if(!onRoof && !freeSpot(x,z,0.6)) continue;
+  is(PR, mat.lead, .075, x, y+.085, z);
+  is(PR, mat.lead, .05, x, y+.15, z+.06);
+  ib(PR, mat.hatBlk, .018,.018,.05, x, y+.155, z+.11);
+}
+
+/* =====================================================================
+   REVEAL THE FLOW
+   The whole argument of the model in one gesture: drop the daylight,
+   take the town away, and leave only the air moving under the streets.
+   ===================================================================== */
+G.flow = new THREE.Group(); G.flow.name = 'flow';
+G.flow.visible = false; scene.add(G.flow);
+
+const FLOW_ROUTES = [
+  ['press_main', 0xff5a3c, 'druck', .30, 9],
+  ['suct_main',  0x4fa8dd, 'saug',  .30, 9],
+  ['cto_dpo',    0xff7a52, 'druck', .17, 11],
+  ['dpo_cto',    0x6fc0ef, 'saug',  .17, 10],
+  ['cto_exc',    0xffa060, 'druck', .15, 9],
+  ['cto_rmt',    0xff5a3c, 'druck', .26, 15],
+  ['rmt_cto',    0xff8a60, 'druck', .26, 15],
+  ['sigcable',   0x74e0a8, 'sig',   .10, 26]
+];
+const glowTex = (()=>{ const c=document.createElement('canvas'); c.width=c.height=64;
+  const x=c.getContext('2d'); const g=x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.3,'rgba(255,240,210,.55)');
+  g.addColorStop(1,'rgba(255,220,180,0)'); x.fillStyle=g; x.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c); })();
+const PULSES = [];
+FLOW_ROUTES.forEach(([key, col, mode, rad, spd])=>{
+  const curve = ROUTES[key]; if(!curve) return;
+  /* the sheath: a fat translucent tube that reads through the ground */
+  const sheath = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 160, rad, 10, false),
+    new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.20,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide, fog:false}));
+  sheath.renderOrder = 820; G.flow.add(sheath);
+  /* the core: a bright thin line */
+  const core = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 160, rad*0.28, 8, false),
+    new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.85,
+      blending:THREE.AdditiveBlending, depthWrite:false, fog:false}));
+  core.renderOrder = 821; G.flow.add(core);
+  /* pulses running the length of it */
+  const len = curve.getLength();
+  const n = Math.max(4, Math.round(len/14));
+  for(let i=0;i<n;i++){
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex, color:col,
+      transparent:true, depthWrite:false, depthTest:false, fog:false,
+      blending:THREE.AdditiveBlending}));
+    const sz = rad*8.5;
+    sp.scale.set(sz, sz, 1);
+    sp.renderOrder = 900;
+    G.flow.add(sp);
+    PULSES.push({sp, curve, t:i/n, v:spd/len, mode});
+  }
+});
+/* a floating key, so the colours mean something */
+label('Druckluft \\u00b7 compressed air, outward', 0, 16.5, 1.1, 2.0, '#ff5a3c');
+label('Saugluft \\u00b7 rarefied air, inward', 0, 13.2, 1.1, 2.0, '#4fa8dd');
+label('Signalling circuit', 0, 10.4, 1.1, 1.7, '#74e0a8');
+const FLOW_KEY = labelSprites.slice(-3);
+FLOW_KEY.forEach(s=>{ s.visible = false; G.flow.add(s); });
+
+ANIM.push(dt=>{
+  if(!G.flow.visible) return;
+  for(const p of PULSES){
+    p.t = (p.t + p.v*dt) % 1;
+    p.sp.position.copy(p.curve.getPointAt(p.t));
+    const pu = 0.55 + 0.45*Math.sin(p.t*Math.PI*14);
+    p.sp.material.opacity = 0.35 + 0.5*pu;
+  }
+});
+
+/* --- the mode switch ------------------------------------------------- */
+const DAY = {hemi:0.78, sun:1.70, fill:0.46, bounce:0.22, exp:1.04,
+             furnace:3.4, eng:2.6, eng2:1.7, bay:1.5, fog:0.00118};
+let flowOn = false;
+const FLOW_HIDE = ['walls','cutwall','props','people','land','labels','soil','street'];
+const _flowSaved = {};
+function setFlow(on){
+  flowOn = on;
+  G.flow.visible = on;
+  FLOW_KEY.forEach(s=>{ s.visible = on; });
+  if(on){
+    for(const k of FLOW_HIDE){
+      if(!G[k]) continue;
+      _flowSaved[k] = G[k].visible;
+      G[k].visible = false;
+    }
+    scene.fog.density = 0.0021;
+    hemi.intensity = 0.10; sun.intensity = 0.14; fill.intensity = 0.05;
+    bounce.intensity = 0.02;
+    furnace.intensity = 0.5; engineLamp.intensity = 0.4;
+    engineLamp2.intensity = 0.3; bayLamp.intensity = 0.3;
+    renderer.toneMappingExposure = 1.22;
+    G.air.visible = true; G.moving.visible = true; G.tubes.visible = true;
+  } else {
+    for(const k of FLOW_HIDE)
+      if(G[k] && _flowSaved[k] !== undefined) G[k].visible = _flowSaved[k];
+    scene.fog.density = DAY.fog;
+    hemi.intensity = DAY.hemi; sun.intensity = DAY.sun; fill.intensity = DAY.fill;
+    bounce.intensity = DAY.bounce;
+    furnace.intensity = DAY.furnace; engineLamp.intensity = DAY.eng;
+    engineLamp2.intensity = DAY.eng2; bayLamp.intensity = DAY.bay;
+    renderer.toneMappingExposure = DAY.exp;
+  }
+  const b = document.getElementById('flowBtn');
+  if(b){ b.classList.toggle('on', on);
+         b.textContent = on ? 'Hide the air flow' : 'Reveal the air flow'; }
+}
+
+/* =====================================================================
    9.  PICKING, THE INFO PLATE AND THE PARTS SCHEDULE
    ===================================================================== */
 const ray = new THREE.Raycaster();
@@ -2914,11 +4403,16 @@ const VIEWS = {
   store:    [V(-27,1.6,-24), 34],
   facade:   [V(-24,5.5,2.0), 30],
   demo:     [V(13.5,2.6,-21), 21],
-  engine:   [V(-44.5,-3.2,16.0), 19]
+  engine:   [V(-44.5,-3.2,16.0), 19],
+  village:  [V(-30,18,-150), 430]
 };
 document.querySelectorAll('[data-view]').forEach(b=>{
   b.onclick = ()=>{
     const v = VIEWS[b.dataset.view];
+    if(b.dataset.view === 'village'){
+      if(flowOn) setFlow(false);
+      controls.sphD.theta = 0.10; controls.sphD.phi = 1.40;
+    }
     if(b.dataset.view === 'facade'){        /* the street needs its walls back */
       G.cutwall.visible = true;
       const fb2 = document.querySelector('[data-layer="facades"]');
@@ -2935,7 +4429,9 @@ const LAYERS = {
   air:      ()=>G.air,
   carriers: ()=>[G.moving, G.carriers],
   labels:   ()=>G.labels,
-  facades:  ()=>G.cutwall
+  facades:  ()=>G.cutwall,
+  land:     ()=>G.land,
+  props:    ()=>[G.props, G.people]
 };
 document.querySelectorAll('[data-layer]').forEach(b=>{
   b.onclick = ()=>{
@@ -2952,11 +4448,14 @@ document.querySelectorAll('[data-layer]').forEach(b=>{
 });
 const rail = document.getElementById('rail');
 document.getElementById('railtog').onclick = ()=>rail.classList.toggle('closed');
+document.getElementById('flowBtn').onclick = ()=>setFlow(!flowOn);
 
 /* ---------- guided tour --------------------------------------------- */
 const TOUR = [
   {t:'A city solved a problem with air', p:null, v:'whole',
    x:'Five buildings, one machine station and about a mile of pipe. Everything you can see was built to answer a single question: how do you get a piece of paper across a crowded city faster than a man can walk it? Between about 1853 and the 1930s the answer was compressed air. Follow the tour, or simply fly around and put the mouse on anything.'},
+  {t:'A town on the left bank', p:null, v:'village',
+   x:'Before the machinery, the place. The quarter stands on the left bank of a river gorge: orchards and hedged fields rise behind it, the water runs below, and the far bank climbs in the terraced vineyards that pay for everything here, with a ruined Burg on the crag and a village under its own spire. This matters to the argument. A pneumatic post is only worth building where a great many messages must cross a dense town quickly \u2014 and a town like this one, with an exchange, a telegraph office, a railway terminal and a river trade, is exactly such a place.'},
   {t:'Read the buildings first', p:'Central Telegraph Office', v:'facade',
    x:'Each building here is drawn in the manner its job demanded. The telegraph office is government work: rusticated stone, arched openings, a columned portico and a clock. The district office is red brick with stone dressings. The railway terminal is sooty industrial brick with a corbelled cornice and an iron-trussed shed roof. The store has a cast-iron shopfront and awnings. Two elevations of every building are cut away so you can see inside — the Complete facades button puts them back.'},
   {t:'The carrier is a loose piston', p:'Rohrpostb\u00fcchse',
@@ -2979,6 +4478,8 @@ const TOUR = [
    x:'So the pneumatic system was wired throughout. A passing carrier closes a contact; that current locks the transmitters up the line for a few seconds, exactly as a railway block system does, and lets many carriers share one pipe safely. Bells, annunciators, telephones and time-locks are as much a part of this technology as the compressors are.'},
   {t:'Three countries, three different machines', p:'8-inch mail canister',
    x:'The same principle, built for three different jobs. London ran small tubes to shift telegram forms to its telegraphists. Berlin ran a genuine public Stadtrohrpost — you could hand in a letter and have it blown across town. America went the other way and built a bulk conveyor, with tubes wide enough to swallow six hundred letters at once. Set the carriers side by side on the stand and the difference in ambition is obvious.'},
+  {t:'Now take the town away', p:null,
+   x:'Press "Reveal the air flow" in the left-hand panel. The daylight drops, the buildings and the streets go, and what is left is the thing the whole installation exists to produce: two utilities of moving air under a city, red going out and blue coming back, with the signalling circuit threaded alongside. Everything else in this model \u2014 every boiler, every cock, every felt ring \u2014 is in the service of those few glowing lines.'},
   {t:'And the version everyone actually saw', p:'Cashier\u2019s cage', v:'store',
    x:'Not mail at all: cash. Brass tubes, a rotary blower, one building, and a cashier in a cage at the centre of a radial system. Telephones and teletypewriters killed the city networks — America shut its postal tubes at the end of 1953 as obsolete and excessively expensive — but the store tube survived, and its descendants still run in hospitals and banks today.'}
 ];
@@ -2991,7 +4492,15 @@ function showTour(i){
   document.getElementById('tourStep').textContent = `${tourAt+1} / ${TOUR.length}`;
   document.getElementById('tourTitle').textContent = s.t;
   document.getElementById('tourText').textContent = s.x;
-  if(s.v && !s.p){ const v = VIEWS[s.v]; controls.frame(v[0], v[1]); }
+  if(s.v){
+    if(s.v === 'village'){ controls.sphD.theta = 0.10; controls.sphD.phi = 1.40; }
+    if(s.v === 'facade'){ G.cutwall.visible = true;
+      const fb3 = document.querySelector('[data-layer="facades"]');
+      if(fb3) fb3.classList.add('on');
+      controls.sphD.theta = 0.35; controls.sphD.phi = 1.42; }
+    const v = VIEWS[s.v]; controls.frame(v[0], v[1]);
+  }
+  if(flowOn && s.p) setFlow(false);
   if(s.p){
     const rec = parts.find(p=>p.name===s.p);
     if(rec) select(rec, true);
@@ -3066,6 +4575,18 @@ function tick(){
     KIN.cyc  = (KIN.cyc + dt * KIN.speed / CYCLE_T) % 1;
   }
   for(let i=0;i<ANIM.length;i++) ANIM[i](dt);
+  if(G.people.visible){
+    const T = clock.elapsedTime;
+    for(const w of WALKERS){
+      const p = T*w.sp*3.1 + w.ph;
+      w.legs[0].rotation.x =  Math.sin(p)*0.52;
+      w.legs[1].rotation.x = -Math.sin(p)*0.52;
+      w.arms[0].rotation.x = -Math.sin(p)*0.40;
+      w.arms[1].rotation.x =  Math.sin(p)*0.40;
+      w.g.position.y = (w.g.userData.y0 === undefined
+        ? (w.g.userData.y0 = w.g.position.y) : w.g.userData.y0) + Math.abs(Math.sin(p))*0.022;
+    }
+  }
   if(G.moving.visible) for(const c of movers){
     c.t = (c.t + c.v*dt) % 1;
     const p = c.curve.getPointAt(c.t), tn = c.curve.getTangentAt(c.t);
