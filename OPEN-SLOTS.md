@@ -22,7 +22,9 @@ Live: `game-zzzzzzzzzk/` / `.game-172` — Kelvin House (The Last Bus from Kelvi
 
 Live: `game-zzzzzzzzzl/` / `.game-173` — Lifting Water (dragon bone, saqiyah, shaduf).
 
-To add more later: next folder is `game-zzzzzzzzzm`, next class is `.game-174`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzm/` / `.game-174` — Spicy Rodent (neighborhood prototype).
+
+To add more later: next folder is `game-zzzzzzzzzn`, next class is `.game-175`. Three pieces must match: folder name, `href`, CSS class.
 
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
