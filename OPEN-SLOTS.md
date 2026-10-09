@@ -18,14 +18,6 @@ Replace that file with your game. Then paste the tiles below into `index.html` j
 
 Live: `game-zzzzzzzzo/` / `.game-149` — 哪边 (taxi / which way).
 
-Live: `game-zzzzzzzzzk/` / `.game-172` — Kelvin House (The Last Bus from Kelvin House).
-
-Live: `game-zzzzzzzzzl/` / `.game-173` — Lifting Water (dragon bone, saqiyah, shaduf).
-
-Live: `game-zzzzzzzzzm/` / `.game-174` — Spicy Rodent (neighborhood prototype).
-
-To add more later: next folder is `game-zzzzzzzzzn`, next class is `.game-175`. Three pieces must match: folder name, `href`, CSS class.
-
 Live: `game-signal-shop/` / `.game-150` — Signal Shop.
 
 Live: `game-zzzzzzzzp/` / `.game-151` — Balloon Current Command.
@@ -69,3 +61,13 @@ Live: `game-zzzzzzzzzh/` / `.game-169` — Vocab System (engineering terminal).
 Live: `game-zzzzzzzzzi/` / `.game-170` — Zombie Characters (Dead Ahead Mandarin survival).
 
 Live: `game-zzzzzzzzzj/` / `.game-171` — Low Gravity (Calypso ice-moon combat).
+
+Live: `game-zzzzzzzzzk/` / `.game-172` — Kelvin House (The Last Bus from Kelvin House).
+
+Live: `game-zzzzzzzzzl/` / `.game-173` — Lifting Water (dragon bone, saqiyah, shaduf).
+
+Live: `game-zzzzzzzzzm/` / `.game-174` — Spicy Rodent (neighborhood prototype).
+
+Live: `game-zzzzzzzzzn/` / `.game-175` — Red and the Dead (triangle wood chase).
+
+To add more later: next folder is `game-zzzzzzzzzo`, next class is `.game-176`. Three pieces must match: folder name, `href`, CSS class.
