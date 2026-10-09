@@ -577,7 +577,11 @@ function mergeGeoms(list){
     const n = p.g.attributes.position.count;
     pos.set(p.g.attributes.position.array, o*3);
     if(p.g.attributes.normal) nor.set(p.g.attributes.normal.array, o*3);
-    for(let i=0;i<n;i++){
+    /* a piece that has already been merged carries its colours per
+       vertex; take those, or the whole thing turns the merged
+       material's plain white */
+    if(p.g.attributes.color) col.set(p.g.attributes.color.array, o*3);
+    else for(let i=0;i<n;i++){
       col[(o+i)*3] = p.c.r; col[(o+i)*3+1] = p.c.g; col[(o+i)*3+2] = p.c.b;
     }
     o += n;
@@ -741,7 +745,9 @@ function person(x,y,z,parent,rot,opt){
     const limbs = legs.concat(arms);
     collapse(g, limbs);
     for(const L of limbs) collapse(L);
-    WALKERS.push({g, legs, arms, ph:R(11)*6.28, sp:0.9+R(12)*0.5});
+    WALKERS.push({g, legs, arms, ph:R(11)*6.28, sp:0.9+R(12)*0.5,
+                  beat:0, patrol:opt.patrol || null,
+                  dir:(g.rotation.y > 0 ? 1 : -1), x:x, z:z});
   } else {
     collapse(g);
   }
@@ -1176,7 +1182,7 @@ G.cutwall.visible = false; scene.add(G.cutwall);   /* the near elevations */
    non-overlapping tiles with the building footprints cut out of it, and
    each class of surface is given a height of its own.
    --------------------------------------------------------------------- */
-const Y_ROAD = 0.000, Y_FOOT = 0.085, Y_TRENCH_CAP = -0.015, Y_INLAY = 0.028;
+const Y_ROAD = 0.000, Y_FOOT = 0.085, Y_TRENCH_CAP = -0.015, Y_INLAY = 0.055;
 
 /* plan footprints that no paving may run beneath */
 const FOOTPRINT = [
@@ -1263,10 +1269,15 @@ function pave(x0,x1,z0,z1, which, y, h, grp){
    out around what room is actually left between them: a footway on the
    north where the frontages allow it, the carriageway and tramway on
    the south, and a footway in front of the shops beyond that.       */
-pave(-72, 68,   3.55,  7.20, 'foot', Y_FOOT, .42);   // north footway
+/* The kerb line gets a band of its own at road level: the kerb stones
+   stand on it, so the footway abuts the kerb instead of running under
+   it. Two slabs sharing a plane is what made the grey strip crawl.  */
+pave(-72, 68,   3.55,  4.11);                        // under the kerb stones
+pave(-72, 68,   4.11,  7.20, 'foot', Y_FOOT, .42);   // north footway
 pave(-72, 68,   7.20, 54.00);                        // north quarter
 pave(-72, 68, -11.07, -3.55);                        // carriageway and tramway
-pave(-72, 68, -13.40,-11.07, 'foot', Y_FOOT, .42);   // south footway
+pave(-72, 68, -11.63,-11.07);                        // under the kerb stones
+pave(-72, 68, -13.40,-11.63, 'foot', Y_FOOT, .42);   // south footway
 pave(-72, 68, -50.00,-13.40);                        // south quarter
 
 /* granite kerb and channel stone, laid stone by stone and skipping
@@ -1295,23 +1306,24 @@ const TRENCH_D = 5.6;
 soilFace(132, TRENCH_D, .5, -3, -TRENCH_D/2,  3.25);
 soilFace(96, TRENCH_D, .5, -21, -TRENCH_D/2, -3.25);
 soilFace(30, TRENCH_D, .5, 48, -TRENCH_D/2, -3.25);
-soilFace(16, TRENCH_D, .5, 27.25, -TRENCH_D/2, -11, Math.PI/2);
-soilFace(16, TRENCH_D, .5, 32.75, -TRENCH_D/2, -11, Math.PI/2);
+soilFace(15.2, TRENCH_D, .5, 27.25, -TRENCH_D/2, -11.1, Math.PI/2);
+soilFace(15.2, TRENCH_D, .5, 32.75, -TRENCH_D/2, -11.1, Math.PI/2);
 box(132,.4,7.0, mat.soilTop, -3, -TRENCH_D-.2, 0, G.soil);
 box(6,.4,15.5, mat.soilTop, 30, -TRENCH_D-.2, -11.25, G.soil);
 
 /* The branch trench is open, so the tramway crosses it on steel plates,
    as any street with the road up had to.                              */
-ib(G.street, mat.steel, 6.6,.14,6.4, 30, Y_ROAD+.01, -9.40);
-for(let i=0;i<7;i++) ib(G.street, mat.ironWork, 6.4,.05,.14, 30, Y_ROAD+.09, -12.3+i*1.0);
-for(const sx of [-1,1]) ib(G.street, mat.ironWork, .22,.5,6.4, 30+sx*3.3, Y_ROAD-.18, -9.40);
+ib(G.street, mat.steel, 6.6,.16,3.8, 30, Y_ROAD+.02, -8.90);
+for(let i=0;i<7;i++) ib(G.street, mat.ironWork, 6.4,.05,.14, 30, Y_ROAD+.11, -10.5+i*0.55);
+for(const sx of [-1,1]) ib(G.street, mat.ironWork, .22,.5,3.8, 30+sx*3.3, Y_ROAD-.17, -8.90);
 
 /* tramway, laid in the south carriageway clear of every building */
 for(const z of [-10.12, -8.68]){
   ib(G.street, mat.steel, 136,.14,.105, -2, Y_ROAD+.055, z);
-  ib(G.street, mat.steel, 136,.05,.19, -2, Y_ROAD-.01, z);   // chair plates
+  ib(G.street, mat.steel, 136,.06,.19, -2, Y_ROAD+.012, z);  // chair plates
 }
-for(let x=-68; x<64; x+=2.1) ib(G.street, mat.stoneSoot, .26,.10,2.5, x, Y_ROAD+.01, -9.40);
+for(let x=-68; x<64; x+=2.1){ if(x > 26.0 && x < 34.0) continue;
+  ib(G.street, mat.stoneSoot, .26,.10,2.5, x, Y_ROAD+.01, -9.40); }
 /* overhead trolley wire, carried out over the track on bracket arms */
 for(let x=-66; x<62; x+=14){
   if(!freeSpot(x, -12.55, 0.6)) continue;
@@ -1622,7 +1634,7 @@ chimney(-60.0, 8.0, 16.7, 2.2, 1.6, 5.2, mat.stoneSoot, 4);
 chimney(-60.0, 26.0, 16.7, 2.2, 1.6, 4.2, mat.stoneSoot, 4);
 chimney(-34.5, 8.0, 16.7, 1.8, 1.4, 3.6, mat.stoneSoot, 3);
 /* portico and steps on the street front */
-for(let i=0;i<4;i++) ib(G.walls, mat.stoneGrey, 9.4-i*.5, .22, 2.6-i*.5, -47, -.05+i*.22, 2.1+i*.28);
+for(let i=0;i<4;i++) ib(G.walls, mat.stoneGrey, 9.4-i*.5, .58, 2.6-i*.5, -47, -.19+i*.22, 2.1+i*.28);
 for(const px of [-50.6,-48.2,-45.8,-43.4]){
   ic(G.walls, mat.stoneWarm, .46, 5.4, px, 2.7, 3.0);
   ic(G.walls, mat.stoneWarm, .58, .3, px, .15, 3.0);
@@ -1670,7 +1682,7 @@ for(const px of [36.4,39.2,42.0,44.8,47.6,50.4]){
 ib(G.walls, mat.stoneWarm, 16.4,.72,2.0, 43, 7.95, 4.6);
 ib(G.walls, mat.stoneWarm, 15.2,.5,1.6, 43, 8.55, 4.6);
 ip(G.walls, mat.stoneWarm, 8.6, 2.3, 43, 9.9, 4.65, [0,Math.PI/4,0]);
-for(let i=0;i<3;i++) ib(G.walls, mat.stoneGrey, 17-i*.6, .24, 3.0-i*.5, 43, -.06+i*.24, 3.4+i*.3);
+for(let i=0;i<3;i++) ib(G.walls, mat.stoneGrey, 17-i*.6, .62, 3.0-i*.5, 43, -.165+i*.24, 3.4+i*.3);
 /* trading floor gallery */
 ib(G.buildings, mat.panelWood, 16.4,.30,.6, 43, 4.2, 8.4);
 for(let i=0;i<20;i++) ic(G.buildings, mat.ironWork, .05,.85, 35.0+i*.85, 4.72, 8.4);
@@ -2898,11 +2910,11 @@ P(box(10,5.6,.05, mat.soil, -5, -2.8, 3.36, G.soil), {
   name:'Tube trench and made ground', de:'', cat:'Street & context',
   desc:'The cut face of the roadway: setts, road bed, made ground, then clay. Tubes were laid two or three feet down for the small lines and as much as eighteen feet for the American mains, often threaded above a subway tunnel and always between the sewer, the water and the gas. Depth was not chosen; it was whatever the other services left over.',
   meta:'2 ft to 18 ft, depending on what was already there'});
-P(box(3.4,.12,2.6, mat.roadSurf, -16.5, Y_INLAY-.06, 7.2, G.street), {
+P(box(3.4,.14,2.6, mat.roadSurf, -16.5, Y_INLAY-.07, 9.8, G.street), {
   name:'Street surface', de:'', cat:'Street & context',
   desc:'Granite setts, laid in courses, with a channel stone at the kerb and a tramway in the southern carriageway. Worth one moment of attention: the whole point of the installation below is that a carrier under this pavement moves at twenty to thirty-five miles an hour, while everything on top of it in 1925 \u2014 the tram, the carts, the pedestrians \u2014 is doing perhaps eight.',
   meta:'the tubes were faster than the street above them'});
-worldUV(parts[parts.length-1].mesh, -16.5, 7.2);
+worldUV(parts[parts.length-1].mesh, -16.5, 9.8);
 /* =====================================================================
    7c.  THE DEMONSTRATION BAY
    Three mechanisms sectioned and working, at four times full size.
@@ -3570,8 +3582,8 @@ function hAt(x,z){
     ib(G.land, mat.stoneGrey, e[2], 1.5, e[3], e[0], -0.70, e[1]);
     ib(G.land, mat.stoneWarm, e[2], .16, e[3]+.3, e[0], 0.08, e[1]);
   }
-  for(const e of [[PE[0]-0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]+1.4],
-                  [PE[1]+0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]+1.4]]){
+  for(const e of [[PE[0]-0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]-1.6],
+                  [PE[1]+0.6, (PE[2]+PE[3])/2, 1.2, PE[3]-PE[2]-1.6]]){
     ib(G.land, mat.stoneGrey, e[2], 1.5, e[3], e[0], -0.70, e[1]);
     ib(G.land, mat.stoneWarm, e[2]+.3, .16, e[3], e[0], 0.08, e[1]);
   }
@@ -3823,6 +3835,14 @@ function placePerson(opt, zone, gap){
     const x = rr(Z[0],Z[1]), z = rr(Z[2],Z[3]);
     if(!standable(x,z,gap)) continue;
     PLACED.push([x,z]);
+    if(opt.walk){
+      /* how far can he actually get before a wall stops him? */
+      let west = 0, east = 0;
+      while(west < 26 && x-west-1.0 > Z[0] && freeSpot(x-west-1.0, z, 1.0)) west += 1.0;
+      while(east < 26 && x+east+1.0 < Z[1] && freeSpot(x+east+1.0, z, 1.0)) east += 1.0;
+      if(west + east < 5) opt.walk = false;           // nowhere to go: he stands
+      else opt.patrol = [x - west, x + east];
+    }
     /* walkers face along the street, loiterers look about them */
     const rot = opt.walk ? (Math.random()<.5 ? Math.PI/2 : -Math.PI/2) : rr(0,6.28);
     return person(x, 0, z, PR, rot, opt);
@@ -3850,9 +3870,14 @@ function horse(x,y,z,parent,rot,coat){
     }
   }
   cyl(.05,.02,.60, c, 0,1.42,.92, g, 6).rotation.x = -0.5;      // tail
-  box(.30,.26,.60, mat.leather, 0,1.56,-.16, g);                 // harness pad
-  box(.06,.30,.06, mat.leather, 0,1.38,-1.04, g);
-  for(const sx of [-1,1]) box(.035,.035,1.5, mat.leather, sx*.30,1.40,.60, g);   // traces
+  box(.34,.28,.62, mat.leather, 0,1.58,-.18, g);                 // saddle pad
+  box(.60,.46,.26, mat.leather, 0,1.44,-1.16, g);                // collar
+  box(.66,.10,.14, mat.brass,   0,1.66,-1.18, g);                // hames
+  for(const sx of [-1,1]){
+    box(.05,.05,1.9, mat.leather, sx*.31,1.42,.46, g);           // traces
+    box(.04,.04,.9,  mat.leather, sx*.22,1.74,-1.42, g);         // reins
+  }
+  box(.10,.34,.10, mat.leather, 0,1.40,-1.06, g);                // girth
   collapse(g);
   return g;
 }
@@ -3878,8 +3903,12 @@ function dray(x,y,z,rot){
   for(const s of [-1,1]) box(.10,.42,4.30, mat.panelWood, s*1.00,1.08,0, g);
   box(2.10,.42,.10, mat.panelWood, 0,1.08,-2.10, g);
   box(1.90,.16,.60, mat.panelWood, 0,1.44,-1.90, g);          // driver's seat
-  box(.10,.10,2.60, mat.panelWood, 0,.80,-3.30, g);           // shafts
-  for(const s of [-1,1]) box(.08,.08,2.40, mat.trunk, s*.46,.80,-3.40, g);
+  /* the shafts run the whole way forward to the collar, one down each
+     flank of the horse, and the swingletree lies across them */
+  for(const s of [-1,1]) box(.09,.09,4.45, mat.trunk, s*.47,1.02,-4.30, g);
+  box(1.10,.09,.09, mat.trunk, 0,1.02,-2.35, g);              // swingletree
+  box(.86,.07,.07, mat.leather, 0,1.24,-6.32, g);             // collar bar
+  for(const s of [-1,1]) box(.05,.05,1.30, mat.leather, s*.40,1.30,-5.70, g);
   for(const s of [-1,1]){
     cartWheel(g, s*1.06, .54, 1.30, .54);
     cartWheel(g, s*1.00, .40, -1.50, .40);
@@ -3905,7 +3934,9 @@ function mailVan(x,y,z,rot){
   for(const s of [-1,1]) box(.08,.60,1.20, mat.glassLit, s*1.01,2.10,-.40, g);
   box(1.20,.30,.05, mat.gilt, 0,1.80,1.73, g);
   box(1.6,.16,.70, mat.panelWood, 0,1.52,-2.10, g);
-  box(.10,.10,2.20, mat.panelWood, 0,.86,-3.10, g);
+  for(const s of [-1,1]) box(.09,.09,4.10, mat.trunk, s*.46,1.02,-4.05, g);
+  box(1.00,.09,.09, mat.trunk, 0,1.02,-2.20, g);
+  box(.80,.07,.07, mat.leather, 0,1.24,-5.90, g);
   for(const s of [-1,1]){ cartWheel(g, s*1.04,.50,1.10,.50); cartWheel(g, s*1.00,.40,-1.40,.40); }
   horse(0,0,-5.0,g,0);
   person(0.9,1.06,-2.06,g,0,{kind:'postman', seed:x*3});
@@ -4613,18 +4644,7 @@ function tick(){
     KIN.cyc  = (KIN.cyc + dt * KIN.speed / CYCLE_T) % 1;
   }
   for(let i=0;i<ANIM.length;i++) ANIM[i](dt);
-  if(G.people.visible){
-    const T = clock.elapsedTime;
-    for(const w of WALKERS){
-      const p = T*w.sp*3.1 + w.ph;
-      w.legs[0].rotation.x =  Math.sin(p)*0.52;
-      w.legs[1].rotation.x = -Math.sin(p)*0.52;
-      w.arms[0].rotation.x = -Math.sin(p)*0.40;
-      w.arms[1].rotation.x =  Math.sin(p)*0.40;
-      w.g.position.y = (w.g.userData.y0 === undefined
-        ? (w.g.userData.y0 = w.g.position.y) : w.g.userData.y0) + Math.abs(Math.sin(p))*0.022;
-    }
-  }
+  if(G.props.visible || G.people.visible) walkEveryone(dt);
   if(G.moving.visible) for(const c of movers){
     c.t = (c.t + c.v*dt) % 1;
     const p = c.curve.getPointAt(c.t), tn = c.curve.getTangentAt(c.t);
@@ -4643,6 +4663,38 @@ function tick(){
   drawMech();
   updateScale();
   renderer.render(scene, camera);
+}
+
+/* ---------------------------------------------------------------------
+   The walk.
+   A pedestrian paces his stretch of footway, turns at the end of it or
+   at a doorway he cannot walk through, and turns round to come back.
+   Stride length is tied to pace, so nobody moonwalks.
+   --------------------------------------------------------------------- */
+const STRIDE = 0.92;                       // metres covered per leg swing
+function walkEveryone(dt){
+  const T = clock.elapsedTime;
+  for(const w of WALKERS){
+    const rate = w.sp*3.1;
+    const p = T*rate + w.ph;
+    w.legs[0].rotation.x =  Math.sin(p)*0.52;
+    w.legs[1].rotation.x = -Math.sin(p)*0.52;
+    w.arms[0].rotation.x = -Math.sin(p)*0.40;
+    w.arms[1].rotation.x =  Math.sin(p)*0.40;
+    if(w.g.userData.y0 === undefined) w.g.userData.y0 = w.g.position.y;
+    w.g.position.y = w.g.userData.y0 + Math.abs(Math.sin(p))*0.022;
+    if(!w.patrol) continue;
+    const v = rate * STRIDE / Math.PI;     // ground speed that matches the legs
+    const nx = w.x + w.dir * v * dt;
+    const ahead = nx + w.dir*0.9;
+    if(ahead < w.patrol[0] || ahead > w.patrol[1] || !freeSpot(ahead, w.z, 1.0)){
+      w.dir = -w.dir;
+      w.g.rotation.y = w.dir > 0 ? Math.PI/2 : -Math.PI/2;
+    } else {
+      w.x = nx;
+      w.g.position.x = nx;
+    }
+  }
 }
 
 /* ---------- raise pressure, then open ------------------------------- */
