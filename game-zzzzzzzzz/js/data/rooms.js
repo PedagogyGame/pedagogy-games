@@ -98,8 +98,14 @@ export const ROOMS = {
     palette: { wall: 0x4527a0, floor: 0x5e35b1, trim: 0xc9a227, light: 0xd1c4e9 },
     exits: { north: "library_hall", down: "foyer", up: "attic_loft" },
     stairs: [
-      // West-side attic stair: landing center stays walkable
-      { id: "attic_up", fromY: 4.2, toY: 8.4, x: -6.5, z: 6, dir: "north", width: 2.2, length: 5.5 },
+      // logic6: attic stair moved OFF the Climb A floor hole. It used to stand at x=-6.5
+      // (footprint x -7.6..-5.4, z 0.5..6) — straight over holeA_climb/holeA_scenic, i.e. over
+      // the climb itself. Now it runs north up the solid west strip of the landing
+      // (x -3.05..-1.75, z 1.7..7.2): 0.6u clear of the hole edge (x -3.65) and 0.65u clear of
+      // the hairpin lane edge (x -1.1). It rises into a real stairwell cut in the landing
+      // ceiling + attic floor (Mansion._storyApertures "stairwell"); the old newel post now
+      // stands under its upper end.
+      { id: "attic_up", fromY: 4.2, toY: 8.4, x: -2.4, z: 7.2, dir: "north", width: 1.3, length: 5.5 },
     ],
   },
   library_hall: {

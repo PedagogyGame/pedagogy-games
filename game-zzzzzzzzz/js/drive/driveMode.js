@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS } from "./car.js?v=ramps1";
-import { TrackSystem } from "./tracks.js?v=ramps1";
-import { EngineAudio } from "./engineAudio.js?v=ramps1";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=ramps1";
+import { RCCar, VEHICLE_PRESETS } from "./car.js?v=logic7";
+import { TrackSystem } from "./tracks.js?v=logic7";
+import { EngineAudio } from "./engineAudio.js?v=logic7";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic7";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -33,9 +33,9 @@ export class DriveMode {
     this._camElevated = 0; // smoothed elevated chase blend
     this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
-    this._driveFov = 68; // calmer tour FOV (was arcade-wide 74)
+    this._driveFov = 70; // calmer tour FOV (was arcade-wide 74; logic7 68→70)
     this._wallFov = 54; // tighter echo-y FOV in walls
-    this._leisureFov = 62; // slower = slightly tighter / more cinematic
+    this._leisureFov = 72; // logic7: was 62 — at rest the spawn read as a narrow corridor
     this._fov = this._baseFov;
     this._tunnelDark = 0;
     this._time = 0;
@@ -82,7 +82,8 @@ export class DriveMode {
     // SwiftShader: only TWO low-intensity Drive lights (fill + climb foot).
     // High-intensity moving PointLights + mid-climb third killed GPU while holding W.
     this._liteGpu = true;
-    this._fillLight = new THREE.PointLight(0xffe0b2, 2.4, 7.5, 2);
+    // logic4: fill 3.4→7.0 / range 14→16 (uniforms only; still the same two Drive lights)
+    this._fillLight = new THREE.PointLight(0xffe8c8, 7.0, 16.0, 1.6);
     this._fillLight.name = "drive_fill";
     this._fillLight.visible = false;
     this._fillLight.castShadow = false;
@@ -94,7 +95,7 @@ export class DriveMode {
       && RAMP_MOUNT_FEET.climb_a.foot)
       ? RAMP_MOUNT_FEET.climb_a.foot
       : { x: -5.05, y: 0.0, z: 11.75 };
-    this._climbFill = new THREE.PointLight(0xffd9a8, 1.8, 6.5, 2);
+    this._climbFill = new THREE.PointLight(0xffe0b8, 2.8, 12.0, 1.6);
     this._climbFill.name = "drive_climb_fill";
     this._climbFill.visible = false;
     this._climbFill.castShadow = false;
@@ -444,7 +445,9 @@ export class DriveMode {
     this.camera.updateProjectionMatrix();
     this._tunnelDark = 0;
     this._camVel.set(0, 0, 0);
+    this._camPrevTarget = null;
     this._camLookSmooth = null;
+    this._camYawS = null;
     this._crashPhase = null;
     this._crashTimer = 0;
     this._inputsFrozen = false;
@@ -461,14 +464,14 @@ export class DriveMode {
     this._jamHits = 0;
     if (this._fillLight) {
       this._fillLight.visible = true;
-      this._fillLight.intensity = 2.4;
-      this._fillLight.distance = 7.5;
+      this._fillLight.intensity = 7.0; // logic4 (was 3.4 — house read near-black at spawn)
+      this._fillLight.distance = 16.0;
       this._fillLight.position.set(CAR_SPAWN.x, CAR_SPAWN.y + 1.6, CAR_SPAWN.z);
     }
     if (this._climbFill) {
       this._climbFill.visible = true;
-      this._climbFill.intensity = 1.8;
-      this._climbFill.distance = 6.5;
+      this._climbFill.intensity = 4.2; // logic4 (was 2.8)
+      this._climbFill.distance = 12.0;
     }
     // climbMidFill intentionally never enabled (SwiftShader: 3rd Drive PointLight)
     // User gesture already happened (Enter/Drive click) — safe to resume AudioContext.
@@ -543,7 +546,9 @@ export class DriveMode {
     this._flash = 0;
     this._fade = 0;
     this._camVel.set(0, 0, 0);
+    this._camPrevTarget = null;
     this._camLookSmooth = null;
+    this._camYawS = null;
     this._snapCamera(true);
     this._edgeWarn = 0;
     this._stuckTimer = 0;
@@ -608,12 +613,20 @@ export class DriveMode {
     // Look-into-turn (#1 strengthened) — yaw look-ahead blended with steer; stay close
     const steerIn = (this.car && this.car._steerInput != null) ? this.car._steerInput : 0;
     if (this._lookSteer == null) this._lookSteer = 0;
-    this._lookSteer = THREE.MathUtils.lerp(this._lookSteer, steerIn, 0.24);
+    // logic7: frame-rate independent (was lerp 0.24 per call = per sub-step)
+    const lsDt = this._camDt || 1 / 60;
+    this._lookSteer = immediate ? steerIn
+      : THREE.MathUtils.lerp(this._lookSteer, steerIn, 1 - Math.exp(-16.5 * lsDt));
     const lookYaw = yaw + this._lookSteer * 0.55 * Math.min(1, spd / 0.75);
     // In-wall: tuck camera close + slightly above car so we never clip inside studs
     // Open road: closer chase — car fills frame (not a speck); still clears walls
-    const back = (inWall ? 0.15 : 0.20 + leisure * 0.035 + elev * 0.03) + Math.min(0.10, spd * 0.040);
-    const up = (inWall ? 0.11 : 0.10 + leisure * 0.04 + elev * 0.028) + Math.min(0.045, spd * 0.014);
+    // logic7: a little higher + further at rest/leisure so the spawn reads as a room (was a
+    // low "brown corridor" view); cruise framing nearly unchanged.
+    const back = (inWall ? 0.15 : 0.21 + leisure * 0.13 + elev * 0.03) + Math.min(0.10, spd * 0.040);
+    const up = (inWall ? 0.11 : 0.115 + leisure * 0.11 + elev * 0.028) + Math.min(0.045, spd * 0.014);
+    this._camBack = back;
+    this._camUp = up;
+    this._camLookYaw = lookYaw;
     const cx = p.x - Math.sin(yaw) * back;
     const cy = p.y + up;
     const cz = p.z - Math.cos(yaw) * back;
@@ -625,7 +638,7 @@ export class DriveMode {
     const aheadUse = Math.min(ahead, inWall ? 0.32 : 0.38);
     this._lookAhead.set(
       p.x + Math.sin(lookYaw) * aheadUse,
-      p.y + (inWall ? 0.055 : 0.032 + leisure * 0.018 + elev * 0.012) + Math.min(0.022, spd * 0.005),
+      p.y + (inWall ? 0.055 : 0.032 + leisure * 0.030 + elev * 0.012) + Math.min(0.022, spd * 0.005),
       p.z + Math.cos(lookYaw) * aheadUse
     );
     this._camTarget.copy(this._lookAhead);
@@ -633,8 +646,27 @@ export class DriveMode {
     if (immediate) {
       this.camera.position.copy(this._camPos);
       this.camera.lookAt(this._camTarget);
+      this._resetChaseSmoothing();
     }
     this._sanitizeCamera();
+  }
+
+  /** logic7: drop smoothed chase state so the next frame starts exactly on the framing. */
+  _resetChaseSmoothing() {
+    this._camYawS = null;
+    this._camBackS = null;
+    this._camUpS = null;
+    this._camLift = 0;
+    this._camLookOff = null;
+    this._camLookSmooth = null;
+  }
+
+  /**
+   * logic7: nominal chase framing (camera→car distance the rig is designed to hold) — used by
+   * cam-framing-fps-sim. Excludes the sight-line lift over decks.
+   */
+  chaseNominalDistance() {
+    return Math.hypot(this._camBack || 0, this._camUp || 0);
   }
 
   /** Recover from NaN/Inf camera (would black-screen / destabilize WebGL). */
@@ -650,7 +682,9 @@ export class DriveMode {
     this._camPos.copy(p);
     this._camTarget.set(CAR_SPAWN.x, CAR_SPAWN.y + 0.06, CAR_SPAWN.z);
     this._camVel.set(0, 0, 0);
+    this._camPrevTarget = null;
     this._camLookSmooth = null;
+    this._camYawS = null;
     this.camera.fov = this._driveFov || 68;
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(this._camTarget);
@@ -670,6 +704,7 @@ export class DriveMode {
     c.speed = 0;
     c.vy = 0;
     this._camVel.set(0, 0, 0);
+    this._camPrevTarget = null;
   }
 
   /**
@@ -678,7 +713,7 @@ export class DriveMode {
    */
   _clearPointFromWalls(x, z, y, pad = 0.02) {
     const r = this._carRadius + pad;
-    const y0 = y - 0.02;
+    const y0 = y + 0.02; // logic3: tyres ride ON a wall top flush with the deck (4.2 vs 4.212)
     const y1 = y + 0.12;
     let px = x;
     let pz = z;
@@ -745,7 +780,7 @@ export class DriveMode {
       const pz = z + dz;
       const r = this._carRadius;
       const cols = this._wallsNear(px, pz, r + 0.28);
-      const y0 = y - 0.02;
+      const y0 = y + 0.02; // logic3: tyres ride ON a wall top flush with the deck (4.2 vs 4.212)
       const y1 = y + 0.12;
       for (const box of cols) {
         if (y1 < box.min.y || y0 > box.max.y) continue;
@@ -792,11 +827,12 @@ export class DriveMode {
 
   /** Foyer climb approach corridor — stair/furniture/junction walls must not pin. */
   _nearFoyerClimbCorridor(x, z) {
-    // Climb foot EAST of grand stair — approach must not pin on stringers/furniture
-    const fx = -5.05, fz = 11.75;
-    if (Math.hypot(x - fx, z - fz) <= 2.55) return true;
-    // Straightened climb band (foot→crest)
-    if (x >= -5.55 && x <= -1.85 && z >= -2.25 && z <= 12.4) return true;
+    // logic3 feet: tangent-continuous foot arcs off the S/F straight (z≈11.4)
+    // Climb A foot sweep x∈[-6.45,-2.0], Climb B x∈[4.0,8.45], z∈[9.0,12.6]
+    if (z >= 9.0 && z <= 12.6 && ((x >= -6.45 && x <= -2.0) || (x >= 4.0 && x <= 8.45))) return true;
+    // Climb strips (holeA_climb / holeB_climb, end at z=10)
+    if (x >= -6.45 && x <= -3.55 && z >= -2.25 && z <= 10.2) return true;
+    if (x >= 5.55 && x <= 8.45 && z >= -2.25 && z <= 10.2) return true;
     return false;
   }
 
@@ -816,7 +852,7 @@ export class DriveMode {
     const r = this._carRadius;
     const p = this.car.root.position;
     const y = p.y;
-    const y0 = y - 0.02;
+    const y0 = y + 0.02; // logic3: tyres ride ON a wall top flush with the deck (4.2 vs 4.212)
     const y1 = y + 0.12;
     // Climb corridor: pierce ONLY intentional soft volumes (stair underside /
     // furniture). NEVER pierce walls or pillars — freestanding posts stay solid.
@@ -1285,7 +1321,17 @@ export class DriveMode {
       }
       return;
     }
-    this._updateFrame(dt);
+    // logic4: real-time manual drive on slow GPUs. main.js used to clamp every rAF to 0.05 s,
+    // so at SwiftShader's ~2–6 fps game time ran 4–10× slower than the wall clock: holding W
+    // for a few seconds only reached ~6 km/h. Now main passes real dt (≤1 s since logic5) and we
+    // integrate it in ≤1/30 s sub-steps (identical to before for normal 60 fps frames).
+    // logic5: accept up to 1 s (live box Chrome ran Drive at ~0.8 fps); still ≤1/30 s sub-steps.
+    const d = Math.max(0, Math.min(Number(dt) || 0, 1.0));
+    const n = Math.max(1, Math.ceil(d * 30 - 1e-6));
+    for (let i = 0; i < n; i++) {
+      this._updateFrame(d / n);
+      if (!this.active) break;
+    }
   }
 
   /** Single simulation frame (physics + cam + FX). */
@@ -1293,6 +1339,17 @@ export class DriveMode {
     if (!this.active) return;
     this._time += dt;
     if (this._autodrive && !this._autodrive.done) this._tickAutodriveClimb(dt);
+    const adHold = this._autodrive && this._autodrive.done && this._autodrive.hold ? this._autodrive : null;
+    if (adHold) {
+      const k = this.keys || {};
+      if (k.forward || k.back || k.left || k.right || k.boost) {
+        adHold.hold = false; // player took over
+      } else {
+        // brake to a stop on the spot the result was measured (≈0.15u roll from cruise)
+        this.car.speed *= Math.exp(-9 * dt);
+        if (Math.abs(this.car.speed) < 0.01) this.car.speed = 0;
+      }
+    }
 
 
     // Crash / restart state machine
@@ -1354,8 +1411,9 @@ export class DriveMode {
         && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")
         && !this.car.airborne && !this.car.crashed
         && movedFrame > 0.0015 && (this._frameWallHits || 0) < 2) {
+      // logic3: ease UP toward the cruise floor (was an instant 0→0.55 snap = 0.49/frame jolt)
       if (this.car.speed < 0.55) {
-        this.car.speed = Math.min(this.car.maxSpeed, Math.max(this.car.speed, 0.55));
+        this.car.speed = Math.min(0.55, this.car.speed + 1.8 * dt);
       }
     }
     this._updateStuckEscape(dt, driveKeys, snap, prevX, prevZ);
@@ -1369,42 +1427,72 @@ export class DriveMode {
 
     const onElevDeck = !!(snap && (snap.elevated || snap.nearDeck || snap.kind === "cornice"
       || snap.kind === "balcony" || snap.kind === "ramp"));
-    this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, Math.min(1, 2.4 * dt));
+    this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, 1 - Math.exp(-2.4 * dt));
+    this._camDt = dt;
     this._snapCamera(false);
 
-    // Low-pass look target Y — grade creases / crest kisses must not tip the lens
-    if (!this._camLookSmooth) this._camLookSmooth = this._camTarget.clone();
-    this._camLookSmooth.x = THREE.MathUtils.lerp(this._camLookSmooth.x, this._camTarget.x, Math.min(1, 6.5 * dt));
-    this._camLookSmooth.z = THREE.MathUtils.lerp(this._camLookSmooth.z, this._camTarget.z, Math.min(1, 6.5 * dt));
-    this._camLookSmooth.y = THREE.MathUtils.lerp(this._camLookSmooth.y, this._camTarget.y, Math.min(1, 3.0 * dt));
+    // logic7 chase rig — CAR-RELATIVE and frame-rate independent.
+    // Before: a world-space spring (k 9.2, damping 4.6 toward ZERO velocity) chased the target.
+    // Its steady-state trail at cruise is v·damp/k ≈ 1.21·4.6/9.2 ≈ 0.6u on top of the 0.26u
+    // framing, i.e. the camera sat ~0.86u back and the car shrank to a dot whenever it moved,
+    // then "snapped back" when it stopped (read live as the car leaping ahead). Now only the
+    // ORIENTATION and framing lengths are smoothed (exp(-k·dt), per ≤1/30 s sub-step); the rig
+    // is anchored to the car, so cam→car distance is the same at 1, 5 and 60 fps and any speed.
+    const pp = this.car.position;
+    const ease = (k) => 1 - Math.exp(-k * dt);
+    const wantYaw = this.car.yaw; // chase sits behind the car body; look-into-turn is in the aim
+    if (this._camYawS == null || !Number.isFinite(this._camYawS)) this._camYawS = wantYaw;
+    let dYaw = wantYaw - this._camYawS;
+    while (dYaw > Math.PI) dYaw -= 2 * Math.PI;
+    while (dYaw < -Math.PI) dYaw += 2 * Math.PI;
+    this._camYawS += dYaw * ease(7.5 - (this._camElevated || 0) * 1.5);
+    if (this._camBackS == null) this._camBackS = this._camBack;
+    if (this._camUpS == null) this._camUpS = this._camUp;
+    this._camBackS += (this._camBack - this._camBackS) * ease(7.0);
+    this._camUpS += (this._camUp - this._camUpS) * ease(7.0);
+    const camX = pp.x - Math.sin(this._camYawS) * this._camBackS;
+    const camZ = pp.z - Math.cos(this._camYawS) * this._camBackS;
+    let camY = pp.y + this._camUpS;
+    // Never let the chase cam sink below the car's own deck height (ramp-body clip guard)
+    let camFloor = pp.y + 0.06;
+    // logic4: ...and never under the ribbon deck BEHIND the car. On the Climb B descent the
+    // chase cam trails up a 29% grade; the guard samples the car→camera sight line so the ray to
+    // the car clears the deck (and its under-fill keel) everywhere between them.
+    if (this.tracks.surfaceYAt) {
+      const pid = this.tracks._lastPathId;
+      const aimY = pp.y + 0.06;
+      for (const f of [0.3, 0.45, 0.6, 0.75, 0.9, 1.0]) {
+        const sx = pp.x + (camX - pp.x) * f, sz = pp.z + (camZ - pp.z) * f;
+        const ys = this.tracks.surfaceYAt(sx, sz, pp.y, pid);
+        if (ys == null) continue;
+        const need = f >= 1 ? ys + 0.14 : aimY + (ys + 0.06 - aimY) / f;
+        camFloor = Math.max(camFloor, Math.min(pp.y + 0.9, need));
+      }
+    }
+    // Lift rises immediately (never inside a deck) and relaxes smoothly (no pop when it clears)
+    const wantLift = Math.max(0, camFloor - camY);
+    this._camLift = wantLift >= (this._camLift || 0) ? wantLift
+      : this._camLift + (wantLift - this._camLift) * ease(4.0);
+    camY += this._camLift;
+    this.camera.position.set(camX, camY, camZ);
+    this._camVel.set(0, 0, 0);
+    this._camPrevTarget = null;
 
-    const spdAbs = Math.abs(this.car.speed);
-    const leisureCam = 1 - THREE.MathUtils.smoothstep(spdAbs, 0.15, 1.3);
-    const elevCam = this._camElevated || 0;
-    const spring = 9.2 + leisureCam * 3.0 - elevCam * 2.4; // softer follow on elevated decks
-    const damp = 4.6 + leisureCam * 0.9 + elevCam * 1.0;
-    // Vertical spring softer than XZ — grade steps don't pitch the chase cam
-    const springY = spring * 0.55;
-    const dampY = damp * 1.15;
-    const dx = this._camPos.x - this.camera.position.x;
-    const dy = this._camPos.y - this.camera.position.y;
-    const dz = this._camPos.z - this.camera.position.z;
-    this._camVel.x += (dx * spring - this._camVel.x * damp) * dt;
-    this._camVel.y += (dy * springY - this._camVel.y * dampY) * dt;
-    this._camVel.z += (dz * spring - this._camVel.z * damp) * dt;
-    // Clamp vertical velocity spike at crease crossings
-    const maxVy = 2.8 + elevCam * 0.6;
-    this._camVel.y = THREE.MathUtils.clamp(this._camVel.y, -maxVy, maxVy);
-    this.camera.position.x += this._camVel.x * dt;
-    this.camera.position.y += this._camVel.y * dt;
-    this.camera.position.z += this._camVel.z * dt;
+    // Aim: car-relative look offset, low-passed (Y softer so grade creases don't tip the lens)
+    const offX = this._camTarget.x - pp.x, offY = this._camTarget.y - pp.y, offZ = this._camTarget.z - pp.z;
+    if (!this._camLookOff) this._camLookOff = new THREE.Vector3(offX, offY, offZ);
+    this._camLookOff.x += (offX - this._camLookOff.x) * ease(6.5);
+    this._camLookOff.z += (offZ - this._camLookOff.z) * ease(6.5);
+    this._camLookOff.y += (offY - this._camLookOff.y) * ease(3.0);
+    if (!this._camLookSmooth) this._camLookSmooth = new THREE.Vector3();
+    this._camLookSmooth.set(pp.x + this._camLookOff.x, pp.y + this._camLookOff.y, pp.z + this._camLookOff.z);
     this.camera.lookAt(this._camLookSmooth);
     this._sanitizeCamera();
 
     const inDark =
       snap?.kind === "shortcut" || snap?.kind === "mouse" || snap?.kind === "shaft"
       || snap?.kind === "tunnel" || snap?.kind === "chute";
-    this._tunnelDark = THREE.MathUtils.lerp(this._tunnelDark, inDark ? 1 : 0, Math.min(1, 3.5 * dt));
+    this._tunnelDark = THREE.MathUtils.lerp(this._tunnelDark, inDark ? 1 : 0, 1 - Math.exp(-3.5 * dt));
 
     // Echo-y tighter FOV in walls; leisurely cruise uses calmer FOV; boost is a treat
     const leisureF = 1 - THREE.MathUtils.smoothstep(Math.abs(this.car.speed), 0.2, 1.4);
@@ -1413,7 +1501,7 @@ export class DriveMode {
     if (this.keys.boost && Math.abs(this.car.speed) > 1.5) wantFov += 2.8;
     // FOV tighten near balcony void lip (#7 strengthened; never a hard snap)
     wantFov -= (this._voidEdge || 0) * 4.6;
-    this._fov = THREE.MathUtils.lerp(this._fov, wantFov, Math.min(1, 2.8 * dt));
+    this._fov = THREE.MathUtils.lerp(this._fov, wantFov, 1 - Math.exp(-2.8 * dt));
     // Shrink near-plane in walls so chase cam doesn't clip inside cavity meshes
     const wantNear = THREE.MathUtils.lerp(0.08, 0.035, this._tunnelDark);
     let projDirty = Math.abs(this.camera.fov - this._fov) > 0.08;
@@ -1498,13 +1586,14 @@ export class DriveMode {
       if (snap.elevated && snap.edgeMargin < 0.075) {
         edgeAmt = THREE.MathUtils.clamp(1 - snap.edgeMargin / 0.075, 0, 1);
       }
-      // Balcony inner lip toward atrium void (#7) — slightly earlier/stronger warning
-      if (snap.pathId === "balcony_loop" && snap.edgeMargin < 0.13) {
-        // Prefer the void-facing side: car closer to atrium center than ribbon center
-        const atriumX = 0.0, atriumZ = 8.5;
+      // Balcony void lip (#7) — slightly earlier/stronger warning on the drop side
+      if (snap.pathId === "balcony_arc" && snap.edgeMargin < 0.13) {
+        // logic3: balcony_arc loops OUT onto the deck (x∈[-5.75,6.75], z≤17.5) and back;
+        // the drop is on the OUTER side of the loop (balustrade / deck ends), south of the facade.
+        const atriumX = 0.1, atriumZ = 14.6;
         const toAtrium = Math.hypot(pos.x - atriumX, pos.z - atriumZ);
         const ribbonToAtrium = Math.hypot((snap.x ?? pos.x) - atriumX, (snap.z ?? pos.z) - atriumZ);
-        const onInner = toAtrium <= ribbonToAtrium + 0.05;
+        const onInner = pos.z > 14.0 && toAtrium >= ribbonToAtrium - 0.05; // (name kept: "void side")
         if (onInner) {
           voidEdge = THREE.MathUtils.clamp(1 - snap.edgeMargin / 0.13, 0, 1);
           edgeAmt = Math.max(edgeAmt, voidEdge * 0.92);
@@ -1569,37 +1658,30 @@ export class DriveMode {
       ? "b" : "a";
 
     let ax, ay, az, yaw, foot, latchPath, latchKind, mode, armMsg, aimFallback;
+    // logic3: honest poses ON the circuit, upstream of each climb, facing authored travel.
+    // The harness then follows the ribbon (snap.yaw is authored a→b — never flipped).
     if (side === "b") {
-      // Climb B foot on landing (upper end of ramp) — descend +Z toward foyer
-      foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.climb_b && RAMP_MOUNT_FEET.climb_b.foot)
-        ? RAMP_MOUNT_FEET.climb_b.foot
-        : { x: 7.00, y: 4.20, z: -2.35 };
-      ax = 7.00;
-      ay = 4.22;
-      az = -3.10; // just before crest on balcony_to_climb_b
-      const aimX = 7.00;
-      const aimZ = 0.50; // down the asphalt corridor
-      yaw = Math.atan2(aimX - ax, aimZ - az);
+      foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.climb_b && RAMP_MOUNT_FEET.climb_b.crest)
+        ? RAMP_MOUNT_FEET.climb_b.crest
+        : { x: 4.40, y: 4.20, z: 0.30 };
+      ax = 4.40; ay = 4.212; az = 3.20; // balcony_to_climb_b, 2.9u before the apex U-turn
+      yaw = Math.PI;                    // heading −Z (north) toward the apex
       latchPath = "balcony_to_climb_b";
       latchKind = "floor";
       mode = "climb_b";
-      armMsg = "autodrive=climb_b armed… posing at Climb B foot on landing";
-      aimFallback = { x: 7.00, z: 12.75 };
+      armMsg = "autodrive=climb_b armed… posing on balcony_to_climb_b before the Climb B apex";
+      aimFallback = null;
     } else {
       foot = (RAMP_MOUNT_FEET && RAMP_MOUNT_FEET.climb_a && RAMP_MOUNT_FEET.climb_a.foot)
         ? RAMP_MOUNT_FEET.climb_a.foot
-        : { x: -5.00, y: 0.0, z: 12.75 };
-      ax = -4.20;
-      ay = 0.012;
-      az = 10.90;
-      const aimX = -5.00;
-      const aimZ = 12.75;
-      yaw = Math.atan2(aimX - ax, aimZ - az);
+        : { x: -2.11, y: 0.0, z: 11.40 };
+      ax = 0.05; ay = 0.012; az = 11.40; // start of foyer_to_climb_a runway
+      yaw = -Math.PI / 2;                // heading −X (west) into the foot sweep
       latchPath = "foyer_to_climb_a";
       latchKind = "floor";
       mode = "climb";
-      armMsg = "autodrive=climb armed… posing on foyer_to_climb_a";
-      aimFallback = { x: -5.00, z: 12.75 };
+      armMsg = "autodrive=climb armed… posing on the Climb A runway facing the foot";
+      aimFallback = null;
     }
 
     this._clearAutodriveUI();
@@ -1610,7 +1692,7 @@ export class DriveMode {
       mode,
       side,
       t: 0,
-      duration: side === "b" ? 28 : 25,
+      duration: side === "b" ? 30 : 32,
       maxY: ay,
       minY: ay,
       startY: ay,
@@ -1637,7 +1719,7 @@ export class DriveMode {
     this._jamHits = 0;
     this._stuckNudgeCd = 0;
     this.car.setPose(ax, ay, az, yaw);
-    this.car.speed = side === "b" ? 0.55 : 0.45;
+    this.car.speed = 0.45;
     this.car.crashed = false;
     this.car.airborne = false;
     this.car.vy = 0;
@@ -1709,6 +1791,98 @@ export class DriveMode {
     }
   }
 
+  /**
+   * logic4: is the car actually ON SCREEN? Car centre inside the view frustum (with a margin)
+   * AND the camera→car ray not blocked by any visible opaque mesh (decks, walls, slabs).
+   * The autodrive PASS banners require this so a buried / occluded camera can't show green.
+   * @returns {{ok:boolean,inFrustum:boolean,blocker:string|null,ndcX:number,ndcY:number}}
+   */
+  _carVisibleInFrame() {
+    const cam = this.camera;
+    const car = this.car;
+    if (!this._visRay) {
+      this._visRay = new THREE.Raycaster();
+      this._visTgt = new THREE.Vector3();
+      this._visDir = new THREE.Vector3();
+      this._visCarSet = new Set();
+    }
+    this._visCarSet.clear();
+    car.root.traverse((o) => this._visCarSet.add(o));
+    // Harness-only: sync world matrices (headless sims never render; the car/tracks move)
+    this.scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld(true);
+    const tgt = this._visTgt.set(car.position.x, car.position.y + 0.06, car.position.z);
+    const ndc = tgt.clone().project(cam);
+    const inFrustum = ndc.z > -1 && ndc.z < 1 && Math.abs(ndc.x) <= 0.92 && Math.abs(ndc.y) <= 0.92;
+    const dir = this._visDir.subVectors(tgt, cam.position);
+    const dist = dir.length();
+    let blocker = null;
+    if (dist > 1e-4) {
+      dir.multiplyScalar(1 / dist);
+      const rc = this._visRay;
+      rc.set(cam.position, dir);
+      rc.near = 0;
+      rc.far = Math.max(0, dist - 0.07);
+      const visibleChain = (o) => {
+        for (let q = o; q; q = q.parent) if (q.visible === false) return false;
+        return true;
+      };
+      const hits = rc.intersectObjects(this.scene.children, true);
+      for (const h of hits) {
+        const o = h.object;
+        if (!o.isMesh || this._visCarSet.has(o) || !visibleChain(o)) continue;
+        const m = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (m && (m.visible === false || (m.transparent && (m.opacity ?? 1) < 0.5))) continue;
+        blocker = `${o.name || o.parent?.name || o.type}@${h.distance.toFixed(2)}`;
+        break;
+      }
+    }
+    return { ok: inFrustum && !blocker, inFrustum, blocker, ndcX: ndc.x, ndcY: ndc.y };
+  }
+
+  /**
+   * logic7: is there DRAWN asphalt directly under the car? Ray straight down from just above the
+   * car against every visible mesh (car excluded); the FIRST surface hit must be a track road
+   * surface (ribbon / spawn pad / end band / painted chevrons) within a few cm of the wheels.
+   * The logic6 banner trusted snap.onTrack only — it can't see a missing/culled road mesh.
+   * @returns {{ok:boolean, hit:string|null, gap:number|null}}
+   */
+  _asphaltUnderCar() {
+    const car = this.car;
+    if (!this._asRay) {
+      this._asRay = new THREE.Raycaster();
+      this._asDown = new THREE.Vector3(0, -1, 0);
+      this._asOrigin = new THREE.Vector3();
+      this._asCarSet = new Set();
+    }
+    this._asCarSet.clear();
+    car.root.traverse((o) => this._asCarSet.add(o));
+    this.scene.updateMatrixWorld(true);
+    const p = car.position;
+    const rc = this._asRay;
+    rc.set(this._asOrigin.set(p.x, p.y + 0.3, p.z), this._asDown);
+    rc.near = 0;
+    rc.far = 0.6;
+    const visibleChain = (o) => {
+      for (let q = o; q; q = q.parent) if (q.visible === false) return false;
+      return true;
+    };
+    const trackRoot = this.tracks && this.tracks.root;
+    const inTracks = (o) => { for (let q = o; q; q = q.parent) if (q === trackRoot) return true; return false; };
+    const ROAD = /^(ribbon_|spawn_clean_pad|spawn_apron_lane|climb_end_band|corner_chevrons|junction_flow_chevrons)/;
+    const hits = rc.intersectObjects(this.scene.children, true);
+    for (const h of hits) {
+      const o = h.object;
+      if (!o.isMesh || this._asCarSet.has(o) || !visibleChain(o)) continue;
+      const m = Array.isArray(o.material) ? o.material[0] : o.material;
+      if (m && (m.visible === false || (m.transparent && (m.opacity ?? 1) < 0.5))) continue;
+      const gap = p.y - h.point.y;
+      const road = !!trackRoot && inTracks(o) && ROAD.test(o.name || "");
+      return { ok: road && Math.abs(gap) < 0.08, hit: o.name || o.parent?.name || o.type, gap };
+    }
+    return { ok: false, hit: null, gap: null };
+  }
+
   _tickAutodriveClimb(dt) {
     const ad = this._autodrive;
     if (!ad || ad.done) return;
@@ -1723,9 +1897,13 @@ export class DriveMode {
       if (ad.logEl) ad.logEl.textContent += `\n${ad.result}`;
       if (pass) console.info("[autodrive] PASS", result);
       else console.warn("[autodrive]", result);
-      this.keys.left = false;
-      this.keys.right = false;
-      if (!pass) this.keys.forward = false;
+      // logic7: HOLD at the result. logic6 kept W held after PASS with steering released, so
+      // the car rolled straight off the crest/foot onto room floors and into walls (04a/04c).
+      // Now every key is released and the car brakes to a stop where the result was measured;
+      // any real key press (keys flip back to true) hands control to the player.
+      ad.hold = true;
+      ad.holdAt = { x: this.car.position.x, y: this.car.position.y, z: this.car.position.z };
+      this.keys = { forward: false, back: false, left: false, right: false, boost: false };
     };
 
     if (this._inputsFrozen || this._crashPhase) {
@@ -1736,16 +1914,12 @@ export class DriveMode {
       ad.drop = (ad.startY ?? ad.maxY) - ad.minY;
       if (ad.t >= ad.duration) {
         if (isB) {
-          if (ad.drop >= 2.5 && ad.sawPath) finish(true, `CLIMB B AUTO PASS drop=${ad.drop.toFixed(2)} path=climb_b`);
-          else if (ad.drop < 1.0) finish(false, "CLIMB B AUTO FAIL");
+          // logic3: never PASS from a crash/freeze (needs live on=1 frame)
+          if (ad.drop < 1.0 || this.car?.crashed) finish(false, "CLIMB B AUTO FAIL");
           else finish(false, `CLIMB B AUTO TIMEOUT drop=${ad.drop.toFixed(2)} saw=${ad.sawPath ? 1 : 0}`);
-        } else if (ad.maxY < 1.0) {
-          finish(false, "CLIMB AUTO FAIL");
-        } else if (ad.maxY >= 2.5) {
-          finish(true, "CLIMB AUTO PASS");
         } else {
-          ad.result = `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)}`;
-          ad.done = true;
+          // Never PASS from crash freeze — green+CRASH was the logic1 lie
+          finish(false, `CLIMB AUTO FAIL (crash/freeze) maxY=${ad.maxY.toFixed(2)}`);
         }
       }
       return;
@@ -1767,41 +1941,45 @@ export class DriveMode {
     if (isB && pathId === "climb_b") ad.sawPath = true;
     if (!isB && pathId === "climb_a") ad.sawPath = true;
 
+    // logic4: car-in-frame proof. Sample every 6th frame while on the climb, every frame once
+    // the pass metric is reached; PASS needs ≥90% visible samples on the climb AND the last
+    // 6 frames visible (camera→car ray clear + car inside the frustum).
+    ad.visFrame = (ad.visFrame || 0) + 1;
+    const nearPassMetric = isB ? ad.drop >= 3.6 : ad.maxY >= 3.9;
+    if (ad.sawPath && (nearPassMetric || ad.visFrame % 6 === 0)) {
+      const vis = this._carVisibleInFrame();
+      const asph = this._asphaltUnderCar();
+      ad.asphLast = asph;
+      if (asph.ok) ad.asphStreak = (ad.asphStreak || 0) + 1;
+      else { ad.asphStreak = 0; ad.asphLastMiss = asph.hit || "none"; }
+      ad.visN = (ad.visN || 0) + 1;
+      if (vis.ok) { ad.visOk = (ad.visOk || 0) + 1; ad.visStreak = (ad.visStreak || 0) + 1; }
+      else { ad.visStreak = 0; ad.visLastBlock = vis.blocker || (vis.inFrustum ? "?" : "off-frame"); }
+      ad.visLast = vis;
+    }
+    const visRatio = ad.visN ? (ad.visOk || 0) / ad.visN : 0;
+    // logic7: PASS also needs drawn asphalt under the wheels for the last 6 samples
+    const visOkNow = (ad.visStreak || 0) >= 6 && visRatio >= 0.9 && (ad.asphStreak || 0) >= 6;
+    const visTag = `vis=${Math.round(visRatio * 100)}% asphalt=${ad.asphLast?.hit || "-"}`;
+
     let left = false;
     let right = false;
-    let yawTarget = null;
-    if (snap && snap.onTrack && Number.isFinite(snap.yaw)) {
-      yawTarget = snap.yaw;
-      // Prefer heading that matches current travel (avoid 180° flip on bidirectional ribbon)
-      let d0 = yawTarget - this.car.yaw;
-      while (d0 > Math.PI) d0 -= Math.PI * 2;
-      while (d0 < -Math.PI) d0 += Math.PI * 2;
-      let d1 = d0 + Math.PI;
-      while (d1 > Math.PI) d1 -= Math.PI * 2;
-      while (d1 < -Math.PI) d1 += Math.PI * 2;
-      if (Math.abs(d1) < Math.abs(d0)) yawTarget += Math.PI;
-    } else {
-      const foot = ad.foot;
-      const toFoot = Math.hypot(p.x - foot.x, p.z - foot.z);
-      if (toFoot > 0.35) yawTarget = Math.atan2(foot.x - p.x, foot.z - p.z);
-      else if (ad.aimFallback) yawTarget = Math.atan2(ad.aimFallback.x - p.x, ad.aimFallback.z - p.z);
-      else yawTarget = Math.atan2(-4.95 - p.x, 10.35 - p.z);
+    // logic3: plain ribbon follow — authored snap.yaw + lateral error (a human holding the lane).
+    // No aim-point flips, no hard-coded crest coordinates.
+    let cmd = 0;
+    if (snap && Number.isFinite(snap.yaw)) {
+      let d = snap.yaw - this.car.yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      cmd += d * 1.6;
+      if (snap.x != null && snap.z != null) {
+        const rx = -Math.cos(this.car.yaw), rz = Math.sin(this.car.yaw);
+        const latErr = (snap.x - p.x) * rx + (snap.z - p.z) * rz; // + = ribbon centre to the right
+        cmd -= latErr * 1.2;
+      }
     }
-    // Slight lateral correction toward snap ribbon center
-    if (snap && snap.onTrack && snap.x != null && snap.z != null) {
-      const fx = Math.sin(this.car.yaw);
-      const fz = Math.cos(this.car.yaw);
-      const cross = fx * (snap.z - p.z) - fz * (snap.x - p.x);
-      if (cross > 0.06) left = true;
-      else if (cross < -0.06) right = true;
-    }
-    if (Number.isFinite(yawTarget)) {
-      let dyaw = yawTarget - this.car.yaw;
-      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-      if (dyaw > 0.04) left = true;
-      if (dyaw < -0.04) right = true;
-    }
+    if (cmd > 0.04) left = true;
+    else if (cmd < -0.04) right = true;
     this.keys.left = left;
     this.keys.right = right;
 
@@ -1814,39 +1992,50 @@ export class DriveMode {
       const metric = isB
         ? `drop=${ad.drop.toFixed(2)} minY=${ad.minY.toFixed(2)}`
         : `maxY=${ad.maxY.toFixed(2)}`;
-      const line = `t=${ad.t.toFixed(1)}s y=${p.y.toFixed(2)} snap.y=${snapY} on=${onTrk} xz=${p.x.toFixed(2)},${p.z.toFixed(2)} spd=${Number(kmh).toFixed(0)} km/h path=${pathId} ${metric}`;
+      const visNow = (ad.visLast ? (ad.visLast.ok ? "car=vis" : `car=HIDDEN(${ad.visLastBlock})`) : "car=-")
+        + (ad.asphLast ? (ad.asphLast.ok ? " road=asphalt" : ` road=MISSING(${ad.asphLast.hit || "none"})`) : "");
+      const line = `t=${ad.t.toFixed(1)}s y=${p.y.toFixed(2)} snap.y=${snapY} on=${onTrk} xz=${p.x.toFixed(2)},${p.z.toFixed(2)} spd=${Number(kmh).toFixed(0)} km/h path=${pathId} ${metric} ${visNow}`;
       console.log("[autodrive]", line);
       if (ad.logEl) ad.logEl.textContent = line + (ad.result ? `\n${ad.result}` : "");
     }
 
     if (isB) {
       // PASS on Y drop ≥2.5 with climb_b path seen (landing → foyer)
-      if (ad.drop >= 2.5 && ad.sawPath) {
-        finish(true, `CLIMB B AUTO PASS drop=${ad.drop.toFixed(2)} path=climb_b`);
+      const onB = !!(snap && snap.onTrack);
+      // logic3: full descent to the foyer (drop ≥4.0 of 4.2), live on=1
+      if (ad.drop >= 4.0 && ad.sawPath && onB && (pathId === "climb_b" || pathId === "foyer_finish") && !this._crashPhase && !this.car?.crashed && visOkNow) {
+        finish(true, `CLIMB B AUTO PASS drop=${ad.drop.toFixed(2)} on=1 path=${pathId} ${visTag} car-in-frame`);
+        return;
+      }
+      if (this._crashPhase || this.car?.crashed) {
+        finish(false, `CLIMB B AUTO FAIL crash drop=${ad.drop.toFixed(2)}`);
         return;
       }
       if (ad.t >= ad.duration) {
         if (ad.drop < 1.0) finish(false, "CLIMB B AUTO FAIL");
-        else finish(false, `CLIMB B AUTO TIMEOUT drop=${ad.drop.toFixed(2)} saw=${ad.sawPath ? 1 : 0} (need drop≥2.5 + path=climb_b)`);
+        else finish(false, `CLIMB B AUTO TIMEOUT drop=${ad.drop.toFixed(2)} saw=${ad.sawPath ? 1 : 0} ${visTag} block=${ad.visLastBlock || "-"} (need drop≥4.0 + on=1 + path=climb_b + car in frame + asphalt under car)`);
       }
       return;
     }
 
-    if (ad.maxY >= 2.5) {
-      finish(true, "CLIMB AUTO PASS");
+    // Honest PASS: near crest height, still on ribbon, no crash overlay
+    const onOk = !!(snap && snap.onTrack);
+    const crestOk = ad.maxY >= 4.15; // logic3: full crest (tip flat is 4.2), not 3.8 mid-arc
+    const pathOk = pathId === "climb_a" || pathId === "landing_hairpin";
+    const noCrash = !this._crashPhase && !this.car?.crashed;
+    if (crestOk && onOk && pathOk && noCrash && visOkNow) {
+      finish(true, `CLIMB AUTO PASS maxY=${ad.maxY.toFixed(2)} on=1 path=${pathId} ${visTag} car-in-frame`);
+      return;
+    }
+    if (this._crashPhase || this.car?.crashed) {
+      finish(false, `CLIMB AUTO FAIL crash maxY=${ad.maxY.toFixed(2)} on=${onOk ? 1 : 0} xz=${p.x.toFixed(2)},${p.z.toFixed(2)}`);
       return;
     }
 
     if (ad.t >= ad.duration) {
       if (ad.maxY < 1.0) finish(false, "CLIMB AUTO FAIL");
       else {
-        ad.done = true;
-        ad.result = `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)} (need ≥2.5)`;
-        console.warn("[autodrive]", ad.result);
-        this.keys.forward = false;
-        this.keys.left = false;
-        this.keys.right = false;
-        if (ad.logEl) ad.logEl.textContent += `\n${ad.result}`;
+        finish(false, `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)} on=${onOk ? 1 : 0} path=${pathId} ${visTag} block=${ad.visLastBlock || "-"} (need maxY≥4.15 + on=1 + no crash + car in frame + asphalt under car)`);
       }
     }
   }

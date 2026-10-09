@@ -23,10 +23,19 @@ function boxOf(c) {
   };
 }
 
+function isWallLike(b) {
+  if (b.kind === "wall" || b.kind === "pillar") return true;
+  if (b.kind === "furniture" || b.kind === "stair") return false;
+  // Unmarked Box3 panels from _addWallWithOpenings — thin + tall = hard wall
+  if (b.minX == null) return false;
+  const dx = b.maxX - b.minX, dy = b.maxY - b.minY, dz = b.maxZ - b.minZ;
+  return dy > 1.5 && (dx < 0.55 || dz < 0.55);
+}
+
 function hardHit(x, y, z) {
   for (const c of cols) {
     const b = boxOf(c);
-    if (b.kind !== "wall" && b.kind !== "pillar") continue;
+    if (!isWallLike(b)) continue;
     if (b.minX == null) continue;
     if (x >= b.minX && x <= b.maxX && y >= b.minY && y <= b.maxY && z >= b.minZ && z <= b.maxZ) {
       return b;
@@ -49,7 +58,7 @@ function sampleClimb(id) {
     const tx = samples[j].x - p.x, tz = samples[j].z - p.z;
     const tl = Math.hypot(tx, tz) || 1;
     const rx = -tz / tl, rz = tx / tl;
-    for (const lat of [0, halfW * 0.85, -halfW * 0.85]) {
+    for (const lat of [0, halfW * 0.85, -halfW * 0.85, halfW * 0.98, -halfW * 0.98]) {
       const x = p.x + rx * lat, z = p.z + rz * lat;
       for (const yOff of [0.22, 0.48]) {
         const hit = hardHit(x, p.y + yOff, z);
@@ -57,8 +66,10 @@ function sampleClimb(id) {
       }
     }
   }
-  const foot = ramp.points[0];
-  const crest = ramp.points[ramp.points.length - 1];
+  const a = ramp.points[0];
+  const b = ramp.points[ramp.points.length - 1];
+  const foot = a.y <= b.y ? a : b;
+  const crest = a.y <= b.y ? b : a;
   return {
     id,
     ok: hits.length === 0,

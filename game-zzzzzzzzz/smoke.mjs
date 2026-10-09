@@ -77,7 +77,7 @@ console.log("Floor samples", { "getFloorY(0,6,0)": f0, "getFloorY(0,4,4.2)": f1 
 if (Math.abs(f0 - 0) > 0.05) throw new Error(`Expected floor 0 at (0,6), got ${f0}`);
 if (Math.abs(f1 - 4.2) > 0.05) throw new Error(`Expected floor 4.2 at (0,4), got ${f1}`);
 
-// Spawn snap on foyer_oval
+// Spawn snap on foyer_sf
 const snap = drive.tracks.querySnap(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, 2.4);
 console.log("Spawn snap", {
   spawn: CAR_SPAWN,
@@ -87,10 +87,10 @@ console.log("Spawn snap", {
   supported: snap.supported,
 });
 if (!snap.onTrack) throw new Error("Spawn not onTrack");
-if (snap.pathId !== "foyer_oval" && snap.kind !== "floor") {
+if (snap.pathId !== "foyer_sf" && snap.kind !== "floor") {
   console.warn("WARN: spawn pathId", snap.pathId);
 }
-if (snap.pathId && snap.pathId !== "foyer_oval") {
+if (snap.pathId && snap.pathId !== "foyer_sf") {
   // Accept nearby floor segment if still asphalt
   if (snap.kind !== "floor") throw new Error(`Spawn kind ${snap.kind} not floor`);
 }
@@ -270,8 +270,8 @@ if (meshesNearSpawn > 0) {
 }
 console.log("Spawn apron clean", { spawnPad, spawnRing, ribbonOverlap: meshesNearSpawn });
 
-// Elevated deck — figure-8 balcony_loop mid sample
-const balRamp = TRACK_PATHS.find((p) => p.id === "balcony_loop" && !p.disabled);
+// Elevated deck — figure-8 balcony_arc mid sample
+const balRamp = TRACK_PATHS.find((p) => p.id === "balcony_arc" && !p.disabled);
 const bm = balRamp.points[Math.floor(balRamp.points.length / 2)];
 const bridgeSnap = drive.tracks.querySnap(bm.x, bm.y, bm.z, 1.65);
 console.log("Elevated circuit snap", {
@@ -358,12 +358,12 @@ if (mansion.getColliders().length < 160) {
   if (floorOff.onTrack) throw new Error("Open floor must not be onTrack");
   if (!floorOff.carpet || !floorOff.supported) throw new Error("Open floor should be carpet-supported");
 
-    // True lateral offset from balcony_loop (avoid ramp lips / landing overlap)
-  drive.tracks._lastPathId = "balcony_loop";
+    // True lateral offset from balcony_arc (avoid ramp lips / landing overlap)
+  drive.tracks._lastPathId = "balcony_arc";
   drive.tracks._lastPathKind = "balcony";
   let best = null, bd = 99;
   for (const seg of drive.tracks.segments) {
-    if (seg.pathId !== "balcony_loop") continue;
+    if (seg.pathId !== "balcony_arc") continue;
     const mx = (seg.a.x + seg.b.x) * 0.5;
     const mz = (seg.a.z + seg.b.z) * 0.5;
     // Outer deck (high Z) — clear of ramp_landing_to_balcony / return lips
@@ -480,11 +480,11 @@ if (drive.tracks.segments.length > 4200) {
   const elevKinds = new Set(["elevated", "cornice", "balcony", "ramp"]);
   const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
   const must = [
-    "foyer_oval",
+    "foyer_sf",
     "foyer_to_climb_a",
     "climb_a",
     "landing_hairpin",
-    "balcony_loop",
+    "balcony_arc",
     "balcony_to_climb_b",
     "climb_b",
     "foyer_finish",
@@ -524,12 +524,14 @@ if (drive.tracks.segments.length > 4200) {
     return best;
   };
   const joins = [
+    joinOK("foyer_sf", "end", "foyer_to_climb_a", 0.05),
     joinOK("foyer_to_climb_a", "end", "climb_a", 0.05),
     joinOK("climb_a", "end", "landing_hairpin", 0.05),
-    joinOK("landing_hairpin", "end", "balcony_loop", 0.05),
+    joinOK("landing_hairpin", "end", "balcony_arc", 0.05),
+    joinOK("balcony_arc", "end", "balcony_to_climb_b", 0.05),
     joinOK("balcony_to_climb_b", "end", "climb_b", 0.05),
     joinOK("climb_b", "end", "foyer_finish", 0.05),
-    joinOK("foyer_finish", "end", "foyer_oval", 0.05),
+    joinOK("foyer_finish", "end", "foyer_sf", 0.05),
   ];
   // Primary on-ramps: overall grade should stay tour-friendly (not chute-steep)
   const grade = (id) => {
@@ -551,12 +553,12 @@ if (drive.tracks.segments.length > 4200) {
     if (g > maxG) throw new Error(`${id} too steep overall ${g.toFixed(2)} > ${maxG}`);
   }
   // Primary elevated snap (hall cornice culled — balcony south face)
-  const bal = byId.balcony_loop.points[0];
+  const bal = byId.balcony_arc.points[0];
   const corniceSnap = drive.tracks.querySnap(bal.x, bal.y, bal.z, 1.65);
   if (!corniceSnap.onTrack || !(corniceSnap.elevated || corniceSnap.kind === "balcony" || corniceSnap.kind === "floor")) {
     throw new Error(`Primary elevated snap failed: ${corniceSnap.kind}/${corniceSnap.pathId}`);
   }
-  if (corniceSnap.pathId !== "balcony_loop" && corniceSnap.kind === "floor" && corniceSnap.pathId !== "landing_hairpin") {
+  if (corniceSnap.pathId !== "balcony_arc" && corniceSnap.kind === "floor" && corniceSnap.pathId !== "landing_hairpin") {
     throw new Error(`Primary elevated snap wrong path: ${corniceSnap.pathId}`);
   }
   console.log("Elevated circuit united", {
@@ -613,7 +615,7 @@ for (const path of TRACK_PATHS) {
 console.log("Road widths scaled + thick-asphalt mins", {
   scale: ROAD_WIDTH_SCALE, rampMult: RAMP_WIDTH_MULT, floorMin: FLOOR_WIDTH_MIN,
   paths: widthChecks, rampHalfOk, floorMinOk,
-  foyer: TRACK_PATHS.find(p => p.id === "foyer_oval")?.width,
+  foyer: TRACK_PATHS.find(p => p.id === "foyer_sf")?.width,
   foyerRampHalf: +(TRACK_PATHS.find(p => p.id === "climb_a")?.width * 0.5).toFixed(3),
 });
 if (widthChecks < 8) throw new Error("too few paths for width check"); // primary-only circuit
@@ -713,9 +715,9 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     throw new Error("cornice_hall_cross_south should stay disabled (primary-circuit cull)");
   }
   {
-    const bal0 = byId.balcony_loop.points[0];
+    const bal0 = byId.balcony_arc.points[0];
     const hdr = drive.tracks.querySnap(bal0.x, bal0.y, bal0.z, 1.65);
-    if (!hdr.onTrack || !(hdr.elevated || hdr.kind === "balcony" || hdr.pathId === "balcony_loop")) {
+    if (!hdr.onTrack || !(hdr.elevated || hdr.kind === "balcony" || hdr.pathId === "balcony_arc")) {
       throw new Error(`Balcony elevated snap failed: ${hdr.kind}/${hdr.pathId}`);
     }
     console.log("Balcony elev snap", { kind: hdr.kind, pathId: hdr.pathId, on: hdr.onTrack });
@@ -932,7 +934,7 @@ if (Math.abs(spawnFloor) > 0.05) throw new Error(`Spawn ~z=11 should be ground, 
     for (const [id, mount] of mounts) {
       const path = byId[id];
       if (!path) { mountFail++; mountFails.push(`${id} missing`); continue; }
-      const approachId = mount.approach || "foyer_oval";
+      const approachId = mount.approach || "foyer_sf";
       drive.tracks._lastPathId = approachId;
       // Foot engagement zone (kiss may report approach asphalt — still valid mount)
       const fs = drive.tracks.querySnap(mount.foot.x, mount.foot.y + 0.04, mount.foot.z, 1.65);

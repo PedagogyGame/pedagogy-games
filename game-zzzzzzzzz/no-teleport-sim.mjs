@@ -1,12 +1,47 @@
 /**
  * No track-to-track teleport proof (figure-8 primary circuit):
- * Drive foyer_oval with noisy steer — pathId must not flip to distant climbs;
+ * Drive foyer_sf with noisy steer — pathId must not flip to distant climbs;
  * per-frame position delta capped (no ribbon yank). Never teleports.
+ * logic6: + full DriveMode (walls) step-ratio checks — no frame may move the car more than
+ *   1.5× speed·dt (+4 mm) on a held-W pursuit lap, a release at the Climb A foot handoff,
+ *   and the Climb B foot handoff. Catches the logic3–5 foot surge (0.129u in one frame @1.21u/s).
  */
 import * as THREE from "./vendor/three.module.js";
 import { TrackSystem } from "./js/drive/tracks.js";
 import { RCCar } from "./js/drive/car.js";
-import { TRACK_PATHS, CAR_SPAWN } from "./js/data/tracks.js";
+import { TRACK_PATHS, CAR_SPAWN, PRIMARY_CIRCUIT } from "./js/data/tracks.js";
+import { Mansion } from "./js/mansion.js";
+import { DriveMode } from "./js/drive/driveMode.js";
+if (typeof globalThis.document === "undefined") {
+  const makeCtx = () => ({
+    fillStyle: "", strokeStyle: "", lineWidth: 1, globalAlpha: 1, font: "",
+    textAlign: "", textBaseline: "",
+    fillRect() {}, strokeRect() {}, clearRect() {}, beginPath() {}, closePath() {},
+    moveTo() {}, lineTo() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() {},
+    ellipse() {}, rect() {}, stroke() {}, fill() {}, clip() {}, save() {}, restore() {},
+    translate() {}, rotate() {}, scale() {}, setTransform() {}, setLineDash() {},
+    fillText() {}, strokeText() {}, measureText: () => ({ width: 0 }),
+    drawImage() {}, createLinearGradient: () => ({ addColorStop() {} }),
+    createRadialGradient: () => ({ addColorStop() {} }),
+    createPattern: () => null,
+    getImageData: () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 }),
+    putImageData() {},
+  });
+  globalThis.document = {
+    createElement: (t) => t === "canvas"
+      ? { width: 0, height: 0, getContext: () => makeCtx(), style: {} }
+      : { style: {}, classList: { add() {}, remove() {} }, appendChild() {},
+          addEventListener() {}, removeEventListener() {},
+          textContent: "", id: "", className: "", remove() {} },
+    addEventListener() {}, removeEventListener() {},
+    getElementById: () => null, querySelector: () => null,
+    head: { appendChild() {} }, body: { appendChild() {} },
+  };
+}
+if (typeof globalThis.window === "undefined") globalThis.window = globalThis;
+if (typeof globalThis.performance === "undefined") {
+  globalThis.performance = { now: () => Date.now() };
+}
 
 const fails = [];
 const ok = (name, pass, detail = "") => {
@@ -51,23 +86,25 @@ function pathPoint(pathId, tFrac) {
   }
 }
 
-// Apron / off-spur: sticky foyer_oval must not latch climb_a from afar
+// Apron / off-spur: sticky foyer_sf must not latch climb_a from afar
 {
-  tracks._lastPathId = "foyer_oval";
+  tracks._lastPathId = "foyer_sf";
   tracks._lastPathKind = "floor";
-  const s = tracks.querySnap(-3.35, 0.08, 11.5, 1.65, Math.PI);
+  // logic3: (-3.35,11.5) is now ON the Climb A west foot leg — probe a ground car on the
+  // foyer floor BESIDE the climb straight instead (2u east of x=-5, 1.1u below the deck).
+  const s = tracks.querySnap(-3.0, 0.08, 8.6, 1.65, Math.PI);
   ok(
     "apron-no-climb-latch",
     s.pathId !== "climb_a" || !s.onTrack,
     `path=${s.pathId} on=${s.onTrack}`
   );
-  const dXZ = Math.hypot((s.x ?? -3.35) + 3.35, (s.z ?? 11.5) - 11.5);
+  const dXZ = s.onTrack ? Math.hypot((s.x ?? -3.0) + 3.0, (s.z ?? 8.6) - 8.6) : 0; // off-ribbon → no magnet at all
   ok("apron-no-distant-magnet", dXZ < 1.25, `dXZ=${dXZ.toFixed(3)}`);
 }
 
 // Mid-foyer cruise: must not snap onto climb when far from foot
 {
-  tracks._lastPathId = "foyer_oval";
+  tracks._lastPathId = "foyer_sf";
   tracks._lastPathKind = "floor";
   const s = tracks.querySnap(0.0, 0.08, 6.5, 1.65, -Math.PI / 2);
   ok(
@@ -91,22 +128,22 @@ function pathPoint(pathId, tFrac) {
   );
 }
 
-// Drive along foyer_oval with noisy steer — no distant flips / no yank
-tracks._lastPathId = "foyer_oval";
+// Drive along foyer_sf with noisy steer — no distant flips / no yank
+tracks._lastPathId = "foyer_sf";
 tracks._lastPathKind = "floor";
-const start = pathPoint("foyer_oval", 0.05);
+const start = pathPoint("foyer_sf", 0.05);
 car.setPose(start.x, start.y + 0.012, start.z, start.yaw);
 car.speed = 1.15;
 
 const distant = new Set([
-  "climb_a", "climb_b", "landing_hairpin", "balcony_loop", "balcony_to_climb_b",
+  "climb_a", "climb_b", "landing_hairpin", "balcony_arc", "balcony_to_climb_b",
 ]);
-let lastPath = "foyer_oval";
+let lastPath = "foyer_sf";
 let badFlips = 0;
 let maxExcess = 0;
 const dt = 1 / 60;
 const allowedNear = new Set([
-  "foyer_oval", "foyer_to_climb_a", "foyer_finish",
+  "foyer_sf", "foyer_to_climb_a", "foyer_finish",
 ]);
 
 for (let i = 0; i < 720; i++) {
@@ -138,6 +175,74 @@ for (let i = 0; i < 720; i++) {
 
 ok("noisy-drive-no-distant-teleport", badFlips === 0, `badFlips=${badFlips}`);
 ok("noisy-drive-no-yank", maxExcess < 0.55, `maxExcess=${maxExcess.toFixed(3)}`);
+
+// ── logic6: per-frame step ≤ 1.5 × speed·dt through every handoff (full DriveMode, walls) ──
+{
+  const scene2 = new THREE.Scene();
+  const cam2 = new THREE.PerspectiveCamera(68, 2, 0.08, 240);
+  const mansion2 = new Mansion(scene2);
+  const drive = new DriveMode(scene2, cam2);
+  drive.setWallColliders(mansion2.getColliders());
+  const byId2 = Object.fromEntries(TRACK_PATHS.map((q) => [q.id, q]));
+  const line = [];
+  for (const id of PRIMARY_CIRCUIT) {
+    const pts = byId2[id].points.map((q) => new THREE.Vector3(q.x, q.y, q.z));
+    const curve = pts.length >= 3 ? new THREE.CatmullRomCurve3(pts, false, "catmullrom", byId2[id].tension ?? 0.15) : null;
+    const L = curve ? curve.getLength() : pts[0].distanceTo(pts[1]);
+    const sp = curve ? curve.getSpacedPoints(Math.max(2, Math.ceil(L / 0.05))) : [pts[0], pts[1]];
+    for (let i = line.length ? 1 : 0; i < sp.length; i++) line.push({ p: sp[i], id });
+  }
+  const STEP_RATIO = 1.5, EPS = 0.004;
+  const run = (label, { frames, releaseAt = null, startIdx = 0, pose = null, dt = 1 / 60 }) => {
+    drive.enter();
+    if (pose) {
+      drive.tracks._lastPathId = pose.path; drive.tracks._lastPathKind = "floor";
+      drive.car.setPose(pose.x, pose.y, pose.z, pose.yaw);
+      drive.car.speed = pose.v ?? 0;
+      drive._snapCamera(true);
+    }
+    drive.keys = { forward: true, back: false, left: false, right: false, boost: false };
+    const car2 = drive.car;
+    let idx = startIdx, worst = { ratio: 0 }, bad = 0, released = false;
+    for (let f = 0; f < frames; f++) {
+      const pos = car2.position;
+      let best = idx, bd = Infinity;
+      for (let k = idx; k < Math.min(line.length, idx + 60); k++) {
+        const q = line[k].p;
+        const d = Math.hypot(q.x - pos.x, (q.y - pos.y) * 2, q.z - pos.z);
+        if (d < bd) { bd = d; best = k; }
+      }
+      idx = best;
+      const look = line[Math.min(line.length - 1, idx + 14)].p;
+      let d = Math.atan2(look.x - pos.x, look.z - pos.z) - car2.yaw;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      drive.keys.left = d > 0.03; drive.keys.right = d < -0.03;
+      if (releaseAt && !released && releaseAt(pos)) { drive.keys.forward = false; released = true; }
+      const px = pos.x, pz = pos.z, v0 = Math.abs(car2.speed);
+      drive.update(dt);
+      if (drive._crashPhase || car2.crashed) break;
+      const step = Math.hypot(car2.position.x - px, car2.position.z - pz);
+      const vRef = Math.max(v0, Math.abs(car2.speed));
+      const allow = STEP_RATIO * vRef * dt + EPS;
+      const ratio = step / Math.max(1e-6, vRef * dt);
+      if (step > allow) bad++;
+      if (step > EPS && ratio > worst.ratio) worst = { ratio, step, v: vRef, x: car2.position.x, z: car2.position.z, path: drive.tracks._lastPathId, f };
+      if (idx >= line.length - 3 || (released && car2.speed < 1e-4)) break;
+    }
+    ok(label, bad === 0,
+      `badFrames=${bad} worst=${worst.ratio.toFixed(2)}× step=${(worst.step || 0).toFixed(4)} v=${(worst.v || 0).toFixed(3)} @${(worst.x ?? 0).toFixed(2)},${(worst.z ?? 0).toFixed(2)} ${worst.path || ""}`);
+    drive.exit();
+  };
+  run("step-ratio-pursuit-lap", { frames: 60 * 90 });
+  run("step-ratio-climb-a-foot-release", { frames: 60 * 8, releaseAt: (p) => p.x < -1.45 });
+  run("step-ratio-climb-a-foot-30fps", { frames: 30 * 6, dt: 1 / 30 });
+  // Climb B foot handoff (climb_b → foyer_finish): start on the descent and run to the S/F line
+  const iB = line.findIndex((q) => q.id === "climb_b" && q.p.y < 1.2);
+  const pB = line[iB].p, qB = line[iB + 2].p;
+  run("step-ratio-climb-b-foot", { frames: 60 * 8, startIdx: iB,
+    pose: { x: pB.x, y: pB.y + 0.012, z: pB.z, yaw: Math.atan2(qB.x - pB.x, qB.z - pB.z), path: "climb_b", v: 1.2 } });
+}
 
 console.log(fails.length ? `\n${fails.length} FAIL(s)` : "\nALL PASS");
 process.exit(fails.length ? 1 : 0);

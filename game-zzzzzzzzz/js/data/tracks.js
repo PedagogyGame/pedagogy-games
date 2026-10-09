@@ -1,15 +1,13 @@
 /**
- * Drive tracks — EXPERT FIGURE-8 LAP · RAMPS REBUILD (ramps1).
+ * Drive tracks — OPEN CIRCUIT · logic3 polish.
  *
- * LAP: (1) foyer oval S/F mid-foyer long axis
- *      (2) Climb A foyer→landing dedicated asphalt corridor EAST of west scenic stairs
- *      (3) landing hairpin 180 around solid newel
- *      (4) balcony loop — outer rail = wall, marked inner edge
- *      (5) Climb B balcony→foyer EAST hole (opposite Climb A)
- *      (6) short foyer straight into start — fully kissed junctions
+ * LAP: foyer_sf → foyer_to_climb_a → climb_a → landing_hairpin →
+ *      balcony_arc → balcony_to_climb_b → climb_b → foyer_finish → S/F
  *
- * LANE: clear 2.2–2.8 m, straights ≤3.0, never >3.5; curb visual 0.35–0.5
- * CAR_SCALE≈0.19. Grade ≤30%. Real dual floor holes. No freeways / floating roads.
+ * logic3: every kiss is d=0 AND tangent-continuous (no spur reversal at the
+ * Climb A foot, crest turns are real arcs). Grade ≤30% by construction
+ * (eased trapezoid profile). All lanes 2.2u (house-scale). Flat lanes on
+ * solid planks; climb holes = corridor strips only.
  */
 export const ROAD_WIDTH_SCALE = 1.0;
 export const RAMP_WIDTH_MULT = 1.0;
@@ -19,202 +17,245 @@ export const DOOR_WIDTH_MIN = 2.2;
 export const DECK_WIDTH_MIN = 2.2;
 export const RAMP_MAX_GRADE = 0.30;
 export const RAMP_DISABLE_MEAN_GRADE = 0.305;
-export const CAR_LENGTH_U = 0.19;
+// logic6: was 0.19 — that is car.js CAR_SCALE, not the car's length. The real body length is
+// 0.45 × CAR_SCALE = 0.0855u. Audit: this export is imported by NOTHING (no js module, no sim),
+// so the wrong value never affected behaviour; corrected for documentation only. Lane widths
+// (*_WIDTH_MIN = 2.2) are deliberately unchanged.
+export const CAR_LENGTH_U = 0.0855;
+
+// ── logic3 plan helpers ───────────────────────────────────────────────
+// Climbs are authored as plan primitives (straight + circular arcs) so every
+// junction is TANGENT-continuous (no 180° spur reversal at the foot, no 90°
+// snap turn at the crest). Height follows a trapezoid grade profile:
+// flat tip → linear ease-in → constant gmax → ease-out → flat tip.
+// Control-point maxSeg ≤ gmax ≤ RAMP_MAX_GRADE (0.30) by construction.
+const R3 = (v) => Math.round(v * 1000) / 1000;
+function _planSample(prims, step) {
+  const out = [];
+  let s = 0;
+  const push = (x, z) => {
+    const prev = out[out.length - 1];
+    if (prev) {
+      const d = Math.hypot(x - prev.x, z - prev.z);
+      if (d < 1e-6) return;
+      s += d;
+    }
+    out.push({ x, z, s });
+  };
+  for (const pr of prims) {
+    if (pr.line) {
+      const [x0, z0, x1, z1] = pr.line;
+      const L = Math.hypot(x1 - x0, z1 - z0);
+      const n = Math.max(1, Math.round(L / step));
+      for (let i = 0; i <= n; i++) push(x0 + (x1 - x0) * (i / n), z0 + (z1 - z0) * (i / n));
+    } else if (pr.arc) {
+      const { cx, cz, r, a0, a1 } = pr.arc;
+      const L = Math.abs(a1 - a0) * r;
+      const n = Math.max(2, Math.round(L / step));
+      for (let i = 0; i <= n; i++) {
+        const a = a0 + (a1 - a0) * (i / n);
+        push(cx + r * Math.cos(a), cz + r * Math.sin(a));
+      }
+    }
+  }
+  return out;
+}
+/** Height at arc-length s for a trapezoid grade profile. */
+function _easedRise(s, flat0, flat1, total, ease, rise) {
+  const L = total - flat0 - flat1;
+  const g = rise / (L - ease);
+  const u = Math.min(Math.max(s - flat0, 0), L);
+  if (u <= ease) return g * u * u / (2 * ease);
+  if (u >= L - ease) {
+    const v = L - u;
+    return rise - g * v * v / (2 * ease);
+  }
+  return g * (u - ease / 2);
+}
+function _climbPoints({ prims, yStart, yEnd, flat0, flat1, ease = 0.55, step = 0.5, labels = {} }) {
+  const plan = _planSample(prims, step);
+  const total = plan[plan.length - 1].s;
+  const rise = Math.abs(yEnd - yStart);
+  const sign = Math.sign(yEnd - yStart) || 1;
+  // Guarantee explicit kinks-free tip flats: insert exact flat-end samples
+  const pts = plan.map((p) => ({
+    x: R3(p.x),
+    y: R3(yStart + sign * _easedRise(p.s, flat0, flat1, total, ease, rise)),
+    z: R3(p.z),
+  }));
+  if (labels.start) pts[0].label = labels.start;
+  if (labels.end) pts[pts.length - 1].label = labels.end;
+  return pts;
+}
+function _arcPts(cx, cz, r, a0, a1, n, y = 0) {
+  const out = [];
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + (a1 - a0) * (i / n);
+    out.push({ x: R3(cx + r * Math.cos(a)), y, z: R3(cz + r * Math.sin(a)) });
+  }
+  return out;
+}
+const PI = Math.PI;
+
+// ── logic3 layout constants (house units) ────────────────────────────
+// Ground straight (S/F line) along the foyer south strip, both climbs curve off it.
+const GROUND_Z = 11.40;
+const SF_X = 1.00;                 // Start / Finish (centre of the foyer straight)
+const CLIMB_A_X = -5.00;           // holeA_climb centre (x∈[-6.35,-3.65])
+const CLIMB_B_X = 7.00;            // holeB_climb centre (x∈[5.65,8.35])
+const BOT_R = 1.50;                // foot-arc radius (west leg → uphill / downhill → west leg)
+const TOP_R = 1.30;                // crest-arc radius (inner ribbon edge stays ≥0.2)
+const CREST_Z = -1.00;             // crest corridor centre (between landing N wall & library S wall)
+const TIP = 0.45;                  // explicit flat tips at both climb ends
+const A_FOOT_X = -2.11;            // Climb A foot (flat) — 2.0u+ solid runway east of it
+const B_FOOT_X = 4.11;             // Climb B foot (mirror of A about SF_X)
+const B_CREST_X = 4.40;            // Climb B entry on solid landing (U-turn start)
+const LAND_Y = 4.20;
 
 const _PATHS = [
-  // ── 1) FOYER OVAL ───────────────────────────────────────────────
+  // ── 1) FOYER S/F — straight ground line heading WEST toward Climb A foot
   {
-    id: "foyer_oval",
+    id: "foyer_sf",
     kind: "floor",
-    width: 2.50,
-    tension: 0.08,
-    closed: true,
+    width: 2.20,
+    tension: 0.06,
+    closed: false,
     fancy: true,
     points: [
-      { x: 0.00, y: 0.0, z: 10.40, label: "Start / Finish" },
-      { x: -2.20, y: 0.0, z: 10.40 },
-      { x: -4.00, y: 0.0, z: 10.55 },
-      { x: -5.40, y: 0.0, z: 11.20 },
-      { x: -6.40, y: 0.0, z: 11.90 },
-      { x: -7.00, y: 0.0, z: 12.20 }, // west wall cruise (scenic stairs)
-      { x: -7.00, y: 0.0, z: 9.00 },
-      { x: -7.00, y: 0.0, z: 5.50 },
-      { x: -6.40, y: 0.0, z: 2.80 },
-      { x: -4.80, y: 0.0, z: 1.20 },
-      { x: -2.40, y: 0.0, z: 0.55 },
-      { x: 0.00, y: 0.0, z: 0.45 },
-      { x: 2.40, y: 0.0, z: 0.55 },
-      { x: 4.80, y: 0.0, z: 1.20 },
-      { x: 6.40, y: 0.0, z: 2.80 },
-      { x: 7.00, y: 0.0, z: 5.50 },
-      { x: 7.00, y: 0.0, z: 9.00 },
-      { x: 7.00, y: 0.0, z: 12.75 }, // kiss climb_b / finish
-      { x: 5.20, y: 0.0, z: 12.05 },
-      { x: 3.00, y: 0.0, z: 10.85 },
-      { x: 1.40, y: 0.0, z: 10.50 },
-      { x: 0.00, y: 0.0, z: 10.40 },
+      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Start / Finish" },
+      { x: 0.52, y: 0.0, z: GROUND_Z },
+      { x: 0.05, y: 0.0, z: GROUND_Z }, // kiss foyer_to_climb_a
     ],
   },
 
-  // Spur oval → Climb A (kiss)
+  // Runway → Climb A foot: straight, same heading as the climb's first metres (≥2u solid)
   {
     id: "foyer_to_climb_a",
     kind: "floor",
-    width: 2.45,
+    width: 2.20,
     tension: 0.03,
     fancy: true,
     points: [
-      // ≥2u flat runway into Climb A foot (Mario Kart readable approach)
-      { x: -4.00, y: 0.0, z: 10.55 }, // from oval
-      { x: -4.60, y: 0.0, z: 10.75 },
-      { x: -5.00, y: 0.0, z: 10.75 }, // align west corridor
-      { x: -5.00, y: 0.0, z: 11.40 },
-      { x: -5.00, y: 0.0, z: 12.05 },
-      { x: -5.00, y: 0.0, z: 12.75 }, // kiss climb_a foot
+      { x: 0.05, y: 0.0, z: GROUND_Z },
+      { x: -1.03, y: 0.0, z: GROUND_Z },
+      { x: A_FOOT_X, y: 0.0, z: GROUND_Z }, // kiss climb_a foot (tangent-continuous, heading west)
     ],
   },
 
-    // ── 2) Climb A — dedicated asphalt EAST of west scenic stairs ───
-  // Corridor x≈-5.0 (stairs scenery at x≈-7.6). Flat run ≥14 m; rise 4.2; grade ≤30%.
+  // ── 2) Climb A — west leg → foot arc (turn north) → straight up holeA → crest arc (turn east)
   {
-    // FROM SCRATCH (ramps1): thick asphalt ribbon, constant-X silhouette east of scenic stairs.
-    // Flat pads at tips; climb run ≈14.0 → mean grade ≤0.30 for rise 4.2.
     id: "climb_a",
     kind: "ramp",
-    width: 2.40,
+    width: 2.20,
     gentleStart: false,
     noLateralBow: true,
+    authoredGrade: true,
     tension: 0.08,
-    points: [
-      { x: -5.00, y: 0.00, z: 12.75, label: "Grand Foyer" }, // foot
-      { x: -5.00, y: 0.00, z: 12.20 }, // tip flat
-      { x: -5.00, y: 0.60, z: 10.20 },
-      { x: -5.00, y: 1.20, z: 8.20 },
-      { x: -5.00, y: 1.80, z: 6.20 },
-      { x: -5.00, y: 2.40, z: 4.20 },
-      { x: -5.00, y: 3.00, z: 2.20 },
-      { x: -5.00, y: 3.60, z: 0.20 },
-      { x: -5.00, y: 4.20, z: -1.80 }, // crest tip flat start
-      { x: -5.00, y: 4.20, z: -2.35, label: "Upper Landing" }, // kiss hairpin
-    ],
+    points: _climbPoints({
+      prims: [
+        { line: [A_FOOT_X, GROUND_Z, CLIMB_A_X + BOT_R, GROUND_Z] },
+        { arc: { cx: CLIMB_A_X + BOT_R, cz: GROUND_Z - BOT_R, r: BOT_R, a0: PI / 2, a1: PI } },
+        { line: [CLIMB_A_X, GROUND_Z - BOT_R, CLIMB_A_X, CREST_Z + TOP_R] },
+        { arc: { cx: CLIMB_A_X + TOP_R, cz: CREST_Z + TOP_R, r: TOP_R, a0: PI, a1: 1.5 * PI } },
+        { line: [CLIMB_A_X + TOP_R, CREST_Z, CLIMB_A_X + TOP_R + TIP, CREST_Z] },
+      ],
+      yStart: 0.0, yEnd: LAND_Y, flat0: TIP, flat1: TIP,
+      labels: { start: "Grand Foyer", end: "Upper Landing" },
+    }),
   },
 
-  // ── 3) Landing hairpin 180 around solid newel ───────────────────
-  // Newel ≈ (-5.50, 4.2, -0.20); inner R ≥ 1.5
+  // ── 3) Landing hairpin — crest corridor east → right turn through the library-south
+  //       doorway (x∈[-1.5,1.5]) → south down the landing (newel stays west, ≥0.4u edge clear)
   {
     id: "landing_hairpin",
     kind: "floor",
-    width: 2.40,
+    width: 2.20,
     tension: 0.10,
     fancy: true,
     points: [
-      // ≥2u flat tip-release off Climb A crest, then 180° around newel (-5.50,-0.20)
-      { x: -5.00, y: 4.20, z: -2.35 }, // kiss climb_a crest
-      { x: -4.85, y: 4.20, z: -1.35 },
-      { x: -4.55, y: 4.20, z: -0.35 }, // ~2.1u flat release
-      { x: -4.15, y: 4.20, z: 0.70 },
-      { x: -3.80, y: 4.20, z: 1.55 },
-      { x: -4.35, y: 4.20, z: 2.40 },
-      { x: -5.50, y: 4.20, z: 2.50 }, // north of newel
-      { x: -6.60, y: 4.20, z: 1.30 },
-      { x: -6.60, y: 4.20, z: -0.30 },
-      { x: -5.80, y: 4.20, z: -1.55 },
-      { x: -4.80, y: 4.20, z: -1.35 },
-      { x: -4.00, y: 4.20, z: 0.15 },
-      { x: -3.40, y: 4.20, z: 1.75 },
-      { x: -2.40, y: 4.20, z: 3.40 },
-      { x: -1.20, y: 4.20, z: 5.00 },
-      { x: 0.40, y: 4.20, z: 6.60 },
-      { x: 2.20, y: 4.20, z: 7.80 },
-      { x: 4.00, y: 4.20, z: 8.80 },
-      { x: 5.00, y: 4.20, z: 9.55, label: "Balcony Approach" },
+      { x: CLIMB_A_X + TOP_R + TIP, y: LAND_Y, z: CREST_Z }, // kiss climb_a crest
+      { x: -2.25, y: LAND_Y, z: CREST_Z },
+      ..._arcPts(-1.25, CREST_Z + 1.25, 1.25, 1.5 * PI, 2 * PI, 3, LAND_Y), // → (0, 0.25) heading south
+      { x: 0.00, y: LAND_Y, z: 1.70 },
+      { x: 0.00, y: LAND_Y, z: 3.60 },
+      { x: 0.00, y: LAND_Y, z: 5.60 },
+      { x: 0.00, y: LAND_Y, z: 7.60 },
+      { x: 0.00, y: LAND_Y, z: 9.60, label: "Balcony Approach" },
     ],
   },
 
-  // ── 4) Balcony loop ─────────────────────────────────────────────
+  // ── 4) Balcony sweep — out through the French doors, S-bend west, U-loop, east run,
+  //       back north through the east doors. Open (not a closed loop), no self-crossing.
   {
-    id: "balcony_loop",
+    id: "balcony_arc",
     kind: "balcony",
-    width: 2.40,
+    width: 2.20,
     rail: true,
     tension: 0.05,
-    closed: true,
+    closed: false,
     fancy: true,
     points: [
-      { x: 5.00, y: 4.20, z: 9.55 },
-      { x: 5.40, y: 4.20, z: 11.20 },
-      { x: 5.50, y: 4.20, z: 13.00 },
-      { x: 5.20, y: 4.20, z: 14.80 },
-      { x: 3.80, y: 4.20, z: 16.40 },
-      { x: 1.80, y: 4.20, z: 17.00 },
-      { x: 0.00, y: 4.20, z: 17.15 },
-      { x: -1.80, y: 4.20, z: 17.00 },
-      { x: -3.80, y: 4.20, z: 16.40 },
-      { x: -5.00, y: 4.20, z: 14.80 },
-      { x: -5.10, y: 4.20, z: 13.00 },
-      { x: -4.70, y: 4.20, z: 11.20 },
-      { x: -3.20, y: 4.20, z: 10.00 },
-      { x: -1.00, y: 4.20, z: 9.60 },
-      { x: 1.50, y: 4.20, z: 9.50 },
-      { x: 3.60, y: 4.20, z: 9.50 },
-      { x: 5.00, y: 4.20, z: 9.55 },
+      { x: 0.00, y: LAND_Y, z: 9.60 },
+      { x: 0.00, y: LAND_Y, z: 10.60 },
+      ..._arcPts(-1.60, 11.60, 1.60, 0, PI / 2, 3, LAND_Y).slice(0), // (0,11.6) → (-1.6,13.2)
+      { x: -2.80, y: LAND_Y, z: 13.20 },
+      ..._arcPts(-2.80, 14.60, 1.40, -PI / 2, -1.5 * PI, 5, LAND_Y).slice(1), // U-loop → (-2.8,16.0)
+      { x: -1.00, y: LAND_Y, z: 16.00 },
+      { x: 0.80, y: LAND_Y, z: 16.00 },
+      ..._arcPts(2.60, 14.20, 1.80, PI / 2, 0, 3, LAND_Y), // (2.6,16.0) → (4.4,14.2) heading north
+      { x: B_CREST_X, y: LAND_Y, z: 12.40 },
+      { x: B_CREST_X, y: LAND_Y, z: 10.60 }, // kiss balcony_to_climb_b
     ],
   },
 
+  // Solid east landing runway (x=4.40 < holeB minX 5.65) → Climb B entry
   {
     id: "balcony_to_climb_b",
     kind: "floor",
-    width: 2.40,
+    width: 2.20,
     tension: 0.06,
     fancy: true,
     points: [
-      // ≥2u flat runway into Climb B crest (east corridor x=7)
-      { x: 5.00, y: 4.20, z: 14.80 },
-      { x: 5.70, y: 4.20, z: 10.50 },
-      { x: 6.50, y: 4.20, z: 5.50 },
-      { x: 7.00, y: 4.20, z: 1.50 },
-      { x: 7.00, y: 4.20, z: -0.35 }, // flat runway start
-      { x: 7.00, y: 4.20, z: -2.35 }, // kiss climb_b crest
+      { x: B_CREST_X, y: LAND_Y, z: 10.60 },
+      { x: B_CREST_X, y: LAND_Y, z: 8.20 },
+      { x: B_CREST_X, y: LAND_Y, z: 5.40 },
+      { x: B_CREST_X, y: LAND_Y, z: 2.60 },
+      { x: B_CREST_X, y: LAND_Y, z: CREST_Z + TOP_R }, // kiss climb_b (U-turn start, solid)
     ],
   },
 
-    // ── 5) Climb B — EAST asphalt hole (scenic stairs at x≈8.6 beside) ─
-  // Straight corridor x=7.00; flat ≥14 m; drop 4.2 → grade ≤0.30; landmark pylons at foot/crest
+  // ── 5) Climb B — flat U-turn over the crest → straight down holeB → foot arc (turn west) → foot
   {
-    // FROM SCRATCH (ramps1): east descent mirror of Climb A — constant-X vs east wall.
-    // Scenic stairs at x≈9.0 stay BESIDE; tip flats + ≤0.30 grade; tip→foyer_finish kiss.
     id: "climb_b",
     kind: "ramp",
-    width: 2.40,
+    width: 2.20,
     gentleStart: false,
     noLateralBow: true,
+    authoredGrade: true,
     tension: 0.08,
-    points: [
-      { x: 7.00, y: 4.20, z: -2.35, label: "Upper Landing" }, // crest (path start)
-      { x: 7.00, y: 4.20, z: -1.80 }, // tip flat
-      { x: 7.00, y: 3.60, z: 0.20 },
-      { x: 7.00, y: 3.00, z: 2.20 },
-      { x: 7.00, y: 2.40, z: 4.20 },
-      { x: 7.00, y: 1.80, z: 6.20 },
-      { x: 7.00, y: 1.20, z: 8.20 },
-      { x: 7.00, y: 0.60, z: 10.20 },
-      { x: 7.00, y: 0.00, z: 12.20 }, // tip flat
-      { x: 7.00, y: 0.00, z: 12.75, label: "Grand Foyer" }, // foot → foyer_finish
-    ],
+    points: _climbPoints({
+      prims: [
+        { arc: { cx: B_CREST_X + TOP_R, cz: CREST_Z + TOP_R, r: TOP_R, a0: PI, a1: 2 * PI } },
+        { line: [CLIMB_B_X, CREST_Z + TOP_R, CLIMB_B_X, GROUND_Z - BOT_R] },
+        { arc: { cx: CLIMB_B_X - BOT_R, cz: GROUND_Z - BOT_R, r: BOT_R, a0: 0, a1: PI / 2 } },
+        { line: [CLIMB_B_X - BOT_R, GROUND_Z, B_FOOT_X, GROUND_Z] },
+      ],
+      yStart: LAND_Y, yEnd: 0.0, flat0: (PI / 2) * TOP_R, flat1: TIP,
+      labels: { start: "Upper Landing", end: "Grand Foyer" },
+    }),
   },
 
-  // ── 6) Short foyer straight into start ──────────────────────────
+  // ── 6) Foyer finish — B foot → S/F (straight, tangent-continuous)
   {
     id: "foyer_finish",
     kind: "floor",
-    width: 2.50,
+    width: 2.20,
     tension: 0.04,
     fancy: true,
     points: [
-      { x: 7.00, y: 0.0, z: 12.75 }, // kiss climb_b foot
-      { x: 4.20, y: 0.0, z: 11.55 },
-      { x: 1.80, y: 0.0, z: 10.65 },
-      { x: 0.00, y: 0.0, z: 10.40, label: "Start / Finish" },
+      { x: B_FOOT_X, y: 0.0, z: GROUND_Z }, // kiss climb_b foot
+      { x: 2.55, y: 0.0, z: GROUND_Z },
+      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Start / Finish" },
     ],
   },
 ];
@@ -248,6 +289,7 @@ for (const path of TRACK_PATHS) {
 
 function _softenRampGrades(path) {
   if (path.kind !== "ramp" || path.disabled || !path.points || path.points.length < 3) return;
+  if (path.authoredGrade) return; // logic3: eased profile authored in _climbPoints
   const pts = path.points;
   const y0 = pts[0].y;
   const y1 = pts[pts.length - 1].y;
@@ -265,7 +307,6 @@ function _softenRampGrades(path) {
     path._disabledReason = `mean grade ${mean.toFixed(2)} > ${RAMP_DISABLE_MEAN_GRADE}`;
     return;
   }
-  // Identify authored flat pads (y≈y0 at start, y≈y1 at end)
   let i0 = 0;
   while (i0 + 1 < pts.length && Math.abs(pts[i0 + 1].y - y0) < 0.05) i0++;
   let i1 = pts.length - 1;
@@ -299,8 +340,15 @@ function _softenRampGrades(path) {
 }
 for (const path of TRACK_PATHS) _softenRampGrades(path);
 
-// Spawn on S/F, facing west toward Climb A
-export const CAR_SPAWN = { x: 0.00, y: 0.012, z: 10.40, yaw: -Math.PI / 2 };
+// Spawn on S/F straight, facing west toward the Climb A runway
+export const CAR_SPAWN = { x: SF_X, y: 0.012, z: GROUND_Z, yaw: -Math.PI / 2 };
+
+/** logic3 layout anchors (sims / mansion decor read these — single source of truth). */
+export const LAYOUT = {
+  GROUND_Z, SF_X, CLIMB_A_X, CLIMB_B_X, BOT_R, TOP_R, CREST_Z, TIP,
+  A_FOOT_X, B_FOOT_X, B_CREST_X, LAND_Y,
+  NEWEL: { x: -2.20, y: LAND_Y, z: 2.20, half: 0.30 },
+};
 
 export const RAMP_MOUNT_FEET = (() => {
   const APPROACH = {
@@ -310,12 +358,15 @@ export const RAMP_MOUNT_FEET = (() => {
   const out = {};
   for (const path of TRACK_PATHS) {
     if (path.kind !== "ramp" || path.disabled) continue;
-    const foot = path.points[0];
-    const crest = path.points[path.points.length - 1];
+    const a = path.points[0];
+    const b = path.points[path.points.length - 1];
+    // foot = LOW end, crest = HIGH end (Climb B path order is crest→foot)
+    const footPt = a.y <= b.y ? a : b;
+    const crestPt = a.y <= b.y ? b : a;
     out[path.id] = {
       approach: APPROACH[path.id] || null,
-      foot: { x: foot.x, y: foot.y, z: foot.z },
-      crest: { x: crest.x, y: crest.y, z: crest.z },
+      foot: { x: footPt.x, y: footPt.y, z: footPt.z },
+      crest: { x: crestPt.x, y: crestPt.y, z: crestPt.z },
       engageBack: path.id === "climb_a" || path.id === "climb_b" ? 1.25 : 0.08,
       crestSoft: 0.12,
       climbFracs: [0.25, 0.5, 0.75],
@@ -327,11 +378,11 @@ export const RAMP_MOUNT_FEET = (() => {
 export const SHORTCUT_TOAST_RE = /mouse run|wall hollow|pipe shaft|service shaft|drop chute|climb tube|safe landing|start \/ finish/i;
 
 export const PRIMARY_CIRCUIT = [
-  "foyer_oval",
+  "foyer_sf",
   "foyer_to_climb_a",
   "climb_a",
   "landing_hairpin",
-  "balcony_loop",
+  "balcony_arc",
   "balcony_to_climb_b",
   "climb_b",
   "foyer_finish",

@@ -262,7 +262,7 @@ const byId = Object.fromEntries(TRACK_PATHS.map((p) => [p.id, p]));
       if (flags.fell || car.crashed) { fell++; break; }
       const onBalDeck = pos.y > 4.15 && pos.z > 10.2 && Math.abs(pos.x) < 6.5;
       if (onBalDeck
-          || snap.pathId === "balcony_loop"
+          || snap.pathId === "balcony_arc"
           || (snap.pathId === "ramp_landing_to_balcony" && pos.z > 10.2)
           || (snap.pathId === "ramp_balcony_return" && pos.z > 10.2)) {
         reachedBal = true;

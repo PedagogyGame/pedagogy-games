@@ -49,12 +49,14 @@ for (const id of ["climb_a", "climb_b"]) {
 }
 
 const kisses = [
+  ["foyer_sf", -1, "foyer_to_climb_a", 0],
   ["foyer_to_climb_a", -1, "climb_a", 0],
   ["climb_a", -1, "landing_hairpin", 0],
-  ["landing_hairpin", -1, "balcony_loop", 0],
+  ["landing_hairpin", -1, "balcony_arc", 0],
+  ["balcony_arc", -1, "balcony_to_climb_b", 0],
   ["balcony_to_climb_b", -1, "climb_b", 0],
   ["climb_b", -1, "foyer_finish", 0],
-  ["foyer_finish", -1, "foyer_oval", 0],
+  ["foyer_finish", -1, "foyer_sf", 0],
 ];
 for (const [a, ai, b, bi] of kisses) {
   const pa = byId[a].points.at(ai), pb = byId[b].points.at(bi);
@@ -62,10 +64,13 @@ for (const [a, ai, b, bi] of kisses) {
   ok(`kiss-${a}->${b}`, d < 0.05, `d=${d.toFixed(4)}`);
 }
 
-ok("climb-a-corridor-east-of-stairs", Math.abs(byId.climb_a.points[0].x - (-5.0)) < 0.05,
-  `footX=${byId.climb_a.points[0].x}`);
-ok("climb-b-corridor-at-x7", Math.abs(byId.climb_b.points[0].x - 7.0) < 0.05,
-  `crestX=${byId.climb_b.points[0].x}`);
+// logic3: feet now sweep off the S/F straight; the CLIMB STRAIGHTS (mid-grade, y∈[1,3])
+// must still run inside the asphalt strips at x=-5 (A, east of scenic stairs) and x=7 (B).
+const midXs = (id) => byId[id].points.filter((q) => q.y > 1.0 && q.y < 3.0).map((q) => q.x);
+ok("climb-a-corridor-east-of-stairs", midXs("climb_a").length > 3 && midXs("climb_a").every((x) => Math.abs(x + 5.0) < 0.05),
+  `midX=${[...new Set(midXs("climb_a").map((x) => x.toFixed(2)))].join(",")} foot=${byId.climb_a.points[0].x}`);
+ok("climb-b-corridor-at-x7", midXs("climb_b").length > 3 && midXs("climb_b").every((x) => Math.abs(x - 7.0) < 0.05),
+  `midX=${[...new Set(midXs("climb_b").map((x) => x.toFixed(2)))].join(",")} crest=${byId.climb_b.points[0].x}`);
 
 const scene = new THREE.Scene();
 const mansion = new Mansion(scene);
@@ -136,19 +141,22 @@ function driveAlong(pathId, { startFrac = 0, endFrac = 1, frames = 900, latch = 
   ok("spawn-onTrack", !!spawn.onTrack && (spawn.kind === "floor" || spawn.kind === "floor"),
     `path=${spawn.pathId} kind=${spawn.kind}`);
 
-  const oval = driveAlong("foyer_oval", { endFrac: 0.35, frames: 700 });
-  ok("drive-oval", oval.onRate > 0.55 && oval.maxJump < 0.55,
+  const oval = driveAlong("foyer_sf", { endFrac: 0.95, frames: 500 });
+  ok("drive-foyer-sf", oval.onRate > 0.55 && oval.maxJump < 0.55,
     `on=${(oval.onRate * 100) | 0}% jump=${oval.maxJump.toFixed(3)}`);
 
   const spur = driveAlong("foyer_to_climb_a", { frames: 500, latch: "foyer_to_climb_a" });
   ok("drive-spur", spur.ok || spur.onRate > 0.45, `on=${(spur.onRate * 100) | 0}%`);
 
   const foot = byId.climb_a.points[0];
-  car.setPose(foot.x, foot.y + 0.03, foot.z, Math.atan2(0, -1));
+  const foot1 = byId.climb_a.points[1];
+  // logic3: pose along the authored foot tangent (west), not the retired −Z foot
+  car.setPose(foot.x, foot.y + 0.03, foot.z, Math.atan2(foot1.x - foot.x, foot1.z - foot.z));
   tracks._lastPathId = "foyer_to_climb_a";
   tracks._lastPathKind = "floor";
-  let maxY = foot.y, fell = 0, onN = 0;
+  let maxY = foot.y, fell = 0, onN = 0, ranN = 0;
   for (let f = 0; f < 1600; f++) {
+    ranN++;
     const pos = car.position;
     const snap = tracks.querySnap(pos.x, pos.y, pos.z, 1.65, car.yaw);
     if (snap.onTrack && snap.yaw != null) {
@@ -161,16 +169,16 @@ function driveAlong(pathId, { startFrac = 0, endFrac = 1, frames = 900, latch = 
     if (snap.onTrack) onN++;
     maxY = Math.max(maxY, car.position.y);
     if (car.crashed || car.position.y < -0.5) { fell++; break; }
-    if (maxY >= 3.9) break;
+    if (maxY >= 4.15) break;
   }
-  ok("drive-climb-a-crest", maxY >= 3.9 && fell === 0,
-    `maxY=${maxY.toFixed(2)} on=${((onN / 1600) * 100) | 0}%`);
+  ok("drive-climb-a-crest", maxY >= 4.15 && fell === 0 && onN / ranN > 0.9,
+    `maxY=${maxY.toFixed(2)} on=${((onN / ranN) * 100) | 0}% frames=${ranN}`);
 
   const hair = driveAlong("landing_hairpin", { latch: "climb_a", frames: 1000 });
   ok("drive-hairpin", hair.onRate >= 0.45 && hair.maxJump < 0.6,
     `on=${(hair.onRate * 100) | 0}% jump=${hair.maxJump.toFixed(3)}`);
 
-  const loop = driveAlong("balcony_loop", { startFrac: 0.05, endFrac: 0.55, frames: 1200, latch: "balcony_loop" });
+  const loop = driveAlong("balcony_arc", { startFrac: 0.05, endFrac: 0.85, frames: 1200, latch: "balcony_arc" });
   ok("drive-balcony", loop.onRate >= 0.40 && loop.maxJump < 0.65,
     `on=${(loop.onRate * 100) | 0}% jump=${loop.maxJump.toFixed(3)}`);
 
@@ -208,20 +216,22 @@ function driveAlong(pathId, { startFrac = 0, endFrac = 1, frames = 900, latch = 
 {
   const holesF = mansion._storyApertures({ id: "foyer" }, "ceiling");
   const holesL = mansion._storyApertures({ id: "landing" }, "floor");
-  ok("dual-holes-foyer", holesF.length === 2, `n=${holesF.length}`);
-  ok("dual-holes-landing", holesL.length === 2, `n=${holesL.length}`);
-  ok("holes-opposite", holesF[0].maxX < 0 && holesF[1].minX > 0, "west+east");
+  ok("dual-holes-foyer", holesF.length === 4, `n=${holesF.length}`);
+  ok("dual-holes-landing", holesL.length === 4, `n=${holesL.length}`);
+  const climbWest = holesF.find((h) => h.minX < -4 && h.maxX < -3);
+  const climbEast = holesF.find((h) => h.minX > 5 && h.maxX < 9);
+  ok("holes-climb-strips", !!climbWest && !!climbEast, "west+east climb");
 }
 
 {
   const cols = mansion.getColliders();
   const newels = cols.filter((c) => c.driveKind === "pillar"
-    && c.min.x < -5.2 && c.max.x > -5.8 && c.min.y >= 4.0);
+    && c.min.x < -2.0 && c.max.x > -2.4 && c.min.z < 2.4 && c.max.z > 2.0 && c.min.y >= 4.0);
   ok("landing-newel", newels.length >= 1, `n=${newels.length}`);
 }
 
 {
-  tracks._lastPathId = "foyer_oval";
+  tracks._lastPathId = "foyer_sf";
   tracks._lastPathKind = "floor";
   const mid = tracks.querySnap(0, 0.08, 6.0, 1.65, Math.PI);
   ok("no-teleport-mid-foyer", mid.pathId !== "climb_a" || !mid.onTrack, `path=${mid.pathId}`);

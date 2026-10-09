@@ -480,6 +480,7 @@ export class RCCar {
     this.vy = 0;
     this.speed = 0;
     this._steerInput = 0; // kill residual steer so re-enter/pure-W does not yaw-drift
+    this._throttleSmooth = 0; // logic3: no residual throttle after re-enter / respawn (car crept + steer jerk)
     this.airborne = false;
     this.crashed = false;
     this._unsupportedFrames = 0;
@@ -672,8 +673,15 @@ export class RCCar {
 
     // Soft throttle ease — responsive on climb, calm on floor cruise (upright caps unchanged)
     if (this._throttleSmooth == null) this._throttleSmooth = 0;
-    const thrRate = (kind === "ramp" || snap?.steep) ? 6.8 : 5.8;
+    // logic3: floor ramp-up eased (5.8→4.4/s) — W from rest builds speed over ~0.6 s, no lurch
+    // logic4: the ease applies to PRESSING only. On release the pedal lifts quickly (12/s) —
+    // the old symmetric 4.4/s ease kept pushing for ~0.9 s after W-up and then hit a hard
+    // friction wall (see coast below), which read as "holds, then snaps to 0 km/h".
+    const thrRate = (Math.abs(throttle) < Math.abs(this._throttleSmooth) || throttle === 0)
+      ? 16.0
+      : ((kind === "ramp" || snap?.steep) ? 6.8 : 4.4);
     this._throttleSmooth = THREE.MathUtils.lerp(this._throttleSmooth, throttle, Math.min(1, thrRate * dt));
+    if (throttle === 0 && Math.abs(this._throttleSmooth) < 0.02) this._throttleSmooth = 0;
     const thr = this._throttleSmooth;
     if (thr > 0.02) {
       const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
@@ -681,11 +689,25 @@ export class RCCar {
       // Climb-only plant — floor cruise torque unchanged so ribbon onRate stays green
       const climbPlant = (kind === "ramp" || snap?.steep) ? 1.06 : 1;
       this.speed += this.accel * thr * curve * climbPlant * accelMul * dt;
+      // logic4: pedal lifting (W released) — rolling drag fades in as the throttle fades out,
+      // so there is no cruise plateau followed by a drop.
+      if (throttle <= 0 && this.speed > 0) {
+        const surfL = THREE.MathUtils.clamp(fric / (this.friction * 1.18 * 0.93), 0.85, 1.15);
+        this.speed = Math.max(0, this.speed - (0.55 + 0.9 * this.speed) * surfL * (1 - thr) * dt);
+      }
     } else if (thr < -0.02) {
       this.speed -= this.brake * Math.abs(thr) * dt;
     } else {
-      if (this.speed > 0) this.speed = Math.max(0, this.speed - fric * dt);
-      else if (this.speed < 0) this.speed = Math.min(0, this.speed + fric * dt);
+      // logic4: COAST = rolling drag, not a brake. The old path subtracted the full surface
+      // friction (~8.3 u/s² on floor asphalt) → cruise 1.38 → 0 in ~0.17 s (1–3 frames on
+      // SwiftShader) — the physics itself snapped the speedo to 0 km/h. Now: constant rolling
+      // resistance + speed-proportional drag, scaled by the surface's friction ratio:
+      // floor asphalt 1.38 → 0 in ≈1.3 s. logic5: surface ratio clamped 0.85–1.15 so a release on a
+      // ramp foot / deck still coasts ≈1.1 s wall-clock (was 1.58× → 0.83 s live).
+      const surf = THREE.MathUtils.clamp(fric / (this.friction * 1.18 * 0.93), 0.85, 1.15);
+      const coast = (0.55 + 0.9 * Math.abs(this.speed)) * surf;
+      if (this.speed > 0) this.speed = Math.max(0, this.speed - coast * dt);
+      else if (this.speed < 0) this.speed = Math.min(0, this.speed + coast * dt);
     }
     this.speed = THREE.MathUtils.clamp(this.speed, -maxV * 0.42, maxV);
 
@@ -800,6 +822,18 @@ export class RCCar {
       const snapJump = (snap.x != null && snap.z != null)
         ? Math.hypot(snap.x - x, snap.z - z) : 99;
       const snapNear = snapJump < 0.55;
+      // logic6: every XZ magnet below is LATERAL-ONLY. The snap point's along-track offset is
+      // removed using the ribbon tangent (snap.yaw). Before this, a car still on the runway
+      // (x≈-1.55) that engaged climb_a got its snap point clamped to the climb's first vertex
+      // (the foot, x=-2.11) and the 0.72/frame "lateral" pull dragged it ~0.5u FORWARD in
+      // ~0.15 s (0.129u in one 1/60 frame at 1.21 u/s = the Climb A foot surge).
+      let magX = snap.x, magZ = snap.z;
+      if (snap.x != null && snap.z != null && Number.isFinite(snap.yaw)) {
+        const fx = Math.sin(snap.yaw), fz = Math.cos(snap.yaw);
+        const along = (snap.x - x) * fx + (snap.z - z) * fz;
+        magX = snap.x - along * fx;
+        magZ = snap.z - along * fz;
+      }
       if (rampAssist && snapNear && snap.x != null && snap.z != null) {
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
         // Strong climb hold — imperfect human steer still crests (not centerline magnet)
@@ -808,21 +842,21 @@ export class RCCar {
         const pullCap = foyerFootHold ? 0.72 : (foyerClimb ? 0.68 : 0.58);
         const pull = Math.min(pullCap,
           (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
-        x = THREE.MathUtils.lerp(x, snap.x, pull);
-        z = THREE.MathUtils.lerp(z, snap.z, pull);
+        x = THREE.MathUtils.lerp(x, magX, pull);
+        z = THREE.MathUtils.lerp(z, magZ, pull);
       } else if (snapNear && snap.onTrack && snap.x != null && snap.z != null
         && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
         // Soft rim hold — keep cruise on ribbon without centerline yank / path teleport
         const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
         if (em < 0.10) {
           const pull = Math.min(0.14, (0.05 + (0.10 - em) * 0.8) * Math.min(1, 12 * dt));
-          x = THREE.MathUtils.lerp(x, snap.x, pull);
-          z = THREE.MathUtils.lerp(z, snap.z, pull);
+          x = THREE.MathUtils.lerp(x, magX, pull);
+          z = THREE.MathUtils.lerp(z, magZ, pull);
         }
       } else if (ASSIST_MAGNET && snapNear && snap.onTrack) {
         const whisper = Math.min(1, 0.08 * 10 * dt);
-        x = THREE.MathUtils.lerp(x, snap.x, whisper);
-        z = THREE.MathUtils.lerp(z, snap.z, whisper);
+        x = THREE.MathUtils.lerp(x, magX, whisper);
+        z = THREE.MathUtils.lerp(z, magZ, whisper);
       }
 
 
@@ -870,15 +904,16 @@ export class RCCar {
         // Bidirectional ribbon yaw — reverse travel must not U-turn.
         // EXCEPTION: foyer climb foot — always settle toward uphill segment yaw so a
         // west/north approach does not glue to the foot facing the wrong way.
-        if (!foyerFootHold) {
+        // logic3: feet are tangent-aligned now — no forced uphill spin (was yawLim π)
+        {
           let dyawR = dyaw + Math.PI;
           while (dyawR > Math.PI) dyawR -= Math.PI * 2;
           while (dyawR < -Math.PI) dyawR += Math.PI * 2;
           if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
         }
-        const yawLim = rampAssist ? (foyerClimb ? (foyerFootHold ? Math.PI : 1.35) : 1.20) : 0.45;
-        const yawK = rampAssist ? (foyerClimb ? (foyerFootHold ? 0.78 : 0.52) : 0.44) : 0.12;
-        const yawRate = rampAssist ? (foyerClimb ? (foyerFootHold ? 6.8 : 4.6) : 4.0) : 1.2;
+        const yawLim = rampAssist ? (foyerClimb ? 1.35 : 1.20) : 0.45;
+        const yawK = rampAssist ? (foyerClimb ? (foyerFootHold ? 0.60 : 0.52) : 0.44) : 0.12;
+        const yawRate = rampAssist ? (foyerClimb ? (foyerFootHold ? 5.2 : 4.6) : 4.0) : 1.2;
         if (Math.abs(dyaw) < yawLim) {
           this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
         }

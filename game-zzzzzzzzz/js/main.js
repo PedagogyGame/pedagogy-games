@@ -1,12 +1,13 @@
 import * as THREE from "three";
-import { Player } from "./player.js?v=ramps1";
-import { Mansion } from "./mansion.js?v=ramps1";
-import { InspectMode } from "./inspect.js?v=ramps1";
-import { SliceSystem } from "./slice.js?v=ramps1";
-import { DriveMode } from "./drive/driveMode.js?v=ramps1";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=ramps1";
-import { OBJECTS } from "./data/objects.js?v=ramps1";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=ramps1";
+import { Player } from "./player.js?v=logic7";
+import { Mansion } from "./mansion.js?v=logic7";
+import { InspectMode } from "./inspect.js?v=logic7";
+import { SliceSystem } from "./slice.js?v=logic7";
+import { DriveMode } from "./drive/driveMode.js?v=logic7";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic7";
+import { OBJECTS } from "./data/objects.js?v=logic7";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic7";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic7";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -60,6 +61,12 @@ const AUTODRIVE_CLIMB = (() => {
     return null;
   }
 })();
+
+/** logic5: `&speedtrace=1` wall-clock speed overlay (debug only). */
+const SPEEDTRACE_ON = (() => {
+  try { return new URLSearchParams(location.search).get("speedtrace") === "1"; } catch (_) { return false; }
+})();
+let speedTrace = null;
 
 /** @type {'explore' | 'drive'} */
 let playMode = "explore";
@@ -134,7 +141,7 @@ function syncPlayModeUI() {
   if (hud) hud.classList.toggle("drive-mode", playMode === "drive");
 }
 
-function setPlayMode(next) {
+function setPlayMode(next, opts = {}) {
   if (!mansion || !drive || boot.failed) return;
   if (next !== "explore" && next !== "drive") return;
   if (next === playMode && mode !== "title") {
@@ -153,6 +160,9 @@ function setPlayMode(next) {
       "#vehicle-picker .vehicle-btn.active, #drive-vehicle-picker .vehicle-btn.active"
     );
     if (vBtn?.dataset?.vehicle) drive.vehicleId = vBtn.dataset.vehicle;
+    // logic5: remember the Explore view so Drive → Explore returns to it (the chase cam used to
+    // be inherited: low car pose + car yaw facing the unlit west foyer wall = "Explore is dark").
+    if (mode === "roam") setPlayMode._exploreView = { pos: camera.position.clone(), quat: camera.quaternion.clone() };
     applyDriveGpuProfile(true);
     drive.enter();
     syncVehicleUI(drive.vehicleId);
@@ -172,6 +182,7 @@ function setPlayMode(next) {
       try { canvas.focus({ preventScroll: true }); } catch (_) { try { canvas.focus(); } catch (_) {} }
     }
   } else {
+    const fromDriveView = mode === "drive" || drive.active;
     if (drive.active) drive.exit();
     applyDriveGpuProfile(false);
     playMode = "explore";
@@ -179,7 +190,16 @@ function setPlayMode(next) {
     player.enabled = true;
     // Fair handoff: keep stroll spawn near foyer if player was far / mid-air from drive cam
     const p = player.position;
-    if (!Number.isFinite(p.x) || Math.abs(p.y) > 20) {
+    const ev = setPlayMode._exploreView;
+    if (ev) {
+      // logic5: restore the pre-Drive Explore view (position + look direction)
+      camera.quaternion.copy(ev.quat);
+      player.setPosition(ev.pos.x, undefined, ev.pos.z);
+    } else if (fromDriveView) {
+      // Drive was entered straight from the title: use the default foyer stroll view (facing north)
+      camera.quaternion.identity();
+      player.setPosition(0, undefined, 11);
+    } else if (!Number.isFinite(p.x) || Math.abs(p.y) > 20) {
       player.setPosition(0, undefined, 11);
     } else {
       // Re-ground feet after drive camera hijack
@@ -190,8 +210,13 @@ function setPlayMode(next) {
     camera.updateProjectionMatrix();
     // Prefer canvas click for pointer lock (Enter gesture is on the button).
     // Safe lock() swallows Chrome WrongDocumentError so Enter never blanks the tab.
-    try { player.lock(); } catch (_) {}
-    promptEl.textContent = "Click to look around · WASD stroll · Shift brisk";
+    // logic7: NOT when the switch came from the HUD Explore|Drive bar — locking there captured
+    // the mouse, so the Drive button could never be clicked back (and moving toward it spun the
+    // view). Click the canvas to look around; Esc frees the mouse; keys 1/2 also switch.
+    if (!opts.viaHud) {
+      try { player.lock(); } catch (_) {}
+    }
+    promptEl.textContent = "Click to look around · WASD stroll · Shift brisk · Esc frees mouse";
     promptEl.classList.remove("lit", "hidden");
     lastRoomId = null;
   }
@@ -250,6 +275,18 @@ window.__MOTU_DUMP__ = () => ({
   playerLocked: !!(player && player.locked),
   titleHidden: !!(titleScreen && titleScreen.classList.contains("hidden")),
   hudHidden: !!(hud && hud.classList.contains("hidden")),
+  // logic5: lighting/GPU state so live proves can confirm Drive → Explore restores exactly
+  gpu: (() => {
+    try {
+      let lights = 0;
+      scene.traverse((o) => { if (o.isLight && o.visible) lights++; });
+      return {
+        exposure: renderer.toneMappingExposure, pixelRatio: renderer.getPixelRatio(), visibleLights: lights,
+        hemi: hemi.intensity, hemiSky: hemi.color.getHexString(), hemiGround: hemi.groundColor.getHexString(),
+        moon: moon.intensity, moonFill: moonFill.intensity, fog: scene.fog ? scene.fog.density : null,
+      };
+    } catch (_) { return null; }
+  })(),
 });
 setEnterLoading();
 
@@ -276,7 +313,10 @@ playModeButtons.forEach((btn) => {
       });
       return;
     }
-    setPlayMode(btn.dataset.playMode);
+    setPlayMode(btn.dataset.playMode, { viaHud: true });
+    // logic7: drop button focus so WASD / arrows reach the game, not the button
+    try { btn.blur(); } catch (_) {}
+    if (canvas) { try { canvas.focus({ preventScroll: true }); } catch (_) {} }
   });
 });
 
@@ -311,9 +351,93 @@ function applyDriveGpuProfile(on) {
     renderer.shadowMap.type = THREE.BasicShadowMap;
     renderer.shadowMap.enabled = false;
     renderer.shadowMap.needsUpdate = true;
+    // Drive-mode ambient boost (no extra PointLights) so wood/walls/asphalt read
+    if (!applyDriveGpuProfile._saved) {
+      applyDriveGpuProfile._saved = {
+        hemi: hemi.intensity,
+        moon: moon.intensity,
+        fill: moonFill.intensity,
+        fog: scene.fog ? scene.fog.density : null,
+        hemiSky: hemi.color.getHex(),
+        hemiGround: hemi.groundColor.getHex(),
+        exposure: renderer.toneMappingExposure,
+      };
+    }
+    // logic5: Drive hides the mansion's room Spot/Point lights (17 SpotLights + ~5 PointLights).
+    // SwiftShader shades every fragment against every visible light: with 26 lights the live
+    // box Chrome ran Drive at 0.78 fps (3.57 fps with them hidden). The logic4 hemisphere/fill
+    // profile carries the look. Exact per-light visibility is restored on exit (Explore unchanged).
+    try {
+      if (on) {
+        if (!applyDriveGpuProfile._hidden && mansion && mansion.root) {
+          const hidden = [];
+          mansion.root.traverse((o) => {
+            if (o.isLight && (o.isSpotLight || o.isPointLight) && o.visible) {
+              o.visible = false;
+              hidden.push(o);
+            }
+          });
+          applyDriveGpuProfile._hidden = hidden;
+        }
+      } else if (applyDriveGpuProfile._hidden) {
+        for (const o of applyDriveGpuProfile._hidden) o.visible = true;
+        applyDriveGpuProfile._hidden = null;
+      }
+    } catch (err) {
+      console.warn("[motu] drive light budget toggle failed", err);
+    }
+    if (!on) setDriveRenderScale(1);
+    if (on) {
+      // logic4: the logic3 Drive profile left the house near-black (live 00-spawn: 81% of the
+      // upper frame <25/255). Indoors the walls are lit almost only by the hemisphere, whose
+      // GROUND colour was a near-black green — vertical walls got half of that. Warm the sky,
+      // give the ground a wood-floor bounce colour and raise the (uniform-only) intensities +
+      // exposure. Same light COUNT (no shader recompiles, no shadows) → SwiftShader-safe.
+      hemi.color.setHex(0xfff0dc);
+      hemi.groundColor.setHex(0x8a6a4e);
+      hemi.intensity = 2.6;
+      moon.intensity = 1.0;
+      moonFill.intensity = 0.7;
+      renderer.toneMappingExposure = 1.42;
+      if (scene.fog) scene.fog.density = 0.0055;
+    } else {
+      const s = applyDriveGpuProfile._saved;
+      hemi.intensity = s.hemi;
+      hemi.color.setHex(s.hemiSky);
+      hemi.groundColor.setHex(s.hemiGround);
+      moon.intensity = s.moon;
+      moonFill.intensity = s.fill;
+      renderer.toneMappingExposure = s.exposure;
+      if (scene.fog && s.fog != null) scene.fog.density = s.fog;
+    }
   } catch (err) {
     console.warn("[motu] applyDriveGpuProfile failed", err);
   }
+}
+
+/**
+ * logic5: adaptive Drive render scale (GPU-lite). SwiftShader cost is per pixel; when Drive
+ * frames average >110 ms the backing store steps down (1 → 0.8 → 0.65 → 0.5 of DPR≤1) and
+ * steps back up under 45 ms. CSS size is unchanged. Explore always renders at scale 1.
+ */
+let _driveRenderScale = 1;
+function setDriveRenderScale(sc) {
+  const next = Math.max(0.5, Math.min(1, sc));
+  if (Math.abs(next - _driveRenderScale) < 1e-3 && renderer.getPixelRatio() === Math.min(devicePixelRatio || 1, 1) * next) return;
+  _driveRenderScale = next;
+  try { renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1) * next); } catch (_) {}
+}
+window.__MOTU_RSCALE__ = () => _driveRenderScale;
+const _driveFrameStat = { ema: 0, acc: 0, n: 0 };
+function updateDriveRenderScale(rawDt) {
+  const st = _driveFrameStat;
+  const d = Math.min(2, Math.max(0, rawDt));
+  st.ema = st.ema ? st.ema + (d - st.ema) * 0.3 : d;
+  st.acc += d; st.n++;
+  if (st.acc < 1.0 || st.n < 2) return;
+  st.acc = 0; st.n = 0;
+  if (st.ema > 0.11 && _driveRenderScale > 0.5) setDriveRenderScale(_driveRenderScale >= 0.99 ? 0.8 : _driveRenderScale >= 0.79 ? 0.65 : 0.5);
+  else if (st.ema < 0.045 && _driveRenderScale < 1) setDriveRenderScale(_driveRenderScale <= 0.51 ? 0.65 : _driveRenderScale <= 0.66 ? 0.8 : 1);
 }
 
 const scene = new THREE.Scene();
@@ -412,6 +536,9 @@ if (!boot.failed && mansion && drive && inspect && slice) {
   };
   // Drive HUD = speedometer + vehicle picker only (no lingering instruction label)
   drive.onHud = () => {};
+  if (SPEEDTRACE_ON) {
+    try { speedTrace = new SpeedTrace(drive); window.__MOTU_SPEEDTRACE__ = speedTrace; } catch (err) { console.warn("[speedtrace] init failed", err); }
+  }
 
   slice.onLayerChange = () => syncSliceUI();
 
@@ -797,7 +924,11 @@ function tick() {
     if ((mode === "drive" || playMode === "drive") && drive) {
       // Autodrive catch-up lives in DriveMode (wall clock). Pass rawDt so a
       // single rare rAF still reports real elapsed time as a lower bound.
-      drive.update((drive._autodrive && !drive._autodrive.done) ? rawDt : dt);
+      // logic5: real wall-clock dt up to 1 s (DriveMode sub-steps ≤1/30 s). The logic4 0.25 s cap
+      // still starved the car at the live box's ~0.8 fps (2 s of W = ~0.5 s of game time).
+      drive.update((drive._autodrive && !drive._autodrive.done) ? rawDt : Math.min(rawDt, 1.0));
+      updateDriveRenderScale(rawDt);
+      if (speedTrace) speedTrace.sample(rawDt);
       updateRoomBadge(drive.car.position);
       mansion.updateFireflies(t);
     } else if (mode === "roam") {

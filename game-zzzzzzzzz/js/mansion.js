@@ -1,7 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js";
-import { OBJECTS } from "./data/objects.js";
-import { buildLayerShells, buildPedestal } from "./meshes.js";
+import { ROOMS } from "./data/rooms.js?v=logic7";
+import { OBJECTS } from "./data/objects.js?v=logic7";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic7";
+
+// logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
+const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
 
 export class Mansion {
   constructor(scene) {
@@ -1130,7 +1133,9 @@ export class Mansion {
         { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx - w / 2 + inset + strip / 2, frameY, cz] },
         { s: [strip, frameH, d - inset * 2 - strip * 2], p: [cx + w / 2 - inset - strip / 2, frameY, cz] },
       ];
-      const climbHoles = this._storyApertures(room, room.id === "landing" ? "floor" : "ceiling");
+      const climbHoles = this._storyApertures(room, cy > 1 ? "floor" : "ceiling");
+      // logic3: first-floor crest corridor (tip flats z≈-1 + apex U-turn) keeps its asphalt clear
+      if (Math.abs(cy - 4.2) < 0.01) climbHoles.push({ minX: -6.6, maxX: 8.6, minZ: -2.35, maxZ: 0.35 });
       for (const s of strips) {
         // Skip perimeter frame segments that cross climb apertures (slab lips)
         if (climbHoles.length) {
@@ -1165,9 +1170,12 @@ export class Mansion {
       let rx = cx, rz = cz;
       const climbHolesRug = this._storyApertures(room, room.id === "landing" ? "floor" : "ceiling");
       if (climbHolesRug.length && room.id === "landing") {
-        // Keep rug in clear center between dual climb voids
-        rw = Math.min(rw, 5.5);
-        rx = cx;
+        // logic3: the hairpin lane (x≈0) and balcony_to_climb_b (x≈4.4) cross the landing —
+        // a rug above asphalt hid the road. Long runner on the centre island only.
+        rw = 1.7;
+        rd = 7.0;
+        rx = cx + 2.25;
+        rz = cz + 0.9;
       }
       const rugTex = this._rugTex(p.trim, p.wall);
       const rugMat = this._stdMat({
@@ -1193,7 +1201,9 @@ export class Mansion {
     }
     // Foyer ceiling opens over stair/climb aperture so Drive ramp never smashes slab.
     const ceilHoles = this._storyApertures(room, "ceiling");
-    this._addSlabWithHole(g, ceilMat, cx, cy + h, cz, w, 0.12, d, ceilHoles.length ? ceilHoles : null, false, null);
+    // logic3: slab TOP sits 2 cm below the story line (was centred on it → top at cy+h+0.06,
+    // i.e. 6 cm ABOVE the first-floor planks, burying the landing ribbon/car in a dark slab).
+    this._addSlabWithHole(g, ceilMat, cx, cy + h - 0.08, cz, w, 0.12, d, ceilHoles.length ? ceilHoles : null, false, null);
 
     // Conservatory mullions + moonlight feel
     if (room.glass) {
@@ -1252,6 +1262,7 @@ export class Mansion {
 
     for (const wall of walls) {
       const openings = this._driveOpeningsForWall(room, wall.side);
+      wall.openings = openings;
       if (openings.length) {
         this._addWallWithOpenings(g, wall, p.wall, thick, p.trim, openings, true);
       } else {
@@ -1287,7 +1298,28 @@ export class Mansion {
       const hasDoor = !!doorways[wall.side];
       const doorGap = wall.doorW || doorGapDefault;
       const segments = [];
-      if (hasDoor && horiz) {
+      // logic3: trim follows the ACTUAL floor-level openings (tunnels, arches, doors) so
+      // baseboards / rails never run across a drive portal or lie on a ribbon edge.
+      const floorOps = (wall.openings || []).filter((o) => o.y0 < cy + 0.5);
+      if (floorOps.length) {
+        const len = horiz ? sx : sz;
+        const c0 = horiz ? px : pz;
+        let spans = [[c0 - len / 2 + 0.075, c0 + len / 2 - 0.075]];
+        for (const o of floorOps) {
+          const g0 = o.along - o.width / 2 - 0.04, g1 = o.along + o.width / 2 + 0.04;
+          const next = [];
+          for (const [s0, s1] of spans) {
+            if (g1 <= s0 || g0 >= s1) { next.push([s0, s1]); continue; }
+            if (g0 - s0 > 0.2) next.push([s0, g0]);
+            if (s1 - g1 > 0.2) next.push([g1, s1]);
+          }
+          spans = next;
+        }
+        for (const [s0, s1] of spans) {
+          const L = s1 - s0, m = (s0 + s1) / 2;
+          segments.push(horiz ? { size: [L, null, null], pos: [m, null, pz] } : { size: [null, null, L], pos: [px, null, m] });
+        }
+      } else if (hasDoor && horiz) {
         const remain = (sx - doorGap) / 2;
         if (remain > 0.2) {
           segments.push({
@@ -1416,6 +1448,23 @@ export class Mansion {
 
 
 
+  /** logic3: along-wall spans of [a0,a1] NOT covered by an opening that overlaps y∈[yLo,yHi]. */
+  _wallFreeSpans(room, side, a0, a1, yLo, yHi, pad = 0.06) {
+    let spans = [[a0, a1]];
+    for (const o of this._driveOpeningsForWall(room, side) || []) {
+      if (o.y1 <= yLo || o.y0 >= yHi) continue;
+      const g0 = o.along - o.width / 2 - pad, g1 = o.along + o.width / 2 + pad;
+      const next = [];
+      for (const [s0, s1] of spans) {
+        if (g1 <= s0 || g0 >= s1) { next.push([s0, s1]); continue; }
+        if (g0 - s0 > 0.15) next.push([s0, g0]);
+        if (s1 - g1 > 0.15) next.push([g1, s1]);
+      }
+      spans = next;
+    }
+    return spans;
+  }
+
   _addWallpaperAccents(group, room, p) {
     const [w, h, d] = room.size;
     const [cx, cy, cz] = room.pos;
@@ -1429,12 +1478,19 @@ export class Mansion {
     const bandH = Math.min(1.85, h * 0.42);
     const bandY = cy + 1.05 + bandH / 2;
     const wallIn = 0.14 + 0.052; // halfThick + gap past panels (~0.192)
-    const strips = [
-      { s: [w - 0.6, bandH, 0.028], p: [cx, bandY, cz - d / 2 + wallIn] },
-      { s: [w - 0.6, bandH, 0.028], p: [cx, bandY, cz + d / 2 - wallIn] },
-      { s: [0.028, bandH, d - 0.6], p: [cx - w / 2 + wallIn, bandY, cz] },
-      { s: [0.028, bandH, d - 0.6], p: [cx + w / 2 - wallIn, bandY, cz] },
-    ];
+    // logic3: bands split around doors / drive portals (no floating paper across an arch)
+    const strips = [];
+    const yLo = bandY - bandH / 2, yHi = bandY + bandH / 2;
+    for (const [side, zc] of [["north", cz - d / 2 + wallIn], ["south", cz + d / 2 - wallIn]]) {
+      for (const [a0, a1] of this._wallFreeSpans(room, side, cx - w / 2 + 0.3, cx + w / 2 - 0.3, yLo, yHi)) {
+        strips.push({ s: [a1 - a0, bandH, 0.028], p: [(a0 + a1) / 2, bandY, zc] });
+      }
+    }
+    for (const [side, xc] of [["west", cx - w / 2 + wallIn], ["east", cx + w / 2 - wallIn]]) {
+      for (const [a0, a1] of this._wallFreeSpans(room, side, cz - d / 2 + 0.3, cz + d / 2 - 0.3, yLo, yHi)) {
+        strips.push({ s: [0.028, bandH, a1 - a0], p: [xc, bandY, (a0 + a1) / 2] });
+      }
+    }
     for (const s of strips) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), mat);
       m.position.set(...s.p);
@@ -1659,8 +1715,10 @@ export class Mansion {
     // Climb corridor gap — hall south triple crown was Ben's "three stacked tan slabs"
     // spanning the asphalt; also clear foyer/landing lips over straightened climb.
     const climbGaps = [
-      { minX: -8.80, maxX: -3.70, minZ: -3.00, maxZ: 13.10 }, // Climb A asphalt + west scenic stairs
-      { minX: 5.40, maxX: 9.90, minZ: -3.00, maxZ: 13.10 }, // Climb B asphalt + east scenic stairs
+      { minX: -6.35, maxX: -3.65, minZ: -2.60, maxZ: 10.00 }, // holeA_climb (logic3: ends at landing S wall)
+      { minX: -8.80, maxX: -6.40, minZ: 2.00, maxZ: 10.50 }, // holeA_scenic
+      { minX: 5.65, maxX: 8.35, minZ: -2.60, maxZ: 10.00 }, // holeB_climb
+      { minX: 8.20, maxX: 9.90, minZ: 2.00, maxZ: 10.50 }, // holeB_scenic
     ];
     const climbGap = climbGaps[0]; // legacy single for split helpers below (west Climb A)
     const addBox = (sx, sy, sz, px, py, pz, mat) => {
@@ -1750,6 +1808,10 @@ export class Mansion {
       for (const zSide of [cz - d / 2 + panelIn, cz + d / 2 - panelIn]) {
         // Skip panels that choke the climb / foyer↔hall west portal band
         if (x > -5.4 && x < -1.6 && zSide > -0.4 && zSide < 2.5) continue;
+        // logic3: never hang a panel across a door / drive portal
+        const pSide = zSide < cz ? "north" : "south";
+        const free = this._wallFreeSpans(room, pSide, x - pw / 2 - 0.05, x + pw / 2 + 0.05, panelY - panelH / 2, panelY + panelH / 2, 0.02);
+        if (free.length !== 1 || free[0][1] - free[0][0] < pw) continue;
         const panel = new THREE.Mesh(new THREE.BoxGeometry(pw, panelH, 0.032), dark);
         panel.position.set(x, panelY, zSide);
         panel.frustumCulled = true;
@@ -1770,6 +1832,9 @@ export class Mansion {
       const pd = Math.min(2.2, d / nP2 - 0.25);
       const z = cz - d / 2 + (i + 0.5) * (d / nP2);
       for (const xSide of [cx - w / 2 + panelIn, cx + w / 2 - panelIn]) {
+        const pSide = xSide < cx ? "west" : "east";
+        const free = this._wallFreeSpans(room, pSide, z - pd / 2 - 0.05, z + pd / 2 + 0.05, panelY - panelH / 2, panelY + panelH / 2, 0.02);
+        if (free.length !== 1 || free[0][1] - free[0][0] < pd) continue;
         const panel = new THREE.Mesh(new THREE.BoxGeometry(0.032, panelH, pd), dark);
         panel.position.set(xSide, panelY, z);
         panel.frustumCulled = true;
@@ -1919,10 +1984,11 @@ export class Mansion {
 
     if (id === "foyer") {
       // Console table against east wall (away from west stair / east cellar stair)
-      addBox(2.4, 0.12, 0.7, cx + 5.5, cy + 0.9, cz + 4, darkWood, true);
-      for (const sx of [-0.9, 0.9]) addBox(0.1, 0.9, 0.1, cx + 5.5 + sx, cy + 0.45, cz + 4, wood);
-      addBox(1.6, 2.0, 0.08, cx + 5.5, cy + 2.3, cz + 4.35, brass);
-      addBox(1.35, 1.75, 0.04, cx + 5.5, cy + 2.3, cz + 4.32, this._glass(0xc5e1ff, 0.45));
+      // logic3: console moved off the Climb B foot arc → centre, backing onto the S/F straight
+      addBox(2.4, 0.12, 0.7, cx + 1.6, cy + 0.9, cz + 3.3, darkWood, true);
+      for (const sx of [-0.9, 0.9]) addBox(0.1, 0.9, 0.1, cx + 1.6 + sx, cy + 0.45, cz + 3.3, wood);
+      addBox(1.6, 2.0, 0.08, cx + 1.6, cy + 2.3, cz + 3.65, brass);
+      addBox(1.35, 1.75, 0.04, cx + 1.6, cy + 2.3, cz + 3.62, this._glass(0xc5e1ff, 0.45));
       addBox(2.2, 0.08, 0.08, cx - 4, cy + 1.7, cz + d / 2 - 0.35, brass);
       for (let i = -2; i <= 2; i++) {
         addCyl(0.03, 0.03, 0.18, cx - 4 + i * 0.4, cy + 1.55, cz + d / 2 - 0.45, brass, 6);
@@ -1931,16 +1997,17 @@ export class Mansion {
         addCyl(0.35, 0.4, 0.7, cx + sx, cy + 0.35, cz - 2, this._mat(0x90a4ae, 0.4, 0.3), 12);
         addCyl(0.2, 0.28, 0.35, cx + sx, cy + 0.85, cz - 2, this._mat(0x78909c, 0.35, 0.25), 10);
       }
-      addBox(2.2, 0.02, 0.55, cx + 5.5, cy + 0.97, cz + 4, this._cloth(0xd7ccc8, 0.9));
+      addBox(2.2, 0.02, 0.55, cx + 1.6, cy + 0.97, cz + 3.3, this._cloth(0xd7ccc8, 0.9));
       for (const side of [-1, 1]) {
         const curtain = new THREE.Mesh(
-          new THREE.BoxGeometry(0.14, h * 0.7, 1.1),
+          new THREE.BoxGeometry(0.9, h * 0.7, 0.1),
           this._velvet(0x4e342e)
         );
-        curtain.position.set(cx + side * 2.4, cy + h * 0.38, cz + d / 2 - 0.55);
+        // logic3: hang flat against the south wall (1.1-deep drapes reached 0.6u into the S/F lane)
+        curtain.position.set(cx + side * 2.4, cy + h * 0.38, cz + d / 2 - 0.22);
         group.add(curtain);
       }
-      for (const sx of [-5, 5]) {
+      for (const sx of [-3.2, 4.8]) { // logic3: x=-5 hung on the Climb A centreline
         const bulb = new THREE.Mesh(
           new THREE.SphereGeometry(0.07, 8, 6),
           this._emissiveGlow(0xffe0b2, 1.05)
@@ -1955,13 +2022,13 @@ export class Mansion {
       for (const sx of [-0.8, 0.8]) addBox(0.1, 0.48, 0.5, cx - 6.6 + sx, cy + 0.24, cz + d / 2 - 0.85, wood);
       addArmchair(cx + 3.5, cz + 2, 0x5d4037, Math.PI * 0.15);
       addSideTable(cx + 4.5, cz + 1.2);
-      addFloorLamp(cx + 6.2, cz + 2.5);
+      addFloorLamp(cx + 4.7, cz + 2.4); // logic3: was under the Climb B deck (x 6.2)
       // Grandfather clock — mid-east foyer, clear of Climb B east corridor (x≈7)
       addBox(0.55, 2.2, 0.35, cx + 3.6, cy + 1.1, cz - 0.2, darkWood, true);
       addBox(0.45, 0.4, 0.08, cx + 3.6, cy + 1.9, cz - 0.05, this._mat(0xffe0b2, 0.4));
       addCyl(0.02, 0.02, 0.15, cx + 3.6, cy + 1.9, cz - 0.02, brass, 6);
       // Umbrella stand — south wall, clear of dual climb feet (x±7)
-      addCyl(0.18, 0.22, 0.55, cx + 2.4, cy + 0.28, cz + d / 2 - 0.75, this._mat(0x37474f, 0.45, 0.5), 10);
+      addCyl(0.18, 0.22, 0.55, cx - 8.25, cy + 0.28, cz + d / 2 - 0.6, this._mat(0x37474f, 0.45, 0.5), 10); // logic3: off the lane
     }
 
     if (id === "cabinet") {
@@ -2286,7 +2353,7 @@ export class Mansion {
     if (id === "library_hall") {
       for (const side of [-1, 1]) {
         const x = cx + side * (w / 2 - 0.35);
-        for (let zi = -3; zi <= 3; zi++) {
+        for (let zi = -3; zi <= 2; zi++) { // logic3: zi=3 shelf stood in the crest corridor
           const z = cz + zi * 2.4;
           addBox(0.45, 2.6, 2.2, x, cy + 1.3, z, darkWood, true);
           for (let r = 0; r < 5; r++) {
@@ -2314,7 +2381,7 @@ export class Mansion {
     if (id === "landing") {
       // Solid newel / pillar for Drive landing hairpin (hard collider)
       {
-        const nx = -5.50, nz = -0.20, ny = 4.2;
+        const nx = -2.20, nz = 2.20, ny = 4.2;
         const newelMat = this._mat(0x4e342e, 0.55, 0.25);
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.35, 0.55), newelMat);
         post.position.set(nx, ny + 0.675, nz);
@@ -2333,18 +2400,23 @@ export class Mansion {
         );
       }
 
-      addCyl(0.22, 0.28, 0.45, cx + w * 0.3, cy + 0.22, cz - d * 0.3, this._mat(0x8d6e63, 0.8), 10);
+      // logic3 decor: lanes run x≈0 (south) and x≈4.4 (north); decor lives in the
+      // centre island x∈[1.2,3.2] and the west strip x∈[-3.5,-1.3] — never on asphalt.
+      addCyl(0.22, 0.28, 0.45, cx + 2.2, cy + 0.22, cz - 2.9, this._mat(0x8d6e63, 0.8), 10);
       const plant = new THREE.Mesh(new THREE.SphereGeometry(0.35, 10, 8), this._mat(0x2e7d32, 0.88));
-      plant.position.set(cx + w * 0.3, cy + 0.7, cz - d * 0.3);
+      plant.position.set(cx + 2.2, cy + 0.7, cz - 2.9);
       group.add(plant);
-      // Console + bench + floor lamp (keep stair west clear)
-      addBox(2.2, 0.12, 0.6, cx + 4, cy + 0.85, cz + 2, darkWood, true);
-      for (const sx of [-0.9, 0.9]) addBox(0.1, 0.85, 0.1, cx + 4 + sx, cy + 0.42, cz + 2, wood);
-      addBox(0.5, 0.7, 0.04, cx + 4, cy + 1.4, cz + 2.25, this._mat(0xd1c4e9, 0.5));
-      addBox(2.4, 0.12, 0.55, cx + 3, cy + 0.48, cz - 3, this._velvet(0x5e35b1));
-      for (const sx of [-1, 1]) addBox(0.12, 0.48, 0.5, cx + 3 + sx, cy + 0.24, cz - 3, wood);
-      addFloorLamp(cx + 5.5, cz - 2);
-      addArmchair(cx + 5, cz + 3.5, 0x4527a0, -0.5);
+      // Console + mirror (centre island, narrowed to 1.5)
+      addBox(1.5, 0.12, 0.6, cx + 2.2, cy + 0.85, cz + 2, darkWood, true);
+      for (const sx of [-0.6, 0.6]) addBox(0.1, 0.85, 0.1, cx + 2.2 + sx, cy + 0.42, cz + 2, wood);
+      addBox(0.5, 0.7, 0.04, cx + 2.2, cy + 1.4, cz + 2.25, this._mat(0xd1c4e9, 0.5));
+      // Bench — logic6: was across the west strip at z=7.4, right in front of the relocated
+      // attic stair foot (z=7.2). Now tucked lengthwise UNDER the stair (stair underside ≥2.2
+      // above it), clear of the newel (z 1.9..2.5) and the foot approach.
+      addBox(0.55, 0.12, 1.3, cx - 2.4, cy + 0.48, cz - 0.6, this._velvet(0x5e35b1));
+      for (const sz of [-0.5, 0.5]) addBox(0.5, 0.48, 0.12, cx - 2.4, cy + 0.24, cz - 0.6 + sz, wood);
+      addFloorLamp(cx + 2.2, cz + 0.2);
+      addArmchair(cx + 2.2, cz + 4.6, 0x4527a0, -0.5);
       // Balcony-side curtains
       for (const side of [-1, 1]) {
         const curtain = new THREE.Mesh(new THREE.BoxGeometry(0.12, h * 0.65, 1.0), this._velvet(0x5e35b1));
@@ -2399,8 +2471,27 @@ export class Mansion {
     }
 
     if (id === "attic_loft") {
-      for (const [dx, dz] of [[-5, 3], [5, -3], [-7, -6], [7, 5], [-3, 7], [4, -7]]) {
+      // logic6: the [-3,7] crate (world -3,1) blocked the attic_up stair top (z=1.7) → moved east.
+      for (const [dx, dz] of [[-5, 3], [5, -3], [-7, -6], [7, 5], [1.5, 8], [4, -7]]) {
         addBox(1.0 + (dx > 0 ? 0.2 : 0), 0.7, 0.8, cx + dx, cy + 0.35, cz + dz, this._wood(0x6d4c41));
+      }
+      // logic6: low balustrade round the attic stairwell (west, east, south sides; the north
+      // side is the stair's top exit). Explore colliders so nobody walks into the well.
+      {
+        const W = ATTIC_STAIRWELL, ry = cy + 0.45, rh = 0.9, t = 0.07;
+        const railM = brass;
+        const lenZ = W.maxZ - W.minZ, midZ = (W.minZ + W.maxZ) / 2;
+        for (const x of [W.minX - t / 2, W.maxX + t / 2]) {
+          addBox(t, 0.06, lenZ, x, cy + rh, midZ, railM);
+          for (const z of [W.minZ + 0.05, midZ, W.maxZ - 0.05]) addBox(t, rh, t, x, ry, z, railM);
+          this._pushCollider(new THREE.Box3(
+            new THREE.Vector3(x - 0.06, cy - 0.02, W.minZ), new THREE.Vector3(x + 0.06, cy + rh + 0.05, W.maxZ)), "wall");
+        }
+        const zs = W.maxZ + t / 2, lenX = W.maxX - W.minX + t * 2, midX = (W.minX + W.maxX) / 2;
+        addBox(lenX, 0.06, t, midX, cy + rh, zs, railM);
+        addBox(t, rh, t, midX, ry, zs, railM);
+        this._pushCollider(new THREE.Box3(
+          new THREE.Vector3(W.minX - t, cy - 0.02, zs - 0.06), new THREE.Vector3(W.maxX + t, cy + rh + 0.05, zs + 0.06)), "wall");
       }
       // Trunks + dress form + oil lamps + cobweb strings
       for (const [dx, dz] of [[-8, 0], [8, 2]]) {
@@ -2954,17 +3045,33 @@ export class Mansion {
   }
 
   _storyApertures(room, which) {
-    // Climb A — west stair band (widened for 2.4 clear + curb)
-    // Climb A asphalt corridor (x≈-5) + west scenic stairs (x≈-7.6)
-    const holeA = { minX: -8.80, maxX: -3.70, minZ: -3.00, maxZ: 13.10 };
-    // Climb B asphalt (x≈7) + east scenic stairs (x≈8.6)
-    const holeB = { minX: 5.40, maxX: 9.90, minZ: -3.00, maxZ: 13.10 };
-    if (which === "ceiling" && room.id === "foyer") return [holeA, holeB];
-    if (which === "floor" && room.id === "landing") return [holeA, holeB];
-    if (which === "ceiling" && room.id === "hall_ground") {
-      return [{ minX: -6.40, maxX: -3.70, minZ: -3.00, maxZ: 2.15 }]; // Climb A corridor
+    // Corridor strips for asphalt climbs + separate scenic stair cuts (logic1).
+    // Solid landing band roughly x∈[-3.5, 5.5] between climb strips.
+    // logic3: climb strips end at z=10 (landing S wall) — foot arcs now curve onto the
+    // foyer straight at y<1, so the foyer ceiling south of z=10 stays solid.
+    const holeA_climb = { minX: -6.35, maxX: -3.65, minZ: -2.60, maxZ: 10.00 };
+    const holeA_scenic = { minX: -8.80, maxX: -6.40, minZ: 2.00, maxZ: 10.50 };
+    const holeB_climb = { minX: 5.65, maxX: 8.35, minZ: -2.60, maxZ: 10.00 };
+    const holeB_scenic = { minX: 8.20, maxX: 9.90, minZ: 2.00, maxZ: 10.50 };
+    const all = [holeA_climb, holeA_scenic, holeB_climb, holeB_scenic];
+    // logic6: stairwell for the relocated attic_up stair (landing x=-2.4, z 7.2→1.7).
+    // Cut where the stair passes the landing ceiling / attic floor (eye ≤ ceiling south of
+    // z≈4.7; the attic only spans z<5 so the well stays fully under the attic).
+    if ((which === "ceiling" && room.id === "landing") || (which === "floor" && room.id === "attic_loft")) {
+      return [ATTIC_STAIRWELL];
     }
-    return [];
+    if (which === "ceiling" && room.id === "foyer") return all;
+    if (which === "floor" && room.id === "landing") return all;
+    // logic3: every ground ceiling / first floor that overlaps a climb strip gets the same cut
+    // (cabinet/armoury ceilings + study/nursery floors used to roof or floor over the crests).
+    const [w, h, d] = room.size; const [cx, cy, cz] = room.pos;
+    const isGroundCeil = which === "ceiling" && Math.abs(cy) < 0.01 && Math.abs(h - 4.2) < 0.01;
+    const isFirstFloor = which === "floor" && Math.abs(cy - 4.2) < 0.01;
+    if (!isGroundCeil && !isFirstFloor) return [];
+    const r = { minX: cx - w / 2, maxX: cx + w / 2, minZ: cz - d / 2, maxZ: cz + d / 2 };
+    return [holeA_climb, holeB_climb]
+      .filter((q) => q.maxX > r.minX && q.minX < r.maxX && q.maxZ > r.minZ && q.minZ < r.maxZ)
+      .map((q) => ({ minX: Math.max(q.minX, r.minX), maxX: Math.min(q.maxX, r.maxX), minZ: Math.max(q.minZ, r.minZ), maxZ: Math.min(q.maxZ, r.maxZ) }));
   }
 
   /**
@@ -2978,20 +3085,22 @@ export class Mansion {
     const out = [];
     const add = (along, width, y0, y1) => out.push({ along, width, y0, y1 });
 
-    // Dual foyer ↔ hall jambs (door_foyer_hall_east/west at x≈±2.85)
+    // ── logic3 tunnels: every opening below is sized from drive-corridor-audit
+    // (ribbon ±1.1 + 0.25 margin; deck−0.22 … deck+1.9). Ground walls get a TOP NOTCH
+    // only where the crest deck passes over them (no more full-story slots);
+    // first-floor crossings get framed portals of door height with a lintel.
+    const top = cy + (room.size[1] || 4) + 0.02;
+    const notch = (a0, a1, y0) => out.push({ along: (a0 + a1) / 2, width: a1 - a0, y0: cy + y0, y1: top, noFrame: true, driveNotch: true });
+    const portal = (a0, a1) => out.push({ along: (a0 + a1) / 2, width: a1 - a0, y0: cy, y1: cy + doorH, tunnel: true });
+
     if (room.id === "foyer" && side === "north") {
-      // Dual climb voids (west Climb A / east Climb B) + center hall door
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(-5.00, 3.60, cy, fullH); // Climb A asphalt corridor
-      add(7.00, 3.80, cy, fullH);  // Climb B east
+      notch(-6.10, -2.95, 3.55); // Climb A crest deck over the foyer north wall top
+      notch(3.30, 8.10, 3.55);   // Climb B crest
       add(0.00, 2.80, cy, cy + doorH);
       return out;
     }
     if (room.id === "hall_ground" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(-5.00, 3.60, cy, fullH); // Climb A
-      add(7.00, 3.80, cy, fullH);
-      add(0.00, 2.80, cy, cy + doorH);
+      add(0.00, 2.80, cy, cy + doorH); // centre door only (old ±climb slots were unused)
       return out;
     }
     // Front drive exit (door_foyer_outdoor near x≈-3.7)
@@ -2999,37 +3108,28 @@ export class Mansion {
       add(-3.70, 3.40, cy, cy + doorH);
       return out;
     }
-    // Landing French doors onto balcony + full-height Climb A/B asphalt voids.
-    // Prior 11m door only cleared x∈[-5.5,5.5] — Climb A (x≈-5) fit, Climb B (x≈7) did not
-    // and left a hard slab at z≈-1 that killed east descent / SwiftShader east look.
+    // Landing French doors onto the balcony: widened east to 5.8 for balcony_to_climb_b (x=4.4)
     if (room.id === "landing" && side === "south") {
-      add(0, 11.0, cy, cy + tallH);
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      out.push({ along: -5.00, width: 3.60, y0: cy, y1: fullH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.80, y0: cy, y1: fullH, noFrame: true });  // Climb B
+      // tunnel-type frame: brass jambs + lintel, no threshold lip across the balcony lanes
+      out.push({ along: 0.15, width: 11.30, y0: cy, y1: cy + tallH, tunnel: true });
       return out;
     }
-    // Landing → library (north): center door + west/east skirting portals so
-    // landing_skirting fillets never pin on leftover jamb slabs.
+    // Landing north: one framed archway (Climb A crest + hairpin + centre door) and a
+    // framed portal for the Climb B apex U-turn.
     if (room.id === "landing" && side === "north") {
-      add(0, 3.0, cy, cy + doorH);
-      out.push({ along: -5.00, width: 3.50, y0: cy, y1: cy + doorH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.60, y0: cy, y1: cy + doorH, noFrame: true });  // Climb B
+      portal(-5.10, 1.50);
+      portal(4.35, 7.00);
       return out;
     }
+    // Library south wall stands inside the landing strip z∈[-2,0]: hairpin arch + east corner notch
     if (room.id === "library_hall" && side === "south") {
-      add(0, 3.0, cy, cy + doorH);
-      out.push({ along: -5.00, width: 3.50, y0: cy, y1: cy + doorH, noFrame: true }); // Climb A
-      out.push({ along: 7.00, width: 3.60, y0: cy, y1: cy + doorH, noFrame: true });
+      portal(-3.70, 1.60);
+      portal(3.00, 3.70);
       return out;
     }
-    // Hall ↔ cabinet / armoury at skirt z≈-7.7
     if (room.id === "hall_ground" && side === "west") {
       add(-7.60, 2.60, cy, cy + doorH);
-      // Climb corridor tunnel through hall west slab — full story (no header clip).
-      // Slightly wider/south so imperfect steer (±0.5m) clears wall lip near z≈0.
-      const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
-      add(0.85, 4.20, cy, fullH);
+      notch(-2.45, 0.45, 3.60);
       return out;
     }
     if (room.id === "hall_ground" && side === "east") {
@@ -3038,25 +3138,19 @@ export class Mansion {
     }
     if (room.id === "cabinet" && side === "east") {
       add(-7.70, 2.60, cy, cy + doorH);
-      // Match hall_ground west climb tunnel — dual wall at x≈-4 otherwise pins climb
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(0.85, 4.20, cy, fullH);
+      notch(-2.45, 0.10, 3.60);
       return out;
     }
     if (room.id === "armoury" && side === "west") {
       add(-7.70, 2.60, cy, cy + doorH);
       return out;
     }
-    // Cabinet south near climb diagonal — full-story tunnel
     if (room.id === "cabinet" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02; // no header lip on climb tunnels
-      add(-3.40, 3.60, cy, fullH);
+      notch(-6.45, -3.95, 3.35);
       return out;
     }
-    // Armoury south — Climb B asphalt (x≈7) punches through east ground wing
     if (room.id === "armoury" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(7.00, 3.80, cy, fullH);
+      notch(3.95, 8.45, 3.35);
       return out;
     }
     // Hall ↔ conservatory
@@ -3090,29 +3184,29 @@ export class Mansion {
     }
     if (room.id === "library_hall" && side === "east") {
       add(-8.0, 2.60, cy, cy + doorH);
-      // South tip mirror of west crest handoff opening
-      out.push({ along: -1.10, width: 3.80, y0: cy, y1: cy + doorH, noFrame: true });
+      portal(-1.45, 0.05); // Climb B apex U-turn brushes the library east end
       return out;
     }
     if (room.id === "library_hall" && side === "west") {
       add(-8.0, 2.60, cy, cy + doorH);
-      // South tip: cover climb crest handoff (z≈-2.1) — no gold jamb in asphalt
-      out.push({ along: -1.10, width: 3.80, y0: cy, y1: cy + doorH, noFrame: true });
+      portal(-2.45, 0.05); // Climb A crest arc
       return out;
     }
     if (room.id === "nursery" && side === "west") {
       add(-8.0, 2.60, cy, cy + doorH);
+      portal(-2.45, -0.90);
       return out;
     }
-    // Nursery south — Climb B crest corridor (x≈7) through east first-floor wing
     if (room.id === "nursery" && side === "south") {
-      const fullH = cy + (room.size[1] || 4) + 0.02;
-      add(7.00, 3.80, cy, fullH);
+      portal(5.90, 8.15); // Climb B descent passes under the nursery south wall
       return out;
     }
     if (room.id === "study" && side === "east") {
       add(-8.0, 2.60, cy, cy + doorH);
       return out;
+    }
+    if (room.id === "study" && side === "south") {
+      return out; // solid (old full-height slot unused)
     }
     // Music ↔ workshop / mezzanine
     if (room.id === "music" && side === "west") {
@@ -3132,6 +3226,17 @@ export class Mansion {
       return out;
     }
 
+    // Landing east/west: only a framed arch where the scenic stair tops out (z≈2..4.6)
+    if (room.id === "landing" && side === "west") {
+      add(3.25, 2.60, cy, cy + doorH);
+      return out;
+    }
+    // Landing east wall hangs over the Climb B strip (x=8 < hole maxX 8.35): gallery arch
+    // over the descent wherever deck+1.9 would reach the wall bottom (z≤5.4) + stair arch.
+    if (room.id === "landing" && side === "east") {
+      portal(-2.10, 5.40);
+      return out;
+    }
     // Fallback: single centered doorway from exits map
     const dirs = this._doorwaysFor(room);
     if (dirs[side]) {
@@ -3177,6 +3282,7 @@ export class Mansion {
         along: o.along,
         width: o.width,
         noFrame: !!o.noFrame,
+        tunnel: !!o.tunnel,
       }))
       .filter((o) => o.a1 - o.a0 > 0.08)
       .sort((a, b) => a.a0 - b.a0);
@@ -3233,7 +3339,9 @@ export class Mansion {
       const jambD = horizontal ? sz + 0.10 : sx + 0.10;
       const frameH = Math.max(0.2, o.y1 - o.y0);
       for (const sign of [-1, 1]) {
-        const ja = o.along + sign * (o.width / 2);
+        // logic3 tunnels: jambs on the CLIPPED edges; none where the opening meets the wall end
+        if (o.tunnel && ((sign < 0 && o.a0 <= wallMin + 0.05) || (sign > 0 && o.a1 >= wallMax - 0.05))) continue;
+        const ja = o.tunnel ? (sign < 0 ? o.a0 + 0.07 : o.a1 - 0.07) : o.along + sign * (o.width / 2);
         const jamb = new THREE.Mesh(
           new THREE.BoxGeometry(horizontal ? 0.14 : jambD, frameH, horizontal ? jambD : 0.14),
           portalBrass
@@ -3242,13 +3350,16 @@ export class Mansion {
         else jamb.position.set(px, (o.y0 + o.y1) / 2, ja);
         group.add(jamb);
       }
+      const lw = o.tunnel ? (o.a1 - o.a0) + 0.14 : o.width + 0.32;
+      const la = o.tunnel ? (o.a0 + o.a1) / 2 : o.along;
       const lintel = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? o.width + 0.32 : jambD, 0.16, horizontal ? jambD : o.width + 0.32),
+        new THREE.BoxGeometry(horizontal ? lw : jambD, 0.16, horizontal ? jambD : lw),
         portalBrass
       );
-      if (horizontal) lintel.position.set(o.along, o.y1 + 0.08, pz);
-      else lintel.position.set(px, o.y1 + 0.08, o.along);
+      if (horizontal) lintel.position.set(la, o.y1 + 0.08, pz);
+      else lintel.position.set(px, o.y1 + 0.08, la);
       group.add(lintel);
+      if (o.tunnel) continue; // road is the threshold — no brass lip across the asphalt (z-fight/bump)
       // Threshold lip — reads as tunnel portal at asphalt height
       const thresh = new THREE.Mesh(
         new THREE.BoxGeometry(horizontal ? o.width + 0.1 : jambD, 0.05, horizontal ? jambD : o.width + 0.1),
@@ -3517,7 +3628,7 @@ export class Mansion {
     const totalW = 30;
     const groundDoorW = 3.2;
     const groundDoorH = 3.4;
-    const balDoorH0 = 4.25;
+    const balDoorH0 = 4.20; // logic3: sill flush with deck (4.25 left a 5 cm curb the car hit)
     const balDoorH1 = 6.45;
     const balDoorW = 11.2; // wide opening onto balcony
 
@@ -3574,7 +3685,8 @@ export class Mansion {
 
     // French-door frames (visual, non-blocking)
     const frameMat = trim;
-    for (const sx of [-3.5, -1.2, 1.2, 3.5]) {
+    // logic3: outer mullions (±3.5) stood inside the balcony lanes — keep centre pair only
+    for (const sx of [-1.2, 1.2]) {
       const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, bandH * 0.95, 0.1), frameMat);
       post.position.set(sx, bandCy, pz + 0.05);
       group.add(post);
@@ -3756,32 +3868,11 @@ export class Mansion {
       g.add(lamp);
     };
 
-    // Climb B foot (foyer east) — twin pylons + asphalt threshold lip
-    addPylon(5.55, 12.90, 0);
-    addPylon(8.35, 12.90, 0);
-    const lipB = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipB.position.set(7.00, 0.04, 12.90);
-    g.add(lipB);
-    const stripeB = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), paint);
-    stripeB.position.set(7.00, 0.08, 12.90);
-    g.add(stripeB);
-
-    // Climb B crest (landing east) — pylons visible from balcony approach
-    addPylon(5.55, -2.10, 4.2);
-    addPylon(8.35, -2.10, 4.2);
-    const lipBc = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipBc.position.set(7.00, 4.24, -2.10);
-    g.add(lipBc);
-
-    // Climb A foot marker (smaller) — confirms asphalt corridor east of scenic stairs
-    addPylon(-6.35, 12.90, 0);
-    addPylon(-3.65, 12.90, 0);
-    const lipA = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.06, 0.55), asphalt);
-    lipA.position.set(-5.00, 0.04, 12.90);
-    g.add(lipA);
-    const stripeA = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.03, 0.18), white);
-    stripeA.position.set(-5.00, 0.08, 12.90);
-    g.add(stripeA);
+    // logic3: one pylon on the OUTSIDE corner of each foot arc (never on asphalt).
+    // Old twin pylons + asphalt lips marked the retired z=12.9 feet and sat on the road.
+    addPylon(-6.45, 12.75, 0); // Climb A foot (west-then-north sweep)
+    addPylon(8.45, 12.75, 0);  // Climb B foot (south-then-east sweep)
+    void asphalt; void white;
 
     this.root.add(g);
   }
