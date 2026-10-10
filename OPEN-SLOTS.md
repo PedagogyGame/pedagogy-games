@@ -70,4 +70,6 @@ Live: `game-zzzzzzzzzm/` / `.game-174` — Spicy Rodent (neighborhood prototype)
 
 Live: `game-zzzzzzzzzn/` / `.game-175` — Red and the Dead (triangle wood chase).
 
-To add more later: next folder is `game-zzzzzzzzzo`, next class is `.game-176`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzo/` / `.game-176` — Fly Simulator (Porch Fly).
+
+To add more later: next folder is `game-zzzzzzzzzp`, next class is `.game-177`. Three pieces must match: folder name, `href`, CSS class.
