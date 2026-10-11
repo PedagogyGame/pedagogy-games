@@ -72,4 +72,6 @@ Live: `game-zzzzzzzzzn/` / `.game-175` — Red and the Dead (triangle wood chase
 
 Live: `game-zzzzzzzzzo/` / `.game-176` — Fly Simulator (Porch Fly).
 
-To add more later: next folder is `game-zzzzzzzzzp`, next class is `.game-177`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzp/` / `.game-177` — Skydiving 101.
+
+To add more later: next folder is `game-zzzzzzzzzq`, next class is `.game-178`. Three pieces must match: folder name, `href`, CSS class.
