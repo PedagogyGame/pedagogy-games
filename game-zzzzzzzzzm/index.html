@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v1.3 — Highway Hops & Motorcycle Aftermath</title>
+<title>Spicy Rodents v1.4 — Canopy Navigation & HUD</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -36,6 +36,29 @@ canvas#world{display:block;width:100%;height:100%;outline:none}#hud{position:fix
 .infection-stat{min-width:83px}#infectionScore{font-size:19px}
 #chewPanel{display:none;position:fixed;bottom:22%;left:50%;transform:translateX(-50%);padding:12px 18px;border:1px solid #e5e8be88;background:#132923eb;color:#ffe6ad;font:bold 13px Arial,sans-serif;letter-spacing:.8px;z-index:4;pointer-events:none}
 @media(max-width:1100px){.scores{gap:11px;padding:9px 11px}.score-item b{font-size:19px}}
+
+/* v1.4 adaptive HUD: gameplay signals stay visible even when panels are collapsed */
+#compass{position:fixed;top:110px;left:50%;transform:translateX(-50%);z-index:3;pointer-events:none;background:#10241ed9;border:1px solid #e2eac342;border-radius:18px;padding:6px 15px 5px;min-width:214px;text-align:center;color:#f2f8e7;box-shadow:0 7px 24px #0002}
+#compassTrack{height:17px;position:relative;overflow:hidden;white-space:nowrap;font:800 12px 'DM Sans',sans-serif;letter-spacing:1px}
+#compassLetters{display:block;position:absolute;left:50%;width:780px;transform:translateX(-50%);transition:none}
+#compassNeedle{position:absolute;left:50%;top:0;color:var(--lime);transform:translateX(-50%);text-shadow:0 0 5px #152c23;z-index:2;font-weight:900}
+#compassHeading{font:700 9px 'DM Sans',sans-serif;letter-spacing:1.2px;color:#d5e0d2}
+#hudDock{position:fixed;top:122px;left:15px;z-index:7;pointer-events:auto;display:flex;gap:5px;align-items:center}
+#hudDock button{font:700 10px 'DM Sans',sans-serif;color:#edf9db;background:#142a23e0;border:1px solid #d4edb75a;border-radius:5px;padding:6px 9px;cursor:pointer}
+#hudDock button:hover{background:#315345}
+#hudMode{color:#e8f5dbba;font-size:9px;letter-spacing:.5px;margin-left:4px;text-shadow:0 1px 3px #000}
+#hudChooser{position:fixed;top:155px;left:15px;z-index:7;background:#11271fee;color:#fff;border:1px solid #dde6c95c;border-radius:10px;padding:13px;display:none;box-shadow:0 10px 30px #0004;pointer-events:auto;min-width:190px}
+#hudChooser.open{display:block}
+#hudChooser label{display:flex;gap:8px;align-items:center;padding:5px 2px;font-size:11px;cursor:pointer}
+#hudChooser input{accent-color:#c9e884}
+#status{top:173px}
+body.hud-hide-stats #hudTop .scores,body.hud-hide-stats #hudTop .brand{visibility:hidden!important;pointer-events:none!important}
+body.hud-hide-hunt #boostBadge,body.hud-hide-hunt #focusLabel{visibility:hidden!important;pointer-events:none!important}
+body.hud-hide-help #hints,body.hud-hide-help #helpToggle{visibility:hidden!important;pointer-events:none!important}
+body.hud-hide-compass #compass{visibility:hidden!important}
+body.hud-hide-world #branchGuide,body.hud-hide-world #districtTag,body.hud-hide-world #status{visibility:hidden!important}
+body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none!important}
+@media(max-width:850px){#compass{top:145px}#hudDock{top:180px}#hudChooser{top:215px}#status{top:236px}}
 </style>
 </head>
 <body>
@@ -45,13 +68,23 @@ canvas#world{display:block;width:100%;height:100%;outline:none}#hud{position:fix
 <div id="boostBadge" class="hudpanel"><span class="pepperIcon">🌶</span><div><b id="boostLabel">CHILI RUSH</b><small id="boostTime">FIND A HIDDEN PEPPER</small></div></div>
 <div id="graphics"><button class="chip" id="crowdBtn">NPC FLOW: DEMO</button><button class="chip" id="qualityBtn">SHADOWS: HIGH</button><button class="chip" id="voiceBtn">VOICES: OFF</button></div>
 <div id="branchGuide" aria-live="polite" style="position:fixed;bottom:116px;left:50%;transform:translateX(-50%);z-index:8;max-width:min(560px,90vw);padding:8px 15px;border-radius:18px;background:#102b1abb;color:#edffd4;border:1px solid #c8f9a44d;box-shadow:0 4px 15px #10271c88;font-size:12px;letter-spacing:.45px;text-align:center;pointer-events:none;display:none"></div><div id="status" class="show">A rolling, connected neighborhood: climb, cross branches, and run the lines.</div><div id="crosshair"></div><div id="aimState">ESTIMATED LEAP / POUNCE PATH</div><div id="reticleHint">SPACE TO LEAP · LEFT CLICK TO POUNCE</div>
-<button id="helpToggle" type="button" aria-label="Toggle controls" title="Toggle controls">? CONTROLS</button><div id="hints" class="hudpanel"><span class="key">W A S D</span> Move <span class="key">SHIFT</span> Sprint <span class="key">SPACE</span> Leap <span class="key">E</span> Grab / selected branch <span class="key">A / D</span> Choose bough while climbing <span class="key">Q</span> Drop from route <span class="key">RIGHT MOUSE</span> First-person stalk <span class="key">LEFT CLICK</span> Pounce anytime <span class="key">ESC</span> Cursor <span class="key">P</span> Pause <span class="key">1 / 2 / 3</span> Fashion choice near sewer stand <span class="key">E HOLD</span> Chew vent <span class="key">SPACE / CLICK</span> Drop from upper hatch</div>
+<button id="helpToggle" type="button" aria-label="Toggle controls" title="Toggle controls">? CONTROLS</button><div id="hints" class="hudpanel"><span class="key">W A S D</span> Move <span class="key">SHIFT</span> Sprint <span class="key">SPACE</span> Leap <span class="key">E</span> Grab / selected branch <span class="key">A / D</span> Choose bough while climbing <span class="key">Q</span> Drop from route <span class="key">RIGHT MOUSE</span> First-person stalk <span class="key">LEFT CLICK</span> Pounce anytime <span class="key">ESC</span> Cursor <span class="key">P</span> Pause <span class="key">1 / 2 / 3</span> Fashion choice near sewer stand <span class="key">E HOLD</span> Chew vent <span class="key">SPACE / CLICK</span> Drop from upper hatch <span class="key">M</span> HUD all <span class="key">TAB</span> HUD mode <span class="key">K</span> HUD panels</div>
 <div id="focusLabel" class="hudpanel"><div class="focusHeader dim" id="focusHeader">SCOUTING</div><span id="scoutText">Find eight hidden, one-time chili peppers.<br>Hunt to build Power; it fades after ten minutes without a bite.</span></div></div>
+<div id="compass" aria-label="Camera compass"><div id="compassTrack"><span id="compassLetters"></span><span id="compassNeedle">▲</span></div><div id="compassHeading">N · 000°</div></div>
+<div id="hudDock"><button type="button" id="allHudBtn" title="M: show/hide panels">M · HUD</button><button type="button" id="hudCycleBtn" title="Tab: next layout">TAB · VIEW</button><button type="button" id="hudCustomBtn" title="K: choose panels">K · EDIT</button><span id="hudMode">FULL</span></div>
+<div id="hudChooser" aria-label="HUD visibility settings"><strong style="font:800 12px 'DM Sans',sans-serif">DISPLAY PANELS</strong>
+<label><input type="checkbox" data-hud="stats" checked>Power and scores</label>
+<label><input type="checkbox" data-hud="compass" checked>Compass</label>
+<label><input type="checkbox" data-hud="world" checked>Route and location tips</label>
+<label><input type="checkbox" data-hud="hunt" checked>Stalking and chili</label>
+<label><input type="checkbox" data-hud="help" checked>Controls reference</label>
+<label><input type="checkbox" data-hud="settings" checked>Graphics / voices</label>
+<small style="display:block;margin-top:8px;line-height:1.6;color:#e5eccc">M show/hide all · Tab presets · K edit · H controls</small></div>
 <div id="bubbleLayer"></div>
 <div id="districtTag" aria-live="polite">OLD TOWN</div>
 <div id="chewPanel" aria-live="polite"></div><div id="shopHint"><strong>🐿 SEWER FASHION STAND</strong><div id="shopDetails">Earn 150 total Squirrel Coins to unlock. Choose hat (1), jacket (2) or pants (3), then E to buy.</div></div>
 <div id="dangerOverlay" class="hidden"><div id="dangerCard"><div class="eyebrow">SPICY RODENTS</div><h2 id="dangerTitle">RUN OVER</h2><p id="dangerText"></p><button class="startButton" id="restartGame">RESTART RUN ↗</button><small>Your equipped clothing is saved on this browser.</small></div></div>
-<div id="start"><div class="modal"><div class="eyebrow">WORKING PROTOTYPE · OCTOBER 2026</div><h1>SPICY<br>RODENTS<span style="color:#d1ee83">.</span></h1><p class="intro">One very unusual squirrel. A sprawling Topeka neighborhood, high tree routes, park, graveyard, hospital, and two estates across the southern street.</p><p>Run north to Sycamore Park and Cedar Rest Cemetery, go west of the park to find the hospital, head south across the new estate road to find two large properties, enter the short sewer through E at a grate, or visit Chili’s and the gas station to the east. Find eight rare hidden peppers each run for a fierce, temporary speed rush. Successful bites build Power; every ten bite-free minutes drains 15% of it. Peppers never respawn during a run. Bites also earn Squirrel Coins for sewer outfits; staying motionless for thirteen minutes ends the run.</p><p><strong>NEW:</strong> Tree climbing and branch running are now 40% slower for deliberate choices. Tap A/D while climbing to choose a marked bough; keep climbing or press E to transfer. Left-click pounces in the squirrel’s own forward direction, not sideways toward a freely orbiting camera.</p><div class="modalgrid"><span><b>LOOK</b> · Mouse movement</span><span><b>RUN</b> · WASD + Shift</span><span><b>CLIMB / FORK</b> · E grab · A/D choose · E transfer</span><span><b>STALK</b> · Hold right-click; pounce anytime</span></div><button class="startButton" id="playButton">ENTER THE NEIGHBORHOOD ↗</button><div class="disclaimer">Highway Hops & Motorcycle Aftermath v1.3 · procedural geometry, not photorealistic scans · desktop mouse and keyboard recommended · internet required to load the 3D engine.</div></div></div>
+<div id="start"><div class="modal"><div class="eyebrow">WORKING PROTOTYPE · OCTOBER 2026</div><h1>SPICY<br>RODENTS<span style="color:#d1ee83">.</span></h1><p class="intro">One very unusual squirrel. A sprawling Topeka neighborhood, high tree routes, park, graveyard, hospital, and two estates across the southern street.</p><p>Run north to Sycamore Park and Cedar Rest Cemetery, go west of the park to find the hospital, head south across the new estate road to find two large properties, enter the short sewer through E at a grate, or visit Chili’s and the gas station to the east. Find eight rare hidden peppers each run for a fierce, temporary speed rush. Successful bites build Power; every ten bite-free minutes drains 15% of it. Peppers never respawn during a run. Bites also earn Squirrel Coins for sewer outfits; staying motionless for thirteen minutes ends the run.</p><p><strong>NEW:</strong> Tree movement is deliberately slower, and W/S follow the direction you are looking along each cable and bough. Tap A/D to choose a marked bough or wire junction; keep climbing or press E to transfer. Left-click pounces in the squirrel’s own forward direction, not sideways toward a freely orbiting camera.</p><div class="modalgrid"><span><b>LOOK</b> · Mouse movement</span><span><b>RUN</b> · WASD + Shift</span><span><b>CLIMB / FORK</b> · E grab · A/D choose · E transfer</span><span><b>STALK</b> · Hold right-click; pounce anytime</span></div><button class="startButton" id="playButton">ENTER THE NEIGHBORHOOD ↗</button><div class="disclaimer">Canopy Navigation & HUD v1.4 · procedural geometry, not photorealistic scans · desktop mouse and keyboard recommended · internet required to load the 3D engine.</div></div></div>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
 const $=id=>document.getElementById(id);
@@ -152,7 +185,15 @@ function signCanvas(text,bg='#713528',fg='#fff3d8'){
  return new THREE.MeshStandardMaterial({map:tex,roughness:.7,emissive:new THREE.Color(bg),emissiveIntensity:.14,side:THREE.DoubleSide})
 }
 const districtSigns=[];const commercialBounds=[];
-function flatSign(text,x,y,z,w=14,h=4,bg='#713528',fg='#fff3d8',turn=0){const surf=box(w,h,.15,signCanvas(text,bg,fg),x,y,z);surf.rotation.y=turn;districtSigns.push(surf);return surf}
+function flatSign(text,x,y,z,w=14,h=4,bg='#713528',fg='#fff3d8',turn=0){
+ // Residential / road wayfinding signs should be sized for humans, not billboards.
+ const roadGuide=/PARK|CEMETERY|GARDEN|HOSPITAL|EMERGENCY ENTRANCE/i.test(text)&& !/SQUIRREL BITES|HOSPITAL  ·/i.test(text);
+ if(roadGuide){w=Math.min(17,Math.max(6.7,w*.45));h=Math.min(1.9,Math.max(1.15,h*.58));
+  y=terrainHeight(x,z)+2.9;
+  for(const dx of [-w*.34,w*.34]){cyl(.075,.08,2.55,M.metal,x+dx,terrainHeight(x+dx,z)+1.275,z)}
+ }
+ const surf=box(w,h,.13,signCanvas(text,bg,fg),x,y,z);surf.rotation.y=turn;districtSigns.push(surf);return surf
+}
 function trafficSignal(x,z){const by=terrainHeight(x,z);cyl(.13,.18,10,M.metal,x,by+5,z);const sx=x+(x<347?2.2:-2.2);
  span(v(x,by+9.2,z),v(sx,by+9.2,z),.12,.12,M.metal);const g=new THREE.Group();g.position.set(sx,by+8.6,z);scene.add(g);
  box(.8,2.3,.65,M.black,0,0,0,g);for(let j=0;j<3;j++){const color=[0xc53227,0xe9a62d,0x478a48][j];ball(.22,mat('#'+color.toString(16).padStart(6,'0')) ,0,.73-j*.72,.38,g)}
@@ -901,8 +942,10 @@ function addDetail(type,x,z,variation=0){
   cyl(.16,.23,9,iron,0,4.5,0,g,12);span(v(0,8.8,0),v(3.3,9.3,0),.12,.10,iron,g);
   box(1.8,.38,1.15,M.metal,3.4,9.15,0,g);box(1.6,.13,1,mat('#fff3c4',.55),3.4,8.87,0,g)
  }else if(type==='stop sign'){
-  cyl(.085,.095,4.4,iron,0,2.2,0,g);const stopMat=signCanvas('STOP','#a72e2e','#fff8e2');
-  const sign=mesh(new THREE.CylinderGeometry(1.24,1.24,.075,8),stopMat,0,3.75,.16,g);
+  cyl(.055,.068,2.75,iron,0,1.375,0,g);const stopMat=signCanvas('STOP','#a72e2e','#fff8e2');
+  const border=mesh(new THREE.CylinderGeometry(.68,.68,.055,8),mat('#f2e9d8'),0,2.40,.09,g);
+  border.rotation.x=PI/2;border.rotation.z=PI/8;
+  const sign=mesh(new THREE.CylinderGeometry(.61,.61,.059,8),[mat('#a42d2c'),stopMat,stopMat],0,2.40,.14,g);
   sign.rotation.x=PI/2;sign.rotation.z=PI/8;
  }else if(type==='garden gnome'){
   ball(.49,mat('#7f8a9c'),0,.46,0,g).scale.set(.85,1.2,.72);
@@ -1433,7 +1476,7 @@ const forkMarkers=[];
 for(let k=0;k<5;k++){const glow=new THREE.Mesh(new THREE.IcosahedronGeometry(.105+k*.01,1),forkMarkerMat);glow.renderOrder=100;forkVisual.add(glow);forkMarkers.push(glow)}
 let pendingFork=null,canopyHintTime=0;
 function clearPendingFork(){pendingFork=null;forkVisual.visible=false;$('branchGuide').style.display='none'}
-function screenRightForTrunk(){const n=player.trunkNormal||v(0,0,1);return v(n.z,0,-n.x).normalize()}
+function screenRightForTrunk(){return cameraRightXZ()}
 function nearbyCanopyForks(){
  if(!player.rail||player.rail.kind!=='trunk')return [];
  const all=canopyForks.get(player.rail)||[];
@@ -1464,7 +1507,7 @@ function sideStepToSibling(side){
  if(player.rail?.kind!=='branch'||player.railT>.21)return false;
  const current=player.rail,up=Array.from(canopyForks.values()).flat();
  const parent=up.find(f=>f.branch===current);if(!parent)return false;
- const right=v(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+ const right=cameraRightXZ();
  const siblings=(canopyForks.get(parent.trunk)||[]).filter(f=>f.branch!==current&&Math.abs(f.height-parent.height)<2.9);
  if(!siblings.length)return false;
  const selected=siblings.map(f=>({...f,s:f.outward.dot(right)})).filter(f=>f.s*side>-.12)
@@ -1756,17 +1799,18 @@ $('playButton').addEventListener('click',()=>{playing=true;$('start').classList.
 document.addEventListener('pointerlockchange',()=>{pointer=document.pointerLockElement===canvas;if(!pointer){focusMouse=false;focusToggle=false;player.focus=false}});
 // Pounce works in normal traversal as well as in stalking view; one event per button-down.
 canvas.addEventListener('mousedown',e=>{if(!playing||gamePaused)return;if(!pointer){requestMouse();return}if(e.button===0){e.preventDefault();attemptPounce()}});
-document.addEventListener('mousemove',e=>{if(!pointer||!playing||gamePaused)return;const sensitivity=player.focus?.0025:.00315;const boost=Math.min(1.25,Math.hypot(e.movementX,e.movementY)/35);yaw-=e.movementX*sensitivity*(1+.18*boost);
+document.addEventListener('mousemove',e=>{if(!pointer||!playing||gamePaused)return;const sensitivity=player.focus?.0025:.00315;const boost=Math.min(1.25,Math.hypot(e.movementX,e.movementY)/35);if(player.rail)routeFreeLook=1.7;yaw-=e.movementX*sensitivity*(1+.18*boost);
  if(player.rail?.kind==='trunk'&&!player.focus){
   // Orbit the climbing squirrel around the bark, keeping body and camera on the same visible side.
   player.trunkNormal?.applyAxisAngle(v(0,1,0),-e.movementX*.004);
  }
  pitch=THREE.MathUtils.clamp(pitch-e.movementY*sensitivity,-.60,1.07)});
 document.addEventListener('mousedown',e=>{if(e.button===2){e.preventDefault();focusMouse=true}});document.addEventListener('mouseup',e=>{if(e.button===2)focusMouse=false});window.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(!playing)return;if(e.code==='KeyP'&&!e.repeat){gamePaused=!gamePaused;flash(gamePaused?'PAUSED · P to resume':'RESUMED',2);return}if(e.code==='KeyH'&&!e.repeat)toggleHelp();if(gamePaused)return;if(!e.repeat&&(e.code==='KeyA'||e.code==='KeyD')&&player.rail){
+window.addEventListener('keydown',e=>{if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(!e.repeat&&e.code==='KeyM'){toggleAllHud();return}if(!e.repeat&&e.code==='Tab'){cycleHudView();return}if(!e.repeat&&e.code==='KeyK'){toggleHudEditor();return}if(!playing)return;if(e.code==='KeyP'&&!e.repeat){gamePaused=!gamePaused;flash(gamePaused?'PAUSED · P to resume':'RESUMED',2);return}if(e.code==='KeyH'&&!e.repeat)toggleHelp();if(gamePaused)return;if(!e.repeat&&(e.code==='KeyA'||e.code==='KeyD')&&player.rail){
    const choiceSide=e.code==='KeyD'?1:-1;
    if(player.rail.kind==='trunk')chooseCanopyFork(choiceSide);
-   else if(player.rail.kind==='branch')sideStepToSibling(choiceSide);
+   else if(player.rail.kind==='branch'){if(!sideStepToSibling(choiceSide))chooseRouteJunction(choiceSide)}
+   else chooseRouteJunction(choiceSide);
  }
  if(e.code==='KeyE'&&!e.repeat){if(!handleInteraction()){if(!takeSelectedFork())attachRoute()}}if(['Digit1','Digit2','Digit3'].includes(e.code)&&!e.repeat)cycleFashion(Number(e.code.at(-1))-1);if(e.code==='KeyQ'&&!e.repeat&&player.rail){launchFromVisibleRoute();clearPendingFork();player.rail=null;player.vel.y=3.3;player.committedAirborne=true;player.cameraCommit=.32;flash('Dropped from the route. Space to leap.',1.8)}if(e.code==='Space'&&!e.repeat)leap();if(e.code==='KeyF'&&!e.repeat)focusToggle=!focusToggle});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();focusMouse=false;focusToggle=false});
 $('crowdBtn').onclick=()=>{demoCrowd=!demoCrowd;$('crowdBtn').textContent='NPC FLOW: '+(demoCrowd?'DEMO':'QUIET');flash(demoCrowd?'Demo rotation: up to eleven characters at once.':'Quiet street: about five people visible.',3)};
@@ -1784,15 +1828,36 @@ function nearestRoute(maxDist=4.5,excluding=null,point=player.pos){
  }
  return best
 }
+// Route input is camera-relative; preserve direction during a held key so a
+// bending cable can't reverse W half-way through a curve.
+let routeWasMoving=false,routeFreeLook=0;
+function cameraForwardXZ(){return v(-Math.sin(yaw),0,-Math.cos(yaw))}
+function cameraRightXZ(){return v(Math.cos(yaw),0,-Math.sin(yaw))}
+function routeTangentXZ(route,t){const q=route.curve.getTangentAt(THREE.MathUtils.clamp(t,.006,.994));q.y=0;return q.lengthSq()>.0001?q.normalize():null}
+function directionFromView(route,t,fallback=1){
+ if(route.kind==='trunk')return 1;
+ const tan=routeTangentXZ(route,t);if(!tan)return fallback;
+ const d=tan.dot(cameraForwardXZ());
+ if(Math.abs(d)>.18)return d>=0?1:-1;
+ // Near perpendicular: continue the currently facing heading, never choose randomly.
+ const facing=tan.dot(v(Math.sin(player.yaw),0,Math.cos(player.yaw)));
+ return Math.abs(facing)>.28?(facing>=0?1:-1):fallback;
+}
+function resyncRouteHeading(route,t,dir){
+ const tan=routeTangentXZ(route,t);if(!tan)return;
+ const h=tan.multiplyScalar(dir);
+ player.yaw=Math.atan2(h.x,h.z);
+}
 function enterRoute(found){
- player.rail=found.route;player.railT=found.t;player.railDir=found.dir||1;player.pos.copy(found.route.curve.getPointAt(found.t));
+ player.rail=found.route;player.railT=found.t;player.railDir=found.dir??directionFromView(found.route,found.t,1);player.pos.copy(found.route.curve.getPointAt(found.t));routeWasMoving=found.dir!==undefined&&(keys.has('KeyW')||keys.has('KeyS'));resyncRouteHeading(found.route,found.t,player.railDir);if(found.dir!==undefined&&found.route.kind!=='trunk'){routeFreeLook=0;yaw=player.yaw+PI;}
  if(found.route.kind==='trunk'){const radial=camera.position.clone().sub(player.pos);radial.y=0;player.trunkNormal=radial.lengthSq()>.01?radial.normalize():v(0,0,1)}
  if(found.route.kind!=='trunk')clearPendingFork();
  player.vel.set(0,0,0);player.grounded=false;player.committedAirborne=false;
- flash(`On ${found.route.name} · W/S traverse · E junction · Q drop`,2.4)
+ flash(`On ${found.route.name} · W advances along your view · S reverses · A/D junction · E transfer`,2.4)
 }
 function attachRoute(){
  if(player.rail){
+   if(takeSelectedJunction())return;
    if(takeSelectedFork())return;
    if(pendingFork&&player.rail.kind==='trunk'){flash('Climb closer to the highlighted branch; then press E.',2);return}
    const next=nearestRoute(2.45,player.rail);
@@ -1846,7 +1911,8 @@ function switchRoute(old,atStart){
  }
  for(const c of seen.values()){
   const tangent=c.route.curve.getTangentAt(THREE.MathUtils.clamp(c.t,.002,.998));
-  const dot=Math.abs(oldForward.dot(tangent));
+  const travel=oldForward.clone().normalize();const dot=Math.abs(travel.dot(tangent));
+  const viewAlignment=Math.abs(cameraForwardXZ().dot(v(tangent.x,0,tangent.z).normalize()));
   let priority=0;
   if(old.kind==='trunk'&&c.route.kind==='bridge')priority=c.route.name.includes('wire')?17:6;
   else if(old.kind==='bridge'&&(c.route.kind==='wire'||c.route.kind==='roof'))priority=12;
@@ -1857,12 +1923,61 @@ function switchRoute(old,atStart){
   else if(old.kind==='trunk'&&(c.route.kind==='branch'||c.route.kind==='lookout'))priority=12;
   else if(old.kind==='branch'&&c.route.kind==='lookout')priority=20;
   else if(old.kind==='lookout'&&c.route.kind==='branch')priority=12;
-  candidates.push({...c,score:priority+dot*2-c.dist*2,travelDir:oldForward.dot(tangent)>=0?1:-1})
+  candidates.push({...c,score:priority+dot*2+viewAlignment*1.4-c.dist*2,travelDir:travel.dot(tangent)>=0?1:-1})
  }
  candidates.sort((a,b)=>b.score-a.score);
  if(!candidates.length)return false;
- const a=candidates[0];player.rail=a.route;player.railT=a.t;player.railDir=a.travelDir;
+ const a=candidates[0];player.rail=a.route;player.railT=a.t;player.railDir=a.travelDir;routeWasMoving=true;resyncRouteHeading(a.route,a.t,a.travelDir);if(a.route.kind!=='trunk'){routeFreeLook=0;yaw=player.yaw+PI;}
  player.pos.copy(a.route.curve.getPointAt(a.t));if(a.route.kind==='trunk'){const radial=camera.position.clone().sub(player.pos);radial.y=0;player.trunkNormal=radial.lengthSq()>.01?radial.normalize():v(0,0,1)}return true
+}
+// Dedicated wire / rooftop junction choices. A/D previews paths on the
+// visible left/right of the camera; E enters exactly the highlighted route.
+const junctionPreview=new THREE.Group();scene.add(junctionPreview);
+const junctionDots=[];const junctionMaterial=new THREE.MeshBasicMaterial({color:0xf7e4a3,transparent:true,opacity:.92,depthTest:false});
+for(let j=0;j<4;j++){const dot=new THREE.Mesh(new THREE.SphereGeometry(.13-j*.012,8,6),junctionMaterial);junctionPreview.add(dot);junctionDots.push(dot)}
+let selectedJunction=null;
+function junctionCandidates(){
+ if(!player.rail || player.rail.kind==='trunk')return [];
+ const p=player.rail.curve.getPointAt(player.railT),radius=3.0,seen=new Map();
+ const xi=Math.floor(p.x/8),yi=Math.floor(p.y/8),zi=Math.floor(p.z/8);
+ for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)for(let k=-1;k<=1;k++)for(const e of routeSpatial.get(`${xi+i},${yi+j},${zi+k}`)||[]){
+  if(e.route===player.rail||e.route.kind==='trunk')continue;
+  const distance=e.pos.distanceTo(p);if(distance>radius)continue;
+  if(!seen.has(e.route)||distance<seen.get(e.route).d)seen.set(e.route,{route:e.route,t:e.t,d:distance});
+ }
+ return [...seen.values()].filter(c=>c.d<2.0||c.route.kind==='wire');
+}
+function junctionOutward(c){
+ const p=player.rail.curve.getPointAt(player.railT),
+ start=c.route.curve.getPointAt(Math.max(0,c.t-.09)),end=c.route.curve.getPointAt(Math.min(1,c.t+.09));
+ const tan=end.sub(start).setY(0).normalize(),delta=c.route.curve.getPointAt(c.t).sub(p).setY(0);
+ return delta.lengthSq()>.24?delta.normalize():tan;
+}
+function chooseRouteJunction(side){
+ const candidates=junctionCandidates();if(!candidates.length){selectedJunction=null;return false}
+ const right=cameraRightXZ();
+ const choices=candidates.map(c=>({...c,side:side*right.dot(junctionOutward(c))})).filter(c=>c.side>-.08).sort((a,b)=>b.side-a.side||a.d-b.d);
+ if(!choices.length)return false;
+ const oldIndex=choices.findIndex(c=>c.route===selectedJunction?.route);
+ selectedJunction=choices[oldIndex<0?0:(oldIndex+1)%choices.length];
+ flash(`JUNCTION: ${selectedJunction.route.name} · E to transfer`,1.6);
+ return true;
+}
+function takeSelectedJunction(){
+ if(!selectedJunction||!player.rail)return false;
+ const c=junctionCandidates().find(x=>x.route===selectedJunction.route);
+ if(!c){selectedJunction=null;return false}
+ const dir=directionFromView(c.route,c.t,player.railDir);
+ enterRoute({route:c.route,t:c.t,dir});selectedJunction=null;
+ return true
+}
+function drawJunctionPreview(){
+ const sel=selectedJunction;const valid=sel&&player.rail&&junctionCandidates().some(c=>c.route===sel.route);
+ junctionPreview.visible=!!valid;if(!valid){selectedJunction=null;return}
+ for(let j=0;j<junctionDots.length;j++){
+  const at=THREE.MathUtils.clamp(sel.t+(j+.4)*.018,0,1);
+  junctionDots[j].position.copy(sel.route.curve.getPointAt(at)).add(v(0,.42+Math.sin(time*4+j)*.06,0));
+ }
 }
 // Vehicle bodies share world-space footprints with jumping, not magical pass-throughs.
 function vehicleHitboxAt(x,z){
@@ -1974,7 +2089,10 @@ function updatePlayer(dt){
    player.yaw=turnToward(player.yaw,Math.atan2(forward.x,forward.z),11.0,dt);
    player.vel.set(0,0,0);player.grounded=true;
  }else if(player.rail){
-   const rs=player.rail,railSpeed=(player.focus?1.2:sprint?12.2:7.2)*(player.boostRemaining>0&&!player.focus?1.6:1)*(['trunk','branch','bridge','lookout'].includes(rs.kind)?.60:1),dir=fw;
+   const rs=player.rail;
+   if(!routeWasMoving&&fw!==0){player.railDir=directionFromView(rs,player.railT,player.railDir);routeLookHold=.9;}
+   routeWasMoving=fw!==0;
+   const railSpeed=(player.focus?1.2:sprint?12.2:7.2)*(player.boostRemaining>0&&!player.focus?1.6:1)*(['trunk','branch','bridge','lookout'].includes(rs.kind)?.60:1),dir=fw;
    const before=player.railT;
    player.railT+=dir*player.railDir*dt*railSpeed/Math.max(1,rs.length);
    // Once a bough has been deliberately selected, holding W takes it at the junction.
@@ -1988,9 +2106,15 @@ function updatePlayer(dt){
    player.transferCooldown=Math.max(0,player.transferCooldown-dt);
    player.pos.lerp(player.rail.curve.getPointAt(player.railT),1-Math.exp(-dt*20));
    const tangent=player.rail.curve.getTangentAt(player.railT);
-   if(tangent.lengthSq()>.1&&Math.abs(tangent.x)+Math.abs(tangent.z)>.25){const sense=dir*player.railDir>=0?1:-1;const angle=Math.atan2(sense*tangent.x,sense*tangent.z);player.yaw=turnToward(player.yaw,angle,17,dt)}
+   if(tangent.lengthSq()>.1&&Math.abs(tangent.x)+Math.abs(tangent.z)>.25){
+      const sense=dir!==0?Math.sign(dir)*player.railDir:player.railDir;
+      const angle=Math.atan2(sense*tangent.x,sense*tangent.z);player.yaw=turnToward(player.yaw,angle,14,dt);
+      // Follow behind the squirrel except while the player is manually orbiting.
+      if(dir!==0&&routeFreeLook<=0)yaw=turnToward(yaw,player.yaw+PI,3.4,dt);
+   }
    player.vel.set(0,0,0);
  }else{
+   routeWasMoving=false;selectedJunction=null;
    if(moving&&player.attackWindow===0){
      const dir=v(-Math.sin(yaw)*fw+Math.cos(yaw)*side,0,-Math.cos(yaw)*fw-Math.sin(yaw)*side).normalize();
      const accel=player.grounded?23:4.2;
@@ -2008,10 +2132,11 @@ function updatePlayer(dt){
    const ground=player.inSewer?sewerFloorY+.25:player.inHospital?(player.inDuct?ductNearestPoint(player.pos).y-.72:HOSPITAL_FLOOR+.2):getGroundAt(player.pos.x,player.pos.z);
    if(player.pos.y<=ground){player.pos.y=ground;player.grounded=true;player.vel.y=0;if(player.committedAirborne){player.committedAirborne=false;player.cameraCommit=Math.max(player.cameraCommit,.35)}}else player.grounded=false;
  }
+ routeFreeLook=Math.max(0,routeFreeLook-dt);
  player.pos.x=THREE.MathUtils.clamp(player.pos.x,-425,674);player.pos.z=THREE.MathUtils.clamp(player.pos.z,-560,NORTH_LIMIT-4);
  updatePounceCollision();
  // Route curves run through wood centerlines; the visible squirrel must NOT.
- updateCanopyGuide(dt);
+ updateCanopyGuide(dt);drawJunctionPreview();
  const isTrunk=player.rail?.kind==='trunk';
  const isWoodTop=player.rail&&['branch','bridge','lookout'].includes(player.rail.kind);
  const visualPos=player.pos.clone();
@@ -2133,13 +2258,17 @@ function updateCamera(dt){
    const n=player.trunkNormal||v(0,0,1);
    target=squirrel.position.clone().add(v(0,.15,0));
    desired=target.clone().addScaledVector(n,4.58).add(v(0,.55,0));
- }else if(player.rail&&['branch','bridge','lookout'].includes(player.rail.kind)){
+ }else if(player.rail&&player.rail.kind!=='trunk'){
    // On branches: elevated camera looking down at the squirrel's back.
    const tangent=player.rail.curve.getTangentAt(player.railT).multiplyScalar(player.railDir);
-   const forward=v(tangent.x,0,tangent.z).normalize();
-   const along=forward.lengthSq()>.01?forward:horizontal;
-   target=squirrel.position.clone().addScaledVector(along,2.0).add(v(0,.25,0));
-   desired=squirrel.position.clone().addScaledVector(along,-3.73).addScaledVector(v(-along.z,0,along.x),.78).add(v(0,2.65+Math.sin(pitch)*.60,0));
+   let along=v(tangent.x,0,tangent.z).normalize();if(along.lengthSq()<.01)along=horizontal;
+   // Free-look orbits without redirecting a held W; chase view returns smoothly.
+   const orbit=THREE.MathUtils.clamp(routeFreeLook/1.7,0,1);
+   along.lerp(horizontal,orbit*.8).normalize();
+   const wire=player.rail.kind==='wire',roof=player.rail.kind==='roof';
+   const behind=wire?4.2:roof?4.6:3.7;
+   target=squirrel.position.clone().addScaledVector(along,2.15).add(v(0,.38,0));
+   desired=squirrel.position.clone().addScaledVector(along,-behind).addScaledVector(v(-along.z,0,along.x),.45).add(v(0,wire?2.35:2.6+Math.sin(pitch)*.55,0));
  }else{
    const airborne=player.committedAirborne||(!player.grounded&&!player.rail);
    const distance=airborne?8.15:player.moveSpeed>11?6.3:5.48;
@@ -2926,13 +3055,48 @@ updateNewSystems = function(realDt,dt){
 };
 // --- end v1.2 patch ---
 
+// Display groups and compact layouts can be changed without interrupting gameplay.
+const hudParts=['stats','compass','world','hunt','help','settings'];
+const hudPresets=[
+ {name:'FULL',show:[...hudParts]},
+ {name:'PLAY',show:['stats','compass','hunt','world']},
+ {name:'NAVIGATION',show:['compass','world','help']},
+ {name:'CLEAN',show:['compass']},
+];
+let hudVisible=new Set(hudParts),hudLast=new Set(hudParts),hudPreset=0;
+function applyHud(){
+ for(const part of hudParts)document.body.classList.toggle('hud-hide-'+part,!hudVisible.has(part));
+ document.querySelectorAll('#hudChooser input[data-hud]').forEach(el=>el.checked=hudVisible.has(el.dataset.hud));
+ $('hudMode').textContent=hudVisible.size===0?'OFF':hudPreset>=0?hudPresets[hudPreset].name:'CUSTOM';
+}
+function toggleAllHud(){if(hudVisible.size===hudParts.length&&!helpBox.classList.contains('collapsed')){hudVisible.clear();hudPreset=-1;}
+ else{hudVisible=new Set(hudParts);hudLast=new Set(hudVisible);hudPreset=0;toggleHelp(true)}applyHud()}
+function cycleHudView(){hudPreset=(hudPreset+1)%hudPresets.length;hudVisible=new Set(hudPresets[hudPreset].show);hudLast=new Set(hudVisible);applyHud()}
+function toggleHudEditor(){const e=$('hudChooser');e.classList.toggle('open');if(e.classList.contains('open')&&document.pointerLockElement)document.exitPointerLock?.()}
+$('allHudBtn').addEventListener('click',toggleAllHud);
+$('hudCycleBtn').addEventListener('click',cycleHudView);
+$('hudCustomBtn').addEventListener('click',toggleHudEditor);
+for(const el of document.querySelectorAll('#hudChooser input[data-hud]'))el.addEventListener('change',()=>{
+ if(el.checked)hudVisible.add(el.dataset.hud);else hudVisible.delete(el.dataset.hud);
+ if(hudVisible.size)hudLast=new Set(hudVisible);hudPreset=-1;applyHud()
+});
+function updateCompass(){
+ // World coordinates: +Z south, -Z north. Camera forward is (-sin(yaw),-cos(yaw)).
+ const heading=((-yaw*180/Math.PI)%360+360)%360;
+ const card=['N','NE','E','SE','S','SW','W','NW'][Math.round(heading/45)%8];
+ $('compassHeading').textContent=`${card} · ${String(Math.round(heading)%360).padStart(3,'0')}°`;
+ const parts=[];for(let k=-4;k<=12;k++){const angle=(k*45+360)%360;const text=['N','NE','E','SE','S','SW','W','NW'][((k%8)+8)%8];parts.push(`<span style="display:inline-block;width:46px;text-align:center">${text}</span>`)}
+ if(!$('compassLetters').dataset.init){$('compassLetters').innerHTML=parts.join('');$('compassLetters').dataset.init='1'}
+ $('compassLetters').style.transform=`translateX(-50%) translateX(${(4-heading/45)*46}px)`;
+}
+applyHud();
 const clock=new THREE.Clock();let wallLast=performance.now();function tick(){requestAnimationFrame(tick);const wallNow=performance.now(),wallDelta=Math.max(0,(wallNow-wallLast)/1000);wallLast=wallNow;const activeDt=Math.min(clock.getDelta(),.25),dt=Math.min(activeDt,.045);if(!gamePaused)time+=dt;if(!gamePaused)messageTime-=dt;if(messageTime<=0)$('status').classList.remove('show');if(playing&&!gamePaused&&player.alive){updatePowerAndHeat(wallDelta);updatePlayer(dt);updatePepperPickups(dt);if(!player.inSewer&&!player.inHospital){updateHumans(dt);updateCars(dt);updateWildlife(dt);updateAmbulance(dt)}updateInfection(Math.min(wallDelta,.20));updateHospital(Math.min(wallDelta,.20));updateNewSystems(wallDelta,dt)}else if(!playing&&player.alive){yaw=PI+Math.sin(time*.08)*.18;pitch=.20;updateTail(time*.7)}for(const leaf of canopyAnimated){
  const breeze=Math.sin(time*.51+leaf.phase)*leaf.amplitude;
  leaf.mesh.rotation.z=breeze;
  leaf.mesh.rotation.x=Math.sin(time*.37+leaf.phase*1.3)*leaf.amplitude*.6;
  }
- updateCanopyShadows();updateCamera(dt);updateBubbles(dt);renderer.render(scene,camera)}
-$('loading').classList.add('done');drawInfection();flash('NEW: Higher Space jumps clear fences and cars, not delivery vans. E climbs poles and gutters. Watch the motorcyclists!',8);tick();
+ updateCanopyShadows();updateCamera(dt);updateCompass();updateBubbles(dt);renderer.render(scene,camera)}
+$('loading').classList.add('done');drawInfection();flash('NEW: W/S on wires and branches follows the camera; A/D previews junctions. M, Tab, K customize HUD.',8);tick();
 </script>
 </body>
 </html>
