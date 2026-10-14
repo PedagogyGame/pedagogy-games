@@ -74,4 +74,6 @@ Live: `game-zzzzzzzzzo/` / `.game-176` — Fly Simulator (Porch Fly).
 
 Live: `game-zzzzzzzzzp/` / `.game-177` — Skydiving 101.
 
-To add more later: next folder is `game-zzzzzzzzzq`, next class is `.game-178`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzq/` / `.game-178` — Calligraphy (500 characters).
+
+To add more later: next folder is `game-zzzzzzzzzr`, next class is `.game-179`. Three pieces must match: folder name, `href`, CSS class.
