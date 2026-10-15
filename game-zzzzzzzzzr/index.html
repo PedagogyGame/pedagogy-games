@@ -39,7 +39,8 @@ html,body{height:100%;margin:0;overflow:hidden;background:var(--ink);color:var(-
 #oil i{background:var(--amber)}
 #carry{font-size:12px;color:var(--ash);letter-spacing:.06em;margin-left:22px;min-height:14px}
 
-#cross{position:fixed;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(232,220,196,.55);pointer-events:none;transition:opacity .6s;opacity:0}
+#cross{position:fixed;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(232,220,196,.55);pointer-events:none;transition:opacity .6s,transform .18s;opacity:0}
+#cross.aim{transform:scale(2.3);background:rgba(240,228,204,.85)}
 #toast{position:fixed;left:50%;bottom:16%;transform:translateX(-50%);font-size:clamp(15px,1.6vw,20px);font-style:italic;color:var(--bone);text-shadow:0 1px 6px #000;opacity:0;transition:opacity .9s;pointer-events:none;text-align:center;max-width:min(80vw,640px)}
 #fade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none}
 
@@ -294,12 +295,12 @@ window.addEventListener('resize', onResize);
 /* ============================================================
    State (saved) and runtime (not saved)
    ============================================================ */
-const SAVE_KEY = 'serpents-wall-v1';
+const SAVE_KEY = 'serpents-wall-v2';
 function freshState() {
   return {
     v: 1, A: 0, x: 0, z: -5, yaw: 0,
     health: 100, oil: C.START_OIL,
-    inv: [], found: new Set(), lens: {}, lapAssign: {},
+    inv: [], found: new Map(), lens: {}, lapAssign: {},
     t: 0, lastSupply: 0, activeSince: 0, lastInput: 0,
     dropN: 0, mirror: null, mirrorSeen: false, inField: false, field: null, dead: false,
   };
@@ -310,17 +311,17 @@ function serialize() {
   const lens = {};
   for (const [k, v] of Object.entries(S.lens)) if (v.sm.length || v.tk.length || v.dr.length) lens[k] = v;
   return JSON.stringify({
-    v: 1, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
+    v: 2, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
     t: S.t, lastSupply: S.lastSupply, activeSince: S.activeSince, dropN: S.dropN, mirror: S.mirror, mirrorSeen: S.mirrorSeen, inField: S.inField, field: S.field, dead: S.dead,
     maxA: S.maxA || 0, stairRet: S.stairRet || null,
   });
 }
 function deserialize(str) {
   const o = JSON.parse(str);
-  if (!o || o.v !== 1) return null;
+  if (!o || o.v !== 2) return null;
   const s = freshState();
   Object.assign(s, o);
-  s.found = new Set(o.found || []);
+  s.found = new Map(o.found || []);
   s.lens = o.lens || {};
   s.lapAssign = o.lapAssign || {};
   s.lastInput = s.t;
@@ -341,7 +342,7 @@ let originA = 0;                // floating origin: the length whose start sits 
 const P = {
   pos: new THREE.Vector3(0, 0, -5), yaw: 0, pitch: 0, vel: new THREE.Vector3(),
   mode: 'corridor', lenA: 0, bob: 0, stepDist: 0, lastBump: 0, swingT: -1, swingHit: false,
-  anim: null, armed: true, inRoute: false, routeP: 0, hurry: false,
+  anim: null, armed: true, inRoute: false, inCave: false, routeP: 0, hurry: false, kick: 0,
 };
 const dyn = { debris: [], falling: [] };
 let field = null;
@@ -665,6 +666,95 @@ const M = {
   bronze: new THREE.MeshPhongMaterial({ color: 0x8a6a3a, specular: 0x9a7a4a, shininess: 40 }),
 };
 
+/* ---------- stone, rock, and four kinds of web ---------- */
+(function moreTextures() {
+  // weathered fieldstone: grey-brown with cracks and a little lichen
+  const stoneTex = (seed, base, warm) => {
+    const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(seed);
+    g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 520; i++) {
+      const x = R.range(0, 256), y = R.range(0, 256), r = R.range(3, 34), l = R.range(-1, 1);
+      const col = l > 0 ? [118 + warm, 112, 100 - warm] : [28, 26, 24];
+      for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) {
+        const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        gr.addColorStop(0, rgb(col[0], col[1], col[2], Math.abs(l) * 0.14)); gr.addColorStop(1, rgb(col[0], col[1], col[2], 0));
+        g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+      }
+    }
+    for (let i = 0; i < 16; i++) { // fractures: long, wandering, thinning out; never a mark that reads as a sign
+      let x = R.range(0, 256), y = R.range(0, 256), ang = R.range(0, TAU), w = R.range(0.7, 1.5);
+      const n = R.int(14, 34), a0 = R.range(0.25, 0.55);
+      for (let k = 0; k < n; k++) {
+        const nx = x + Math.cos(ang) * R.range(3, 7), ny = y + Math.sin(ang) * R.range(3, 7);
+        g.strokeStyle = `rgba(12,10,8,${a0 * (1 - k / n * 0.7)})`; g.lineWidth = w * (1 - k / n * 0.6);
+        for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) { g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(nx + ox, ny + oy); g.stroke(); }
+        x = nx; y = ny; ang += R.range(-0.35, 0.35);
+      }
+    }
+    for (let i = 0; i < 40; i++) { g.fillStyle = `rgba(${R.int(90, 120)},${R.int(100, 118)},${R.int(70, 84)},${R.range(0.08, 0.22)})`; g.beginPath(); g.arc(R.range(0, 256), R.range(0, 256), R.range(2, 9), 0, TAU); g.fill(); } // lichen
+    for (let i = 0; i < 500; i++) { const l = R.int(60, 170); g.fillStyle = rgb(l, l * 0.96, l * 0.9, R.range(0.15, 0.5)); g.fillRect(R.range(0, 256), R.range(0, 256), 1.2, 1.2); }
+    jitter(g, 256, 256, 20, seed + 1);
+    return texOf(c);
+  };
+  T.stone = stoneTex(301, '#5a5650', 6);
+  T.stone2 = stoneTex(311, '#4c463e', 14);
+  T.rock = stoneTex(321, '#3e3a35', 10);
+  // lime-and-clay mortar, lumpy, for the basin
+  { const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(331);
+    g.fillStyle = '#6a645a'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 70; i++) { // field stones pressed into the clay, their edges lost in it
+      const x = R.range(0, 256), y = R.range(0, 256), w = R.range(14, 40), h = w * R.range(0.5, 0.9), l = R.int(62, 104), rot = R.range(0, 3);
+      g.fillStyle = rgb(l, l * 0.96, l * 0.88, 0.85); g.beginPath(); g.ellipse(x, y, w / 2, h / 2, rot, 0, TAU); g.fill();
+      g.strokeStyle = 'rgba(30,26,22,.35)'; g.lineWidth = 2.5; g.stroke();
+      g.fillStyle = rgb(l + 18, (l + 18) * 0.96, (l + 18) * 0.9, 0.35); g.beginPath(); g.ellipse(x - w * 0.1, y - h * 0.12, w / 4, h / 4, rot, 0, TAU); g.fill();
+    }
+    for (let i = 0; i < 900; i++) { const l = R.int(70, 120); g.fillStyle = rgb(l, l * 0.95, l * 0.86, R.range(0.1, 0.35)); g.fillRect(R.range(0, 256), R.range(0, 256), 1.5, 1.5); }
+    jitter(g, 256, 256, 18, 9); T.mortar = texOf(c); }
+  // webs: orb, tangle sheet, torn orb, small corner wisp
+  const webCanvas = (kind, seed) => {
+    const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(seed);
+    g.clearRect(0, 0, 256, 256);
+    const line = (x0, y0, x1, y1, a, w) => { g.strokeStyle = `rgba(235,230,220,${a})`; g.lineWidth = w; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+    if (kind === 'orb' || kind === 'torn') {
+      const cx = R.range(90, 130), cy = R.range(90, 130), n = R.int(11, 16), sp = [];
+      for (let i = 0; i < n; i++) sp.push(i / n * TAU + R.range(-0.08, 0.08));
+      const tears = kind === 'torn' ? [R.range(0, TAU), R.range(0, TAU)] : [];
+      const torn = a => tears.some(t => Math.abs(((a - t + Math.PI) % TAU + TAU) % TAU - Math.PI) < 0.55);
+      for (const a of sp) if (!torn(a) || R.chance(0.3)) line(cx, cy, cx + Math.cos(a) * 140, cy + Math.sin(a) * 140, 0.5, 1);
+      for (let r = 8; r < 120; r += R.range(6, 10)) {
+        g.strokeStyle = `rgba(235,230,220,${R.range(0.25, 0.5)})`; g.lineWidth = 0.8;
+        for (let i = 0; i < n; i++) {
+          const a0 = sp[i], a1 = sp[(i + 1) % n] + (i === n - 1 ? TAU : 0);
+          if (torn(a0) && r > 30) continue;
+          g.beginPath(); g.moveTo(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r);
+          g.quadraticCurveTo(cx + Math.cos((a0 + a1) / 2) * r * 0.92, cy + Math.sin((a0 + a1) / 2) * r * 0.92, cx + Math.cos(a1) * r, cy + Math.sin(a1) * r); g.stroke();
+        }
+      }
+      if (kind === 'torn') for (let i = 0; i < 6; i++) { const a = tears[0] + R.range(-0.4, 0.4), r0 = R.range(30, 90); line(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0, cx + Math.cos(a + R.range(-1, 1)) * (r0 + R.range(20, 50)), cy + Math.sin(a) * (r0 + 40) + R.range(10, 60), 0.4, 0.8); }
+    } else if (kind === 'sheet') {
+      for (let i = 0; i < 260; i++) { const x = R.range(0, 256), y = R.range(0, 200) * (1 - x / 400), a = R.range(0, TAU), l = R.range(8, 40); line(x, y, x + Math.cos(a) * l, y + Math.sin(a) * l * 0.5, R.range(0.12, 0.35), 0.6); }
+      for (let i = 0; i < 30; i++) { g.fillStyle = 'rgba(200,195,185,.12)'; g.beginPath(); g.arc(R.range(0, 200), R.range(0, 150), R.range(4, 20), 0, TAU); g.fill(); }
+    } else { // wisp in a corner
+      const n = 7;
+      for (let i = 0; i < n; i++) { const a = i / (n - 1) * Math.PI / 2; line(0, 0, Math.cos(a) * 200, Math.sin(a) * 200, 0.45, 1); }
+      for (let r = 20; r < 160; r += R.range(12, 22)) { g.strokeStyle = `rgba(235,230,220,${R.range(0.2, 0.45)})`; g.lineWidth = 0.8; g.beginPath(); g.arc(0, 0, r, 0.05, Math.PI / 2 - 0.05); g.stroke(); }
+      for (let i = 0; i < 8; i++) line(R.range(40, 150), R.range(40, 150), R.range(60, 200), R.range(140, 256), 0.3, 0.7); // trailing strands
+    }
+    return texOf(c);
+  };
+  T.webs = [webCanvas('orb', 401), webCanvas('sheet', 402), webCanvas('torn', 403), webCanvas('wisp', 404)];
+})();
+M.webs = T.webs.map(t => new THREE.MeshLambertMaterial({ map: t, transparent: true, alphaTest: 0.06, side: THREE.DoubleSide, depthWrite: false, opacity: 0.8 }));
+M.stone = lam(T.stone, { bumpScale: 2.6 });
+M.stoneB = lam(T.stone2, { bumpScale: 2.6 });
+M.stoneC = lam(T.stone, { color: 0xc8b8a0, bumpScale: 2.6 });
+M.rock = lam(T.rock, { bumpScale: 3.2, side: THREE.BackSide });
+M.mortar = lam(T.mortar, { color: 0x8c8474, bumpScale: 2.0 });
+M.blackWater = new THREE.MeshLambertMaterial({ color: 0x06080a });   // matte: it holds no reflection
+M.ash = lam(T.earth, { color: 0x6a6660, bumpScale: 0.8 });
+M.straw = new THREE.MeshLambertMaterial({ color: 0x8c7a48 });
+M.twig = lam(T.bark, { color: 0x9a8a70, bumpScale: 0.6 });
+
 /* ---- 20_geom.js ---- */
 /* ============================================================
    Geometry helpers: merged static builder, skeletons, containers
@@ -675,9 +765,17 @@ function mtx(x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) {
   return new THREE.Matrix4().compose(_p.set(x, y, z), _q, _sc.set(sx, sy, sz));
 }
 function flipWinding(g) {
-  const idx = g.index.array;
-  for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
-  g.index.needsUpdate = true;
+  if (g.index) {
+    const idx = g.index.array;
+    for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+    g.index.needsUpdate = true; return;
+  }
+  // unindexed: swap the second and third corner of every triangle, in every attribute
+  for (const name of Object.keys(g.attributes)) {
+    const at = g.attributes[name], a = at.array, n = at.itemSize;
+    for (let v = 0; v + 2 < at.count; v += 3) for (let k = 0; k < n; k++) { const i1 = (v + 1) * n + k, i2 = (v + 2) * n + k, t = a[i1]; a[i1] = a[i2]; a[i2] = t; }
+    at.needsUpdate = true;
+  }
 }
 // box with world-scaled UVs; grain (texture u) follows the longer edge of every face
 function boxGeo(sx, sy, sz, ts = 1) {
@@ -738,6 +836,23 @@ class Builder {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), d.normalize());
     const m = new THREE.Matrix4().compose(mid, q, new THREE.Vector3(1, 1, 1));
     this.add(mat, boxGeo(w, h, len), m, true);
+  }
+  // the same, in slices: one merged chunk per step so a length can be built across many frames
+  *finishGen(group, chunk = 60) {
+    for (const [mat, l] of this.lists) {
+      for (let i = 0; i < l.length; i += chunk) {
+        const part = l.slice(i, i + chunk);
+        const g = mergeGeometries(part, false);
+        for (const x of part) x.dispose();
+        g.computeBoundingSphere();
+        const mesh = new THREE.Mesh(g, mat);
+        mesh.matrixAutoUpdate = false; mesh.userData.disposable = true;
+        if (mat.transparent) mesh.renderOrder = 2;
+        group.add(mesh);
+        yield;
+      }
+    }
+    this.lists.clear();
   }
   finish(group) {
     for (const [mat, l] of this.lists) {
@@ -935,6 +1050,8 @@ const LOWER = ['vault', 'cistern', 'crypt', 'shaft', 'cache'];
 const LOWER_W = [2, 1.1, 1.5, 1, 1.2];
 const FORCE = { 23: { i: 0, lower: false, design: 'dank', v: 0, leak: true }, 58: { i: 1, lower: true, design: 'crypt', v: 0, leak: true }, 91: { i: 2, lower: true, design: 'cistern', v: 2, leak: true } };
 const MIRROR_OK = new Set(['store', 'empty', 'dank', 'pigeon', 'gallery', 'toppled', 'collapsed']);
+const CAVES = { 12: { basin: false }, 63: { basin: true }, 99: { basin: false } };
+const JUTS = { 16: {}, 41: {} };
 
 const _layCache = new Map();
 function variantOf(L, lap) { return VAR_SET.has(L) ? (((lap % 4) + 4) % 4) : 0; }
@@ -970,7 +1087,22 @@ function layoutFor(L, lap) {
     const a = rooms[i - 1], b = rooms[i];
     if (a.side === b.side && b.d - a.d < 13 && !(L === C.ESCAPE_L && b.lower)) b.side = -b.side;
   }
-  const lay = { L, vi, rooms, clutterSeed: R.int(0, 1e9) };
+  // fixed extras every lap: three caves, and two rooms that jut off at an angle where the rhythm starts to feel known
+  const extra = CAVES[L] ? 'cave' : JUTS[L] ? 'jut' : null;
+  if (extra) {
+    const R2 = new Rng(hash32(L, 4711, 3));
+    let best = null, bestScore = -1;
+    for (let k = 0; k < 60; k++) {
+      const d = R2.range(16, 84), side = R2.chance(0.5) ? 1 : -1;
+      let minSame = 99, minOpp = 99;
+      for (const r of rooms) { const dd = Math.abs(r.d - d); if (r.side === side) minSame = Math.min(minSame, dd); else minOpp = Math.min(minOpp, dd); }
+      const score = Math.min(minSame, 30) + Math.min(minOpp, 5) * 0.6;
+      if (minSame > 13 && minOpp > 2.2 && score > bestScore) { bestScore = score; best = { d, side }; }
+    }
+    if (!best) best = { d: 50, side: 1 };
+    rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: extra, v: 0, seed: R2.int(0, 1e9), basin: !!(CAVES[L] && CAVES[L].basin), extra: true });
+  }
+  const lay = { L, vi, rooms, clutterSeed: R.int(0, 1e9), decorSeed: hash32(L, vi, 555) };
   _layCache.set(key, lay);
   return lay;
 }
@@ -983,21 +1115,26 @@ class LengthCtx {
     this.group = new THREE.Group();
     this.B = new Builder();
     this.solids = []; this.smash = []; this.items = []; this.rooms = []; this.drips = []; this.droplets = [];
-    this.triggers = []; this.route = null; this.meshes = [];
+    this.triggers = []; this.route = null; this.meshes = []; this.zones = []; this.mouseSpots = []; this.decor = [];
     this.cid = 0;
     this.st = lenState(A);
     this.smashedSet = new Set(this.st.sm);
     this.setFrame(1, 0, 0, 0);
   }
-  setFrame(side, xOff, zc, y0 = 0) {
-    this.frame = { side, xOff, zc, y0 };
-    this.B.setBase(new THREE.Matrix4().makeTranslation(side * xOff, y0, zc).multiply(new THREE.Matrix4().makeScale(side, 1, 1)));
+  // a room frame: mirrored to the side, offset (ou, ov) and turned by rot about that point
+  setFrame(side, xOff, zc, y0 = 0, rot = 0, ou = 0, ov = 0) {
+    this.frame = { side, xOff, zc, y0, rot, ou, ov, c: Math.cos(rot), s: Math.sin(rot) };
+    this.B.setBase(new THREE.Matrix4().makeTranslation(side * xOff, y0, zc).multiply(new THREE.Matrix4().makeScale(side, 1, 1))
+      .multiply(new THREE.Matrix4().makeTranslation(ou, 0, ov)).multiply(new THREE.Matrix4().makeRotationY(rot)));
   }
-  W(u, y, v) { const f = this.frame; return new THREE.Vector3(f.side * (f.xOff + u), f.y0 + y, f.zc + v); }
-  yaw(ry) { return this.frame.side * ry; }
+  W(u, y, v) {
+    const f = this.frame, uu = f.ou + u * f.c + v * f.s, vv = f.ov - u * f.s + v * f.c;
+    return new THREE.Vector3(f.side * (f.xOff + uu), f.y0 + y, f.zc + vv);
+  }
+  yaw(ry) { return this.frame.side * (ry + this.frame.rot); }
   solid(u, v, su, sv, ry = 0, lvl = 'up') {
-    const f = this.frame, c = this.W(u, 0, v);
-    const s = { cx: c.x, cz: c.z, ux: f.side * Math.cos(ry), uz: -Math.sin(ry), hx: su / 2, hz: sv / 2, lvl };
+    const f = this.frame, c = this.W(u, 0, v), a = ry + f.rot;
+    const s = { cx: c.x, cz: c.z, ux: f.side * Math.cos(a), uz: -Math.sin(a), hx: su / 2, hz: sv / 2, lvl };
     this.solids.push(s); return s;
   }
   circle(u, v, r, lvl = 'up') { const c = this.W(u, 0, v); const s = { circle: true, cx: c.x, cz: c.z, r, lvl }; this.solids.push(s); return s; }
@@ -1026,17 +1163,6 @@ class LengthCtx {
     return s;
   }
   surface(room, u, y, v, support = null) { room.surfaces.push({ pos: this.W(u, y, v), support }); }
-  web(p, du, dv, size) {
-    // quad from corner p spanning du and dv (local directions); texture origin at the corner
-    const a = p, b = p.clone().addScaledVector(du, size), c = p.clone().addScaledVector(dv, size), d = b.clone().addScaledVector(dv, size);
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z], 3));
-    const n = new THREE.Vector3().crossVectors(du, dv).normalize();
-    g.setAttribute('normal', new THREE.Float32BufferAttribute([n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z], 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 0, 0, 1, 0], 2));
-    g.setIndex([0, 2, 1, 1, 2, 3]);
-    this.B.add(M.web, g, new THREE.Matrix4(), true);
-  }
   skeleton(pose, u, v, ry = 0, y = 0, opts = {}) { skeletonToBuilder(this.B, POSES[pose], mtx(u, y, v, 0, ry, 0), opts); }
   bones(u, v, R) {
     const B = this.B;
@@ -1063,18 +1189,30 @@ class LengthCtx {
     this.rooms.push(info); return info;
   }
   setBounds(room, u0, u1, v0, v1) {
-    const a = this.W(u0, 0, v0), b = this.W(u1, 0, v1);
-    room.bounds = { x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) };
+    const pts = [this.W(u0, 0, v0), this.W(u1, 0, v1), this.W(u0, 0, v1), this.W(u1, 0, v0)];
+    room.bounds = { x0: Math.min(...pts.map(p => p.x)), x1: Math.max(...pts.map(p => p.x)), z0: Math.min(...pts.map(p => p.z)), z1: Math.max(...pts.map(p => p.z)) };
     room.frame = Object.assign({}, this.frame);
+  }
+  web(p, du, dv, size, kind) {
+    // kind 0..3 picks one of four web materials; the quad's texture origin sits in the corner p
+    const mat = M.webs[kind ?? 0];
+    const a = p, b = p.clone().addScaledVector(du, size), c = p.clone().addScaledVector(dv, size), d = b.clone().addScaledVector(dv, size);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z], 3));
+    const n = new THREE.Vector3().crossVectors(du, dv).normalize();
+    g.setAttribute('normal', new THREE.Float32BufferAttribute([n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z, n.x, n.y, n.z], 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 0, 0, 1, 0], 2));
+    g.setIndex([0, 2, 1, 1, 2, 3]);
+    this.B.add(mat, g, new THREE.Matrix4(), true);
   }
 }
 
 /* ---------- corridor ---------- */
-function buildCorridor(ctx) {
+function* corridorGen(ctx) {
   const B = ctx.B, R = new Rng(ctx.lay.clutterSeed);
   ctx.setFrame(1, 0, 0, 0);
   const open = { '-1': [], '1': [] };
-  for (const r of ctx.lay.rooms) open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : 0.72, top: 2.3 });
+  for (const r of ctx.lay.rooms) open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : r.design === 'cave' ? 0.85 : 0.72, top: r.design === 'cave' ? 2.15 : 2.3, rough: r.design === 'cave' });
 
   B.box(M.plank, 0, -0.05, -50, 4.1, 0.1, 100, 0, 0, 0, 0.55);
   B.box(M.board, 0, 3.07, -50, 4.9, 0.12, 100, 0, 0, 0, 0.6);
@@ -1095,25 +1233,48 @@ function buildCorridor(ctx) {
       const z = -k * 4;
       if (!ops.some(o => Math.abs(z - o.z) < o.h + 0.2)) B.box(M.wood, s * 2.08, 1.5, z, 0.3, 3.0, 0.3);
     }
-    for (let k = 0; k < 25; k++) {
-      const z0 = -k * 4 - 0.15, z1 = -k * 4 - 3.85;
-      for (let i = 0; i < 10; i++) {
-        const y = 0.15 + i * 0.29;
-        const segs = y - 0.14 < 2.3 ? cut(z1, z0, ops) : [[z1, z0]];
-        for (const [a, b] of segs) B.log(M.log, s * 2.14, y, (a + b) / 2, 0.146, b - a, 'z');
+    buildStage = 'logs';
+    for (let half = 0; half < 2; half++) {
+      for (let k = half * 13; k < Math.min(25, half * 13 + 13); k++) {
+        const z0 = -k * 4 - 0.15, z1 = -k * 4 - 3.85;
+        for (let i = 0; i < 10; i++) {
+          const y = 0.15 + i * 0.29;
+          const segs = y - 0.14 < 2.3 ? cut(z1, z0, ops) : [[z1, z0]];
+          for (const [a, b] of segs) B.log(M.log, s * 2.14, y, (a + b) / 2, 0.146, b - a, 'z');
+        }
+        if (overBudget()) yield;
       }
+      yield;
     }
+    buildStage = 'openings';
     for (const [a, b] of cut(-100, 0, ops)) {
       B.box(M.earth, s * 2.38, 1.5, (a + b) / 2, 0.12, 3.0, b - a, 0, 0, 0, 0.5);
       ctx.solid(s * 2.25, (a + b) / 2, 0.5, b - a, 0, 'up');
     }
     for (const o of ops) {
       B.box(M.earth, s * 2.38, (o.top + 3) / 2, o.z, 0.12, 3 - o.top, 2 * o.h);
-      for (const e of [-1, 1]) B.box(M.wood, s * 2.22, o.top / 2, o.z + e * (o.h + 0.08), 0.5, o.top, 0.16);
-      B.box(M.wood, s * 2.22, o.top + 0.08, o.z, 0.52, 0.16, 2 * o.h + 0.34);
-      B.box(M.plank, s * 2.24, -0.045, o.z, 0.5, 0.09, 2 * o.h);
+      if (o.rough) {
+        // a cave mouth: the logs simply stop, held up by rough stone jambs and a heavy unhewn lintel
+        const RJ = new Rng(hash32(ctx.L, Math.round(o.z * 10), 9));
+        for (const e of [-1, 1]) {
+          let y = 0;
+          while (y < o.top - 0.05) {
+            const h = RJ.range(0.16, 0.34), w = RJ.range(0.38, 0.55), dpt = RJ.range(0.22, 0.34);
+            B.box(RJ.pick([M.stone, M.stoneB, M.stoneC]), s * RJ.range(2.12, 2.3), y + h / 2, o.z + e * (o.h + dpt / 2 - 0.02), w, h * 0.96, dpt, RJ.range(-0.05, 0.05), RJ.range(-0.12, 0.12), RJ.range(-0.05, 0.05));
+            y += h;
+          }
+        }
+        B.log(M.log, s * 2.2, o.top + 0.14, o.z, 0.19, 2 * o.h + 0.9, 'z', 8);
+        B.box(M.earth, s * 2.24, -0.04, o.z, 0.52, 0.08, 2 * o.h);
+      } else {
+        for (const e of [-1, 1]) B.box(M.wood, s * 2.22, o.top / 2, o.z + e * (o.h + 0.08), 0.5, o.top, 0.16);
+        B.box(M.wood, s * 2.22, o.top + 0.08, o.z, 0.52, 0.16, 2 * o.h + 0.34);
+        B.box(M.plank, s * 2.24, -0.045, o.z, 0.5, 0.09, 2 * o.h);
+      }
     }
+    yield;
   }
+  buildStage = 'beams';
   for (let k = 0; k <= 25; k++) {
     const z = -k * 4;
     B.box(M.wood, 0, 2.86, z, 4.6, 0.26, 0.28);
@@ -1126,6 +1287,7 @@ function buildCorridor(ctx) {
       for (const x of [-1.05, 0, 1.05]) B.box(M.wood, x, 2.96, mid, 0.13, 0.1, 3.72);
       if (R.chance(0.15)) for (let j = 0; j < 7; j++) B.log(M.log, 0, 2.66, z - 0.4 - j * 0.5, 0.06, 3.9, 'x', 6);
     }
+    if (overBudget()) yield;
   }
   // the start of every length: a heavier frame and a carved tally
   for (const s of [-1, 1]) B.box(M.woodDark, s * 1.86, 1.5, -0.38, 0.24, 3.0, 0.24);
@@ -1142,17 +1304,17 @@ function buildCorridor(ctx) {
     B.beam(M.wood, V3(1.9, 0.2, -1.4), V3(-0.6, 2.8, 0.05), 0.22, 0.22);
     ctx.solid(0, 0.6, 4.6, 1.0, 0, 'up');
   }
+  yield;
 
-  // clutter along the walls
+  // clutter along the walls (unchanged rhythm, so the lengths keep their faces)
   const clear = (s, z, need) => !open[s].some(o => Math.abs(z - o.z) < o.h + need);
+  const used = { '-1': [], '1': [] };
+  buildStage = 'clutter';
   for (let k = 1; k < 25; k++) {
-    for (const s of [-1, 1]) {
-      // webs where posts meet beams
-      if (R.chance(0.42)) ctx.web(V3(s * 1.92, 2.72, -k * 4 + (R.chance(0.5) ? 0.17 : -0.17)), V3(-s, 0, 0), V3(0, -1, 0), R.range(0.45, 1.05));
-    }
     if (!R.chance(0.4)) continue;
     const s = R.chance(0.5) ? 1 : -1, z = -k * 4 - R.range(0.8, 3.2);
     if (!clear(s, z, 1.6)) continue;
+    used[s].push(z);
     const kind = R.pickW(['crates', 'barrels', 'sit', 'lie', 'bones', 'beam', 'box'], [3, 2, 1.4, 0.6, 1.2, 0.8, 1]);
     if (kind === 'crates') {
       const c1 = ctx.addSmash('crate', s * 1.55, 0, z, R.range(-0.3, 0.3));
@@ -1171,7 +1333,165 @@ function buildCorridor(ctx) {
       B.beam(M.wood, V3(s * 1.15, 0.05, z), V3(s * 1.93, 2.5, z - R.range(-0.8, 0.8)), 0.22, 0.22);
       ctx.circle(s * 1.3, z, 0.25, 'up');
     }
+    if (overBudget()) yield;
   }
+  yield;
+  // webs: fewer, and never quite the same: four kinds, different corners, sizes and slants
+  buildStage = 'webs';
+  const W = new Rng(hash32(ctx.lay.decorSeed, 77));
+  for (let k = 1; k < 25; k++) for (const s of [-1, 1]) {
+    if (!W.chance(0.13)) continue;
+    const z = -k * 4, kind = W.pickW([0, 1, 2, 3], [1, 0.8, 0.9, 1.4]), size = W.range(0.35, 1.15);
+    const where = W.pickW(['post', 'joist', 'low'], [3, 1.2, 0.8]);
+    if (where === 'post') ctx.web(V3(s * 1.92, 2.72, z + (W.chance(0.5) ? 0.17 : -0.17)), V3(-s, 0, W.range(-0.15, 0.15)).normalize(), V3(0, -1, W.range(-0.2, 0.2)).normalize(), size, kind);
+    else if (where === 'joist') ctx.web(V3(s * 1.05, 2.9, z - W.range(0.6, 3.4)), V3(-s, 0, 0), V3(0, -0.4, W.chance(0.5) ? 1 : -1).normalize(), size * 0.8, kind);
+    else if (!open[s].some(o => Math.abs(z - o.z) < o.h + 0.6)) ctx.web(V3(s * 1.9, W.range(0.05, 0.3), z - 0.16), V3(-s, 0.4, 0).normalize(), V3(0, 0.2, -1).normalize(), size * 0.6, 3);
+  }
+  // rare small events, each drawn fresh: rubble, potsherds, a besom, fallen footing stones...
+  buildStage = 'decor';
+  yield* decorGen(ctx, open, used);
+}
+
+/* ---------- the sparse scatter ---------- */
+const DECOR = ['rubble', 'sherds', 'broom', 'footing', 'horseskull', 'loomweights', 'quern', 'hearth', 'shield', 'rope', 'ladder', 'straw'];
+const DECOR_W = [2.2, 1.6, 1.0, 1.0, 0.45, 0.6, 0.5, 0.45, 0.4, 0.6, 0.4, 0.7];
+function stoneLump(B, R, mat, x, y, z, s, flat = 0.75) {
+  // an irregular stone: a jittered icosahedron, never the same twice
+  const g = new THREE.IcosahedronGeometry(1, R.chance(0.5) ? 0 : 1), p = g.attributes.position, seed = R.int(0, 99999);
+  // the same corner gets the same push in every face that shares it, so the stone stays closed
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 0.75 + 0.45 * (hash32(Math.round(x * 97), Math.round(y * 97), Math.round(z * 97) + seed) / 4294967296); p.setXYZ(i, x * k, y * k * flat, z * k); }
+  g.computeVertexNormals();
+  B.add(mat, g, mtx(x, y, z, R.range(-0.4, 0.4), R.range(0, TAU), R.range(-0.4, 0.4), s * R.range(0.8, 1.25), s, s * R.range(0.8, 1.25)), true);
+}
+function sherd(B, R, mat, x, z, s) {
+  // a curved piece of a pot wall, lying on the boards however it fell
+  const g = new THREE.CylinderGeometry(s, s, s * R.range(0.5, 0.9), 5, 1, true, 0, R.range(0.5, 1.1));
+  g.center(); g.applyMatrix4(mtx(0, 0, 0, R.range(1.2, 1.9) + (R.chance(0.5) ? Math.PI : 0), 0, R.range(-0.4, 0.4)));
+  g.computeBoundingBox(); g.translate(0, -g.boundingBox.min.y + 0.003, 0);
+  B.add(mat, g, mtx(x, 0, z, 0, R.range(0, TAU), 0), true);
+}
+function* decorGen(ctx, open, used) {
+  const B = ctx.B, R = new Rng(ctx.lay.decorSeed);
+  const n = R.pickW([0, 1, 2], [0.5, 0.38, 0.12]);
+  const stones = [M.stone, M.stoneB, M.stoneC];
+  for (let e = 0; e < n; e++) {
+    let s = 1, z = -50, ok = false;
+    for (let tries = 0; tries < 12 && !ok; tries++) {
+      s = R.chance(0.5) ? 1 : -1; z = -R.range(5, 95);
+      ok = !open[s].some(o => Math.abs(z - o.z) < o.h + 1.8) && !used[s].some(u => Math.abs(u - z) < 2.2);
+    }
+    if (!ok) continue;
+    used[s].push(z);
+    const kind = R.pickW(DECOR, DECOR_W), x = s * R.range(1.35, 1.7);
+    ctx.decor.push({ kind, s, z });
+    if (kind === 'rubble') {
+      const cnt = R.int(5, 22), spread = R.range(0.5, 1.6), along = R.range(0.6, 2.4);
+      const mats = R.chance(0.5) ? stones : [R.pick(stones)];
+      for (let i = 0; i < cnt; i++) {
+        const sz = Math.pow(R.next(), 2.2) * 0.32 + 0.04, buried = R.chance(0.3) ? -sz * R.range(0.3, 0.7) : 0;
+        stoneLump(B, R, R.pick(mats), x + s * R.range(-spread, 0.35) * 0.6, sz * 0.6 + buried, z + R.range(-along, along), sz, R.range(0.5, 0.95));
+      }
+      if (R.chance(0.4)) B.add(M.earth, new THREE.SphereGeometry(1, 10, 6, 0, TAU, 0, Math.PI / 2), mtx(s * 1.7, -0.02, z, 0, R.range(0, 3), 0, R.range(0.4, 0.8), R.range(0.1, 0.25), R.range(0.5, 1.1)), true);
+      ctx.circle(s * 1.8, z, 0.3);
+    } else if (kind === 'sherds') {
+      const tones = [0xc8a888, 0x8a4a30, 0xd8cfb8, 0x5a3a2a, 0x9a6a48], ti = R.int(0, 4);
+      const mat = cachedMat('sherd' + ti, () => { const m = new THREE.MeshLambertMaterial({ color: tones[ti], side: THREE.DoubleSide }); m.bumpMap = T.earth; m.bumpScale = 0.4; return m; });
+      const cnt = R.int(4, 13), cx = x * 0.85, cz = z;
+      for (let i = 0; i < cnt; i++) sherd(B, R, mat, cx + R.range(-0.5, 0.5), cz + R.range(-0.6, 0.6), R.range(0.05, 0.14));
+      if (R.chance(0.35)) B.add(mat, new THREE.CylinderGeometry(0.1, 0.07, 0.07, 10, 1, true), mtx(cx, 0.035, cz, R.range(-0.3, 0.3), 0, R.range(-0.3, 0.3)), true); // a broken base
+    } else if (kind === 'broom') {
+      // a besom: a stick with a bundle of twigs bound to it, leaning on the wall
+      const yaw = R.range(-0.4, 0.4), base = V3(s * R.range(1.5, 1.68), 0, z);
+      const top = V3(s * 1.97, R.range(1.25, 1.45), z + Math.sin(yaw) * 0.4), ax = top.clone().sub(base).normalize();
+      const at = (k) => base.clone().addScaledVector(ax, k), q = new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), ax);
+      B.beam(M.wood, at(0.3), top, 0.034, 0.034);
+      // the head: a sheaf of birch twigs, tight under the binding, spread where it meets the floor
+      const hl = R.range(0.42, 0.55), head = new THREE.CylinderGeometry(0.04, R.range(0.1, 0.14), hl, 9, 3, true), hp = head.attributes.position;
+      for (let i = 0; i < hp.count; i++) { const k = 1 + (vnoise(hp.getX(i) * 9, hp.getZ(i) * 9 + hp.getY(i) * 4, z * 7) - 0.5) * 0.35; hp.setX(i, hp.getX(i) * k); hp.setZ(i, hp.getZ(i) * k); }
+      head.computeVertexNormals();
+      B.add(M.twig, head, new THREE.Matrix4().compose(at(hl / 2), q, V3(1, 1, R.range(0.7, 0.9))), true);
+      for (let i = 0; i < R.int(10, 18); i++) {
+        const a = R.range(0, TAU), r0 = 0.03, r1 = R.range(0.1, 0.17), l = R.range(0.3, hl + 0.06);
+        const side = V3(Math.cos(a), 0, Math.sin(a)).applyQuaternion(q);
+        B.beam(M.twig, at(l).addScaledVector(side, r0), at(0.01).addScaledVector(side, r1).setY(R.range(0.005, 0.03)), 0.007, 0.007);
+      }
+      for (const k of [hl * 0.78, hl * 0.9]) B.add(M.rope, new THREE.TorusGeometry(0.047, 0.009, 4, 12), new THREE.Matrix4().compose(at(k), q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(V3(1, 0, 0), Math.PI / 2)), V3(1, 1, 1)), true);
+    } else if (kind === 'footing') {
+      // a run of dry-stone footing along the wall base, partly fallen out
+      const len = R.range(1.2, 3.2), courses = R.int(2, 4);
+      let zz = z + len / 2;
+      for (let c = 0; c < courses; c++) {
+        let zc = z - len / 2 + R.range(0, 0.15);
+        while (zc < z + len / 2) {
+          const w = R.range(0.28, 0.55), h = R.range(0.13, 0.22);
+          if (!(c === courses - 1 && R.chance(0.35))) B.box(R.pick(stones), s * (1.88 - R.range(0, 0.08)), c * 0.17 + h / 2, zc + w / 2, R.range(0.22, 0.3), h, w * 0.95, R.range(-0.04, 0.04), R.range(-0.1, 0.1), R.range(-0.05, 0.05));
+          zc += w;
+        }
+      }
+      for (let i = 0; i < R.int(2, 6); i++) stoneLump(B, R, R.pick(stones), s * R.range(1.2, 1.7), 0.08, z + R.range(-len / 2, len / 2), R.range(0.1, 0.18), 0.6);
+      ctx.solid(s * 1.86, z, 0.36, len, 0, 'up');
+    } else if (kind === 'horseskull') {
+      // a horse's skull: broad behind the eyes, the long face narrowing to the teeth
+      const ry = R.range(0, TAU), roll = R.chance(0.3) ? s * R.range(1.1, 1.4) : R.range(-0.15, 0.15), m = mtx(x * 0.9, roll > 1 ? 0.075 : 0.07, z, R.range(-0.08, 0.04), ry, roll);
+      const part = (geo, px, py, pz, rx, sx, sy, sz, mat = M.bone) => B.add(mat, geo, m.clone().multiply(mtx(px, py, pz, rx, 0, 0, sx, sy, sz)));
+      const ob = cachedMat('oldbone', () => lam(T.bone, { color: 0x8c806a, bumpScale: 0.8 }));
+      part(UNIT_SPH, 0, 0.02, -0.04, 0, 0.09, 0.085, 0.11, ob);                   // braincase
+      part(new THREE.CylinderGeometry(0.036, 0.085, 0.4, 10), 0, 0.005, 0.2, Math.PI / 2, 0.95, 1, 0.75, ob); // the long face
+      part(UNIT_SPH, 0, -0.005, 0.4, 0, 0.04, 0.032, 0.045, ob);                   // muzzle
+      part(UNIT_SPH, 0, 0.012, 0.3, 0, 0.022, 0.012, 0.09, M.socket);              // nasal opening, long
+      for (const e of [-1, 1]) {
+        part(boxGeo(0.03, 0.035, 0.2), e * 0.1, 0.0, -0.01, 0, 1, 1, 1, ob);          // cheekbone arch
+        part(new THREE.TorusGeometry(0.034, 0.012, 5, 10), e * 0.1, 0.045, 0.04, 0, 0.6, 1, 1, ob); // orbit rim
+        part(UNIT_SPH, e * 0.098, 0.045, 0.04, 0, 0.02, 0.028, 0.028, M.socket);     // the hollow of the eye
+      }
+      part(boxGeo(0.06, 0.014, 0.17), 0, -0.05, 0.3, 0, 1, 1, 1, ob);                // row of teeth
+      if (R.chance(0.5)) for (const e of [-1, 1]) part(boxGeo(0.016, 0.055, 0.4), e * 0.05, -0.075, 0.12, -0.08, 1, 1, 1, ob); // the jaw, still with it
+    } else if (kind === 'loomweights') {
+      // the loom rotted away; its weights lie where they fell, in a row
+      const cnt = R.int(3, 8), ang = R.range(-0.3, 0.3), tone = cachedMat('loomw', () => { const m = new THREE.MeshLambertMaterial({ color: 0x75685a }); m.bumpMap = T.earth; m.bumpScale = 0.6; return m; });
+      for (let i = 0; i < cnt; i++) {
+        const zz = z - 0.6 + i * R.range(0.14, 0.22), xx = x + Math.sin(ang) * (zz - z);
+        if (R.chance(0.6)) B.add(tone, new THREE.TorusGeometry(0.055, 0.035, 6, 10), mtx(xx, 0.035, zz, Math.PI / 2 + R.range(-0.3, 0.3), 0, R.range(-0.3, 0.3)), true);
+        else B.add(tone, new THREE.ConeGeometry(0.06, 0.12, 4), mtx(xx, 0.04, zz, R.range(1.3, 1.8), R.range(0, 3), 0), true);
+      }
+    } else if (kind === 'quern') {
+      const st = R.pick(stones), qx = x * 0.95;
+      B.add(st, new THREE.CylinderGeometry(0.26, 0.28, 0.12, 14), mtx(qx, 0.06, z), true);
+      const tilt = R.chance(0.5) ? R.range(0.2, 0.9) : 0;
+      B.add(st, new THREE.CylinderGeometry(0.24, 0.25, 0.1, 14, 1), mtx(qx + (tilt ? s * 0.2 : 0), tilt ? 0.18 : 0.17, z, tilt, 0, tilt * 0.3), true);
+      B.add(M.socket, new THREE.CylinderGeometry(0.035, 0.035, 0.105, 8), mtx(qx + (tilt ? s * 0.2 : 0), tilt ? 0.18 : 0.17, z, tilt, 0, tilt * 0.3), true);
+      ctx.circle(qx, z, 0.32);
+    } else if (kind === 'hearth') {
+      const hx = x * 0.8, cnt = R.int(7, 11), rr = R.range(0.38, 0.55);
+      for (let i = 0; i < cnt; i++) { const a = i / cnt * TAU + R.range(-0.15, 0.15); stoneLump(B, R, R.pick(stones), hx + Math.cos(a) * rr, 0.05, z + Math.sin(a) * rr, R.range(0.09, 0.15), 0.6); }
+      B.add(M.ash, new THREE.CircleGeometry(rr * 0.85, 14), mtx(hx, 0.01, z, -Math.PI / 2, 0, 0), true);
+      for (let i = 0; i < 6; i++) B.add(M.socket, boxGeo(R.range(0.08, 0.2), 0.03, 0.04), mtx(hx + R.range(-0.2, 0.2), 0.025, z + R.range(-0.2, 0.2), 0, R.range(0, 3), 0), true);
+      ctx.circle(hx, z, rr + 0.1);
+    } else if (kind === 'shield') {
+      const sx = x * 0.95, m = mtx(sx, 0.03, z, -Math.PI / 2 + R.range(-0.1, 0.1), 0, R.range(0, TAU));
+      B.add(M.board, new THREE.CylinderGeometry(0.42, 0.42, 0.025, 20).rotateX(Math.PI / 2), m, true);
+      B.add(M.iron, new THREE.SphereGeometry(0.09, 10, 6, 0, TAU, 0, Math.PI / 2).rotateX(Math.PI / 2), m.clone().multiply(mtx(0, 0, 0.012)), true);
+      if (R.chance(0.6)) B.add(M.leather, new THREE.TorusGeometry(0.42, 0.012, 4, 24), m, true);
+    } else if (kind === 'rope') {
+      const rx = x, turns = R.int(4, 7);
+      for (let i = 0; i < turns; i++) B.add(M.rope, new THREE.TorusGeometry(0.16 + i * 0.012 + R.range(-0.01, 0.01), 0.018, 5, 18), mtx(rx + R.range(-0.02, 0.02), 0.02 + i * 0.03, z + R.range(-0.02, 0.02), Math.PI / 2 + R.range(-0.08, 0.08), 0, R.range(-0.08, 0.08)), true);
+      if (R.chance(0.6)) B.beam(M.rope, V3(rx, 0.03, z + 0.18), V3(rx - s * R.range(0.3, 0.7), 0.02, z + R.range(0.4, 1.0)), 0.025, 0.025);
+    } else if (kind === 'ladder') {
+      const top = R.range(1.6, 2.4), lean = R.range(0.5, 0.8), rungs = R.int(4, 7), broken = R.int(1, rungs - 1);
+      for (const e of [-0.2, 0.2]) B.beam(M.wood, V3(s * (1.95 - lean), 0, z + e), V3(s * 1.95, top, z + e), 0.05, 0.05);
+      for (let i = 0; i < rungs; i++) { if (i === broken) continue; const t = (i + 0.7) / (rungs + 0.6); B.box(M.wood, s * (1.95 - lean * (1 - t)), top * t, z, 0.04, 0.04, 0.42); }
+      B.box(M.wood, s * 1.3, 0.02, z + R.range(-0.5, 0.5), 0.04, 0.04, 0.42, 0, R.range(0, 3), 0);
+      ctx.circle(s * (1.95 - lean * 0.5), z, 0.25);
+    } else if (kind === 'straw') {
+      const cnt = R.int(30, 70), sx = x * 0.9;
+      for (let i = 0; i < cnt; i++) { const a = R.range(0, TAU), l = R.range(0.1, 0.3), px = sx + R.range(-0.6, 0.6), pz = z + R.range(-0.8, 0.8); B.beam(M.straw, V3(px, 0.006, pz), V3(px + Math.cos(a) * l, 0.006 + R.range(0, 0.02), pz + Math.sin(a) * l), 0.006, 0.004); }
+    }
+    yield;
+  }
+  // a crack in the boards here and there costs nothing and repeats nothing
+  if (R.chance(0.3)) { const z = -R.range(4, 96), a = R.range(-0.5, 0.5); B.box(M.socket, R.range(-1.2, 1.2), 0.002, z, 0.03, 0.004, R.range(0.6, 1.6), 0, a, 0); }
+  // where a mouse could come from and go to: small gaps at the wall base
+  for (let i = 0; i < 2; i++) ctx.mouseSpots.push(-R.range(10, 90));
 }
 
 /* ---------- room shells ---------- */
@@ -1199,7 +1519,8 @@ function shell(ctx, room, D, W, H, wallMat, o = {}) {
   }
   for (const s of [-1, 1]) B.box(wallMat, u0 + D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.7);
   for (const s of [-1, 1]) ctx.solid(u0 + D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, lvl);
-  if (o.door !== false) {
+  if (o.front === false) { /* open to whatever it adjoins */ }
+  else if (o.door !== false) {
     const dh = o.dh ?? 0.72, top = 2.3;
     for (const s of [-1, 1]) { B.box(wallMat, u0 + 0.06, H / 2, s * (dh + (hw - dh) / 2), 0.12, H, hw - dh, 0, 0, 0, 0.7); ctx.solid(u0 + 0.06, s * (dh + (hw - dh) / 2), 0.2, hw - dh, 0, lvl); }
     B.box(wallMat, u0 + 0.06, (top + H) / 2, 0, 0.12, H - top, 2 * dh);
@@ -1215,7 +1536,7 @@ function shell(ctx, room, D, W, H, wallMat, o = {}) {
   for (const [u, v] of posts) B.box(M.wood, u, H / 2, v, 0.22, H, 0.22);
   // webs in the far corners
   const R = new Rng(room.r.seed ^ 0x55);
-  for (const s of [-1, 1]) if (R.chance(0.6)) ctx.web(V3(uB - 0.02, H - 0.02, s * (hw - 0.02)), V3(-0.7071, 0, -s * 0.7071), V3(0, -1, 0), R.range(0.5, 1.0));
+  for (const s of [-1, 1]) if (R.chance(0.45)) ctx.web(V3(uB - 0.02, H - 0.02, s * (hw - 0.02)), V3(-0.7071, 0, -s * 0.7071), V3(0, -1, R.range(-0.2, 0.2)).normalize(), R.range(0.4, 1.1), R.int(0, 3));
   ctx.setBounds(room, u0, uB, -hw, hw);
   room.D = D; room.W = W; room.H = H; room.u0 = u0;
 }
@@ -1314,7 +1635,7 @@ const UPPER_BUILD = {
     shelves(ctx, room, 'u', 1.1, D - 0.3, -W / 2 + 0.2, 0.36, [0.4, 0.95, 1.5, 2.05]);
     if (v === 1) ctx.skeleton('sit', D - 0.32, 0, -Math.PI / 2);
     else ctx.addSmash('box', D - 0.5, 0, 0.15, 0.3, { room });
-    for (let u = 2; u < D - 1; u += R.range(2.5, 4.5)) ctx.web(V3(u, 2.58, W / 2 - 0.4), V3(0, 0, -1), V3(0, -1, 0.3).normalize(), R.range(0.4, 0.8));
+    for (let u = 2; u < D - 1; u += R.range(3.5, 6.5)) ctx.web(V3(u, 2.58, W / 2 - 0.4), V3(0, 0, -1), V3(0, -1, 0.3).normalize(), R.range(0.4, 0.8), R.int(0, 3));
   },
   dank(ctx, room, R, v) {
     const D = v === 0 ? 4 : 5, W = v === 0 ? 4 : 3, H = 2.5;
@@ -1535,7 +1856,7 @@ const LOWER_BUILD = {
     const c2 = ctx.addSmash('bigcrate', uB - 0.5, 0, -0.49, -0.04, { room, lvl: 'low' });
     ctx.addSmash('bigcrate', uB - 0.5, 0.96, 0.47, -0.02, { room, lvl: 'low', below: c1 });
     ctx.addSmash('bigcrate', uB - 0.5, 0.96, -0.5, 0.05, { room, lvl: 'low', below: c2 });
-    buildEscapeRoute(ctx, room, uB);
+    ctx.escapeArgs = [room, uB];
   },
 };
 function lowerShell(ctx, room, D, W, H, o = {}) {
@@ -1557,7 +1878,7 @@ function backWallWithGap(ctx, uB, W, H, gap, gh) {
 }
 
 /* ---------- length 75: the way out ---------- */
-function buildEscapeRoute(ctx, room, uB) {
+function* buildEscapeRouteGen(ctx, room, uB) {
   const B = ctx.B;
   // remove the plain back wall the shell drew: rebuild that face with a gap (the shell's wall is drawn; we draw over it by
   // overdrawing a darker recess — instead we never let the shell draw it, see lowerShell gap handling)
@@ -1607,6 +1928,7 @@ function buildEscapeRoute(ctx, room, uB) {
     }
     return out;
   };
+  yield;
   for (const side of [-1, 1]) {
     const o = off(side);
     for (let i = 0; i < o.length - 1; i++) {
@@ -1655,6 +1977,7 @@ function buildEscapeRoute(ctx, room, uB) {
         for (const s of [-1, 1]) B.box(M.wood, p.x + n.x * s * (hw + 0.02), y + 1.25, p.y + n.y * s * (hw + 0.02), 0.16, 2.6, 0.16);
         B.box(M.wood, p.x, y + 2.5, p.y, 0.16, 0.16, 2 * hw + 0.3, 0, -ang, 0);
       }
+      if (i % 40 === 39) yield;
     }
     const c0 = ctx.W(a.x, 0, a.y);
     const len = RUN + 3;
@@ -1676,111 +1999,311 @@ function buildEscapeRoute(ctx, room, uB) {
   }
 }
 
-/* ---------- assemble a length ---------- */
-function buildLength(A) {
+/* ---------- caves: three per lap, rough rock, a little stonework ---------- */
+function caveTube(R, pts, rx, ry, yc, seed) {
+  // rings swept along a polyline, pushed in and out by noise; flat underfoot
+  const samples = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], len = a.distanceTo(b), n = Math.max(2, Math.ceil(len / 0.35));
+    for (let k = 0; k < n; k++) samples.push({ p: a.clone().lerp(b, k / n), t: b.clone().sub(a).normalize() });
+  }
+  samples.push({ p: pts[pts.length - 1].clone(), t: pts[pts.length - 1].clone().sub(pts[pts.length - 2]).normalize() });
+  const N = 14, pos = [], uv = [], idx = [];
+  let dist = 0;
+  samples.forEach((smp, i) => {
+    if (i) dist += smp.p.distanceTo(samples[i - 1].p);
+    const nx = -smp.t.y, nz = smp.t.x;
+    for (let j = 0; j <= N; j++) {
+      const th = j / N * TAU, k = 1 + (vnoise(dist * 1.1, (j % N) * 0.75, seed) - 0.5) * 0.36 + (vnoise(dist * 3.1, (j % N) * 1.9, seed + 5) - 0.5) * 0.14;
+      let y = yc + Math.sin(th) * ry * k;
+      const h = Math.cos(th) * rx * k;
+      if (y < 0) y = vnoise(dist * 2, j, seed + 9) * 0.03;
+      pos.push(smp.p.x + nx * h, y, smp.p.y + nz * h); uv.push(dist / 1.1, j / N * 4);
+    }
+    if (i) for (let j = 0; j < N; j++) { const a = (i - 1) * (N + 1) + j, b = i * (N + 1) + j; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+function caveChamber(R, a, b, c, yc, seed) {
+  const g = new THREE.SphereGeometry(1, 30, 18), p = g.attributes.position, uvs = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + (vnoise(x * 2.1 + 3, z * 2.1 + y * 1.7, seed) - 0.5) * 0.42 + (vnoise(x * 6 + y * 3, z * 6, seed + 3) - 0.5) * 0.14;
+    let yy = yc + y * c * k;
+    if (yy < 0) yy = vnoise(x * 5, z * 5, seed + 7) * 0.025;
+    p.setXYZ(i, x * a * k, yy, z * b * k);
+    uvs.setXY(i, uvs.getX(i) * 13, uvs.getY(i) * 6);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function buildCave(ctx, room, R) {
+  const B = ctx.B, side = room.side;
+  ctx.setFrame(side, C.WALL_OUT, room.zc, 0);
+  const seed = room.r.seed % 10000;
+  const a = R.range(3.3, 4.2), b = R.range(2.6, 3.3), c = R.range(2.5, 3.0);
+  const b1 = R.range(-0.7, 0.7), cc = new THREE.Vector2(3.0 + R.range(1.0, 2.0) + a * 0.7, R.range(-1.4, 1.4));
+  const P0 = new THREE.Vector2(-0.55, 0), P1 = new THREE.Vector2(2.3, b1), P2 = new THREE.Vector2(cc.x - a * 0.72, cc.y * 0.7);
+  B.add(M.rock, caveTube(R, [P0, P1, P2], 0.95, 1.2, 1.0, seed), new THREE.Matrix4(), true);
+  B.add(M.rock, caveChamber(R, a, b, c, 0.55, seed + 11), mtx(cc.x, 0, cc.y), true);
+  // allowed ground: the mouth, the bends of the passage, the chamber
+  const regions = [];
+  const rect = (pa, pb, hw, ext = 0.3) => {
+    const d = pb.clone().sub(pa), len = d.length(), m = pa.clone().add(pb).multiplyScalar(0.5);
+    const cw = ctx.W(m.x, 0, m.y), dir = ctx.W(m.x + d.x / len, 0, m.y + d.y / len).sub(cw);
+    regions.push({ cx: cw.x, cz: cw.z, ux: dir.x, uz: dir.z, hx: len / 2 + ext, hz: hw });
+  };
+  rect(new THREE.Vector2(-0.7, 0), new THREE.Vector2(0.4, 0), 0.74, 0);
+  rect(P0, P1, 0.74); rect(P1, P2, 0.74, 0.6); rect(P2, cc, 0.74, 0.2);
+  const cw = ctx.W(cc.x, 0, cc.y);
+  regions.push({ ell: true, cx: cw.x, cz: cw.z, a: a * 0.78 - 0.35, b: b * 0.78 - 0.35 });
+  const lo = ctx.W(-0.7, 0, -1.2), hi = ctx.W(cc.x + a + 0.5, 0, cc.y + b + 0.5), lo2 = ctx.W(cc.x + a + 0.5, 0, cc.y - b - 0.5);
+  ctx.zones.push({ regions, frame: Object.assign({}, ctx.frame), x0: Math.min(lo.x, hi.x), x1: Math.max(lo.x, hi.x), z0: Math.min(lo.z, hi.z, lo2.z) - 1, z1: Math.max(lo.z, hi.z, lo2.z) + 1, room });
+  // stonework: a curve of dry-stone wall against part of the chamber, a ledge or two, fallen stones
+  const stones = [M.stone, M.stoneB, M.stoneC];
+  const arc0 = R.range(0.3, 2.2), arcLen = R.range(0.9, 1.7);
+  for (let course = 0; course < R.int(3, 6); course++) {
+    for (let t = arc0; t < arc0 + arcLen; t += R.range(0.1, 0.16)) {
+      if (course > 2 && R.chance(0.35)) continue;
+      const r = 0.93 - course * 0.015, x = cc.x + Math.cos(t) * a * r * 0.86, z = cc.y + Math.sin(t) * b * r * 0.86;
+      B.box(R.pick(stones), x, 0.1 + course * 0.19, z, R.range(0.3, 0.5), R.range(0.15, 0.2), R.range(0.22, 0.3), R.range(-0.05, 0.05), -t + Math.PI / 2 + R.range(-0.15, 0.15), R.range(-0.05, 0.05));
+    }
+  }
+  for (let i = 0; i < R.int(6, 14); i++) { const t = R.range(0, TAU), r = R.range(0.35, 0.8); stoneLump(B, R, R.pick(stones), cc.x + Math.cos(t) * a * r * 0.75, 0.06, cc.y + Math.sin(t) * b * r * 0.75, Math.pow(R.next(), 2) * 0.25 + 0.05, R.range(0.5, 0.9)); }
+  const ledges = R.int(1, 2);
+  for (let i = 0; i < ledges; i++) {
+    const t = arc0 + Math.PI + R.range(-0.6, 0.6) + i * 0.9, x = cc.x + Math.cos(t) * a * 0.62, z = cc.y + Math.sin(t) * b * 0.62, h = R.range(0.55, 0.85);
+    B.box(R.pick(stones), x, h / 2, z, 0.9, h, 0.5, 0, -t + Math.PI / 2, 0);
+    B.box(M.stoneC, x, h + 0.04, z, 1.0, 0.08, 0.6, 0, -t + Math.PI / 2, 0);
+    ctx.solid(x - ctx.frame.side * 0, z, 0.95, 0.55, -t + Math.PI / 2, 'up');
+    for (const k of [-0.25, 0.25]) ctx.surface(room, x + Math.cos(-t + Math.PI / 2) * k, h + 0.085, z - Math.sin(-t + Math.PI / 2) * k);
+  }
+  ctx.bones(cc.x + R.range(-1, 1), cc.y + R.range(-1, 1), R);
+  if (R.chance(0.5)) ctx.addSmash('box', cc.x - a * 0.3, 0, cc.y + b * 0.45, R.range(0, 3), { room });
+  if (room.r.basin) {
+    // the basin: a crude mortared stone vessel, kept in the darkest corner, holding black water that shows nothing
+    const bx = cc.x + a * 0.55, bz = cc.y - Math.sign(cc.y || 1) * b * 0.35;
+    const prof = [[0, 0], [0.62, 0], [0.74, 0.12], [0.8, 0.36], [0.76, 0.6], [0.66, 0.66], [0.58, 0.62], [0.55, 0.34], [0.46, 0.14], [0, 0.12]];
+    B.add(M.mortar, scaleUV(new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 16), 3, 1.5), mtx(bx, 0, bz, 0, R.range(0, 3), 0), true);
+    for (let i = 0; i < 9; i++) { const t = i / 9 * TAU + R.range(-0.2, 0.2); stoneLump(B, R, R.pick(stones), bx + Math.cos(t) * 0.8, R.range(0.08, 0.4), bz + Math.sin(t) * 0.8, R.range(0.08, 0.15), 0.7); }
+    B.add(M.blackWater, new THREE.CircleGeometry(0.565, 20), mtx(bx, 0.5, bz, -Math.PI / 2, 0, 0), true);
+    ctx.circle(bx, bz, 0.9);
+    // something drips into it now and then
+    const top = ctx.W(bx + 0.15, c * 0.95, bz), bottom = ctx.W(bx + 0.15, 0.5, bz);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 5), M.water); drop.position.copy(top); drop.userData.disposable = true; ctx.group.add(drop);
+    ctx.droplets.push({ mesh: drop, top: top.y, bottom: bottom.y, t: R.range(0, 4), period: R.range(5, 9) });
+  }
+  // a web where the passage meets the chamber
+  ctx.web(V3(P2.x, 1.9, P2.y + 0.6), V3(0, -0.3, -1).normalize(), V3(0.3, -1, 0).normalize(), R.range(0.5, 0.9), R.int(0, 3));
+  ctx.setBounds(room, 0, cc.x + a, cc.y - b, cc.y + b);
+  room.D = cc.x + a; room.W = 2 * b; room.H = c;
+}
+
+/* ---------- the two rooms that jut off at an angle ---------- */
+function buildJut(ctx, room, R) {
+  const side = room.side, ang = (R.chance(0.5) ? 1 : -1) * R.range(0.5, 0.68);
+  const PD = R.range(3.4, 4.4), PW = 1.5;
+  ctx.setFrame(side, C.WALL_OUT, room.zc, 0, ang, 0, 0);
+  shell(ctx, room, PD + 0.3, PW, 2.4, M.board, { u0: -0.3, front: false, backGap: [0.62, 2.2] });
+  const ou = PD * Math.cos(ang), ov = -PD * Math.sin(ang);
+  ctx.setFrame(side, C.WALL_OUT, room.zc, 0, ang, ou, ov);
+  const D = R.range(3.2, 4.2), W = R.range(3.2, 4.4), H = 2.6;
+  shell(ctx, room, D, W, H, R.chance(0.5) ? M.log : M.board, { dh: 0.68 });
+  shelves(ctx, room, 'v', -W / 2 + 0.3, W / 2 - 0.3, D - 0.25, 0.4, [0.5, 1.15, 1.8], R);
+  if (R.chance(0.6)) ctx.skeleton('sit', 0.45, W / 2 - 0.45, Math.PI, 0);
+  stack(ctx, room, 1.2, -W / 2 + 0.5, R, 1);
+  if (R.chance(0.5)) ctx.addSmash('stool', D * 0.55, 0, 0.3, R.range(0, 3), { room });
+  room.D = D; room.W = W; room.H = H;
+}
+
+/* ---------- assemble a length, a slice at a time ---------- */
+let buildStage = '';
+// builds run a slice at a time; a slice gives way once it has had its few milliseconds
+let sliceStart = 0, sliceBudget = 3;
+const overBudget = () => performance.now() - sliceStart > sliceBudget;
+function* buildLengthGen(A) {
+  buildStage = 'ctx';
   const ctx = new LengthCtx(A);
-  buildCorridor(ctx);
+  buildStage = 'corridor';
+  yield* corridorGen(ctx);
   for (const r of ctx.lay.rooms) {
     const R = new Rng(r.seed);
+    buildStage = (r.lower ? 'low:' : 'up:') + r.design;
     if (r.lower) {
       const room = ctx.newRoom(r, 'low');
       stairAlcove(ctx, room);
+      yield;
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, C.LOWER_Y);
-      if (r.design === 'escape') {
-        // escape room uses a back wall with an opening instead of the shell's solid one
-        LOWER_BUILD.escape(ctx, room, R);
-      } else LOWER_BUILD[r.design](ctx, room, R, r.v);
+      LOWER_BUILD[r.design](ctx, room, R, r.v);
+      if (ctx.escapeArgs) { yield; yield* buildEscapeRouteGen(ctx, ...ctx.escapeArgs); ctx.escapeArgs = null; }
     } else {
       const room = ctx.newRoom(r, 'up');
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, 0);
-      UPPER_BUILD[r.design](ctx, room, R, r.v);
+      if (r.design === 'cave') buildCave(ctx, room, R);
+      else if (r.design === 'jut') buildJut(ctx, room, R);
+      else UPPER_BUILD[r.design](ctx, room, R, r.v);
     }
+    yield;
   }
+  buildStage = 'tokens';
   placeTokens(ctx);
-  ctx.B.finish(ctx.group);
+  yield;
+  buildStage = 'finish';
+  yield* ctx.B.finishGen(ctx.group);
   return ctx;
+}
+function buildLength(A) {
+  const g = buildLengthGen(A);
+  let r = g.next();
+  while (!r.done) r = g.next();
+  return r.value;
 }
 
 /* ---- 40_items.js ---- */
 /* ============================================================
    The useless objects, lamp oil, biscuits
+   Every object is the kind of thing a steppe rampart could have held a thousand years ago or far earlier:
+   fired clay, bronze, iron, silver, gold, bone, horn, antler, stone, flint, amber, shell, lead.
    ============================================================ */
 const CLAY = [
   { n: 'pale', b: '#e2dac8', i: '#6a3a2a' }, { n: 'maroon', b: '#5c1e22', i: '#e0cfae' }, { n: 'magenta', b: '#9a2a68', i: '#f0dac8' },
   { n: 'ochre', b: '#b5852f', i: '#3a2414' }, { n: 'chalk-white', b: '#ece7dc', i: '#2c2a28' }, { n: 'soot-black', b: '#1e1a17', i: '#d8c9a8' },
   { n: 'umber', b: '#5a3a22', i: '#e6d2a8' }, { n: 'rose', b: '#c48b84', i: '#4a2420' }, { n: 'slate-blue', b: '#566578', i: '#ebe2cd' },
   { n: 'green-glazed', b: '#4d8574', i: '#1e2a24' }, { n: 'ash-grey', b: '#99938a', i: '#2a201a' }, { n: 'red-brown', b: '#88482d', i: '#f0e0c0' },
+  { n: 'buff', b: '#c9ad84', i: '#4a2c1a' }, { n: 'dun', b: '#8f8064', i: '#1e1812' }, { n: 'black-burnished', b: '#2a2622', i: '#b8a888' },
+  { n: 'turquoise-glazed', b: '#3f8a86', i: '#1a2422' },
 ];
+// the magenta vase is the only magenta thing on the wall
+const GEN_CLAY = CLAY.filter(c => c.n !== 'magenta');
 const MOTIFS = ['swans', 'flowers', 'swans and flowers', 'horses', 'stags', 'spirals', 'waves', 'rosettes', 'dots', 'zigzags', 'fish', 'birds', 'eye', 'interlace', 'wheels', 'hands', 'ladders', 'plain'];
 const MOTIF_WORDS = { swans: 'swans', flowers: 'flowers', 'swans and flowers': 'swans and flowers', horses: 'horses', stags: 'stags', spirals: 'spirals', waves: 'waves', rosettes: 'rosettes', dots: 'rows of dots', zigzags: 'zigzags', fish: 'fish', birds: 'birds in flight', eye: 'a single eye', interlace: 'interlace', wheels: 'sun-wheels', hands: 'open hands', ladders: 'ladders' };
-const CLAY_KINDS = { vase: 'vase', jug: 'jug', bowl: 'bowl', cup: 'cup', plate: 'plate', amphora: 'amphora', lamp: 'clay lamp', whorl: 'spindle whorl', figurine: 'figure' };
-const METAL_KINDS = { candlestick: 'candlestick holder', bell: 'bell', key: 'key', buckle: 'buckle', ring: 'ring', brooch: 'brooch', spoon: 'spoon' };
-const BONE_KINDS = { comb: 'comb', tooth: 'tooth', horn: 'drinking horn', whistle: 'whistle', die: 'die', beads: 'string of beads', tablet: 'lead tablet' };
-const METALS = [{ n: 'bronze', c: 0x8a6a3a }, { n: 'iron', c: 0x4a4440 }, { n: 'silver', c: 0xa8a49c }, { n: 'copper', c: 0x9a5a38 }];
+// kind: [noun, family, weight]
+const KINDS = {
+  vase: ['vase', 'clay', 3], jug: ['jug', 'clay', 2], bowl: ['bowl', 'clay', 2.2], cup: ['cup', 'clay', 1.6], plate: ['plate', 'clay', 1.1],
+  amphora: ['amphora', 'clay', 1.0], lamp: ['clay lamp', 'clay', 0.9], beaker: ['beaker', 'clay', 1.1], jar: ['jar', 'clay', 1.2], strainer: ['strainer', 'clay', 0.5],
+  whorl: ['spindle whorl', 'clay', 0.8], loomweight: ['loom weight', 'clay', 0.7], figurine: ['figure', 'clay', 0.9], rattle: ['rattle', 'clay', 0.45],
+  candlestick: ['candlestick holder', 'metal', 0.5], bell: ['bell', 'metal', 0.8], key: ['key', 'metal', 0.8], buckle: ['buckle', 'metal', 0.9],
+  ring: ['ring', 'metal', 0.9], brooch: ['brooch', 'metal', 1.0], pin: ['dress pin', 'metal', 0.7], torc: ['torc', 'metal', 0.6], bracelet: ['bracelet', 'metal', 0.8],
+  earring: ['earring', 'metal', 0.6], plaque: ['belt plaque', 'metal', 0.8], bit: ['horse bit', 'metal', 0.5], phalera: ['harness disc', 'metal', 0.5],
+  arrowhead: ['arrowhead', 'metal', 0.8], fishhook: ['fishhook', 'metal', 0.4], needlecase: ['needle case', 'metal', 0.4], ladle: ['ladle', 'metal', 0.5],
+  cauldron: ['cauldron', 'metal', 0.35], strapend: ['strap end', 'metal', 0.5], tweezers: ['tweezers', 'metal', 0.4], spoon: ['spoon', 'metal', 0.5],
+  comb: ['comb', 'bone', 0.9], tooth: ['tooth', 'bone', 0.5], horn: ['drinking horn', 'bone', 0.6], whistle: ['whistle', 'bone', 0.5], die: ['die', 'bone', 0.5],
+  knucklebone: ['knucklebone', 'bone', 0.7], awl: ['awl', 'bone', 0.5], antlerpick: ['antler pick', 'bone', 0.35], needle: ['bone needle', 'bone', 0.4], hornspoon: ['horn spoon', 'bone', 0.4],
+  whetstone: ['whetstone', 'stone', 0.6], flint: ['flint blade', 'stone', 0.6], axehead: ['stone axe-head', 'stone', 0.4], counter: ['gaming counter', 'stone', 0.6],
+  amber: ['lump of amber', 'stone', 0.5], cowrie: ['cowrie shell', 'stone', 0.5], sealstone: ['seal stone', 'stone', 0.4], beads: ['string of beads', 'stone', 0.8],
+  tablet: ['lead tablet', 'lead', 0.4],
+};
+const METALS = [{ n: 'bronze', c: 0x8a6a3a, w: 4 }, { n: 'iron', c: 0x4a4440, w: 2.5 }, { n: 'silver', c: 0xa8a49c, w: 1.6 }, { n: 'copper', c: 0x9a5a38, w: 1.2 }, { n: 'gilt bronze', c: 0xb8923a, w: 0.7 }, { n: 'gold', c: 0xd4a840, w: 0.35 }];
+const IRON_ONLY = new Set(['candlestick', 'key', 'arrowhead', 'bit', 'fishhook']);
+const METAL_DETAIL = {
+  brooch: ['a garnet', 'a coiled spring', 'a broken pin', 'a stag', 'three knobs', 'a bird\'s head'], ring: ['a twisted band', 'a flat bezel', 'a garnet', 'a spiral'],
+  plaque: ['a stag', 'a coiled panther', 'a griffin', 'a horse', 'a wolf', 'two birds'], torc: ['knobbed ends', 'a twisted body', 'beast-head ends'],
+  bracelet: ['snake heads', 'a twisted body', 'ribbed bands'], earring: ['a hanging drop', 'a granulated bead', 'a spiral'], bell: ['an iron clapper', 'a cracked lip', 'a loop for a cord'],
+  pin: ['a bird\'s head', 'a ball head', 'a ring head', 'a spiral head'], phalera: ['a rosette', 'a boss', 'a ring of dots'], strapend: ['a tongue-shaped end', 'a beast\'s face', 'punched dots'],
+  arrowhead: ['three blades', 'a long socket', 'barbs'], ladle: ['a long handle', 'a hooked end'], cauldron: ['a conical foot', 'two upright handles'], buckle: ['an oval frame', 'a square frame', 'a long tongue'],
+};
+const STONE_COL = { whetstone: ['grey', 'banded', 'dark'], flint: ['brown', 'grey', 'honey-coloured'], axehead: ['green', 'black', 'grey'], counter: ['white', 'black', 'blue glass', 'bone-white'], amber: ['dark', 'clear', 'cloudy'], cowrie: ['small', 'pierced', 'worn'], sealstone: ['red', 'black', 'banded'], beads: ['glass', 'amber', 'carnelian', 'clay', 'jet'] };
+const BONE_ADJ = { tablet: ['dark', 'small', 'old', 'bent'], default: ['small', 'worn', 'carved', 'old', 'broken', 'dark', 'pale', 'yellowed', 'polished'] };
+const KIND_LINES = {
+  whorl: ['A hole worn smooth by thread.', 'Heavy for its size.', 'It would spin a long time.'],
+  loomweight: ['The loom it hung from is long gone.', 'A hole worn smooth by the warp.', 'Heavy, and plain.'],
+  figurine: ['A small figure with no face.', 'Its arms are folded.', 'Worn smooth where a thumb would rest.'],
+  rattle: ['Something small moves inside.', 'Pinched into shape by hand.', 'A child\'s, perhaps.'],
+  strainer: ['Pierced all over with small holes.', 'Stained inside.', 'A crack runs through the holes.'],
+  candlestick: ['The socket is empty.'],
+  bell: ['It does not ring.', 'Small enough to hang from a harness.'],
+  key: ['Worn smooth at the bow.', 'Cold, and heavier than it looks.', 'A long stem and a heavy bit.'],
+  torc: ['Made to sit around a neck.', 'Heavier than it looks.', 'Bent open a little.'],
+  bit: ['The mouthpiece is worn thin.', 'Two links and two rings.'],
+  arrowhead: ['Still sharp at the point.', 'The shaft rotted away.', 'Small and mean.'],
+  fishhook: ['No barb.', 'Bent straight once, and bent back.', 'Very small.'],
+  needlecase: ['Empty.', 'A little tube with a cap.', 'The cap is stuck fast.'],
+  cauldron: ['Soot on the outside still.', 'Small enough for one meal.', 'One handle is bent.'],
+  tweezers: ['The arms still spring apart.', 'Small, and finely made.'],
+  comb: ['A few teeth missing.', 'Carved from one piece of bone.', 'Polished by handling.'],
+  tooth: ['A single tooth.', 'Yellowed.', 'Small enough to lose.'],
+  horn: ['A metal rim, gone dark.', 'Dry inside.', 'Polished by handling.'],
+  whistle: ['Three holes along one side.', 'Yellowed.', 'Polished by handling.'],
+  die: ['The pips are almost gone.', 'One side worn flat.', 'Yellowed.'],
+  knucklebone: ['From a sheep, or a goat.', 'Worn smooth by throwing.', 'One of a set, once.'],
+  awl: ['The point is still sharp.', 'Polished from use.', 'Made from a leg bone.'],
+  antlerpick: ['The tines are worn short.', 'Heavy at the head.', 'Earth still in the cracks.'],
+  needle: ['The eye is whole.', 'Thin as a straw.', 'Snapped near the point.'],
+  hornspoon: ['Dark and smooth.', 'The bowl is cracked.', 'Shaped in hot water once.'],
+  whetstone: ['Worn hollow in the middle.', 'A hole for a cord at one end.', 'Fine-grained.'],
+  flint: ['Still sharp along one edge.', 'Struck from a larger stone.', 'It catches the light.'],
+  axehead: ['Ground smooth and polished.', 'The edge is chipped.', 'Older than everything else here.'],
+  counter: ['One of a set, once.', 'Smooth on both faces.', 'Small enough to lose.'],
+  amber: ['Warm to hold.', 'Something small is caught inside.', 'From a northern sea.'],
+  cowrie: ['From a warm sea, very far away.', 'Pierced for a cord.', 'Worn smooth.'],
+  sealstone: ['A beast cut into one end.', 'Pierced along its length.', 'The carving is worn soft.'],
+  beads: ['Strung on a dark cord.', 'Some are missing.', 'No two alike.'],
+  tablet: ['Folded twice.', 'Soft enough to mark with a nail.', 'Something is scratched inside the fold.'],
+};
+const METAL_LINES = ['Cold, and heavier than it looks.', 'Bent once, and straightened.', 'Worn smooth along one edge.', 'Small marks scratched into it.', 'Mended once with a rivet.', 'It has been through a fire.', 'Pitted all over.'];
+// what the years do to each metal
+const METAL_AGE = { bronze: ['Green with age.'], copper: ['Green with age.'], 'gilt bronze': ['The gilding is nearly gone.', 'Green where the gilding has worn through.'], iron: ['Rust has eaten into it.', 'Black with old rust.'], silver: ['Black with tarnish.'], gold: ['Still bright, under the dirt.'] };
+const WHERE = { vase: 'around the shoulder', jug: 'around the shoulder', amphora: 'around the shoulder', jar: 'around the shoulder', beaker: 'in bands', bowl: 'inside the rim', plate: 'around the rim', cup: 'around the outside', lamp: 'across the top' };
+const PAINTED = [(m, k) => `${cap(m)}, painted by a careful hand.`, (m, k) => `${cap(m)} ${WHERE[k] || 'around it'}.`, (m, k) => `${cap(m)}, worn almost away.`, (m, k) => `${cap(m)}. Someone took their time.`, (m, k) => `A chip at the rim. ${cap(m)} below it.`, (m, k) => `${cap(m)}, a little crooked.`];
+const PLAIN = ['Unpainted. Smooth where it was held.', 'No decoration at all.', 'A crack, mended long ago.', 'Thin walls. It rings when tapped.'];
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 const ITEM_DEFS = [];
-(function defineItems() {
-  const names = new Set();
-  const push = d => { names.add(d.name.toLowerCase()); ITEM_DEFS.push(d); };
-  push({ id: 0, kind: 'vase', mat: 'clay', clay: CLAY[0], motif: 'swans and flowers', name: 'Pale vase', desc: 'Swans and flowers, painted by a careful hand.' });
-  push({ id: 1, kind: 'candlestick', mat: 'metal', metal: METALS[1], name: 'Iron candlestick holder', desc: 'The socket is empty.' });
-  push({ id: 2, kind: 'tooth', mat: 'bone', name: 'Waxed tooth', desc: 'A single tooth, sealed in wax.' });
-  push({ id: 3, kind: 'tablet', mat: 'bone', name: 'Folded lead tablet', desc: 'Something is scratched inside the fold.' });
-  push({ id: 4, kind: 'key', mat: 'metal', metal: METALS[1], name: 'Iron key', desc: 'A long stem and a heavy bit.' });
-  push({ id: 5, kind: 'vase', mat: 'clay', clay: CLAY[2], motif: 'plain', name: 'Magenta vase', desc: 'Glazed. Nothing painted on it.' });
-  push({ id: 6, kind: 'vase', mat: 'clay', clay: CLAY[1], motif: 'dots', name: 'Maroon vase', desc: 'A ring of dots around the neck.' });
-  const WHERE = { vase: 'around the shoulder', jug: 'around the shoulder', amphora: 'around the shoulder', bowl: 'inside the rim', plate: 'around the rim', cup: 'around the outside', lamp: 'across the top' };
-  const paintedLines = [(m, k) => `${cap(m)}, painted by a careful hand.`, (m, k) => `${cap(m)} ${WHERE[k]}.`, (m, k) => `${cap(m)}, worn almost away.`, (m, k) => `${cap(m)}. Someone took their time.`, (m, k) => `A chip at the rim. ${cap(m)} below it.`, (m, k) => `${cap(m)}, a little crooked.`];
-  const plainLines = ['Unpainted. Smooth where it was held.', 'No decoration at all.', 'A crack, mended long ago.', 'Thin walls. It rings when tapped.'];
-  const KIND_LINES = {
-    whorl: ['A hole worn smooth by thread.', 'Heavy for its size.', 'It would spin a long time.'],
-    figurine: ['A small figure with no face.', 'Its arms are folded.', 'Worn smooth where a thumb would rest.'],
-    bell: ['The clapper is still there.', 'Green with age.', 'Small marks scratched into it.'],
-    key: ['Worn smooth at the bow.', 'Cold, and heavier than it looks.', 'A long stem and a heavy bit.'],
-    comb: ['A few teeth missing.', 'Carved from one piece of bone.', 'Polished by handling.'],
-    tooth: ['A single tooth.', 'Yellowed.', 'Small enough to lose.'],
-    horn: ['A metal rim, gone dark.', 'Dry inside.', 'Polished by handling.'],
-    whistle: ['Three holes along one side.', 'Yellowed.', 'Polished by handling.'],
-    die: ['The pips are almost gone.', 'One side worn flat.', 'Yellowed.'],
-    beads: ['Glass, amber and clay.', 'Strung on a dark cord.', 'Some are missing.'],
-    tablet: ['Folded twice.', 'Soft enough to mark with a nail.', 'Something is scratched inside the fold.'],
-  };
-  const metalLines = ['Green with age.', 'Cold, and heavier than it looks.', 'Bent once, and straightened.', 'Worn smooth along one edge.', 'Small marks scratched into it.'];
-  const BONE_ADJ = { tablet: ['dark', 'small', 'old', 'bent'], beads: ['small', 'old', 'broken', 'short'], default: ['small', 'worn', 'carved', 'old', 'broken', 'dark', 'pale', 'yellowed'] };
-  for (let id = 7; id < C.FIRST_POOL + C.SECOND_POOL; id++) {
-    const R = new Rng(hash32(id, 99, 7));
-    let d;
-    for (let tries = 0; tries < 40; tries++) {
-      const fam = R.pickW(['clay', 'metal', 'bone'], [6, 2.5, 1.5]);
-      if (fam === 'clay') {
-        const kind = R.pickW(Object.keys(CLAY_KINDS), [3, 2, 2.2, 1.6, 1.2, 1.2, 1, 0.8, 0.8]);
-        const clay = R.pick(CLAY);
-        const motif = (kind === 'whorl' || kind === 'figurine') ? 'plain' : R.pickW(MOTIFS, MOTIFS.map(m => m === 'plain' ? 2 : m.startsWith('swans') ? 1.4 : 1));
-        let name = cap(`${clay.n} ${CLAY_KINDS[kind]}`);
-        if (names.has(name.toLowerCase()) && motif !== 'plain') name = `${name} with ${MOTIF_WORDS[motif]}`;
-        if (names.has(name.toLowerCase())) continue;
-        const desc = KIND_LINES[kind] ? R.pick(KIND_LINES[kind]) : motif === 'plain' ? R.pick(plainLines) : R.pick(paintedLines)(MOTIF_WORDS[motif], kind);
-        d = { id, kind, mat: 'clay', clay, motif, name, desc };
-      } else if (fam === 'metal') {
-        const kind = R.pick(Object.keys(METAL_KINDS)), metal = kind === 'candlestick' ? METALS[R.int(0, 1)] : R.pick(METALS);
-        const name = cap(`${metal.n} ${METAL_KINDS[kind]}`);
-        if (names.has(name.toLowerCase())) continue;
-        d = { id, kind, mat: 'metal', metal, name, desc: kind === 'candlestick' ? 'The socket is empty.' : R.pick(KIND_LINES[kind] || metalLines) };
-      } else {
-        const kind = R.pick(Object.keys(BONE_KINDS));
-        const adj = R.pick(BONE_ADJ[kind] || BONE_ADJ.default);
-        const name = cap(`${adj} ${BONE_KINDS[kind]}`);
-        if (names.has(name.toLowerCase())) continue;
-        d = { id, kind, mat: 'bone', name, desc: R.pick(KIND_LINES[kind]), seed: R.int(0, 1e6) };
-      }
-      break;
+const _itemNames = new Set();
+function _pushDef(d) { _itemNames.add(d.name.toLowerCase()); ITEM_DEFS.push(d); }
+_pushDef({ id: 0, kind: 'vase', mat: 'clay', clay: CLAY[0], motif: 'swans and flowers', name: 'Pale vase', desc: 'Swans and flowers, painted by a careful hand.' });
+_pushDef({ id: 1, kind: 'candlestick', mat: 'metal', metal: METALS[1], name: 'Iron candlestick holder', desc: 'The socket is empty.' });
+_pushDef({ id: 2, kind: 'tooth', mat: 'bone', name: 'Waxed tooth', desc: 'A single tooth, sealed in wax.' });
+_pushDef({ id: 3, kind: 'tablet', mat: 'lead', name: 'Folded lead tablet', desc: 'Something is scratched inside the fold.' });
+_pushDef({ id: 4, kind: 'key', mat: 'metal', metal: METALS[1], name: 'Iron key', desc: 'A long stem and a heavy bit.' });
+_pushDef({ id: 5, kind: 'vase', mat: 'clay', clay: CLAY[2], motif: 'plain', name: 'Magenta vase', desc: 'Glazed. Nothing painted on it.' });
+_pushDef({ id: 6, kind: 'vase', mat: 'clay', clay: CLAY[1], motif: 'dots', name: 'Maroon vase', desc: 'A ring of dots around the neck.' });
+const KIND_KEYS = Object.keys(KINDS), KIND_WEIGHTS = KIND_KEYS.map(k => KINDS[k][2]);
+function _genDef(id) {
+  const R = new Rng(hash32(id, 99, 7));
+  for (let tries = 0; tries < 60; tries++) {
+    const kind = R.pickW(KIND_KEYS, KIND_WEIGHTS), [noun, fam] = KINDS[kind];
+    let d = null, name;
+    if (fam === 'clay') {
+      const clay = R.pick(GEN_CLAY);
+      const decorated = !['whorl', 'loomweight', 'figurine', 'rattle', 'strainer'].includes(kind);
+      const motif = decorated ? R.pickW(MOTIFS, MOTIFS.map(m => m === 'plain' ? 2 : m.startsWith('swans') ? 1.4 : 1)) : 'plain';
+      const fig = kind === 'figurine' ? R.pick(['', 'horse ', 'bird ', 'woman ']) : '';
+      name = cap(`${clay.n} ${fig}${noun}`);
+      if (_itemNames.has(name.toLowerCase()) && motif !== 'plain') name = `${name} with ${MOTIF_WORDS[motif]}`;
+      if (_itemNames.has(name.toLowerCase()) && tries > 20) name = cap(`${R.pick(['small', 'chipped', 'mended', 'squat', 'tall', 'lopsided'])} ${name.charAt(0).toLowerCase() + name.slice(1)}`);
+      const desc = KIND_LINES[kind] ? R.pick(KIND_LINES[kind]) : motif === 'plain' ? R.pick(PLAIN) : R.pick(PAINTED)(MOTIF_WORDS[motif], kind);
+      d = { id, kind, mat: 'clay', clay, motif, fig: fig.trim(), name, desc };
+    } else if (fam === 'metal') {
+      const metal = IRON_ONLY.has(kind) ? (kind === 'candlestick' || kind === 'key' ? R.pick([METALS[0], METALS[1]]) : METALS[R.chance(0.7) ? 1 : 0]) : R.pickW(METALS, METALS.map(m => m.w));
+      const det = METAL_DETAIL[kind] && R.chance(0.65) ? R.pick(METAL_DETAIL[kind]) : '';
+      name = cap(`${kind === 'cauldron' ? 'small ' : ''}${metal.n} ${noun}`) + (det ? ` with ${det}` : '');
+      if (_itemNames.has(name.toLowerCase())) name = cap(`${R.pick(kind === 'cauldron' ? ['worn', 'plain', 'bent', 'sooty'] : ['small', 'worn', 'heavy', 'plain', 'bent', 'thin'])} ${name.charAt(0).toLowerCase() + name.slice(1)}`);
+      const lines = (KIND_LINES[kind] || METAL_LINES).concat(METAL_AGE[metal.n] || []);
+      d = { id, kind, mat: 'metal', metal, name, desc: R.pick(lines), seed: R.int(0, 1e6) };
+    } else if (fam === 'stone') {
+      const adj = R.pick(STONE_COL[kind] || ['grey']);
+      name = cap(kind === 'beads' ? `string of ${adj} beads` : `${adj} ${noun}`);
+      if (_itemNames.has(name.toLowerCase())) name = cap(`${R.pick(['small', 'worn', 'broken', 'old'])} ${name.charAt(0).toLowerCase() + name.slice(1)}`);
+      d = { id, kind, mat: 'stone', tone: adj, name, desc: R.pick(KIND_LINES[kind]), seed: R.int(0, 1e6) };
+    } else {
+      const adj = R.pick(BONE_ADJ[kind] || BONE_ADJ.default);
+      name = cap(`${adj} ${noun}`);
+      d = { id, kind, mat: fam === 'lead' ? 'lead' : 'bone', name, desc: R.pick(KIND_LINES[kind]), seed: R.int(0, 1e6) };
     }
-    if (!d) d = { id, kind: 'cup', mat: 'clay', clay: CLAY[id % CLAY.length], motif: 'plain', name: `Cup no. ${id}`, desc: 'No decoration at all.' };
-    push(d);
+    if (_itemNames.has(d.name.toLowerCase())) continue;
+    return d;
   }
-})();
-function itemName(tok) { return tok === 'O' ? 'Lamp oil' : tok === 'B' ? 'A hard biscuit' : ITEM_DEFS[tok].name; }
+  const clay = GEN_CLAY[id % GEN_CLAY.length];
+  return { id, kind: 'cup', mat: 'clay', clay, motif: 'plain', name: cap(`${clay.n} cup, mended`), desc: 'A crack, mended long ago.' };
+}
+// the pool is endless: definitions are made as they are first needed, always in the same order
+function itemDef(id) { while (ITEM_DEFS.length <= id) _pushDef(_genDef(ITEM_DEFS.length)); return ITEM_DEFS[id]; }
+function poolSize(lap) { return lap <= 0 ? C.FIRST_POOL : C.FIRST_POOL + C.SECOND_POOL + 20 * (lap - 1); }
+function itemName(tok) { return tok === 'O' ? 'Lamp oil' : tok === 'B' ? 'A hard biscuit' : itemDef(tok).name; }
 
 /* ---------- models ---------- */
 const LATHE = {
@@ -1814,9 +2337,21 @@ const BISCUIT_TEX = (() => {
 })();
 const BISCUIT_MAT = new THREE.MeshLambertMaterial({ map: BISCUIT_TEX });
 
+const STONE_MATS = {
+  grey: 0x7a7670, banded: 0x8a7a68, dark: 0x3a3632, brown: 0x6a4a30, 'honey-coloured': 0xa07a40, green: 0x4a5e4a, black: 0x1e1c1a,
+  white: 0xe2dcd0, 'blue glass': 0x2a4a8a, 'bone-white': 0xd8ccb0, clear: 0xd08a2a, cloudy: 0xc89a50, small: 0xe8dcc4, pierced: 0xe8dcc4, worn: 0xd8ccb4, red: 0x8a2a20, glass: 0x2a6a7a, amber: 0xb8741a, carnelian: 0xa83a20, clay: 0x9a6a48, jet: 0x141210,
+};
+function stoneMat(tone, kind) {
+  const c = STONE_MATS[tone] ?? 0x7a7670;
+  if (kind === 'amber' || tone === 'amber' || tone === 'clear' || tone === 'cloudy') return cachedMat('amb' + tone, () => new THREE.MeshPhongMaterial({ color: c, specular: 0xffd890, shininess: 90, transparent: true, opacity: 0.85, emissive: 0x2a1404 }));
+  const gloss = kind === 'flint' || kind === 'axehead' || kind === 'cowrie' || kind === 'beads' || tone === 'blue glass' || tone === 'jet';
+  return cachedMat('st' + tone + gloss, () => new THREE.MeshPhongMaterial({ color: c, specular: gloss ? 0x8a8478 : 0x222018, shininess: gloss ? 70 : 8, map: gloss ? null : T.stone }));
+}
 function itemModel(tok) {
   const g = new THREE.Group();
   const add = (geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, s = 1) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.setScalar(s); m.userData.disposable = true; g.add(m); return m; };
+  const addS = (geo, mat, x, y, z, sx, sy, sz, rx = 0, ry = 0, rz = 0) => { const m = add(geo, mat, x, y, z, rx, ry, rz); m.scale.set(sx, sy, sz); return m; };
+  const lath = (pts, segs = 20) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), segs);
   if (tok === 'O') {
     add(latheGeo('flask', 16), OIL_MAT);
     add(new THREE.CylinderGeometry(0.018, 0.016, 0.03, 8), M.wood, 0, 0.17);
@@ -1824,9 +2359,14 @@ function itemModel(tok) {
     g.userData.size = 0.17; return g;
   }
   if (tok === 'B') { add(new THREE.CylinderGeometry(0.062, 0.062, 0.024, 18), BISCUIT_MAT, 0, 0.012); g.userData.size = 0.12; return g; }
-  const d = ITEM_DEFS[tok];
-  const clayMat = () => cachedMat(`c${d.clay.n}|${d.motif}`, () => new THREE.MeshLambertMaterial({ map: motifTexture(d.clay.b, d.clay.i, d.motif, hash32(d.id)), side: THREE.DoubleSide }));
+  const d = itemDef(tok);
+  const glazed = !!d.clay && /glazed|magenta/.test(d.clay.n);
+  const clayMat = () => cachedMat(`c${d.clay.n}|${d.motif}`, () => glazed
+    ? new THREE.MeshPhongMaterial({ map: motifTexture(d.clay.b, d.clay.i, d.motif, hash32(d.id)), side: THREE.DoubleSide, specular: 0x3a3430, shininess: 55 })
+    : new THREE.MeshLambertMaterial({ map: motifTexture(d.clay.b, d.clay.i, d.motif, hash32(d.id)), side: THREE.DoubleSide }));
   const mm = d.metal ? metalMat(d.metal.c) : null;
+  const sm = d.mat === 'stone' ? stoneMat(d.tone, d.kind) : null;
+  const R = new Rng(d.seed || d.id + 1);
   let size = 0.2;
   switch (d.kind) {
     case 'vase': case 'jug': case 'bowl': case 'cup': case 'plate': case 'amphora': case 'lamp': case 'whorl': {
@@ -1837,13 +2377,35 @@ function itemModel(tok) {
       size = { vase: 0.32, jug: 0.26, bowl: 0.25, cup: 0.12, plate: 0.3, amphora: 0.4, lamp: 0.15, whorl: 0.08 }[d.kind];
       break;
     }
+    case 'beaker': add(lath([[0, 0], [0.04, 0], [0.05, 0.03], [0.045, 0.08], [0.05, 0.14], [0.058, 0.17], [0.05, 0.172], [0.043, 0.14], [0.038, 0.08], [0, 0.01]]), clayMat()); size = 0.17; break;
+    case 'jar': add(lath([[0, 0], [0.06, 0], [0.1, 0.06], [0.11, 0.13], [0.09, 0.2], [0.06, 0.22], [0.066, 0.24], [0.052, 0.242], [0.05, 0.22]]), clayMat()); size = 0.24; break;
+    case 'strainer': {
+      const m = clayMat(); add(LATHE.bowl && latheGeo('bowl'), m);
+      for (let i = 0; i < 14; i++) { const a = i / 14 * TAU, r = 0.03 + (i % 3) * 0.022; add(new THREE.CircleGeometry(0.004, 5), M.socket, Math.cos(a) * r, 0.02 + r * 0.25, Math.sin(a) * r, -Math.PI / 2); }
+      add(new THREE.BoxGeometry(0.09, 0.012, 0.025), m, 0.16, 0.08, 0); size = 0.27; break;
+    }
+    case 'loomweight':
+      if (R.chance(0.5)) { add(new THREE.ConeGeometry(0.045, 0.11, 4), clayMat(), 0, 0.055, 0, 0, Math.PI / 4); add(new THREE.CylinderGeometry(0.006, 0.006, 0.07, 6), M.socket, 0, 0.08, 0, 0, 0, Math.PI / 2); }
+      else add(new THREE.TorusGeometry(0.045, 0.028, 8, 14), clayMat(), 0, 0.028, 0, Math.PI / 2);
+      size = 0.11; break;
     case 'figurine': {
       const m = clayMat();
-      add(new THREE.CylinderGeometry(0.03, 0.042, 0.13, 10), m, 0, 0.065);
-      add(new THREE.SphereGeometry(0.03, 10, 8), m, 0, 0.16);
-      for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.009, 0.009, 0.07, 6), m, s * 0.033, 0.09, 0.01, 0.3, 0, s * 0.25);
-      size = 0.19; break;
+      if (d.fig === 'horse') {
+        addS(UNIT_SPH, m, 0, 0.08, 0, 0.03, 0.03, 0.065); addS(UNIT_CYL, m, 0, 0.11, 0.06, 0.014, 0.05, 0.014, -0.7); addS(UNIT_SPH, m, 0, 0.13, 0.085, 0.015, 0.016, 0.03);
+        for (const [x, z] of [[-0.018, 0.04], [0.018, 0.04], [-0.018, -0.04], [0.018, -0.04]]) addS(UNIT_CYL, m, x, 0.035, z, 0.008, 0.07, 0.008);
+        size = 0.15;
+      } else if (d.fig === 'bird') {
+        addS(UNIT_SPH, m, 0, 0.04, 0, 0.03, 0.03, 0.05); addS(UNIT_SPH, m, 0, 0.075, 0.035, 0.018, 0.018, 0.018); add(new THREE.ConeGeometry(0.007, 0.025, 6), m, 0, 0.073, 0.06, Math.PI / 2);
+        addS(UNIT_SPH, m, 0, 0.045, -0.05, 0.02, 0.006, 0.03); size = 0.1;
+      } else {
+        add(new THREE.CylinderGeometry(0.03, 0.042, 0.13, 10), m, 0, 0.065);
+        add(new THREE.SphereGeometry(0.03, 10, 8), m, 0, 0.16);
+        for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.009, 0.009, 0.07, 6), m, s * 0.033, 0.09, 0.01, 0.3, 0, s * 0.25);
+        size = 0.19;
+      }
+      break;
     }
+    case 'rattle': { const m = clayMat(); add(new THREE.SphereGeometry(0.04, 12, 8), m, 0, 0.04); add(new THREE.CylinderGeometry(0.012, 0.014, 0.06, 8), m, 0.05, 0.03, 0, 0, 0, Math.PI / 2.4); size = 0.1; break; }
     case 'candlestick':
       add(latheGeo('whorl'), mm, 0, 0, 0, 0, 0, 0, 2.2);
       add(new THREE.CylinderGeometry(0.012, 0.016, 0.2, 8), mm, 0, 0.13);
@@ -1860,9 +2422,28 @@ function itemModel(tok) {
     case 'buckle':
       for (const [x, z, w, dd] of [[0, 0.025, 0.06, 0.008], [0, -0.025, 0.06, 0.008], [0.03, 0, 0.008, 0.058], [-0.03, 0, 0.008, 0.058]]) add(new THREE.BoxGeometry(w, 0.008, dd), mm, x, 0.004, z);
       add(new THREE.BoxGeometry(0.06, 0.006, 0.005), mm, 0.004, 0.009, 0, 0, 0.1, 0); size = 0.08; break;
-    case 'ring': add(new THREE.TorusGeometry(0.03, 0.007, 8, 20), mm, 0, 0.007, 0, Math.PI / 2); size = 0.07; break;
-    case 'brooch': add(new THREE.CylinderGeometry(0.035, 0.035, 0.008, 16), mm, 0, 0.004); add(new THREE.TorusGeometry(0.025, 0.004, 4, 14), mm, 0, 0.009, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.002, 0.002, 0.08, 4), mm, 0, 0.012, 0, 0, 0, Math.PI / 2); size = 0.08; break;
+    case 'ring': add(new THREE.TorusGeometry(0.03, 0.007, 8, 20), mm, 0, 0.007, 0, Math.PI / 2); if (/garnet/.test(d.name)) add(new THREE.SphereGeometry(0.008, 8, 6), stoneMat('red'), 0.03, 0.012, 0); size = 0.07; break;
+    case 'brooch':
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.008, 16), mm, 0, 0.004); add(new THREE.TorusGeometry(0.025, 0.004, 4, 14), mm, 0, 0.009, 0, Math.PI / 2);
+      add(new THREE.CylinderGeometry(0.002, 0.002, 0.08, 4), mm, 0, 0.012, 0, 0, 0, Math.PI / 2);
+      if (/garnet/.test(d.name)) add(new THREE.SphereGeometry(0.009, 8, 6), stoneMat('red'), 0, 0.012, 0);
+      size = 0.08; break;
+    case 'pin': add(new THREE.CylinderGeometry(0.0025, 0.0015, 0.13, 6), mm, 0, 0.004, 0, 0, 0, Math.PI / 2); add(/ring/.test(d.name) ? new THREE.TorusGeometry(0.01, 0.003, 4, 10) : new THREE.SphereGeometry(0.008, 8, 6), mm, -0.066, 0.006, 0, Math.PI / 2); size = 0.13; break;
+    case 'torc': add(new THREE.TorusGeometry(0.07, 0.008, 6, 26, TAU * 0.85), mm, 0, 0.008, 0, Math.PI / 2, 0, 0); for (const a of [0, TAU * 0.85]) add(new THREE.SphereGeometry(0.014, 8, 6), mm, Math.cos(a) * 0.07, 0.01, -Math.sin(a) * 0.07); size = 0.15; break;
+    case 'bracelet': add(new THREE.TorusGeometry(0.038, 0.006, 6, 22, TAU * 0.9), mm, 0, 0.006, 0, Math.PI / 2); size = 0.08; break;
+    case 'earring': add(new THREE.TorusGeometry(0.012, 0.0022, 4, 12), mm, 0, 0.012, 0); add(new THREE.SphereGeometry(0.006, 8, 6), mm, 0, -0.004, 0); size = 0.04; break;
+    case 'plaque': add(new THREE.BoxGeometry(0.07, 0.006, 0.05), mm, 0, 0.003); for (let i = 0; i < 5; i++) addS(UNIT_SPH, mm, R.range(-0.022, 0.022), 0.007, R.range(-0.015, 0.015), R.range(0.006, 0.014), 0.004, R.range(0.005, 0.012)); add(new THREE.TorusGeometry(0.006, 0.0015, 4, 8), mm, 0.03, 0.006, 0.02, Math.PI / 2); size = 0.08; break;
+    case 'bit': for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(0.005, 0.005, 0.07, 6), mm, s * 0.035, 0.005, 0, 0, 0, Math.PI / 2); add(new THREE.TorusGeometry(0.025, 0.004, 4, 14), mm, s * 0.08, 0.004, 0, Math.PI / 2); } size = 0.2; break;
+    case 'phalera': add(lath([[0, 0.012], [0.02, 0.011], [0.04, 0.007], [0.05, 0.002], [0.05, 0]], 18), mm); add(new THREE.TorusGeometry(0.03, 0.002, 4, 18), mm, 0, 0.007, 0, Math.PI / 2); size = 0.1; break;
+    case 'arrowhead': add(new THREE.ConeGeometry(0.011, 0.04, /three/.test(d.name) ? 3 : 4), mm, 0, 0.006, 0, 0, 0, -Math.PI / 2); add(new THREE.CylinderGeometry(0.004, 0.005, 0.02, 6), mm, -0.028, 0.006, 0, 0, 0, Math.PI / 2); size = 0.06; break;
+    case 'fishhook': add(new THREE.TorusGeometry(0.012, 0.0018, 4, 10, Math.PI * 1.2), mm, 0, 0.002, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.0018, 0.0018, 0.035, 4), mm, -0.012, 0.002, -0.017, Math.PI / 2); size = 0.04; break;
+    case 'needlecase': add(new THREE.CylinderGeometry(0.008, 0.008, 0.07, 10), mm, 0, 0.008, 0, 0, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 10), mm, 0.037, 0.008, 0, 0, 0, Math.PI / 2); size = 0.08; break;
+    case 'ladle': add(new THREE.SphereGeometry(0.035, 12, 8, 0, TAU, Math.PI / 2, Math.PI / 2), mm, 0.09, 0.035, 0); add(new THREE.BoxGeometry(0.17, 0.006, 0.012), mm, -0.03, 0.05, 0, 0, 0, -0.25); size = 0.22; break;
+    case 'cauldron': { const m2 = mm; add(lath([[0, 0.03], [0.04, 0.02], [0.075, 0.05], [0.085, 0.1], [0.08, 0.14], [0.072, 0.14], [0.075, 0.1], [0.066, 0.055], [0.03, 0.04], [0, 0.04]]), m2); add(new THREE.CylinderGeometry(0.02, 0.035, 0.03, 10, 1, true), m2, 0, 0.015); for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.018, 0.004, 4, 10, Math.PI), m2, s * 0.05, 0.145, 0, 0, Math.PI / 2 * 0); size = 0.17; break; }
+    case 'strapend': add(new THREE.BoxGeometry(0.05, 0.004, 0.016), mm, 0, 0.002); add(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 10), mm, 0.025, 0.002, 0); size = 0.06; break;
+    case 'tweezers': for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.06, 0.002, 0.006), mm, 0, 0.002, s * 0.006, 0, s * 0.08, 0); add(new THREE.TorusGeometry(0.005, 0.0015, 4, 8), mm, -0.031, 0.002, 0, Math.PI / 2); size = 0.06; break;
     case 'spoon': add(new THREE.SphereGeometry(0.025, 10, 6, 0, TAU, Math.PI / 2, Math.PI / 2), mm, 0.06, 0.012, 0, 0, 0, 0, 1); add(new THREE.BoxGeometry(0.12, 0.006, 0.012), mm, -0.02, 0.012, 0); size = 0.15; break;
+    case 'hornspoon': add(new THREE.SphereGeometry(0.028, 10, 6, 0, TAU, Math.PI / 2, Math.PI / 2), HORN_MAT, 0.06, 0.014, 0); add(new THREE.BoxGeometry(0.11, 0.007, 0.014), HORN_MAT, -0.02, 0.016, 0, 0, 0, -0.12); size = 0.15; break;
     case 'comb':
       add(new THREE.BoxGeometry(0.11, 0.006, 0.035), BONE_MAT, 0, 0.003, -0.012);
       for (let i = 0; i < 12; i++) add(new THREE.BoxGeometry(0.004, 0.005, 0.035), BONE_MAT, -0.05 + i * 0.009, 0.003, 0.02);
@@ -1884,13 +2465,22 @@ function itemModel(tok) {
       size = 0.12; break;
     case 'die': {
       add(new THREE.BoxGeometry(0.022, 0.022, 0.022), BONE_MAT, 0, 0.011, 0);
-      const R = new Rng(d.seed || 3);
       for (let i = 0; i < 4; i++) add(new THREE.SphereGeometry(0.0026, 5, 4), M.socket, R.range(-0.006, 0.006), 0.0225, R.range(-0.006, 0.006));
       size = 0.04; break;
     }
+    case 'knucklebone': addS(UNIT_SPH, BONE_MAT, 0, 0.012, 0, 0.022, 0.012, 0.014); addS(UNIT_SPH, BONE_MAT, 0.012, 0.016, 0, 0.01, 0.008, 0.012); addS(UNIT_SPH, M.socket, -0.006, 0.02, 0.004, 0.005, 0.003, 0.004); size = 0.05; break;
+    case 'awl': add(new THREE.ConeGeometry(0.004, 0.07, 6), BONE_MAT, 0.03, 0.005, 0, 0, 0, -Math.PI / 2); add(new THREE.CylinderGeometry(0.009, 0.01, 0.05, 8), BONE_MAT, -0.025, 0.009, 0, 0, 0, Math.PI / 2); size = 0.11; break;
+    case 'antlerpick': for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(0.014 - i * 0.002, 0.016 - i * 0.002, 0.07, 8), BONE_MAT, -0.08 + i * 0.065, 0.015 + Math.sin(i * 0.7) * 0.02, 0, 0, 0, Math.PI / 2 - 0.25 + i * 0.12); add(new THREE.ConeGeometry(0.01, 0.08, 6), BONE_MAT, -0.09, 0.05, 0, 0, 0, 0.3); size = 0.25; break;
+    case 'needle': add(new THREE.CylinderGeometry(0.0018, 0.001, 0.08, 5), BONE_MAT, 0, 0.002, 0, 0, 0, Math.PI / 2); add(new THREE.TorusGeometry(0.003, 0.001, 4, 8), BONE_MAT, -0.04, 0.002, 0, Math.PI / 2); size = 0.08; break;
+    case 'whetstone': add(new THREE.BoxGeometry(0.13, 0.022, 0.028), sm, 0, 0.011); add(new THREE.CylinderGeometry(0.005, 0.005, 0.03, 6), M.socket, -0.055, 0.011, 0); size = 0.13; break;
+    case 'flint': { const fg = new THREE.ConeGeometry(0.018, 0.1, 3); fg.scale(1, 1, 0.35); add(fg, sm, 0, 0.006, 0, 0, 0, Math.PI / 2); size = 0.1; break; }
+    case 'axehead': { const ag = new THREE.CylinderGeometry(0.018, 0.032, 0.12, 8); ag.scale(1, 1, 0.55); add(ag, sm, 0, 0.018, 0, 0, 0, Math.PI / 2); size = 0.12; break; }
+    case 'counter': add(new THREE.CylinderGeometry(0.012, 0.013, 0.008, 14), sm, 0, 0.004); size = 0.03; break;
+    case 'amber': { const ag = new THREE.IcosahedronGeometry(0.025, 1), p = ag.attributes.position; for (let i = 0; i < p.count; i++) { const k = R.range(0.75, 1.2); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.7, p.getZ(i) * k); } ag.computeVertexNormals(); add(ag, sm, 0, 0.016); size = 0.05; break; }
+    case 'cowrie': addS(UNIT_SPH, sm, 0, 0.01, 0, 0.012, 0.009, 0.02); add(new THREE.BoxGeometry(0.002, 0.004, 0.026), M.socket, 0, 0.002, 0); size = 0.04; break;
+    case 'sealstone': add(new THREE.CylinderGeometry(0.01, 0.01, 0.03, 12), sm, 0, 0.01, 0, 0, 0, Math.PI / 2); for (const x of [-0.008, 0, 0.008]) add(new THREE.TorusGeometry(0.0101, 0.001, 3, 12), M.socket, x, 0.01, 0, 0, Math.PI / 2); size = 0.04; break;
     case 'beads': {
-      const R = new Rng(d.seed || 5), cols = [0xb87a2a, 0x2a4a7a, 0x8a2a2a, 0xd8d0c0, 0x2a6a4a, 0x111111];
-      for (let i = 0; i < 11; i++) { const a = -1.1 + i * 0.22; add(new THREE.SphereGeometry(0.009, 8, 6), cachedMat('bead' + (i % 6), () => new THREE.MeshPhongMaterial({ color: R.pick(cols), shininess: 80, specular: 0x666666 })), Math.cos(a) * 0.05, 0.009, Math.sin(a) * 0.05); }
+      for (let i = 0; i < 11; i++) { const a = -1.1 + i * 0.22; add(new THREE.SphereGeometry(0.009, 8, 6), d.tone === 'glass' ? stoneMat(R.pick(['glass', 'blue glass', 'white', 'red']), 'beads') : sm, Math.cos(a) * 0.05, 0.009, Math.sin(a) * 0.05); }
       size = 0.12; break;
     }
     case 'tablet':
@@ -1905,12 +2495,13 @@ function itemModel(tok) {
 }
 
 /* ---------- which room holds what, per lap ---------- */
-const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6 };
+const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6, cave: 1.1, jut: 1.5 };
 function lapAssign(lap) {
   if (S.lapAssign[lap]) return S.lapAssign[lap];
-  const pool = lap === 0 ? C.FIRST_POOL : C.FIRST_POOL + C.SECOND_POOL;
+  // 100 the first time round, 50 more on the second, 20 more every lap after; anything already seen stays gone
+  const pool = poolSize(lap);
   const avail = [];
-  for (let id = 0; id < pool; id++) if (!S.found.has(id)) avail.push(id);
+  for (let id = 0; id < pool; id++) { itemDef(id); if (!S.found.has(id)) avail.push(id); }
   const R = new Rng(hash32(lap, 4242, 17));
   R.shuffle(avail);
   if (lap === 0 && avail.includes(0)) { avail.splice(avail.indexOf(0), 1); avail.unshift(0); }
@@ -1954,7 +2545,7 @@ function placeTokens(ctx) {
     toks.forEach((tok, j) => {
       const key = `${room.i}:${j}`;
       if (taken.has(key)) return;
-      if (typeof tok === 'number' && S.found.has(tok)) return;
+      if (typeof tok === 'number' && S.found.has(tok) && S.found.get(tok) < ctx.lap) return; // seen in an earlier lap: gone
       const R = new Rng(hash32(ctx.A, room.i, j, 5));
       const conts = room.containers.filter(c => !c.isHidden);
       const free = room.surfaces.map((s, k) => k).filter(k => !used.has(k));
@@ -2050,6 +2641,7 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 /* ---------- lengths in memory ---------- */
 const buildQueue = [];
+let streaming = null;   // the length being built a slice at a time: { A, gen }
 function activeLens() {
   if (P.mode === 'corridor') { const out = []; for (const a of [originA - 1, originA, originA + 1]) { const l = loaded.get(a); if (l) out.push(l); } return out; }
   const l = loaded.get(P.lenA); return l ? [l] : [];
@@ -2065,30 +2657,54 @@ function unloadLength(a) {
   scene.remove(len.group); disposeTree(len.group);
   loaded.delete(a);
 }
-function ensureLoaded(sync = false) {
+function wantedLengths() {
   const want = new Set();
   if (P.mode === 'corridor') { for (const a of [originA - 1, originA, originA + 1]) if (a >= 0) want.add(a); }
-  else { want.add(P.lenA); }
+  else for (const a of [P.lenA - 1, P.lenA, P.lenA + 1]) if (a >= 0) want.add(a);   // keep building overhead while below
+  return want;
+}
+function ensureLoaded(sync = false) {
+  const want = wantedLengths();
   for (const a of [...loaded.keys()]) if (!want.has(a) && !(P.mode !== 'corridor' && Math.abs(a - P.lenA) <= 1)) unloadLength(a);
-  for (const a of want) if (!loaded.has(a) && !buildQueue.includes(a)) buildQueue.push(a);
+  if (streaming && !want.has(streaming.A)) streaming = null;
+  for (let i = buildQueue.length - 1; i >= 0; i--) if (!want.has(buildQueue[i])) buildQueue.splice(i, 1);
+  for (const a of want) if (!loaded.has(a) && !buildQueue.includes(a) && !(streaming && streaming.A === a)) buildQueue.push(a);
   buildQueue.sort((x, y) => Math.abs(x - originA) - Math.abs(y - originA));
-  if (sync) while (buildQueue.length) buildOne();
+  if (sync) finishAllBuilds();
   positionGroups();
 }
-function buildOne() {
-  const a = buildQueue.shift();
-  if (a === undefined || loaded.has(a)) return;
-  const len = buildLength(a);
-  loaded.set(a, len); scene.add(len.group);
-  positionGroups();
+function adoptBuilt(a, len) { loaded.set(a, len); scene.add(len.group); positionGroups(); }
+function stepBuild() {
+  if (!streaming) {
+    let a; do { a = buildQueue.shift(); } while (a !== undefined && loaded.has(a));
+    if (a === undefined) return false;
+    streaming = { A: a, gen: buildLengthGen(a) };
+  }
+  const t0 = sliceStart = performance.now(), stage = buildStage;
+  const r = streaming.gen.next();
+  if (r.done) { adoptBuilt(streaming.A, r.value); streaming = null; }
+  if (window.__prof) window.__prof.push([stage, +(performance.now() - t0).toFixed(1)]);
+  return true;
+}
+// a few milliseconds of building per frame, so a new length arrives without a stutter
+function pumpBuilds(budgetMs) { const t0 = performance.now(); while (performance.now() - t0 < budgetMs) if (!stepBuild()) break; }
+function finishAllBuilds() { while (stepBuild()); }
+function buildNow(a) {
+  if (loaded.has(a)) return;
+  if (streaming && streaming.A === a) { let r; do r = streaming.gen.next(); while (!r.done); adoptBuilt(a, r.value); streaming = null; return; }
+  const i = buildQueue.indexOf(a); if (i >= 0) buildQueue.splice(i, 1);
+  adoptBuilt(a, buildLength(a));
 }
 function rebase() {
   const aHere = originA + Math.floor(-P.pos.z / C.LEN_M);
   if (aHere === originA || aHere < 0) return;
-  P.pos.z += (aHere - originA) * C.LEN_M;
+  const shift = (aHere - originA) * C.LEN_M;
+  P.pos.z += shift;
+  if (mouse.run) { mouse.run.p0.z += shift; mouse.run.p1.z += shift; }
   originA = aHere;
-  if (!loaded.has(originA)) { buildQueue.unshift(originA); buildOne(); }
+  buildNow(originA);
   ensureLoaded();
+  maybeMouse();
 }
 
 /* ---------- collision ---------- */
@@ -2127,10 +2743,54 @@ function constrainRoute(len, dz) {
   P.pos.z = q.cz + best.cx * q.uz + best.cz * q.ux + dz;
   return bestD;
 }
+function constrainRegions(regions, dz) {
+  const px = P.pos.x, pz = P.pos.z - dz, rad = C.R;
+  let bx = 0, bz = 0, bestD = Infinity;
+  for (const q of regions) {
+    if (q.ell) {
+      const lx = px - q.cx, lz = pz - q.cz, a = Math.max(0.05, q.a - rad), b = Math.max(0.05, q.b - rad);
+      const val = (lx / a) * (lx / a) + (lz / b) * (lz / b);
+      if (val <= 1) return 0;
+      const k = 1 / Math.sqrt(val), nx = q.cx + lx * k, nz = q.cz + lz * k, d = Math.hypot(px - nx, pz - nz);
+      if (d < bestD) { bestD = d; bx = nx; bz = nz; }
+      continue;
+    }
+    const dx = px - q.cx, dzz = pz - q.cz, lx = dx * q.ux + dzz * q.uz, lz = -dx * q.uz + dzz * q.ux;
+    const hx = Math.max(0, q.hx - rad), hz = Math.max(0, q.hz - rad);
+    const cx = clamp(lx, -hx, hx), cz = clamp(lz, -hz, hz), d = Math.hypot(lx - cx, lz - cz);
+    if (d < 1e-6) return 0;
+    if (d < bestD) { bestD = d; bx = q.cx + cx * q.ux - cz * q.uz; bz = q.cz + cx * q.uz + cz * q.ux; }
+  }
+  if (bestD === Infinity) return 0;
+  P.pos.x = bx; P.pos.z = bz + dz;
+  return bestD;
+}
+// is the player inside one of the caves? (they are free-form, so they keep their own ground)
+function caveAt() {
+  if (P.mode !== 'corridor') return null;
+  for (const len of activeLens()) {
+    const dz = len.group.position.z, pz = P.pos.z - dz;
+    for (const z of len.zones) {
+      const u = z.frame.side * P.pos.x - z.frame.xOff;
+      if (u > 0.02 && P.pos.x >= z.x0 && P.pos.x <= z.x1 && pz >= z.z0 && pz <= z.z1) return { len, z, dz };
+    }
+  }
+  return null;
+}
 function collide() {
   let pushed = 0;
   const lvl = P.mode === 'corridor' ? 'up' : 'low';
   const lens = activeLens();
+  const cave = caveAt();
+  if (cave) {
+    for (let pass = 0; pass < 3; pass++) {
+      pushed += constrainRegions(cave.z.regions, cave.dz);
+      for (const s of cave.len.solids) if (s.lvl === 'up' && !s.dead) pushed += pushOut(s, cave.dz);
+    }
+    P.inCave = true;
+    return pushed;
+  }
+  P.inCave = false;
   for (let pass = 0; pass < 3; pass++) {
     for (const len of lens) {
       const dz = len.group.position.z;
@@ -2303,7 +2963,7 @@ function hitContainer(s) {
   s.hits--;
   const len = loaded.get(s.A);
   const wp = s.obj.position.clone(); wp.z += len.group.position.z;
-  if (s.hits > 0) { s.wob = 0.3; AU.thud(s.spec.sound, wp); return; }
+  if (s.hits > 0) { s.wob = 0.3; P.kick = 0.6; AU.thud(s.spec.sound, wp); return; }
   breakContainer(s, len);
 }
 const SHARD_GEO = [new THREE.BoxGeometry(0.34, 0.025, 0.08), new THREE.BoxGeometry(0.18, 0.03, 0.06), new THREE.BoxGeometry(0.1, 0.03, 0.1)];
@@ -2317,8 +2977,42 @@ function spawnDebris(len, pos, mat, n, small = false) {
     dyn.debris.push({ m, vx: (Math.random() - 0.5) * 2.6, vy: Math.random() * 2.4 + 0.6, vz: (Math.random() - 0.5) * 2.6, floor: len === null ? 0 : pos.floor, spin: (Math.random() - 0.5) * 9, len });
   }
 }
+// a thing is spent once it has been seen: when its box is broken open, or when it is looked at in light
+function markSeen(tok, A) { if (typeof tok === 'number' && !S.found.has(tok)) S.found.set(tok, Math.floor(A / C.LENGTHS)); }
+function segHitsBox(s, x0, z0, x1, z1) {
+  const t = (x, z) => { const dx = x - s.cx, dz = z - s.cz; return [dx * s.ux + dz * s.uz, -dx * s.uz + dz * s.ux]; };
+  const [ax, az] = t(x0, z0), [bx, bz] = t(x1, z1);
+  let t0 = 0, t1 = 1;
+  const clip = (p, q) => { if (Math.abs(p) < 1e-9) return q >= 0; const r = q / p; if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } return true; };
+  const dx = bx - ax, dz = bz - az;
+  return clip(-dx, ax + s.hx) && clip(dx, s.hx - ax) && clip(-dz, az + s.hz) && clip(dz, s.hz - az) && t0 <= t1;
+}
+function insideBox(s, x, z, m) { const dx = x - s.cx, dz = z - s.cz, lx = dx * s.ux + dz * s.uz, lz = -dx * s.uz + dz * s.ux; return Math.abs(lx) < s.hx + m && Math.abs(lz) < s.hz + m; }
+function scanSeen() {
+  if (S.inField || lanternFactor() < 0.06) return;
+  eyeRay();
+  for (const len of activeLens()) {
+    const dz = len.group.position.z;
+    for (const it of len.items) {
+      if (!it.alive || typeof it.tok !== 'number' || S.found.has(it.tok)) continue;
+      const x = it.obj.position.x, y = it.obj.position.y, z = it.obj.position.z + dz;
+      const dx = x - _v1.x, dy = y - _v1.y, dzz = z - _v1.z, d = Math.hypot(dx, dy, dzz);
+      if (d > 6.5 || Math.abs(dy) > 3 || d < 0.01) continue;
+      if ((dx * _v2.x + dy * _v2.y + dzz * _v2.z) / d < 0.55) continue;
+      let hidden = false;
+      for (const s of len.solids) {
+        if (s.circle || s.dead || Math.max(s.hx, s.hz) < 0.9 || Math.min(s.hx, s.hz) > 0.4) continue;
+        if (insideBox(s, x, z - dz, 0.25)) continue;
+        if (segHitsBox(s, _v1.x, _v1.z - dz, x, z - dz)) { hidden = true; break; }
+      }
+      if (!hidden) markSeen(it.tok, it.A);
+    }
+  }
+}
 function breakContainer(s, len) {
   s.alive = false;
+  for (const c of s.contents) markSeen(c.tok, s.A);
+  P.kick = Math.max(P.kick || 0, 1);
   len.group.remove(s.obj);
   if (s.solid) s.solid.dead = true;
   lenState(s.A).sm.push(s.cid);
@@ -2357,11 +3051,11 @@ function destroyItem(it) {
   const wp = it.obj.position.clone(); wp.z += it.len.group.position.z;
   const p = it.obj.position.clone(); p.floor = it.floorY;
   if (typeof it.tok === 'number') {
-    S.found.add(it.tok); purgeDuplicates(it.tok, it);
-    const d = ITEM_DEFS[it.tok];
+    markSeen(it.tok, it.A); purgeDuplicates(it.tok, it);
+    const d = itemDef(it.tok);
     if (d.mat === 'clay') { spawnDebris(it.len, p, it.obj.children[0].material, 9, true); AU.smash('clay', wp); }
     else if (d.mat === 'metal') AU.smash('metal', wp);
-    else { spawnDebris(it.len, p, BONE_MAT, 5, true); AU.smash('bone', wp); }
+    else { spawnDebris(it.len, p, it.obj.children[0].material, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : 'bone', wp); }
   } else if (it.tok === 'O') { spawnDebris(it.len, p, OIL_MAT, 9, true); AU.smash('oil', wp); }
   else { spawnDebris(it.len, p, BISCUIT_MAT, 7, true); AU.smash('biscuit', wp); }
   removeItem(it);
@@ -2442,9 +3136,9 @@ function take() {
     removeItem(it); AU.pickup('biscuit'); toast(lit ? 'A hard biscuit.' : 'Something.');
   } else {
     if (S.inv.length >= C.INV_SLOTS) { openInv(it); return; }
-    S.inv.push(it.tok); S.found.add(it.tok);
-    removeItem(it); purgeDuplicates(it.tok, it); AU.pickup(ITEM_DEFS[it.tok].mat);
-    toast(lit ? ITEM_DEFS[it.tok].name + '.' : 'Something.');
+    S.inv.push(it.tok); markSeen(it.tok, it.A);
+    removeItem(it); purgeDuplicates(it.tok, it); AU.pickup(itemDef(it.tok).mat);
+    toast(lit ? itemDef(it.tok).name + '.' : 'Something.');
   }
 }
 function dropFromInv(i) {
@@ -2461,13 +3155,13 @@ function dropFromInv(i) {
 }
 function swapInto(i, it) {
   const old = S.inv[i];
-  S.inv[i] = it.tok; S.found.add(it.tok);
+  S.inv[i] = it.tok; markSeen(it.tok, it.A);
   const p = it.obj.position.clone(), len = it.len;
   removeItem(it); purgeDuplicates(it.tok, it);
   const d = { id: old, n: S.dropN++, x: p.x, y: it.floorY, z: p.z };
   lenState(len.A).dr.push(d);
   spawnItem(len, old, 'd:' + d.n, new THREE.Vector3(p.x, it.floorY, p.z), { dropped: d });
-  AU.pickup(ITEM_DEFS[it.tok].mat);
+  AU.pickup(itemDef(it.tok).mat);
 }
 function lanternFactor() {
   if (S.oil <= 0) return 0;
@@ -2572,6 +3266,44 @@ function updateViewmodel(dt, lf, flick) {
   HORN_PANE.emissive.setRGB(0.85 * lf * flick, 0.42 * lf * flick, 0.1 * lf);
 }
 
+/* ============================================================
+   A mouse, about once every thirty lengths: mostly heard, sometimes seen
+   ============================================================ */
+const mouse = (() => {
+  const g = new THREE.Group(), fur = lam(T.cloth, { color: 0x6e6252, bumpScale: 0.3 }), pink = new THREE.MeshLambertMaterial({ color: 0x9a7470 });
+  const add = (geo, mat, x, y, z, sx, sy, sz, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.x = rx; g.add(m); return m; };
+  add(UNIT_SPH, fur, 0, 0.028, 0, 0.032, 0.026, 0.055);
+  add(UNIT_SPH, fur, 0, 0.034, 0.05, 0.02, 0.018, 0.026);
+  add(new THREE.ConeGeometry(1, 1, 6), fur, 0, 0.032, 0.078, 0.01, 0.022, 0.01, Math.PI / 2);
+  for (const s of [-1, 1]) add(new THREE.CircleGeometry(1, 8), pink, s * 0.014, 0.05, 0.045, 0.009, 0.01, 1);
+  add(UNIT_CYL, pink, 0, 0.022, -0.09, 0.003, 0.08, 0.003, Math.PI / 2 - 0.15);
+  g.visible = false; scene.add(g);
+  return { g, run: null };
+})();
+function maybeMouse(force = false) {
+  if (P.mode !== 'corridor' || S.inField) return;
+  if ((!force && hash32(originA, 3030, 7) % 30 !== 0) || mouse.run) return;
+  const R = new Rng(hash32(originA, 3031)), ahead = -Math.cos(P.yaw) < 0 ? -1 : 1;
+  const z = P.pos.z + ahead * R.range(4.5, 9), s = R.chance(0.5) ? 1 : -1;
+  const along = R.chance(0.4);
+  const p0 = new THREE.Vector3(s * 1.9, 0, z), p1 = along ? new THREE.Vector3(s * 1.88, 0, z - ahead * R.range(2.5, 4)) : new THREE.Vector3(-s * 1.9, 0, z + R.range(-1.2, 1.2));
+  mouse.run = { p0, p1, t: -R.range(0.5, 2.5), dur: p0.distanceTo(p1) / 2.8, wob: R.range(0, 6) };
+}
+function updateMouse(dt) {
+  const r = mouse.run;
+  if (!r) return;
+  const prev = r.t; r.t += dt;
+  if (prev < 0 && r.t >= 0) AU.scurry(r.p0, r.p1, r.dur);
+  if (r.t < 0) return;
+  const k = r.t / r.dur;
+  if (k >= 1 || S.inField || P.mode !== 'corridor') { mouse.g.visible = false; mouse.run = null; return; }
+  const p = r.p0.clone().lerp(r.p1, smooth(0, 1, k));
+  p.x += Math.sin(k * 9 + r.wob) * 0.08;
+  mouse.g.position.set(p.x, 0.002 + Math.abs(Math.sin(r.t * 40)) * 0.006, p.z);
+  mouse.g.rotation.y = Math.atan2(r.p1.x - r.p0.x, r.p1.z - r.p0.z) + Math.cos(k * 9 + r.wob) * 0.4;
+  mouse.g.visible = true;
+}
+
 /* ---- 60_inventory.js ---- */
 /* ============================================================
    What you carry: fifty slots
@@ -2637,7 +3369,7 @@ function renderInv() {
   const showId = pendingSwap && invHot < 0 ? pendingSwap.tok : (invHot >= 0 ? S.inv[invHot] : (invSel >= 0 ? S.inv[invSel] : undefined));
   if (showId === undefined) { $('dname').textContent = ''; $('ddesc').textContent = ''; setPreview(null); }
   else if (dark) { $('dname').textContent = '…'; $('ddesc').textContent = 'Too dark to see it.'; setPreview(null); }
-  else { const d = ITEM_DEFS[showId]; $('dname').textContent = d.name; $('ddesc').textContent = d.desc; setPreview(showId); }
+  else { const d = itemDef(showId); $('dname').textContent = d.name; $('ddesc').textContent = d.desc; setPreview(showId); }
 }
 function openInv(swapItem) {
   if (S.dead) return;
@@ -2669,7 +3401,7 @@ function invClick(button) {
     if (button === 0 && i >= 0 && S.inv[i] !== undefined) {
       const it = pendingSwap; pendingSwap = null;
       swapInto(i, it);
-      toast(blind() ? 'Something.' : ITEM_DEFS[S.inv[i]].name + '.');
+      toast(blind() ? 'Something.' : itemDef(S.inv[i]).name + '.');
       closeInv();
     }
     return;
@@ -2815,7 +3547,7 @@ const AU = (() => {
       if (!on()) return; const t = ctx.currentTime, d = out(pos);
       if (tok === 'B') { noise(d, t, 0.05, 'bandpass', 1200, 1, 0.08); return; }
       if (tok === 'O') { tone(d, t, 0.12, 330, 0.12); noise(d, t, 0.06, 'lowpass', 1200, 1, 0.12); return; }
-      const m = ITEM_DEFS[tok]?.mat;
+      const m = itemDef(tok)?.mat;
       if (m === 'metal') { tone(d, t, 0.5, 1650, 0.06); tone(d, t, 0.4, 2480, 0.04); }
       else { tone(d, t, 0.06, 900 + Math.random() * 500, 0.08); noise(d, t, 0.04, 'bandpass', 2000, 1, 0.08); }
     },
@@ -2835,6 +3567,15 @@ const AU = (() => {
       noise(d, t, 0.015, 'highpass', 4000, 0.6, 0.05);
     },
     splash() { if (!on()) return; const t = ctx.currentTime, d = out(null, dry); noise(d, t, 0.5, 'lowpass', 2400, 1.4, 0.3, 0.01, 260); tone(d, t + 0.02, 0.12, 420, 0.08, 'sine', 180); },
+    scurry(p0, p1, dur) {
+      if (!on()) return; const t = ctx.currentTime, n = Math.max(6, Math.floor(dur * 26));
+      for (let i = 0; i < n; i++) {
+        const k = i / n, p = p0.clone().lerp(p1, k), o = out(p); o.gain.value *= 0.6;
+        const tt = t + k * dur + Math.random() * 0.02;
+        noise(o, tt, 0.018, 'bandpass', 3400 + Math.random() * 2600, 2.5, 0.14);
+        if (i % 5 === 0) noise(o, tt, 0.05, 'highpass', 5200, 0.7, 0.05, 0.01);
+      }
+    },
     gutter() { if (!on()) return; const t = ctx.currentTime, d = out(null, dry); noise(d, t, 0.5, 'lowpass', 700, 0.8, 0.18, 0.02, 120); },
     space(mode) {
       space = mode;
@@ -3016,7 +3757,7 @@ function updateMirror(dt) {
    ============================================================ */
 let fieldFade = null;
 function beginField() { if (!S.inField && !fieldFade) fieldFade = { t: 0, phase: 'in' }; }
-function buildField() {
+function* buildFieldGen() {
   const fs = new THREE.Scene();
   const HORIZON = new THREE.Color(0xcfdfea);
   fs.background = HORIZON.clone();
@@ -3039,6 +3780,7 @@ function buildField() {
         gl_FragColor = vec4(col, 1.0); }`,
   }));
   sky.renderOrder = -1; sky.frustumCulled = false; fs.add(sky);
+  yield;
   // clouds
   { const c = makeCanvas(256, 128), g = c.getContext('2d'), R = new Rng(808);
     for (let i = 0; i < 22; i++) { const x = R.range(40, 216), y = R.range(40, 90), r = R.range(18, 46); const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 128); }
@@ -3077,11 +3819,13 @@ function buildField() {
     tmp.copy(cA).lerp(cB, smooth(0.35, 0.75, n)).lerp(cDry, smooth(0.55, 0.8, n2) * 0.6).lerp(cC, smooth(12, 4, Math.abs(z - RZ(x))) * 0.7);
     tmp.lerp(cRock, smooth(30, 110, h) * (0.55 + 0.45 * n)); tmp.lerp(cSnow, smooth(175, 235, h));
     cols[i * 3] = tmp.r; cols[i * 3 + 1] = tmp.g; cols[i * 3 + 2] = tmp.b;
+    if (i % 2500 === 2499) yield;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
   const land = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
   fs.add(land);
+  yield;
   // water
   { const pts = [], idx = [], uvs = [];
     let k = 0;
@@ -3100,6 +3844,7 @@ function buildField() {
     water.userData.tex = wt; fs.add(water);
     var waterMesh = water;
   }
+  yield;
   // the place you came out: a timber-framed hole in the rise
   const exitPos = new THREE.Vector3(0, heightRaw(0, 4), 4);
   { const B = new Builder();
@@ -3109,6 +3854,7 @@ function buildField() {
     B.box(M.wood, 0, 1.45, -0.55, 2.2, 0.2, 0.24);
     const g = new THREE.Group(); B.finish(g); g.position.copy(exitPos); g.position.y -= 0.6; fs.add(g);
   }
+  yield;
   // larches across the water
   const trees = [];
   { const B = new Builder(), R = new Rng(515), green = new THREE.MeshLambertMaterial({ color: 0x3f5a2a }), barkM = lam(T.bark);
@@ -3120,6 +3866,7 @@ function buildField() {
     }
     const g = new THREE.Group(); B.finish(g); fs.add(g);
   }
+  yield;
   // grass and flowers that follow you
   const tuftGeo = (() => { const a = new THREE.PlaneGeometry(0.7, 0.5); a.translate(0, 0.24, 0); const b = a.clone(); b.rotateY(Math.PI / 2); const g = mergeGeometries([a, b]); const nn = g.attributes.normal; for (let i = 0; i < nn.count; i++) nn.setXYZ(i, 0, 1, 0); return g; })();
   const GRID = 60, CELL = 1.0, HALF = GRID * CELL / 2;
@@ -3128,6 +3875,7 @@ function buildField() {
   const flowers = new THREE.InstancedMesh(flowerGeo, new THREE.MeshLambertMaterial({ map: T.flower, alphaTest: 0.4, side: THREE.DoubleSide }), 900);
   grass.frustumCulled = flowers.frustumCulled = false;
   fs.add(grass, flowers);
+  yield;
   let lastCell = null;
   const hCache = new Map();
   const cellH = (gx, gz, x, z) => { const k = gx * 131071 + gz; let h = hCache.get(k); if (h === undefined) { if (hCache.size > 60000) hCache.clear(); h = heightRaw(x, z); hCache.set(k, h); } return h; };
@@ -3251,10 +3999,11 @@ function buildField() {
         if (Math.hypot(dx, dz) < 5) { a.flee = 5; a.dodge = 0.3; }
       }
     },
-    take() {
+    aimed() {
       eyeRay();
       let best = null, bestT = 1e9;
       const test = (obj, kind, ref, size) => {
+        if (!obj.visible) return;
         const cx = obj.position.x - _v1.x, cy = obj.position.y + size * 0.4 - _v1.y, cz = obj.position.z - _v1.z;
         const t = cx * _v2.x + cy * _v2.y + cz * _v2.z; if (t < 0.1 || t > 2.9) return;
         const perp = Math.hypot(cx - _v2.x * t, cy - _v2.y * t, cz - _v2.z * t);
@@ -3262,6 +4011,11 @@ function buildField() {
       };
       for (const s of stones) test(s.m, 'stone', s, 0.3);
       for (const it of fieldItems) test(it.obj, 'item', it, it.obj.userData.size || 0.15);
+      return best;
+    },
+    canTake() { return !!api.aimed(); },
+    take() {
+      const best = api.aimed();
       if (best && best.kind === 'stone') {
         if (carried >= 6) { toast('Your hands are full of stones.'); return; }
         best.ref.m.visible = false; best.ref.placed = false; best.ref.carried = true; carried++;
@@ -3270,7 +4024,7 @@ function buildField() {
       if (best && best.kind === 'item') {
         if (S.inv.length >= C.INV_SLOTS) { toast('You carry fifty things already.'); return; }
         S.inv.push(best.ref.id); fs.remove(best.ref.obj); disposeTree(best.ref.obj); fieldItems.splice(fieldItems.indexOf(best.ref), 1);
-        AU.pickup(ITEM_DEFS[best.ref.id].mat); toast(ITEM_DEFS[best.ref.id].name + '.'); return;
+        AU.pickup(itemDef(best.ref.id).mat); toast(itemDef(best.ref.id).name + '.'); return;
       }
       if (carried > 0 && _v2.y < -0.05) {
         // set a stone into the river where you are looking
@@ -3330,11 +4084,20 @@ function buildField() {
   };
   return api;
 }
+function buildField() { const g = buildFieldGen(); let r = g.next(); while (!r.done) r = g.next(); return r.value; }
+let fieldGen = null;
+// the field is built quietly while you climb, so there is no pause at the top
+function pumpField(budgetMs) {
+  if (field) return;
+  if (!fieldGen) fieldGen = buildFieldGen();
+  const t0 = performance.now();
+  while (performance.now() - t0 < budgetMs) { const r = fieldGen.next(); if (r.done) { field = r.value; fieldGen = null; return; } }
+}
 function enterField() {
-  if (!field) field = buildField();
+  if (!field) { if (fieldGen) { let r; do r = fieldGen.next(); while (!r.done); field = r.value; fieldGen = null; } else field = buildField(); }
   S.inField = true;
   for (const a of [...loaded.keys()]) unloadLength(a);
-  buildQueue.length = 0;
+  buildQueue.length = 0; streaming = null;
   activeScene = field.scene;
   P.mode = 'field'; P.inRoute = false; P.anim = null;
   const sx = 0, sz = 1.6;
@@ -3350,7 +4113,7 @@ function enterField() {
    Running the game
    ============================================================ */
 const hudEl = $('hud'), crossEl = $('cross'), toastEl = $('toast'), fadeEl = $('fade');
-let toastT = 0, saveT = 0, deathT = 0, invT = 0, lastFrame = performance.now(), lastLf = 1;
+let toastT = 0, saveT = 0, deathT = 0, invT = 0, seenT = 0, aimT = 0, lastFrame = performance.now(), lastLf = 1;
 function toast(text) { toastEl.textContent = text; toastEl.style.opacity = '1'; toastT = 2.4; }
 function syncSaveFromPlayer() {
   if (S.inField) return;
@@ -3359,11 +4122,12 @@ function syncSaveFromPlayer() {
 }
 function resetWorld() {
   for (const a of [...loaded.keys()]) unloadLength(a);
-  buildQueue.length = 0; dyn.debris.length = 0; dyn.falling.length = 0;
+  buildQueue.length = 0; streaming = null; dyn.debris.length = 0; dyn.falling.length = 0;
+  mouse.run = null; mouse.g.visible = false; fieldGen = null;
   dropMirrorObject();
   activeScene = scene; camera.far = 1600; camera.updateProjectionMatrix();
   vmSun.intensity = 0; vmAmbient.intensity = 0;
-  P.anim = null; P.inRoute = false; P.routeP = 0; P.vel.set(0, 0, 0); P.swingT = -1; P.armed = true;
+  P.anim = null; P.inRoute = false; P.inCave = false; P.routeP = 0; P.vel.set(0, 0, 0); P.swingT = -1; P.armed = true; P.kick = 0;
   fieldFade = null; fadeEl.style.opacity = '0';
 }
 function placePlayerFromState() {
@@ -3372,6 +4136,7 @@ function placePlayerFromState() {
   originA = S.A; P.mode = 'corridor';
   P.pos.set(S.x, 0, S.z); P.yaw = S.yaw; P.pitch = 0;
   ensureLoaded(true);
+  try { renderer.compile(scene, camera); } catch (e) { }
   AU.space('corridor');
 }
 function teleport(A, z = -5, x = 0) {
@@ -3489,7 +4254,11 @@ function update(dt) {
   if (S.health <= 0) { die(); return; }
   updateMirror(dt);
   if (S.inField && field) field.update(dt, S.t);
-  if (buildQueue.length) buildOne();
+  pumpBuilds(fieldFade ? 1 : 4);
+  if (P.inRoute && P.routeP > 0.02 && !field) pumpField(3);
+  updateMouse(dt);
+  seenT += dt; if (seenT > 0.25) { seenT = 0; scanSeen(); }
+  aimT += dt; if (aimT > 0.1) { aimT = 0; const lit = S.inField || lanternFactor() > 0.05; crossEl.classList.toggle('aim', lit && !invOpen && !P.anim && !!(S.inField ? (field && field.canTake && field.canTake()) : pickTarget())); }
   saveT += dt; if (saveT > 15) { saveT = 0; saveGame(); }
   invT += dt; if (invOpen && invT > 0.5) { invT = 0; renderInv(); }
 }
@@ -3506,7 +4275,8 @@ function draw(now, dt) {
   const sp = Math.min(1, P.vel.length() / C.WALK);
   const bob = P.anim ? Math.sin(P.bob) * 0.02 : -Math.abs(Math.sin(P.bob)) * 0.035 * sp;
   camera.position.set(P.pos.x, P.pos.y + C.EYE + bob - (S.dead ? smooth(0, 3, deathT) * (S.inField ? 0.8 : 1.15) : 0), P.pos.z);
-  camera.rotation.set(P.pitch, P.yaw, S.dead && !S.inField ? smooth(0, 3, deathT) * 0.35 : 0);
+  P.kick = Math.max(0, (P.kick || 0) - dt * 6);
+  camera.rotation.set(P.pitch + P.kick * P.kick * 0.012, P.yaw, S.dead && !S.inField ? smooth(0, 3, deathT) * 0.35 : 0);
   camera.updateMatrixWorld(true);
   updateViewmodel(dt, lf, flick);
   vm.visible = !S.dead;
@@ -3532,8 +4302,17 @@ function devKey(code) {
   if (code === 'KeyM') { S.mirror = { pending: true }; }
   if (code === 'KeyG') { const lap = Math.floor(originA / C.LENGTHS), r = layoutFor(C.ESCAPE_L, lap).rooms.find(r => r.design === 'escape'); teleport(lap * C.LENGTHS + C.ESCAPE_L, -r.d + 3, 1.2); }
   if (code === 'KeyF') { S.inField = false; beginField(); }
+  const toRoom = (design) => {
+    for (let i = 1; i <= C.LENGTHS; i++) {
+      const a = originA + i, r = layoutFor(a % C.LENGTHS, Math.floor(a / C.LENGTHS)).rooms.find(r => r.design === design);
+      if (r) { teleport(a, -r.d + 1.2, r.side * 1.4); P.yaw = r.side > 0 ? -Math.PI / 2 : Math.PI / 2; toast(design + ' at length ' + (a % C.LENGTHS + 1)); return; }
+    }
+  };
+  if (code === 'KeyC') toRoom('cave');
+  if (code === 'KeyJ') toRoom('jut');
+  if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
-window.__rampart = { itemModel, motifTexture, buildLength, placeTokens, LengthCtx, buildCorridor, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, ITEM_DEFS, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, strike, mirrorRt, scene, camera };
+window.__rampart = { maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, strike, mirrorRt, scene, camera };
 
 /* ---------- boot ---------- */
 let pendingSave = null;
