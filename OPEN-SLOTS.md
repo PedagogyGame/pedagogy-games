@@ -78,4 +78,6 @@ Live: `game-zzzzzzzzzq/` / `.game-178` — Calligraphy (500 characters).
 
 Live: `game-zzzzzzzzzr/` / `.game-179` — Serpent's Wall.
 
-To add more later: next folder is `game-zzzzzzzzzs`, next class is `.game-180`. Three pieces must match: folder name, `href`, CSS class.
+Live: `game-zzzzzzzzzs/` / `.game-180` — Teddy Air Corps.
+
+To add more later: next folder is `game-zzzzzzzzzt`, next class is `.game-181`. Three pieces must match: folder name, `href`, CSS class.
