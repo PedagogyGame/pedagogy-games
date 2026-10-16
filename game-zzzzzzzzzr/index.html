@@ -262,6 +262,9 @@ scene.add(camera);
 const lanternLight = new THREE.PointLight(0xffc488, 9, 15, 1.7);
 lanternLight.position.set(-0.32, -0.28, -0.45);
 camera.add(lanternLight);
+// the little lamp in the niche at 49: always in the scene (so no shader ever recompiles), dark until its room is near
+const eternalLight = new THREE.PointLight(0xffa458, 0, 6.5, 1.5);
+scene.add(eternalLight);
 // daylight that only exists on the long stair and in the field
 const skyLight = new THREE.HemisphereLight(0xfff2dc, 0x6b5a44, 0);
 scene.add(skyLight);
@@ -295,7 +298,7 @@ window.addEventListener('resize', onResize);
 /* ============================================================
    State (saved) and runtime (not saved)
    ============================================================ */
-const SAVE_KEY = 'serpents-wall-v2';
+const SAVE_KEY = 'serpents-wall-v3';
 function freshState() {
   return {
     v: 1, A: 0, x: 0, z: -5, yaw: 0,
@@ -311,14 +314,14 @@ function serialize() {
   const lens = {};
   for (const [k, v] of Object.entries(S.lens)) if (v.sm.length || v.tk.length || v.dr.length) lens[k] = v;
   return JSON.stringify({
-    v: 2, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
+    v: 3, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
     t: S.t, lastSupply: S.lastSupply, activeSince: S.activeSince, dropN: S.dropN, mirror: S.mirror, mirrorSeen: S.mirrorSeen, inField: S.inField, field: S.field, dead: S.dead,
     maxA: S.maxA || 0, stairRet: S.stairRet || null,
   });
 }
 function deserialize(str) {
   const o = JSON.parse(str);
-  if (!o || o.v !== 2) return null;
+  if (!o || o.v !== 3) return null;
   const s = freshState();
   Object.assign(s, o);
   s.found = new Map(o.found || []);
@@ -452,7 +455,16 @@ const T = {};
       }
     }
     for (let i = 0; i < 260; i++) { const x = R.range(0, 256), y = R.range(0, 256), r = R.range(0.6, 2.6), l = R.range(55, 115); g.fillStyle = rgb(l, l * 0.88, l * 0.72, R.range(0.35, 0.8)); g.beginPath(); g.ellipse(x, y, r, r * R.range(0.5, 1), R.range(0, 3), 0, TAU); g.fill(); }
-    for (let i = 0; i < 26; i++) { const x = R.range(0, 256), y = R.range(0, 256); g.strokeStyle = 'rgba(16,10,6,.5)'; g.lineWidth = R.range(0.6, 1.8); g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 6; k++) g.lineTo(x + R.range(-18, 18) * k * 0.4, y + k * R.range(3, 7)); g.stroke(); } // roots
+    for (let i = 0; i < 14; i++) { // fine roots: they wander down through the clay and thin out, never anything like a mark
+      let x = R.range(0, 256), y = R.range(0, 256), ang = Math.PI / 2 + R.range(-0.5, 0.5), w = R.range(0.6, 1.4);
+      const n = R.int(10, 26);
+      for (let k = 0; k < n; k++) {
+        const nx = x + Math.cos(ang) * R.range(3, 6), ny = y + Math.sin(ang) * R.range(3, 6);
+        g.strokeStyle = `rgba(16,10,6,${0.42 * (1 - k / n * 0.6)})`; g.lineWidth = w * (1 - k / n * 0.6);
+        for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) { g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(nx + ox, ny + oy); g.stroke(); }
+        x = nx; y = ny; ang = clamp(ang + R.range(-0.25, 0.25), Math.PI * 0.2, Math.PI * 0.8);
+      }
+    }
     jitter(g, 256, 256, 22, 7); T.earth = texOf(c); }
   // sacking
   { const c = makeCanvas(128, 128), g = c.getContext('2d'), R = new Rng(61);
@@ -973,8 +985,22 @@ function skeletonInto(add, J, opts = {}) {
     }
   }
 }
-function skeletonToBuilder(B, J, local, opts) {
-  skeletonInto((geo, m, mat, owned) => B.add(mat, owned ? geo : geo, local.clone().multiply(m), !!owned), J, opts);
+// each pose is put together once, merged per material, and after that only copied into place
+const _skelCache = new Map();
+function skeletonToBuilder(B, J, local, opts = {}) {
+  const key = (J.__id ||= Math.random().toString(36).slice(2)) + '|' + JSON.stringify(opts);
+  let parts = _skelCache.get(key);
+  if (!parts) {
+    const lists = new Map();
+    skeletonInto((geo, m, mat, owned) => {
+      const g = owned ? geo : geo.clone();
+      g.applyMatrix4(m); if (m.determinant() < 0) flipWinding(g); stripAttrs(g);
+      (lists.get(mat) || lists.set(mat, []).get(mat)).push(g);
+    }, J, opts);
+    parts = [...lists].map(([mat, l]) => { const g = mergeGeometries(l, false); l.forEach(x => x.dispose()); return [mat, g]; });
+    _skelCache.set(key, parts);
+  }
+  for (const [mat, g] of parts) B.add(mat, g, local, false);
 }
 
 /* ---------- containers ---------- */
@@ -1052,7 +1078,12 @@ const FORCE = { 23: { i: 0, lower: false, design: 'dank', v: 0, leak: true }, 58
 const MIRROR_OK = new Set(['store', 'empty', 'dank', 'pigeon', 'gallery', 'toppled', 'collapsed']);
 const CAVES = { 12: { basin: false }, 63: { basin: true }, 99: { basin: false } };
 const JUTS = { 16: {}, 41: {} };
+// two odd, deep, bending rooms with something carved on the far wall: the wall's own emblem, and the golden rule
+const ODD = { 31: { kind: 'serpent' }, 49: { kind: 'golden' } };
 
+// every ceiling stands 30% higher than it first did; doorways only a little (5%)
+const HS = 1.3, DOOR = 2.3 * 1.05, CAVE_DOOR = 2.15 * 1.05;
+const CH = 3.0 * HS, UP = CH - 3.0;      // corridor height, and how far everything near the ceiling moved up
 const _layCache = new Map();
 function variantOf(L, lap) { return VAR_SET.has(L) ? (((lap % 4) + 4) % 4) : 0; }
 function layoutFor(L, lap) {
@@ -1065,7 +1096,7 @@ function layoutFor(L, lap) {
   while (stairIdx.size < Math.min(stairs, n)) stairIdx.add(R.int(0, n - 1));
   const f = FORCE[L];
   if (f) { if (f.lower) stairIdx.add(f.i); else stairIdx.delete(f.i); }
-  if (L === C.ESCAPE_L) { stairIdx.clear(); stairIdx.add(Math.floor(n / 2)); }
+  if (L === C.ESCAPE_L) stairIdx.clear();   // the way out goes down from inside its own room, not from the corridor
   const lastLower = { '-1': -99, '1': -99 };
   const rooms = [];
   for (let i = 0; i < n; i++) {
@@ -1076,8 +1107,8 @@ function layoutFor(L, lap) {
     if (lower) { room.design = R.pickW(LOWER, LOWER_W); room.v = R.int(0, 2); }
     else { room.design = R.pickW(UPPER, UPPER_W); room.v = R.int(0, 1); }
     if (f && f.i === i) { room.design = f.design; room.v = f.v; room.leak = true; }
-    if (L === C.ESCAPE_L && lower) { room.design = 'escape'; room.v = 0; side = 1; }
-    if (lower && L !== C.ESCAPE_L) { if (d - lastLower[side] < 18) side = -side; }
+    if (L === C.ESCAPE_L) side = -1;          // everything else at 75 keeps to the other side
+    if (lower) { if (d - lastLower[side] < 18) side = -side; }
     if (lower) lastLower[side] = d;
     room.side = side;
     rooms.push(room);
@@ -1085,22 +1116,27 @@ function layoutFor(L, lap) {
   // keep side rooms of the same side from crowding each other
   for (let i = 1; i < rooms.length; i++) {
     const a = rooms[i - 1], b = rooms[i];
-    if (a.side === b.side && b.d - a.d < 13 && !(L === C.ESCAPE_L && b.lower)) b.side = -b.side;
+    if (a.side === b.side && b.d - a.d < 13 && L !== C.ESCAPE_L) b.side = -b.side;
   }
   // fixed extras every lap: three caves, and two rooms that jut off at an angle where the rhythm starts to feel known
-  const extra = CAVES[L] ? 'cave' : JUTS[L] ? 'jut' : null;
+  if (L === C.ESCAPE_L) {
+    // the deepest, most winding room on the wall; at its far end, the only stair that goes down from inside a room
+    rooms.push({ i: rooms.length, d: 52, side: 1, lower: false, design: 'escape', v: 0, seed: R.int(0, 1e9), extra: true });
+  }
+  const extra = CAVES[L] ? 'cave' : JUTS[L] ? 'jut' : ODD[L] ? 'odd' : null;
+  const need = extra === 'odd' ? 17 : 13;
   if (extra) {
     const R2 = new Rng(hash32(L, 4711, 3));
     let best = null, bestScore = -1;
     for (let k = 0; k < 60; k++) {
-      const d = R2.range(16, 84), side = R2.chance(0.5) ? 1 : -1;
+      const d = extra === 'odd' ? R2.range(22, 78) : R2.range(16, 84), side = R2.chance(0.5) ? 1 : -1;
       let minSame = 99, minOpp = 99;
       for (const r of rooms) { const dd = Math.abs(r.d - d); if (r.side === side) minSame = Math.min(minSame, dd); else minOpp = Math.min(minOpp, dd); }
       const score = Math.min(minSame, 30) + Math.min(minOpp, 5) * 0.6;
-      if (minSame > 13 && minOpp > 2.2 && score > bestScore) { bestScore = score; best = { d, side }; }
+      if (minSame > need && minOpp > 2.2 && score > bestScore) { bestScore = score; best = { d, side }; }
     }
     if (!best) best = { d: 50, side: 1 };
-    rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: extra, v: 0, seed: R2.int(0, 1e9), basin: !!(CAVES[L] && CAVES[L].basin), extra: true });
+    rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: extra, v: 0, seed: R2.int(0, 1e9), basin: !!(CAVES[L] && CAVES[L].basin), kind: ODD[L] ? ODD[L].kind : null, extra: true });
   }
   const lay = { L, vi, rooms, clutterSeed: R.int(0, 1e9), decorSeed: hash32(L, vi, 555) };
   _layCache.set(key, lay);
@@ -1212,11 +1248,11 @@ function* corridorGen(ctx) {
   const B = ctx.B, R = new Rng(ctx.lay.clutterSeed);
   ctx.setFrame(1, 0, 0, 0);
   const open = { '-1': [], '1': [] };
-  for (const r of ctx.lay.rooms) open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : r.design === 'cave' ? 0.85 : 0.72, top: r.design === 'cave' ? 2.15 : 2.3, rough: r.design === 'cave' });
+  for (const r of ctx.lay.rooms) open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : r.design === 'cave' ? 0.85 : 0.72, top: r.design === 'cave' ? CAVE_DOOR : DOOR, rough: r.design === 'cave' });
 
   B.box(M.plank, 0, -0.05, -50, 4.1, 0.1, 100, 0, 0, 0, 0.55);
-  B.box(M.board, 0, 3.07, -50, 4.9, 0.12, 100, 0, 0, 0, 0.6);
-  for (const s of [-1, 1]) B.box(M.wood, s * 1.97, 2.95, -50, 0.22, 0.16, 100);
+  B.box(M.board, 0, 3.07 + UP, -50, 4.9, 0.12, 100, 0, 0, 0, 0.6);
+  for (const s of [-1, 1]) B.box(M.wood, s * 1.97, 2.95 + UP, -50, 0.22, 0.16, 100);
 
   const cut = (a0, a1, ops) => { // [a0,a1] (a0<a1) minus opening intervals
     let segs = [[a0, a1]];
@@ -1231,15 +1267,15 @@ function* corridorGen(ctx) {
     const ops = open[s];
     for (let k = 0; k <= 25; k++) {
       const z = -k * 4;
-      if (!ops.some(o => Math.abs(z - o.z) < o.h + 0.2)) B.box(M.wood, s * 2.08, 1.5, z, 0.3, 3.0, 0.3);
+      if (!ops.some(o => Math.abs(z - o.z) < o.h + 0.2)) B.box(M.wood, s * 2.08, CH / 2, z, 0.3, CH, 0.3);
     }
     buildStage = 'logs';
     for (let half = 0; half < 2; half++) {
       for (let k = half * 13; k < Math.min(25, half * 13 + 13); k++) {
         const z0 = -k * 4 - 0.15, z1 = -k * 4 - 3.85;
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 13; i++) {
           const y = 0.15 + i * 0.29;
-          const segs = y - 0.14 < 2.3 ? cut(z1, z0, ops) : [[z1, z0]];
+          const segs = y - 0.14 < DOOR ? cut(z1, z0, ops) : [[z1, z0]];
           for (const [a, b] of segs) B.log(M.log, s * 2.14, y, (a + b) / 2, 0.146, b - a, 'z');
         }
         if (overBudget()) yield;
@@ -1248,11 +1284,11 @@ function* corridorGen(ctx) {
     }
     buildStage = 'openings';
     for (const [a, b] of cut(-100, 0, ops)) {
-      B.box(M.earth, s * 2.38, 1.5, (a + b) / 2, 0.12, 3.0, b - a, 0, 0, 0, 0.5);
+      B.box(M.earth, s * 2.38, CH / 2, (a + b) / 2, 0.12, CH, b - a, 0, 0, 0, 0.5);
       ctx.solid(s * 2.25, (a + b) / 2, 0.5, b - a, 0, 'up');
     }
     for (const o of ops) {
-      B.box(M.earth, s * 2.38, (o.top + 3) / 2, o.z, 0.12, 3 - o.top, 2 * o.h);
+      B.box(M.earth, s * 2.38, (o.top + CH) / 2, o.z, 0.12, CH - o.top, 2 * o.h);
       if (o.rough) {
         // a cave mouth: the logs simply stop, held up by rough stone jambs and a heavy unhewn lintel
         const RJ = new Rng(hash32(ctx.L, Math.round(o.z * 10), 9));
@@ -1277,21 +1313,21 @@ function* corridorGen(ctx) {
   buildStage = 'beams';
   for (let k = 0; k <= 25; k++) {
     const z = -k * 4;
-    B.box(M.wood, 0, 2.86, z, 4.6, 0.26, 0.28);
+    B.box(M.wood, 0, 2.86 + UP, z, 4.6, 0.26, 0.28);
     if (k % 2 === 0 && k < 25) for (const s of [-1, 1]) {
       if (open[s].some(o => Math.abs(z - o.z) < o.h + 0.6)) continue;
-      B.beam(M.wood, V3(s * 1.92, 2.05, z), V3(s * 1.3, 2.74, z), 0.13, 0.13);
+      B.beam(M.wood, V3(s * 1.92, 2.05 + UP, z), V3(s * 1.3, 2.74 + UP, z), 0.13, 0.13);
     }
     if (k < 25) {
       const mid = z - 2;
-      for (const x of [-1.05, 0, 1.05]) B.box(M.wood, x, 2.96, mid, 0.13, 0.1, 3.72);
-      if (R.chance(0.15)) for (let j = 0; j < 7; j++) B.log(M.log, 0, 2.66, z - 0.4 - j * 0.5, 0.06, 3.9, 'x', 6);
+      for (const x of [-1.05, 0, 1.05]) B.box(M.wood, x, 2.96 + UP, mid, 0.13, 0.1, 3.72);
+      if (R.chance(0.15)) for (let j = 0; j < 7; j++) B.log(M.log, 0, 2.66 + UP, z - 0.4 - j * 0.5, 0.06, 3.9, 'x', 6);
     }
     if (overBudget()) yield;
   }
   // the start of every length: a heavier frame and a carved tally
-  for (const s of [-1, 1]) B.box(M.woodDark, s * 1.86, 1.5, -0.38, 0.24, 3.0, 0.24);
-  B.box(M.woodDark, 0, 2.62, -0.38, 3.9, 0.22, 0.24);
+  for (const s of [-1, 1]) B.box(M.woodDark, s * 1.86, CH / 2, -0.38, 0.24, CH, 0.24);
+  B.box(M.woodDark, 0, 2.62 + UP, -0.38, 3.9, 0.22, 0.24);
   {
     const tm = new THREE.MeshLambertMaterial({ map: tallyTexture(ctx.L + 1) });
     const plank = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.34), tm);
@@ -1299,9 +1335,9 @@ function* corridorGen(ctx) {
     ctx.group.add(plank); ctx.meshes.push(plank);
   }
   if (ctx.A === 0) {
-    B.box(M.earth, 0, 1.5, 0.35, 5, 3.2, 0.6, 0, 0, 0, 0.5);
-    B.beam(M.wood, V3(-1.8, 0.1, -0.9), V3(1.2, 2.9, 0.1), 0.24, 0.24);
-    B.beam(M.wood, V3(1.9, 0.2, -1.4), V3(-0.6, 2.8, 0.05), 0.22, 0.22);
+    B.box(M.earth, 0, (CH + 0.2) / 2, 0.35, 5, CH + 0.2, 0.6, 0, 0, 0, 0.5);
+    B.beam(M.wood, V3(-1.8, 0.1, -0.9), V3(1.2, 2.9 + UP, 0.1), 0.24, 0.24);
+    B.beam(M.wood, V3(1.9, 0.2, -1.4), V3(-0.6, 2.8 + UP, 0.05), 0.22, 0.22);
     ctx.solid(0, 0.6, 4.6, 1.0, 0, 'up');
   }
   yield;
@@ -1343,8 +1379,8 @@ function* corridorGen(ctx) {
     if (!W.chance(0.13)) continue;
     const z = -k * 4, kind = W.pickW([0, 1, 2, 3], [1, 0.8, 0.9, 1.4]), size = W.range(0.35, 1.15);
     const where = W.pickW(['post', 'joist', 'low'], [3, 1.2, 0.8]);
-    if (where === 'post') ctx.web(V3(s * 1.92, 2.72, z + (W.chance(0.5) ? 0.17 : -0.17)), V3(-s, 0, W.range(-0.15, 0.15)).normalize(), V3(0, -1, W.range(-0.2, 0.2)).normalize(), size, kind);
-    else if (where === 'joist') ctx.web(V3(s * 1.05, 2.9, z - W.range(0.6, 3.4)), V3(-s, 0, 0), V3(0, -0.4, W.chance(0.5) ? 1 : -1).normalize(), size * 0.8, kind);
+    if (where === 'post') ctx.web(V3(s * 1.92, 2.72 + UP, z + (W.chance(0.5) ? 0.17 : -0.17)), V3(-s, 0, W.range(-0.15, 0.15)).normalize(), V3(0, -1, W.range(-0.2, 0.2)).normalize(), size, kind);
+    else if (where === 'joist') ctx.web(V3(s * 1.05, 2.9 + UP, z - W.range(0.6, 3.4)), V3(-s, 0, 0), V3(0, -0.4, W.chance(0.5) ? 1 : -1).normalize(), size * 0.8, kind);
     else if (!open[s].some(o => Math.abs(z - o.z) < o.h + 0.6)) ctx.web(V3(s * 1.9, W.range(0.05, 0.3), z - 0.16), V3(-s, 0.4, 0).normalize(), V3(0, 0.2, -1).normalize(), size * 0.6, 3);
   }
   // rare small events, each drawn fresh: rubble, potsherds, a besom, fallen footing stones...
@@ -1521,7 +1557,7 @@ function shell(ctx, room, D, W, H, wallMat, o = {}) {
   for (const s of [-1, 1]) ctx.solid(u0 + D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, lvl);
   if (o.front === false) { /* open to whatever it adjoins */ }
   else if (o.door !== false) {
-    const dh = o.dh ?? 0.72, top = 2.3;
+    const dh = o.dh ?? 0.72, top = DOOR;
     for (const s of [-1, 1]) { B.box(wallMat, u0 + 0.06, H / 2, s * (dh + (hw - dh) / 2), 0.12, H, hw - dh, 0, 0, 0, 0.7); ctx.solid(u0 + 0.06, s * (dh + (hw - dh) / 2), 0.2, hw - dh, 0, lvl); }
     B.box(wallMat, u0 + 0.06, (top + H) / 2, 0, 0.12, H - top, 2 * dh);
   } else {
@@ -1591,13 +1627,13 @@ function stack(ctx, room, u, v, R, n = 2) {
 const UPPER_BUILD = {
   store(ctx, room, R, v) {
     if (v === 0) {
-      shell(ctx, room, 4, 4, 2.7, M.board);
+      shell(ctx, room, 4, 4, 2.7 * HS, M.board);
       shelves(ctx, room, 'v', -1.75, 1.75, 3.73, 0.42, [0.45, 1.05, 1.65], R);
       shelves(ctx, room, 'u', 1.2, 3.3, 1.75, 0.4, [0.5, 1.15]);
       stack(ctx, room, 1.35, -1.45, R); if (R.chance(0.7)) stack(ctx, room, 2.15, -1.5, R, 1);
       if (R.chance(0.6)) ctx.addSmash('barrel', 2.95, 0, -1.45, R.range(0, 3), { room });
     } else {
-      shell(ctx, room, 3.4, 5, 2.7, M.board);
+      shell(ctx, room, 3.4, 5, 2.7 * HS, M.board);
       table(ctx, room, 2.0, 0.1, Math.PI / 2);
       shelves(ctx, room, 'u', 0.9, 3.15, 2.27, 0.4, [0.45, 1.05, 1.65]);
       shelves(ctx, room, 'u', 0.9, 3.15, -2.27, 0.4, [0.45, 1.05, 1.65], R);
@@ -1608,7 +1644,7 @@ const UPPER_BUILD = {
   collapsed(ctx, room, R, v) {
     const B = ctx.B;
     if (v === 0) {
-      shell(ctx, room, 5, 4, 2.6, M.earth, { floor: M.earth });
+      shell(ctx, room, 5, 4, 2.6 * HS, M.earth, { floor: M.earth });
       B.box(M.earth, 4.1, 0.35, 0.7, 2.4, 1.3, 2.8, 0, 0.2, 0.42, 0.5);
       ctx.solid(4.2, 0.7, 1.8, 2.6, 0.2, 'up');
       B.beam(M.wood, V3(1.6, 2.6, -1.9), V3(3.8, 0.12, 1.1), 0.24, 0.24);
@@ -1619,7 +1655,7 @@ const UPPER_BUILD = {
       stack(ctx, room, 1.7, -1.45, R, 1);
       if (R.chance(0.5)) ctx.bones(2.4, 1.2, R);
     } else {
-      shell(ctx, room, 4, 5, 2.6, M.earth, { floor: M.earth });
+      shell(ctx, room, 4, 5, 2.6 * HS, M.earth, { floor: M.earth });
       B.box(M.earth, 2.0, 0.4, 2.0, 3.2, 1.4, 1.6, 0.5, 0, 0, 0.5);
       ctx.solid(2.0, 2.0, 3.2, 1.2, 0, 'up');
       B.beam(M.wood, V3(0.7, 0.15, -0.9), V3(3.6, 2.4, -2.4), 0.24, 0.24);
@@ -1630,15 +1666,15 @@ const UPPER_BUILD = {
   },
   gallery(ctx, room, R, v) {
     const D = v === 0 ? 12 : 16, W = v === 0 ? 2.6 : 2.4;
-    shell(ctx, room, D, W, 2.6, v === 0 ? M.board : M.log);
+    shell(ctx, room, D, W, 2.6 * HS, v === 0 ? M.board : M.log);
     shelves(ctx, room, 'u', 1.1, D - 0.3, W / 2 - 0.2, 0.36, [0.4, 0.95, 1.5, 2.05], R);
     shelves(ctx, room, 'u', 1.1, D - 0.3, -W / 2 + 0.2, 0.36, [0.4, 0.95, 1.5, 2.05]);
     if (v === 1) ctx.skeleton('sit', D - 0.32, 0, -Math.PI / 2);
     else ctx.addSmash('box', D - 0.5, 0, 0.15, 0.3, { room });
-    for (let u = 2; u < D - 1; u += R.range(3.5, 6.5)) ctx.web(V3(u, 2.58, W / 2 - 0.4), V3(0, 0, -1), V3(0, -1, 0.3).normalize(), R.range(0.4, 0.8), R.int(0, 3));
+    for (let u = 2; u < D - 1; u += R.range(3.5, 6.5)) ctx.web(V3(u, 2.6 * HS - 0.02, W / 2 - 0.4), V3(0, 0, -1), V3(0, -1, 0.3).normalize(), R.range(0.4, 0.8), R.int(0, 3));
   },
   dank(ctx, room, R, v) {
-    const D = v === 0 ? 4 : 5, W = v === 0 ? 4 : 3, H = 2.5;
+    const D = v === 0 ? 4 : 5, W = v === 0 ? 4 : 3, H = 2.5 * HS;
     shell(ctx, room, D, W, H, M.earth, { floor: M.earth });
     ctx.B.add(M.wet, new THREE.CircleGeometry(1, 20), mtx(D * 0.55, 0.006, 0.2, -Math.PI / 2, 0, 0, D * 0.32, W * 0.3, 1), true);
     ctx.addSmash('barrel', D - 0.7, -0.34, W / 2 - 0.6, 0.4, { room, tilt: [0.18, -0.12] });
@@ -1647,12 +1683,12 @@ const UPPER_BUILD = {
     if (room.r.leak) { ctx.drip(room, D * 0.5, 0.3, H); ctx.drip(room, D * 0.7, -0.4, H); }
   },
   empty(ctx, room, R, v) {
-    shell(ctx, room, 3, 3, 2.5, R.chance(0.5) ? M.board : M.log);
+    shell(ctx, room, 3, 3, 2.5 * HS, R.chance(0.5) ? M.board : M.log);
     if (v === 0) { if (R.chance(0.45)) ctx.addSmash('crate', 2.45, 0, -0.95, 0.3, { room }); }
     else { ctx.skeleton('sit', 2.85, 0.6, -Math.PI / 2); ctx.addSmash('stool', 1.9, 0, -0.8, 0.5, { room }); }
   },
   hanging(ctx, room, R, v) {
-    const D = v === 0 ? 4 : 5, W = v === 0 ? 5 : 4, H = 2.8;
+    const D = v === 0 ? 4 : 5, W = v === 0 ? 5 : 4, H = 2.8 * HS;
     shell(ctx, room, D, W, H, M.board);
     const spots = v === 0 ? [[1.6, 1.4], [2.6, 0.6], [2.7, -1.5], [3.4, 1.4], [1.7, -1.6]] : [[1.5, 1.2], [2.3, 0.4], [2.4, -1.2], [3.2, 1.3], [3.5, -0.3], [4.3, 0.9], [4.2, -1.3]];
     for (const [u, vv] of spots) if (R.chance(0.8)) sack(ctx, room, u, vv, H, R.range(1.4, 2.0), R);
@@ -1661,11 +1697,11 @@ const UPPER_BUILD = {
   },
   pigeon(ctx, room, R, v) {
     if (v === 0) {
-      shell(ctx, room, 3, 4, 2.6, M.board);
+      shell(ctx, room, 3, 4, 2.6 * HS, M.board);
       cubbies(ctx, room, 'v', -1.85, 1.85, 2.78, 4, 6, 0.42, 0.2, 2.3);
       if (R.chance(0.5)) ctx.addSmash('box', 1.5, 0, -1.4, 0.4, { room });
     } else {
-      shell(ctx, room, 4, 4, 2.6, M.board);
+      shell(ctx, room, 4, 4, 2.6 * HS, M.board);
       cubbies(ctx, room, 'u', 0.9, 3.7, 1.78, 4, 4, 0.42, 0.2, 2.3);
       cubbies(ctx, room, 'u', 0.9, 3.7, -1.78, 4, 4, 0.42, 0.2, 2.3);
     }
@@ -1673,7 +1709,7 @@ const UPPER_BUILD = {
   toppled(ctx, room, R, v) {
     const B = ctx.B;
     const D = v === 0 ? 4 : 5, W = v === 0 ? 5 : 4;
-    shell(ctx, room, D, W, 2.6, M.board);
+    shell(ctx, room, D, W, 2.6 * HS, M.board);
     // a shelf unit gone over, resting against the wall
     const sideV = v === 0 ? 2.1 : -1.7;
     B.box(M.wood, D * 0.55, 1.0, sideV - Math.sign(sideV) * 0.5, 2.2, 0.06, 0.4, 1.0 * Math.sign(sideV), 0, 0);
@@ -1695,28 +1731,31 @@ const UPPER_BUILD = {
 
 /* ---------- the spiral stair (uniform) and the five lower rooms, three variations each ---------- */
 const STAIR = { cu: 1.5, steps: 36, turns: 1.5, r: 0.7 };
-function stairAlcove(ctx, room) {
+// the height of each lower room, so the shaft from above stops at its ceiling
+const LOWER_H = { vault: [3.6, 2.8, 3.4], cistern: [3.6, 3.6, 3.6], crypt: [2.6, 2.6, 2.6], shaft: [3.4, 3.4, 3.4], cache: [2.6, 2.6, 2.6] };
+const lowerH = (design, v) => (LOWER_H[design] ? LOWER_H[design][v] ?? LOWER_H[design][0] : 3) * HS;
+function stairAlcove(ctx, room, below = 3.4 * HS) {
   const B = ctx.B;
   ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
-  const H = 2.8;
+  const H = 2.8 * HS;
   B.box(M.plank, 0.125, -0.05, 0, 0.25, 0.1, 3.2); B.box(M.plank, 2.9, -0.05, 0, 0.3, 0.1, 3.2);
   for (const s of [-1, 1]) B.box(M.plank, 1.5, -0.05, s * 1.4, 2.5, 0.1, 0.3);
   B.box(M.board, 1.5, H + 0.06, 0, 3.4, 0.12, 3.4);
   B.box(M.log, 3.1, H / 2, 0, 0.2, H, 3.4, 0, 0, 0, 0.7);
   for (const s of [-1, 1]) B.box(M.log, 1.5, H / 2, s * 1.62, 3.2, H, 0.2, 0, 0, 0, 0.7);
   for (const s of [-1, 1]) B.box(M.log, 0.06, H / 2, s * 1.33, 0.12, H, 0.6);
-  B.box(M.log, 0.06, (2.3 + H) / 2, 0, 0.12, H - 2.3, 2.1);
+  B.box(M.log, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 2.1);
   // the shaft, timber-lined, down to the ceiling of the room below
-  const sh = 5.6;
+  const sh = -C.LOWER_Y - below;
   B.box(M.log, 0.18, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7);
   for (const s of [-1, 1]) B.box(M.log, 1.5, -sh / 2, s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
-  for (const y of [-1.2, -2.6, -4.0]) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
+  for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
   // rail around the back and sides of the opening
   B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
   for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
   for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
   // newel and steps
-  B.log(M.wood, STAIR.cu, -3.1, 0, 0.13, 11.8, 'y', 8);
+  B.log(M.wood, STAIR.cu, (C.LOWER_Y + H) / 2, 0, 0.13, H - C.LOWER_Y, 'y', 8);
   for (let s = 0; s < STAIR.steps; s++) {
     const phi = Math.PI + (s + 0.5) * (STAIR.turns * TAU / STAIR.steps);
     const y = -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1));
@@ -1741,7 +1780,7 @@ function pit(ctx, room, cu, cv, su, sv, depth, water) {
 }
 const LOWER_BUILD = {
   vault(ctx, room, R, v) {
-    const H = v === 1 ? 2.8 : v === 2 ? 3.4 : 3.6;
+    const H = lowerH('vault', v);
     const D = [10, 12, 8][v], W = [10, 8, 12][v];
     lowerShell(ctx, room, D, W, H);
     const uB = D - 0.3, hw = W / 2;
@@ -1764,7 +1803,7 @@ const LOWER_BUILD = {
     }
   },
   cistern(ctx, room, R, v) {
-    const D = 10, W = 10, H = 3.6, uB = D - 0.3, hw = W / 2;
+    const D = 10, W = 10, H = lowerH('cistern', v), uB = D - 0.3, hw = W / 2;
     lowerShell(ctx, room, D, W, H);
     if (v === 0) pit(ctx, room, 5.6, 0, 2.6, 2.6, 4, true);
     else if (v === 1) { pit(ctx, room, 4.8, 0, 1.6, 1.6, 4, true); pit(ctx, room, 7.6, 0, 1.6, 1.6, 4, true); }
@@ -1777,7 +1816,7 @@ const LOWER_BUILD = {
   },
   crypt(ctx, room, R, v) {
     const B = ctx.B;
-    const D = [14, 10, 9][v], W = [5.5, 8, 6][v], H = 2.6, uB = D - 0.3, hw = W / 2;
+    const D = [14, 10, 9][v], W = [5.5, 8, 6][v], H = lowerH('crypt', v), uB = D - 0.3, hw = W / 2;
     lowerShell(ctx, room, D, W, H);
     const niches = (along, a, b, wallC, inward) => { // a row of niches set into a wall, two high
       const cnt = Math.floor((b - a) / 1.9);
@@ -1814,7 +1853,7 @@ const LOWER_BUILD = {
   },
   shaft(ctx, room, R, v) {
     const B = ctx.B;
-    const D = 8, W = 8, H = 3.4, uB = D - 0.3, hw = W / 2;
+    const D = 8, W = 8, H = lowerH('shaft', v), uB = D - 0.3, hw = W / 2;
     lowerShell(ctx, room, D, W, H);
     const winch = (cu, cv) => {
       for (const s of [-1, 1]) { B.beam(M.wood, V3(cu - 0.5, 0, cv + s * 1.7), V3(cu, 1.6, cv + s * 1.7), 0.14, 0.14); B.beam(M.wood, V3(cu + 0.5, 0, cv + s * 1.7), V3(cu, 1.6, cv + s * 1.7), 0.14, 0.14); }
@@ -1834,7 +1873,7 @@ const LOWER_BUILD = {
     if (R.chance(0.5)) ctx.bones(2.8, -2.6, R);
   },
   cache(ctx, room, R, v) {
-    const D = [5.8, 6.2, 5.8][v], W = [4.6, 5.2, 6][v], H = 2.6, uB = D - 0.3, hw = W / 2;
+    const D = [5.8, 6.2, 5.8][v], W = [4.6, 5.2, 6][v], H = lowerH('cache', v), uB = D - 0.3, hw = W / 2;
     lowerShell(ctx, room, D, W, H);
     ctx.addSmash('chest', uB - 0.4, 0, -0.7, -Math.PI / 2, { room, lvl: 'low' });
     if (v === 1) ctx.addSmash('chest', uB - 0.4, 0, 1.0, -Math.PI / 2, { room, lvl: 'low' });
@@ -1844,25 +1883,11 @@ const LOWER_BUILD = {
     if (v !== 0) ctx.addSmash('barrel', 0.0, 0, hw - 0.5, 0, { room, lvl: 'low' });
     ctx.addSmash('box', uB - 0.35, 0, 0.35, 0.3, { room, lvl: 'low' });
   },
-  escape(ctx, room, R) {
-    const D = 8.3, W = 7, H = 3.0, uB = D - 0.3, hw = W / 2;
-    lowerShell(ctx, room, D, W, H, { gap: 0.62 });
-    ctx.addSmash('chest', uB - 0.5, 0, -2.2, -Math.PI / 2, { room, lvl: 'low' });
-    stack(ctx, room, 4.6, 2.45, R); stack(ctx, room, 5.4, 2.45, R); stack(ctx, room, 6.2, -2.9, R, 1);
-    ctx.addSmash('barrel', 3.6, 0, -2.9, 0.3, { room, lvl: 'low' });
-    shelves(ctx, room, 'u', 3.9, 6.6, hw - 0.24, 0.4, [0.5, 1.1, 1.7], R);
-    // the boxes that hide the walkway
-    const c1 = ctx.addSmash('bigcrate', uB - 0.5, 0, 0.49, 0.03, { room, lvl: 'low' });
-    const c2 = ctx.addSmash('bigcrate', uB - 0.5, 0, -0.49, -0.04, { room, lvl: 'low' });
-    ctx.addSmash('bigcrate', uB - 0.5, 0.96, 0.47, -0.02, { room, lvl: 'low', below: c1 });
-    ctx.addSmash('bigcrate', uB - 0.5, 0.96, -0.5, 0.05, { room, lvl: 'low', below: c2 });
-    ctx.escapeArgs = [room, uB];
-  },
 };
 function lowerShell(ctx, room, D, W, H, o = {}) {
   ctx.setFrame(room.side, C.WALL_OUT, room.zc, C.LOWER_Y);
   const B = ctx.B, hw = W / 2, u0 = -0.3, uB = u0 + D;
-  shell(ctx, room, D, W, H, M.earth, { u0, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true, backGap: o.gap ? [o.gap, 1.9] : null });
+  shell(ctx, room, D, W, H, M.earth, { u0, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true });
   // the bottom of the stair comes through the ceiling here
   ctx.circle(STAIR.cu, 0, 0.2, 'low');
   const c = ctx.W(STAIR.cu, 0, 0);
@@ -1875,128 +1900,6 @@ function backWallWithGap(ctx, uB, W, H, gap, gh) {
   B.box(M.earth, uB + 0.1, (gh + H) / 2, 0, 0.2, H - gh, 2 * gap);
   for (const s of [-1, 1]) B.box(M.wood, uB + 0.1, gh / 2, s * (gap + 0.07), 0.24, gh, 0.14);
   B.box(M.wood, uB + 0.1, gh + 0.07, 0, 0.24, 0.14, 2 * gap + 0.3);
-}
-
-/* ---------- length 75: the way out ---------- */
-function* buildEscapeRouteGen(ctx, room, uB) {
-  const B = ctx.B;
-  // remove the plain back wall the shell drew: rebuild that face with a gap (the shell's wall is drawn; we draw over it by
-  // overdrawing a darker recess — instead we never let the shell draw it, see lowerShell gap handling)
-  const gap = 0.62, gh = 1.9;
-  const rects = [];
-  const rect = (cu, cv, hu, hv, ang = 0) => { const c = ctx.W(cu, 0, cv); rects.push({ cx: c.x, cz: c.z, ux: Math.cos(ang), uz: Math.sin(ang), hx: hu, hz: hv }); };
-  // walkway
-  const w0 = uB + 0.2, w1 = w0 + 8;
-  B.box(M.plank, (w0 + w1) / 2, -0.05, 0, w1 - w0 + 0.2, 0.1, 1.3, 0, 0, 0, 0.55);
-  B.box(M.board, (w0 + w1) / 2, 2.26, 0, w1 - w0, 0.1, 1.6);
-  for (const s of [-1, 1]) B.box(M.earth, (w0 + w1) / 2, 1.1, s * 0.75, w1 - w0, 2.3, 0.2, 0, 0, 0, 0.6);
-  for (let u = w0 + 0.6; u < w1; u += 1.5) { for (const s of [-1, 1]) B.box(M.wood, u, 1.1, s * 0.6, 0.12, 2.2, 0.1); B.box(M.wood, u, 2.15, 0, 0.12, 0.12, 1.3); }
-  rect(uB + 0.05, 0, 0.45, gap - 0.02); rect((w0 + w1) / 2, 0, (w1 - w0) / 2 + 0.2, 0.63);
-  // the larger room
-  const r0 = w1, r1 = r0 + 11, RH = 4.4, RW = 11;
-  B.box(M.plank, (r0 + r1) / 2, -0.05, 0, r1 - r0, 0.1, RW, 0, 0, 0, 0.55);
-  B.box(M.board, (r0 + r1) / 2, RH + 0.06, 0, r1 - r0 + 0.4, 0.12, RW + 0.4, 0, 0, 0, 0.6);
-  for (const s of [-1, 1]) B.box(M.earth, (r0 + r1) / 2, RH / 2, s * (RW / 2 + 0.1), r1 - r0, RH, 0.2, 0, 0, 0, 0.6);
-  for (const s of [-1, 1]) B.box(M.earth, r0 - 0.1, RH / 2, s * (0.75 + (RW / 2 - 0.75) / 2), 0.2, RH, RW / 2 - 0.75, 0, 0, 0, 0.6);
-  B.box(M.earth, r0 - 0.1, (2.3 + RH) / 2, 0, 0.2, RH - 2.3, 1.5);
-  for (const s of [-1, 1]) B.box(M.earth, r1 + 0.1, RH / 2, s * (1.05 + (RW / 2 - 1.05) / 2), 0.2, RH, RW / 2 - 1.05, 0, 0, 0, 0.6);
-  B.box(M.earth, r1 + 0.1, (2.7 + RH) / 2, 0, 0.2, RH - 2.7, 2.1);
-  for (const u of [r0 + 3, r0 + 6, r0 + 9]) for (const s of [-1, 1]) { B.box(M.wood, u, RH / 2, s * 2.6, 0.32, RH, 0.32); B.box(M.wood, u, RH - 0.15, 0, 0.26, 0.26, RW); }
-  shelves(ctx, room, 'v', -4.8, -1.6, r1 - 0.25, 0.4, [0.5, 1.1]);
-  ctx.skeleton('sit', r0 + 4.4, RW / 2 - 0.3, Math.PI);
-  ctx.web(V3(r1 - 0.02, RH - 0.02, RW / 2 - 0.02), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), 1.2);
-  rect((r0 + r1) / 2, 0, (r1 - r0) / 2 + 0.1, RW / 2 - 0.05);
-  // halls bending right (+v), then the stair
-  const a1 = 0.44, a2 = 1.22, hw = 0.95, hallH = 2.6;
-  const Q0 = new THREE.Vector2(r1, 0);
-  const Q1 = Q0.clone().add(new THREE.Vector2(Math.cos(a1), Math.sin(a1)).multiplyScalar(13.5));
-  const Q2 = Q1.clone().add(new THREE.Vector2(Math.cos(a2), Math.sin(a2)).multiplyScalar(9.5));
-  const RUN = 130, RISE = 75;
-  const Q3 = Q2.clone().add(new THREE.Vector2(Math.cos(a2), Math.sin(a2)).multiplyScalar(RUN));
-  const pts = [Q0.clone().add(new THREE.Vector2(-0.3, 0)), Q1, Q2, Q3];
-  const yAt = (i, t) => i < 2 ? 0 : RISE * t; // floor height along segment i (0..1)
-  // walls with mitred corners
-  const off = (side) => {
-    const out = [];
-    for (let i = 0; i < pts.length; i++) {
-      const dPrev = i > 0 ? pts[i].clone().sub(pts[i - 1]).normalize() : null;
-      const dNext = i < pts.length - 1 ? pts[i + 1].clone().sub(pts[i]).normalize() : null;
-      const n1 = dPrev ? new THREE.Vector2(-dPrev.y, dPrev.x) : null, n2 = dNext ? new THREE.Vector2(-dNext.y, dNext.x) : null;
-      let n;
-      if (n1 && n2) { n = n1.clone().add(n2); n.multiplyScalar(1 / (1 + n1.dot(n2))); } else n = (n1 || n2).clone();
-      out.push(pts[i].clone().addScaledVector(n, side * (hw + 0.1)));
-    }
-    return out;
-  };
-  yield;
-  for (const side of [-1, 1]) {
-    const o = off(side);
-    for (let i = 0; i < o.length - 1; i++) {
-      const a = o[i], b = o[i + 1], d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, d.x);
-      if (i < 2) B.box(M.earth, (a.x + b.x) / 2, hallH / 2, (a.y + b.y) / 2, len + 0.2, hallH, 0.2, 0, -ang, 0, 0.6);
-      else {
-        // sloped earth walls of the long stair, in pieces
-        const n = 26;
-        for (let k = 0; k < n; k++) {
-          const t0 = k / n, t1 = (k + 1) / n, pa = a.clone().lerp(b, t0), pb = a.clone().lerp(b, t1);
-          const y0 = RISE * t0, y1 = RISE * t1, segL = len / n;
-          const pitch = Math.atan2(y1 - y0, segL);
-          B.box(M.earth, (pa.x + pb.x) / 2, (y0 + y1) / 2 + 1.35, (pa.y + pb.y) / 2, Math.hypot(segL, y1 - y0) + 0.3, 3.4, 0.2, 0, -ang, pitch, 0.6);
-        }
-      }
-    }
-  }
-  // hall floors and ceilings
-  for (let i = 0; i < 2; i++) {
-    const a = pts[i], b = pts[i + 1], d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, d.x), m = a.clone().add(b).multiplyScalar(0.5);
-    B.box(M.earth, m.x, -0.05, m.y, len + 2.0, 0.1, 2 * hw + 0.6, 0, -ang, 0, 0.5);
-    B.box(M.earth, m.x, hallH + 0.05, m.y, len + 2.0, 0.1, 2 * hw + 0.6, 0, -ang, 0, 0.5);
-    for (let t = 1.2; t < len; t += 2.2) {
-      const p = a.clone().addScaledVector(d.clone().normalize(), t), n = new THREE.Vector2(-d.y, d.x).normalize();
-      for (const s of [-1, 1]) B.box(M.wood, p.x + n.x * s * hw, hallH / 2, p.y + n.y * s * hw, 0.14, hallH, 0.14, 0, -ang, 0);
-      B.box(M.wood, p.x, hallH - 0.08, p.y, 0.14, 0.14, 2 * hw + 0.2, 0, -ang, 0);
-    }
-    const c = ctx.W(m.x, 0, m.y);
-    rects.push({ cx: c.x, cz: c.z, ux: Math.cos(ang), uz: Math.sin(ang), hx: len / 2 + (i === 0 ? 0.6 : 1.2), hz: hw });
-  }
-  // the long stair: risers held by posts driven into the dirt
-  {
-    const a = Q2, d = Q3.clone().sub(Q2).normalize(), n = new THREE.Vector2(-d.y, d.x), ang = Math.atan2(d.y, d.x);
-    const tread = 0.35, steps = Math.round(RUN / tread);
-    const pitch = Math.atan2(RISE, RUN), slope = Math.hypot(RUN, RISE);
-    const mid = a.clone().addScaledVector(d, RUN / 2);
-    B.box(M.earth, mid.x, RISE / 2 - 0.35, mid.y, slope + 1, 0.5, 2 * hw + 0.4, 0, -ang, pitch, 0.5);    // the dirt under the steps
-    B.box(M.earth, mid.x, RISE / 2 + 2.75, mid.y, slope + 1, 0.3, 2 * hw + 0.6, 0, -ang, pitch, 0.5);    // roof
-    for (let i = 0; i < steps; i++) {
-      const t = (i + 0.5) * tread, p = a.clone().addScaledVector(d, t), y = RISE * (i + 1) / steps;
-      B.box(M.plank, p.x, y - 0.025, p.y, tread + 0.02, 0.05, 2 * hw - 0.1, 0, -ang, 0, 1);
-      const f = a.clone().addScaledVector(d, i * tread);
-      B.box(M.board, f.x, y - RISE / steps / 2 - 0.02, f.y, 0.04, RISE / steps + 0.04, 2 * hw - 0.1, 0, -ang, 0, 1);
-      if (i % 2 === 0) for (const s of [-1, 1]) B.box(M.wood, f.x + n.x * s * (hw - 0.12), y - 0.15, f.y + n.y * s * (hw - 0.12), 0.07, 0.45, 0.07);
-      if (i % 9 === 4) {
-        for (const s of [-1, 1]) B.box(M.wood, p.x + n.x * s * (hw + 0.02), y + 1.25, p.y + n.y * s * (hw + 0.02), 0.16, 2.6, 0.16);
-        B.box(M.wood, p.x, y + 2.5, p.y, 0.16, 0.16, 2 * hw + 0.3, 0, -ang, 0);
-      }
-      if (i % 40 === 39) yield;
-    }
-    const c0 = ctx.W(a.x, 0, a.y);
-    const len = RUN + 3;
-    const cm = ctx.W(a.x + d.x * (RUN / 2 - 1.5), 0, a.y + d.y * (RUN / 2 - 1.5));
-    rects.push({ cx: cm.x, cz: cm.z, ux: Math.cos(ang), uz: Math.sin(ang), hx: len / 2, hz: hw - 0.05 });
-    // light at the top
-    const top = ctx.W(Q3.x + d.x * 0.6, RISE + 1.2, Q3.y + d.y * 0.6);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false });
-    const glow = new THREE.Mesh(new THREE.PlaneGeometry(2 * hw + 0.4, 3), glowMat);
-    glow.position.copy(top); glow.rotation.y = Math.PI / 2 - ang;
-    glow.lookAt(c0.x, RISE * 0.6 + C.LOWER_Y, c0.z);
-    glow.userData.disposable = true; glow.userData.ownMat = true;
-    ctx.group.add(glow);
-    const sx = ctx.W(a.x, 0, a.y);
-    ctx.route = {
-      rects, glow, run: RUN, rise: RISE, ox: sx.x, oz: sx.z, dx: Math.cos(ang), dz: Math.sin(ang), hw,
-      enterU: uB + 0.02, frame: Object.assign({}, ctx.frame), room,
-    };
-  }
 }
 
 /* ---------- caves: three per lap, rough rock, a little stonework ---------- */
@@ -2044,10 +1947,10 @@ function buildCave(ctx, room, R) {
   const B = ctx.B, side = room.side;
   ctx.setFrame(side, C.WALL_OUT, room.zc, 0);
   const seed = room.r.seed % 10000;
-  const a = R.range(3.3, 4.2), b = R.range(2.6, 3.3), c = R.range(2.5, 3.0);
+  const a = R.range(3.3, 4.2), b = R.range(2.6, 3.3), c = R.range(2.5, 3.0) * HS;
   const b1 = R.range(-0.7, 0.7), cc = new THREE.Vector2(3.0 + R.range(1.0, 2.0) + a * 0.7, R.range(-1.4, 1.4));
   const P0 = new THREE.Vector2(-0.55, 0), P1 = new THREE.Vector2(2.3, b1), P2 = new THREE.Vector2(cc.x - a * 0.72, cc.y * 0.7);
-  B.add(M.rock, caveTube(R, [P0, P1, P2], 0.95, 1.2, 1.0, seed), new THREE.Matrix4(), true);
+  B.add(M.rock, caveTube(R, [P0, P1, P2], 0.95, 1.6, 1.26, seed), new THREE.Matrix4(), true);
   B.add(M.rock, caveChamber(R, a, b, c, 0.55, seed + 11), mtx(cc.x, 0, cc.y), true);
   // allowed ground: the mouth, the bends of the passage, the chamber
   const regions = [];
@@ -2097,7 +2000,7 @@ function buildCave(ctx, room, R) {
     ctx.droplets.push({ mesh: drop, top: top.y, bottom: bottom.y, t: R.range(0, 4), period: R.range(5, 9) });
   }
   // a web where the passage meets the chamber
-  ctx.web(V3(P2.x, 1.9, P2.y + 0.6), V3(0, -0.3, -1).normalize(), V3(0.3, -1, 0).normalize(), R.range(0.5, 0.9), R.int(0, 3));
+  ctx.web(V3(P2.x, 2.45, P2.y + 0.6), V3(0, -0.3, -1).normalize(), V3(0.3, -1, 0).normalize(), R.range(0.5, 0.9), R.int(0, 3));
   ctx.setBounds(room, 0, cc.x + a, cc.y - b, cc.y + b);
   room.D = cc.x + a; room.W = 2 * b; room.H = c;
 }
@@ -2107,10 +2010,10 @@ function buildJut(ctx, room, R) {
   const side = room.side, ang = (R.chance(0.5) ? 1 : -1) * R.range(0.5, 0.68);
   const PD = R.range(3.4, 4.4), PW = 1.5;
   ctx.setFrame(side, C.WALL_OUT, room.zc, 0, ang, 0, 0);
-  shell(ctx, room, PD + 0.3, PW, 2.4, M.board, { u0: -0.3, front: false, backGap: [0.62, 2.2] });
+  shell(ctx, room, PD + 0.3, PW, 2.4 * HS, M.board, { u0: -0.3, front: false, backGap: [0.62, 2.2 * 1.05] });
   const ou = PD * Math.cos(ang), ov = -PD * Math.sin(ang);
   ctx.setFrame(side, C.WALL_OUT, room.zc, 0, ang, ou, ov);
-  const D = R.range(3.2, 4.2), W = R.range(3.2, 4.4), H = 2.6;
+  const D = R.range(3.2, 4.2), W = R.range(3.2, 4.4), H = 2.6 * HS;
   shell(ctx, room, D, W, H, R.chance(0.5) ? M.log : M.board, { dh: 0.68 });
   shelves(ctx, room, 'v', -W / 2 + 0.3, W / 2 - 0.3, D - 0.25, 0.4, [0.5, 1.15, 1.8], R);
   if (R.chance(0.6)) ctx.skeleton('sit', 0.45, W / 2 - 0.45, Math.PI, 0);
@@ -2134,16 +2037,17 @@ function* buildLengthGen(A) {
     buildStage = (r.lower ? 'low:' : 'up:') + r.design;
     if (r.lower) {
       const room = ctx.newRoom(r, 'low');
-      stairAlcove(ctx, room);
+      stairAlcove(ctx, room, lowerH(r.design, r.v));
       yield;
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, C.LOWER_Y);
       LOWER_BUILD[r.design](ctx, room, R, r.v);
-      if (ctx.escapeArgs) { yield; yield* buildEscapeRouteGen(ctx, ...ctx.escapeArgs); ctx.escapeArgs = null; }
     } else {
       const room = ctx.newRoom(r, 'up');
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, 0);
       if (r.design === 'cave') buildCave(ctx, room, R);
       else if (r.design === 'jut') buildJut(ctx, room, R);
+      else if (r.design === 'odd') yield* buildOddGen(ctx, room, R);
+      else if (r.design === 'escape') yield* buildEscapeGen(ctx, room, R);
       else UPPER_BUILD[r.design](ctx, room, R, r.v);
     }
     yield;
@@ -2162,6 +2066,680 @@ function buildLength(A) {
   return r.value;
 }
 
+/* ---- 35_rooms.js ---- */
+/* ============================================================
+   The odd rooms: long bending passages to a chamber with something carved on its far wall,
+   and the way out at length 75
+   ============================================================ */
+M.gold = new THREE.MeshPhongMaterial({ color: 0xd2a23c, specular: 0xffe2a0, shininess: 70, emissive: 0x140c02 });
+M.carve = lam(T.wood, { color: 0xe2cca8, bumpScale: 1.4 });
+M.panel = lam(T.wood, { color: 0x4e4236, bumpScale: 1.0 });
+
+function offsetPolyline(pts, d) {
+  const out = [];
+  for (let i = 0; i < pts.length; i++) {
+    const dPrev = i > 0 ? pts[i].clone().sub(pts[i - 1]).normalize() : null;
+    const dNext = i < pts.length - 1 ? pts[i + 1].clone().sub(pts[i]).normalize() : null;
+    const n1 = dPrev ? new THREE.Vector2(-dPrev.y, dPrev.x) : null, n2 = dNext ? new THREE.Vector2(-dNext.y, dNext.x) : null;
+    let n;
+    if (n1 && n2) { n = n1.clone().add(n2); n.multiplyScalar(1 / (1 + n1.dot(n2))); } else n = (n1 || n2).clone();
+    out.push(pts[i].clone().addScaledVector(n, d));
+  }
+  return out;
+}
+const V2 = (u, v) => new THREE.Vector2(u, v);
+
+// a timbered passage that bends along a polyline (room frame, floor at y = 0)
+function* passageGen(ctx, room, pts, o = {}) {
+  const B = ctx.B, hw = o.hw ?? 0.8, H = o.H ?? 2.6 * HS, wall = o.wall || M.board, lvl = o.lvl || room.lvl;
+  for (const side of [-1, 1]) {
+    const q = offsetPolyline(pts, side * (hw + 0.1));
+    for (let i = 0; i < q.length - 1; i++) {
+      const a = q[i], b = q[i + 1], d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, d.x), m = a.clone().add(b).multiplyScalar(0.5);
+      B.box(wall, m.x, H / 2, m.y, len + 0.2, H, 0.2, 0, -ang, 0, 0.7);
+      ctx.solid(m.x, m.y, len + 0.3, 0.3, -ang, lvl);
+    }
+    for (let i = 1; i < q.length - 1; i++) { B.box(M.wood, q[i].x, H / 2, q[i].y, 0.26, H, 0.26); ctx.circle(q[i].x, q[i].y, 0.22, lvl); }
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, d.x), dir = d.clone().normalize(), nrm = V2(-dir.y, dir.x);
+    const e0 = i === 0 ? 0 : hw + 0.1, e1 = i === pts.length - 2 ? 0.05 : hw + 0.1;
+    const fa = a.clone().addScaledVector(dir, -e0), fb = b.clone().addScaledVector(dir, e1), fm = fa.clone().add(fb).multiplyScalar(0.5), fl = fa.distanceTo(fb);
+    B.box(o.floor || M.plank, fm.x, -0.05 - i * 0.0015, fm.y, fl, 0.1, 2 * hw + 0.25, 0, -ang, 0, 0.55);
+    B.box(o.ceil || M.board, fm.x, H + 0.06 + i * 0.0015, fm.y, fl, 0.12, 2 * hw + 0.45, 0, -ang, 0, 0.6);
+    for (let t = 1.2; t < len - 0.7; t += 2.2) {
+      const p = a.clone().addScaledVector(dir, t);
+      for (const s2 of [-1, 1]) B.box(M.wood, p.x + nrm.x * s2 * (hw - 0.03), H / 2, p.y + nrm.y * s2 * (hw - 0.03), 0.14, H, 0.14, 0, -ang, 0);
+      B.box(M.wood, p.x, H - 0.1, p.y, 0.16, 0.16, 2 * hw + 0.1, 0, -ang, 0);
+    }
+    if (overBudget()) yield;
+  }
+  // now and then a web where the passage turns
+  const R = new Rng(room.r.seed ^ 0x2b);
+  for (let i = 1; i < pts.length - 1; i++) if (R.chance(0.35)) {
+    const q = offsetPolyline(pts, (R.chance(0.5) ? 1 : -1) * (hw - 0.02))[i];
+    ctx.web(V3(q.x, H - 0.03, q.y), V3(R.range(-1, 1), 0, R.range(-1, 1)).normalize(), V3(0, -1, 0), R.range(0.35, 0.8), R.int(0, 3));
+  }
+}
+
+// a straight earthen tunnel between two points of the current frame (used below ground at 75)
+function tunnelSeg(ctx, a, b, hw, H, o = {}) {
+  const B = ctx.B, d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, d.x), dir = d.clone().normalize(), n = V2(-dir.y, dir.x), m = a.clone().add(b).multiplyScalar(0.5);
+  B.box(M.earth, m.x, -0.05, m.y, len, 0.1, 2 * hw + 0.3, 0, -ang, 0, 0.5);
+  B.box(M.earth, m.x, H + 0.05, m.y, len, 0.1, 2 * hw + 0.3, 0, -ang, 0, 0.5);
+  for (const s of [-1, 1]) {
+    if ((s > 0 && o.noLeft) || (s < 0 && o.noRight)) continue;
+    const w = m.clone().addScaledVector(n, s * (hw + 0.1));
+    B.box(M.earth, w.x, H / 2, w.y, len + 0.2, H, 0.2, 0, -ang, 0, 0.6);
+  }
+  if (o.cap) { const c = b.clone().addScaledVector(dir, 0.1); B.box(M.earth, c.x, H / 2, c.y, 0.2, H, 2 * hw + 0.4, 0, -ang, 0, 0.6); }
+  for (let t = 1.0; t < len - 0.4; t += 2.3) {
+    const p = a.clone().addScaledVector(dir, t);
+    for (const s of [-1, 1]) B.box(M.wood, p.x + n.x * s * (hw - 0.02), H / 2, p.y + n.y * s * (hw - 0.02), 0.15, H, 0.15, 0, -ang, 0);
+    B.box(M.wood, p.x, H - 0.09, p.y, 0.15, 0.15, 2 * hw + 0.2, 0, -ang, 0);
+  }
+  const c = ctx.W(m.x, 0, m.y), f = ctx.frame;
+  return { cx: c.x, cz: c.z, ux: f.side * Math.cos(ang), uz: Math.sin(ang), hx: len / 2 + (o.ext ?? 0.3), hz: hw };
+}
+
+/* ---------- the carvings ---------- */
+// the wall's emblem: a serpent of jointed timbers biting its own tail, and in its ring a hare walking upright
+// with its bundle on a stick over its shoulder, going on anyway
+function serpentEmblem(ctx, uWall, yc) {
+  const B = ctx.B, u = uWall - 0.02, Rr = 0.7;
+  B.box(M.panel, u, yc, 0, 0.05, 1.9, 1.9);
+  const at = (th, r = Rr) => V3(u - 0.07, yc + Math.sin(th) * r, Math.cos(th) * r);
+  // the body: blocks joined end to end, alternating proud and set back, thinning towards the tail
+  const N = 26, th0 = Math.PI / 2 + 0.24, th1 = Math.PI / 2 + TAU - 0.2;
+  for (let i = 0; i < N; i++) {
+    const t0 = lerp(th0, th1, i / N), t1 = lerp(th0, th1, (i + 1) / N) + 0.02, k = 1 - i / N;
+    const thick = 0.08 + 0.1 * k, depth = (i % 2 ? 0.085 : 0.12) * (0.6 + 0.4 * k);
+    const a = at(t0), b = at(t1); a.x = b.x = u - depth / 2;
+    B.beam(M.carve, a, b, depth, thick);
+    if (i % 2 === 0) { const p = at(t1); B.add(M.woodDark, UNIT_CYL, mtx(u - depth - 0.005, p.y, p.z, 0, 0, Math.PI / 2, 0.012, 0.02, 0.012)); }   // a peg at the joint
+  }
+  // the head at the top: a long skull, the snout pointing round the ring, jaws closed on the tail
+  const hy = yc + Rr;
+  B.add(M.carve, UNIT_SPH, mtx(u - 0.055, hy + 0.03, -0.04, 0.12, 0, 0, 0.075, 0.095, 0.17));
+  B.add(M.carve, boxGeo(0.1, 0.055, 0.2), mtx(u - 0.05, hy + 0.075, 0.13, -0.12, 0, 0));      // upper jaw over the tail
+  B.add(M.carve, boxGeo(0.09, 0.045, 0.17), mtx(u - 0.05, hy - 0.07, 0.12, 0.22, 0, 0));       // lower jaw under it
+  B.add(M.carve, UNIT_SPH, mtx(u - 0.06, hy + 0.1, -0.09, 0, 0, 0, 0.05, 0.035, 0.05));        // the brow
+  B.add(M.socket, UNIT_SPH, mtx(u - 0.115, hy + 0.06, -0.03, 0, 0, 0, 0.012, 0.024, 0.03));    // the eye
+  B.add(M.socket, UNIT_SPH, mtx(u - 0.1, hy + 0.085, 0.2, 0, 0, 0, 0.01, 0.01, 0.012));        // a nostril
+  // the hare, cut in low relief: head bowed, leaning into the walk, bundle on a stick over its shoulder
+  const hare = [
+    // [v, y, half-width, half-height, lean]
+    [0.0, 0.0, 0.13, 0.22, 0.45], [-0.08, -0.17, 0.13, 0.12, 0.3], [0.05, -0.08, 0.09, 0.1, 0.4], [0.09, 0.15, 0.08, 0.08, 0.5],
+    [0.17, 0.2, 0.1, 0.065, 0.35], [0.26, 0.165, 0.042, 0.035, 0.35],
+    [0.04, 0.38, 0.03, 0.15, -0.5], [0.08, 0.37, 0.024, 0.13, -0.32],
+    [-0.19, -0.12, 0.045, 0.042, 0],
+    [0.02, -0.3, 0.04, 0.1, -0.5], [0.11, -0.4, 0.12, 0.026, 0.0],
+    [-0.12, -0.28, 0.04, 0.09, 0.4], [-0.17, -0.37, 0.1, 0.026, -0.35],
+    [0.15, 0.06, 0.03, 0.09, -0.3],
+  ];
+  const hy0 = yc - 0.03;
+  for (const [hv, hh, a, b, rot] of hare) B.add(M.carve, UNIT_SPH, mtx(u - 0.035, hy0 + hh, hv, rot, 0, 0, 0.05, b, a));
+  B.add(M.socket, UNIT_SPH, mtx(u - 0.075, hy0 + 0.215, 0.2, 0, 0, 0, 0.008, 0.013, 0.015));
+  // the stick, from the paw back over the shoulder, and the bundle hanging off its end
+  B.beam(M.carve, V3(u - 0.08, hy0 + 0.12, 0.19), V3(u - 0.08, hy0 + 0.34, -0.34), 0.03, 0.024);
+  B.add(M.carve, UNIT_SPH, mtx(u - 0.06, hy0 + 0.19, -0.31, 0.1, 0, 0, 0.055, 0.12, 0.095));
+  for (const dv of [-0.04, 0.035]) B.add(M.carve, UNIT_SPH, mtx(u - 0.065, hy0 + 0.315, -0.32 + dv, 0, 0, 0, 0.03, 0.035, 0.022));
+}
+
+let _ruleTex = null;
+function goldenRuleTexture() {
+  if (_ruleTex) return _ruleTex;
+  const c = makeCanvas(1024, 512), g = c.getContext('2d');
+  g.clearRect(0, 0, 1024, 512);
+  const font = document.fonts && document.fonts.check && document.fonts.check('96px "IM Fell English SC"') ? '"IM Fell English SC", Georgia, serif' : 'Georgia, "Times New Roman", serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const lines = ['TREAT OTHERS', "AS YOU'D BE", 'TREATED.'];
+  lines.forEach((t, i) => {
+    const y = 130 + i * 128;
+    g.font = `${i === 2 ? 104 : 96}px ${font}`;
+    g.fillStyle = 'rgba(20,12,4,0.95)'; g.fillText(t, 512 + 3, y + 4);          // the cut
+    g.fillStyle = '#e6bf62'; g.fillText(t, 512, y);                            // the leaf laid into it
+    g.fillStyle = 'rgba(255,240,190,0.5)'; g.fillText(t, 512 - 1, y - 2);
+  });
+  _ruleTex = texOf(c);
+  return _ruleTex;
+}
+// a five-pointed star in a circle, inlaid with gold leaf, and the golden rule cut into its heart
+function goldenEmblem(ctx, uWall, yc) {
+  const B = ctx.B, u = uWall - 0.02, Rp = 0.95;
+  B.box(M.panel, u, yc, 0, 0.05, 2.3, 2.3);
+  const vtx = []; for (let k = 0; k < 5; k++) { const a = Math.PI / 2 + k * TAU / 5; vtx.push(V3(u - 0.05, yc + Math.sin(a) * Rp, Math.cos(a) * Rp)); }
+  for (let k = 0; k < 5; k++) B.beam(M.gold, vtx[k], vtx[(k + 2) % 5], 0.02, 0.04);
+  B.add(M.gold, new THREE.TorusGeometry(Rp + 0.05, 0.016, 6, 72).rotateY(Math.PI / 2), mtx(u - 0.05, yc, 0), true);
+  // the words face whoever reads them, whichever side of the wall the room is on
+  const p = ctx.W(u - 0.06, yc, 0);
+  const mat = new THREE.MeshPhongMaterial({ map: goldenRuleTexture(), transparent: true, alphaTest: 0.3, specular: 0xffe2a0, shininess: 60, emissive: 0x140c02 });
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.33), mat);
+  plate.position.copy(p); plate.position.y = yc - 0.02;
+  plate.rotation.y = ctx.yaw(-Math.PI / 2);
+  plate.userData.disposable = true; plate.userData.ownMat = true;
+  ctx.group.add(plate);
+}
+// the one light on the wall that is not the player's: a little clay lamp in a niche that never goes out
+const FLAME_MAT = new THREE.MeshBasicMaterial({ color: 0xffb257 });
+function eternalLamp(ctx, u, y, vWall, inward) {
+  const B = ctx.B, v = vWall - inward * 0.18;
+  // the niche: a recess framed in timber, its back blackened by centuries of the same small flame
+  B.box(M.earth, u, y + 0.3, vWall - inward * 0.03, 0.62, 0.68, 0.06, 0, 0, 0, 0.5);
+  B.box(M.socket, u, y + 0.38, vWall - inward * 0.065, 0.36, 0.34, 0.01);
+  for (const s of [-1, 1]) B.box(M.woodDark, u + s * 0.3, y + 0.3, v, 0.07, 0.7, 0.34);
+  B.box(M.woodDark, u, y + 0.67, v, 0.68, 0.07, 0.36); B.box(M.woodDark, u, y - 0.03, v, 0.68, 0.06, 0.38);
+  B.add(M.earth, new THREE.CylinderGeometry(0.05, 0.065, 0.035, 12), mtx(u, y + 0.018, v - inward * 0.02), true);
+  const lampMat = cachedMat('eternal-lamp', () => lam(T.earth, { color: 0xa0704a, bumpScale: 0.4 }));
+  B.add(lampMat, latheGeo('lamp', 14), mtx(u, y + 0.035, v - inward * 0.02, 0, 0, 0, 1.2, 1.2, 1.2), true);
+  B.add(lampMat, new THREE.CylinderGeometry(0.012, 0.02, 0.08, 8), mtx(u, y + 0.07, v - inward * 0.1, inward * -1.35, 0, 0), true);   // the nozzle, towards the room
+  const fp = ctx.W(u, y + 0.1, v - inward * 0.14);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.045, 8), FLAME_MAT);
+  flame.position.copy(fp); flame.userData.disposable = true;
+  ctx.group.add(flame);
+  ctx.eternal = { pos: fp.clone(), flame };
+}
+
+/* ---------- 31 and 49 ---------- */
+const ODD_PATHS = {
+  serpent: [[-0.3, 0], [3.0, 0], [3.0, 3.2], [6.6, 3.2], [6.6, -0.9], [10.4, -0.9], [11.8, 1.1], [14.2, 1.1]],
+  golden: [[-0.3, 0], [4.0, 0], [5.6, -2.6], [9.2, -2.6], [10.8, 0.6], [14.8, 0.6], [14.8, 3.6], [17.2, 3.6], [18.6, 0.8], [21.4, 0.8]],
+};
+function* buildOddGen(ctx, room, R) {
+  const kind = room.r.kind, pts = ODD_PATHS[kind].map(([u, v]) => V2(u, v));
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+  const H = 2.6 * HS;
+  yield* passageGen(ctx, room, pts, { hw: 0.78, H, wall: kind === 'golden' ? M.log : M.board });
+  // things left along the way, a few only
+  const mid = pts[Math.floor(pts.length / 2)];
+  if (R.chance(0.6)) ctx.bones(mid.x, mid.y + R.range(-0.3, 0.3), R);
+  const end = pts[pts.length - 1];
+  const D = kind === 'golden' ? 5.2 : 4.4, Wc = kind === 'golden' ? 4.6 : 4.0, Hc = (kind === 'golden' ? 3.0 : 2.8) * HS;
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0, 0, end.x, end.y);
+  shell(ctx, room, D, Wc, Hc, kind === 'golden' ? M.log : M.board, { dh: 0.78 });
+  if (kind === 'serpent') {
+    serpentEmblem(ctx, D, 1.75);
+    stack(ctx, room, 1.0, Wc / 2 - 0.5, R, 1);
+    if (R.chance(0.5)) ctx.addSmash('stool', D - 1.3, 0, -Wc / 2 + 0.6, R.range(0, 3), { room });
+  } else {
+    goldenEmblem(ctx, D, 1.75);
+    eternalLamp(ctx, D - 1.05, 1.12, Wc / 2, 1);
+    ctx.addSmash('box', 1.0, 0, -Wc / 2 + 0.5, 0.2, { room });
+  }
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+  room.odd = { end: [end.x, end.y], D, W: Wc };
+}
+
+/* ---------- 75: the way out ---------- */
+// at the end of the longest, most winding room: a big storeroom, crates stacked against its back wall;
+// behind them a low tunnel, a spiral stair going down, a long passage, a choice, and the long climb
+function* buildEscapeGen(ctx, room, R) {
+  const B = ctx.B, side = room.side, zc = room.zc;
+  const H = 2.6 * HS;
+  const pts = [[-0.3, 0], [3.5, 0], [3.5, -3.2], [7.5, -3.2], [9.2, 0.6], [12.8, 0.6], [12.8, 4.2], [16.4, 4.2], [18.2, 1.0], [22.2, 1.0], [23.6, -2.4], [27, -2.4]].map(([u, v]) => V2(u, v));
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+  yield* passageGen(ctx, room, pts, { hw: 0.8, H, wall: M.board });
+  ctx.bones(14.8, 3.8, R);
+  yield;
+  // the larger room
+  const u0 = 27, vc = -2.4, D = 11, Wr = 9, RH = 4.4 * HS, gap = 0.62, gh = 1.9 * 1.05;
+  ctx.setFrame(side, C.WALL_OUT, zc, 0, 0, u0, vc);
+  shell(ctx, room, D, Wr, RH, M.earth, { dh: 0.8, backGap: [gap, gh], wallPosts: true });
+  for (const u of [3, 6, 9]) for (const s of [-1, 1]) { B.box(M.wood, u, RH / 2, s * 2.6, 0.32, RH, 0.32); ctx.circle(u, s * 2.6, 0.2); }
+  for (const u of [3, 6, 9]) B.box(M.wood, u, RH - 0.15, 0, 0.26, 0.26, Wr);
+  shelves(ctx, room, 'u', 6.7, 9.7, Wr / 2 - 0.24, 0.4, [0.5, 1.1, 1.7], R);
+  shelves(ctx, room, 'v', -Wr / 2 + 0.5, -1.5, D - 0.25, 0.4, [0.5, 1.1]);
+  ctx.addSmash('chest', D - 0.5, 0, Wr / 2 - 1.1, -Math.PI / 2, { room });
+  stack(ctx, room, 4.4, -Wr / 2 + 0.5, R); stack(ctx, room, 5.2, -Wr / 2 + 0.5, R); stack(ctx, room, 7.6, -Wr / 2 + 0.5, R, 1);
+  ctx.addSmash('barrel', 3.6, 0, Wr / 2 - 0.6, 0.3, { room });
+  ctx.skeleton('sit', 4.4, Wr / 2 - 0.3, Math.PI);
+  ctx.web(V3(D - 0.02, RH - 0.02, -Wr / 2 + 0.02), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), 1.2);
+  // the crates that hide the tunnel
+  const c1 = ctx.addSmash('bigcrate', D - 0.5, 0, 0.49, 0.03, { room });
+  const c2 = ctx.addSmash('bigcrate', D - 0.5, 0, -0.49, -0.04, { room });
+  ctx.addSmash('bigcrate', D - 0.5, 0.96, 0.47, -0.02, { room, below: c1 });
+  ctx.addSmash('bigcrate', D - 0.5, 0.96, -0.5, 0.05, { room, below: c2 });
+  const bigBounds = room.bounds, bigFrame = room.frame;
+  yield;
+  // the low tunnel
+  const t0 = D + 0.2, t1 = t0 + 8;
+  B.box(M.plank, (t0 + t1) / 2, -0.05, 0, t1 - t0 + 0.1, 0.1, 1.3, 0, 0, 0, 0.55);
+  B.box(M.board, (t0 + t1) / 2, gh + 0.06, 0, t1 - t0, 0.1, 1.6);
+  for (const s of [-1, 1]) { B.box(M.earth, (t0 + t1) / 2, (gh + 0.1) / 2, s * 0.75, t1 - t0, gh + 0.1, 0.2, 0, 0, 0, 0.6); ctx.solid((t0 + t1) / 2, s * 0.78, t1 - t0 + 0.2, 0.3, 0); }
+  for (let u = t0 + 0.6; u < t1; u += 1.5) { for (const s of [-1, 1]) B.box(M.wood, u, gh / 2, s * 0.6, 0.12, gh, 0.1); B.box(M.wood, u, gh - 0.05, 0, 0.12, 0.12, 1.3); }
+  // the stair well at its end: the only stair on the wall that starts inside a room
+  const us = t1, Hw = 2.8 * HS, below = 2.6 * HS;
+  ctx.setFrame(side, C.WALL_OUT, zc, 0, 0, u0 + us, vc);
+  stairWell(ctx, room, Hw, below, gap, gh);
+  yield;
+  // down below
+  ctx.setFrame(side, C.WALL_OUT, zc, C.LOWER_Y, 0, u0 + us, vc);
+  const low = { lvl: 'low', r: room.r, containers: [], surfaces: [] };
+  shell(ctx, low, 3.4, 3.4, below, M.earth, { u0: 0, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true, backGap: [0.95, below - 0.35] });
+  const sc = ctx.W(STAIR.cu, 0, 0);
+  ctx.triggers.push({ type: 'up', room, cx: sc.x, cz: sc.z, hx: 0.85, hz: 0.85, frame: Object.assign({}, ctx.frame), exitDown: { u: 3.0, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } });
+  const rects = [];
+  { const c = ctx.W(1.7, 0, 0); rects.push({ cx: c.x, cz: c.z, ux: side, uz: 0, hx: 1.72, hz: 1.72 }); }
+  // the long passage forward, the junction, the dead end to the right and the long way to the left
+  ctx.setFrame(side, C.WALL_OUT, zc, C.LOWER_Y);
+  const hw = 0.95, LH = 2.6 * HS, a0 = u0 + us + 3.4, J = V2(a0 + 23.5, vc);
+  rects.push(tunnelSeg(ctx, V2(a0, vc), V2(J.x - hw, vc), hw, LH, { ext: 0.5 }));
+  yield;
+  // the junction: open on three sides
+  ctx.B.box(M.earth, J.x, -0.05, J.y, 2 * hw + 0.2, 0.1, 2 * hw + 0.2, 0, 0, 0, 0.5);
+  ctx.B.box(M.earth, J.x, LH + 0.05, J.y, 2 * hw + 0.2, 0.1, 2 * hw + 0.2, 0, 0, 0, 0.5);
+  ctx.B.box(M.earth, J.x + hw + 0.1, LH / 2, J.y, 0.2, LH, 2 * hw + 0.4, 0, 0, 0, 0.6);
+  for (const s of [-1, 1]) for (const e of [-1, 1]) ctx.B.box(M.wood, J.x + e * (hw - 0.02), LH / 2, J.y + s * (hw - 0.02), 0.16, LH, 0.16);
+  { const c = ctx.W(J.x, 0, J.y); rects.push({ cx: c.x, cz: c.z, ux: side, uz: 0, hx: hw, hz: hw }); }
+  const deadEnd = V2(J.x, J.y + 16), leftEnd = V2(J.x, J.y - 26);
+  rects.push(tunnelSeg(ctx, V2(J.x, J.y + hw), deadEnd, hw, LH, { cap: true, ext: 0.4 }));
+  rects.push(tunnelSeg(ctx, V2(J.x, J.y - hw), leftEnd, hw, LH, { ext: 0.6 }));
+  // the dead end: the roof came down here long ago
+  for (let i = 0; i < 16; i++) { const sz = Math.pow(R.next(), 1.8) * 0.4 + 0.08; stoneLump(ctx.B, R, R.pick([M.stone, M.stoneB, M.earth]), J.x + R.range(-0.8, 0.8), sz * 0.5, deadEnd.y - R.range(0.1, 1.6), sz, 0.7); }
+  ctx.B.add(M.earth, new THREE.SphereGeometry(1, 12, 8, 0, TAU, 0, Math.PI / 2), mtx(J.x, -0.05, deadEnd.y - 0.2, 0, 0, 0, 1.1, 1.3, 1.4), true);
+  ctx.B.beam(M.wood, V3(J.x - 0.8, 0.1, deadEnd.y - 2.4), V3(J.x + 0.7, LH - 0.4, deadEnd.y - 0.6), 0.18, 0.18);
+  ctx.B.beam(M.wood, V3(J.x + 0.8, 0.2, deadEnd.y - 1.8), V3(J.x - 0.4, 1.4, deadEnd.y - 0.3), 0.16, 0.16);
+  ctx.skeleton('sit', J.x - 0.55, deadEnd.y - 2.6, Math.PI / 2 + 0.3);
+  yield;
+  // and at the end of the left way, the long climb to the light (the old stair, unchanged)
+  yield* climbGen(ctx, room, leftEnd, Math.atan2(-0.91, 0.42), rects, hw, V2(0, -1));
+  room.bounds = bigBounds; room.frame = bigFrame; room.D = D; room.W = Wr; room.H = RH;
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+}
+
+// the stair well inside the escape room: floor round a hole, rails, the shaft down, the newel and the treads
+function stairWell(ctx, room, H, below, doorHalf, doorTop) {
+  const B = ctx.B;
+  B.box(M.plank, 0.125, -0.05, 0, 0.25, 0.1, 3.2); B.box(M.plank, 2.9, -0.05, 0, 0.3, 0.1, 3.2);
+  for (const s of [-1, 1]) B.box(M.plank, 1.5, -0.05, s * 1.4, 2.5, 0.1, 0.3);
+  B.box(M.board, 1.5, H + 0.06, 0, 3.4, 0.12, 3.4);
+  B.box(M.log, 3.1, H / 2, 0, 0.2, H, 3.4, 0, 0, 0, 0.7);
+  for (const s of [-1, 1]) B.box(M.log, 1.5, H / 2, s * 1.62, 3.2, H, 0.2, 0, 0, 0, 0.7);
+  for (const s of [-1, 1]) B.box(M.log, 0.06, H / 2, s * (doorHalf + (1.7 - doorHalf) / 2), 0.12, H, 1.7 - doorHalf);
+  B.box(M.log, 0.06, (doorTop + H) / 2, 0, 0.12, H - doorTop, 2 * doorHalf);
+  const sh = -C.LOWER_Y - below;
+  B.box(M.log, 0.18, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7);
+  for (const s of [-1, 1]) B.box(M.log, 1.5, -sh / 2, s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
+  for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
+  B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
+  for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
+  for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
+  B.log(M.wood, STAIR.cu, (C.LOWER_Y + H) / 2, 0, 0.13, H - C.LOWER_Y, 'y', 8);
+  for (let s = 0; s < STAIR.steps; s++) {
+    const phi = Math.PI + (s + 0.5) * (STAIR.turns * TAU / STAIR.steps);
+    const y = -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1));
+    B.box(M.plank, STAIR.cu + 0.66 * Math.cos(phi), y, 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
+    B.box(M.wood, STAIR.cu + 1.12 * Math.cos(phi), y - 0.12, 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
+  }
+  ctx.solid(3.25, 0, 0.3, 3.6, 0, 'up');
+  for (const s of [-1, 1]) { ctx.solid(1.5, s * 1.75, 3.6, 0.3, 0, 'up'); ctx.solid(0.06, s * (doorHalf + (1.7 - doorHalf) / 2), 0.2, 1.7 - doorHalf, 0, 'up'); }
+  const c = ctx.W(STAIR.cu, 0, 0);
+  ctx.triggers.push({ type: 'down', room, cx: c.x, cz: c.z, hx: 1.18, hz: 1.18, frame: Object.assign({}, ctx.frame), exitDown: { u: 3.0, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } });
+}
+
+// the long climb: risers held by posts driven into the dirt, rising 75 m over 130 m to the daylight
+function* climbGen(ctx, room, start, ang, rects, hw, prevDir) {
+  const B = ctx.B, RUN = 130, RISE = 75, d = V2(Math.cos(ang), Math.sin(ang)), n = V2(-d.y, d.x);
+  const a = start, end = a.clone().addScaledVector(d, RUN);
+  const tread = 0.35, steps = Math.round(RUN / tread);
+  const pitch = Math.atan2(RISE, RUN), slope = Math.hypot(RUN, RISE);
+  const mid = a.clone().addScaledVector(d, RUN / 2);
+  B.box(M.earth, mid.x, RISE / 2 - 0.35, mid.y, slope + 1, 0.5, 2 * hw + 0.4, 0, -ang, pitch, 0.5);
+  B.box(M.earth, mid.x, RISE / 2 + 2.75 * HS, mid.y, slope + 1, 0.3, 2 * hw + 0.6, 0, -ang, pitch, 0.5);
+  // sloped earth walls, in pieces, and a post at the turn into the climb
+  for (const s of [-1, 1]) {
+    const wa = a.clone().addScaledVector(n, s * (hw + 0.1)), wb = end.clone().addScaledVector(n, s * (hw + 0.1)), L = wa.distanceTo(wb), nseg = 26;
+    for (let k = 0; k < nseg; k++) {
+      const t0 = k / nseg, t1 = (k + 1) / nseg, pa = wa.clone().lerp(wb, t0), pb = wa.clone().lerp(wb, t1);
+      const y0 = RISE * t0, y1 = RISE * t1, segL = L / nseg;
+      B.box(M.earth, (pa.x + pb.x) / 2, (y0 + y1) / 2 + 1.35 * HS, (pa.y + pb.y) / 2, Math.hypot(segL, y1 - y0) + 0.3, 3.4 * HS, 0.2, 0, -ang, Math.atan2(y1 - y0, segL), 0.6);
+    }
+    // close the corner between the level passage and the first of the climb
+    const pn = V2(-prevDir.y, prevDir.x), bp = a.clone().addScaledVector(pn, s * (hw + 0.1)), bd = wa.clone().sub(bp), bl = bd.length();
+    if (bl > 0.02) B.box(M.earth, (bp.x + wa.x) / 2, 1.7 * HS, (bp.y + wa.y) / 2, bl + 0.25, 3.4 * HS, 0.2, 0, -Math.atan2(bd.y, bd.x), 0, 0.6);
+    B.box(M.wood, wa.x, 1.6 * HS, wa.y, 0.24, 3.2 * HS, 0.24);
+  }
+  yield;
+  for (let i = 0; i < steps; i++) {
+    const t = (i + 0.5) * tread, p = a.clone().addScaledVector(d, t), y = RISE * (i + 1) / steps;
+    B.box(M.plank, p.x, y - 0.025, p.y, tread + 0.02, 0.05, 2 * hw - 0.1, 0, -ang, 0, 1);
+    const f = a.clone().addScaledVector(d, i * tread);
+    B.box(M.board, f.x, y - RISE / steps / 2 - 0.02, f.y, 0.04, RISE / steps + 0.04, 2 * hw - 0.1, 0, -ang, 0, 1);
+    if (i % 2 === 0) for (const s of [-1, 1]) B.box(M.wood, f.x + n.x * s * (hw - 0.12), y - 0.15, f.y + n.y * s * (hw - 0.12), 0.07, 0.45, 0.07);
+    if (i % 9 === 4) {
+      for (const s of [-1, 1]) B.box(M.wood, p.x + n.x * s * (hw + 0.02), y + 1.25 * HS, p.y + n.y * s * (hw + 0.02), 0.16, 2.6 * HS, 0.16);
+      B.box(M.wood, p.x, y + 2.5 * HS, p.y, 0.16, 0.16, 2 * hw + 0.3, 0, -ang, 0);
+    }
+    if (i % 40 === 39 || overBudget()) yield;
+  }
+  const f = ctx.frame, c0 = ctx.W(a.x, 0, a.y);
+  const cm = ctx.W(a.x + d.x * (RUN / 2 - 0.4), 0, a.y + d.y * (RUN / 2 - 0.4));
+  const wux = f.side * d.x, wuz = d.y;
+  rects.push({ cx: cm.x, cz: cm.z, ux: wux, uz: wuz, hx: (RUN + 0.8) / 2, hz: hw - 0.05 });
+  // daylight at the top
+  const top = ctx.W(end.x + d.x * 0.6, RISE + 1.2, end.y + d.y * 0.6);
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(2 * hw + 0.4, 3 * HS), new THREE.MeshBasicMaterial({ color: 0x000000, fog: false }));
+  glow.position.copy(top);
+  glow.lookAt(c0.x, RISE * 0.6 + C.LOWER_Y, c0.z);
+  glow.userData.disposable = true; glow.userData.ownMat = true;
+  ctx.group.add(glow);
+  ctx.route = { rects, glow, run: RUN, rise: RISE, ox: c0.x, oz: c0.z, dx: wux, dz: wuz, hw, frame: Object.assign({}, f), room };
+}
+
+/* ---- 39_catalogue.js ---- */
+/* ============================================================
+   The written catalogue: every useless thing on the wall, by hand, for the first ten passes.
+   (Pass 1: ids 0-99. Pass 2: 100-149. Passes 3-10: twenty each, to 309. Beyond that the old generator takes over.)
+   Nothing here was invented in the last thousand years. Each pass holds one perfume vial in a colour of its own.
+   kind[:style] | material | name | line
+   materials: c:<clay>/<motif>  m:<metal>[+extra]  s:<stone>  g:<glass>  b bone  h horn  l lead  w parchment
+   ============================================================ */
+const CATALOGUE_TEXT = `
+vase|c:ochre/horses|Ochre vase with horses|Six horses run round the shoulder, their legs drawn as single strokes.
+bowl|c:chalk-white/flowers|White bowl with flowers|Each flower is four dabs of the brush, over and over.
+jug|c:red-brown/spirals|Red-brown jug|Spirals climb the belly. The handle was mended with pitch.
+cup|c:black-burnished/plain|Black burnished cup|Polished with a pebble until it shone, and it still does, a little.
+amphora|c:buff/plain|Buff amphora|Its foot is a point, made to stand in sand.
+lamp|c:red-brown/rosettes|Clay oil lamp|A rosette pressed into the top; the nozzle is black from burning.
+jar|c:dun/zigzags|Storage jar|Zigzags pressed in with a fingernail before it was fired.
+plate|c:pale/fish|Plate with fish|Two fish chase each other round the rim and never meet.
+beaker|c:red-brown/ladders|Bell beaker|Bands of comb-marks, very neat. It is older than almost everything else here.
+vase|c:soot-black/stags|Black vase with stags|The stags' antlers branch like trees in winter.
+bowl|c:rose/birds|Rose bowl with birds|The birds are only flicks of the brush, but they fly.
+jug|c:green-glazed/plain|Green-glazed jug|A lead glaze the colour of a pond under trees.
+strainer|c:buff/plain|Clay strainer|For curds, or for beer; the holes were pushed through with a twig.
+whorl|c:umber/plain|Spindle whorl|Small, heavy and round. It spun thread for years.
+loomweight|c:ash-grey/plain|Loom weight|It hung in a row with others, keeping the warp taut.
+figurine:horse|c:buff/plain|Clay horse|Its legs are pinched stubs. A child's, worn smooth with handling.
+figurine:woman|c:umber/plain|Clay figure of a woman|Her arms are folded and she has no face.
+rattle|c:red-brown/plain|Clay rattle|Shake it and something small answers from inside.
+cup|c:red-figure/horses|Red-figure cup|A rider waits inside the bowl, seen only when the wine was gone.
+jar|c:slate-blue/waves|Grey-blue jar|Waves drawn round the shoulder in a single breath.
+amphora|c:black-figure/horses|Black-figure amphora|Black horsemen ride on orange clay, going nowhere.
+kulhad|c:terracotta/plain|Cup|Thin red clay, unglazed, pressed into shape by a thumb. Made to be used once and broken.
+bowl|c:turquoise-glazed/plain|Turquoise-glazed bowl|The glaze has crazed into a net of very fine lines.
+lamp|c:buff/plain|Pinched lamp|A saucer of clay with one edge pinched in to hold the wick.
+plate|c:red-slip/plain|Red gloss plate|Smooth red slip, and the potter's stamp in the middle, worn past reading.
+beaker|c:black-burnished/zigzags|Black beaker|Zigzags cut into it and filled with white paste.
+vase|c:white-ground/hands|White-ground vase|Painted on white: two hands reaching toward each other.
+jug|c:ochre/dots|Ochre jug|A ring of dots at the neck, one of them a little out of line.
+jar|c:umber/plain|Small umber jar|Something sticky dried in the bottom of it long ago.
+cup|c:faience/flowers|Faience cup with lotus flowers|Lotus flowers drawn in black on bright blue glaze.
+bowl|c:pale/spirals|Shallow bowl|A spiral in the bottom, drawn while the bowl turned on the wheel.
+bracelet|m:bronze|Bronze bangle|Too small for most wrists now.
+ring|m:silver|Silver ring|Worn thin at the back, where it pressed against the palm.
+brooch|m:bronze|Bow brooch|The spring still pushes the pin back into its catch.
+pin|m:bronze|Bronze dress pin|The head is a little cast ball; the point is still sharp.
+key|m:bronze|Ring key|A key on a finger ring, so it could never be put down and lost.
+buckle|m:iron|Iron buckle|Rust has welded the tongue to the frame.
+torc|m:gold|Gold torc|Two rods twisted together; the ends are small beast heads, almost touching.
+bell|m:bronze|Harness bell|A small cone with a clapper. It once rang on a horse.
+arrowhead:three|m:bronze|Three-bladed arrowhead|Cast in a mould, one of hundreds. This one was never shot.
+arrowhead|m:iron|Leaf-shaped arrowhead|A long socket, a broad blade, and rust where the shaft rotted.
+bit|m:iron|Iron horse bit|Two links and two rings. The mouthpiece is polished by teeth.
+phalera|m:silver|Silver harness disc|A horse wore it on its chest.
+plaque|m:bronze|Belt plaque with a wolf|The wolf bites its own back leg.
+strapend|m:bronze|Strap end|It weighted the tip of a belt so it hung straight.
+needlecase|m:bronze|Needle case|A tube with a cap. One needle is still inside.
+ladle|m:bronze|Bronze ladle|For dipping wine out of a mixing bowl.
+cauldron|m:bronze|Small bronze cauldron|Two handles stand up like ears; a hollow foot to set in the fire.
+tweezers|m:bronze|Bronze tweezers|Once hung on a ring with an ear-scoop and a nail cleaner.
+spoon|m:silver|Silver spoon|The handle ends in a little hoof.
+earring|m:gold|Gold earring|A hoop with a cluster of tiny gold grains.
+fishhook|m:bronze|Fish hook|Bent from bronze wire. There is no barb.
+coin:owl|m:silver|Silver coin with an owl|An owl on one face, a helmeted head on the other.
+coin:hole|m:bronze|Coin with a square hole|It was strung with others on a cord, once.
+knife|m:iron|Small iron knife|The bone handle split and fell away long ago.
+shears|m:iron|Iron shears|A single strip of iron bent back on itself to make the spring.
+stylus|m:bronze|Bronze stylus|Pointed for writing in wax, flattened at the other end for rubbing it out.
+bolt:head|m:bronze|Crossbow bolt head|Three edges and a long tang. Cast to a pattern, one of thousands.
+slingbullet|l|Lead sling bullet|Shaped like an almond. A word is stamped on one side.
+weight|m:bronze|Bronze weight|A small square weight for a balance; its mark is a single line.
+bell:cow|m:iron|Iron cow bell|Folded from one sheet and riveted. Its clapper is a bone.
+comb|b|Double-sided comb|Fine teeth on one side, coarse on the other.
+die|b|Bone die|Its opposite faces do not add up to seven.
+knucklebone|b|Knucklebone|One of five for a game of throws and catches.
+awl|b|Bone awl|Sharpened from a sheep's shin bone.
+whistle|b|Bone flute|Three holes. It would play three notes and the spaces between them.
+horn|h|Drinking horn|It cannot be set down without spilling.
+needle|b|Bone needle|The eye was drilled through with a flint point.
+hornspoon|h|Horn spoon|Shaped in hot water and left to set.
+antlerpick|b|Antler pick|Made for digging chalk. The tines are worn short.
+tooth|b|Bear tooth|Pierced through the root for a cord.
+comb|b|Comb with a carved case|Ring-and-dot patterns on the case, worn shallow.
+counter|s:bone-white|Bone gaming counter|A disc of bone, one side lightly domed.
+flint|s:honey-coloured|Flint blade|Struck from the core in one blow.
+axehead|s:green|Polished stone axe|Ground smooth over a whole season. Older than bronze, older than iron.
+whetstone|s:grey|Whetstone|Hollowed in the middle by a thousand blades.
+counter|s:black|Black gaming counter|One side of a game whose rules went with the players.
+amber|s:clear|Lump of amber|A small fly is caught inside, its legs still folded.
+cowrie|s:small|Cowrie shell|From a warm sea, carried a very long way.
+sealstone|s:red|Seal stone|A running goat cut into it backwards, so it prints the right way round.
+beads|s:carnelian|String of carnelian beads|Red stone, drilled from both ends to meet in the middle.
+scarab|c:faience/plain|Faience scarab|A blue-green beetle with signs cut into its flat belly.
+gem:rough|s:ruby|Rough ruby|A red crystal with six sides, never cut or polished.
+beads|s:eyeglass|String of eye beads|Blue glass eyes ringed in white stare out in every direction.
+vial:alabastron|g:cobalt blue|Perfume vial (cobalt blue)|Yellow and white threads were wound round it while hot and combed into feathers.
+scroll|w|Parchment scroll|Tied with a faded cord. Too brittle to open.
+helmet|m:bronze|Bronze helmet|Long cheek guards and a crown that leans forward.
+figurine:bird|c:chalk-white/plain|Clay bird|A dove, or something like one, with a hole for a cord.
+lamp|m:bronze|Bronze lamp|Its lid is shaped like a shell, and there is a ring to hang it by.
+cup|m:silver|Silver cup|Plain, thin and dented. Someone drank from it every day.
+bowl|m:bronze|Bronze bowl|Hammered thin; it hums when you tap it.
+brooch:penannular|m:silver|Silver penannular brooch|An open ring, and a long pin that swings across it.
+coin:gold|m:gold|Gold coin of a standing king|The king holds a staff; the letters round him are worn to bumps.
+necklace:chain|m:gold|Gold chain necklace|Loop-in-loop chain, every link bent by hand.
+necklace:pendant|m:gold+carnelian|Necklace with a carnelian pendant|Small gold beads, and one red drop at the centre.
+necklace:cowrie|s:small|Necklace of cowries and teeth|Shells and the eye-teeth of some small animal, strung turn and turn about.
+necklace:crescent|m:bronze|Necklace with a bronze crescent|A moon-shaped charm on a string of dark beads.
+necklace:collar|c:faience/plain|Faience bead necklace|Rows of blue-green tubes and discs, like a little collar.
+bracelet:twist|m:gold|Twisted gold bracelet|Three wires twisted together and the ends hammered flat.
+bracelet:snake|m:silver|Snake bracelet|It coils twice round; a head at each end, both looking the same way.
+bracelet:glass|g:cobalt blue|Blue glass bangle|Made without any join. Nobody here could tell you how.
+bracelet:beads|s:amber|Bracelet of amber beads|Red-brown and cloudy, and warm in the hand.
+bracelet:jet|s:jet|Jet bangle|Black and light. Rub it and it draws up dust.
+vial:amphoriskos|g:turquoise|Perfume vial (turquoise)|Two tiny handles, and a yellow thread zigzagging round the belly.
+gem:bead|s:ruby|Ruby bead|Polished smooth and drilled through, the colour of a pomegranate seed.
+bolt:whole|m:bronze+wood|Crossbow bolt|Short and heavy, with a bronze head. The vanes have crumbled.
+vase|c:red-figure/birds|Red-figure vase with birds|A heron stands on one leg among reeds.
+jug|c:white-ground/flowers|White-ground jug|Painted after firing; the colours come off on your thumb.
+bowl|c:black-burnished/spirals|Black bowl with spirals|Spirals cut in and rubbed with white chalk.
+amphora|c:red-brown/ladders|Wine amphora|Pitch still lines the inside. A number is painted on the neck.
+cup|c:black-figure/stags|Black-figure cup|A hound runs round the rim after a hare it will never reach.
+lamp|c:red-slip/rosettes|Mould-made lamp|The maker's name is on the bottom, in raised letters.
+plate|c:turquoise-glazed/fish|Glazed plate with fish|Three fish swim head to tail in the glaze.
+jar|c:buff/stags|Jar with stags|A stag looks back over its shoulder at something behind it.
+beaker|c:pale/dots|Thin-walled beaker|So thin it rings when a fingernail touches it.
+rattle|c:ochre/dots|Ochre rattle|Pierced with holes, and the pebbles inside are still loose.
+figurine:horse|c:red-brown/plain|Clay horse with a saddle cloth|Painted stripes for the saddle cloth, red and black.
+whorl|c:black-burnished/plain|Black spindle whorl|Decorated with a ring of tiny pits.
+strainer|c:pale/plain|Pale strainer|Its spout is shaped like a little open mouth.
+ring|m:gold+garnet|Gold ring with a garnet|The red stone is set flat, cut smooth and rounded.
+pin|m:silver|Silver hair pin|A tiny bird stands on its head.
+earring|m:silver|Silver earring|A crescent with three small drops hanging from it.
+plaque|m:gilt bronze|Gilt belt plaque|Two beasts locked in a fight, their bodies twisted into one shape.
+coin:drachm|m:silver|Silver coin with a fire altar|A bearded king on one side; on the other, two attendants at a fire.
+coin:lump|m:electrum|Lump of electrum|A coin from before coins were round: a lion's head stamped into a pale gold bean.
+key:lift|m:iron|Iron lift key|Its teeth stand up at right angles, to lift the pins of a lock.
+arrowhead|m:bronze|Barbed arrowhead|Two barbs, so it could not be drawn out again.
+spoon|m:bronze|Bronze spoon|The bowl is pear-shaped and the handle a thin rod.
+tweezers|m:silver|Silver tweezers|Small enough for eyebrows.
+buckle|m:bronze|Bronze buckle with an oval frame|Worn bright where the strap pulled across it.
+bell|m:bronze|Bronze hand bell|There was a wooden handle once; now there is only the socket.
+knife:ring|m:bronze|Bronze knife with a ring pommel|The ring was for hanging it from a belt.
+weight:duck|s:grey|Stone weight shaped like a duck|A duck asleep, its head turned back along its body.
+comb|b|Comb with a horse|A horse cut in the solid strip above the teeth.
+die|b|Long die|A bone bar with numbers on four sides only.
+whistle|b|Bird-bone whistle|Made from the hollow wing bone of a large bird.
+counter|s:white|White glass counter|A drop of glass, flat beneath and rounded above.
+sealstone|s:banded|Cylinder seal|Roll it across wet clay and a line of goats walks out.
+scarab|c:faience/dots|Scarab with a name|A name in a ring on its underside, too small and worn to read.
+tablet:tag|l|Lead tag|A label for a sack, with a name scratched on it.
+amber|s:dark|Amber pendant|A dark lump with a hole bored for a cord.
+flint|s:grey|Flint arrowhead|Pressure-flaked into a leaf, very fine.
+cowrie|s:pierced|Pierced cowrie|Its back was ground away so it would lie flat when sewn on.
+vial:aryballos|g:yellow|Perfume vial (yellow)|Round as a fruit, with a short neck and two ear-like handles.
+ring:ruby|m:gold+ruby|Gold ring with a ruby|The stone is polished round, never cut into facets.
+vase|c:buff/birds|Buff vase with birds|Water birds in a line, heads all turned the same way.
+bowl|c:red-slip/flowers|Red gloss bowl|A band of little leaves pressed in from a mould.
+jug|c:soot-black/plain|Black jug with a trefoil mouth|The lip is pinched in three places, to pour.
+cup|c:ochre/eye|Eye cup|Two great eyes painted on the outside, to stare back over the drinker's face.
+torc|m:bronze|Bronze torc|Its ends are buffers, flat as two small coins.
+brooch|m:gilt bronze|Disc brooch|Covered in tiny cells that once held red glass.
+pin|m:bronze|Pin with a spiral head|The head is a coil of wire, hammered flat.
+bit|m:bronze|Bronze snaffle|The cheek pieces are shaped like two little horses.
+coin|m:silver|Thin silver coin|So thin it bends. A cross of lines on one side.
+knife:curved|m:iron|Curved iron knife|For reeds, or for the harvest. The edge is notched.
+comb|b|Antler comb|Riveted together from pieces, with iron pins.
+needle:netting|b|Netting needle|Long and flat, with an eye at each end.
+beads|s:glass|String of glass beads|Every colour the glassmaker had that week.
+axehead|s:black|Black stone hammer-axe|A hole drilled clean through for the haft, with sand and a stick.
+figurine:woman|c:pale/plain|Seated clay woman|She sits with her hands on her knees. Her lap is worn smooth.
+lamp|c:green-glazed/plain|Glazed lamp|The green glaze has run and pooled under the nozzle.
+slingbullet:ball|s:grey|Stone sling ball|Round as an egg, and almost as heavy as a fist.
+tooth:tusk|b|Boar tusk|Split lengthways, the way they were split to sew onto a helmet.
+vial:alabastron|g:milky white|Perfume vial (milky white)|Purple threads drawn round it in a zigzag, like waves on milk.
+bolt:head|m:iron|Iron crossbow bolt head|Square in section, made to punch rather than cut.
+jar|c:ochre/hands|Jar with hands|Two hands painted on the shoulder, fingers spread.
+amphora|c:pale/fish|Pale amphora with fish|Leaping fish round the shoulder, very lively.
+plate|c:black-burnished/rosettes|Black plate|Stamped rosettes in a ring, each one slightly different.
+cup|c:slate-blue/plain|Grey cup on a tall foot|Made to look like silver from across a room.
+ring:seal|m:bronze|Bronze ring with a flat bezel|A little figure scratched on the bezel: a bird, perhaps.
+earring|m:bronze|Bronze earring with a bead|The blue bead hanging from it is glass.
+bracelet:twist|m:silver|Twisted silver bracelet|Cut from a larger one; the ends are not finished.
+strapend|m:silver|Silver strap end|A beast's face at the tip, its eyes two dots.
+coin|m:copper|Copper coin with a horse|A horse at a gallop, and letters nobody here can read.
+spoon|m:bronze|Long-handled bronze spoon|For reaching the bottom of a narrow jar.
+shears|m:iron|Small iron shears|For trimming wicks, or a beard.
+knucklebone|b|Painted knucklebone|Traces of red paint are still in its hollows.
+awl|b|Bone pin-beater|Polished all over by the weaver's hand.
+hornspoon|h|Horn ladle|Too big for eating; for serving out of a pot.
+whetstone|s:banded|Banded whetstone|Pierced at one end to hang from a belt.
+sealstone|s:black|Black seal stone|A man with a spear facing a lion, cut very small.
+cowrie|s:worn|Worn cowrie|Passed from hand to hand as money, perhaps, until it went smooth.
+scarab|s:green|Green stone scarab|Cut in hard green stone, the beetle's legs tucked underneath.
+vial:amphoriskos|g:purple|Perfume vial (purple)|So dark it looks black until it is held to the light.
+vase|c:rose/swans|Rose vase with swans|Swans with long necks, each drawn with one line.
+jug|c:buff/zigzags|Buff jug with a beak spout|The spout tilts up like a bird about to drink.
+bowl|c:umber/waves|Umber bowl|Waves inside, so it looks full when it is empty.
+beaker|c:red-slip/plain|Face beaker|A face moulded on one side, with a broad nose.
+loomweight|c:buff/plain|Pyramid loom weight|A mark stamped on its top: a little wheel.
+figurine:bird|c:ochre/plain|Clay owl|Big round eyes pressed in with a reed.
+cauldron|m:iron|Small iron cauldron|Hung from a chain once; one of the lugs is still there.
+ladle|m:iron|Iron ladle|The bowl was riveted on; one rivet is gone.
+brooch|m:bronze|Brooch shaped like a hare|Enamel once filled its body; a little blue is left.
+pin|m:gold|Gold pin with a pomegranate head|Grains of gold for the seeds.
+plaque|m:gold|Gold plaque with a stag|Its legs are folded under it, its antlers run along its back.
+phalera|m:bronze|Bronze disc with a face|A round-eyed face looks out from the middle.
+coin:hole|m:bronze|Ring coin|Its centre was punched out; the rest is a thin bronze ring.
+arrowhead|m:bronze|Socketed arrowhead|A rivet hole through the socket.
+tooth|b|Wolf tooth|Grooved round the root, where a thread was tied.
+comb|h|Horn comb|You can see light through it where it is thinnest.
+counter|s:blue glass|Blue glass counter|It throws a blue spot on the floor when the lamp is near.
+amber|s:cloudy|Carved amber|Shaped into a little crouching animal, its features almost gone.
+flint|s:brown|Flint scraper|Rounded at the working end, for scraping hides.
+vial:unguentarium|g:amber|Perfume vial (amber)|Blown, not moulded: a round belly and a long thin neck.
+bolt:whole|m:iron+wood|Crossbow bolt with an iron head|The shaft is split, but the head is still sound.
+vase|c:green-glazed/flowers|Glazed vase with flowers|Flowers cut under the glaze, which has gone silvery in patches.
+jar|c:red-brown/eye|Jar with an eye|One large eye painted on the shoulder, watching.
+plate|c:chalk-white/birds|White plate with a bird|One bird in the middle, very large, with a fish in its beak.
+cup|c:umber/plain|Handleless cup|It fits a cupped palm exactly.
+jug|c:rose/plain|Rose jug|The handle has a thumb rest pressed into it.
+rattle|c:buff/plain|Buff rattle|Shaped roughly like a pomegranate.
+bracelet:coil|m:copper|Copper wire bracelet|Coiled four times round, and springy still.
+ring|m:iron|Iron finger ring|Its stone has fallen out of the setting.
+earring|m:gold+garnet|Gold earring with a garnet drop|It still swings.
+key|m:bronze|Small bronze key|For a casket, not a door.
+needlecase|b|Bone needle case|Cut from a bird's leg bone, plugged at one end.
+stylus|m:iron|Iron stylus|A thin spiral of bronze is inlaid along its shaft.
+weight:disc|l|Lead weight|A disc with a hole for hanging, and three dots.
+die|b|Bone die with circles|Ring-and-dot circles instead of plain pits.
+whistle:pipe|b|Bone pipe|Five holes in front and one behind.
+beads|s:jet|String of jet beads|Light as wood, black as wet stone.
+axehead|s:grey|Small stone adze|Flat on one face and rounded on the other, for shaping wood.
+gem:rough|s:lapis|Lump of lapis|Blue stone with flecks of gold in it, from mountains a very long way off.
+vial:aryballos|g:red|Perfume vial (red)|Opaque red glass, rare and hard to make, with a yellow thread at the lip.
+vase|c:black-figure/birds|Black-figure vase with birds|Sirens in a ring: women's heads on the bodies of birds.
+amphora|c:dun/plain|Dun amphora|Each handle is three rolls of clay laid side by side.
+bowl|c:turquoise-glazed/birds|Turquoise bowl with birds|Black birds painted under the glaze, crowding to the rim.
+cup|c:red-figure/hands|Red-figure cup with a dancer|Inside, a woman dances with clappers in her hands.
+lamp|c:ochre/plain|Lamp with a handle|A loop at the back, for carrying it from room to room.
+strainer|c:dun/plain|Dun strainer|The holes run in a spiral, pricked one by one.
+torc|m:silver|Silver torc|Thin and plain; worn every day, not for show.
+brooch|m:iron|Iron brooch|Rust has eaten everything but the spring.
+buckle|m:gilt bronze|Gilt buckle|Its plate is shaped like a shield.
+bit|m:iron|Iron bit with cheek bars|The bars are long and curved like new moons.
+coin:gold|m:gold|Small gold coin|Thick and bright; a horse on one side, scattered dots on the other.
+tweezers|m:iron|Iron tweezers|Big ones, for pulling thorns.
+knife:razor|m:bronze|Bronze razor|Crescent-shaped, with a little ring to hang it by.
+slingbullet|l|Lead sling bullet with a scorpion|A scorpion cast in relief on one side.
+comb|b|Small bone comb|For lice: very fine teeth, close together.
+antlerpick|b|Antler hammer|The crown of the antler serves as the head; the tines are cut away.
+sealstone|s:red|Carnelian seal|A bull with its head lowered, cut into the stone.
+cowrie|s:small|Spotted cowrie|Bigger than the others, and spotted like a leopard.
+gem:bead|s:lapis|Lapis bead|Shaped like a little fly.
+vial:unguentarium|g:sea-green|Perfume vial (sea-green)|Thin as an eggshell. The glass is full of tiny bubbles.
+vase|c:chalk-white/zigzags|White vase with zigzags|Black zigzags between double lines, very carefully done.
+jug|c:black-burnished/plain|Black jug|Polished so long it has a sheen like leather.
+bowl|c:red-brown/hands|Red-brown bowl|A handprint in the bottom, pressed in before firing.
+plate|c:green-glazed/flowers|Glazed plate with flowers|The glaze is cracked like old ice.
+beaker|c:buff/plain|Buff beaker|Rough on the outside, with grit thrown on to help the grip.
+whorl|c:red-slip/plain|Spindle whorl cut from a sherd|Cut down from a broken red bowl and drilled through.
+figurine:horse|c:ochre/plain|Ochre horse|It had wheels on its legs once.
+ring:seal|m:silver|Silver ring with a seal|A tiny head in profile is cut into the flat.
+pin|m:iron|Iron pin with a ring head|The ring swings freely in the head.
+phalera|m:gilt bronze|Gilt harness disc|Three swirls joined at the centre.
+plaque|m:bronze|Openwork plaque|Cut through in a pattern of bent lines, like a net.
+coin|m:bronze|Bronze coin with a ship|A ship's prow, and three letters along it.
+earring|m:gold|Gold earring shaped like a boat|Hollow, and as light as a leaf.
+cauldron|m:copper|Copper cauldron|Patched three times with riveted plates.
+bell|m:bronze|Bronze bell with a face|A face cast on its side, its mouth open.
+knucklebone|b|Knucklebone filled with lead|Heavier than the rest. Made to cheat.
+needle:hairpin|b|Bone hair pin|Its head is carved into a small hand.
+counter|s:clay|Counter cut from a pot|Ground round from a broken pot, for a game played on scratched squares.
+flint|s:honey-coloured|Sickle flint|Its edge has a gloss from cutting grass and grain.
+vial:amphoriskos|g:dark green|Perfume vial (dark green)|White threads pulled up and down into a pattern like fern leaves.
+vase|c:slate-blue/flowers|Grey-blue vase|Flowers scratched through the grey to the pale clay beneath.
+amphora|c:rose/stags|Rose amphora with deer|Deer graze all the way round with their heads down.
+bowl|c:pale/eye|Pale bowl with an eye|An eye painted in the bottom, looking up through whatever was poured in.
+cup|c:green-glazed/rosettes|Glazed cup with rosettes|Moulded rosettes in rows; the green has gone almost brown.
+jar|c:soot-black/fish|Black jar with fish|Fish cut in and filled with white, swimming upward.
+lamp|c:pale/swans|Lamp with a swan|A swan's head rises from the handle.
+torc|m:gilt bronze|Gilt torc|Hollow, and lighter than it looks.
+bracelet:snake|m:bronze|Bronze snake bracelet|Its scales are marked with tiny punched crescents.
+brooch|m:gold+garnet|Gold brooch with a garnet|Garnets set in a cross of little cells.
+buckle|m:silver|Silver buckle|Its tongue ends in an animal's head biting the frame.
+key:padlock|m:iron|Iron padlock key|Long and flat, with a slot cut through it.
+coin:hole|m:bronze|Coin with four characters|Four signs around the square hole; one of them is worn smooth.
+arrowhead|m:iron|Bodkin arrowhead|Thin and square, made to slip between the rings of mail.
+spoon|m:silver|Silver spoon with a swan-neck handle|The handle bends up and back like a bird's neck.
+tooth|b|Shark tooth|From a sea far off, and pierced to wear.
+whistle|h|Horn whistle|Blown from the narrow end, it would sound like an animal calling.
+hornspoon|h|Horn spoon with a carved handle|The handle ends in a bird's head.
+beads|s:amber|String of amber beads|Some round, some cut flat like little cheeses.
+gem:rough|s:ruby|Ruby pebble|Worn round by water, and found in the gravel of some river.
+vial:unguentarium|g:clear|Perfume vial (clear)|Nearly colourless glass, the hardest kind there was to make.
+vase|c:red-brown/swans|Red-brown vase with swans|The swans stand in water drawn as three wavy lines.
+jug|c:chalk-white/spirals|White jug with spirals|Red spirals that run into one another.
+bowl|c:soot-black/rosettes|Black bowl with stamps|Palmettes stamped in a ring inside it.
+plate|c:umber/stags|Umber plate with a stag|A stag with antlers like a crown fills the whole plate.
+beaker|c:chalk-white/ladders|White beaker with bands|Bands of red and black, painted while the beaker turned.
+figurine:woman|c:red-slip/plain|Clay woman holding a child|Both their faces are worn away.
+loomweight|c:red-brown/plain|Ring loom weight|Round as a ring, and blackened on one side by a fire.
+ring:hands|m:gold|Gold ring with clasped hands|Two tiny hands joined on the bezel.
+earring|m:silver+basket|Silver basket earring|A tiny hanging basket of silver wire.
+pin|m:bronze|Bronze pin with a hand|The head is an open hand, palm out.
+plaque|m:silver|Silver plaque with a bird|A bird of prey with its wings spread, gripping something.
+bit|m:bronze|Bronze bit with jingles|Little rings hang from the cheek pieces, to chime as the horse walked.
+coin:drachm|m:silver|Silver coin with an archer|A kneeling archer drawing a bow.
+shears|m:iron|Big iron shears|For sheep; each blade is as long as a hand.
+needlecase|m:bronze|Bronze needle case with a chain|A short chain, to hang it from a brooch.
+die|b|Small bone die|Its pits are filled with something black.
+awl|b|Bone point|Rubbed on a stone to a long, fine point.
+sealstone|s:banded|Banded agate seal|The bands run through the carving like grain through wood.
+gem:bead|s:crystal|Rock crystal bead|Clear as water, round, and drilled with great patience.
+`;
+
 /* ---- 40_items.js ---- */
 /* ============================================================
    The useless objects, lamp oil, biscuits
@@ -2175,6 +2753,8 @@ const CLAY = [
   { n: 'green-glazed', b: '#4d8574', i: '#1e2a24' }, { n: 'ash-grey', b: '#99938a', i: '#2a201a' }, { n: 'red-brown', b: '#88482d', i: '#f0e0c0' },
   { n: 'buff', b: '#c9ad84', i: '#4a2c1a' }, { n: 'dun', b: '#8f8064', i: '#1e1812' }, { n: 'black-burnished', b: '#2a2622', i: '#b8a888' },
   { n: 'turquoise-glazed', b: '#3f8a86', i: '#1a2422' },
+  { n: 'red-figure', b: '#211a16', i: '#c66a36' }, { n: 'black-figure', b: '#c8783e', i: '#1c1612' }, { n: 'white-ground', b: '#e6dfcf', i: '#3a2a20' },
+  { n: 'red-slip', b: '#a8462c', i: '#e8d0b0' }, { n: 'terracotta', b: '#a4502e', i: '#5a2a16' }, { n: 'faience', b: '#2f9a9c', i: '#122028' },
 ];
 // the magenta vase is the only magenta thing on the wall
 const GEN_CLAY = CLAY.filter(c => c.n !== 'magenta');
@@ -2196,7 +2776,7 @@ const KINDS = {
   amber: ['lump of amber', 'stone', 0.5], cowrie: ['cowrie shell', 'stone', 0.5], sealstone: ['seal stone', 'stone', 0.4], beads: ['string of beads', 'stone', 0.8],
   tablet: ['lead tablet', 'lead', 0.4],
 };
-const METALS = [{ n: 'bronze', c: 0x8a6a3a, w: 4 }, { n: 'iron', c: 0x4a4440, w: 2.5 }, { n: 'silver', c: 0xa8a49c, w: 1.6 }, { n: 'copper', c: 0x9a5a38, w: 1.2 }, { n: 'gilt bronze', c: 0xb8923a, w: 0.7 }, { n: 'gold', c: 0xd4a840, w: 0.35 }];
+const METALS = [{ n: 'bronze', c: 0x8a6a3a, w: 4 }, { n: 'iron', c: 0x4a4440, w: 2.5 }, { n: 'silver', c: 0xa8a49c, w: 1.6 }, { n: 'copper', c: 0x9a5a38, w: 1.2 }, { n: 'gilt bronze', c: 0xb8923a, w: 0.7 }, { n: 'gold', c: 0xd4a840, w: 0.35 }, { n: 'electrum', c: 0xc2aa58, w: 0 }];
 const IRON_ONLY = new Set(['candlestick', 'key', 'arrowhead', 'bit', 'fishhook']);
 const METAL_DETAIL = {
   brooch: ['a garnet', 'a coiled spring', 'a broken pin', 'a stag', 'three knobs', 'a bird\'s head'], ring: ['a twisted band', 'a flat bezel', 'a garnet', 'a spiral'],
@@ -2301,7 +2881,32 @@ function _genDef(id) {
   return { id, kind: 'cup', mat: 'clay', clay, motif: 'plain', name: cap(`${clay.n} cup, mended`), desc: 'A crack, mended long ago.' };
 }
 // the pool is endless: definitions are made as they are first needed, always in the same order
-function itemDef(id) { while (ITEM_DEFS.length <= id) _pushDef(_genDef(ITEM_DEFS.length)); return ITEM_DEFS[id]; }
+// the written catalogue first (ids 7-309), the generator after it
+const CATALOGUE = CATALOGUE_TEXT.trim().split('\n').map(l => l.split('|'));
+const GLASS = {
+  'cobalt blue': { c: 0x1d3a8c, th: ['#e3bc3c', '#ece6d6'] }, turquoise: { c: 0x2a9a96, th: ['#e8c43c'] }, yellow: { c: 0xd2a82c, th: ['#24367e'] },
+  'milky white': { c: 0xe8e4da, th: ['#6c2c6c'] }, purple: { c: 0x3a1640, th: [] }, amber: { c: 0xb0661c, op: 0.8 }, red: { c: 0x9c2c20, th: ['#e3bc3c'] },
+  'sea-green': { c: 0x9ccab8, op: 0.6 }, 'dark green': { c: 0x1c4430, th: ['#ece6d6'] }, clear: { c: 0xe2ece6, op: 0.45 },
+};
+function _catDef(id, [kindS, matS, name, desc]) {
+  const [kind, style = ''] = kindS.split(':');
+  const d = { id, kind, style, name, desc, seed: hash32(id, 4242) % 1000000 };
+  const [mt, spec = ''] = matS.split(':');
+  if (mt === 'c') { const [cn, motif] = spec.split('/'); d.mat = 'clay'; d.clay = CLAY.find(c => c.n === cn) || CLAY[0]; d.motif = motif || 'plain'; }
+  else if (mt === 'm') { const [mn, extra] = spec.split('+'); d.mat = 'metal'; d.metal = METALS.find(m => m.n === mn) || METALS[0]; d.extra = extra || ''; }
+  else if (mt === 's') { d.mat = 'stone'; d.tone = spec; }
+  else if (mt === 'g') { d.mat = 'glass'; d.glass = spec; }
+  else d.mat = { b: 'bone', h: 'horn', l: 'lead', w: 'parchment' }[mt] || 'bone';
+  if (kind === 'figurine') d.fig = style;
+  return d;
+}
+function itemDef(id) {
+  while (ITEM_DEFS.length <= id) {
+    const n = ITEM_DEFS.length, row = CATALOGUE[n - 7];
+    _pushDef(n >= 7 && row ? _catDef(n, row) : _genDef(n));
+  }
+  return ITEM_DEFS[id];
+}
 function poolSize(lap) { return lap <= 0 ? C.FIRST_POOL : C.FIRST_POOL + C.SECOND_POOL + 20 * (lap - 1); }
 function itemName(tok) { return tok === 'O' ? 'Lamp oil' : tok === 'B' ? 'A hard biscuit' : itemDef(tok).name; }
 
@@ -2321,7 +2926,12 @@ const LATHE = {
 const latheGeo = (k, segs = 22) => new THREE.LatheGeometry(LATHE[k].map(([r, y]) => new THREE.Vector2(r, y)), segs);
 const _matCache = new Map();
 function cachedMat(key, make) { if (!_matCache.has(key)) _matCache.set(key, make()); return _matCache.get(key); }
-function metalMat(c) { return cachedMat('m' + c, () => new THREE.MeshPhongMaterial({ color: c, specular: 0x8a7050, shininess: 42, map: T.iron })); }
+// iron keeps its rust; the other metals show their own colour, with the texture only for the feel of the surface
+function metalMat(c) {
+  return cachedMat('m' + c, () => c === 0x4a4440
+    ? new THREE.MeshPhongMaterial({ color: 0x8a8076, specular: 0x6a6058, shininess: 30, map: T.iron })
+    : new THREE.MeshPhongMaterial({ color: c, specular: 0xb89868, shininess: 48, bumpMap: T.iron, bumpScale: 0.4 }));
+}
 const BONE_MAT = new THREE.MeshPhongMaterial({ color: 0xe6dcc4, specular: 0x403830, shininess: 18, map: T.bone });
 const LEAD_MAT = new THREE.MeshPhongMaterial({ color: 0x77777a, specular: 0x505058, shininess: 22 });
 const WAX_MAT = new THREE.MeshPhongMaterial({ color: 0xc9953a, specular: 0x886633, shininess: 60, transparent: true, opacity: 0.82 });
@@ -2340,11 +2950,14 @@ const BISCUIT_MAT = new THREE.MeshLambertMaterial({ map: BISCUIT_TEX });
 const STONE_MATS = {
   grey: 0x7a7670, banded: 0x8a7a68, dark: 0x3a3632, brown: 0x6a4a30, 'honey-coloured': 0xa07a40, green: 0x4a5e4a, black: 0x1e1c1a,
   white: 0xe2dcd0, 'blue glass': 0x2a4a8a, 'bone-white': 0xd8ccb0, clear: 0xd08a2a, cloudy: 0xc89a50, small: 0xe8dcc4, pierced: 0xe8dcc4, worn: 0xd8ccb4, red: 0x8a2a20, glass: 0x2a6a7a, amber: 0xb8741a, carnelian: 0xa83a20, clay: 0x9a6a48, jet: 0x141210,
+  ruby: 0x8c0e1e, lapis: 0x22407e, crystal: 0xe8eef0, eyeglass: 0x1f3e8e, garnet: 0x6a1018,
 };
 function stoneMat(tone, kind) {
   const c = STONE_MATS[tone] ?? 0x7a7670;
+  if (tone === 'ruby' || tone === 'garnet') return cachedMat('gem' + tone, () => new THREE.MeshPhongMaterial({ color: c, specular: 0xffb0b0, shininess: 110, transparent: true, opacity: 0.9, emissive: 0x1a0204 }));
+  if (tone === 'crystal') return cachedMat('crystal', () => new THREE.MeshPhongMaterial({ color: c, specular: 0xffffff, shininess: 140, transparent: true, opacity: 0.45 }));
   if (kind === 'amber' || tone === 'amber' || tone === 'clear' || tone === 'cloudy') return cachedMat('amb' + tone, () => new THREE.MeshPhongMaterial({ color: c, specular: 0xffd890, shininess: 90, transparent: true, opacity: 0.85, emissive: 0x2a1404 }));
-  const gloss = kind === 'flint' || kind === 'axehead' || kind === 'cowrie' || kind === 'beads' || tone === 'blue glass' || tone === 'jet';
+  const gloss = kind === 'flint' || kind === 'axehead' || kind === 'cowrie' || kind === 'beads' || kind === 'gem' || kind === 'scarab' || tone === 'blue glass' || tone === 'jet' || tone === 'lapis' || tone === 'eyeglass';
   return cachedMat('st' + tone + gloss, () => new THREE.MeshPhongMaterial({ color: c, specular: gloss ? 0x8a8478 : 0x222018, shininess: gloss ? 70 : 8, map: gloss ? null : T.stone }));
 }
 function itemModel(tok) {
@@ -2360,20 +2973,23 @@ function itemModel(tok) {
   }
   if (tok === 'B') { add(new THREE.CylinderGeometry(0.062, 0.062, 0.024, 18), BISCUIT_MAT, 0, 0.012); g.userData.size = 0.12; return g; }
   const d = itemDef(tok);
-  const glazed = !!d.clay && /glazed|magenta/.test(d.clay.n);
+  const glazed = !!d.clay && /glazed|magenta|faience|red-slip|figure/.test(d.clay.n);
   const clayMat = () => cachedMat(`c${d.clay.n}|${d.motif}`, () => glazed
     ? new THREE.MeshPhongMaterial({ map: motifTexture(d.clay.b, d.clay.i, d.motif, hash32(d.id)), side: THREE.DoubleSide, specular: 0x3a3430, shininess: 55 })
     : new THREE.MeshLambertMaterial({ map: motifTexture(d.clay.b, d.clay.i, d.motif, hash32(d.id)), side: THREE.DoubleSide }));
   const mm = d.metal ? metalMat(d.metal.c) : null;
   const sm = d.mat === 'stone' ? stoneMat(d.tone, d.kind) : null;
   const R = new Rng(d.seed || d.id + 1);
+  const vesselMat = () => d.mat === 'metal' ? mm : clayMat();
   let size = 0.2;
-  switch (d.kind) {
+  const xs = extraModel(d, { add, addS, lath, mm, sm, R, clayMat });
+  if (xs) size = xs;
+  else switch (d.kind) {
     case 'vase': case 'jug': case 'bowl': case 'cup': case 'plate': case 'amphora': case 'lamp': case 'whorl': {
-      add(latheGeo(d.kind), clayMat());
-      if (d.kind === 'jug') add(new THREE.TorusGeometry(0.045, 0.01, 6, 12, Math.PI * 1.2), clayMat(), 0.075, 0.17, 0, 0, 0, -Math.PI * 0.55);
-      if (d.kind === 'amphora') for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.05, 0.01, 6, 10, Math.PI), clayMat(), s * 0.07, 0.32, 0, 0, 0, s > 0 ? -Math.PI / 2 : Math.PI / 2);
-      if (d.kind === 'lamp') add(new THREE.CylinderGeometry(0.012, 0.018, 0.06, 8), clayMat(), 0.08, 0.03, 0, 0, 0, Math.PI / 2);
+      add(latheGeo(d.kind), vesselMat());
+      if (d.kind === 'jug') add(new THREE.TorusGeometry(0.045, 0.01, 6, 12, Math.PI * 1.2), vesselMat(), 0.075, 0.17, 0, 0, 0, -Math.PI * 0.55);
+      if (d.kind === 'amphora') for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.05, 0.01, 6, 10, Math.PI), vesselMat(), s * 0.07, 0.32, 0, 0, 0, s > 0 ? -Math.PI / 2 : Math.PI / 2);
+      if (d.kind === 'lamp') add(new THREE.CylinderGeometry(0.012, 0.018, 0.06, 8), vesselMat(), 0.08, 0.03, 0, 0, 0, Math.PI / 2);
       size = { vase: 0.32, jug: 0.26, bowl: 0.25, cup: 0.12, plate: 0.3, amphora: 0.4, lamp: 0.15, whorl: 0.08 }[d.kind];
       break;
     }
@@ -2492,6 +3108,184 @@ function itemModel(tok) {
   if (size < 0.09) { g.scale.setScalar(1.6); size *= 1.6; }
   g.userData.size = size;
   return g;
+}
+
+/* ---------- models for the written catalogue's new kinds and styles ---------- */
+const PARCH_MAT = (() => { const m = new THREE.MeshLambertMaterial({ color: 0xd2bf96 }); m.bumpMap = T.cloth; m.bumpScale = 0.5; return m; })();
+const SHAFT_MAT = lam(T.wood, { color: 0x8a6a48 });
+const VANE_MAT = new THREE.MeshLambertMaterial({ color: 0x5a4a38, side: THREE.DoubleSide });
+const FAIENCE_MAT = new THREE.MeshPhongMaterial({ color: 0x2f9a9c, specular: 0x8adada, shininess: 70 });
+const VIAL_LATHE = {
+  alabastron: [[0, 0], [0.018, 0.003], [0.024, 0.02], [0.026, 0.06], [0.024, 0.1], [0.016, 0.118], [0.009, 0.124], [0.009, 0.132], [0.02, 0.136], [0.018, 0.14], [0.008, 0.138]],
+  amphoriskos: [[0, 0], [0.006, 0.002], [0.012, 0.02], [0.026, 0.055], [0.028, 0.072], [0.022, 0.092], [0.01, 0.104], [0.009, 0.124], [0.016, 0.13], [0.014, 0.134], [0.007, 0.132]],
+  aryballos: [[0, 0], [0.02, 0.004], [0.034, 0.025], [0.036, 0.045], [0.03, 0.065], [0.012, 0.075], [0.009, 0.085], [0.022, 0.09], [0.02, 0.094], [0.008, 0.092]],
+  unguentarium: [[0, 0], [0.02, 0.002], [0.032, 0.02], [0.03, 0.04], [0.012, 0.06], [0.008, 0.08], [0.007, 0.13], [0.013, 0.135], [0.012, 0.139], [0.006, 0.137]],
+};
+function glassMat(name) {
+  return cachedMat('glass:' + name, () => {
+    const G = GLASS[name] || GLASS.clear;
+    if (G.op) return new THREE.MeshPhongMaterial({ color: G.c, specular: 0xffffff, shininess: 110, transparent: true, opacity: G.op, side: THREE.DoubleSide });
+    const c = makeCanvas(128, 128), g = c.getContext('2d'), R = new Rng(hash32(name.length, 77));
+    g.fillStyle = '#' + G.c.toString(16).padStart(6, '0'); g.fillRect(0, 0, 128, 128);
+    // core-formed glass: threads wound round while hot, then dragged up and down into feathers
+    (G.th || []).forEach((col, k) => {
+      g.strokeStyle = col; g.lineWidth = 2.2; g.globalAlpha = 0.9;
+      for (let band = 0; band < 3; band++) {
+        const y0 = 26 + band * 34 + k * 8;
+        g.beginPath();
+        for (let x = 0; x <= 128; x += 2) { const y = y0 + Math.sin(x / 128 * TAU * 6) * 7 * (band === 1 ? 1 : 0.35); x ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+      }
+    });
+    g.globalAlpha = 1;
+    jitter(g, 128, 128, 10, 5);
+    return new THREE.MeshPhongMaterial({ map: texOf(c), specular: 0xc8c8c8, shininess: 90 });
+  });
+}
+// a tube along a list of points (for twisted wire, coils and chains)
+function wireGeo(pts, r, closed = false) {
+  const curve = new THREE.CatmullRomCurve3(pts, closed);
+  return new THREE.TubeGeometry(curve, Math.max(24, pts.length * 3), r, 5, closed);
+}
+function extraModel(d, o) {
+  const { add, addS, lath, mm, sm, R } = o;
+  const st = d.style || '';
+  switch (d.kind) {
+    case 'kulhad': add(lath([[0, 0], [0.028, 0], [0.032, 0.008], [0.04, 0.06], [0.046, 0.088], [0.042, 0.09], [0.035, 0.062], [0.027, 0.012], [0, 0.009]], 18), o.clayMat()); return 0.1;
+    case 'vial': {
+      const gm = glassMat(d.glass), prof = VIAL_LATHE[st] || VIAL_LATHE.alabastron;
+      add(lath(prof, 18), gm);
+      if (st === 'amphoriskos' || st === 'aryballos') for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.008, 0.0025, 4, 10, Math.PI), gm, s * (st === 'aryballos' ? 0.016 : 0.013), st === 'aryballos' ? 0.082 : 0.112, 0, 0, 0, s > 0 ? -Math.PI / 2 : Math.PI / 2);
+      if (st === 'amphoriskos') add(new THREE.SphereGeometry(0.006, 6, 5), gm, 0, 0.002, 0);
+      return 0.14;
+    }
+    case 'scroll':
+      add(new THREE.CylinderGeometry(0.017, 0.017, 0.17, 14), PARCH_MAT, 0, 0.017, 0, 0, 0, Math.PI / 2);
+      for (const s of [-1, 1]) add(new THREE.TorusGeometry(0.0145, 0.0035, 5, 14), PARCH_MAT, s * 0.085, 0.017, 0, 0, Math.PI / 2, 0);
+      for (const dx of [-0.012, 0.012]) add(new THREE.TorusGeometry(0.018, 0.0022, 4, 14), M.rope, dx, 0.017, 0, 0, Math.PI / 2, 0);
+      add(new THREE.BoxGeometry(0.004, 0.03, 0.002), M.rope, 0.004, 0.0, 0.017, 0.3, 0, 0);
+      return 0.17;
+    case 'helmet': {
+      // open-faced bronze: a tall crown leaning forward, two ridges for a crest, long cheek guards, a flared neck
+      const crown = new THREE.SphereGeometry(0.1, 18, 12, 0, TAU, 0, Math.PI * 0.56); crown.scale(0.92, 1.18, 1.05);
+      add(crown, mm, 0, 0.02, 0, -0.18, 0, 0);
+      for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.006, 0.012, 0.19), mm, s * 0.018, 0.135, -0.005, -0.5, 0, 0);
+      add(new THREE.TorusGeometry(0.097, 0.006, 5, 28), mm, 0, 0.03, 0, Math.PI / 2, 0, 0);
+      for (const s of [-1, 1]) {
+        const cheek = new THREE.CylinderGeometry(0.1, 0.1, 0.11, 10, 1, true, s > 0 ? 0.25 : TAU - 0.95, 0.7);
+        add(cheek, mm, 0, -0.025, 0.004, 0.08, 0, 0);
+      }
+      add(new THREE.CylinderGeometry(0.1, 0.122, 0.03, 16, 1, true, Math.PI * 0.62, Math.PI * 0.76), mm, 0, 0.014, 0);
+      return 0.26;
+    }
+    case 'bolt':
+      add(new THREE.ConeGeometry(0.008, 0.032, 3), mm, 0.04, 0.008, 0, 0, 0, -Math.PI / 2);
+      if (st === 'whole') {
+        add(new THREE.CylinderGeometry(0.0055, 0.006, 0.22, 7), SHAFT_MAT, -0.085, 0.008, 0, 0, 0, Math.PI / 2);
+        for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, 0.0015, 0.018), VANE_MAT, -0.17, 0.008 + s * 0.006, 0, s * 0.6, 0, 0);
+        return 0.26;
+      }
+      add(new THREE.CylinderGeometry(0.0025, 0.003, 0.05, 6), metalMat(0x4a4440), 0.0, 0.008, 0, 0, 0, Math.PI / 2);
+      return 0.08;
+    case 'coin': {
+      if (st === 'lump') { addS(UNIT_SPH, mm, 0, 0.005, 0, 0.011, 0.005, 0.009); return 0.03; }
+      const r = st === 'gold' ? 0.009 : st === 'owl' ? 0.012 : 0.0115, h = st === 'gold' ? 0.0032 : st === 'owl' ? 0.003 : 0.0018;
+      addS(new THREE.CylinderGeometry(r, r, h, 20), mm, 0, h / 2, 0, st === 'drachm' ? 1.08 : 1, 1, 1);
+      if (st === 'hole') for (const y of [h + 0.0002, -0.0002]) add(new THREE.BoxGeometry(0.0042, 0.0004, 0.0042), M.socket, 0, y, 0);
+      else addS(UNIT_SPH, mm, 0.001, h, 0, r * 0.45, 0.0006, r * 0.38);   // the worn relief
+      return 0.03;
+    }
+    case 'knife': {
+      if (st === 'razor') { add(new THREE.TorusGeometry(0.03, 0.009, 3, 14, Math.PI), mm, 0, 0.003, 0, Math.PI / 2, 0, 0); add(new THREE.TorusGeometry(0.007, 0.0018, 4, 10), mm, 0, 0.003, -0.032, Math.PI / 2); return 0.08; }
+      const blade = new THREE.BoxGeometry(0.1, 0.003, 0.016); blade.translate(0.05, 0, 0);
+      add(blade, mm, -0.01, 0.003, 0, 0, st === 'curved' ? 0.15 : 0, 0);
+      add(new THREE.ConeGeometry(0.008, 0.02, 4), mm, 0.098, 0.003, st === 'curved' ? -0.016 : 0, 0, 0, -Math.PI / 2);
+      if (st === 'ring') { add(new THREE.CylinderGeometry(0.004, 0.004, 0.06, 6), mm, -0.04, 0.004, 0, 0, 0, Math.PI / 2); add(new THREE.TorusGeometry(0.012, 0.003, 4, 12), mm, -0.082, 0.004, 0, Math.PI / 2); }
+      else add(new THREE.CylinderGeometry(0.0035, 0.004, 0.05, 6), mm, -0.035, 0.004, 0, 0, 0, Math.PI / 2);
+      return 0.16;
+    }
+    case 'shears':
+      for (const s of [-1, 1]) { const b = new THREE.BoxGeometry(0.075, 0.003, 0.012); b.translate(0.04, 0, 0); add(b, mm, 0.0, 0.003 + s * 0.0015, s * 0.006, 0, -s * 0.06, 0); add(new THREE.BoxGeometry(0.06, 0.004, 0.004), mm, -0.03, 0.003, s * 0.012); }
+      add(new THREE.TorusGeometry(0.013, 0.0025, 4, 12, Math.PI), mm, -0.06, 0.003, 0, Math.PI / 2, 0, Math.PI / 2);
+      return 0.16;
+    case 'stylus':
+      add(new THREE.CylinderGeometry(0.0022, 0.0028, 0.11, 6), mm, 0, 0.003, 0, 0, 0, Math.PI / 2);
+      add(new THREE.ConeGeometry(0.0025, 0.012, 6), mm, 0.06, 0.003, 0, 0, 0, -Math.PI / 2);
+      add(new THREE.BoxGeometry(0.012, 0.002, 0.008), mm, -0.06, 0.003, 0);
+      return 0.13;
+    case 'slingbullet':
+      if (st === 'ball') { add(new THREE.SphereGeometry(0.024, 12, 9), sm, 0, 0.022, 0, 0, 0, 0); return 0.05; }
+      addS(UNIT_SPH, LEAD_MAT, 0, 0.009, 0, 0.022, 0.009, 0.011); return 0.045;
+    case 'weight':
+      if (st === 'duck') { addS(UNIT_SPH, sm, 0, 0.022, 0, 0.045, 0.024, 0.03); addS(UNIT_SPH, sm, 0.02, 0.038, 0.016, 0.016, 0.012, 0.02, 0, 0.6, 0); return 0.1; }
+      if (st === 'disc') { add(new THREE.CylinderGeometry(0.022, 0.022, 0.008, 18), LEAD_MAT, 0, 0.004, 0); add(new THREE.CylinderGeometry(0.004, 0.004, 0.0085, 8), M.socket, 0.012, 0.004, 0); return 0.05; }
+      add(new THREE.BoxGeometry(0.018, 0.016, 0.018), mm, 0, 0.008, 0); return 0.03;
+    case 'scarab': {
+      const m = d.mat === 'clay' ? FAIENCE_MAT : sm;
+      add(new THREE.SphereGeometry(0.016, 12, 8, 0, TAU, 0, Math.PI / 2).scale(0.85, 0.7, 1.15), m, 0, 0.002, 0);
+      add(new THREE.CylinderGeometry(0.0135, 0.0135, 0.004, 14).scale(0.85, 1, 1.15), m, 0, 0.002, 0);
+      add(new THREE.BoxGeometry(0.0008, 0.002, 0.024), M.socket, 0, 0.0128, 0.001);
+      add(new THREE.BoxGeometry(0.022, 0.002, 0.0008), M.socket, 0, 0.011, -0.006);
+      return 0.04;
+    }
+    case 'gem': {
+      if (st === 'bead') { add(new THREE.SphereGeometry(0.009, 12, 9), sm, 0, 0.009, 0); add(new THREE.CylinderGeometry(0.0018, 0.0018, 0.0185, 6), M.socket, 0, 0.009, 0, 0, 0, Math.PI / 2); return 0.03; }
+      if (d.tone === 'lapis') { const g = new THREE.IcosahedronGeometry(0.02, 1); const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = 0.8 + 0.35 * (hash32(Math.round(x * 900), Math.round(y * 900), Math.round(z * 900)) / 4294967296); p.setXYZ(i, x * k, y * k * 0.7, z * k); } g.computeVertexNormals(); add(g, sm, 0, 0.013, 0); return 0.05; }
+      if (/pebble/i.test(d.name)) { addS(UNIT_SPH, sm, 0, 0.008, 0, 0.011, 0.008, 0.009); return 0.03; }
+      add(new THREE.CylinderGeometry(0.009, 0.011, 0.018, 6), sm, 0, 0.009, 0, 0.1, 0.4, 0.05); return 0.035;
+    }
+    case 'necklace': {
+      const pts = (n, rx, rz, y = 0.004) => Array.from({ length: n }, (_, i) => { const a = i / n * TAU; return [Math.cos(a) * rx, y, Math.sin(a) * rz]; });
+      if (st === 'chain') { for (const [x, y, z] of pts(34, 0.07, 0.085)) add(new THREE.TorusGeometry(0.0045, 0.0012, 4, 8), mm, x, y, z, Math.PI / 2 * (R.chance(0.5) ? 1 : 0.2), Math.atan2(x, z), 0); return 0.18; }
+      if (st === 'pendant') { for (const [x, y, z] of pts(28, 0.065, 0.08)) add(new THREE.SphereGeometry(0.0045, 7, 5), mm, x, y, z); addS(UNIT_SPH, stoneMat('carnelian', 'beads'), 0, 0.008, 0.096, 0.011, 0.008, 0.016); return 0.18; }
+      if (st === 'cowrie') { pts(18, 0.07, 0.085).forEach(([x, y, z], i) => { if (i % 2) addS(UNIT_SPH, stoneMat('small', 'cowrie'), x, 0.007, z, 0.008, 0.006, 0.012, 0, Math.atan2(x, z), 0); else add(new THREE.ConeGeometry(0.004, 0.02, 6), BONE_MAT, x, 0.004, z, Math.PI / 2, Math.atan2(x, z), 0); }); return 0.18; }
+      if (st === 'crescent') { for (const [x, y, z] of pts(30, 0.065, 0.08)) add(new THREE.SphereGeometry(0.004, 6, 5), stoneMat('dark', 'beads'), x, y, z); add(new THREE.TorusGeometry(0.014, 0.004, 4, 12, Math.PI * 1.3), mm, 0, 0.004, 0.096, Math.PI / 2, 0, Math.PI * 0.35); return 0.18; }
+      // a broad collar of faience: rows of little tubes
+      for (let row = 0; row < 4; row++) { const r = 0.05 + row * 0.012; for (let i = 0; i < 18 + row * 3; i++) { const a = Math.PI * 0.05 + i / (18 + row * 3) * Math.PI * 0.9; add(new THREE.CylinderGeometry(0.003, 0.003, 0.011, 5), FAIENCE_MAT, Math.cos(a) * r, 0.003, Math.sin(a) * r, Math.PI / 2, a, 0); } }
+      return 0.16;
+    }
+    case 'bracelet': {
+      if (st === 'twist') { for (let k = 0; k < 3; k++) { const p = []; for (let i = 0; i <= 60; i++) { const a = i / 60 * TAU * 0.92, w = a * 8 + k * TAU / 3; p.push(new THREE.Vector3(Math.cos(a) * (0.037 + Math.cos(w) * 0.0022), 0.005 + Math.sin(w) * 0.0022, Math.sin(a) * (0.037 + Math.cos(w) * 0.0022))); } add(wireGeo(p, 0.0016), mm); } return 0.08; }
+      if (st === 'coil' || st === 'snake') { const turns = st === 'coil' ? 4 : 2, p = []; for (let i = 0; i <= 90; i++) { const a = i / 90 * TAU * turns; p.push(new THREE.Vector3(Math.cos(a) * 0.036, 0.004 + i / 90 * (st === 'coil' ? 0.02 : 0.012), Math.sin(a) * 0.036)); } add(wireGeo(p, st === 'coil' ? 0.0016 : 0.003), mm); if (st === 'snake') for (const e of [p[0], p[p.length - 1]]) addS(UNIT_SPH, mm, e.x, e.y, e.z, 0.006, 0.004, 0.006); return 0.08; }
+      if (st === 'glass') { add(new THREE.TorusGeometry(0.036, 0.008, 8, 26), glassMat(d.glass), 0, 0.008, 0, Math.PI / 2); return 0.08; }
+      if (st === 'jet') { add(new THREE.TorusGeometry(0.036, 0.007, 8, 26), stoneMat('jet', 'beads'), 0, 0.007, 0, Math.PI / 2); return 0.08; }
+      if (st === 'beads') { for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; add(new THREE.SphereGeometry(0.0065, 8, 6), stoneMat('amber', 'amber'), Math.cos(a) * 0.034, 0.0065, Math.sin(a) * 0.034); } return 0.08; }
+      return 0;
+    }
+    case 'torc': { if (d.metal && d.metal.n === 'gold') { for (let k = 0; k < 2; k++) { const p = []; for (let i = 0; i <= 70; i++) { const a = i / 70 * TAU * 0.85, w = a * 7 + k * Math.PI; p.push(new THREE.Vector3(Math.cos(a) * (0.07 + Math.cos(w) * 0.003), 0.008 + Math.sin(w) * 0.003, -Math.sin(a) * (0.07 + Math.cos(w) * 0.003))); } add(wireGeo(p, 0.0035), mm); } for (const a of [0, TAU * 0.85]) addS(UNIT_SPH, mm, Math.cos(a) * 0.07, 0.01, -Math.sin(a) * 0.07, 0.012, 0.01, 0.016); return 0.15; } return 0; }
+    case 'ring': {
+      if (!st) return 0;
+      add(new THREE.TorusGeometry(0.03, 0.006, 8, 20), mm, 0, 0.007, 0, Math.PI / 2);
+      if (st === 'ruby') add(new THREE.SphereGeometry(0.009, 12, 8, 0, TAU, 0, Math.PI / 2), stoneMat('ruby', 'gem'), 0.032, 0.011, 0);
+      else add(new THREE.CylinderGeometry(0.011, 0.011, 0.004, 14), mm, 0.031, 0.009, 0, 0, 0, 0);
+      return 0.07;
+    }
+    case 'brooch': if (st === 'penannular') { add(new THREE.TorusGeometry(0.035, 0.004, 6, 22, TAU * 0.85), mm, 0, 0.004, 0, Math.PI / 2, 0, 0); for (const a of [0, TAU * 0.85]) addS(UNIT_SPH, mm, Math.cos(a) * 0.035, 0.005, -Math.sin(a) * 0.035, 0.006, 0.004, 0.006); add(new THREE.CylinderGeometry(0.0022, 0.0018, 0.1, 5), mm, 0, 0.008, 0.01, 0, 0.5, Math.PI / 2); return 0.1; } return 0;
+    case 'key':
+      if (st === 'lift') { add(new THREE.CylinderGeometry(0.004, 0.004, 0.1, 6), mm, 0, 0.006, 0, 0, 0, Math.PI / 2); add(new THREE.TorusGeometry(0.012, 0.004, 4, 10), mm, -0.058, 0.006, 0, Math.PI / 2); for (let k = 0; k < 3; k++) add(new THREE.BoxGeometry(0.004, 0.004, 0.018), mm, 0.04 + k * 0.007, 0.006, 0.009); return 0.13; }
+      if (st === 'padlock') { add(new THREE.BoxGeometry(0.13, 0.004, 0.016), mm, 0, 0.003, 0); add(new THREE.BoxGeometry(0.03, 0.0045, 0.005), M.socket, 0.045, 0.003, 0); add(new THREE.TorusGeometry(0.008, 0.003, 4, 10), mm, -0.07, 0.003, 0, Math.PI / 2); return 0.15; }
+      return 0;
+    case 'bell': if (st === 'cow') { add(new THREE.CylinderGeometry(0.03, 0.045, 0.08, 4, 1, true), mm, 0, 0.04, 0, 0, Math.PI / 4, 0); add(new THREE.BoxGeometry(0.05, 0.004, 0.05), mm, 0, 0.081, 0); add(new THREE.TorusGeometry(0.012, 0.004, 4, 10, Math.PI), mm, 0, 0.083, 0); add(new THREE.CylinderGeometry(0.005, 0.006, 0.06, 6), BONE_MAT, 0.008, 0.04, 0); return 0.12; } return 0;
+    case 'comb': if (d.mat === 'horn') { add(new THREE.BoxGeometry(0.11, 0.006, 0.035), HORN_MAT, 0, 0.003, -0.012); for (let i = 0; i < 12; i++) add(new THREE.BoxGeometry(0.004, 0.005, 0.035), HORN_MAT, -0.05 + i * 0.009, 0.003, 0.02); return 0.12; } return 0;
+    case 'needlecase': if (d.mat === 'bone') { add(new THREE.CylinderGeometry(0.008, 0.009, 0.08, 10), BONE_MAT, 0, 0.009, 0, 0, 0, Math.PI / 2); add(new THREE.CylinderGeometry(0.006, 0.006, 0.01, 8), M.wood, 0.042, 0.009, 0, 0, 0, Math.PI / 2); return 0.09; } return 0;
+    case 'whistle': {
+      if (!st && d.mat !== 'horn') return 0;
+      const m = d.mat === 'horn' ? HORN_MAT : BONE_MAT, L = st === 'pipe' ? 0.17 : 0.12;
+      add(new THREE.CylinderGeometry(0.009, d.mat === 'horn' ? 0.018 : 0.011, L, 10), m, 0, 0.013, 0, 0, 0, Math.PI / 2);
+      for (let i = 0; i < (st === 'pipe' ? 5 : 1); i++) add(new THREE.SphereGeometry(0.0038, 5, 4), M.socket, -L / 2 + 0.03 + i * 0.024, 0.024, 0);
+      return L;
+    }
+    case 'needle':
+      if (st === 'netting') { add(new THREE.BoxGeometry(0.14, 0.003, 0.012), BONE_MAT, 0, 0.002, 0); for (const x of [-0.06, 0.06]) add(new THREE.BoxGeometry(0.008, 0.0035, 0.004), M.socket, x, 0.002, 0); return 0.15; }
+      if (st === 'hairpin') { add(new THREE.CylinderGeometry(0.0025, 0.0015, 0.1, 6), BONE_MAT, 0, 0.003, 0, 0, 0, Math.PI / 2); addS(UNIT_SPH, BONE_MAT, -0.052, 0.004, 0, 0.007, 0.004, 0.009); return 0.11; }
+      return 0;
+    case 'tooth': if (st === 'tusk') { for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(0.006 - i * 0.0012, 0.0072 - i * 0.0012, 0.03, 7), BONE_MAT, -0.04 + i * 0.027, 0.008 + Math.sin(i * 0.6) * 0.01, 0, 0, 0, Math.PI / 2 - 0.2 + i * 0.22); return 0.12; } return 0;
+    case 'tablet': if (st === 'tag') { add(new THREE.BoxGeometry(0.06, 0.003, 0.025), LEAD_MAT, 0, 0.002, 0); add(new THREE.CylinderGeometry(0.003, 0.003, 0.0035, 8), M.socket, -0.024, 0.002, 0); return 0.06; } return 0;
+    case 'earring': if (d.extra === 'basket') { add(new THREE.TorusGeometry(0.012, 0.0018, 4, 12), mm, 0, 0.012, 0); add(new THREE.ConeGeometry(0.008, 0.014, 8, 1, true), mm, 0, -0.008, 0, Math.PI); return 0.045; } if (d.extra === 'garnet') { add(new THREE.TorusGeometry(0.012, 0.0022, 4, 12), mm, 0, 0.012, 0); addS(UNIT_SPH, stoneMat('garnet', 'gem'), 0, -0.006, 0, 0.005, 0.008, 0.005); return 0.045; } return 0;
+    case 'lamp': if (d.mat === 'metal') { add(latheGeo('lamp'), mm); add(new THREE.CylinderGeometry(0.012, 0.018, 0.06, 8), mm, 0.08, 0.03, 0, 0, 0, Math.PI / 2); add(new THREE.TorusGeometry(0.014, 0.003, 4, 10), mm, -0.075, 0.035, 0); add(new THREE.SphereGeometry(0.03, 10, 6, 0, TAU, 0, Math.PI / 2).scale(1, 0.4, 1), mm, 0, 0.044, 0); return 0.16; } return 0;
+    case 'beads': if (d.tone === 'eyeglass') { for (let i = 0; i < 11; i++) { const a = -1.1 + i * 0.22, x = Math.cos(a) * 0.05, z = Math.sin(a) * 0.05; add(new THREE.SphereGeometry(0.009, 8, 6), stoneMat('eyeglass', 'beads'), x, 0.009, z); add(new THREE.SphereGeometry(0.0035, 6, 4), stoneMat('white', 'beads'), x, 0.0165, z); } return 0.12; } return 0;
+  }
+  return 0;
 }
 
 /* ---------- which room holds what, per lap ---------- */
@@ -2705,6 +3499,20 @@ function rebase() {
   buildNow(originA);
   ensureLoaded();
   maybeMouse();
+  queueChime();
+}
+
+// once in each new length, a little after you cross into it
+let chimeAt = -1, chimeL = 0;
+function queueChime() {
+  if (S.inField) return;
+  chimeL = ((originA % C.LENGTHS) + C.LENGTHS) % C.LENGTHS;
+  chimeAt = S.t + 0.35 + (hash32(originA, 107, 3) % 1000) / 1000 * 1.3;
+}
+function updateChime() {
+  if (chimeAt < 0 || S.t < chimeAt) return;
+  chimeAt = -1;
+  if (!S.inField && !S.dead) AU.chime(chimeL);
 }
 
 /* ---------- collision ---------- */
@@ -2800,20 +3608,18 @@ function collide() {
   }
   return pushed;
 }
-function routeLocal(len) {
-  const f = len.route.frame;
-  return { u: f.side * P.pos.x - f.xOff, v: P.pos.z - len.group.position.z - f.zc };
-}
 function floorHere() {
   if (P.mode === 'corridor') return 0;
   const len = loaded.get(P.lenA);
   if (P.inRoute && len && len.route) {
+    // level ground under the passages; only on the climb itself does the floor rise
     const r = len.route, dz = len.group.position.z;
     const x = P.pos.x - r.ox, z = P.pos.z - dz - r.oz;
-    const along = x * r.dx + z * r.dz;
-    P.routeP = clamp(along / r.run, 0, 1);
+    const along = x * r.dx + z * r.dz, lat = -x * r.dz + z * r.dx;
+    P.routeP = along > -0.3 && Math.abs(lat) < r.hw + 0.25 ? clamp(along / r.run, 0, 1) : 0;
     return C.LOWER_Y + r.rise * P.routeP;
   }
+  P.routeP = 0;
   return C.LOWER_Y;
 }
 
@@ -2845,7 +3651,7 @@ function updatePlayer(dt) {
   P.pos.x += P.vel.x * dt; P.pos.z += P.vel.z * dt;
   let pushed;
   if (S.inField) pushed = field.collide(); else {
-    if (P.mode === 'lower') { const len = loaded.get(P.lenA); if (len && len.route) { const L = routeLocal(len); P.inRoute = L.u > len.route.enterU; } }
+    if (P.mode === 'lower') { const len = loaded.get(P.lenA); P.inRoute = !!(len && len.route); }
     pushed = collide();
   }
   const moved = Math.hypot(P.pos.x - x0, P.pos.z - z0);
@@ -2863,7 +3669,7 @@ function updatePlayer(dt) {
 }
 function checkTriggers() {
   const want = P.mode === 'corridor' ? 'down' : 'up';
-  if (P.mode === 'lower' && P.inRoute) return;
+  if (P.mode === 'lower' && P.inRoute && P.routeP > 0.001) return;
   let inside = false;
   for (const len of activeLens()) {
     const dz = len.group.position.z;
@@ -2880,15 +3686,20 @@ function checkTriggers() {
 
 /* ---------- the spiral stair ---------- */
 function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % TAU + TAU) % TAU - Math.PI; return a + d * t; }
+// a point and a direction of a room frame (mirrored to its side, offset and turned) in the length's own space
+function frameXZ(f, u, v) { const c = f.c ?? 1, s = f.s ?? 0, uu = (f.ou || 0) + u * c + v * s, vv = (f.ov || 0) - u * s + v * c; return [f.side * (f.xOff + uu), f.zc + vv]; }
+function frameDir(f, du, dv) { const c = f.c ?? 1, s = f.s ?? 0; return [f.side * (du * c + dv * s), -du * s + dv * c]; }
 function stairPose(trig, len, s) {
   const f = trig.frame, phi = Math.PI + s * STAIR.turns * TAU;
-  const u = STAIR.cu + STAIR.r * Math.cos(phi), v = STAIR.r * Math.sin(phi);
-  return { x: f.side * (f.xOff + u), y: lerp(0, C.LOWER_Y, s), z: f.zc + v + len.group.position.z, dx: f.side * -Math.sin(phi), dz: Math.cos(phi), ix: f.side * -Math.cos(phi), iz: -Math.sin(phi) };
+  const [x, z] = frameXZ(f, STAIR.cu + STAIR.r * Math.cos(phi), STAIR.r * Math.sin(phi));
+  const [dx, dz] = frameDir(f, -Math.sin(phi), Math.cos(phi)), [ix, iz] = frameDir(f, -Math.cos(phi), -Math.sin(phi));
+  return { x, y: lerp(0, C.LOWER_Y, s), z: z + len.group.position.z, dx, dz, ix, iz };
 }
 function stairExit(trig, len, dir) {
-  const f = trig.frame, dz = len.group.position.z;
-  if (dir > 0) return { x: f.side * (f.xOff + 3.1), y: C.LOWER_Y, z: f.zc + dz, yaw: Math.atan2(-f.side, 0) };
-  return { x: f.side * (f.xOff - 0.5), y: 0, z: f.zc + dz, yaw: Math.atan2(f.side, 0) };
+  const f = trig.frame;
+  const e = dir > 0 ? (trig.exitDown || { u: 3.1, v: 0, du: 1, dv: 0 }) : (trig.exitUp || { u: -0.5, v: 0, du: -1, dv: 0 });
+  const [x, z] = frameXZ(f, e.u, e.v), [fx, fz] = frameDir(f, e.du, e.dv);
+  return { x, y: dir > 0 ? C.LOWER_Y : 0, z: z + len.group.position.z, yaw: Math.atan2(-fx, -fz) };
 }
 function startStair(len, trig, dir) {
   P.anim = { t: 0, dur: 3.1, len, trig, dir, from: { x: P.pos.x, y: P.pos.y, z: P.pos.z, yaw: P.yaw, pitch: P.pitch }, next: 0 };
@@ -3053,7 +3864,7 @@ function destroyItem(it) {
   if (typeof it.tok === 'number') {
     markSeen(it.tok, it.A); purgeDuplicates(it.tok, it);
     const d = itemDef(it.tok);
-    if (d.mat === 'clay') { spawnDebris(it.len, p, it.obj.children[0].material, 9, true); AU.smash('clay', wp); }
+    if (d.mat === 'clay' || d.mat === 'glass') { spawnDebris(it.len, p, it.obj.children[0].material, 9, true); AU.smash('clay', wp); }
     else if (d.mat === 'metal') AU.smash('metal', wp);
     else { spawnDebris(it.len, p, it.obj.children[0].material, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : 'bone', wp); }
   } else if (it.tok === 'O') { spawnDebris(it.len, p, OIL_MAT, 9, true); AU.smash('oil', wp); }
@@ -3575,6 +4386,29 @@ const AU = (() => {
         noise(o, tt, 0.018, 'bandpass', 3400 + Math.random() * 2600, 2.5, 0.14);
         if (i % 5 === 0) noise(o, tt, 0.05, 'highpass', 5200, 0.7, 0.05, 0.01);
       }
+    },
+    // the signal at the start of each length: D, B, D-flat, a breath, then this length's own chord on the scale of 107.
+    // a second, quieter layer over the hum, which is left exactly as it was
+    chime(L) {
+      if (!on()) return;
+      const t = ctx.currentTime + 0.03, d = out(null);
+      d.gain.value = 0.62;
+      const F3 = 174.614, st = (k, oct = 0) => F3 * Math.pow(2, k / 107 + oct);
+      const bell = (t0, f, g, dur) => {
+        tone(d, t0, dur, f, g, 'sine', null, 0.008);
+        tone(d, t0, dur * 0.55, f * 2, g * 0.22, 'sine', null, 0.006);
+        tone(d, t0, dur * 0.28, f * 3, g * 0.06, 'sine', null, 0.004);
+      };
+      // D, B, D-flat: their nearest steps of 107 above F (80, 53, 71)
+      bell(t, st(80), 0.05, 1.7);
+      bell(t + 0.48, st(53), 0.046, 1.7);
+      bell(t + 0.96, st(71), 0.05, 2.0);
+      // the pause, then the chord: the root, this length's step above it, the octave
+      const c0 = t + 2.15, special = L === 31 || L === 39, dur = special ? 6.5 : 3.6;
+      bell(c0, F3, 0.034, dur);
+      bell(c0 + 0.012, st(L), 0.036, dur);
+      bell(c0 + 0.02, F3 * 2, 0.014, dur * 0.8);
+      if (special) bell(c0 + 0.03, st(L, 1), 0.012, dur * 0.9);   // at 31 and 39, a soft octave above
     },
     gutter() { if (!on()) return; const t = ctx.currentTime, d = out(null, dry); noise(d, t, 0.5, 'lowpass', 700, 0.8, 0.18, 0.02, 120); },
     space(mode) {
@@ -4123,7 +4957,7 @@ function syncSaveFromPlayer() {
 function resetWorld() {
   for (const a of [...loaded.keys()]) unloadLength(a);
   buildQueue.length = 0; streaming = null; dyn.debris.length = 0; dyn.falling.length = 0;
-  mouse.run = null; mouse.g.visible = false; fieldGen = null;
+  mouse.run = null; mouse.g.visible = false; fieldGen = null; chimeAt = -1; eternalLight.intensity = 0;
   dropMirrorObject();
   activeScene = scene; camera.far = 1600; camera.updateProjectionMatrix();
   vmSun.intensity = 0; vmAmbient.intensity = 0;
@@ -4138,6 +4972,7 @@ function placePlayerFromState() {
   ensureLoaded(true);
   try { renderer.compile(scene, camera); } catch (e) { }
   AU.space('corridor');
+  queueChime();
 }
 function teleport(A, z = -5, x = 0) {
   S.inField = false; resetWorld();
@@ -4155,6 +4990,7 @@ function startGame(state) {
   placePlayerFromState();
   running = true; paused = false;
   if (!state) toast('');
+  setTimeout(() => { try { goldenRuleTexture(); } catch (e) { } }, 2500);   // drawn early, so length 49 arrives without a pause
   lockPointer();
 }
 function pauseGame() {
@@ -4248,7 +5084,8 @@ function update(dt) {
   updateDynamics(dt);
   const before = lanternFactor();
   S.oil = Math.max(0, S.oil - C.OIL_BURN * dt);
-  S.health = Math.max(0, S.health - C.HEALTH_DRAIN * dt);
+  // carrying costs: every thing in the pack makes the hunger come a little faster (never shown)
+  S.health = Math.max(0, S.health - C.HEALTH_DRAIN * (1 + 0.004 * S.inv.length) * dt);
   if (before > 0 && S.oil <= 0) AU.gutter();
   if (P.mode === 'corridor') S.maxA = Math.max(S.maxA || 0, originA);
   if (S.health <= 0) { die(); return; }
@@ -4257,6 +5094,7 @@ function update(dt) {
   pumpBuilds(fieldFade ? 1 : 4);
   if (P.inRoute && P.routeP > 0.02 && !field) pumpField(3);
   updateMouse(dt);
+  updateChime();
   seenT += dt; if (seenT > 0.25) { seenT = 0; scanSeen(); }
   aimT += dt; if (aimT > 0.1) { aimT = 0; const lit = S.inField || lanternFactor() > 0.05; crossEl.classList.toggle('aim', lit && !invOpen && !P.anim && !!(S.inField ? (field && field.canTake && field.canTake()) : pickTarget())); }
   saveT += dt; if (saveT > 15) { saveT = 0; saveGame(); }
@@ -4269,8 +5107,19 @@ function frame(now) {
   if (running && !paused) update(dt);
   draw(now, dt);
 }
+// the lamp in the niche at 49 burns whether or not anyone is there to see it
+function updateEternal(t) {
+  let src = null;
+  if (!S.inField) for (const len of loaded.values()) if (len.eternal) { src = len; break; }
+  if (!src) { eternalLight.intensity = 0; return; }
+  const e = src.eternal, f = 1 + 0.07 * Math.sin(t * 7.3) + 0.05 * Math.sin(t * 13.1 + 2) + 0.03 * Math.sin(t * 29.7);
+  eternalLight.position.set(e.pos.x, e.pos.y + 0.05, e.pos.z + src.group.position.z);
+  eternalLight.intensity = 0.55 * f;
+  e.flame.scale.set(1, 0.9 + 0.12 * Math.sin(t * 9.1) + 0.06 * Math.sin(t * 17.3), 1);
+}
 function draw(now, dt) {
   const lf = lanternFactor();
+  updateEternal(now / 1000);
   const flick = updateLight(now / 1000, lf);
   const sp = Math.min(1, P.vel.length() / C.WALK);
   const bob = P.anim ? Math.sin(P.bob) * 0.02 : -Math.abs(Math.sin(P.bob)) * 0.035 * sp;
@@ -4300,7 +5149,7 @@ function devKey(code) {
   if (code === 'KeyK') S.health = 0.3;
   if (code === 'KeyL') S.oil = C.FADE_OIL;
   if (code === 'KeyM') { S.mirror = { pending: true }; }
-  if (code === 'KeyG') { const lap = Math.floor(originA / C.LENGTHS), r = layoutFor(C.ESCAPE_L, lap).rooms.find(r => r.design === 'escape'); teleport(lap * C.LENGTHS + C.ESCAPE_L, -r.d + 3, 1.2); }
+  if (code === 'KeyG') { const lap = Math.floor(originA / C.LENGTHS), r = layoutFor(C.ESCAPE_L, lap).rooms.find(r => r.design === 'escape'); teleport(lap * C.LENGTHS + C.ESCAPE_L, -r.d + 1.2, r.side * 1.4); P.yaw = r.side > 0 ? -Math.PI / 2 : Math.PI / 2; }
   if (code === 'KeyF') { S.inField = false; beginField(); }
   const toRoom = (design) => {
     for (let i = 1; i <= C.LENGTHS; i++) {
@@ -4310,9 +5159,10 @@ function devKey(code) {
   };
   if (code === 'KeyC') toRoom('cave');
   if (code === 'KeyJ') toRoom('jut');
+  if (code === 'KeyE') toRoom('odd');
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
-window.__rampart = { maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, strike, mirrorRt, scene, camera };
+window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, strike, mirrorRt, scene, camera };
 
 /* ---------- boot ---------- */
 let pendingSave = null;
