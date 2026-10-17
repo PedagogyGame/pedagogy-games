@@ -145,7 +145,7 @@ body{
 "use strict";
 /* ---------- lattice geometry ---------- */
 const DEG=Math.PI/180, TAU=Math.PI*2;
-const H=Math.sqrt(3)/2, N=12;
+const H=Math.sqrt(3)/2, N=15;
 const DIRS=[[0,1],[1,1],[1,0],[0,-1],[-1,-1],[-1,0]]; // E SE SW W NW NE (angle = index*60)
 const nid=(i,j)=>i*(i+1)/2+j;
 const NC=(N+1)*(N+2)/2;
@@ -159,12 +159,15 @@ const mirN=k=>nid(NI[k],NI[k]-NJ[k]);
 const FULL=[];
 for (let k=0;k<NC;k++){ FULL[k]=[]; for (const [di,dj] of DIRS){ const i=NI[k]+di, j=NJ[k]+dj; if (inLat(i,j)) FULL[k].push(nid(i,j)); } }
 
-const C=nid(8,4); // graveyard centre
+const CI=Math.round(N/3)*2;          // centroid row (even, so it has a centre node)
+const C=nid(CI,CI/2);                 // graveyard centre
+const PROW=CI-2;                      // row of the graveyard gate and the fairy rings
 const distC=new Int16Array(NC).fill(-1);
 { const q=[C]; distC[C]=0; while(q.length){ const k=q.shift(); for (const n of FULL[k]) if (distC[n]<0){ distC[n]=distC[k]+1; q.push(n); } } }
 const PEN_IN=new Set(), RING=new Set();
 for (let k=0;k<NC;k++){ if (distC[k]<=1) PEN_IN.add(k); else if (distC[k]===2) RING.add(k); }
-const G=nid(6,3), PL=nid(6,0), PR=nid(6,6), START=nid(N,N/2), BONUS_N=nid(10,5);
+const SROW=N%2?N-1:N;
+const G=nid(PROW,PROW/2), PL=nid(PROW,0), PR=nid(PROW,PROW), START=nid(SROW,SROW/2), BONUS_N=nid(CI+2,CI/2+1);
 const CORNERS=[nid(0,0),nid(N,0),nid(N,N)];
 const ACTIVE_NODES=NC-PEN_IN.size;
 const PD=1.15, PLEN=PD*2;
@@ -201,7 +204,7 @@ function genMaze(seed){
     if ((ia===N&&ib===N)||(ja===0&&jb===0)||(ja===ia&&jb===ib)) forced.add(key);
     if (RING.has(a)&&RING.has(b)) forced.add(key);
   }
-  forced.add(ekey(PL,nid(6,1))); forced.add(ekey(PR,nid(6,5)));
+  forced.add(ekey(PL,nid(PROW,1))); forced.add(ekey(PR,nid(PROW,PROW-1)));
   const pairs=[], seen=new Set();
   for (const [key,[a,b]] of edges){
     if (forced.has(key)||seen.has(key)) continue;
@@ -321,7 +324,7 @@ function resetActors(){
   Object.assign(red,{a:START,b:START,t:0,moving:false,heading:180,desired:180,deathT:0,burst:false});
   for (const z of zombies){
     z.fright=false; z.revive=0; z.leaveNow=false;
-    if (z.id===0){ z.state='active'; z.a=G; z.b=nid(6,2); z.t=0; z.heading=180; }
+    if (z.id===0){ z.state='active'; z.a=G; z.b=nid(PROW,PROW/2-1); z.t=0; z.heading=180; }
     else { z.state='pen'; z.px=SLOTS[z.id].x; z.py=SLOTS[z.id].y; z.heading=90; }
   }
   mode='scatter'; modeIdx=0; modeT=0; frightLeft=0; combo=0; lifeT=0; noDotT=0;
@@ -482,7 +485,7 @@ function updateZombie(z,dt){
     else {
       let go;
       if (afterDeath) go=lifeT>z.id*1.7;
-      else { const lim=level===1?[0,0,30,60]:level===2?[0,0,0,45]:[0,0,0,0]; go=levelDots>=lim[z.id]; }
+      else { const k=dotsTotal/200, lim=level===1?[0,0,30*k,60*k]:level===2?[0,0,0,45*k]:[0,0,0,0]; go=levelDots>=lim[z.id]; }
       if (!go&&noDotT>4){ const first=zombies.find(t=>t.state==='pen'&&t.revive<=0); if (first===z){ go=true; noDotT=0; } }
       if (go){ z.state='leaving'; burst(z.px,z.py,'dirt',8); }
     }
@@ -713,7 +716,7 @@ function buildDecor(mz,seed){
   }
   const have=new Set(mz.edges.map(([a,b])=>ekey(a,b)));
   for (let k=0;k<NC;k++) for (const n of FULL[k]) if (k<n&&!have.has(ekey(k,n))) cands.push([(UX[k]+UX[n])/2,(UY[k]+UY[n])/2]);
-  for (let i=0;i<900;i++){ const x=(rnd()*2-1)*(N/2+7.5), y=-6+rnd()*(N*H+12); if (triDist(x,y)>-.3) continue; cands.push([x,y]); }
+  for (let i=0;i<1300;i++){ const x=(rnd()*2-1)*(N/2+7.5), y=-6+rnd()*(N*H+12); if (triDist(x,y)>-.3) continue; cands.push([x,y]); }
   const trees=[], small=[], rings=[RINGPOS(PL),RINGPOS(PR)];
   for (const [x0,y0] of cands){
     const x=x0+(rnd()-.5)*.08, y=y0+(rnd()-.5)*.08;
@@ -1090,7 +1093,7 @@ function layout(){
   DPR=clamp(Math.min(2,window.devicePixelRatio||1,Math.sqrt(2.0e6/(CW*CH)))*qual,.6,2);
   cv.width=Math.round(CW*DPR); cv.height=Math.round(CH*DPR);
   darkC=mk(Math.ceil(cv.width/2),Math.ceil(cv.height/2)); darkG=darkC.getContext('2d');
-  Sclose=clamp(Math.min(CW,CH)/5.4,46,160);
+  Sclose=clamp(Math.min(CW,CH)/5.4,46,160)*.93;   // camera pulled back 7%
   Sfit=Math.min(CW/(N+3.6),CH/(N*H+2.8));
   vignC=mk(darkC.width,darkC.height);
   const vg=vignC.getContext('2d'), R=Math.hypot(vignC.width,vignC.height)/2, gr=vg.createRadialGradient(vignC.width/2,vignC.height/2,R*.38,vignC.width/2,vignC.height/2,R);
