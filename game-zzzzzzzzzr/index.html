@@ -361,7 +361,7 @@ function serialize() {
   return JSON.stringify({
     v: 3, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
     t: S.t, lastSupply: S.lastSupply, activeSince: S.activeSince, dropN: S.dropN, mirror: S.mirror, mirrorSeen: S.mirrorSeen, inField: S.inField, field: S.field, dead: S.dead,
-    maxA: S.maxA || 0, stairRet: S.stairRet || null,
+    maxA: S.maxA || 0, stairRet: S.stairRet || null, harp: S.harp || null,
   });
 }
 function deserialize(str) {
@@ -1184,7 +1184,47 @@ function layoutFor(L, lap) {
     if (!best) best = { d: 50, side: 1 };
     rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: extra, v: 0, seed: R2.int(0, 1e9), basin: !!(CAVES[L] && CAVES[L].basin), kind: ODD[L] ? ODD[L].kind : null, extra: true });
   }
-  const lay = { L, vi, rooms, clutterSeed: R.int(0, 1e9), decorSeed: hash32(L, vi, 555) };
+  const clutterSeed = R.int(0, 1e9);
+  // the smithies, weaving rooms and sleeping bays, added after everything else so no older room moves or renumbers.
+  // Mostly on the left, where the first lengths had little; two or three in each of the first ten
+  { const R3 = new Rng(hash32(L, 2026, 41));
+    const want = L < 10 ? (L === 0 ? 2 : R3.int(1, 3)) : (R3.chance(0.4) ? 1 : 0) + (R3.chance(0.08) ? 1 : 0);
+    const room = (r) => r.design === 'odd' || r.design === 'escape' ? 22 : r.design === 'cave' ? 17 : 14, kind0 = R3.int(0, 2);
+    for (let k = 0; k < want; k++) {
+      const left = L < 10 ? 0.9 : 0.72;
+      let best = null, bestScore = -1;
+      for (let t = 0; t < 80; t++) {
+        const side = R3.chance(left) ? -1 : 1, d = R3.range(12, 88);
+        let ok = true, minSame = 99, minOpp = 99;
+        for (const r of rooms) { const dd = Math.abs(r.d - d); if (r.side === side) { minSame = Math.min(minSame, dd); if (dd < room(r)) ok = false; } else minOpp = Math.min(minOpp, dd); }
+        if (!ok || minOpp < 2.4) continue;
+        const score = Math.min(minSame, 30) + Math.min(minOpp, 5) * 0.6 + (side < 0 ? 8 : 0);
+        if (score > bestScore) { bestScore = score; best = { d, side }; }
+      }
+      if (!best) break;
+      rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: NEW_UPPER[(kind0 + k) % 3], v: R3.int(0, 1), seed: R3.int(0, 1e9), added: true });
+    }
+  }
+  // the two grottos go in last of all, where there is room for them to spread through the rock:
+  // about 10 m back along the wall toward the length's start, 4 m the other way
+  if (GROTTOS[L]) {
+    const R4 = new Rng(hash32(L, 9001, 7));
+    let best = null, bestScore = -1;
+    for (let t = 0; t < 160; t++) {
+      const side = R4.chance(0.7) ? -1 : 1, d = R4.range(20, 84);
+      let ok = true, minOpp = 99, room = 99;
+      for (const r of rooms) {
+        const dd = r.d - d;
+        if (r.side === side) { if ((dd < 0 && -dd < 14) || (dd >= 0 && dd < 7.5)) ok = false; room = Math.min(room, Math.abs(dd)); }
+        else minOpp = Math.min(minOpp, Math.abs(dd));
+      }
+      if (!ok || minOpp < 2.4) continue;
+      const score = Math.min(room, 30) + Math.min(minOpp, 5) * 0.5 + (side < 0 ? 5 : 0);
+      if (score > bestScore) { bestScore = score; best = { d, side }; }
+    }
+    if (best) rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: 'grotto', v: 0, seed: R4.int(0, 1e9), added: true });
+  }
+  const lay = { L, vi, rooms, clutterSeed, decorSeed: hash32(L, vi, 555) };
   _layCache.set(key, lay);
   return lay;
 }
@@ -1294,7 +1334,7 @@ function* corridorGen(ctx) {
   const B = ctx.B, R = new Rng(ctx.lay.clutterSeed);
   ctx.setFrame(1, 0, 0, 0);
   const open = { '-1': [], '1': [] };
-  for (const r of ctx.lay.rooms) open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : r.design === 'cave' ? 0.85 : 0.72, top: r.design === 'cave' ? CAVE_DOOR : DOOR, rough: r.design === 'cave' });
+  for (const r of ctx.lay.rooms) { const rock = r.design === 'cave' || r.design === 'grotto'; open[r.side].push({ z: -r.d, h: r.lower ? 0.95 : rock ? 0.85 : 0.72, top: rock ? CAVE_DOOR : DOOR, rough: rock }); }
 
   B.box(M.plank, 0, -0.05, -50, 4.1, 0.1, 100, 0, 0, 0, 0.55);
   B.box(M.board, 0, 3.07 + UP, -50, 4.9, 0.12, 100, 0, 0, 0, 0.6);
@@ -1389,13 +1429,18 @@ function* corridorGen(ctx) {
   yield;
 
   // clutter along the walls (unchanged rhythm, so the lengths keep their faces)
-  const clear = (s, z, need) => !open[s].some(o => Math.abs(z - o.z) < o.h + need);
+  const openOld = { '-1': [], '1': [] }, openNew = { '-1': [], '1': [] };
+  for (const r of ctx.lay.rooms) (r.added ? openNew : openOld)[r.side].push({ z: -r.d, h: 0.72 });
+  const clear = (s, z, need) => !openOld[s].some(o => Math.abs(z - o.z) < o.h + need);
+  // a pile that would stand in one of the newer doorways moves along the wall, out of the way
+  const dodge = (s, z) => { for (const o of openNew[s]) if (Math.abs(z - o.z) < o.h + 1.6) z = o.z + (z >= o.z ? 1 : -1) * (o.h + 1.7); return z; };
   const used = { '-1': [], '1': [] };
   buildStage = 'clutter';
   for (let k = 1; k < 25; k++) {
     if (!R.chance(0.4)) continue;
-    const s = R.chance(0.5) ? 1 : -1, z = -k * 4 - R.range(0.8, 3.2);
-    if (!clear(s, z, 1.6)) continue;
+    const s = R.chance(0.5) ? 1 : -1, z0 = -k * 4 - R.range(0.8, 3.2);
+    if (!clear(s, z0, 1.6)) continue;
+    const z = clamp(dodge(s, z0), -99, -1);
     used[s].push(z);
     const kind = R.pickW(['crates', 'barrels', 'sit', 'lie', 'bones', 'beam', 'box'], [3, 2, 1.4, 0.6, 1.2, 0.8, 1]);
     if (kind === 'crates') {
@@ -1712,6 +1757,7 @@ const UPPER_BUILD = {
   },
   gallery(ctx, room, R, v) {
     const D = v === 0 ? 12 : 16, W = v === 0 ? 2.6 : 2.4;
+    room.D = D;
     shell(ctx, room, D, W, 2.6 * HS, v === 0 ? M.board : M.log);
     shelves(ctx, room, 'u', 1.1, D - 0.3, W / 2 - 0.2, 0.36, [0.4, 0.95, 1.5, 2.05], R);
     shelves(ctx, room, 'u', 1.1, D - 0.3, -W / 2 + 0.2, 0.36, [0.4, 0.95, 1.5, 2.05]);
@@ -1996,8 +2042,11 @@ function buildCave(ctx, room, R) {
   const a = R.range(3.3, 4.2), b = R.range(2.6, 3.3), c = R.range(2.5, 3.0) * HS;
   const b1 = R.range(-0.7, 0.7), cc = new THREE.Vector2(3.0 + R.range(1.0, 2.0) + a * 0.7, R.range(-1.4, 1.4));
   const P0 = new THREE.Vector2(-0.55, 0), P1 = new THREE.Vector2(2.3, b1), P2 = new THREE.Vector2(cc.x - a * 0.72, cc.y * 0.7);
-  B.add(M.rock, caveTube(R, [P0, P1, P2], 0.95, 1.6, 1.26, seed), new THREE.Matrix4(), true);
-  B.add(M.rock, caveChamber(R, a, b, c, 0.55, seed + 11), mtx(cc.x, 0, cc.y), true);
+  const ch = { c: cc, a, b, h: c, yc: 0.55, kf: caveK(seed + 11) };
+  B.add(M.rock, cutGeo(caveTube(R, [P0, P1, P2], 0.95, 1.6, 1.26, seed), insideChamber([ch])), new THREE.Matrix4(), true);
+  { const g = caveChamber(R, a, b, c, 0.55, seed + 11), d = P2.clone().sub(P1).normalize(), h = _hole(P2.clone().sub(cc), d, 0.72, 2.3, 1.8);
+    B.add(M.rock, cutGeo(g, (x, y, z) => { const dx = x - h.u, dz = z - h.v, al = dx * h.du + dz * h.dv, ac = -dx * h.dv + dz * h.du; return Math.abs(al) < h.depth && Math.abs(ac) < h.w && y > h.y0 && y < h.y1; }), mtx(cc.x, 0, cc.y), true); }
+  rimOpening(B, seed + 5, ch, P2, P2.clone().sub(P1).normalize(), 0.72, 2.3);
   // allowed ground: the mouth, the bends of the passage, the chamber
   const regions = [];
   const rect = (pa, pb, hw, ext = 0.3) => {
@@ -2094,6 +2143,7 @@ function* buildLengthGen(A) {
       else if (r.design === 'jut') buildJut(ctx, room, R);
       else if (r.design === 'odd') yield* buildOddGen(ctx, room, R);
       else if (r.design === 'escape') yield* buildEscapeGen(ctx, room, R);
+      else if (r.design === 'grotto') yield* buildGrottoGen(ctx, room, R);
       else UPPER_BUILD[r.design](ctx, room, R, r.v);
     }
     yield;
@@ -2110,6 +2160,575 @@ function buildLength(A) {
   let r = g.next();
   while (!r.done) r = g.next();
   return r.value;
+}
+
+/* ---- 31_workrooms.js ---- */
+/* ============================================================
+   Three later kinds of upper room: the smithy, the weaving room, the sleeping bay.
+   Each reads as a working room left in a hurry, and as something else besides
+   (a kiln, a rack, a row of niches), as the older rooms do. Two variations each.
+   ============================================================ */
+const NEW_UPPER = ['forge', 'loom', 'bunks'];
+const _wm = {
+  clay: () => cachedMat('wr-clay', () => lam(T.earth, { color: 0x9a8268, bumpScale: 0.6 })),
+  slag: () => cachedMat('wr-slag', () => new THREE.MeshPhongMaterial({ color: 0x2c241e, specular: 0x4a3a2a, shininess: 34 })),
+  rust: () => cachedMat('wr-rust', () => lam(T.iron, { color: 0x6a4a34, bumpScale: 0.8 })),
+  coal: () => cachedMat('wr-coal', () => new THREE.MeshLambertMaterial({ color: 0x141210 })),
+  soot: () => cachedMat('wr-soot', () => new THREE.MeshLambertMaterial({ color: 0x0c0a08, transparent: true, opacity: 0.82, depthWrite: false })),
+  tick: () => cachedMat('wr-tick', () => lam(T.cloth, { color: 0xa89868, bumpScale: 0.8 })),
+  fur: (k) => cachedMat('wr-fur' + k, () => lam(T.cloth, { color: [0x5a4634, 0x7a6a58, 0x3a3028][k], bumpScale: 2.2 })),
+  wool: (c) => cachedMat('wr-wool' + c, () => lam(T.cloth, { color: c, bumpScale: 1.2 })),
+  basket: () => cachedMat('wr-basket', () => lam(T.bark, { color: 0xb09a6a, bumpScale: 0.8, side: THREE.DoubleSide })),
+  warp: () => cachedMat('wr-warp', () => {
+    // the warp: a few hundred threads hanging from the cloth beam, gathered at the foot into bundles for the weights
+    const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(2207);
+    g.clearRect(0, 0, 256, 256);
+    for (let i = 0; i < 96; i++) {
+      const x = 3 + i * 2.6 + R.range(-0.5, 0.5), bundle = Math.round((i + 0.5) / 96 * 14 - 0.5) / 13 * 250 + 3;
+      g.strokeStyle = `rgba(${R.int(208, 232)},${R.int(196, 220)},${R.int(160, 186)},0.95)`; g.lineWidth = 0.9;
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x + R.range(-0.6, 0.6), 200); g.quadraticCurveTo(x, 236, bundle, 256); g.stroke();
+    }
+    const m = new THREE.MeshLambertMaterial({ map: texOf(c), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide });
+    return m;
+  }),
+  web: () => cachedMat('wr-cloth', () => {
+    // the woven part at the top: a madder-red cloth with a pale band, beaten up tight under the beam
+    const c = makeCanvas(128, 64), g = c.getContext('2d'), R = new Rng(5150);
+    g.fillStyle = '#7e2e22'; g.fillRect(0, 0, 128, 64);
+    g.fillStyle = '#c8b48a'; g.fillRect(0, 40, 128, 7); g.fillRect(0, 50, 128, 2);
+    for (let y = 0; y < 64; y += 2) { g.fillStyle = `rgba(0,0,0,${R.range(0.04, 0.14)})`; g.fillRect(0, y, 128, 1); }
+    for (let x = 0; x < 128; x += 2) { g.fillStyle = `rgba(255,240,220,${R.range(0.02, 0.07)})`; g.fillRect(x, 0, 1, 64); }
+    return new THREE.MeshLambertMaterial({ map: texOf(c), side: THREE.DoubleSide });
+  }),
+  board: () => cachedMat('wr-board', () => {
+    // a gaming board: a grid cut into a plank, the point where the lines meet marked
+    const c = makeCanvas(128, 128), g = c.getContext('2d');
+    g.drawImage(T.plank.image, 0, 0, 128, 128);
+    g.strokeStyle = 'rgba(30,20,12,0.85)'; g.lineWidth = 1.6;
+    for (let i = 0; i < 9; i++) { const p = 10 + i * 13.5; g.beginPath(); g.moveTo(10, p); g.lineTo(118, p); g.stroke(); g.beginPath(); g.moveTo(p, 10); g.lineTo(p, 118); g.stroke(); }
+    g.beginPath(); g.arc(64, 64, 5, 0, TAU); g.stroke();
+    return new THREE.MeshLambertMaterial({ map: texOf(c) });
+  }),
+};
+function _clayWeight(B, mat, u, y, v, R) {
+  // a loom weight: a fired-clay ring, or the older pyramid shape, with its hole for the thread
+  if (R.chance(0.65)) B.add(mat, new THREE.TorusGeometry(0.045, 0.03, 6, 10), mtx(u, y, v, 0, Math.PI / 2 + R.range(-0.2, 0.2), R.range(-0.2, 0.2)), true);
+  else B.add(mat, new THREE.ConeGeometry(0.055, 0.12, 4), mtx(u, y, v, R.range(-0.1, 0.1), R.range(0, 1.5), 0), true);
+}
+function _wool(B, R, u, y, v, s = 1) {
+  const cols = [0xe0d4b8, 0xcab89a, 0x6a5a48, 0x9a8a78, 0xb8a888];
+  B.add(_wm.wool(R.pick(cols)), new THREE.IcosahedronGeometry(1, 1), mtx(u, y, v, R.range(0, 3), R.range(0, 3), 0, 0.1 * s, 0.085 * s, 0.1 * s), true);
+}
+function _basket(ctx, u, v, R, fill = true) {
+  const B = ctx.B, h = R.range(0.26, 0.36), r = R.range(0.22, 0.28);
+  B.add(_wm.basket(), new THREE.CylinderGeometry(r, r * 0.82, h, 14, 1, true), mtx(u, h / 2, v), true);
+  B.add(_wm.basket(), new THREE.TorusGeometry(r, 0.014, 4, 18), mtx(u, h, v, Math.PI / 2, 0, 0), true);
+  B.add(_wm.basket(), new THREE.CircleGeometry(r * 0.82, 14), mtx(u, 0.01, v, -Math.PI / 2, 0, 0), true);
+  if (fill) for (let i = 0; i < R.int(3, 6); i++) _wool(B, R, u + R.range(-r * 0.5, r * 0.5), h - 0.04 + R.range(0, 0.06), v + R.range(-r * 0.5, r * 0.5));
+  ctx.circle(u, v, r + 0.05);
+}
+function _hammer(B, a, b, head = 0.12) {
+  B.beam(M.wood, a, b, 0.03, 0.03);
+  const d = b.clone().sub(a).normalize(), m = new THREE.Matrix4().compose(b.clone().addScaledVector(d, 0.03), new THREE.Quaternion().setFromUnitVectors(V3(1, 0, 0), d), V3(1, 1, 1));
+  B.add(M.iron, boxGeo(0.06, 0.05, head), m, true);
+}
+function _tongs(B, x, y, z, len = 0.55, spread = 0.05) {
+  // two long iron arms crossing at a rivet, hung by their handles
+  B.beam(M.iron, V3(x, y, z - spread), V3(x, y - len, z + spread * 0.6), 0.016, 0.016);
+  B.beam(M.iron, V3(x, y, z + spread), V3(x, y - len, z - spread * 0.6), 0.016, 0.016);
+}
+function _bellows(B, u, v, R) {
+  // a pair of bag bellows: leather between two boards, a pipe from each toward the fire
+  for (const e of [-0.2, 0.2]) {
+    const squash = R.range(0.55, 1);
+    B.add(M.leather, M_SPH(), mtx(u + e, 0.13 * squash + 0.02, v, 0, 0, 0, 0.17, 0.12 * squash, 0.3), true);
+    B.box(M.wood, u + e, 0.26 * squash + 0.05, v, 0.3, 0.02, 0.46);
+    B.beam(M.wood, V3(u + e, 0.04, v + 0.32), V3(u + e, 0.06, v + 0.62), 0.04, 0.04);
+  }
+}
+function M_SPH() { return new THREE.SphereGeometry(1, 10, 7); }
+
+Object.assign(UPPER_BUILD, {
+  // ---------- the smithy: a raised hearth gone cold, bag bellows, an anvil on a stump, the quench trough ----------
+  forge(ctx, room, R, v) {
+    const B = ctx.B, stones = [M.stone, M.stoneB, M.stoneC];
+    const D = v === 0 ? 5 : 6, W = v === 0 ? 4.2 : 4.4, hw = W / 2, H = 2.8 * HS;
+    shell(ctx, room, D, W, H, v === 0 ? M.log : M.board, { floor: M.earth });
+    // the hearth: a waist-high block of clay and stone with a fire pit in its top
+    const [hu, hv, hlu, hlv] = v === 0 ? [D - 0.62, -0.5, 1.0, 1.5] : [3.0, -hw + 0.62, 1.6, 1.0];
+    B.box(M.stoneB, hu, 0.38, hv, hlu, 0.76, hlv, 0, 0, 0, 0.8);
+    B.box(_wm.clay(), hu, 0.775, hv, hlu + 0.04, 0.03, hlv + 0.04);
+    const pr = Math.min(hlu, hlv) * 0.32;
+    B.add(M.ash, new THREE.CircleGeometry(pr, 14), mtx(hu, 0.795, hv, -Math.PI / 2, 0, 0), true);
+    for (let i = 0; i < 9; i++) { const a = i / 9 * TAU + R.range(-0.2, 0.2); stoneLump(B, R, R.pick(stones), hu + Math.cos(a) * (pr + 0.05), 0.83, hv + Math.sin(a) * (pr + 0.05), R.range(0.06, 0.1), 0.6); }
+    for (let i = 0; i < 10; i++) B.box(_wm.coal(), hu + R.range(-pr, pr) * 0.7, 0.81, hv + R.range(-pr, pr) * 0.7, R.range(0.04, 0.09), 0.03, R.range(0.03, 0.06), 0, R.range(0, 3), 0);
+    ctx.solid(hu, hv, hlu + 0.1, hlv + 0.1);
+    // years of smoke have blackened the wall above it, wider toward the top
+    { const g = new THREE.PlaneGeometry(1, 1); g.translate(0, 0.5, 0); const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.5) p.setX(i, p.getX(i) * 1.7);
+      if (v === 0) B.add(_wm.soot(), g.rotateY(-Math.PI / 2), mtx(D - 0.015, 0.78, hv, 0, 0, 0, 1, H - 0.9, hlv * 0.8), true);
+      else B.add(_wm.soot(), g, mtx(hu, 0.78, -hw + 0.015, 0, 0, 0, hlu * 0.8, H - 0.9, 1), true); }
+    // the clay pipe that fed the air in, and the bellows that worked it
+    const bu = v === 0 ? hu : hu + 1.15, bv = v === 0 ? -hw + 0.38 : hv;
+    _bellows(B, bu, bv, R);
+    B.add(_wm.clay(), new THREE.CylinderGeometry(0.05, 0.06, 0.5, 8), v === 0 ? mtx(hu, 0.6, hv - hlv / 2 - 0.12, Math.PI / 2, 0, 0) : mtx(hu + hlu / 2 + 0.12, 0.6, hv, 0, 0, Math.PI / 2), true);
+    ctx.circle(bu, bv, 0.36);
+    // the anvil: an iron block with a short beak, on an oak stump; the hammer left leaning on it
+    const [au, av] = v === 0 ? [2.75, 0.25] : [3.0, 0.35];
+    B.add(M.log, new THREE.CylinderGeometry(0.26, 0.3, 0.6, 10), mtx(au, 0.3, av, 0, R.range(0, 3), 0), true);
+    B.box(M.iron, au, 0.71, av, 0.24, 0.22, 0.3, 0, R.range(-0.2, 0.2), 0, 0.6);
+    B.add(M.iron, new THREE.ConeGeometry(0.07, 0.24, 8), mtx(au, 0.77, av + 0.26, Math.PI / 2, 0, 0), true);
+    _hammer(B, V3(au + 0.3, 0.02, av - 0.2), V3(au + 0.2, 0.42, av - 0.12));
+    ctx.circle(au, av, 0.36);
+    ctx.surface(room, au - 0.06, 0.8, av);
+    // the quench trough: a hollowed-out log, black water still in it
+    const tu = v === 0 ? 3.05 : 2.6, tv = hw - 0.42, tl = 1.2;
+    for (const e of [-1, 1]) B.box(M.woodDark, tu, 0.22, tv + e * 0.22, tl, 0.44, 0.06);
+    for (const e of [-1, 1]) B.box(M.woodDark, tu + e * tl / 2, 0.22, tv, 0.06, 0.44, 0.5);
+    B.box(M.woodDark, tu, 0.03, tv, tl, 0.06, 0.5);
+    B.box(M.water, tu, 0.34, tv, tl - 0.06, 0.01, 0.38);
+    ctx.solid(tu, tv, tl + 0.1, 0.6);
+    // the rack on the wall above it: tongs, a set hammer, a punch, a file
+    B.box(M.wood, tu, 1.62, hw - 0.06, 1.5, 0.07, 0.07);
+    for (let i = 0; i < 4; i++) B.box(M.wood, tu - 0.6 + i * 0.4, 1.62, hw - 0.12, 0.03, 0.03, 0.12);
+    _tongs(B, tu - 0.55, 1.6, hw - 0.14); _tongs(B, tu - 0.15, 1.6, hw - 0.14, 0.62, 0.04);
+    _hammer(B, V3(tu + 0.25, 1.6, hw - 0.16), V3(tu + 0.25, 1.18, hw - 0.16), 0.1);
+    B.beam(M.iron, V3(tu + 0.62, 1.58, hw - 0.14), V3(tu + 0.62, 1.2, hw - 0.14), 0.022, 0.022);
+    // slag and scale swept into a corner; a few raw blooms of iron beside it
+    const [su, sv] = v === 0 ? [1.0, -hw + 0.5] : [D - 0.7, hw - 0.6];
+    for (let i = 0; i < R.int(8, 14); i++) stoneLump(B, R, _wm.slag(), su + R.range(-0.35, 0.35), 0.04, sv + R.range(-0.3, 0.3), R.range(0.04, 0.11), R.range(0.4, 0.8));
+    for (let i = 0; i < R.int(2, 4); i++) stoneLump(B, R, _wm.rust(), su + R.range(-0.2, 0.4), 0.08, sv + R.range(-0.2, 0.2), R.range(0.08, 0.13), 0.7);
+    ctx.circle(su, sv, 0.4);
+    if (v === 0) {
+      shelves(ctx, room, 'u', 1.7, 3.4, -hw + 0.22, 0.36, [0.9, 1.5]);
+      ctx.addSmash('chest', D - 0.55, 0, hw - 0.62, -Math.PI / 2 + R.range(-0.15, 0.15), { room });
+      stack(ctx, room, 1.05, hw - 0.55, R, 1);
+    } else {
+      // a grindstone in its frame, turned by a crank, a little water box under it
+      const gu = D - 0.75, gv = 0.45;
+      for (const e of [-1, 1]) { B.box(M.wood, gu + e * 0.32, 0.45, gv, 0.08, 0.9, 0.08); B.box(M.wood, gu + e * 0.32, 0.06, gv, 0.08, 0.08, 0.7); }
+      B.add(M.stoneC, new THREE.CylinderGeometry(0.34, 0.34, 0.1, 18), mtx(gu, 0.62, gv, 0, 0, Math.PI / 2), true);
+      B.beam(M.iron, V3(gu - 0.42, 0.62, gv), V3(gu + 0.42, 0.62, gv), 0.025, 0.025);
+      B.beam(M.iron, V3(gu + 0.42, 0.62, gv), V3(gu + 0.42, 0.42, gv + 0.12), 0.022, 0.022);
+      B.box(M.woodDark, gu, 0.12, gv, 0.5, 0.18, 0.2);
+      ctx.solid(gu, gv, 0.8, 0.8);
+      table(ctx, room, 1.55, -hw + 0.62, 0);
+      ctx.addSmash('chest', D - 0.62, 0, -hw + 0.62, Math.PI / 2 + R.range(-0.15, 0.15), { room });
+      stack(ctx, room, 1.1, hw - 0.55, R, 2);
+    }
+  },
+
+  // ---------- the weaving room: a warp-weighted loom against the back wall, its weights hanging in two rows ----------
+  loom(ctx, room, R, v) {
+    const B = ctx.B, D = v === 0 ? 4.6 : 5, W = v === 0 ? 4.4 : 4, hw = W / 2, H = 2.75 * HS, clay = _wm.clay();
+    shell(ctx, room, D, W, H, M.board);
+    if (v === 0) {
+      // the loom stands leaning back against the wall: two uprights, the cloth beam across their tops
+      const u0 = D - 0.62, lean = 0.42, top = 2.45, tilt = -Math.atan2(lean, top), at = (y) => u0 + lean * y / top;
+      for (const e of [-1, 1]) B.beam(M.log, V3(u0, 0, e * 1.1), V3(u0 + lean, top, e * 1.1), 0.1, 0.1);
+      B.log(M.log, at(2.36), 2.36, 0, 0.075, 2.5, 'z');
+      // the heddle rod on its forked pegs, and the shed rod lower down
+      for (const e of [-1, 1]) B.beam(M.wood, V3(at(1.22), 1.22, e * 1.1), V3(at(1.22) - 0.18, 1.24, e * 1.1), 0.04, 0.04);
+      B.log(M.wood, at(1.24) - 0.16, 1.26, 0, 0.022, 2.3, 'z');
+      B.log(M.wood, at(0.95) - 0.05, 0.95, 0, 0.03, 2.2, 'z');
+      // the warp, and the cloth already woven at the top
+      const warp = new THREE.PlaneGeometry(2.0, 1.86); warp.rotateY(-Math.PI / 2);
+      B.add(_wm.warp(), warp, mtx(at(1.38) - 0.01, 1.38, 0, 0, 0, tilt), true);
+      const cloth = new THREE.PlaneGeometry(2.04, 0.5); cloth.rotateY(-Math.PI / 2);
+      B.add(_wm.web(), cloth, mtx(at(2.08) - 0.015, 2.08, 0, 0, 0, tilt), true);
+      // the weights, front row and back
+      for (let i = 0; i < 14; i++) {
+        const vv = -0.93 + i * 0.143;
+        _clayWeight(B, clay, at(0.4) - 0.06, 0.4 + R.range(-0.03, 0.03), vv, R);
+        if (i % 2 === 0) _clayWeight(B, clay, at(0.36) + 0.06, 0.36 + R.range(-0.03, 0.03), vv + 0.07, R);
+      }
+      ctx.solid(u0 + 0.2, 0, 0.7, 2.5);
+      // a bench along the wall with spindles on it; a distaff leaning at its end
+      const bv = hw - 0.28;
+      B.box(M.plank, 1.9, 0.42, bv, 1.8, 0.05, 0.4);
+      for (const du of [-0.8, 0.8]) for (const dv of [-0.14, 0.14]) B.box(M.wood, 1.9 + du, 0.2, bv + dv, 0.06, 0.4, 0.06);
+      for (const su of [1.25, 1.9, 2.55]) ctx.surface(room, su, 0.445, bv);
+      ctx.solid(1.9, bv, 1.9, 0.45);
+      for (let i = 0; i < 2; i++) { const su = 1.5 + i * 0.85; B.beam(M.wood, V3(su, 0.455, bv - 0.1), V3(su + 0.28, 0.455, bv + 0.05), 0.012, 0.012); B.add(clay, new THREE.CylinderGeometry(0.025, 0.025, 0.018, 10), mtx(su + 0.24, 0.455, bv + 0.03, 0, 0, Math.PI / 2), true); }
+      B.beam(M.wood, V3(2.95, 0, bv), V3(2.95, 1.3, bv + 0.14), 0.025, 0.025);
+      B.add(_wm.wool(0xe0d4b8), new THREE.IcosahedronGeometry(1, 1), mtx(2.95, 1.12, bv + 0.11, 0, 0, 0, 0.09, 0.18, 0.09), true);
+      _basket(ctx, 1.15, -hw + 0.45, R);
+      ctx.addSmash('chest', D - 1.25, 0, -hw + 0.62, Math.PI / 2 + R.range(-0.1, 0.1), { room });
+      ctx.addSmash('box', 3.35, 0, hw - 0.3, R.range(-0.4, 0.4), { room });
+    } else {
+      // the loom has gone over: the uprights slid down the wall, the weights spilled in a line where they hit the floor
+      const B2 = B;
+      B2.beam(M.log, V3(D - 0.2, 1.9, -hw + 0.35), V3(3.0, 0.06, -hw + 0.5), 0.1, 0.1);
+      B2.beam(M.log, V3(D - 0.2, 1.84, -0.4), V3(3.15, 0.06, -0.2), 0.1, 0.1);
+      B2.beam(M.log, V3(D - 0.18, 1.92, -hw + 0.2), V3(D - 0.22, 1.86, -0.12), 0.075, 0.075);
+      B2.log(M.wood, 3.5, 0.6, -0.95, 0.022, 1.7, 'z');
+      for (let i = 0; i < 12; i++) _clayWeight(B2, clay, 3.0 + R.range(-0.12, 0.25), 0.04, -hw + 0.4 + i * 0.13 + R.range(-0.03, 0.03), R);
+      B2.add(_wm.web(), new THREE.SphereGeometry(1, 10, 6, 0, TAU, 0, Math.PI / 2), mtx(D - 0.6, 0, -1.05, 0, 0.4, 0, 0.5, 0.14, 0.35), true);
+      ctx.solid(3.95, -hw + 0.9, 1.9, 1.5);
+      // skeins hung to dry from a pole across the room: madder, woad, weld, walnut, undyed, and a green of woad over weld
+      const pu = 1.65;
+      B2.log(M.wood, pu, H - 0.55, 0, 0.03, W - 0.1, 'z');
+      [0xa23a28, 0x2a3a6a, 0xc8a83a, 0x5a3e28, 0xe0d4b8, 0x4e6a3a].forEach((c, i) => {
+        const vv = -1.35 + i * 0.54 + R.range(-0.05, 0.05);
+        B2.add(_wm.wool(c), new THREE.TorusGeometry(0.11, 0.025, 5, 12), mtx(pu, H - 0.82, vv, 0, Math.PI / 2, 0, 1, 2.3, 1), true);
+      });
+      // a band woven on tablets, still on the table with its square tablets
+      table(ctx, room, 2.1, hw - 0.55, 0);
+      B2.box(_wm.web(), 2.1, 0.805, hw - 0.55, 1.0, 0.004, 0.06);
+      for (let i = 0; i < 12; i++) B2.box(M.bone, 2.45 + (i % 2) * 0.004, 0.81 + i * 0.006, hw - 0.55, 0.05, 0.004, 0.05, 0, R.range(-0.1, 0.1), 0);
+      _basket(ctx, 1.05, -hw + 0.42, R);
+      ctx.addSmash('chest', D - 0.6, 0, hw - 0.62, -Math.PI / 2 + R.range(-0.1, 0.1), { room });
+      stack(ctx, room, 3.4, hw - 0.5, R, 1);
+    }
+  },
+
+  // ---------- the sleeping bay: berths in tiers along the walls, or one long raised bench with hides on it ----------
+  bunks(ctx, room, R, v) {
+    const B = ctx.B, H = 2.85 * HS;
+    if (v === 0) {
+      const D = 5.6, W = 4.4, hw = W / 2;
+      shell(ctx, room, D, W, H, M.log);
+      const berth = (s, u0, u1, tiers) => {
+        const dv = 0.85, vc = s * (hw - dv / 2), vf = s * (hw - dv), um = (u0 + u1) / 2;
+        for (const pu of [u0, u1]) B.box(M.wood, pu, tiers * 0.5 + 0.1, vf, 0.1, tiers * 1.0 + 0.2, 0.1);
+        for (let t = 0; t < tiers; t++) {
+          const y = 0.45 + t * 1.0;
+          B.box(M.plank, um, y, vc, u1 - u0, 0.05, dv, 0, 0, 0, 0.7);
+          B.box(M.wood, um, y + 0.09, vf, u1 - u0, 0.14, 0.05);
+          B.box(_wm.tick(), um, y + 0.07, vc, u1 - u0 - 0.12, 0.09, dv - 0.12, 0, 0, 0, 0.6);
+          if (R.chance(0.7)) B.add(_wm.wool(R.pick([0x6a3a2a, 0x4a4a3a, 0x8a7a5a, 0x3a3a4a])), new THREE.CylinderGeometry(0.11, 0.11, dv - 0.2, 10), mtx(u1 - 0.3, y + 0.21, vc, Math.PI / 2, 0, 0), true);
+          if (t === tiers - 1) ctx.surface(room, um - 0.3, y + 0.13, vc);
+        }
+        ctx.solid(um, vc, u1 - u0 + 0.1, dv);
+      };
+      berth(-1, 1.3, 3.3, 2); berth(1, 1.3, 3.3, 2); berth(-1, 3.5, 5.45, 1);
+      // someone still asleep in the lower berth on the right
+      ctx.skeleton('lie', 2.25, hw - 0.43, Math.PI / 2 + R.range(-0.08, 0.08), 0.53);
+      // a brazier in the middle: an iron bowl on three legs, ash in it
+      const zu = 3.2, zv = 0.25;
+      B.add(M.iron, new THREE.SphereGeometry(0.26, 12, 6, 0, TAU, Math.PI / 2, Math.PI / 2), mtx(zu, 0.52, zv), true);
+      B.add(M.ash, new THREE.CircleGeometry(0.22, 12), mtx(zu, 0.45, zv, -Math.PI / 2, 0, 0), true);
+      for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; B.beam(M.iron, V3(zu + Math.cos(a) * 0.14, 0.4, zv + Math.sin(a) * 0.14), V3(zu + Math.cos(a) * 0.26, 0, zv + Math.sin(a) * 0.26), 0.025, 0.025); }
+      ctx.circle(zu, zv, 0.32);
+      // pegs on the back wall: a cloak, a belt with its knife
+      for (const pv of [0.2, 0.9, 1.6]) B.box(M.wood, D - 0.12, 1.7, pv, 0.14, 0.03, 0.03);
+      B.add(_wm.wool(0x5a3a2a), new THREE.CylinderGeometry(0.05, 0.24, 1.0, 10, 1, true, -Math.PI / 2, Math.PI), mtx(D - 0.14, 1.2, 0.9, 0, -Math.PI / 2, 0), true);
+      B.beam(M.leather, V3(D - 0.12, 1.68, 1.6), V3(D - 0.14, 1.18, 1.62), 0.03, 0.006);
+      // turnshoes under a berth
+      for (const e of [0, 1]) B.add(M.leather, new THREE.SphereGeometry(1, 8, 5, 0, TAU, 0, Math.PI / 2), mtx(1.7 + e * 0.14, 0.01, -hw + 1.0, 0, 0.1, 0, 0.055, 0.06, 0.13), true);
+      ctx.addSmash('chest', D - 0.55, 0, 0.75, -Math.PI / 2 + R.range(-0.1, 0.1), { room });
+      ctx.addSmash('box', 1.0, 0, -hw + 1.25, R.range(-0.4, 0.4), { room });
+    } else {
+      const D = 5, W = 4.6, hw = W / 2;
+      shell(ctx, room, D, W, H, M.board);
+      // one long raised bench across the back, as in a hall, hides thrown over it
+      const u0 = 3.5, u1 = D - 0.05, um = (u0 + u1) / 2;
+      B.box(M.plank, um, 0.45, 0, u1 - u0, 0.06, W - 0.05, 0, 0, 0, 0.7);
+      B.box(M.wood, u0 + 0.04, 0.22, 0, 0.08, 0.44, W - 0.05);
+      for (let pv = -hw + 0.3; pv < hw; pv += 1.1) B.box(M.wood, u0 + 0.12, 0.22, pv, 0.1, 0.44, 0.1);
+      for (let i = 0; i < 4; i++) {
+        const fv = -1.6 + i * 1.05 + R.range(-0.1, 0.1), k = R.int(0, 2);
+        B.add(_wm.fur(k), new THREE.CylinderGeometry(1, 1, 1, 9), mtx(um + R.range(-0.1, 0.1), 0.49, fv, 0, R.range(-0.3, 0.3), 0, 0.62, 0.025, 0.42), true);
+      }
+      B.add(_wm.wool(0x6a3a2a), new THREE.CylinderGeometry(0.11, 0.11, 0.8, 10), mtx(u1 - 0.3, 0.6, -hw + 0.6, Math.PI / 2, 0, 0), true);
+      ctx.solid(um, 0, u1 - u0 + 0.1, W);
+      for (const sv of [-1.4, -0.4, 1.4]) ctx.surface(room, um, 0.52, sv);
+      // a game left on the bench: the board with its pieces where they stood
+      const gv = 0.55;
+      B.add(_wm.board(), boxGeo(0.42, 0.03, 0.42), mtx(u0 + 0.35, 0.495, gv, 0, 0.12, 0), true);
+      for (let i = 0; i < 11; i++) {
+        const gx = R.int(0, 8), gy = R.int(0, 8), px = u0 + 0.35 + (gx - 4) * 0.044, pz = gv + (gy - 4) * 0.044;
+        B.add(i < 4 ? M.bone : M.woodDark, new THREE.CylinderGeometry(0.015, 0.017, 0.02, 8), mtx(px, 0.52, pz), true);
+      }
+      B.add(M.bone, new THREE.CylinderGeometry(0.02, 0.022, 0.03, 8), mtx(u0 + 0.35, 0.525, gv), true);   // the king, in the middle
+      // a shield on the side wall, and a cloak on a peg
+      const sm = mtx(2.2, 1.55, -hw + 0.06, 0, 0, 0);
+      B.add(M.board, new THREE.CylinderGeometry(0.4, 0.4, 0.025, 20).rotateX(Math.PI / 2), sm, true);
+      B.add(M.iron, new THREE.SphereGeometry(0.08, 10, 6, 0, TAU, 0, Math.PI / 2).rotateX(Math.PI / 2), sm.clone().multiply(mtx(0, 0, 0.012)), true);
+      B.box(M.wood, 1.4, 1.75, hw - 0.08, 0.03, 0.03, 0.14);
+      B.add(_wm.wool(0x3a3a4a), new THREE.CylinderGeometry(0.05, 0.22, 0.95, 10, 1, true, 0, Math.PI), mtx(1.4, 1.27, hw - 0.12, 0, 0, 0), true);
+      ctx.addSmash('chest', 2.85, 0, -hw + 0.6, Math.PI / 2 + R.range(-0.1, 0.1), { room });
+      ctx.addSmash('chest', 2.9, 0, hw - 0.6, -Math.PI / 2 + R.range(-0.1, 0.1), { room });
+      if (R.chance(0.6)) ctx.addSmash('stool', 1.6, 0, -0.9, R.range(0, 3), { room });
+    }
+  },
+});
+
+/* ---- 33_grottos.js ---- */
+/* ============================================================
+   Two grottos, at lengths 10 and 93: natural caves in the rock, joined by passages someone cut through it.
+   Big chambers with hanging stone; a chiselled corridor with niches in its walls; a low natural crawl;
+   a pool that holds no reflection; a far hall with steps and a bench cut out of the living rock.
+   ============================================================ */
+const GROTTOS = { 10: {}, 93: {} };
+const _gm = {
+  rockF: () => cachedMat('gr-rockF', () => lam(T.rock, { bumpScale: 3.2 })),
+  cut: () => cachedMat('gr-cut', () => lam(cutRockTex(), { bumpScale: 2.6, side: THREE.BackSide })),
+  cutF: () => cachedMat('gr-cutF', () => lam(cutRockTex(), { bumpScale: 2.6 })),
+  clay: () => cachedMat('gr-clay', () => lam(T.earth, { color: 0x9a7a58, bumpScale: 0.6 })),
+};
+let _cutTex = null;
+// the walls where they were cut: the same dark rock, crossed by the strokes of a pick, row on row
+function cutRockTex() {
+  if (_cutTex) return _cutTex;
+  const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(4412);
+  g.drawImage(T.rock.image, 0, 0, 256, 256);
+  for (let row = 0; row < 9; row++) {
+    const y0 = row * 29 + R.range(-3, 3), slant = R.range(0.5, 0.9) * (row % 2 ? 1 : -1);
+    for (let x = -20; x < 276; x += R.range(5, 9)) {
+      const len = R.range(14, 26), y = y0 + R.range(-2, 2);
+      g.strokeStyle = `rgba(14,12,10,${R.range(0.25, 0.5)})`; g.lineWidth = R.range(1.2, 2.2);
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + len * slant * 0.4, y + len); g.stroke();
+      g.strokeStyle = `rgba(150,140,124,${R.range(0.06, 0.16)})`; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x + 1.5, y); g.lineTo(x + 1.5 + len * slant * 0.4, y + len); g.stroke();
+    }
+  }
+  _cutTex = texOf(c);
+  return _cutTex;
+}
+
+// a passage swept along a path. 'carved' gives squared walls, a flat floor and a low arch, with little wobble;
+// otherwise round and rough like the old caves. Holes can be cut where something opens off it
+function grottoTube(pts, o) {
+  const step = o.carved ? 0.2 : 0.3, N = o.carved ? 28 : 18, samples = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], len = a.distanceTo(b), n = Math.max(2, Math.ceil(len / step));
+    for (let k = 0; k < n; k++) samples.push({ p: a.clone().lerp(b, k / n), t: b.clone().sub(a).normalize() });
+  }
+  samples.push({ p: pts[pts.length - 1].clone(), t: pts[pts.length - 1].clone().sub(pts[pts.length - 2]).normalize() });
+  // round the corners of the path: each ring faces halfway between the legs it joins
+  for (let i = 1; i < samples.length - 1; i++) if (!samples[i].t.equals(samples[i - 1].t)) samples[i].t = samples[i].t.clone().add(samples[i - 1].t).normalize();
+  const pos = [], uv = [], idx = [];
+  let dist = 0;
+  samples.forEach((smp, i) => {
+    if (i) dist += smp.p.distanceTo(samples[i - 1].p);
+    const nx = -smp.t.y, nz = smp.t.x;
+    for (let j = 0; j <= N; j++) {
+      const th = j / N * TAU, cs = Math.cos(th), sn = Math.sin(th);
+      let h, y;
+      if (o.carved) {
+        const k = 1 + (vnoise(dist * 2.3, (j % N) * 0.9, o.seed) - 0.5) * 0.07;
+        h = Math.sign(cs) * Math.pow(Math.abs(cs), sn > 0 ? 0.55 : 0.25) * o.rx * k;
+        y = o.yc + Math.sign(sn) * Math.pow(Math.abs(sn), sn > 0 ? 0.8 : 0.25) * o.ry * k;
+        if (y < 0) y = 0.005;
+      } else {
+        const k = 1 + (vnoise(dist * 1.1, (j % N) * 0.75, o.seed) - 0.5) * 0.36 + (vnoise(dist * 3.1, (j % N) * 1.9, o.seed + 5) - 0.5) * 0.14;
+        y = o.yc + sn * o.ry * k; h = cs * o.rx * k;
+        if (y < 0) y = vnoise(dist * 2, j, o.seed + 9) * 0.03;
+      }
+      pos.push(smp.p.x + nx * h, y, smp.p.y + nz * h); uv.push(dist / 1.1, j / N * 4);
+    }
+    if (i) for (let j = 0; j < N; j++) { const a = (i - 1) * (N + 1) + j, b = i * (N + 1) + j; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(cutHoles(pos, idx, o.holes || [], 0, 0));
+  g.computeVertexNormals();
+  return g;
+}
+// a natural chamber: a lumpy ellipsoid, flat underfoot, with openings where the passages come in
+function grottoChamber(a, b, c, yc, seed, cx, cz, holes) {
+  const g = new THREE.SphereGeometry(1, 40, 24), p = g.attributes.position, uvs = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + (vnoise(x * 2.1 + 3, z * 2.1 + y * 1.7, seed) - 0.5) * 0.36 + (vnoise(x * 6 + y * 3, z * 6, seed + 3) - 0.5) * 0.12;
+    let yy = yc + y * c * k;
+    if (yy < 0) yy = vnoise(x * 5, z * 5, seed + 7) * 0.025;
+    p.setXYZ(i, x * a * k, yy, z * b * k);
+    uvs.setXY(i, uvs.getX(i) * 15, uvs.getY(i) * 7);
+  }
+  const arr = Array.from(p.array).map((v, i) => i % 3 === 0 ? v + cx : i % 3 === 2 ? v + cz : v);
+  g.setIndex(cutHoles(arr, Array.from(g.index.array), holes, 0, 0));
+  g.translate(cx, 0, cz);
+  g.computeVertexNormals();
+  return g;
+}
+// drop the triangles of a wall where an opening goes through it: holes are boxes in the room's own (u, y, v)
+function cutHoles(pos, idx, holes) {
+  if (!holes.length) return idx;
+  const out = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    let cx = 0, cy = 0, cz = 0;
+    for (let k = 0; k < 3; k++) { const i = idx[t + k] * 3; cx += pos[i]; cy += pos[i + 1]; cz += pos[i + 2]; }
+    cx /= 3; cy /= 3; cz /= 3;
+    let cut = false;
+    for (const h of holes) {
+      const dx = cx - h.u, dz = cz - h.v, along = dx * h.du + dz * h.dv, across = -dx * h.dv + dz * h.du;
+      if (Math.abs(along) < h.depth && Math.abs(across) < h.w && cy > h.y0 && cy < h.y1) { cut = true; break; }
+    }
+    if (!cut) out.push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  return out;
+}
+// drop every triangle whose middle passes a test: how passages are trimmed back to the chamber walls they meet
+function cutGeo(g, test) {
+  const p = g.attributes.position.array, idx = g.index.array, out = [];
+  for (let t = 0; t < idx.length; t += 3) {
+    let cx = 0, cy = 0, cz = 0;
+    for (let k = 0; k < 3; k++) { const i = idx[t + k] * 3; cx += p[i]; cy += p[i + 1]; cz += p[i + 2]; }
+    if (!test(cx / 3, cy / 3, cz / 3)) out.push(idx[t], idx[t + 1], idx[t + 2]);
+  }
+  g.setIndex(out);
+  return g;
+}
+// the wobble of a chamber's wall, as the chamber was built with it: grotto chambers, and the older caves' (rougher)
+const grottoK = (seed) => (x, y, z) => 1 + (vnoise(x * 2.1 + 3, z * 2.1 + y * 1.7, seed) - 0.5) * 0.36 + (vnoise(x * 6 + y * 3, z * 6, seed + 3) - 0.5) * 0.12;
+const caveK = (seed) => (x, y, z) => 1 + (vnoise(x * 2.1 + 3, z * 2.1 + y * 1.7, seed) - 0.5) * 0.42 + (vnoise(x * 6 + y * 3, z * 6, seed + 3) - 0.5) * 0.14;
+// inside a chamber, short of its own wobbling wall: so a passage ends exactly where the chamber begins
+const insideChamber = (chs) => (x, y, z) => chs.some(ch => {
+  const dx = (x - ch.c.x) / ch.a, dy = (y - ch.yc) / ch.h, dz = (z - ch.c.y) / ch.b, r = Math.hypot(dx, dy, dz);
+  if (r < 1e-4) return true;
+  return r < ch.kf(dx / r, dy / r, dz / r) * 0.97;
+});
+// rough stone round the edge of an opening, where a passage breaks through a chamber's wall:
+// find where the passage's line leaves the chamber, and set lumps of rock along the sides and over the top
+function rimOpening(B, seed, ch, p, d, w, y1) {
+  const R = new Rng(seed), inside = insideChamber([ch]);
+  let t = 0; while (t < 4 && inside(p.x - d.x * t, 1.0, p.y - d.y * t)) t += 0.05;
+  const q = p.clone().addScaledVector(d, -t + 0.12), n = new THREE.Vector2(-d.y, d.x), mat = cachedMat('gr-rockF', () => lam(T.rock, { bumpScale: 3.2 }));
+  const put = (lat, y, s) => stoneLump(B, R, mat, q.x + n.x * lat, y, q.y + n.y * lat, s, R.range(0.6, 0.95));
+  for (let y = 0.15; y < y1; y += R.range(0.28, 0.4)) for (const e of [-1, 1]) put(e * (w + R.range(0.02, 0.12)), y, R.range(0.16, 0.28));
+  for (let lat = -w; lat <= w + 0.01; lat += R.range(0.28, 0.38)) put(lat, y1 + R.range(0.0, 0.1), R.range(0.18, 0.3));
+}
+// an opening into a chamber at point p (u, v) along unit direction d, for a passage of half-width w and height h
+const _hole = (p, d, w, y1, depth = 0.9) => ({ u: p.x, v: p.y, du: d.x, dv: d.y, w, y0: 0.14, y1, depth });
+
+function* buildGrottoGen(ctx, room, R) {
+  const B = ctx.B, side = room.side, seed = room.r.seed % 10000, stones = [M.stone, M.stoneB, M.stoneC];
+  ctx.setFrame(side, C.WALL_OUT, room.zc, 0);
+  const V2 = (u, v) => new THREE.Vector2(u, v), dirOf = (a, b) => b.clone().sub(a).normalize();
+  // the plan, in the room's own space: u runs into the rock, v along the wall
+  const A = { c: V2(9.0, 0.5), a: 3.6, b: 3.2, h: 3.3 * HS },          // the great chamber
+  Cc = { c: V2(13.6, 7.4), a: 2.5, b: 2.1, h: 2.1 * HS },              // the low chamber with the pool
+  Dd = { c: V2(19.2, -0.6), a: 2.8, b: 2.5, h: 2.6 * HS };             // the far hall
+  const E = [V2(-0.6, 0), V2(3.2, 0.15), V2(6.1, 0.4)];                  // the cut way in
+  const Np = [V2(9.9, 3.3), V2(11.0, 5.0), V2(12.2, 6.0)];               // the cut passage with niches
+  const S = [V2(12.2, -0.3), V2(14.3, -2.0), V2(16.8, -1.4)];            // the natural crawl
+  const L = [V2(17.9, 1.4), V2(16.6, 4.0), V2(15.2, 6.2)];               // the cut way back round to the pool
+  // each end of a passage opens a hole in the chamber it reaches
+  const holeAt = (pts, end, w, h) => { const p = end ? pts[pts.length - 1] : pts[0], q = end ? pts[pts.length - 2] : pts[1]; return _hole(p, dirOf(q, p), w, h, 1.6); };
+  const holesA = [holeAt(E, true, 0.74, 2.2), holeAt(Np, false, 0.72, 2.2), holeAt(S, false, 0.6, 1.65)];
+  const holesC = [holeAt(Np, true, 0.72, 2.2), holeAt(L, true, 0.72, 2.15)];
+  const holesD = [holeAt(S, true, 0.6, 1.65), holeAt(L, false, 0.72, 2.15)];
+  // niches cut into the walls of the passage, at chest height, some on each side
+  const niches = [];
+  { const dir = dirOf(Np[0], Np[2]), nrm = V2(-dir.y, dir.x);
+    [[0.25, 1], [0.45, -1], [0.62, 1], [0.8, -1]].forEach(([t, s]) => {
+      const p = Np[0].clone().lerp(Np[2], t), wall = p.clone().addScaledVector(nrm, s * 0.86);
+      niches.push({ p: wall, n: nrm.clone().multiplyScalar(s), dir, y0: 0.95, y1: 1.5, w: 0.3 });
+    }); }
+  const nicheHoles = niches.map(n => ({ u: n.p.x, v: n.p.y, du: n.n.x, dv: n.n.y, w: n.w, y0: n.y0, y1: n.y1, depth: 0.25 }));
+  yield;
+  A.kf = grottoK(seed + 11); Cc.kf = grottoK(seed + 23); Dd.kf = grottoK(seed + 37);
+  for (const ch of [A, Cc, Dd]) ch.yc = 0.45;
+  const trim = insideChamber([A, Cc, Dd]);
+  B.add(_gm.cut(), cutGeo(grottoTube(E, { carved: true, rx: 0.92, ry: 1.25, yc: 1.25, seed }), trim), new THREE.Matrix4(), true);
+  B.add(_gm.cut(), cutGeo(grottoTube(Np, { carved: true, rx: 0.9, ry: 1.25, yc: 1.25, seed: seed + 1, holes: nicheHoles }), trim), new THREE.Matrix4(), true);
+  B.add(M.rock, cutGeo(grottoTube(S, { carved: false, rx: 0.78, ry: 1.0, yc: 0.98, seed: seed + 2 }), trim), new THREE.Matrix4(), true);
+  B.add(_gm.cut(), cutGeo(grottoTube(L, { carved: true, rx: 0.9, ry: 1.2, yc: 1.2, seed: seed + 3 }), trim), new THREE.Matrix4(), true);
+  yield;
+  for (const [ch, holes, sd] of [[A, holesA, 11], [Cc, holesC, 23], [Dd, holesD, 37]]) {
+    B.add(M.rock, grottoChamber(ch.a, ch.b, ch.h, 0.45, seed + sd, ch.c.x, ch.c.y, holes), new THREE.Matrix4(), true);
+    yield;
+  }
+  [[A, S, false, 0.6, 1.65], [Cc, Np, true, 0.72, 2.2], [Cc, L, true, 0.72, 2.15], [Dd, S, true, 0.6, 1.65], [Dd, L, false, 0.72, 2.15]].forEach(([ch, pts, end, w, h], i) => {
+    const p = end ? pts[pts.length - 1] : pts[0], q = end ? pts[pts.length - 2] : pts[1];
+    rimOpening(B, seed + 50 + i, ch, p, dirOf(q, p), w, h);
+  });
+  yield;
+  // the niches themselves: little cut boxes, seen from inside
+  for (const n of niches) {
+    const g = new THREE.BoxGeometry(0.5, n.y1 - n.y0 + 0.2, n.w * 2 + 0.24);
+    const ang = Math.atan2(-n.n.y, n.n.x), m = new THREE.Matrix4().compose(V3(n.p.x + n.n.x * 0.17, (n.y0 + n.y1) / 2 + 0.1, n.p.y + n.n.y * 0.17), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), ang), V3(1, 1, 1));
+    B.add(_gm.cut(), g, m, true);
+    n.sill = V3(n.p.x + n.n.x * 0.16, n.y0 + 0.005, n.p.y + n.n.y * 0.16);
+    B.box(_gm.cutF(), n.p.x + n.n.x * 0.12, n.y0 - 0.05, n.p.y + n.n.y * 0.12, 0.3, 0.1, n.w * 2 + 0.1, 0, Math.atan2(-n.n.y, n.n.x), 0);
+  }
+  // what is in them: an oil lamp gone cold, a skull, a pot, nothing
+  const lamp = (x, y, z, ry) => { B.add(_gm.clay(), new THREE.CylinderGeometry(0.055, 0.045, 0.035, 12), mtx(x, y + 0.018, z, 0, ry, 0), true); B.add(_gm.clay(), new THREE.ConeGeometry(0.022, 0.07, 6), mtx(x + Math.cos(ry) * 0.06, y + 0.022, z - Math.sin(ry) * 0.06, 0, ry, -Math.PI / 2), true); };
+  niches.forEach((n, i) => {
+    const k = (seed + i) % 4;
+    if (k === 0) lamp(n.sill.x, n.sill.y, n.sill.z, R.range(0, 3));
+    else if (k === 1) { const sk = mtx(n.sill.x, n.sill.y + 0.08, n.sill.z, 0, Math.atan2(n.n.x, n.n.y) + Math.PI, 0); B.add(M.bone, UNIT_SPH, sk.clone().multiply(mtx(0, 0, 0, 0, 0, 0, 0.083, 0.09, 0.1))); B.add(M.socket, UNIT_SPH, sk.clone().multiply(mtx(-0.03, 0.005, 0.085, 0, 0, 0, 0.022, 0.024, 0.012))); B.add(M.socket, UNIT_SPH, sk.clone().multiply(mtx(0.03, 0.005, 0.085, 0, 0, 0, 0.022, 0.024, 0.012))); }
+    else if (k === 2) B.add(_gm.clay(), new THREE.SphereGeometry(0.1, 10, 8), mtx(n.sill.x, n.sill.y + 0.09, n.sill.z, 0, 0, 0, 1, 0.9, 1), true);
+    ctx.surface(room, n.sill.x - n.n.x * 0.02, n.sill.y + 0.002, n.sill.z);
+  });
+  yield;
+  // where the ways in meet the rock, timber frames hold up what was cut
+  const frame = (p, d, w, h) => {
+    const nrm = V2(-d.y, d.x);
+    for (const s of [-1, 1]) { const q = p.clone().addScaledVector(nrm, s * (w - 0.1)); B.box(M.log, q.x, h / 2, q.y, 0.2, h, 0.2, 0, -Math.atan2(d.y, d.x), 0); }
+    B.box(M.log, p.x, h + 0.08, p.y, 0.22, 0.2, w * 2 + 0.1, 0, -Math.atan2(d.y, d.x), 0);
+  };
+  frame(V2(0.5, 0.03), dirOf(E[0], E[1]), 0.9, 2.2); frame(V2(3.4, 0.17), dirOf(E[1], E[2]), 0.88, 2.25);
+  frame(Np[0].clone().lerp(Np[1], 0.25), dirOf(Np[0], Np[1]), 0.86, 2.2);
+  // a cracked place in the far passage, shored with a timber jammed corner to corner
+  { const p = L[1], d = dirOf(L[0], L[2]), n = V2(-d.y, d.x);
+    const foot = p.clone().addScaledVector(n, 0.66).addScaledVector(d, -0.35), top = p.clone().addScaledVector(n, 0.62).addScaledVector(d, 0.25);
+    B.beam(M.log, V3(foot.x, 0.02, foot.y), V3(top.x, 2.15, top.y), 0.15, 0.15);
+    B.beam(M.log, V3(top.x, 2.1, top.y), V3(p.x - n.x * 0.75, 2.2, p.y - n.y * 0.75), 0.13, 0.13);
+  }
+  yield;
+  // the great chamber: stone hanging from the roof and rising from the floor, one column where they met, rubble, bones
+  const ceil = (ch, u, v) => { const q = 1 - ((u - ch.c.x) / ch.a) ** 2 - ((v - ch.c.y) / ch.b) ** 2; return 0.45 + ch.h * Math.sqrt(Math.max(0, q)) * 0.82; };
+  const drip = (ch, u, v, len, r) => B.add(_gm.rockF(), new THREE.ConeGeometry(r, len, 7).rotateX(Math.PI), mtx(u, ceil(ch, u, v) - len / 2 + 0.15, v, R.range(-0.05, 0.05), R.range(0, 3), R.range(-0.05, 0.05)), true);
+  const rise = (u, v, len, r) => { B.add(_gm.rockF(), new THREE.ConeGeometry(r, len, 7), mtx(u, len / 2 - 0.02, v, 0, R.range(0, 3), 0), true); ctx.circle(u, v, r * 0.9 + 0.05); };
+  for (let i = 0; i < 22; i++) { const t = R.range(0, TAU), rr = Math.sqrt(R.next()) * 0.8; drip(A, A.c.x + Math.cos(t) * A.a * rr, A.c.y + Math.sin(t) * A.b * rr, R.range(0.25, 1.1), R.range(0.05, 0.14)); }
+  for (const [du, dv, len, r] of [[1.4, -1.6, 0.9, 0.22], [1.9, -1.0, 0.5, 0.16], [-1.2, 2.0, 0.7, 0.2], [0.6, 2.3, 0.4, 0.14]]) rise(A.c.x + du, A.c.y + dv, len, r);
+  { const cu = A.c.x + 0.8, cv = A.c.y - 0.6, top = ceil(A, cu, cv);
+    B.add(_gm.rockF(), new THREE.CylinderGeometry(0.16, 0.42, top * 0.55, 9), mtx(cu, top * 0.275, cv), true);
+    B.add(_gm.rockF(), new THREE.CylinderGeometry(0.5, 0.16, top * 0.5, 9), mtx(cu, top * 0.75, cv), true);
+    ctx.circle(cu, cv, 0.45); }
+  for (let i = 0; i < 16; i++) { const t = R.range(0, TAU), rr = R.range(0.5, 0.85); stoneLump(B, R, R.pick(stones), A.c.x + Math.cos(t) * A.a * rr * 0.8, 0.06, A.c.y + Math.sin(t) * A.b * rr * 0.8, Math.pow(R.next(), 2) * 0.28 + 0.05, R.range(0.5, 0.9)); }
+  ctx.bones(A.c.x - 1.4, A.c.y - 1.2, R);
+  stack(ctx, room, A.c.x - 1.6, A.c.y + 2.0, R, 2);
+  yield;
+  // the low chamber: black water in a hollow, a rim of stones, a drip that never stops
+  { const pu = Cc.c.x + 0.4, pv = Cc.c.y + 0.5, pr = 1.05;
+    B.add(M.blackWater, new THREE.CircleGeometry(pr, 22), mtx(pu, 0.03, pv, -Math.PI / 2, 0, 0), true);
+    for (let i = 0; i < 16; i++) { const t = i / 16 * TAU + R.range(-0.1, 0.1); stoneLump(B, R, R.pick(stones), pu + Math.cos(t) * (pr + 0.08), 0.05, pv + Math.sin(t) * (pr + 0.08), R.range(0.1, 0.18), 0.6); }
+    ctx.circle(pu, pv, pr + 0.15);
+    const top = ctx.W(pu - 0.3, ceil(Cc, pu - 0.3, pv) - 0.1, pv), bottom = ctx.W(pu - 0.3, 0.04, pv);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 5), M.water); drop.position.copy(top); drop.userData.disposable = true; ctx.group.add(drop);
+    ctx.droplets.push({ mesh: drop, top: top.y, bottom: bottom.y, t: R.range(0, 4), period: R.range(4, 7) });
+    for (let i = 0; i < 8; i++) { const t = R.range(0, TAU), rr = Math.sqrt(R.next()) * 0.75; drip(Cc, Cc.c.x + Math.cos(t) * Cc.a * rr, Cc.c.y + Math.sin(t) * Cc.b * rr, R.range(0.2, 0.6), R.range(0.04, 0.1)); }
+    ctx.addSmash('box', Cc.c.x - 1.2, 0, Cc.c.y - 0.7, R.range(0, 3), { room }); }
+  yield;
+  // the far hall: steps cut up to a ledge across its back, a bench cut along one side, a sitter who stayed
+  { const back = Dd.c.x + Dd.a * 0.55, cf = _gm.cutF();
+    for (let i = 0; i < 3; i++) { const sh = 0.24 * (i + 1); B.box(cf, back - 0.78 + i * 0.26, sh / 2, Dd.c.y - 0.2, 0.28, sh, 1.3); }
+    B.box(cf, back + 0.35, 0.475, Dd.c.y - 0.2, 0.75, 0.95, 2.4);
+    ctx.solid(back - 0.1, Dd.c.y - 0.2, 1.6, 2.5);
+    for (const sv of [-0.8, 0.2, 0.7]) ctx.surface(room, back + 0.3, 0.945, Dd.c.y + sv);
+    const bu = Dd.c.x - 0.4, bv = Dd.c.y - Dd.b * 0.62;
+    B.box(cf, bu, 0.22, bv, 2.0, 0.44, 0.5);
+    ctx.solid(bu, bv, 2.05, 0.55);
+    for (const su of [-0.6, 0.5]) ctx.surface(room, bu + su, 0.445, bv);
+    ctx.skeleton('sit', bu + 0.25, bv - 0.08, 0, 0.44);
+    ctx.addSmash('chest', Dd.c.x + 1.1, 0, Dd.c.y + 1.5, Math.PI + R.range(-0.2, 0.2), { room });
+    ctx.addSmash('barrel', Dd.c.x - 0.2, 0, Dd.c.y + Dd.b * 0.75, R.range(0, 3), { room });
+    for (let i = 0; i < 10; i++) { const t = R.range(0, TAU), rr = R.range(0.4, 0.8); stoneLump(B, R, R.pick(stones), Dd.c.x + Math.cos(t) * Dd.a * rr * 0.7, 0.05, Dd.c.y + Math.sin(t) * Dd.b * rr * 0.7, Math.pow(R.next(), 2) * 0.2 + 0.04, 0.7); }
+    for (let i = 0; i < 9; i++) { const t = R.range(0, TAU), rr = Math.sqrt(R.next()) * 0.7; drip(Dd, Dd.c.x + Math.cos(t) * Dd.a * rr, Dd.c.y + Math.sin(t) * Dd.b * rr, R.range(0.2, 0.7), R.range(0.04, 0.11)); } }
+  // webs where the passages meet the chambers
+  ctx.web(V3(E[2].x - 0.3, 2.35, E[2].y + 0.7), V3(0, -0.3, -1).normalize(), V3(0.3, -1, 0).normalize(), R.range(0.5, 0.9), R.int(0, 3));
+  ctx.web(V3(S[1].x, 1.8, S[1].y - 0.6), V3(1, -0.2, 0).normalize(), V3(0, -1, 0.3).normalize(), R.range(0.4, 0.7), R.int(0, 3));
+  yield;
+  // where you can stand: the passages, and the floors of the chambers
+  const regions = [];
+  const rect = (pa, pb, hw, ext = 0.3) => {
+    const d = pb.clone().sub(pa), len = d.length(), m = pa.clone().add(pb).multiplyScalar(0.5);
+    const cw = ctx.W(m.x, 0, m.y), dir = ctx.W(m.x + d.x / len, 0, m.y + d.y / len).sub(cw);
+    regions.push({ cx: cw.x, cz: cw.z, ux: dir.x, uz: dir.z, hx: len / 2 + ext, hz: hw });
+  };
+  rect(V2(-0.8, 0), V2(0.4, 0), 0.74, 0);
+  for (const pts of [E, Np, L]) for (let i = 0; i < pts.length - 1; i++) rect(pts[i], pts[i + 1], 0.78, 0.45);
+  for (let i = 0; i < S.length - 1; i++) rect(S[i], S[i + 1], 0.62, 0.45);
+  // and from where each passage comes in, on to the middle of its chamber
+  for (const [p, ch, hw] of [[E[2], A, 0.78], [Np[0], A, 0.78], [S[0], A, 0.62], [Np[2], Cc, 0.78], [L[2], Cc, 0.78], [L[0], Dd, 0.78], [S[2], Dd, 0.62]]) rect(p, ch.c, hw, 0.1);
+  for (const ch of [A, Cc, Dd]) { const cw = ctx.W(ch.c.x, 0, ch.c.y); regions.push({ ell: true, cx: cw.x, cz: cw.z, a: ch.a * 0.8 - 0.35, b: ch.b * 0.8 - 0.35 }); }
+  const corners = [ctx.W(-0.8, 0, -3.8), ctx.W(Dd.c.x + Dd.a + 0.6, 0, -3.8), ctx.W(-0.8, 0, Cc.c.y + Cc.b + 0.8), ctx.W(Dd.c.x + Dd.a + 0.6, 0, Cc.c.y + Cc.b + 0.8)];
+  ctx.zones.push({ regions, frame: Object.assign({}, ctx.frame), x0: Math.min(...corners.map(p => p.x)), x1: Math.max(...corners.map(p => p.x)), z0: Math.min(...corners.map(p => p.z)), z1: Math.max(...corners.map(p => p.z)), room });
+  ctx.setBounds(room, 0, Dd.c.x + Dd.a, -3.6, Cc.c.y + Cc.b);
+  room.D = Dd.c.x + Dd.a; room.W = Cc.c.y + Cc.b + 3.6; room.H = A.h;
 }
 
 /* ---- 35_rooms.js ---- */
@@ -2954,7 +3573,10 @@ const SPECIAL_ITEMS = {
   10002: { kind: 'coin', style: 'gold', mat: 'metal', metal: { n: 'gold', c: 0xd4a840 }, name: 'Gold coin with a horseman', desc: 'A rider with a spear, very small, and still bright.' },
   10003: { kind: 'coin', style: 'drachm', mat: 'metal', metal: { n: 'silver', c: 0xa8a49c }, name: 'Heavy silver coin', desc: 'Thick and well struck; a stag lies folded on one face.' },
   10004: { kind: 'coin', mat: 'metal', metal: { n: 'bronze', c: 0x8a6a3a }, name: 'Worn bronze coin', desc: 'Green and smooth, its pictures worn to shadows.' },
+  // and the harp at 39, where the chord is a septimal third
+  10005: { kind: 'harp', mat: 'wood', name: 'Harp', desc: 'A steppe harp, its soundbox carved with the wall\'s own sign: the serpent of timbers, the hare walking in its ring. Most of the gut strings still hold.' },
 };
+const HARP_ID = 10005, HARP_L = 39;
 for (const [id, d] of Object.entries(SPECIAL_ITEMS)) { d.id = +id; d.seed = +id; d.style = d.style || ''; _itemNames.add(d.name.toLowerCase()); }
 function itemDef(id) {
   if (id >= 10000) return SPECIAL_ITEMS[id];
@@ -3208,6 +3830,38 @@ function extraModel(d, o) {
   const { add, addS, lath, mm, sm, R } = o;
   const st = d.style || '';
   switch (d.kind) {
+    case 'harp': {
+      // an angular harp of the kind buried with the riders in the frozen kurgans: a tall hollow soundbox,
+      // a rod for the strings running out from its foot, the strings between them
+      const wood = cachedMat('harpwood', () => lam(T.wood, { color: 0xb88e62, bumpScale: 0.6 }));
+      const gut = cachedMat('harpgut', () => new THREE.MeshLambertMaterial({ color: 0xf0e2b8, emissive: 0x2a2216 }));
+      // the body's side profile (forward, up), leaning back a little, extruded to its thickness
+      const sh = new THREE.Shape(), F = (z, y) => [-z, y];
+      sh.moveTo(...F(-0.12, 0.05)); sh.lineTo(...F(0.055, 0.05));
+      sh.quadraticCurveTo(...F(0.07, 0.3), ...F(0.02, 0.62)); sh.quadraticCurveTo(...F(-0.02, 0.86), ...F(-0.1, 0.88));
+      sh.quadraticCurveTo(...F(-0.17, 0.88), ...F(-0.165, 0.7)); sh.quadraticCurveTo(...F(-0.16, 0.3), ...F(-0.12, 0.05));
+      const body = new THREE.ExtrudeGeometry(sh, { depth: 0.07, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 8 });
+      body.rotateY(Math.PI / 2); body.translate(-0.035, 0, 0);
+      add(body, wood).parent.userData.face = Math.PI / 2;     // shown side-on in the pack, where the sign is
+      const frontZ = y => y < 0.62 ? 0.055 + (0.02 - 0.055) * (y - 0.05) / 0.57 : 0.02 - 0.12 * (y - 0.62) / 0.26;
+      // the sign, cut into both flanks of the soundbox
+      const sign = cachedMat('harpsign', () => new THREE.MeshLambertMaterial({ map: harpSignTexture(), transparent: true }));
+      for (const s of [-1, 1]) add(new THREE.PlaneGeometry(0.17, 0.17), sign, s * 0.0482, 0.5, -0.055, 0, s * Math.PI / 2, 0);
+      add(new THREE.SphereGeometry(0.03, 10, 6), wood, 0, 0.9, -0.12);
+      // the foot and the string rod, rising a little as it runs out
+      addS(new THREE.BoxGeometry(1, 1, 1), wood, 0, 0.03, -0.02, 0.08, 0.06, 0.22);
+      const rodY = z => 0.075 + (z - 0.06) * 0.1;
+      addS(UNIT_CYL, wood, 0, rodY(0.31), 0.31, 0.016, 0.52, 0.016, Math.PI / 2 - 0.1, 0, 0);
+      add(new THREE.SphereGeometry(0.024, 8, 6), wood, 0, rodY(0.57), 0.57);
+      // fourteen strings, the long ones furthest out; two have gone
+      for (let i = 0; i < 14; i++) {
+        if (i === 4 || i === 11) continue;
+        const z0 = 0.1 + i * 0.032, y1 = 0.16 + i * 0.05;
+        const a = V3(0, rodY(z0) + 0.012, z0), b = V3(0, y1, frontZ(y1) - 0.006), dd = b.clone().sub(a), m = add(UNIT_CYL, gut);
+        m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(V3(0, 1, 0), dd.clone().normalize()); m.scale.set(0.0022, dd.length(), 0.0022);
+      }
+      return 0.95;
+    }
     case 'ironbar': {
       // a smith's bar, drawn to a point at both ends
       const L = d.style === 'large' ? 0.46 : d.style === 'small' ? 0.2 : 0.32, w = d.style === 'large' ? 0.034 : d.style === 'small' ? 0.02 : 0.027;
@@ -3378,6 +4032,7 @@ function riderValue(id) {
   if (!d) return 0;
   const m = d.metal ? d.metal.n : '';
   switch (d.kind) {
+    case 'harp': return 1.5;                                  // everybody loves music
     case 'ironbar': return d.style === 'large' ? 3 : d.style === 'small' ? 1 : 2;
     case 'silk': return 2;
     case 'helmet': return 3;
@@ -3394,8 +4049,8 @@ function riderValue(id) {
 }
 
 /* ---------- which room holds what, per lap ---------- */
-const BOX_OK = new Set(['store', 'collapsed', 'dank', 'toppled', 'jut', 'vault', 'cistern', 'cache', 'escape', 'odd']);
-const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6, cave: 1.1, jut: 1.5 };
+const BOX_OK = new Set(['store', 'collapsed', 'dank', 'toppled', 'jut', 'vault', 'cistern', 'cache', 'escape', 'odd', 'forge', 'loom', 'bunks', 'grotto']);
+const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6, cave: 1.1, jut: 1.5, forge: 1.3, loom: 1.2, bunks: 1.2, grotto: 2.0 };
 function lapAssign(lap) {
   if (S.lapAssign[lap]) return S.lapAssign[lap];
   // 100 the first time round, 50 more on the second, 20 more every lap after; anything already seen stays gone
@@ -3479,6 +4134,35 @@ function placeTokens(ctx) {
     });
   }
   for (const d of ctx.st.dr) spawnItem(ctx, d.id, 'd:' + d.n, new THREE.Vector3(d.x, d.y, d.z), { dropped: d });
+  // at 39 the harp stands at the far end of the long gallery, pass after pass, until it is taken or broken
+  if (ctx.L === HARP_L && !S.harp && !S.inv.includes(HARP_ID) && !ctx.st.dr.some(d => d.id === HARP_ID)) {
+    const room = ctx.rooms.find(r => r.design === 'gallery' && !r.lower);
+    if (room && room.frame) {
+      // side-on to the door, so the first thing seen down the long room is the triangle of strings and the sign
+      const [x, z] = frameXZ(room.frame, room.D - 1.3, -0.3);
+      room.mirrorOK = false;
+      spawnItem(ctx, HARP_ID, 'harp', new THREE.Vector3(x, 0, z), { yaw: (room.frame.side > 0 ? Math.PI : 0) + 0.3 });
+    }
+  }
+}
+// the wall's sign, small, as a carver would cut it into a soundbox: the ring of timbers, the head on the tail, the hare
+function harpSignTexture() {
+  const c = makeCanvas(128, 128), g = c.getContext('2d');
+  g.fillStyle = '#c49a6a'; g.beginPath(); g.arc(64, 64, 62, 0, TAU); g.fill();
+  g.strokeStyle = 'rgba(60,36,18,0.7)'; g.lineWidth = 2; g.beginPath(); g.arc(64, 64, 61, 0, TAU); g.stroke();
+  const ink = 'rgba(40,24,12,0.9)', lit = 'rgba(232,206,160,0.55)';
+  const ring = (off, col) => { g.strokeStyle = col; for (let i = 0; i < 18; i++) { const a0 = -Math.PI / 2 + 0.3 + i * (TAU - 0.5) / 18, a1 = a0 + (TAU - 0.5) / 18 - 0.06; g.lineWidth = 9 - i * 0.28; g.beginPath(); g.arc(64 + off, 64 + off, 46, a0, a1); g.stroke(); } };
+  ring(1.2, ink); ring(-0.6, lit);
+  g.fillStyle = ink; g.beginPath(); g.ellipse(58, 16, 11, 7, -0.2, 0, TAU); g.fill();          // the head, its jaws on the tail
+  g.fillStyle = lit; g.beginPath(); g.ellipse(57, 15, 8, 4, -0.2, 0, TAU); g.fill();
+  // the hare: leaning into the walk, the bundle on its stick over the shoulder
+  g.fillStyle = ink;
+  const blob = (x, y, rx, ry, r) => { g.beginPath(); g.ellipse(x, y, rx, ry, r, 0, TAU); g.fill(); };
+  blob(62, 70, 10, 15, 0.45); blob(70, 54, 7, 6, 0.3); blob(76, 52, 4, 3, 0.2); blob(67, 40, 2.5, 9, -0.3); blob(71, 41, 2.2, 8, -0.15);
+  blob(58, 86, 3, 8, 0.5); blob(68, 87, 3, 8, -0.4); blob(52, 72, 4, 4, 0);
+  g.strokeStyle = ink; g.lineWidth = 3; g.beginPath(); g.moveTo(72, 62); g.lineTo(44, 46); g.stroke();
+  blob(44, 52, 7, 8, 0.2);
+  return texOf(c);
 }
 
 /* ---- 50_player.js ---- */
@@ -3994,9 +4678,10 @@ function destroyItem(it) {
   if (typeof it.tok === 'number') {
     markSeen(it.tok, it.A); purgeDuplicates(it.tok, it);
     const d = itemDef(it.tok);
+    if (it.tok === HARP_ID) { S.harp = 'broken'; AU.twang(wp); }
     if (d.mat === 'clay' || d.mat === 'glass') { spawnDebris(it.len, p, it.obj.children[0].material, 9, true); AU.smash('clay', wp); }
     else if (d.mat === 'metal') AU.smash('metal', wp);
-    else { spawnDebris(it.len, p, it.obj.children[0].material, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : 'bone', wp); }
+    else { spawnDebris(it.len, p, it.obj.children[0].material, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : d.mat === 'wood' ? 'wood' : 'bone', wp); }
   } else if (it.tok === 'O') { spawnDebris(it.len, p, OIL_MAT, 9, true); AU.smash('oil', wp); }
   else { spawnDebris(it.len, p, BISCUIT_MAT, 7, true); AU.smash('biscuit', wp); }
   removeItem(it);
@@ -4078,6 +4763,7 @@ function take() {
   } else {
     if (S.inv.length >= C.INV_SLOTS) { openInv(it); return; }
     S.inv.push(it.tok); markSeen(it.tok, it.A);
+    if (it.tok === HARP_ID) S.harp = 'taken';
     removeItem(it); purgeDuplicates(it.tok, it); AU.pickup(itemDef(it.tok).mat);
     toast(lit ? itemDef(it.tok).name + '.' : 'Something.');
   }
@@ -4277,7 +4963,7 @@ function frameModel(obj) {
 }
 function thumbOf(id) {
   if (thumbs.has(id)) return thumbs.get(id);
-  const m = itemModel(id); m.rotation.y = -0.5; studio.add(m);
+  const m = itemModel(id); m.rotation.y = -0.5 + (m.userData.face || 0); studio.add(m);
   frameModel(m);
   thumbR.render(studio, studioCam);
   const url = thumbR.domElement.toDataURL();
@@ -4362,6 +5048,9 @@ function updateInvPreview(t) {
 /* ============================================================
    Sound: everything synthesized. In the dark this is all you have.
    ============================================================ */
+// the lengths whose chords ring on, with a soft octave over them: 31 (near 11/9), 39 (near 9/7),
+// and the ones that land on ratios of 17 and 19: 30 (17/14), 71 (19/12), 82 (17/10), 99 (19/10). Not 75: that one has its song
+const RING_LONG = new Set([30, 31, 39, 71, 82, 99]);
 const AU = (() => {
   let ctx = null, master, bus, dry, wet, reverb, noiseBuf;
   let drone = null, hissGain, windGain, riverGain, windLfo;
@@ -4534,11 +5223,11 @@ const AU = (() => {
       bell(t + 0.48, st(53), 0.046, 1.7);
       bell(t + 0.96, st(71), 0.05, 2.0);
       // the pause, then the chord: the root, this length's step above it, the octave
-      const c0 = t + 2.15, special = L === 31 || L === 39, dur = special ? 6.5 : 3.6;
+      const c0 = t + 2.15, special = RING_LONG.has(L), dur = special ? 6.5 : 3.6;
       bell(c0, F3, 0.034, dur);
       bell(c0 + 0.012, st(L), 0.036, dur);
       bell(c0 + 0.02, F3 * 2, 0.014, dur * 0.8);
-      if (special) bell(c0 + 0.03, st(L, 1), 0.012, dur * 0.9);   // at 31 and 39, a soft octave above
+      if (special) bell(c0 + 0.03, st(L, 1), 0.012, dur * 0.9);   // at the sweet ones, a soft octave above
     },
     // riding home: the wall's three notes once more, slowly, and then a long soft chord on its own scale that dies with the light
     homeward() {
@@ -4555,6 +5244,11 @@ const AU = (() => {
         }
       };
       for (const [k, g] of [[0, 0.022], [63, 0.016], [107, 0.012], [170, 0.006]]) pad(t + 4.2, st(k), g, 12);
+    },
+    // the harp's strings letting go, one after another, each a step of 107 sagging as it goes slack
+    twang(pos) {
+      if (!on()) return; const t = ctx.currentTime, d = out(pos);
+      for (let i = 0; i < 6; i++) { const f = 174.614 * Math.pow(2, (47 + 28 * (i % 4) + 63 * (i > 3)) / 107); tone(d, t + 0.04 + i * 0.07 + Math.random() * 0.05, 1.2, f, 0.05, 'triangle', f * 0.94); }
     },
     gutter() { if (!on()) return; const t = ctx.currentTime, d = out(null, dry); noise(d, t, 0.5, 'lowpass', 700, 0.8, 0.18, 0.02, 120); },
     // unshod hooves on turf: a dull pair of beats, louder as they near
@@ -4598,6 +5292,8 @@ const AU = (() => {
     update(dt, lf) {
       if (!on()) return;
       const t = ctx.currentTime;
+      songTick();
+      if (S.inField && song) songClose();
       hissGain.gain.setTargetAtTime(S.inField ? 0 : 0.007 * lf, t, 0.2);
       // the hum follows the current length on a 107-step scale
       const L = S.inField ? -1 : (P.mode === 'corridor' ? originA : P.lenA) % C.LENGTHS;
@@ -4638,8 +5334,131 @@ const AU = (() => {
         }
       }
     },
-    die() { if (!on()) return; drone.gain.gain.setTargetAtTime(0, ctx.currentTime, 2); hissGain.gain.setTargetAtTime(0, ctx.currentTime, 0.5); },
+    die() { if (!on()) return; drone.gain.gain.setTargetAtTime(0, ctx.currentTime, 2); hissGain.gain.setTargetAtTime(0, ctx.currentTime, 0.5); songStop(2); },
+    // the song at 75: true when the daylight is first seen up the climb, false to let it fade, 'field' to let it close
+    ascent(state) {
+      if (!on()) return;
+      if (state === true) { if (!song) songStart(); }
+      else if (state === 'field') songClose();
+      else songStop(1.4);
+    },
+    ascentRise(k) { if (song && !song.closing) song.g.gain.setTargetAtTime(0.55 + 0.5 * k, ctx.currentTime, 1.5); },
+    songOn: () => !!song && !song.closing,
+    songNotes: () => song ? song.count : -1,
   };
+  /* ---------- the song at 75 ----------
+     The chord at 75 is the root and step 75 of the 107. Under the climb they hold, low and slow, and over them a harp-like
+     line wanders around step 75, moving mostly by minor thirds (28 steps of 107) and now and then by a fifth (63) */
+  let song = null;
+  const SF3 = 174.614, sst = (k, oct = 0) => SF3 * Math.pow(2, k / 107 + oct);
+  function pluck(d, t0, f, g) {
+    tone(d, t0, 4.6, f, g, 'triangle', null, 0.004);
+    tone(d, t0, 1.8, f * 2, g * 0.3, 'sine', null, 0.003);
+    tone(d, t0, 0.6, f * 3, g * 0.08, 'sine', null, 0.002);
+  }
+  function songStart() {
+    const t = ctx.currentTime, g = ctx.createGain();
+    g.gain.value = 0.0001; g.gain.setTargetAtTime(0.55, t, 2.2);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+    g.connect(lp); lp.connect(bus);                          // through the long echo of the low halls
+    const pad = [];
+    for (const [k, gn] of [[-107, 0.012], [0, 0.017], [75, 0.015]]) for (const det of [-0.45, 0.45]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = sst(k) + det;
+      const gg = ctx.createGain(); gg.gain.value = 0.0001; gg.gain.setTargetAtTime(gn, t + 0.5, 3.5);
+      o.connect(gg); gg.connect(g); o.start(t); pad.push({ o, gg, gn });
+    }
+    // a held minor third over 75 that breathes in at the end of each phrase and out again
+    const third = [];
+    for (const det of [-0.35, 0.35]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = sst(75 + 28) + det;
+      const gg = ctx.createGain(); gg.gain.value = 0.0001; o.connect(gg); gg.connect(g); o.start(t); third.push({ o, gg });
+    }
+    song = { g, lp, pad, third, next: t + 4.2, cur: 0, dir: 1, left: 5, opened: false, net: 0, fifthIn: 10 + Math.floor(Math.random() * 9), phrase: 0, count: 0, closing: false };
+  }
+  // one note (or a few together) at song.next, then the wait before the next.
+  // Every move is a minor third (28 steps of 107) except the fifths (63), and those come only every ten notes
+  // or so, as the one distant step, each undoing the last. The line leans upward, then walks home to 75 by
+  // thirds at the end of each phrase. Many notes carry a second minor third sounding with them
+  const SONG_LO = -56, SONG_HI = 112;
+  function songNote() {
+    const s = song, t = s.next, R = Math.random;
+    const third = (base, at, g) => { const up = base - 28 < SONG_LO; pluck(s.g, at, sst(75 + base + (up ? 28 : -28)), g); };
+    const lat = () => s.cur - 63 * s.net;                   // where the line sits on the ladder of thirds through 75
+    const need = () => Math.abs(lat()) / 28 + Math.abs(s.net); // moves still needed to come home to 75
+    if (s.left <= 0) {
+      // the end of a phrase: the last step home onto 75, nearly always with a minor third under it
+      const m = -s.cur;                                       // a third, or the fifth back down
+      if (Math.abs(m) === 63) s.net = 0;
+      s.cur = 0;
+      pluck(s.g, t, sst(75), 0.05);
+      if (R() < 0.8) third(0, t + 0.05, 0.032);
+      s.count++;
+      // an odd number of steps, so that thirds and fifths, each one rung, can always land back on 75 exactly at the end
+      s.phrase++; s.left = [5, 5, 7, 7, 9][Math.floor(R() * 5)]; s.opened = false;
+      s.dir = R() < 0.72 ? 1 : -1;                            // most phrases set off rising
+      // the held notes swell a little between phrases, and the held minor third with them
+      for (const p of s.pad) { p.gg.gain.setTargetAtTime(p.gn * 1.35, t, 1.2); p.gg.gain.setTargetAtTime(p.gn, t + 3, 2.5); }
+      for (const p of s.third) { p.gg.gain.setTargetAtTime(0.009, t + 0.3, 1.4); p.gg.gain.setTargetAtTime(0.0001, t + 4, 2.6); }
+      s.next = t + 4.2 + R() * 1.8;
+      return;
+    }
+    if (!s.opened) {
+      // many phrases open with a rolled stack of minor thirds, rising from a third below where the last one came home
+      s.opened = true;
+      if (s.dir > 0 && R() < 0.6 && s.cur - 28 >= SONG_LO && s.cur + 28 <= SONG_HI && s.left > need() + 3) {
+        for (let k = 0; k < 3; k++) pluck(s.g, t + k * 0.17, sst(75 + s.cur - 28 + 28 * k), 0.04 - k * 0.006);
+        s.cur += 28; s.count += 3; s.left -= 3;
+        s.next = t + 2.4;
+        return;
+      }
+    }
+    let m;
+    s.fifthIn--;
+    if (need() >= s.left + 1) {
+      // time to head home: thirds toward 75, and the fifth back down as the last step if one is out
+      m = s.net && lat() === 0 ? -63 * s.net : -28 * Math.sign(lat());
+    } else if (s.fifthIn <= 0) {
+      // the distant step: a fifth, the other way from the last one
+      m = s.net ? -63 * s.net : (s.cur + 63 <= SONG_HI ? 63 : -63);
+      s.fifthIn = 10 + Math.floor(R() * 9);
+    } else {
+      m = (R() < 0.8 ? 28 : -28) * s.dir;
+      if (s.cur + m > SONG_HI || s.cur + m < SONG_LO) m = -m;
+    }
+    if (Math.abs(m) === 63) s.net += Math.sign(m);
+    s.cur += m;
+    if (s.cur + 28 * s.dir > SONG_HI || s.cur + 28 * s.dir < SONG_LO) s.dir = -s.dir;   // turn at the edges of the range
+    pluck(s.g, t, sst(75 + s.cur), 0.046);
+    if (Math.abs(m) === 63) pluck(s.g, t + 0.04, sst(75 + s.cur - m), 0.026);           // the fifth heard whole
+    else if (R() < 0.42) third(s.cur, t + 0.04, 0.028);                                  // a minor third sounding with it
+    s.count++; s.left--;
+    const gaps = [1.5, 1.5, 2.1, 2.7, 0.75];
+    s.next = t + gaps[Math.floor(R() * gaps.length)];
+  }
+  function songTick() {
+    if (!song || song.closing) return;
+    if (song.next < ctx.currentTime - 0.2) song.next = ctx.currentTime + 0.4;   // after the tab slept: pick up again, never catch up all at once
+    while (song.next < ctx.currentTime + 0.6) songNote();
+  }
+  // out on the grass: one last chord, root, 75 and its fifth, and the held notes go with the light
+  function songClose() {
+    if (!song || song.closing) return;
+    const s = song, t = Math.max(ctx.currentTime + 0.4, s.next - 0.6);
+    s.closing = true;
+    pluck(s.g, t, sst(0, 1), 0.04); pluck(s.g, t + 0.06, sst(75), 0.044); pluck(s.g, t + 0.12, sst(138), 0.03);
+    for (const p of s.pad.concat(s.third)) p.gg.gain.setTargetAtTime(0.0001, t + 2, 3.5);
+    for (const p of s.pad.concat(s.third)) p.o.stop(t + 20);
+    const g = s.g; setTimeout(() => { try { g.disconnect(); } catch (e) { } }, 21000);
+    song = null;
+  }
+  function songStop(tc) {
+    if (!song) return;
+    const s = song, t = ctx.currentTime;
+    s.g.gain.cancelScheduledValues(t); s.g.gain.setTargetAtTime(0.0001, t, tc);
+    for (const p of s.pad.concat(s.third)) p.o.stop(t + tc * 6);
+    setTimeout(() => { try { s.g.disconnect(); } catch (e) { } }, tc * 6000 + 500);
+    song = null;
+  }
   // a skylark, too high to see, singing on and on
   function lark() {
     const t0 = ctx.currentTime, d = out(null, dry), pan = ctx.createStereoPanner();
@@ -6428,7 +7247,7 @@ function updateLight(t, lf) {
     scene.fog.density = lerp(0.085, 0.011, k);
     skyLight.intensity = 2.6 * Math.pow(k, 1.6);
     vmAmbient.intensity = 1.1 * Math.pow(k, 1.6);
-    len.route.glow.material.color.setRGB(1, 0.94, 0.82).multiplyScalar(0.05 + 1.4 * Math.pow(k, 1.1));
+    len.route.glow.material.color.setRGB(1, 0.94, 0.82).multiplyScalar(0.12 + 1.33 * Math.pow(k, 1.1));   // a speck of day from the very bottom
   } else {
     scene.fog.color.copy(BLACK); scene.background.copy(BLACK); scene.fog.density = 0.085;
     skyLight.intensity = 0; vmAmbient.intensity = 0;
@@ -6473,6 +7292,7 @@ function update(dt) {
   if (P.inRoute && P.routeP > 0.02 && !field) pumpField(3);
   updateMouse(dt);
   updateChime();
+  updateSong();
   seenT += dt; if (seenT > 0.25) { seenT = 0; scanSeen(); }
   aimT += dt; if (aimT > 0.1) { aimT = 0; const lit = S.inField || lanternFactor() > 0.05; crossEl.classList.toggle('aim', lit && !invOpen && !P.anim && !!(S.inField ? (field && field.canTake && field.canTake()) : pickTarget())); }
   saveT += dt; if (saveT > 15) { saveT = 0; saveGame(); }
@@ -6543,11 +7363,25 @@ function devKey(code) {
   // out on the steppe: R brings the riders, Y walks you to the grave in the fold, U fills the pack with things they would take
   if (code === 'KeyR' && S.inField && field && riders.state === 'none') { S.field.walked = 700; S.field.riders = 0; const z = field.RZ(P.pos.x) + 9; P.pos.set(P.pos.x, field.heightAt(P.pos.x, z), z); }
   if (code === 'KeyY' && S.inField && field) { const x = FIELD_WS.x + 3.5, z = FIELD_WS.z + 2.5; P.pos.set(x, field.heightAt(x, z), z); P.yaw = Math.atan2(3.5, 2.5); }
-  if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004]) if (S.inv.length < C.INV_SLOTS) S.inv.push(id); toast('Goods for trading.'); }
+  if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID]) if (S.inv.length < C.INV_SLOTS && (id !== HARP_ID || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; toast('Goods for trading.'); }
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
 window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera };
 
+// the song at 75 starts the first time the daylight can be seen at the top of the climb, and rises with you
+const _songV = new THREE.Vector3();
+function updateSong() {
+  if (S.inField || S.dead) return;
+  const len = P.inRoute ? loaded.get(P.lenA) : null;
+  if (!len || !len.route) { if (AU.songOn()) AU.ascent(false); return; }
+  if (AU.songOn()) { AU.ascentRise(P.routeP); return; }
+  // standing where the tunnel bends into the climb, or on the climb itself, with the light in view
+  const r = len.route, x = P.pos.x - r.ox, z = P.pos.z - len.group.position.z - r.oz;
+  const along = x * r.dx + z * r.dz, lat = -x * r.dz + z * r.dx;
+  if (along < -2.6 || Math.abs(lat) > r.hw + 0.4) return;
+  r.glow.getWorldPosition(_songV).project(camera);
+  if (Math.abs(_songV.x) < 0.95 && Math.abs(_songV.y) < 0.95 && _songV.z < 1) AU.ascent(true);
+}
 /* ---------- boot ---------- */
 let pendingSave = null;
 function boot(data) {
