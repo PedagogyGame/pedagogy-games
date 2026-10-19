@@ -361,7 +361,7 @@ function serialize() {
   return JSON.stringify({
     v: 3, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
     t: S.t, lastSupply: S.lastSupply, activeSince: S.activeSince, dropN: S.dropN, mirror: S.mirror, mirrorSeen: S.mirrorSeen, inField: S.inField, field: S.field, dead: S.dead,
-    maxA: S.maxA || 0, stairRet: S.stairRet || null, harp: S.harp || null,
+    maxA: S.maxA || 0, stairRet: S.stairRet || null, harp: S.harp || null, bells: S.bells || null,
   });
 }
 function deserialize(str) {
@@ -391,6 +391,7 @@ const P = {
   pos: new THREE.Vector3(0, 0, -5), yaw: 0, pitch: 0, vel: new THREE.Vector3(),
   mode: 'corridor', lenA: 0, bob: 0, stepDist: 0, lastBump: 0, swingT: -1, swingHit: false,
   anim: null, armed: true, inRoute: false, inCave: false, routeP: 0, hurry: false, kick: 0, locked: false,
+  zone: null, loftHi: false, loftK: 0, deep: false, dampK: 0, squeeze: 0,
 };
 const dyn = { debris: [], falling: [] };
 let field = null;
@@ -665,17 +666,18 @@ function motifTexture(baseHex, inkHex, motif, seed) {
 
 // carved tally on the plank at the start of each length: one notch per length, in fives
 const _tallyCache = new Map();
-function tallyTexture(n) {
-  if (_tallyCache.has(n)) return _tallyCache.get(n);
+function tallyTexture(n, faint = false) {
+  const key = faint ? n + 'f' : n;
+  if (_tallyCache.has(key)) return _tallyCache.get(key);
   const c = makeCanvas(512, 160), g = c.getContext('2d');
-  drawGrain(g, 512, 160, { base: '#5a5042', dark: [30, 24, 18], light: [130, 118, 98], lines: 90, wave: 2, seed: 200 + n });
+  drawGrain(g, 512, 160, { base: faint ? '#5e5446' : '#5a5042', dark: [30, 24, 18], light: [130, 118, 98], lines: 90, wave: 2, seed: 200 + n });
   const groups = Math.floor(n / 5), rest = n % 5;
   const perRow = 8, gw = 58, top = 22, rowH = 46;
   let idx = 0;
   const notch = (x, y1, x2, y2) => {
-    g.strokeStyle = 'rgba(14,9,5,.92)'; g.lineWidth = 4.5; g.lineCap = 'round';
+    g.strokeStyle = faint ? 'rgba(22,15,9,.62)' : 'rgba(14,9,5,.92)'; g.lineWidth = faint ? 3.6 : 4.5; g.lineCap = 'round';
     g.beginPath(); g.moveTo(x, y1); g.lineTo(x2, y2); g.stroke();
-    g.strokeStyle = 'rgba(150,120,85,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x + 2.4, y1 + 1); g.lineTo(x2 + 2.4, y2 + 1); g.stroke();
+    g.strokeStyle = faint ? 'rgba(150,120,85,.16)' : 'rgba(150,120,85,.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(x + 2.4, y1 + 1); g.lineTo(x2 + 2.4, y2 + 1); g.stroke();
   };
   const total = groups + (rest ? 1 : 0);
   for (let k = 0; k < total; k++) {
@@ -687,7 +689,7 @@ function tallyTexture(n) {
     idx++;
   }
   const t = texOf(c); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-  _tallyCache.set(n, t);
+  _tallyCache.set(key, t);
   if (_tallyCache.size > 8) { const k = _tallyCache.keys().next().value; _tallyCache.get(k).dispose(); _tallyCache.delete(k); }
   return t;
 }
@@ -1067,6 +1069,14 @@ const PROTO = {};
     for (const y of [t / 2, s - t / 2]) for (const z of [-1, 1]) B.box(M.wood, 0, y, z * (s / 2 - t / 2), s, t, t);
     for (const y of [t / 2, s - t / 2]) for (const x of [-1, 1]) B.box(M.wood, x * (s / 2 - t / 2), y, 0, t, t, s);
   });
+  // a narrow box stood on end, taller than a man's waist, banded three times
+  PROTO.tallbox = mk(B => {
+    const w = 0.6, h = 1.3, t = 0.06;
+    B.box(M.board, 0, h / 2, 0, w - 0.02, h - 0.02, w - 0.02, 0, 0, 0, 1.4);
+    for (const x of [-1, 1]) for (const z of [-1, 1]) B.box(M.wood, x * (w / 2 - t / 2), h / 2, z * (w / 2 - t / 2), t, h, t);
+    for (const y of [t / 2, h / 2, h - t / 2]) { for (const z of [-1, 1]) B.box(M.wood, 0, y, z * (w / 2 - t / 2), w, t, t); for (const x of [-1, 1]) B.box(M.wood, x * (w / 2 - t / 2), y, 0, t, t, w); }
+    B.box(M.wood, 0, h + 0.02, 0, w + 0.03, 0.04, w + 0.03);
+  });
   PROTO.box = mk(B => {
     B.box(M.board, 0, 0.16, 0, 0.46, 0.3, 0.36, 0, 0, 0, 1.6);
     B.box(M.wood, 0, 0.32, 0, 0.5, 0.04, 0.4);
@@ -1107,6 +1117,7 @@ const SMASH_SPEC = {
   chest: { hits: 2, r: 0.5, h: 0.69, top: 0.69, sound: 'chest' },
   table: { hits: 1, r: 0.6, h: 0.8, top: 0.8, sound: 'wood' },
   stool: { hits: 1, r: 0.25, h: 0.47, top: 0.47, sound: 'wood' },
+  tallbox: { hits: 1, r: 0.36, h: 1.3, top: 1.3, sound: 'wood' },
 };
 
 /* ---- 30_world.js ---- */
@@ -1224,6 +1235,11 @@ function layoutFor(L, lap) {
     }
     if (best) rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: 'grotto', v: 0, seed: R4.int(0, 1e9), added: true });
   }
+  // and last, at 82 the stair that climbs to the loft, and at 99 the stair that goes down further than any other
+  if (L === LOFT_L) rooms.push({ i: rooms.length, d: LOFT_D, side: LOFT_SIDE, lower: false, design: 'loft', v: 0, seed: hash32(L, 82, 17), added: true });
+  if (L === DEEP_L) rooms.push({ i: rooms.length, d: DEEP_D, side: DEEP_SIDE, lower: false, design: 'deep', v: 0, seed: hash32(L, 99, 23), added: true });
+  // at 51, a stair down to a bigger room with another stair in its floor
+  if (L === CELLAR_L) rooms.push({ i: rooms.length, d: CELLAR_D, side: CELLAR_SIDE, lower: true, design: 'twostair', v: 0, seed: hash32(L, 51, 29), added: true });
   const lay = { L, vi, rooms, clutterSeed, decorSeed: hash32(L, vi, 555) };
   _layCache.set(key, lay);
   return lay;
@@ -1415,9 +1431,11 @@ function* corridorGen(ctx) {
   for (const s of [-1, 1]) B.box(M.woodDark, s * 1.86, CH / 2, -0.38, 0.24, CH, 0.24);
   B.box(M.woodDark, 0, 2.62 + UP, -0.38, 3.9, 0.22, 0.24);
   {
-    const tm = new THREE.MeshLambertMaterial({ map: tallyTexture(ctx.L + 1) });
-    const plank = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.34), tm);
-    plank.position.set(-1.975, 1.72, -1.5); plank.rotation.y = Math.PI / 2; plank.userData.disposable = true; plank.userData.ownMat = true;
+    // the first length of every pass keeps its big plank; on every other the tally is small and worn, easy to walk past
+    const first = ctx.L === 0;
+    const tm = new THREE.MeshLambertMaterial({ map: tallyTexture(ctx.L + 1, !first), color: first ? 0xffffff : 0xa89c88 });
+    const plank = new THREE.Mesh(new THREE.PlaneGeometry(first ? 1.1 : 0.4, first ? 0.34 : 0.124), tm);
+    plank.position.set(-1.975, first ? 1.72 : 1.46, -1.5); plank.rotation.y = Math.PI / 2; plank.userData.disposable = true; plank.userData.ownMat = true;
     ctx.group.add(plank); ctx.meshes.push(plank);
   }
   if (ctx.A === 0) {
@@ -1625,7 +1643,10 @@ function* decorGen(ctx, open, used) {
 function shell(ctx, room, D, W, H, wallMat, o = {}) {
   const B = ctx.B, hw = W / 2, lvl = room.lvl;
   const u0 = o.u0 ?? 0, uB = u0 + D;
-  B.box(o.floor || M.plank, u0 + D / 2, -0.05, 0, D + 0.1, 0.1, W + 0.1, 0, 0, 0, 0.55);
+  if (o.floorHole) {   // [u0, u1, v0, v1] left open for a stair going further down
+    const [a0, a1, b0, b1] = o.floorHole, f = o.floor || M.plank, fb = (ua, ub, va, vb) => B.box(f, (ua + ub) / 2, -0.05, (va + vb) / 2, ub - ua, 0.1, vb - va, 0, 0, 0, 0.55);
+    fb(u0 - 0.05, a0, -hw - 0.05, hw + 0.05); fb(a1, uB + 0.05, -hw - 0.05, hw + 0.05); fb(a0, a1, -hw - 0.05, b0); fb(a0, a1, b1, hw + 0.05);
+  } else B.box(o.floor || M.plank, u0 + D / 2, -0.05, 0, D + 0.1, 0.1, W + 0.1, 0, 0, 0, 0.55);
   if (o.hole) { // ceiling with a square hole for the stair shaft
     const [h0, h1, hv] = o.hole;
     B.box(M.board, (h1 + uB + 0.2) / 2, H + 0.06, 0, uB + 0.2 - h1, 0.12, W + 0.4, 0, 0, 0, 0.6);
@@ -1979,7 +2000,7 @@ const LOWER_BUILD = {
 function lowerShell(ctx, room, D, W, H, o = {}) {
   ctx.setFrame(room.side, C.WALL_OUT, room.zc, C.LOWER_Y);
   const B = ctx.B, hw = W / 2, u0 = -0.3, uB = u0 + D;
-  shell(ctx, room, D, W, H, M.earth, { u0, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true });
+  shell(ctx, room, D, W, H, M.earth, Object.assign({ u0, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true }, o.shell || {}));
   // the bottom of the stair comes through the ceiling here
   ctx.circle(STAIR.cu, 0, 0.2, 'low');
   const c = ctx.W(STAIR.cu, 0, 0);
@@ -2135,7 +2156,8 @@ function* buildLengthGen(A) {
       stairAlcove(ctx, room, lowerH(r.design, r.v));
       yield;
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, C.LOWER_Y);
-      LOWER_BUILD[r.design](ctx, room, R, r.v);
+      const gen = LOWER_BUILD[r.design](ctx, room, R, r.v);
+      if (gen && typeof gen.next === 'function') yield* gen;
     } else {
       const room = ctx.newRoom(r, 'up');
       ctx.setFrame(r.side, C.WALL_OUT, -r.d, 0);
@@ -2144,6 +2166,8 @@ function* buildLengthGen(A) {
       else if (r.design === 'odd') yield* buildOddGen(ctx, room, R);
       else if (r.design === 'escape') yield* buildEscapeGen(ctx, room, R);
       else if (r.design === 'grotto') yield* buildGrottoGen(ctx, room, R);
+      else if (r.design === 'loft') yield* buildLoftGen(ctx, room, R);
+      else if (r.design === 'deep') yield* buildDeepGen(ctx, room, R);
       else UPPER_BUILD[r.design](ctx, room, R, r.v);
     }
     yield;
@@ -2731,6 +2755,279 @@ function* buildGrottoGen(ctx, room, R) {
   room.D = Dd.c.x + Dd.a; room.W = Cc.c.y + Cc.b + 3.6; room.H = A.h;
 }
 
+/* ---- 34_loft.js ---- */
+/* ============================================================
+   Length 82, seven lengths past the way out: the one stair on the wall that climbs.
+   A tall stair room off the corridor; a steep flight up through a dark slot under its boards; and at the
+   top a great barn loft under a high roof, its rafters lost in the dark, a hoist rope hanging out of it,
+   oat straw and lucerne hay heaped at the far end, and by the hay seven little bronze bells on a cord.
+   ============================================================ */
+const LOFT_L = 82, LOFT_D = 46, LOFT_SIDE = -1;
+const LOFT = (() => {
+  const N = 28, riser = 0.22, tread = 0.29, U0 = 1.4, SW = 0.7;
+  const RISE = N * riser, RUN = N * tread, YL = RISE, U1 = U0 + RUN;
+  const soff = u => (u - U0) / RUN * RISE + 2.3;                 // the underside of the boards over the stair
+  const HOLE0 = U0 + (YL - 0.16 - 2.3) * RUN / RISE;             // where they meet the loft floor
+  return { N, riser, tread, U0, U1, SW, RISE, RUN, YL, soff, HOLE0, AD: 4.0, AW: 3.6, AH: 4.4, H0: 4.0, H1: 22.0, HW: 4.7, WALL: 4.2, RIDGE: 11.0, POSTV: 2.5, POSTS: [7, 10, 13, 16, 19] };
+})();
+const _lfm = {
+  straw: () => cachedMat('lf-straw', () => lam(strawTex(0), { bumpScale: 1.2 })),
+  hay: () => cachedMat('lf-hay', () => lam(strawTex(1), { bumpScale: 1.2 })),
+  beam: () => cachedMat('lf-beam', () => lam(T.wood, { color: 0xb8a68e, bumpScale: 1.6 })),     // old timber, pale with dust
+  roof: () => cachedMat('lf-roof', () => lam(T.board, { color: 0x8c7e6e })),
+  wall: () => cachedMat('lf-wall', () => lam(T.board, { color: 0xa89a88 })),
+};
+// straw: a mat of stalks, gold for the oat straw, grey-green with crumbs of dried leaf for the lucerne
+const _strawTex = [];
+function strawTex(kind) {
+  if (_strawTex[kind]) return _strawTex[kind];
+  const c = makeCanvas(256, 256), g = c.getContext('2d'), R = new Rng(7100 + kind);
+  g.fillStyle = kind ? '#77744a' : '#a4864a'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2800; i++) {
+    const x = R.range(-12, 268), y = R.range(-12, 268), a = R.range(-1.1, 1.1), l = R.range(8, 36), lit = R.next() > 0.5;
+    const col = kind ? (lit ? '186,176,116' : '62,64,36') : (lit ? '232,204,126' : '104,78,38');
+    g.strokeStyle = `rgba(${col},${R.range(0.25, 0.7).toFixed(2)})`; g.lineWidth = R.range(0.8, 2.3);
+    g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+  }
+  if (kind) for (let i = 0; i < 110; i++) {
+    g.fillStyle = R.chance(0.5) ? 'rgba(92,108,50,0.55)' : 'rgba(132,118,70,0.5)';
+    g.beginPath(); g.ellipse(R.range(0, 256), R.range(0, 256), R.range(2, 5), R.range(1, 3), R.range(0, 3), 0, TAU); g.fill();
+  }
+  _strawTex[kind] = texOf(c);
+  return _strawTex[kind];
+}
+// a heap of loose hay: a dome, lumpy all over, its foot spread on the boards
+function hayMound(rx, ry, rz, ph) {
+  const g = new THREE.SphereGeometry(1, 24, 12, 0, TAU, 0, Math.PI / 2);
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const n = 1 + 0.11 * Math.sin(x * 6.1 + ph) * Math.cos(z * 5.3 - ph) + 0.06 * Math.sin(y * 11 + x * 4 + ph * 2);
+    const foot = y < 0.05 ? 1.08 : 1;
+    p.setXYZ(i, x * rx * n * foot, y * ry * n, z * rz * n * foot);
+    uv.setXY(i, uv.getX(i) * (rx + rz) * 2.2, uv.getY(i) * ry * 1.6);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+function* buildLoftGen(ctx, room, R) {
+  const B = ctx.B, L = LOFT, YL = L.YL, side = room.side;
+  const beam = _lfm.beam();
+  const straw = _lfm.straw(); yield;
+  const hay = _lfm.hay(); yield;
+  // ---- the stair room: taller than any room on the wall, and the stair going up out of its back
+  shell(ctx, room, L.AD, L.AW, L.AH, M.log, { backGap: [L.SW + 0.12, L.soff(L.AD) - 0.02] });
+  ctx.skeleton('sit', L.AD - 0.32, -1.32, -Math.PI / 2);
+  // the treads and risers, and the stringers under them
+  for (let i = 0; i < L.N; i++) {
+    const y = L.riser * (i + 1), u0 = L.U0 + i * L.tread;
+    B.box(M.plank, u0 + L.tread / 2, y - 0.025, 0, L.tread + 0.03, 0.05, 2 * L.SW, 0, 0, 0, 1);
+    B.box(M.board, u0 + 0.02, y - L.riser / 2 - 0.02, 0, 0.04, L.riser, 2 * L.SW - 0.02);
+    if (overBudget()) yield;
+  }
+  const pitch = Math.atan2(L.RISE, L.RUN), slope = Math.hypot(L.RISE, L.RUN);
+  for (const s of [-1, 1]) B.box(M.wood, L.U0 + L.RUN / 2, L.RISE / 2 - 0.12, s * (L.SW + 0.04), slope + 0.2, 0.3, 0.08, 0, 0, pitch);
+  // in the room, the stair is boxed in at the sides down to the floor, so it is only climbed from its foot
+  for (const s of [-1, 1]) {
+    for (let u = L.U0; u < L.AD - 0.01; u += 0.3) {
+      const h = Math.max(0.05, (u + 0.15 - L.U0) / L.RUN * L.RISE);
+      B.box(M.board, u + 0.15, h / 2, s * (L.SW + 0.09), 0.3, h, 0.05);
+    }
+    ctx.solid((L.U0 + 0.45 + L.AD) / 2, s * (L.SW + 0.09), L.AD - L.U0 - 0.45, 0.1, 0, 'up');
+  }
+  yield;
+  // the slot the stair climbs through: boarded sides, posts, and the boards over it, sloping up to the loft floor
+  for (const s of [-1, 1]) {
+    B.box(M.board, (L.AD + L.U1) / 2, YL / 2, s * (L.SW + 0.17), L.U1 - L.AD + 0.1, YL, 0.1, 0, 0, 0, 0.8);
+    for (let u = L.AD + 0.6; u < L.U1; u += 1.25) B.box(M.wood, u, YL / 2, s * (L.SW + 0.09), 0.14, YL, 0.08);
+  }
+  const s0 = L.soff(L.AD), s1 = L.soff(L.HOLE0);
+  B.box(M.board, (L.AD + L.HOLE0) / 2, (s0 + s1) / 2 + 0.03, 0, Math.hypot(L.HOLE0 - L.AD, s1 - s0) + 0.05, 0.06, 2 * L.SW + 0.42, 0, 0, pitch);
+  for (let u = L.AD + 0.4; u < L.HOLE0; u += 0.7) B.box(M.wood, u, L.soff(u) - 0.04, 0, 0.1, 0.1, 2 * L.SW + 0.3);
+  // a rope run up the wall of the slot on pegs, to hold on to
+  { const a = V3(L.U0 + 0.2, 1.0, L.SW + 0.07), b = V3(L.U1 - 0.1, L.RISE + 0.95, L.SW + 0.07);
+    B.beam(M.rope, a, b, 0.03, 0.03);
+    for (let k = 0; k <= 5; k++) { const p = a.clone().lerp(b, k / 5); B.box(M.wood, p.x, p.y - 0.03, p.z + 0.04, 0.04, 0.06, 0.1); } }
+  yield;
+  // ---- the loft: its floor, with the stair coming up through it near the near end
+  const fl = (u0, u1, v0, v1) => B.box(M.plank, (u0 + u1) / 2, YL - 0.08, (v0 + v1) / 2, u1 - u0, 0.16, v1 - v0, 0, 0, 0, 0.8);
+  fl(L.H0, L.HOLE0, -L.HW - 0.1, L.HW + 0.1); fl(L.U1, L.H1, -L.HW - 0.1, L.HW + 0.1);
+  for (const s of [-1, 1]) fl(L.HOLE0, L.U1, s > 0 ? 0.86 : -L.HW - 0.1, s > 0 ? L.HW + 0.1 : -0.86);
+  // a rail round the hole on three sides
+  for (const s of [-1, 1]) {
+    for (const u of [L.HOLE0, (L.HOLE0 + L.U1) / 2, L.U1]) B.box(beam, u, YL + 0.5, s * 0.92, 0.1, 1.0, 0.1);
+    for (const y of [0.52, 1.0]) B.box(beam, (L.HOLE0 + L.U1) / 2, YL + y, s * 0.92, L.U1 - L.HOLE0 + 0.1, 0.07, 0.07);
+    ctx.solid((L.HOLE0 + L.U1) / 2, s * 0.92, L.U1 - L.HOLE0 + 0.14, 0.14, 0, 'loft');
+  }
+  for (const y of [0.52, 1.0]) B.box(beam, L.HOLE0, YL + y, 0, 0.07, 0.07, 1.9);
+  ctx.solid(L.HOLE0 - 0.02, 0, 0.14, 1.98, 0, 'loft');
+  // the long walls, boarded, with studs; the plates along their heads
+  const mid = (L.H0 + L.H1) / 2, len = L.H1 - L.H0;
+  for (const s of [-1, 1]) {
+    B.box(_lfm.wall(), mid, YL + L.WALL / 2, s * (L.HW + 0.06), len + 0.2, L.WALL, 0.1, 0, 0, 0, 0.8);
+    for (let u = L.H0 + 0.9; u < L.H1; u += 1.8) B.box(beam, u, YL + L.WALL / 2, s * (L.HW - 0.05), 0.16, L.WALL, 0.12);
+    B.box(beam, mid, YL + L.WALL + 0.1, s * L.HW, len + 0.2, 0.2, 0.24);
+    B.box(beam, mid, YL + 0.08, s * (L.HW - 0.06), len, 0.16, 0.14);
+  }
+  yield;
+  // the gables, of upright boards cut to the slope of the roof
+  const roofY = v => L.WALL + (L.RIDGE - L.WALL) * (1 - Math.abs(v) / L.HW);
+  for (const ug of [L.H0 - 0.04, L.H1 + 0.04]) {
+    for (let v = -L.HW; v < L.HW; v += 0.3) {
+      const h = roofY(v + 0.15) + 0.1;
+      B.box(_lfm.wall(), ug, YL + h / 2, v + 0.15, 0.08, h, 0.31, 0, 0, 0, 0.8);
+      if (overBudget()) yield;
+    }
+    for (const y of [L.WALL, L.WALL + 3.3]) { const w = 2 * L.HW * (1 - (y - L.WALL) / (L.RIDGE - L.WALL)); B.box(beam, ug + (ug < mid ? 0.08 : -0.08), YL + y, 0, 0.14, 0.18, w); }
+  }
+  // the roof: rafters in pairs from the plates to the ridge, purlins, the boards laid over them
+  const ang = Math.atan2(L.RIDGE - L.WALL, L.HW), sl = Math.hypot(L.RIDGE - L.WALL, L.HW);
+  for (let u = L.H0 + 0.35; u < L.H1 - 0.2; u += 0.9) { for (const s of [-1, 1]) B.beam(beam, V3(u, YL + L.WALL + 0.1, s * L.HW), V3(u, YL + L.RIDGE - 0.08, 0), 0.13, 0.17); if (overBudget()) yield; }
+  B.box(beam, mid, YL + L.RIDGE - 0.1, 0, len + 0.3, 0.26, 0.24);
+  for (const s of [-1, 1]) {
+    const n = V3(0, Math.cos(ang), s * Math.sin(ang));
+    const c = V3(mid, YL + (L.WALL + L.RIDGE) / 2, s * L.HW / 2).addScaledVector(n, 0.13);
+    B.box(_lfm.roof(), c.x, c.y, c.z, len + 0.5, 0.07, sl + 0.4, s * ang, 0, 0, 0.7);
+    for (const f of [0.3, 0.72]) B.box(beam, mid, YL + L.WALL + (L.RIDGE - L.WALL) * f - 0.12, s * L.HW * (1 - f), len, 0.18, 0.18);
+  }
+  yield;
+  // two rows of tall posts carrying plates under the rafters, tie beams across, collars high up, braces
+  for (const u of L.POSTS) {
+    if (overBudget()) yield;
+    for (const s of [-1, 1]) {
+      const v = s * L.POSTV, top = roofY(L.POSTV) - 0.28;
+      B.box(beam, u, YL + top / 2, v, 0.32, top, 0.32);
+      ctx.circle(u, v, 0.24, 'loft');
+      for (const du of [-1, 1]) if (u + du * 1.3 > L.H0 && u + du * 1.3 < L.H1) B.beam(beam, V3(u, YL + top - 1.5, v), V3(u + du * 1.3, YL + top - 0.05, v), 0.12, 0.12);
+      B.beam(beam, V3(u, YL + L.WALL - 1.1, v), V3(u, YL + L.WALL - 0.08, v + s * 1.0), 0.12, 0.12);
+    }
+    B.box(beam, u, YL + L.WALL, 0, 0.24, 0.26, 2 * L.HW + 0.2);
+    const cy = 9.2, cw = L.HW * (1 - (cy - L.WALL) / (L.RIDGE - L.WALL));
+    B.box(beam, u, YL + cy, 0, 0.16, 0.2, 2 * cw + 0.2);
+  }
+  for (const s of [-1, 1]) B.box(beam, mid, YL + roofY(L.POSTV) - 0.16, s * L.POSTV, len - 0.4, 0.24, 0.3);
+  // webs up in the corners and between the rafters
+  ctx.web(V3(L.H0 + 0.1, YL + L.WALL - 0.05, L.HW - 0.12), V3(0, 0, -1), V3(0, -1, 0), R.range(0.6, 1.0), R.int(0, 3));
+  ctx.web(V3(L.H1 - 0.1, YL + L.WALL - 0.05, -L.HW + 0.12), V3(0, 0, 1), V3(0, -1, 0), R.range(0.6, 1.0), R.int(0, 3));
+  ctx.web(V3(13.0, YL + 8.9, 1.4), V3(1, 0, 0), V3(0, -0.6, -0.8).normalize(), R.range(0.7, 1.1), R.int(0, 3));
+  ctx.web(V3(10.0, YL + L.WALL - 0.12, L.POSTV - 0.16), V3(0, 0, -1), V3(0, -1, 0.2).normalize(), R.range(0.4, 0.7), R.int(0, 3));
+  ctx.web(V3(16.0, YL + L.WALL - 0.12, -L.POSTV + 0.16), V3(0, 0, 1), V3(0, -1, -0.2).normalize(), R.range(0.4, 0.7), R.int(0, 3));
+  yield;
+  // ---- the far end: hay heaped against the gable, oat straw and lucerne, and sheaves stood by the wall
+  const mounds = [[20.3, -3.2, 2.0, 1.7, 1.8, 0], [20.6, 0.3, 2.2, 2.1, 2.0, 1], [20.2, 3.3, 1.9, 1.6, 1.7, 0], [18.9, -1.5, 1.3, 0.9, 1.4, 1],
+    [19.0, 2.0, 1.2, 0.8, 1.3, 0], [21.3, -1.7, 1.3, 2.3, 1.6, 1], [21.3, 1.9, 1.3, 2.2, 1.5, 0], [21.4, 4.0, 1.0, 1.3, 0.9, 1], [21.4, -4.0, 1.0, 1.2, 0.9, 0]];
+  for (const [u, v, rx, ry, rz, k] of mounds) { B.add(k ? hay : straw, hayMound(rx, ry, rz, u * 1.7 + v), mtx(u, YL, v), true); if (overBudget()) yield; }
+  ctx.solid(20.1, 0, 4.0, 2 * L.HW, 0, 'loft');
+  for (const [u, v, lean] of [[15.4, 4.36, 0.12], [15.9, 4.34, -0.08], [16.4, 4.38, 0.15], [14.6, -4.36, -0.1], [15.1, -4.38, 0.06]]) {
+    const ry = R.range(0, TAU), tilt = mtx(u, YL, v, lean * (v > 0 ? 1 : -1), ry, 0);
+    B.add(straw, new THREE.CylinderGeometry(0.2, 0.15, 0.62, 10, 1, false), tilt.clone().multiply(mtx(0, 0.31, 0)), true);
+    B.add(straw, new THREE.ConeGeometry(0.27, 0.42, 10, 1, true).rotateX(Math.PI), tilt.clone().multiply(mtx(0, 0.78, 0)), true);
+    B.add(M.rope, new THREE.TorusGeometry(0.18, 0.02, 5, 14).rotateX(Math.PI / 2), tilt.clone().multiply(mtx(0, 0.52, 0)), true);
+    ctx.circle(u, v - Math.sign(v) * 0.05, 0.2, 'loft');
+  }
+  // a wooden fork left leaning in the heap
+  { const a = V3(17.7, YL + 0.02, -2.75), b = V3(18.8, YL + 1.55, -3.0);
+    B.beam(beam, a, b, 0.045, 0.045);
+    const d = b.clone().sub(a).normalize(), n = V3(0, 0, 1);
+    for (const k of [-1, 0, 1]) B.beam(beam, b.clone().addScaledVector(n, k * 0.07), b.clone().addScaledVector(n, k * 0.09).addScaledVector(d, 0.42), 0.022, 0.022); }
+  // straw dropped over the boards, thick near the heap and thinning out towards the stair
+  for (let i = 0; i < 520; i++) {
+    const near = R.chance(0.7), u = near ? R.range(13.5, 18.6) : R.range(L.U1 + 0.2, 13.5), v = R.range(-L.HW + 0.3, L.HW - 0.3);
+    B.add(R.chance(0.6) ? straw : hay, UNIT_CYL, mtx(u, YL + 0.006, v, Math.PI / 2, R.range(0, TAU), 0, 0.005, R.range(0.12, 0.38), 0.005));
+    if (i % 60 === 59 && overBudget()) yield;
+  }
+  // the hoist: a pulley under the collar of the fourth bay, and its rope hanging down out of the dark
+  { const u = 16.0, py = YL + 8.85;
+    B.box(beam, u, py, 0, 0.12, 0.34, 0.2);
+    B.add(beam, new THREE.CylinderGeometry(0.11, 0.11, 0.06, 14).rotateX(Math.PI / 2).rotateY(Math.PI / 2), mtx(u, py - 0.04, 0), true);
+    B.beam(M.rope, V3(u, py + 0.17, 0), V3(u, YL + 9.12, 0), 0.03, 0.03);
+    B.beam(M.rope, V3(u, py - 0.12, -0.1), V3(u - 0.04, YL + 0.95, -0.12), 0.026, 0.026);
+    B.beam(M.rope, V3(u, py - 0.12, 0.1), V3(u + 0.06, YL + 3.1, 0.13), 0.026, 0.026);
+    B.add(M.rope, new THREE.TorusGeometry(0.09, 0.022, 5, 12), mtx(u - 0.04, YL + 0.86, -0.12, 0, Math.PI / 2, 0), true);
+    ctx.circle(u, -0.1, 0.09, 'loft'); }
+  // an old chopping block in front of the heap, and the bells on it
+  B.add(M.log, new THREE.CylinderGeometry(0.25, 0.27, 0.42, 12), mtx(16.95, YL + 0.21, 0.55), true);
+  B.add(M.wood, new THREE.CircleGeometry(0.25, 12).rotateX(-Math.PI / 2), mtx(16.95, YL + 0.421, 0.55), true);
+  ctx.circle(16.95, 0.55, 0.28, 'loft');
+  room.bellSpot = { pos: ctx.W(16.95, YL + 0.425, 0.55), yaw: ctx.yaw(Math.PI / 2) + 0.4 };
+  yield;
+  // ---- where you can stand: below, the room and the stair; above, the loft floor and the top of the stair
+  const f = Object.assign({}, ctx.frame);
+  const rect = (u0, u1, v0, v1) => { const c = ctx.W((u0 + u1) / 2, 0, (v0 + v1) / 2); return { cx: c.x, cz: c.z, ux: f.side * f.c, uz: -f.s, hx: (u1 - u0) / 2, hz: (v1 - v0) / 2 }; };
+  const ground = [rect(-0.6, 0.45, -0.74, 0.74), rect(0, L.AD, -L.AW / 2, L.AW / 2), rect(L.U0 - 0.2, L.U1 + 0.1, -L.SW, L.SW)];
+  const high = [rect(L.H0, L.H1, -L.HW, L.HW), rect(L.U1 - 1.5, L.U1 + 0.1, -L.SW, L.SW)];
+  const toRoom = (x, zl) => { const du = f.side * x - f.xOff - f.ou, dv = zl - f.zc - f.ov; return [f.c * du - f.s * dv, f.s * du + f.c * dv]; };
+  const stairY = u => clamp((u - L.U0) / L.RUN, 0, 1) * L.RISE;
+  const onStair = (u, v) => Math.abs(v) < L.SW + 0.1 && u > L.U0 - 0.05 && u < L.U1 + 0.02;
+  const loft = {
+    high, toRoom, stairY, onStair, rise: L.RISE,
+    inGround: (u, v) => (u >= -0.7 && u <= L.AD && Math.abs(v) <= L.AW / 2) || (Math.abs(v) < L.SW && u <= L.U1),
+    inHigh: (u, v) => u >= L.H0 && u <= L.H1 && Math.abs(v) <= L.HW,
+    floor: (u, v, hi) => {
+      const st = Math.abs(v) < L.SW + 0.12 && u > L.U0 - 0.05;
+      if (hi) return st && u < L.U1 ? stairY(u) : L.YL;
+      return st ? stairY(u) : 0;
+    },
+  };
+  const corners = [ctx.W(-0.8, 0, -L.HW - 0.3), ctx.W(L.H1 + 0.3, 0, -L.HW - 0.3), ctx.W(-0.8, 0, L.HW + 0.3), ctx.W(L.H1 + 0.3, 0, L.HW + 0.3)];
+  ctx.zones.push({ regions: ground, loft, frame: f, x0: Math.min(...corners.map(p => p.x)), x1: Math.max(...corners.map(p => p.x)), z0: Math.min(...corners.map(p => p.z)), z1: Math.max(...corners.map(p => p.z)), room });
+  room.D = L.AD; room.W = L.AW; room.H = L.AH;
+}
+
+/* ---------- up in the loft: the air, the wings, the light ---------- */
+const loftFx = { motes: null, batT: 7, wasHi: false };
+function makeMotes() {
+  const n = 240, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), seed = new Float32Array(n);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - 0.5) * 8; pos[i * 3 + 1] = (Math.random() - 0.5) * 5; pos[i * 3 + 2] = (Math.random() - 0.5) * 8; seed[i] = Math.random() * 100; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const c = makeCanvas(32, 32), cg = c.getContext('2d'), gr = cg.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); cg.fillStyle = gr; cg.fillRect(0, 0, 32, 32);
+  const m = new THREE.PointsMaterial({ size: 0.022, map: new THREE.CanvasTexture(c), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.visible = false; pts.userData.seed = seed;
+  scene.add(pts);
+  return pts;
+}
+// dust turning slowly in the lantern's light, which reaches further up here; now and then wings, high in the roof
+function updateLoft(dt, lf) {
+  const z = P.zone && P.zone.z.loft ? P.zone : null;
+  const target = z && !S.inField ? clamp((P.pos.y - 2.4) / 3.6, 0, 1) : 0;
+  P.loftK += (target - P.loftK) * Math.min(1, dt * 2.5);
+  if (P.loftK < 0.002) P.loftK = 0;
+  const hi = P.loftK > 0.5;
+  if (hi !== loftFx.wasHi) { loftFx.wasHi = hi; AU.space(hi ? 'loft' : P.mode); }
+  if (!loftFx.motes && P.loftK > 0) loftFx.motes = makeMotes();
+  const mo = loftFx.motes;
+  if (mo) {
+    mo.visible = P.loftK > 0.01 && lf > 0.02;
+    if (mo.visible) {
+      const p = mo.geometry.attributes.position, c = mo.geometry.attributes.color, sd = mo.userData.seed, t = S.t;
+      camera.getWorldPosition(_lfV);
+      const k = P.loftK * Math.min(1, lf * 1.4);
+      for (let i = 0; i < p.count; i++) {
+        let x = p.getX(i) + Math.sin(t * 0.21 + sd[i]) * dt * 0.05, y = p.getY(i) + (Math.sin(t * 0.13 + sd[i] * 1.7) * 0.04 - 0.012) * dt, zz = p.getZ(i) + Math.cos(t * 0.17 + sd[i]) * dt * 0.05;
+        // keep the cloud round the eye: what drifts out comes back in on the far side
+        const wx = x - _lfV.x, wy = y - _lfV.y, wz = zz - _lfV.z;
+        if (Math.abs(wx) > 4) x -= Math.sign(wx) * 8; if (Math.abs(wy) > 2.5) y -= Math.sign(wy) * 5; if (Math.abs(wz) > 4) zz -= Math.sign(wz) * 8;
+        p.setXYZ(i, x, y, zz);
+        const d = Math.hypot(x - _lfV.x, y - _lfV.y, zz - _lfV.z), b = d < 0.5 ? 0 : Math.max(0, 1 - d / 4.2) ** 2 * k * 0.9;
+        c.setXYZ(i, b, b * 0.86, b * 0.62);
+      }
+      p.needsUpdate = true; c.needsUpdate = true;
+    }
+  }
+  if (P.loftK > 0.9) {
+    loftFx.batT -= dt;
+    if (loftFx.batT <= 0) {
+      loftFx.batT = 28 + Math.random() * 45;
+      const a = Math.random() * TAU;
+      AU.flutter(V3(P.pos.x + Math.cos(a) * 4, P.pos.y + 7 + Math.random() * 2.5, P.pos.z + Math.sin(a) * 4));
+    }
+  } else loftFx.batT = Math.max(loftFx.batT, 6);
+}
+const _lfV = new THREE.Vector3();
+
 /* ---- 35_rooms.js ---- */
 /* ============================================================
    The odd rooms: long bending passages to a chamber with something carved on its far wall,
@@ -3090,6 +3387,310 @@ function* climbGen(ctx, room, start, ang, rects, hw, prevDir) {
   ctx.group.add(glow);
   ctx.route = { rects, glow, run: RUN, rise: RISE, ox: c0.x, oz: c0.z, dx: wux, dz: wuz, hw, frame: Object.assign({}, f), room };
 }
+
+/* ---- 36_deep.js ---- */
+/* ============================================================
+   Length 99: the deepest stair on the wall. A low wet room off the corridor, and in its floor a round shaft
+   with a stone stair winding down it, turn after turn, the walls closing in, the lantern struggling in
+   the damp. At the bottom a passage, a turn, a fork: one way a fall of earth, the other a room where the
+   wall's own sign is cut again, the serpent and the hare gone to bone. Two tall boxes stand under it.
+   ============================================================ */
+const DEEP_L = 99, DEEP_D = 60, DEEP_SIDE = 1, DEEP_Y = -26;
+const DEEP_ST = { cu: 1.75, steps: 118, turns: 6.5, r: 0.72, r1: 0.5 };
+// the passes (counted from 0) when the tall boxes hold a flask of oil and a biscuit: then one pass empty,
+// then two, three, four, five, and never again
+const DEEP_STOCK = [0, 2, 5, 9, 14];
+const _dm = {
+  wet: () => cachedMat('dp-wet', () => new THREE.MeshPhongMaterial({ map: T.rock, bumpMap: T.rock, bumpScale: 2.2, color: 0x6a645a, specular: 0x2c2a26, shininess: 34, side: THREE.BackSide })),
+  wetF: () => cachedMat('dp-wetF', () => new THREE.MeshPhongMaterial({ map: T.rock, bumpMap: T.rock, bumpScale: 2.2, color: 0x6a645a, specular: 0x2c2a26, shininess: 34 })),
+  slab: () => cachedMat('dp-slab', () => new THREE.MeshPhongMaterial({ map: T.stone, bumpMap: T.stone, bumpScale: 1.4, color: 0x8a8478, specular: 0x24221e, shininess: 26 })),
+  panel: () => cachedMat('dp-panel', () => lam(T.wood, { color: 0x4c3c2e, bumpScale: 1.4 })),
+  rag: () => cachedMat('dp-rag', () => lam(T.cloth, { color: 0x4a3e30 })),
+  bone: () => cachedMat('dp-bone', () => lam(T.bone, { color: 0xcabda0, bumpScale: 0.7 })),
+};
+const deepWallR = y => lerp(1.32, 0.95, clamp(-y / -DEEP_Y, 0, 1));    // the shaft narrows as it goes down
+
+function* buildDeepGen(ctx, room, R) {
+  const B = ctx.B, st = DEEP_ST, H = 2.5 * HS, D = 3.6, W = 3.4, hw = W / 2, cu = st.cu, Rh = 1.32;
+  const slab = _dm.slab(), wetF = _dm.wetF();
+  yield;
+  // ---- the room above: low, stone, wet; a round hole in its floor
+  { const sh = new THREE.Shape(); sh.moveTo(0, -hw); sh.lineTo(D, -hw); sh.lineTo(D, hw); sh.lineTo(0, hw); sh.lineTo(0, -hw);
+    const hole = new THREE.Path(); hole.absarc(cu, 0, Rh, 0, TAU, true); sh.holes.push(hole);
+    const g = new THREE.ShapeGeometry(sh, 24); g.rotateX(Math.PI / 2);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.6, uv.getY(i) * 0.6);
+    B.add(slab, g, mtx(0, 0.002, 0), true);
+    B.box(slab, D / 2, -0.12, 0, D, 0.2, W, 0, 0, 0, 0.6); }
+  yield;
+  B.box(M.board, D / 2, H + 0.06, 0, D + 0.4, 0.12, W + 0.4);
+  for (const u of [0.8, 2.6]) B.box(M.woodDark, u, H - 0.1, 0, 0.2, 0.2, W);
+  B.box(wetF, D + 0.1, H / 2, 0, 0.2, H, W + 0.4, 0, 0, 0, 0.7); ctx.solid(D + 0.15, 0, 0.3, W + 0.6, 0, 'up');
+  for (const s of [-1, 1]) {
+    B.box(wetF, D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.7); ctx.solid(D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, 'up');
+    B.box(wetF, 0.06, H / 2, s * (0.72 + (hw - 0.72) / 2), 0.12, H, hw - 0.72, 0, 0, 0, 0.7); ctx.solid(0.06, s * (0.72 + (hw - 0.72) / 2), 0.2, hw - 0.72, 0, 'up');
+  }
+  B.box(wetF, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 1.44);
+  // a kerb of rough stones round the back of the hole
+  for (let k = 0; k < 15; k++) {
+    const a = -Math.PI * 0.62 + k / 14 * Math.PI * 1.24, sz = R.range(0.16, 0.26);
+    stoneLump(B, R, R.pick([M.stone, M.stoneB]), cu + Math.cos(a) * (Rh + 0.14), sz * 0.45, Math.sin(a) * (Rh + 0.14), sz, 0.8);
+    if (overBudget()) yield;
+  }
+  ctx.solid(D - 0.05, 0, 0.12, 2.4, 0, 'up');
+  for (const s of [-1, 1]) ctx.solid(cu + 0.4, s * (Rh + 0.16), 1.8, 0.14, 0, 'up');
+  B.add(M.wet, new THREE.CircleGeometry(0.5, 16), mtx(0.6, 0.008, -1.1, -Math.PI / 2, 0, 0, 1, 0.7, 1), true);
+  ctx.web(V3(D - 0.03, H - 0.03, hw - 0.03), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), R.range(0.6, 0.9), R.int(0, 3));
+  yield;
+  // ---- the shaft: rough stone, sweating, closing in as it goes down; a stone newel and stone treads
+  const nSeg = 19, segH = -(DEEP_Y + 2.5) / nSeg;
+  for (let k = 0, y = 0; k < nSeg; k++, y -= segH) {
+    const r0 = deepWallR(y), r1 = deepWallR(y - segH);
+    const g = new THREE.CylinderGeometry(r0, r1, segH + 0.02, 11, 1, true);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2.2, uv.getY(i) * 0.5);
+    B.add(_dm.wet(), g, mtx(cu + R.range(-0.03, 0.03), y - segH / 2, R.range(-0.03, 0.03), 0, R.range(0, TAU), 0), true);
+    if (overBudget()) yield;
+  }
+  yield;
+  B.log(M.stoneB, cu, DEEP_Y / 2 + 0.5, 0, 0.15, -DEEP_Y + 1, 'y', 8);
+  yield;
+  for (let s = 0; s < st.steps; s++) {
+    const phi = Math.PI + (s + 0.5) * (st.turns * TAU / st.steps);
+    const y = -0.22 - s * ((-DEEP_Y - 0.44) / (st.steps - 1)), rw = deepWallR(y) - 0.04, rc = (0.15 + rw) / 2;
+    B.box(slab, cu + rc * Math.cos(phi), y - 0.06, rc * Math.sin(phi), rw - 0.12, 0.12, 0.36 + rc * 0.1, 0, -phi, 0, 1);
+    if (s % 9 === 4) B.add(M.wet, new THREE.CircleGeometry(0.14, 10), mtx(cu + rc * Math.cos(phi), y + 0.002, rc * Math.sin(phi), -Math.PI / 2, 0, 0), true);
+    if (s % 20 === 19 || overBudget()) yield;
+  }
+  // water running down the stone: drops falling the length of the shaft
+  for (let k = 0; k < 4; k++) {
+    const a = R.range(0, TAU), rr = deepWallR(-6 * k) - 0.12, p = ctx.W(cu + Math.cos(a) * rr, -1 - 6 * k, Math.sin(a) * rr);
+    const drop = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 5), M.water);
+    drop.position.copy(p); drop.userData.disposable = true; ctx.group.add(drop);
+    ctx.droplets.push({ mesh: drop, top: p.y, bottom: p.y - 5.5, t: R.range(0, 3), period: R.range(2.5, 4.5) });
+  }
+  const top = ctx.W(cu, 0, 0);
+  ctx.triggers.push({ type: 'down', deep: 'deep', damp: true, depth: DEEP_Y, dur: 12.5, st, room, cx: top.x, cz: top.z, hx: 1.0, hz: 1.0, frame: Object.assign({}, ctx.frame),
+    exitDown: { u: cu + 1.25, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } });
+  ctx.setBounds(room, 0, D, -hw, hw);
+  room.D = D; room.W = W; room.H = H;
+  yield;
+  // ---- below: the foot of the stair in a small round chamber
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, DEEP_Y);
+  const CR = 1.9, CH = 2.5, gap = 0.4;
+  { const g = new THREE.CylinderGeometry(CR, CR, CH, 22, 1, true, Math.PI / 2 + gap, TAU - 2 * gap);
+    B.add(_dm.wet(), g, mtx(cu, CH / 2, 0), true);
+    B.add(slab, new THREE.CircleGeometry(CR + 0.05, 22).rotateX(-Math.PI / 2), mtx(cu, 0, 0), true);
+    B.add(wetF, new THREE.RingGeometry(deepWallR(DEEP_Y + CH) - 0.02, CR + 0.1, 22).rotateX(Math.PI / 2), mtx(cu, CH, 0), true);
+    const bot = ctx.W(cu, 0, 0);
+    ctx.triggers.push({ type: 'up', deep: 'deep', damp: true, depth: DEEP_Y, dur: 12.5, st, room, cx: bot.x, cz: bot.z, hx: 0.8, hz: 0.8, frame: Object.assign({}, ctx.frame),
+      exitDown: { u: cu + 1.25, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } }); }
+  // the way on: a passage, a turn, and a fork
+  const hwP = 0.72, LH = 2.25, regions = [];
+  const f = Object.assign({}, ctx.frame);
+  const rect = (u0, u1, v0, v1) => { const c = ctx.W((u0 + u1) / 2, 0, (v0 + v1) / 2); regions.push({ cx: c.x, cz: c.z, ux: f.side, uz: 0, hx: (u1 - u0) / 2, hz: (v1 - v0) / 2 }); };
+  { const c = ctx.W(cu, 0, 0); regions.push({ ell: true, cx: c.x, cz: c.z, a: CR, b: CR }); }
+  const C1 = V2(10.3, 0), J = V2(10.3, -7.0), A1 = V2(10.3, -16.0), RD = 17.2;
+  regions.push(tunnelSeg(ctx, V2(cu + CR - 0.25, 0), V2(C1.x - hwP, 0), hwP, LH, { ext: 0.5 }));
+  const corner = (p, closed) => {
+    B.box(M.earth, p.x, -0.05, p.y, 2 * hwP + 0.2, 0.1, 2 * hwP + 0.2, 0, 0, 0, 0.5);
+    B.box(M.earth, p.x, LH + 0.05, p.y, 2 * hwP + 0.2, 0.1, 2 * hwP + 0.2, 0, 0, 0, 0.5);
+    for (const [du, dv] of closed) B.box(M.earth, p.x + du * (hwP + 0.1), LH / 2, p.y + dv * (hwP + 0.1), du ? 0.2 : 2 * hwP + 0.4, LH, dv ? 0.2 : 2 * hwP + 0.4, 0, 0, 0, 0.6);
+    for (const s of [-1, 1]) for (const e of [-1, 1]) B.box(M.wood, p.x + e * (hwP - 0.02), LH / 2, p.y + s * (hwP - 0.02), 0.15, LH, 0.15);
+    rect(p.x - hwP, p.x + hwP, p.y - hwP, p.y + hwP);
+  };
+  yield;
+  corner(C1, [[1, 0], [0, 1]]);
+  regions.push(tunnelSeg(ctx, V2(C1.x, -hwP), V2(J.x, J.y + hwP), hwP, LH, { ext: 0.5 }));
+  corner(J, [[-1, 0]]);
+  yield;
+  // straight on: a dead end where the roof came in
+  regions.push(tunnelSeg(ctx, V2(J.x, J.y - hwP), A1, hwP, LH, { cap: true, ext: 0.4 }));
+  for (let i = 0; i < 18; i++) { const sz = Math.pow(R.next(), 1.8) * 0.42 + 0.08; stoneLump(B, R, R.pick([M.stone, M.stoneB, M.earth]), A1.x + R.range(-0.7, 0.7), sz * 0.5, A1.y + R.range(0.1, 1.8), sz, 0.7); if (overBudget()) yield; }
+  yield;
+  B.add(M.earth, new THREE.SphereGeometry(1, 12, 8, 0, TAU, 0, Math.PI / 2), mtx(A1.x, -0.05, A1.y + 0.3, 0, 0, 0, 1.0, 1.2, 1.5), true);
+  ctx.skeleton('lie', A1.x - 0.2, A1.y + 2.4, 0.3);
+  ctx.drip(room, J.x + 0.1, J.y - 4.5, LH);
+  // to the left: on to the room
+  regions.push(tunnelSeg(ctx, V2(J.x + hwP, J.y), V2(RD, J.y), hwP, LH, { ext: 0.5 }));
+  ctx.drip(room, 13.6, J.y + 0.2, LH);
+  yield;
+  // ---- the room of the bones
+  const RU1 = RD + 5.0, RV0 = J.y - 2.6, RV1 = J.y + 2.6, RH = 2.8;
+  B.box(slab, (RD + RU1) / 2, -0.05, J.y, RU1 - RD, 0.1, RV1 - RV0, 0, 0, 0, 0.6);
+  B.box(M.earth, (RD + RU1) / 2, RH + 0.05, J.y, RU1 - RD + 0.2, 0.1, RV1 - RV0 + 0.2, 0, 0, 0, 0.5);
+  B.box(wetF, RU1 + 0.1, RH / 2, J.y, 0.2, RH, RV1 - RV0 + 0.4, 0, 0, 0, 0.7);
+  for (const vw of [RV0 - 0.1, RV1 + 0.1]) B.box(wetF, (RD + RU1) / 2, RH / 2, vw, RU1 - RD + 0.2, RH, 0.2, 0, 0, 0, 0.7);
+  for (const s of [-1, 1]) { const a = s > 0 ? J.y + hwP : RV0, b = s > 0 ? RV1 : J.y - hwP; B.box(wetF, RD - 0.1, RH / 2, (a + b) / 2, 0.2, RH, b - a, 0, 0, 0, 0.7); }
+  B.box(wetF, RD - 0.1, (LH + RH) / 2, J.y, 0.2, RH - LH, 2 * hwP);
+  for (const [u, v] of [[RD + 0.15, RV0 + 0.15], [RD + 0.15, RV1 - 0.15], [RU1 - 0.15, RV0 + 0.15], [RU1 - 0.15, RV1 - 0.15]]) B.box(M.woodDark, u, RH / 2, v, 0.2, RH, 0.2);
+  for (const u of [RD + 1.7, RD + 3.4]) B.box(M.woodDark, u, RH - 0.1, J.y, 0.2, 0.2, RV1 - RV0);
+  rect(RD - 0.35, RU1, RV0, RV1);
+  yield;
+  yield* boneEmblem(ctx, RU1, 1.45, J.y);
+  yield;
+  // the two tall boxes under it
+  const boxes = [ctx.addSmash('tallbox', RU1 - 0.62, 0, J.y - 1.65, 0.12, { room, lvl: 'deep' }), ctx.addSmash('tallbox', RU1 - 0.6, 0, J.y + 1.65, -0.08, { room, lvl: 'deep' })];
+  if (DEEP_STOCK.includes(ctx.lap)) {
+    const taken = new Set(ctx.st.tk);
+    [['O', 'deep:O'], ['B', 'deep:B']].forEach(([tok, key], k) => {
+      if (taken.has(key)) return;
+      const c = boxes[k];
+      if (c.alive) c.contents.push({ tok, key });
+      else spawnItem(ctx, tok, key, new THREE.Vector3(c.pos.x + 0.25, DEEP_Y, c.pos.z), { floorY: DEEP_Y });
+    });
+  }
+  ctx.skeleton('sit', RD + 0.45, RV0 + 0.4, Math.PI * 0.75);
+  ctx.bones(RD + 2.6, RV1 - 0.6, R);
+  ctx.drip(room, RD + 2.2, J.y - 0.8, RH);
+  ctx.drip(room, RD + 3.8, J.y + 1.3, RH);
+  ctx.web(V3(RU1 - 0.03, RH - 0.03, RV1 - 0.03), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), R.range(0.6, 1.0), R.int(0, 3));
+  room.deep = { regions };
+  (ctx.deeps ||= {}).deep = { regions, y: DEEP_Y };
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+}
+
+// the sign again, cut the same, but the serpent is a chain of vertebrae with its ribs, its skull biting the
+// last of its tail, and the hare walking in the ring is bones too, still leaning into the walk, still carrying
+// its stick, the bundle on the end of it rotted to a rag
+function* boneEmblem(ctx, uWall, yc, vc) {
+  const B = ctx.B, u = uWall - 0.02, Rr = 0.7, bone = _dm.bone();
+  B.box(_dm.panel(), u, yc, vc, 0.05, 1.9, 1.9);
+  const at = (th, r = Rr, d = 0.06) => V3(u - d, yc + Math.sin(th) * r, vc + Math.cos(th) * r);
+  // the spine: vertebrae close-set along the ring, each drawn out along it, a spine of bone standing off each,
+  // and ribs on both sides curving back towards the tail, long behind the head and dying away
+  const N = 52, th0 = Math.PI / 2 + 0.26, th1 = Math.PI / 2 + TAU - 0.2, step = (th1 - th0) / N;
+  for (let i = 0; i < N; i++) {
+    const t = th0 + (i + 0.5) * step, k = 1 - i / N, p = at(t);
+    const rr = 0.022 + 0.022 * k, len = step * Rr * 0.62;
+    B.add(bone, UNIT_SPH, mtx(p.x, p.y, p.z, -t, 0, 0, rr * 0.75, len, rr));                                      // the centrum, along the ring
+    B.add(bone, UNIT_SPH, mtx(p.x + 0.004, p.y, p.z, -t, 0, 0, rr * 0.6, len * 0.35, rr * 1.35));                // the knuckle where the ribs join
+    B.beam(bone, at(t, Rr + rr * 0.8, 0.065), at(t - step * 0.4, Rr + rr * 2.2, 0.07), 0.009, 0.008);            // the spine standing off it
+    if (i < N * 0.8) for (const s of [-1, 1]) {
+      const rl = (0.07 + 0.11 * k) * (s > 0 ? 1 : 0.8), back = step * 1.6;
+      const m1 = at(t - back * 0.35, Rr + s * rl * 0.55, 0.055), e = at(t - back, Rr + s * rl, 0.04);
+      B.beam(bone, at(t, Rr + s * rr * 0.9, 0.06), m1, 0.0075, 0.0075); B.beam(bone, m1, e, 0.006, 0.006);
+    }
+    if (overBudget()) yield;
+  }
+  // the skull, long and low, its jaws closed on the tail
+  const hy = yc + Rr;
+  B.add(bone, UNIT_SPH, mtx(u - 0.055, hy + 0.03, vc - 0.05, 0.1, 0, 0, 0.06, 0.075, 0.15));
+  B.beam(bone, V3(u - 0.06, hy + 0.06, vc + 0.02), V3(u - 0.06, hy + 0.05, vc + 0.22), 0.05, 0.03);        // the snout
+  B.beam(bone, V3(u - 0.05, hy - 0.04, vc - 0.1), V3(u - 0.05, hy - 0.06, vc + 0.2), 0.03, 0.018);          // the lower jaw
+  B.add(M.socket, UNIT_SPH, mtx(u - 0.1, hy + 0.06, vc - 0.04, 0, 0, 0, 0.02, 0.03, 0.035));                 // the eye socket
+  for (let k = 0; k < 5; k++) B.add(bone, new THREE.ConeGeometry(0.006, 0.03, 5), mtx(u - 0.06, hy + 0.02, vc + 0.04 + k * 0.035, Math.PI, 0, 0), true);
+  // the hare's bones: skull with its great eye, spine bowed, a cage of ribs, the long hind legs mid-stride
+  const H0 = yc - 0.03, hp = (v, y, d = 0.05) => V3(u - d, H0 + y, vc + v);
+  B.add(bone, UNIT_SPH, mtx(u - 0.05, H0 + 0.2, vc + 0.21, 0.35, 0, 0, 0.04, 0.05, 0.085));                  // skull
+  B.add(M.socket, UNIT_SPH, mtx(u - 0.085, H0 + 0.215, vc + 0.2, 0, 0, 0, 0.012, 0.022, 0.024));
+  B.beam(bone, hp(0.25, 0.17), hp(0.3, 0.14), 0.02, 0.015);                                                   // the muzzle
+  B.beam(bone, hp(0.2, 0.17), hp(0.27, 0.12), 0.012, 0.01);                                                   // the jaw
+  const spine = [[0.15, 0.15], [0.1, 0.12], [0.05, 0.08], [0.0, 0.03], [-0.04, -0.03], [-0.07, -0.09], [-0.08, -0.15], [-0.11, -0.19]];
+  for (let k = 0; k < spine.length; k++) { const [v, y] = spine[k]; B.add(bone, UNIT_SPH, mtx(u - 0.05, H0 + y, vc + v, 0, 0, 0, 0.018, 0.02, 0.02)); if (k) B.beam(bone, hp(...spine[k - 1]), hp(v, y), 0.012, 0.012); }
+  for (let k = 0; k < 5; k++) {                                                                               // the ribs, hanging forward of the spine
+    const [v, y] = [0.1 - k * 0.03, 0.11 - k * 0.035];
+    B.beam(bone, hp(v, y), hp(v + 0.06, y - 0.06, 0.04), 0.007, 0.007); B.beam(bone, hp(v + 0.06, y - 0.06, 0.04), hp(v + 0.03, y - 0.12, 0.04), 0.006, 0.006);
+  }
+  B.add(bone, UNIT_SPH, mtx(u - 0.045, H0 - 0.15, vc - 0.09, 0.5, 0, 0, 0.02, 0.06, 0.04));                  // the pelvis
+  const leg = (hip, knee, ankle, toe) => { B.beam(bone, hip, knee, 0.016, 0.016); B.beam(bone, knee, ankle, 0.012, 0.012); B.beam(bone, ankle, toe, 0.01, 0.01); };
+  leg(hp(-0.09, -0.16), hp(0.0, -0.25), hp(0.02, -0.38, 0.045), hp(0.16, -0.41, 0.045));                       // the leg striding out
+  leg(hp(-0.1, -0.17, 0.04), hp(-0.14, -0.26, 0.04), hp(-0.12, -0.37, 0.04), hp(-0.26, -0.39, 0.04));         // the leg pushing off
+  B.beam(bone, hp(0.11, 0.1), hp(0.15, 0.03), 0.01, 0.01); B.beam(bone, hp(0.15, 0.03), hp(0.19, 0.12), 0.009, 0.009);   // the arm up to the stick
+  B.add(bone, UNIT_SPH, mtx(u - 0.05, H0 - 0.2, vc - 0.15, 0, 0, 0, 0.018, 0.018, 0.02));                    // the scut, what is left of it
+  // the stick over the shoulder, and the bundle on its end gone to a hanging rag
+  B.beam(M.woodDark, hp(0.19, 0.12, 0.08), hp(-0.34, 0.34, 0.08), 0.026, 0.022);
+  B.add(_dm.rag(), UNIT_SPH, mtx(u - 0.06, H0 + 0.22, vc - 0.31, 0.1, 0, 0.15, 0.04, 0.1, 0.07));
+  B.beam(_dm.rag(), hp(-0.31, 0.15, 0.06), hp(-0.29, 0.02, 0.06), 0.02, 0.012);
+  B.beam(_dm.rag(), hp(-0.34, 0.16, 0.06), hp(-0.37, 0.06, 0.06), 0.018, 0.01);
+}
+
+// how much the damp and the narrowing press in: rising through the descent, full at the bottom, gone once back up
+function updateDamp(dt) {
+  let target = 0, sq = 0;
+  const a = P.anim;
+  if (a && a.trig.damp) { const e = stairEase(Math.min(1, a.t)), s = a.dir > 0 ? e : 1 - e; target = Math.max(0.15, s); sq = s; }
+  else if (P.deep === 'deep' && P.mode === 'lower') target = 1;
+  P.dampK += (target - P.dampK) * Math.min(1, dt * 1.5);
+  P.squeeze += (sq - P.squeeze) * Math.min(1, dt * 2);
+  if (P.dampK < 0.002) P.dampK = 0;
+  if (P.squeeze < 0.002) P.squeeze = 0;
+}
+
+/* ---- 37_cellar.js ---- */
+/* ============================================================
+   Length 51: a cellar under a cellar. The stair down from the corridor comes into a room a good deal bigger
+   than the others below, and in the far part of its floor a second stair goes on down, to a small low room
+   under it. On the first pass there are two crates down there, each with a biscuit in it.
+   ============================================================ */
+const CELLAR_L = 51, CELLAR_D = 30, CELLAR_SIDE = -1, CELLAR_Y2 = -18;
+const CELLAR = { D: 14, W: 12, su: 10.6, sv: -3.4, D2: 6, W2: 5 };
+LOWER_H.twostair = [3.4, 3.4, 3.4];
+LOWER_BUILD.twostair = function* (ctx, room, R) {
+  const B = ctx.B, H = lowerH('twostair', 0), c = CELLAR, hw = c.W / 2, uB = -0.3 + c.D;
+  const h0 = c.su - 1.3, h1 = c.su + 1.3, v0 = c.sv - 1.3, v1 = c.sv + 1.3;
+  lowerShell(ctx, room, c.D, c.W, H, { shell: { floorHole: [h0, h1, v0, v1] } });
+  yield;
+  // the big room: a row of posts down its middle, shelves round the walls, the usual leavings
+  for (const u of [4.2, 8.2]) for (const v of [-1.2, 2.6]) { B.box(M.wood, u, H / 2, v, 0.32, H, 0.32); ctx.circle(u, v, 0.22, 'low'); }
+  for (const u of [4.2, 8.2]) B.box(M.wood, u, H - 0.15, 0.7, 0.26, 0.26, 4.2);
+  shelves(ctx, room, 'u', 3.2, uB - 0.5, hw - 0.24, 0.42, [0.45, 1.05, 1.65, 2.25], R);
+  shelves(ctx, room, 'v', 0.0, hw - 0.6, uB - 0.24, 0.42, [0.45, 1.05, 1.65], R);
+  stack(ctx, room, 3.6, -hw + 0.6, R); stack(ctx, room, 5.4, -hw + 0.6, R, 1);
+  ctx.addSmash('barrel', 6.6, 0, -hw + 0.6, 0.3, { room, lvl: 'low' });
+  ctx.addSmash('barrel', uB - 0.6, 0, 3.6, 1.1, { room, lvl: 'low' });
+  ctx.skeleton('sit', uB - 0.35, 1.2, -Math.PI / 2);
+  yield;
+  // a rail round three sides of the hole, open towards the room
+  B.box(M.wood, h1 + 0.02, 0.95, c.sv, 0.08, 0.08, 2.6);
+  for (const s of [-1, 1]) B.box(M.wood, c.su + 0.1, 0.95, c.sv + s * 1.32, 2.4, 0.08, 0.08);
+  for (const [u, v] of [[h1 + 0.02, v0 - 0.02], [h1 + 0.02, v1 + 0.02], [h0 + 0.2, v0 - 0.02], [h0 + 0.2, v1 + 0.02]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
+  ctx.solid(h1 + 0.1, c.sv, 0.3, 2.9, 0, 'low');
+  for (const s of [-1, 1]) ctx.solid(c.su + 0.1, c.sv + s * 1.38, 2.7, 0.3, 0, 'low');
+  // the shaft, timbered like the others, down to the ceiling of the room below
+  const H2 = 2.6 * HS, sh = -(CELLAR_Y2 - C.LOWER_Y) - H2;
+  B.box(M.log, h0 - 0.07, -sh / 2, c.sv, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, h1 + 0.07, -sh / 2, c.sv, 0.12, sh, 2.6, 0, 0, 0, 0.7);
+  for (const s of [-1, 1]) B.box(M.log, c.su, -sh / 2, c.sv + s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
+  for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, c.su, y, c.sv + s * 1.2, 2.5, 0.16, 0.12);
+  yield;
+  const drop = C.LOWER_Y - CELLAR_Y2;
+  B.log(M.wood, c.su, (H - drop) / 2, c.sv, 0.13, drop + H, 'y', 8);
+  const st = { cu: c.su, steps: 36, turns: 1.5, r: 0.7 };
+  for (let s = 0; s < st.steps; s++) {
+    const phi = Math.PI + (s + 0.5) * (st.turns * TAU / st.steps), y = -0.22 - s * ((drop - 0.44) / (st.steps - 1));
+    B.box(M.plank, c.su + 0.66 * Math.cos(phi), y, c.sv + 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
+    B.box(M.wood, c.su + 1.12 * Math.cos(phi), y - 0.12, c.sv + 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
+    if (overBudget()) yield;
+  }
+  yield;
+  // the stair runs in a frame of its own, centred on the hole
+  const sf = Object.assign({}, ctx.frame, { ov: c.sv });
+  const top = ctx.W(c.su, 0, c.sv);
+  const trig = { st, top: C.LOWER_Y, depth: CELLAR_Y2, frame: sf, room, exitDown: { u: c.su + 1.5, v: 0, du: 1, dv: 0 }, exitUp: { u: c.su - 1.75, v: 0, du: -1, dv: 0 } };
+  ctx.triggers.push(Object.assign({ type: 'down', from: 'low', deep: 'sub', cx: top.x, cz: top.z, hx: 1.18, hz: 1.18 }, trig));
+  ctx.triggers.push(Object.assign({ type: 'up', deep: 'sub', topDeep: false, cx: top.x, cz: top.z, hx: 0.85, hz: 0.85 }, trig));
+  // ---- the room under the room: low, earth-walled, the stair coming down through its ceiling near the front
+  const low2 = { lvl: 'sub', r: room.r, containers: [], surfaces: [], side: room.side, zc: room.zc };
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, CELLAR_Y2, 0, c.su - STAIR.cu, c.sv);
+  shell(ctx, low2, c.D2, c.W2, H2, M.earth, { u0: -0.3, door: false, floor: M.plank, hole: [0.25, 2.75, 1.25], wallPosts: true });
+  ctx.circle(STAIR.cu, 0, 0.2, 'sub');
+  yield;
+  B.add(M.wet, new THREE.CircleGeometry(0.5, 16), mtx(3.4, 0.008, 1.6, -Math.PI / 2, 0, 0, 1, 0.7, 1), true);
+  ctx.bones(c.D2 - 1.4, 0.2, R);
+  ctx.web(V3(c.D2 - 0.33, H2 - 0.03, c.W2 / 2 - 0.03), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), R.range(0.5, 0.8), R.int(0, 3));
+  // two crates at the far end, apart from each other; on the first pass, a biscuit in each
+  const crates = [ctx.addSmash('crate', c.D2 - 1.0, 0, -1.45, 0.25, { room: low2, lvl: 'sub' }), ctx.addSmash('crate', c.D2 - 1.15, 0, 1.5, -0.4, { room: low2, lvl: 'sub' })];
+  if (ctx.lap === 0) {
+    const taken = new Set(ctx.st.tk);
+    crates.forEach((cr, k) => {
+      const key = 'sub:B' + (k + 1);
+      if (taken.has(key)) return;
+      if (cr.alive) cr.contents.push({ tok: 'B', key });
+      else spawnItem(ctx, 'B', key, new THREE.Vector3(cr.pos.x + 0.3, CELLAR_Y2, cr.pos.z), { floorY: CELLAR_Y2 });
+    });
+  }
+  const a = ctx.W(-0.3, 0, -c.W2 / 2), b = ctx.W(c.D2 - 0.3, 0, c.W2 / 2), m = ctx.W((c.D2 - 0.6) / 2, 0, 0);
+  (ctx.deeps ||= {}).sub = { y: CELLAR_Y2, regions: [{ cx: m.x, cz: m.z, ux: 1, uz: 0, hx: Math.abs(b.x - a.x) / 2, hz: Math.abs(b.z - a.z) / 2 }] };
+  ctx.setFrame(room.side, C.WALL_OUT, room.zc, C.LOWER_Y);
+};
 
 /* ---- 39_catalogue.js ---- */
 /* ============================================================
@@ -3577,6 +4178,8 @@ const SPECIAL_ITEMS = {
   10005: { kind: 'harp', mat: 'wood', name: 'Harp', desc: 'A steppe harp, its soundbox carved with the wall\'s own sign: the serpent of timbers, the hare walking in its ring. Most of the gut strings still hold.' },
 };
 const HARP_ID = 10005, HARP_L = 39;
+SPECIAL_ITEMS[10006] = { kind: 'bells', mat: 'metal', metal: { n: 'bronze', c: 0x9c7a44 }, name: 'Seven bronze bells', desc: 'Seven small cast bells threaded on a plaited cord, each a size smaller than the last. Lifted, they ring down from the highest.' };
+const BELLS_ID = 10006;
 for (const [id, d] of Object.entries(SPECIAL_ITEMS)) { d.id = +id; d.seed = +id; d.style = d.style || ''; _itemNames.add(d.name.toLowerCase()); }
 function itemDef(id) {
   if (id >= 10000) return SPECIAL_ITEMS[id];
@@ -3830,6 +4433,25 @@ function extraModel(d, o) {
   const { add, addS, lath, mm, sm, R } = o;
   const st = d.style || '';
   switch (d.kind) {
+    case 'bells': {
+      // seven small cast bells, each a size smaller than the last, on a plaited cord laid in a loose loop
+      const cord = cachedMat('bellcord', () => lam(T.cloth, { color: 0x6a4a2a, bumpScale: 0.5 }));
+      const pts = []; for (let i = 0; i <= 24; i++) { const a = i / 24 * TAU * 0.9 + 0.35, r = 0.1 + 0.022 * Math.sin(a * 3); pts.push(V3(Math.cos(a) * r * 1.3, 0.008, Math.sin(a) * r)); }
+      const curve = new THREE.CatmullRomCurve3(pts);
+      add(new THREE.TubeGeometry(curve, 60, 0.0065, 5, false), cord);
+      const prof = lath([[0, 0.05], [0.013, 0.048], [0.019, 0.036], [0.023, 0.02], [0.029, 0.007], [0.033, 0], [0.029, 0.002], [0.02, 0.016], [0.013, 0.033], [0, 0.039]], 14);
+      for (let k = 0; k < 7; k++) {
+        const t = 0.07 + k * 0.135, p = curve.getPointAt(t), tan = curve.getTangentAt(t), s = 1 - k * 0.075;
+        const outward = V3(p.x, 0, p.z).normalize();
+        const bell = add(prof, mm, p.x + outward.x * 0.022 * s, 0.024 * s, p.z + outward.z * 0.022 * s);
+        bell.scale.setScalar(s);
+        bell.quaternion.setFromUnitVectors(V3(0, 1, 0), outward.clone().negate().add(V3(0, 0.3, 0)).normalize());
+        add(new THREE.TorusGeometry(0.008, 0.0022, 4, 8), mm, p.x, 0.016, p.z).quaternion.setFromUnitVectors(V3(0, 0, 1), tan);
+      }
+      add(new THREE.SphereGeometry(0.013, 8, 6), cord, pts[0].x, 0.012, pts[0].z);
+      add(new THREE.SphereGeometry(0.011, 8, 6), cord, pts[24].x, 0.011, pts[24].z);
+      return 0.3;
+    }
     case 'harp': {
       // an angular harp of the kind buried with the riders in the frozen kurgans: a tall hollow soundbox,
       // a rod for the strings running out from its foot, the strings between them
@@ -4033,6 +4655,7 @@ function riderValue(id) {
   const m = d.metal ? d.metal.n : '';
   switch (d.kind) {
     case 'harp': return 1.5;                                  // everybody loves music
+    case 'bells': return 3;
     case 'ironbar': return d.style === 'large' ? 3 : d.style === 'small' ? 1 : 2;
     case 'silk': return 2;
     case 'helmet': return 3;
@@ -4061,7 +4684,7 @@ function lapAssign(lap) {
   R.shuffle(avail);
   if (lap === 0 && avail.includes(0)) { avail.splice(avail.indexOf(0), 1); avail.unshift(0); }
   const rooms = [];
-  for (let L = 0; L < C.LENGTHS; L++) for (const r of layoutFor(L, lap).rooms) rooms.push({ L, r });
+  for (let L = 0; L < C.LENGTHS; L++) for (const r of layoutFor(L, lap).rooms) if (r.design !== 'loft' && r.design !== 'deep') rooms.push({ L, r });
   let order = rooms.map(x => ({ x, k: Math.pow(R.next(), 1 / (ROOM_WEIGHT[x.r.design] || 1)) })).sort((a, b) => b.k - a.k).map(o => o.x);
   if (lap === 0) { const first = order.findIndex(o => o.L === 0 && o.r.i === 0); if (first > 0) order.unshift(order.splice(first, 1)[0]); }
   const map = {};
@@ -4083,6 +4706,8 @@ function lapAssign(lap) {
   for (let k = 0; k < biscuits; k++) { const { L, r } = R.pick(rooms); (map[`${L}:${r.i}`] ||= []).push('B'); }
   // the third time round, one more biscuit, at the way out
   if (lap === 2) { const esc = layoutFor(C.ESCAPE_L, lap).rooms.find(q => q.design === 'escape'); (map[`${C.ESCAPE_L}:${esc.i}`] ||= []).push('B'); }
+  // from the fourth time round on, one more biscuit somewhere, a different place each pass
+  if (lap >= 3) { const R6 = new Rng(hash32(lap, 6161, 9)), { L, r } = R6.pick(rooms); (map[`${L}:${r.i}`] ||= []).push('B'); }
   S.lapAssign[lap] = map;
   for (const k of Object.keys(S.lapAssign)) if (+k < lap - 1) delete S.lapAssign[k];
   return map;
@@ -4134,6 +4759,11 @@ function placeTokens(ctx) {
     });
   }
   for (const d of ctx.st.dr) spawnItem(ctx, d.id, 'd:' + d.n, new THREE.Vector3(d.x, d.y, d.z), { dropped: d });
+  // in the loft at 82, the bells on the chopping block by the hay, until they are taken or broken
+  if (ctx.L === LOFT_L && !S.bells && !S.inv.includes(BELLS_ID) && !ctx.st.dr.some(d => d.id === BELLS_ID)) {
+    const room = ctx.rooms.find(r => r.design === 'loft');
+    if (room && room.bellSpot) spawnItem(ctx, BELLS_ID, 'bells', room.bellSpot.pos.clone(), { yaw: room.bellSpot.yaw });
+  }
   // at 39 the harp stands at the far end of the long gallery, pass after pass, until it is taken or broken
   if (ctx.L === HARP_L && !S.harp && !S.inv.includes(HARP_ID) && !ctx.st.dr.some(d => d.id === HARP_ID)) {
     const room = ctx.rooms.find(r => r.design === 'gallery' && !r.lower);
@@ -4400,25 +5030,44 @@ function collide() {
   const lens = activeLens();
   const cave = caveAt();
   if (cave) {
+    // the loft has two floors: the room and the stair below, the loft itself above; which one you are on decides the walls
+    const lf = cave.z.loft;
+    if (lf) loftLevel(cave);
+    const hi = !!(lf && P.loftHi), regions = hi ? lf.high : cave.z.regions, slv = hi ? 'loft' : 'up';
     for (let pass = 0; pass < 3; pass++) {
-      pushed += constrainRegions(cave.z.regions, cave.dz);
-      for (const s of cave.len.solids) if (s.lvl === 'up' && !s.dead) pushed += pushOut(s, cave.dz);
+      pushed += constrainRegions(regions, cave.dz);
+      for (const s of cave.len.solids) if (s.lvl === slv && !s.dead) pushed += pushOut(s, cave.dz);
     }
-    P.inCave = true;
+    P.inCave = true; P.zone = cave;
     return pushed;
   }
-  P.inCave = false;
+  P.inCave = false; P.zone = null; P.loftHi = false;
   for (let pass = 0; pass < 3; pass++) {
     for (const len of lens) {
       const dz = len.group.position.z;
+      if (P.deep) {
+        const dl = len.deeps && len.deeps[P.deep];
+        if (dl && len.A === P.lenA) { pushed += constrainRegions(dl.regions, dz); for (const s of len.solids) if (s.lvl === P.deep && !s.dead) pushed += pushOut(s, dz); }
+        continue;
+      }
       if (P.inRoute && len.route) { pushed += constrainRoute(len, dz); continue; }
       for (const s of len.solids) if (s.lvl === lvl && !s.dead) pushed += pushOut(s, dz);
     }
   }
   return pushed;
 }
+function loftLevel(cave) {
+  const lf = cave.z.loft, [u, v] = lf.toRoom(P.pos.x, P.pos.z - cave.dz);
+  if (!P.zone || P.zone.z !== cave.z) P.loftHi = !lf.inGround(u, v) && lf.inHigh(u, v);   // arriving, or waking up, inside it
+  if (lf.onStair(u, v)) P.loftHi = lf.stairY(u) > lf.rise - 0.35;
+}
 function floorHere() {
-  if (P.mode === 'corridor') return 0;
+  if (P.mode === 'corridor') {
+    const zn = P.zone;
+    if (zn && zn.z.loft) { const lf = zn.z.loft, [u, v] = lf.toRoom(P.pos.x, P.pos.z - zn.dz); return lf.floor(u, v, P.loftHi); }
+    return 0;
+  }
+  if (P.deep) { P.routeP = 0; const len = loaded.get(P.lenA), dl = len && len.deeps && len.deeps[P.deep]; return dl ? dl.y : C.LOWER_Y; }
   const len = loaded.get(P.lenA);
   if (P.inRoute && len && len.route) {
     // level ground under the passages; only on the climb itself does the floor rise
@@ -4477,17 +5126,23 @@ function updatePlayer(dt) {
     if (P.inRoute && P.routeP > 0.985) beginField();
   }
 }
+// which stairs can be taken from where you stand: from the corridor, the ones going down from it; below, the one you
+// came down by (its 'up'), and any that go down further from the floor you are on
+function stairHere(t) {
+  if (P.mode === 'corridor') return t.type === 'down' && !t.from;
+  if (t.type === 'up') return (t.deep || false) === (P.deep || false);
+  return t.type === 'down' && t.from === 'low' && !P.deep;
+}
 function checkTriggers() {
-  const want = P.mode === 'corridor' ? 'down' : 'up';
   if (P.mode === 'lower' && P.inRoute && P.routeP > 0.001) return;
   let inside = false;
   for (const len of activeLens()) {
     const dz = len.group.position.z;
     for (const t of len.triggers) {
-      if (t.type !== want) continue;
+      if (!stairHere(t)) continue;
       if (Math.abs(P.pos.x - t.cx) < t.hx && Math.abs(P.pos.z - dz - t.cz) < t.hz) {
         inside = true;
-        if (P.armed) { startStair(len, t, want === 'down' ? 1 : -1); return; }
+        if (P.armed) { startStair(len, t, t.type === 'down' ? 1 : -1); return; }
       }
     }
   }
@@ -4500,22 +5155,25 @@ function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % TAU + TAU) % TAU - Ma
 function frameXZ(f, u, v) { const c = f.c ?? 1, s = f.s ?? 0, uu = (f.ou || 0) + u * c + v * s, vv = (f.ov || 0) - u * s + v * c; return [f.side * (f.xOff + uu), f.zc + vv]; }
 function frameDir(f, du, dv) { const c = f.c ?? 1, s = f.s ?? 0; return [f.side * (du * c + dv * s), -du * s + dv * c]; }
 function stairPose(trig, len, s) {
-  const f = trig.frame, phi = Math.PI + s * STAIR.turns * TAU;
-  const [x, z] = frameXZ(f, STAIR.cu + STAIR.r * Math.cos(phi), STAIR.r * Math.sin(phi));
+  const st = trig.st || STAIR, f = trig.frame, phi = Math.PI + s * st.turns * TAU, r = st.r1 ? lerp(st.r, st.r1, s) : st.r;
+  const [x, z] = frameXZ(f, st.cu + r * Math.cos(phi), r * Math.sin(phi));
   const [dx, dz] = frameDir(f, -Math.sin(phi), Math.cos(phi)), [ix, iz] = frameDir(f, -Math.cos(phi), -Math.sin(phi));
-  return { x, y: lerp(0, C.LOWER_Y, s), z: z + len.group.position.z, dx, dz, ix, iz };
+  return { x, y: lerp(trig.top ?? 0, trig.depth ?? C.LOWER_Y, s), z: z + len.group.position.z, dx, dz, ix, iz };
 }
 function stairExit(trig, len, dir) {
   const f = trig.frame;
   const e = dir > 0 ? (trig.exitDown || { u: 3.1, v: 0, du: 1, dv: 0 }) : (trig.exitUp || { u: -0.5, v: 0, du: -1, dv: 0 });
   const [x, z] = frameXZ(f, e.u, e.v), [fx, fz] = frameDir(f, e.du, e.dv);
-  return { x, y: dir > 0 ? C.LOWER_Y : 0, z: z + len.group.position.z, yaw: Math.atan2(-fx, -fz) };
+  return { x, y: dir > 0 ? (trig.depth ?? C.LOWER_Y) : (trig.top ?? 0), z: z + len.group.position.z, yaw: Math.atan2(-fx, -fz) };
 }
 function startStair(len, trig, dir) {
-  P.anim = { t: 0, dur: 3.8, len, trig, dir, from: { x: P.pos.x, y: P.pos.y, z: P.pos.z, yaw: P.yaw, pitch: P.pitch }, tread: -1, prevE: 0 };
+  P.anim = { t: 0, dur: trig.dur ?? 3.8, len, trig, dir, from: { x: P.pos.x, y: P.pos.y, z: P.pos.z, yaw: P.yaw, pitch: P.pitch }, tread: -1, prevE: 0 };
   P.mode = dir > 0 ? 'descend' : 'ascend';
   P.vel.set(0, 0, 0);
-  if (dir > 0) { P.lenA = len.A; const ex = stairExit(trig, len, -1); S.stairRet = { A: len.A, x: ex.x, z: ex.z - len.group.position.z, yaw: ex.yaw }; }
+  if (dir > 0) {
+    P.deep = trig.deep || false; P.lenA = len.A;
+    if (!trig.from) { const ex = stairExit(trig, len, -1); S.stairRet = { A: len.A, x: ex.x, z: ex.z - len.group.position.z, yaw: ex.yaw }; }
+  }
 }
 function stairEase(t) { const sm = t * t * t * (t * (t * 6 - 15) + 10); return sm * 0.88 + t * 0.12; }
 function updateStairAnim(dt) {
@@ -4534,16 +5192,18 @@ function updateStairAnim(dt) {
   x = lerp(x, ex.x, b1); y = lerp(y, ex.y, b1); z = lerp(z, ex.z, b1); yaw = lerpAngle(yaw, ex.yaw, b1); pitch = lerp(pitch, 0, b1);
   P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch;
   // one footfall every third tread, so the sound slows and quickens with the body
-  P.bob += Math.abs(e - a.prevE) * (STAIR.steps / 3) * Math.PI; a.prevE = e;
-  const tread = Math.floor(e * STAIR.steps / 3);
+  const steps = (a.trig.st || STAIR).steps;
+  P.bob += Math.abs(e - a.prevE) * (steps / 3) * Math.PI; a.prevE = e;
+  const tread = Math.floor(e * steps / 3);
   if (tread !== a.tread) { a.tread = tread; AU.step('stair'); }
   if (a.t >= 1) {
     P.anim = null; P.armed = false;
-    P.mode = a.dir > 0 ? 'lower' : 'corridor';
+    P.mode = a.dir > 0 || a.trig.top ? 'lower' : 'corridor';
+    if (a.dir < 0) P.deep = a.trig.top ? (a.trig.topDeep || false) : false;
     P.pos.set(ex.x, ex.y, ex.z); P.yaw = ex.yaw; P.pitch = 0;
     P.inRoute = false;
     AU.space(P.mode);
-    if (P.mode === 'corridor') ensureLoaded();
+    if (P.mode === 'corridor') { P.deep = false; ensureLoaded(); }
   }
 }
 
@@ -4572,7 +5232,7 @@ function doHit() {
     const score = dh + angH * 1.4 + Math.abs(elev - P.pitch) * 0.45;
     if (score < bestScore) { bestScore = score; best = { kind, ref }; }
   };
-  const lvl = P.mode === 'corridor' ? 'up' : 'low';
+  const lvl = P.mode === 'corridor' ? 'up' : P.deep || 'low';
   for (const len of activeLens()) {
     const dz = len.group.position.z;
     for (const s of len.smash) if (s.alive && s.lvl === lvl) consider('smash', s, s.obj.position.x, s.obj.position.y + s.spec.h * 0.5, s.obj.position.z + dz, s.spec.r);
@@ -4679,6 +5339,7 @@ function destroyItem(it) {
     markSeen(it.tok, it.A); purgeDuplicates(it.tok, it);
     const d = itemDef(it.tok);
     if (it.tok === HARP_ID) { S.harp = 'broken'; AU.twang(wp); }
+    if (it.tok === BELLS_ID) S.bells = 'broken';
     if (d.mat === 'clay' || d.mat === 'glass') { spawnDebris(it.len, p, it.obj.children[0].material, 9, true); AU.smash('clay', wp); }
     else if (d.mat === 'metal') AU.smash('metal', wp);
     else { spawnDebris(it.len, p, it.obj.children[0].material, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : d.mat === 'wood' ? 'wood' : 'bone', wp); }
@@ -4763,8 +5424,7 @@ function take() {
   } else {
     if (S.inv.length >= C.INV_SLOTS) { openInv(it); return; }
     S.inv.push(it.tok); markSeen(it.tok, it.A);
-    if (it.tok === HARP_ID) S.harp = 'taken';
-    removeItem(it); purgeDuplicates(it.tok, it); AU.pickup(itemDef(it.tok).mat);
+    removeItem(it); purgeDuplicates(it.tok, it); tookIt(it.tok);
     toast(lit ? itemDef(it.tok).name + '.' : 'Something.');
   }
 }
@@ -4788,7 +5448,13 @@ function swapInto(i, it) {
   const d = { id: old, n: S.dropN++, x: p.x, y: it.floorY, z: p.z };
   lenState(len.A).dr.push(d);
   spawnItem(len, old, 'd:' + d.n, new THREE.Vector3(p.x, it.floorY, p.z), { dropped: d });
-  AU.pickup(itemDef(it.tok).mat);
+  tookIt(it.tok);
+}
+// the sound of a thing going into the pack; the harp and the bells are remembered, and the bells ring first
+function tookIt(tok) {
+  if (tok === HARP_ID) S.harp = 'taken';
+  if (tok === BELLS_ID) { S.bells = 'taken'; AU.bells(); return; }
+  AU.pickup(itemDef(tok).mat);
 }
 function lanternFactor() {
   if (S.oil <= 0) return 0;
@@ -5063,8 +5729,13 @@ const AU = (() => {
   }
   function loopNoise() { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.start(); return s; }
   function init() {
-    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    if (ctx) { wake(); return; }
+    // on phones, let the game sound even with the ringer switched to silent, the way a music player does
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { }
     try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; return; }
+    // one silent sample, which some browsers wait for before they let a page make any sound at all
+    try { const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) { }
+    if (ctx.state !== 'running') ctx.resume().catch(() => { });
     master = ctx.createGain(); master.gain.value = 0.85;
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4;
     master.connect(comp); comp.connect(ctx.destination);
@@ -5090,6 +5761,13 @@ const AU = (() => {
     const r = loopNoise(), rb = ctx.createBiquadFilter(); rb.type = 'bandpass'; rb.frequency.value = 700; rb.Q.value = 0.6;
     const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.frequency.value = 1800;
     riverGain = ctx.createGain(); riverGain.gain.value = 0; r.connect(rb); rb.connect(rl); rl.connect(riverGain); riverGain.connect(master);
+  }
+  // the browser can put the sound to sleep (another tab, headphones in or out, a phone locked, Safari 'interrupted');
+  // the next click or key press wakes it, and if it was closed outright it is built again
+  function wake() {
+    if (!ctx) return;
+    if (ctx.state === 'closed') { ctx = null; song = null; init(); return; }
+    if (ctx.state !== 'running') ctx.resume().catch(() => { });
   }
   // ---------- building blocks ----------
   function out(pos, dest = bus) {
@@ -5131,7 +5809,7 @@ const AU = (() => {
   }
   // ---------- events ----------
   const api = {
-    init,
+    init, wake, state: () => ctx ? ctx.state : 'none',
     step(kind) {
       if (!on()) return; const t = ctx.currentTime, d = out(null);
       d.gain.value = P.hurry ? 1.15 : 0.9;
@@ -5250,6 +5928,29 @@ const AU = (() => {
       if (!on()) return; const t = ctx.currentTime, d = out(pos);
       for (let i = 0; i < 6; i++) { const f = 174.614 * Math.pow(2, (47 + 28 * (i % 4) + 63 * (i > 3)) / 107); tone(d, t + 0.04 + i * 0.07 + Math.random() * 0.05, 1.2, f, 0.05, 'triangle', f * 0.94); }
     },
+    // the seven bells from the loft, tuned round the circle of fifths on the 107 (0, 19, 38, 57, 63, 82, 101),
+    // each rung once from the highest down, and then all of them, softly, as they settle into the pack
+    bells() {
+      if (!on()) return;
+      const t = ctx.currentTime + 0.05, d = out(null); d.gain.value = 0.8;
+      const F5 = 698.456, st = k => F5 * Math.pow(2, k / 107);
+      const ring = (t0, f, g, len) => {
+        tone(d, t0, len, f, g, 'sine', null, 0.002);
+        tone(d, t0, len * 0.9, f * 1.0035, g * 0.5, 'sine', null, 0.002);    // a second voice a hair apart, the shimmer of a cast bell
+        tone(d, t0, len * 0.4, f * 2.76, g * 0.3, 'sine', null, 0.001);
+        tone(d, t0, len * 0.16, f * 5.4, g * 0.13, 'sine', null, 0.001);
+      };
+      const steps = [101, 82, 63, 57, 38, 19, 0];
+      steps.forEach((k, i) => ring(t + i * 0.42 + Math.random() * 0.02, st(k), 0.05 - i * 0.002, 3.2));
+      const t1 = t + steps.length * 0.42 + 0.6;
+      steps.forEach(k => ring(t1 + Math.random() * 0.32, st(k), 0.011, 1.6));
+    },
+    // wings, high in the dark of the roof
+    flutter(pos) {
+      if (!on()) return; const t = ctx.currentTime, d = out(pos); d.gain.value *= 0.75;
+      const n = 10 + Math.floor(Math.random() * 10), rate = 0.05 + Math.random() * 0.025;
+      for (let i = 0; i < n; i++) noise(d, t + i * rate, 0.035, 'bandpass', 650 + Math.random() * 500, 1.3, 0.12 * (1 - i / n * 0.6), 0.004);
+    },
     gutter() { if (!on()) return; const t = ctx.currentTime, d = out(null, dry); noise(d, t, 0.5, 'lowpass', 700, 0.8, 0.18, 0.02, 120); },
     // unshod hooves on turf: a dull pair of beats, louder as they near
     hoof(pos, v = 6) {
@@ -5285,7 +5986,7 @@ const AU = (() => {
     space(mode) {
       space = mode;
       if (!on()) return;
-      const w = mode === 'field' ? 0.03 : mode === 'lower' ? 0.5 : 0.34;
+      const w = mode === 'field' ? 0.03 : mode === 'loft' ? 0.64 : mode === 'lower' ? 0.5 : 0.34;
       wet.gain.setTargetAtTime(w, ctx.currentTime, 0.6);
     },
     // per-frame: hum, hiss, ambience
@@ -5311,6 +6012,12 @@ const AU = (() => {
         return;
       }
       windGain.gain.setTargetAtTime(0.03 + (P.inRoute ? P.routeP * 0.04 : 0), t, 1);
+      // down in the damp the lantern spits and catches
+      if (P.dampK > 0.4 && lf > 0.05 && Math.random() < dt * 0.3 * P.dampK) {
+        const o = out(null, dry);
+        for (let i = 0, n = 3 + Math.floor(Math.random() * 4); i < n; i++) noise(o, t + Math.random() * 0.25, 0.012, 'highpass', 2600, 0.8, 0.05);
+        noise(o, t, 0.2, 'bandpass', 900, 1, 0.02, 0.01);
+      }
       creakT -= dt;
       if (creakT <= 0) {
         creakT = 5 + Math.random() * 14;
@@ -7146,7 +7853,7 @@ function resetWorld() {
   dropMirrorObject();
   activeScene = scene; camera.far = 1600; camera.updateProjectionMatrix();
   vmSun.intensity = 0; vmAmbient.intensity = 0;
-  P.anim = null; P.inRoute = false; P.inCave = false; P.routeP = 0; P.vel.set(0, 0, 0); P.swingT = -1; P.armed = true; P.kick = 0;
+  P.anim = null; P.inRoute = false; P.inCave = false; P.routeP = 0; P.zone = null; P.loftHi = false; P.loftK = 0; P.deep = false; P.dampK = 0; P.squeeze = 0; P.vel.set(0, 0, 0); P.swingT = -1; P.armed = true; P.kick = 0;
   fieldFade = null; fadeEl.style.opacity = '0';
   resetRiders();
 }
@@ -7199,6 +7906,8 @@ function resumeGame() {
   AU.init(); lockPointer();
 }
 $('pause').addEventListener('click', resumeGame);
+for (const ev of ['pointerdown', 'keydown', 'touchend']) document.addEventListener(ev, () => { if (running) AU.wake(); }, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && running) AU.wake(); });
 $('btnNew').addEventListener('click', () => { clearSave(); startGame(null); });
 $('btnCont').addEventListener('click', () => { const s = pendingSave || loadSaved(); startGame(s); });
 $('btnAgain').addEventListener('click', () => { clearSave(); startGame(null); });
@@ -7228,14 +7937,20 @@ function updateDeath(dt) {
 }
 
 /* ---------- light ---------- */
+const LANTERN_REACH = 1.2, FOG_D = 0.085 / LANTERN_REACH, CAM_FOV = 72;
 const BLACK = new THREE.Color(0, 0, 0), HAZE = new THREE.Color(0.96, 0.9, 0.8), _fc = new THREE.Color();
 function updateLight(t, lf) {
   const gut = 1 - lf;
   let flick = 1 + (0.05 + gut * 0.25) * Math.sin(t * 11.3) + (0.03 + gut * 0.2) * Math.sin(t * 27.1 + 1.3) + 0.02 * Math.sin(t * 53.7);
   if (gut > 0.2 && Math.sin(t * 2.3) * Math.sin(t * 0.71) > 0.8) flick *= 0.55;
+  // in the damp at the bottom of the deep stair the flame struggles: slow dips, and less reach
+  if (P.dampK) flick *= 1 - P.dampK * (0.08 + 0.2 * Math.max(0, Math.sin(t * 1.3) * Math.sin(t * 0.41 + 1)));
   flick = Math.max(0.2, flick);
   lanternLight.intensity = (S.inField ? 1.5 : 9) * lf * flick;
-  lanternLight.distance = 3 + 13 * Math.sqrt(lf);
+  // the lantern's reach: a tenth further than it first was, at the same brightness. Up in the loft the light
+  // carries on into the roof; in the deep it gives out sooner
+  lanternLight.distance = (3 + 13 * Math.sqrt(lf)) * LANTERN_REACH * (1 + 0.8 * P.loftK) * (1 - 0.32 * P.dampK);
+  lanternLight.decay = lerp(1.7, 1.15, P.loftK);
   vmLight.intensity = 1.5 * lf * flick;
   vmFill.intensity = 0.45 * lf * flick;
   if (S.inField) return flick;
@@ -7244,12 +7959,13 @@ function updateLight(t, lf) {
     const k = smooth(0, 1, P.routeP);
     _fc.copy(BLACK).lerp(HAZE, Math.pow(k, 1.5));
     scene.fog.color.copy(_fc); scene.background.copy(_fc);
-    scene.fog.density = lerp(0.085, 0.011, k);
+    scene.fog.density = lerp(FOG_D, 0.011, k);
     skyLight.intensity = 2.6 * Math.pow(k, 1.6);
     vmAmbient.intensity = 1.1 * Math.pow(k, 1.6);
     len.route.glow.material.color.setRGB(1, 0.94, 0.82).multiplyScalar(0.12 + 1.33 * Math.pow(k, 1.1));   // a speck of day from the very bottom
   } else {
-    scene.fog.color.copy(BLACK); scene.background.copy(BLACK); scene.fog.density = 0.085;
+    scene.fog.color.copy(BLACK); scene.background.copy(BLACK);
+    scene.fog.density = FOG_D * lerp(1, 0.33, P.loftK) * lerp(1, 2.1, P.dampK);
     skyLight.intensity = 0; vmAmbient.intensity = 0;
   }
   return flick;
@@ -7277,6 +7993,8 @@ function update(dt) {
   if (S.dead) { updateDeath(dt); return; }
   if (ending) { updateEnding(dt); fieldEvents(dt); if (field) field.update(dt, S.t); return; }
   if (!(fieldFade && fieldFade.phase === 'in' && fieldFade.t > 1.6)) updatePlayer(dt);
+  updateLoft(dt, lanternFactor());
+  updateDamp(dt);
   updateSwing(dt);
   updateDynamics(dt);
   const before = lanternFactor();
@@ -7326,6 +8044,8 @@ function draw(now, dt) {
   camera.rotation.set(P.pitch + P.kick * P.kick * 0.012, P.yaw, S.dead && !S.inField ? smooth(0, 3, deathT) * 0.35 : 0);
   const outside = ending && ending.shown;
   if (outside) { camera.position.copy(ending.cam); camera.lookAt(ending.look); }
+  const fov = CAM_FOV - 9 * P.squeeze;                       // the deep stair closing in
+  if (Math.abs(camera.fov - fov) > 0.02) { camera.fov = fov; camera.updateProjectionMatrix(); }
   camera.updateMatrixWorld(true);
   updateViewmodel(dt, lf, flick);
   vm.visible = !S.dead && !outside;
@@ -7351,6 +8071,11 @@ function devKey(code) {
   if (code === 'KeyM') { S.mirror = { pending: true }; }
   if (code === 'KeyG') { const lap = Math.floor(originA / C.LENGTHS), r = layoutFor(C.ESCAPE_L, lap).rooms.find(r => r.design === 'escape'); teleport(lap * C.LENGTHS + C.ESCAPE_L, -r.d + 1.2, r.side * 1.4); P.yaw = r.side > 0 ? -Math.PI / 2 : Math.PI / 2; }
   if (code === 'KeyF') { S.inField = false; beginField(); }
+  // to the doors of the loft at 82 and the deep stair at 99
+  if (code === 'KeyV' || code === 'KeyX') {
+    const lap = Math.floor(originA / C.LENGTHS), [L, d, side] = code === 'KeyV' ? [LOFT_L, LOFT_D, LOFT_SIDE] : [DEEP_L, DEEP_D, DEEP_SIDE];
+    teleport(lap * C.LENGTHS + L, -d, side * (C.WALL_OUT - 0.9)); P.yaw = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+  }
   const toRoom = (design) => {
     for (let i = 1; i <= C.LENGTHS; i++) {
       const a = originA + i, r = layoutFor(a % C.LENGTHS, Math.floor(a / C.LENGTHS)).rooms.find(r => r.design === design);
@@ -7363,7 +8088,7 @@ function devKey(code) {
   // out on the steppe: R brings the riders, Y walks you to the grave in the fold, U fills the pack with things they would take
   if (code === 'KeyR' && S.inField && field && riders.state === 'none') { S.field.walked = 700; S.field.riders = 0; const z = field.RZ(P.pos.x) + 9; P.pos.set(P.pos.x, field.heightAt(P.pos.x, z), z); }
   if (code === 'KeyY' && S.inField && field) { const x = FIELD_WS.x + 3.5, z = FIELD_WS.z + 2.5; P.pos.set(x, field.heightAt(x, z), z); P.yaw = Math.atan2(3.5, 2.5); }
-  if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID]) if (S.inv.length < C.INV_SLOTS && (id !== HARP_ID || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; toast('Goods for trading.'); }
+  if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID, BELLS_ID]) if (S.inv.length < C.INV_SLOTS && ((id !== HARP_ID && id !== BELLS_ID) || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; if (S.inv.includes(BELLS_ID)) S.bells = 'taken'; toast('Goods for trading.'); }
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
 window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera };
