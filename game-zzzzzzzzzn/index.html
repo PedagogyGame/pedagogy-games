@@ -273,7 +273,7 @@ const SCHED=[7,20,7,20,5,20,5,1e9];
 const bonus={active:false,t:0,idx:0,spawned:0};
 const collected=[], particles=[], popups=[];
 
-const red={a:START,b:START,t:0,moving:false,heading:180,desired:180,walk:0,deathT:0,burst:false};
+const red={a:START,b:START,t:0,moving:false,heading:180,desired:180,walk:0,deathT:0,burst:false,prev:null,acc:.6,vox:0,voy:0};
 const ZDEFS=[
   {name:'The Woodsman', role:'follows your trail',     kind:'woodsman', coat:'#8c2b2b', coat2:'#c9a27a', pants:'#4a3a2a', mini:'#ff6a5a', scatter:{x:2.4,y:-2.4}},
   {name:'The Milkmaid', role:'heads you off',          kind:'milkmaid', coat:'#3e6aa6', coat2:'#e6dcc8', pants:'#2b3d5e', mini:'#7ab4ff', scatter:{x:-2.4,y:-2.4}},
@@ -308,6 +308,21 @@ const redHeading=()=>(red.moving&&red.a!==red.b)?edgeHeading(red.a,red.b,red.t):
 const zPos=z=>(z.state==='active'||z.state==='eaten')?edgePos(z.a,z.b,z.t):{x:z.px,y:z.py,sc:1};
 const zHeading=z=>(z.state==='active'||z.state==='eaten')?edgeHeading(z.a,z.b,z.t):z.heading;
 const kick=a=>{ shake=Math.max(shake,a); };
+// Drawn position: on leaving a junction the walker carries a little momentum from the old lane
+// and curves into the new one, so turns read as rounded instead of snapping on a hinge.
+function smoothPos(a,b,t,prev,R,k){
+  const p=edgePos(a,b,t);
+  if (prev==null||prev===b||a===b||isPortal(a,b)||isPortal(prev,a)) return p;
+  const done=t*edgeLen(a,b); if (done>=R) return p;
+  const ix=UX[a]-UX[prev], iy=UY[a]-UY[prev], il=Math.hypot(ix,iy)||1;
+  const ox=UX[b]-UX[a], oy=UY[b]-UY[a], ol=Math.hypot(ox,oy)||1;
+  const dx=ix/il, dy=iy/il, ex=ox/ol, ey=oy/ol, dot=dx*ex+dy*ey;
+  if (dot<-.9||dot>.99) return p;
+  const u=done/R, m=1-u, x0=UX[a], y0=UY[a];
+  const c1=3*m*m*u, c2=3*m*u*u, c3=u*u*u;
+  return {x:x0+c1*dx*k+c2*ex*(R-k)+c3*ex*R, y:y0+c1*dy*k+c2*ey*(R-k)+c3*ey*R, sc:p.sc};
+}
+const redDrawPos=()=>{ const p=smoothPos(red.a,red.b,red.t,red.prev,.24,.08); return {x:p.x+red.vox,y:p.y+red.voy,sc:p.sc}; };
 
 /* ---------- level setup ---------- */
 function setupDots(){
@@ -321,7 +336,7 @@ function setupDots(){
   bonusAt=[Math.round(dotsTotal*.33),Math.round(dotsTotal*.78)];
 }
 function resetActors(){
-  Object.assign(red,{a:START,b:START,t:0,moving:false,heading:180,desired:180,deathT:0,burst:false});
+  Object.assign(red,{a:START,b:START,t:0,moving:false,heading:180,desired:180,deathT:0,burst:false,prev:null,acc:.6,vox:0,voy:0});
   for (const z of zombies){
     z.fright=false; z.revive=0; z.leaveNow=false;
     if (z.id===0){ z.state='active'; z.a=G; z.b=nid(PROW,PROW/2-1); z.t=0; z.heading=180; }
@@ -410,8 +425,8 @@ function showOver(){
 }
 
 /* ---------- Red's movement ---------- */
-function redChoose(node){
-  const opts=maze.adjL[node]; if (!opts.length) return null;
+function redChoose(node,skip){
+  const opts=maze.adjL[node].filter(o=>o.n!==skip); if (!opts.length) return null;
   if (red.desired!=null){
     let best=null, bd=999, bh=999;
     for (const o of opts){
@@ -423,25 +438,39 @@ function redChoose(node){
   for (const o of opts) if (angDiff(o.ang,red.heading)<1) return o;
   return null;
 }
+const TURN_GRACE=.16; // a turn pressed just after passing a junction still takes it
 function updateRed(dt){
   const f=red;
-  let rem=redSpeed()*dt;
   if (!f.moving){
     const o=redChoose(f.a);
-    if (!o){ eatNode(f.a); return; }
+    if (!o){ eatNode(f.a); f.acc=.6; return; }
     f.b=o.n; f.t=0; f.moving=true; f.heading=o.ang;
   }
-  if (f.desired!=null && angDiff(edgeHeading(f.a,f.b,f.t),f.desired)>135){ const a=f.a; f.a=f.b; f.b=a; f.t=1-f.t; }
+  f.acc=Math.min(1,f.acc+dt*3.2);              // soft start after standing still
+  const dk=Math.exp(-dt*12); f.vox*=dk; f.voy*=dk;  // ease out any lane switch
+  let rem=redSpeed()*f.acc*dt;
+  if (f.desired!=null && angDiff(edgeHeading(f.a,f.b,f.t),f.desired)>135){ const a=f.a; f.a=f.b; f.b=a; f.t=1-f.t; f.prev=null; }
+  else if (f.desired!=null && f.prev!=null && !isPortal(f.a,f.b)){
+    const len=edgeLen(f.a,f.b), done=f.t*len, cur=edgeHeading(f.a,f.b,.5);
+    if (done<TURN_GRACE && angDiff(cur,f.desired)>40){
+      const o=redChoose(f.a,f.prev);
+      if (o && o.n!==f.b && angDiff(o.ang,f.desired)+20<angDiff(cur,f.desired)){
+        const before=redDrawPos();
+        f.b=o.n; f.heading=o.ang; f.t=done/edgeLen(f.a,f.b);
+        const after=redDrawPos(); f.vox+=before.x-after.x; f.voy+=before.y-after.y;
+      }
+    }
+  }
   const dist=rem;
   while (rem>0){
     const len=edgeLen(f.a,f.b), left=(1-f.t)*len;
     if (rem<left){ f.t+=rem/len; rem=0; break; }
     rem-=left;
     f.heading=edgeHeading(f.a,f.b,.999);
-    f.a=f.b; f.t=0;
+    f.prev=f.a; f.a=f.b; f.t=0;
     eatNode(f.a); if (phase!=='play') return;
     const o=redChoose(f.a);
-    if (!o){ f.b=f.a; f.moving=false; break; }
+    if (!o){ f.b=f.a; f.moving=false; f.acc=.6; break; }
     f.b=o.n; f.heading=o.ang;
   }
   if (f.moving){
@@ -454,7 +483,7 @@ function updateRed(dt){
 }
 
 /* ---------- the dead ---------- */
-function reverseZ(z){ if (z.state!=='active') return; const a=z.a; z.a=z.b; z.b=a; z.t=1-z.t; }
+function reverseZ(z){ if (z.state!=='active') return; const a=z.a; z.a=z.b; z.b=a; z.t=1-z.t; z.prev=null; }
 function zTarget(z){
   if (z.state==='eaten') return {x:UX[G],y:UY[G]};
   const rp=redPos(), rh=redHeading()*DEG;
@@ -476,7 +505,7 @@ function zChoose(z,node,prev){
     const tg=zTarget(z); let bd=Infinity;
     for (const o of opts){ const d=(UX[o.n]-tg.x)**2+(UY[o.n]-tg.y)**2; if (d<bd-1e-6){ bd=d; pick=o; } }
   }
-  z.a=node; z.b=pick.n; z.t=0;
+  z.prev=prev>=0?prev:null; z.a=node; z.b=pick.n; z.t=0;
 }
 function updateZombie(z,dt){
   if (z.state==='pen'){
@@ -517,7 +546,7 @@ function checkCollisions(){
   for (const z of zombies){
     if (z.state!=='active') continue;
     const zp=zPos(z);
-    if (Math.hypot(zp.x-rp.x,zp.y-rp.y)<.56){
+    if (Math.hypot(zp.x-rp.x,zp.y-rp.y)<.48){
       if (z.fright){ eatZombie(z,zp); return; }
       die(); return;
     }
@@ -595,7 +624,7 @@ function updateFx(dt){
   const rp=redPos();
   for (let i=particles.length-1;i>=0;i--){
     const p=particles[i]; p.life+=dt; if (p.life>=p.max){ particles.splice(i,1); continue; }
-    if (p.kind==='mote'){ const k=Math.min(1,dt*11); p.x+=(rp.x-p.x)*k; p.y+=(rp.y-.35-p.y)*k; continue; }
+    if (p.kind==='mote'){ const k=Math.min(1,dt*11); p.x+=(rp.x-p.x)*k; p.y+=(rp.y-.27-p.y)*k; continue; }
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.rot+=p.vr*dt;
     if (p.kind==='dirt'||p.kind==='cloth'){
       p.vz-=(p.kind==='cloth'?2.6:9)*dt; p.z+=p.vz*dt;
@@ -638,7 +667,7 @@ function groundTile(){
 }
 function dirtTile(){
   const s=256, c=mk(s,s), g=c.getContext('2d'), rnd=mulberry32(21);
-  g.fillStyle='#4a3a29'; g.fillRect(0,0,s,s);
+  g.fillStyle='#584532'; g.fillRect(0,0,s,s);
   for (let i=0;i<40;i++){
     const x=rnd()*s, y=rnd()*s, r=14+rnd()*40, col=rnd()<.5?'rgba(104,82,56,.45)':'rgba(40,29,20,.45)';
     tileWrap(s,(ox,oy)=>{ const gr=g.createRadialGradient(x+ox,y+oy,0,x+ox,y+oy,r); gr.addColorStop(0,col); gr.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gr; g.fillRect(x+ox-r,y+oy-r,r*2,r*2); });
@@ -722,7 +751,7 @@ function buildDecor(mz,seed){
     const x=x0+(rnd()-.5)*.08, y=y0+(rnd()-.5)*.08;
     if (Math.hypot(x-UX[C],y-UY[C])<1.85) continue;
     if (rings.some(r=>Math.hypot(x-r.x,y-r.y)<.78)) continue;
-    const lim=pd(x,y)-.19;
+    const lim=pd(x,y)-.23;
     if (lim<.07) continue;
     const inside=triDist(x,y)>.15;
     const r=inside?Math.min(lim+.04,.44):Math.min(lim,.4+rnd()*.34);
@@ -1103,14 +1132,14 @@ function layout(){
 }
 function updateCam(dt){
   const ov={x:0,y:N*H*.5+.1,s:Sfit};
-  const rp=redPos(), hd=redHeading()*DEG;
+  const rp=redDrawPos(), hd=redHeading()*DEG;
   const lk=(red.moving&&phase==='play')?1:0, la=1-Math.exp(-dt*2.2);
   cam.lx+=(Math.cos(hd)*lk-cam.lx)*la; cam.ly+=(Math.sin(hd)*lk*.8-cam.ly)*la;
-  let tx=rp.x+cam.lx, ty=rp.y-.35+cam.ly, ts=Sclose, rate=4.5;
+  let tx=rp.x+cam.lx, ty=rp.y-.3+cam.ly, ts=Sclose, rate=4.5;
   if (phase==='title'){ tx=Math.sin(T*.11)*3.4; ty=N*H*.55+Math.cos(T*.08)*2.8; ts=Sclose*.85; rate=1.2; }
   else if (phase==='clear'){ tx=ov.x; ty=ov.y; ts=ov.s; rate=1.5; }
-  else if (phase==='dying'){ tx=rp.x; ty=rp.y-.4; ts=Sclose*1.4; rate=3; }
-  else if (phase==='over'){ tx=rp.x; ty=rp.y-.4; ts=Sclose*1.25; rate=1; }
+  else if (phase==='dying'){ tx=rp.x; ty=rp.y-.3; ts=Sclose*1.4; rate=3; }
+  else if (phase==='over'){ tx=rp.x; ty=rp.y-.3; ts=Sclose*1.25; rate=1; }
   else if (phase==='freeze') ts=Sclose*1.07;
   else if (frightLeft>0) ts=Sclose*.9;
   if (phase==='ready'&&levelIntro){
@@ -1147,9 +1176,10 @@ function render(dt){
   drawGraveyardGround(g);
   const path=mazePath();
   g.lineCap='round'; g.lineJoin='round';
-  g.strokeStyle='rgba(5,9,7,.55)'; g.lineWidth=.56; g.stroke(path);
-  g.strokeStyle=PAT.dirt; g.lineWidth=.42; g.stroke(path);
-  g.strokeStyle='rgba(200,170,120,.12)'; g.lineWidth=.14; g.stroke(path);
+  g.strokeStyle='rgba(3,6,5,.72)'; g.lineWidth=.64; g.stroke(path);
+  g.strokeStyle='rgba(150,124,84,.62)'; g.lineWidth=.5; g.stroke(path);
+  g.strokeStyle=PAT.dirt; g.lineWidth=.44; g.stroke(path);
+  g.strokeStyle='rgba(214,184,132,.17)'; g.lineWidth=.17; g.stroke(path);
   for (const d of decor.small) if (inView(d.x,d.y,.5)) drawSmall(g,d,W2D,s);
   for (const t of decor.trees) if (inView(t.x,t.y,t.r*1.3)) drawTree(g,t);
   if (inView(UX[C],UY[C],2.2)) drawGraveyard(g);
@@ -1167,20 +1197,26 @@ function render(dt){
   const hideZ=(phase==='dying'&&red.deathT>.9)||phase==='clear'||phase==='over';
   if (!hideZ) for (const z of zombies){
     if (z.state==='eaten'||z.state==='entering') continue;
-    const zp=zPos(z); if (!inView(zp.x,zp.y,1.5)) continue;
+    let zp=zPos(z);
+    if (z.state==='active'){
+      zp=smoothPos(z.a,z.b,z.t,z.prev,.32,.13);
+      const h=zHeading(z)*DEG, sw=Math.sin(z.walk*.55)*(z.fright?.02:.05);
+      zp={x:zp.x-Math.sin(h)*sw, y:zp.y+Math.cos(h)*sw, sc:zp.sc};
+    }
+    if (!inView(zp.x,zp.y,1.5)) continue;
     actors.push({y:zp.y,fn:()=>{
       const pen=z.state==='pen', h=zHeading(z);
       const face=pen?1:(Math.cos(h*DEG)<-.01?-1:1), back=!pen&&Math.sin(h*DEG)<-.2;
       const flash=z.fright&&frightLeft<2&&Math.floor(frightLeft*5)%2===0;
-      const sz=.82*zp.sc; if (sz<.05) return;
+      const sz=.64*zp.sc; if (sz<.05) return;
       drawZombie(g,zp.x,zp.y,sz,z,{walk:pen?T*2+z.bob:z.walk,face,back,fright:z.fright,flash,eyes});
     }});
   }
-  const rp=redPos();
+  const rp=redDrawPos();
   lanternDev.ok=false;
   if (!(phase==='dying'&&red.deathT>1.0)&&phase!=='over'){
     actors.push({y:rp.y,fn:()=>{
-      const h=redHeading(); let sz=.8*rp.sc, spin=0, jitter=0;
+      const h=redHeading(); let sz=.6*rp.sc, spin=0, jitter=0;
       if (phase==='dying'){ const k=clamp((red.deathT-.35)/.65,0,1); spin=k*k*9; sz*=1-k*.85; if (red.deathT<.35) jitter=(Math.random()-.5)*.04; }
       if (sz<.03) return;
       drawRed(g,rp.x,rp.y,sz,{walk:red.walk,moving:red.moving&&phase==='play',face:Math.cos(h*DEG)<-.01?-1:1,back:Math.sin(h*DEG)<-.2&&phase!=='dying',spin,jitter,swing:Math.sin(red.walk*.5)*.3+Math.sin(T*1.7)*.05,out:lanternDev});
@@ -1202,7 +1238,7 @@ function render(dt){
   if (phase==='dying') LR*=1-clamp(red.deathT/1.3,0,1);
   if (phase==='over') LR=0;
   if (phase==='title') LR=2.4*fl;
-  if (!lanternDev.ok){ const [dx,dy]=W2D(rp.x,rp.y-.3); lanternDev.x=dx; lanternDev.y=dy; }
+  if (!lanternDev.ok){ const [dx,dy]=W2D(rp.x,rp.y-.23); lanternDev.x=dx; lanternDev.y=dy; }
   if (LR>0) lights.push({x:lanternDev.x,y:lanternDev.y,r:LR*s*DPR,a:1});
   for (const q of particles) if (q.kind==='spark'){ const [dx,dy]=W2D(q.x,q.y); lights.push({x:dx,y:dy,r:.5*s*DPR,a:.35*(1-q.life/q.max)}); }
 
@@ -1255,7 +1291,7 @@ function render(dt){
   for (let k=0;k<NC;k++) if (nodeDot[k]===1) fly(UX[k],UY[k],k);
   for (const key of edgeDot){ const a=key>>8, b=key&255; fly((UX[a]+UX[b])/2,(UY[a]+UY[b])/2,a*7+b); }
   for (const q of glows){ g.globalAlpha=clamp(q.a,0,1); g.drawImage(q.spr,q.x-q.r,q.y-q.r,q.r*2,q.r*2); }
-  const er=.15*s*DPR;
+  const er=.12*s*DPR;
   g.globalAlpha=.95; for (let i=0;i<eyes.length;i+=2) g.drawImage(GLOW.eye,eyes[i]-er,eyes[i+1]-er,er*2,er*2);
   for (const q of particles){
     if (q.kind==='dirt'||q.kind==='cloth') continue;
@@ -1268,7 +1304,7 @@ function render(dt){
   // souls returning to the graveyard
   for (const z of zombies){
     if (z.state!=='eaten'&&z.state!=='entering') continue;
-    const p=zPos(z), [dx,dy]=W2D(p.x,p.y-.45-Math.sin(T*4+z.id)*.06), r=.2*s*DPR;
+    const p=zPos(z), [dx,dy]=W2D(p.x,p.y-.36-Math.sin(T*4+z.id)*.05), r=.16*s*DPR;
     g.globalCompositeOperation='lighter'; g.globalAlpha=.8; g.drawImage(GLOW.soul,dx-r*2.4,dy-r*2.4,r*4.8,r*4.8); g.globalCompositeOperation='source-over';
     drawWisp(g,dx,dy,r,z.state==='entering'?clamp((UY[C]-p.y)/1.2+.2,0,1):1);
   }
