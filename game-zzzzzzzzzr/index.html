@@ -694,6 +694,141 @@ function tallyTexture(n, faint = false) {
   return t;
 }
 
+/* ---------- fine wood ----------
+   The first textures above are small, so the game can start at once. Once it is up, these are drawn pixel by pixel in
+   the background, four times finer, and swapped in: growth rings bending into arches, fibres, pores, broad streaks of
+   colour along the grain, grey weathering, every plank and board in a set its own tree; then knots, splits, seams and
+   pegs drawn over. A tile is a metre of timber either way. */
+function tileNoise(gx, gy, seed) {
+  const v = new Float32Array(gx * gy); let s = seed >>> 0;
+  for (let i = 0; i < v.length; i++) { s = (s * 1664525 + 1013904223) >>> 0; v[i] = s / 4294967296; }
+  return (x, y) => {
+    x = ((x % gx) + gx) % gx; y = ((y % gy) + gy) % gy;
+    const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, x1 = (x0 + 1) % gx, y1 = (y0 + 1) % gy;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const a = v[y0 * gx + x0], b = v[y0 * gx + x1], c = v[y1 * gx + x0], d = v[y1 * gx + x1];
+    return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+  };
+}
+// o: { W, H, vert (grain runs down the tile), pieces (planks or boards across it), base/dark/light [r,g,b], rings, warp, grey, seed }
+function* fineWoodGen(o, data) {
+  const { W, H } = o, R = new Rng(o.seed), sd = () => R.int(1, 1e9);
+  const nWarp = tileNoise(4, 6, sd()), nWarp2 = tileNoise(8, 12, sd()), nCath = tileNoise(2, 3, sd());
+  const nFib = tileNoise(5, 380, sd()), nFib2 = tileNoise(9, 760, sd()), nPore = tileNoise(150, 680, sd());
+  const nStreak = tileNoise(1, 9, sd()), nGrey = tileNoise(3, 3, sd()), nGrey2 = tileNoise(7, 7, sd()), nFleck = tileNoise(40, 90, sd());
+  const P = o.pieces || 1, piece = [];
+  for (let k = 0; k < P; k++) piece.push({ ring: R.range(0, 30), du: R.range(0, 4), tint: R.range(0.86, 1.13), warm: R.range(-0.05, 0.05), rings: (o.rings || 60) * R.range(0.75, 1.3), grey: R.range(0, 1) });
+  const [br, bg, bb] = o.base, [dr, dg, db] = o.dark, [lr, lg, lb] = o.light;
+  const NR = new Rng(o.seed + 99);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      // along the grain, and across it
+      const a = o.vert ? py / H : px / W, c = o.vert ? px / W : py / H;
+      const k = Math.min(P - 1, (c * P) | 0), pc = piece[k], cl = c * P - k;
+      const u = a + pc.du / 4;
+      const warp = (nWarp(u * 4, c * 6) - 0.5) * (o.warp || 1.2) + (nWarp2(u * 8, c * 12) - 0.5) * (o.warp || 1.2) * 0.4 + (nCath(u * 2, c * 3) - 0.5) * 0.9;
+      const r = (P > 1 ? cl : c) * pc.rings / P + pc.ring + warp, s = r - Math.floor(r);
+      const late = (s > 0.55 ? Math.min(1, (s - 0.55) / 0.22) : 0) * (s > 0.86 ? Math.max(0, 1 - (s - 0.86) / 0.14) : 1);
+      const fib = nFib(u * 5, c * 380) - 0.5, fib2 = nFib2(u * 9, c * 760) - 0.5, pore = nPore(u * 150, c * 680);
+      let t = 0.53 + (nStreak(u, c * 9) - 0.5) * 0.34 + fib * 0.42 + fib2 * 0.26 - late * 0.2 - (pore > 0.84 ? (pore - 0.84) * 2.6 : 0);
+      t += (nFleck(u * 40, c * 90) > 0.9 ? 0.06 : 0) + (NR.next() - 0.5) * 0.06;
+      t = t * pc.tint; t = t < 0 ? 0 : t > 1.15 ? 1.15 : t;
+      let rr, gg, bl;
+      if (t < 0.5) { const q = t / 0.5; rr = dr + (br - dr) * q; gg = dg + (bg - dg) * q; bl = db + (bb - db) * q; }
+      else { const q = (t - 0.5) / 0.5; rr = br + (lr - br) * q; gg = bg + (lg - bg) * q; bl = bb + (lb - bb) * q; }
+      rr *= 1 + pc.warm; bl *= 1 - pc.warm;
+      // grey where the weather got at it
+      const w = Math.max(0, (nGrey(u * 3, c * 3) * 0.7 + nGrey2(u * 7, c * 7) * 0.3) - 0.5) * 2 * (o.grey || 0.4) * (0.5 + pc.grey);
+      const lum = rr * 0.3 + gg * 0.59 + bl * 0.11;
+      rr += (lum * 0.95 - rr) * w; gg += (lum * 0.97 - gg) * w; bl += (lum * 1.02 - bl) * w;
+      const i = (py * W + px) * 4; data[i] = rr; data[i + 1] = gg; data[i + 2] = bl; data[i + 3] = 255;
+    }
+    if (py % 24 === 23) yield;
+  }
+}
+// what is drawn over the grain: knots with the grain swirling round them, splits along it, and for planks and boards
+// the seams between them, a butt joint in each run, and the pegs that hold them
+function fineWoodMarks(g, o) {
+  const { W, H } = o, R = new Rng(o.seed + 7), P = o.pieces || 1, d = o.dark;
+  g.save();
+  if (o.vert) { g.translate(W, 0); g.rotate(Math.PI / 2); }
+  const LW = o.vert ? H : W, LH = o.vert ? W : H;          // in the drawing frame the grain runs along x
+  for (let kn = 0; kn < (o.knots || 3); kn++) {
+    const kx = R.range(60, LW - 60), ky = R.range(30, LH - 30), rx = R.range(18, 44), ry = rx * R.range(0.34, 0.58);
+    const halo = g.createRadialGradient(kx, ky, rx * 0.4, kx, ky, rx * 2.6);
+    halo.addColorStop(0, rgb(d[0], d[1], d[2], 0.32)); halo.addColorStop(1, rgb(d[0], d[1], d[2], 0));
+    g.save(); g.translate(kx, ky); g.scale(1, ry / rx); g.fillStyle = halo; g.beginPath(); g.arc(0, 0, rx * 2.6, 0, TAU); g.fill(); g.restore();
+    for (let r = 1; r <= 3; r++) {
+      g.strokeStyle = rgb(d[0], d[1], d[2], 0.22 - r * 0.05); g.lineWidth = 2.2;
+      g.beginPath(); g.ellipse(kx, ky, rx * (0.75 + r * 0.38), ry * (0.75 + r * 0.24), 0, 0, TAU); g.stroke();
+    }
+    const gr = g.createRadialGradient(kx, ky, 0, kx, ky, rx * 0.7);
+    gr.addColorStop(0, rgb(d[0] * 1.5, d[1] * 1.3, d[2] * 1.1, 0.85)); gr.addColorStop(0.45, rgb(d[0] * 1.1, d[1] * 0.95, d[2] * 0.8, 0.75)); gr.addColorStop(1, rgb(d[0], d[1], d[2], 0));
+    g.fillStyle = gr; g.beginPath(); g.ellipse(kx, ky, rx * 0.7, ry * 0.7, 0, 0, TAU); g.fill();
+    if (R.chance(0.5)) { g.strokeStyle = 'rgba(8,5,3,.7)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(kx - rx * 0.4, ky); g.lineTo(kx + rx * 0.5, ky + R.range(-2, 2)); g.stroke(); }
+  }
+  for (let k = 0; k < (o.splits || 14); k++) {
+    let x = R.range(0, LW), y = R.range(0, LH); const len = R.range(40, 260);
+    g.strokeStyle = `rgba(8,5,3,${R.range(0.35, 0.7).toFixed(2)})`; g.lineWidth = R.range(0.8, 2.2);
+    g.beginPath(); g.moveTo(x, y);
+    for (let s = 0; s < len; s += 12) { x += 12; y += R.range(-0.8, 0.8); g.lineTo(x, y); }
+    g.stroke();
+  }
+  if (P > 1) {
+    const ph = LH / P;
+    for (let k = 0; k < P; k++) {
+      const y0 = k * ph;
+      g.fillStyle = 'rgba(6,4,2,.9)'; g.fillRect(0, y0, LW, 5);
+      g.fillStyle = 'rgba(150,130,100,.12)'; g.fillRect(0, y0 + 5, LW, 2);
+      g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y0 + ph - 6, LW, 6);
+      if (o.joints) {
+        const bx = R.range(LW * 0.1, LW * 0.9);
+        g.fillStyle = 'rgba(6,4,2,.88)'; g.fillRect(bx, y0, 4, ph);
+        g.fillStyle = 'rgba(16,11,7,.9)';
+        for (const nx of [bx - 26, bx + 30]) for (const ny of [y0 + ph * 0.25, y0 + ph * 0.75]) { g.beginPath(); g.arc(nx, ny, 7, 0, TAU); g.fill(); }
+        g.fillStyle = 'rgba(140,118,90,.25)';
+        for (const nx of [bx - 26, bx + 30]) for (const ny of [y0 + ph * 0.25, y0 + ph * 0.75]) { g.beginPath(); g.arc(nx - 1.5, ny - 1.5, 3, 0, TAU); g.fill(); }
+      }
+    }
+  }
+  if (o.adze) {
+    // hewn faces: the shallow scallops an adze leaves, in rows along the timber, catching the light a little
+    for (let k = 0; k < 150; k++) {
+      const x = R.range(0, LW), y = R.range(0, LH), w = R.range(30, 95), h = R.range(50, 160), rot = R.range(-0.5, 0.5), a = R.range(0.02, 0.05);
+      const gr = g.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+      gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(0.6, `rgba(255,240,210,${a * 0.5})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.save(); g.translate(x, y); g.rotate(rot); g.fillStyle = gr; g.beginPath(); g.ellipse(0, 0, w / 2, h / 2, 0, 0, TAU); g.fill(); g.restore();
+    }
+  }
+  g.restore();
+}
+const FINE_WOOD = [
+  { key: 'plank', W: 1024, H: 1024, pieces: 4, joints: true, base: [70, 61, 50], dark: [24, 19, 14], light: [112, 99, 82], rings: 56, knots: 4, splits: 16, seed: 3101 },
+  { key: 'board', W: 1024, H: 1024, vert: true, pieces: 5, base: [65, 56, 45], dark: [22, 17, 12], light: [104, 91, 74], rings: 50, knots: 3, splits: 14, seed: 4101 },
+  { key: 'wood', W: 1024, H: 1024, base: [79, 70, 59], dark: [30, 25, 19], light: [124, 111, 92], rings: 64, warp: 1.4, knots: 3, splits: 18, grey: 0.55, adze: true, seed: 1101 },
+  { key: 'log', W: 1024, H: 512, base: [67, 58, 48], dark: [20, 16, 12], light: [106, 94, 77], rings: 40, warp: 1.0, knots: 3, splits: 22, grey: 0.5, seed: 2101 },
+];
+// drawn a few rows at a time between frames, so nothing ever waits for it
+function startFineWood() {
+  let job = 0, gen = null, c = null, g = null, img = null;
+  const step = () => {
+    const t0 = performance.now(), budget = typeof running !== 'undefined' && running ? 8 : 40;   // more at a time while nobody is playing
+    while (performance.now() - t0 < budget) {
+      if (job >= FINE_WOOD.length) return;
+      const o = FINE_WOOD[job];
+      if (!gen) { c = makeCanvas(o.W, o.H); g = c.getContext('2d'); img = g.createImageData(o.W, o.H); gen = fineWoodGen(o, img.data); }
+      if (gen.next().done) {
+        g.putImageData(img, 0, 0); fineWoodMarks(g, o);
+        // let go of the small one on the card first, so the new size is given room rather than written over the old
+        const tex = T[o.key]; tex.dispose(); tex.image = c; tex.needsUpdate = true;
+        gen = null; job++;
+      }
+    }
+    setTimeout(step, 0);
+  };
+  setTimeout(step, 0);
+}
+
 /* ============================================================
    Materials
    ============================================================ */
@@ -724,6 +859,8 @@ const M = {
   mail: lam(T.mail, { color: 0xb0aaa0, side: THREE.DoubleSide, bumpScale: 0.8 }),
   bronze: new THREE.MeshPhongMaterial({ color: 0x8a6a3a, specular: 0x9a7a4a, shininess: 40 }),
 };
+// timber that varies piece by piece: each post, beam, plank and log gets its own patch of the grain and its own shade
+for (const m of [M.wood, M.woodDark, M.log, M.plank, M.board]) m.userData.vary = true;
 
 /* ---------- stone, rock, and four kinds of web ---------- */
 (function moreTextures() {
@@ -865,11 +1002,29 @@ function cylGeo(r, len, seg = 7, open = true, ts = 1, r2 = r) {
   return swapUV(new THREE.CylinderGeometry(r2, r, len, seg, 1, open), len * ts, TAU * r * ts);
 }
 function stripAttrs(g) {
-  for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+  for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && k !== 'color') g.deleteAttribute(k);
   if (!g.index) { const n = g.attributes.position.count, a = new Uint32Array(n); for (let i = 0; i < n; i++) a[i] = i; g.setIndex(new THREE.BufferAttribute(a, 1)); }
   return g;
 }
 
+// a piece of timber, told apart from its neighbours by where it stands: its own patch of the grain, its own shade,
+// warmer or greyer, now and then one much weathered
+function variedMat(mat) {
+  if (!mat.userData.varied) { const v = mat.clone(); v.vertexColors = true; v.userData = { varied: true }; mat.userData.varied = v; }
+  return mat.userData.varied;
+}
+function varyPiece(g, e) {
+  const h = hash32(Math.round(e[12] * 50), Math.round(e[13] * 50), Math.round(e[14] * 50), 4049), f = k => ((h >>> k) & 1023) / 1023;
+  const uv = g.attributes.uv;
+  if (uv) { const du = f(0) * 7.31, dv = f(10) * 3.17; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) + du, uv.getY(i) + dv); }
+  let b = 0.84 + 0.3 * f(20), warm = (f(5) - 0.5) * 0.1, grey = f(15) > 0.86 ? 0.35 : 0;
+  if (grey) b *= 1.08;
+  let r = b * (1 + warm), gg = b, bl = b * (1 - warm * 1.4);
+  const lum = r * 0.3 + gg * 0.59 + bl * 0.11; r += (lum - r) * grey; gg += (lum - gg) * grey; bl += (lum * 1.04 - bl) * grey;
+  const n = g.attributes.position.count, col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { col[i * 3] = r; col[i * 3 + 1] = gg; col[i * 3 + 2] = bl; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+}
 class Builder {
   constructor() { this.lists = new Map(); this.base = new THREE.Matrix4(); this._m = new THREE.Matrix4(); }
   setBase(m) { this.base.copy(m); return this; }
@@ -879,6 +1034,7 @@ class Builder {
     g.applyMatrix4(this._m);
     if (this._m.determinant() < 0) flipWinding(g);
     stripAttrs(g);
+    if (mat.userData.vary) { mat = variedMat(mat); varyPiece(g, this._m.elements); }
     let l = this.lists.get(mat); if (!l) { l = []; this.lists.set(mat, l); }
     l.push(g);
   }
@@ -1367,6 +1523,8 @@ function* corridorGen(ctx) {
   };
   for (const s of [-1, 1]) {
     const ops = open[s];
+    // the logs and the earth behind them stop a little inside the door posts, never flush with their faces
+    const opsG = ops.map(o => o.rough ? o : Object.assign({}, o, { h: o.h + 0.06 }));
     for (let k = 0; k <= 25; k++) {
       const z = -k * 4;
       if (!ops.some(o => Math.abs(z - o.z) < o.h + 0.2)) B.box(M.wood, s * 2.08, CH / 2, z, 0.3, CH, 0.3);
@@ -1377,7 +1535,7 @@ function* corridorGen(ctx) {
         const z0 = -k * 4 - 0.15, z1 = -k * 4 - 3.85;
         for (let i = 0; i < 13; i++) {
           const y = 0.15 + i * 0.29;
-          const segs = y - 0.14 < DOOR ? cut(z1, z0, ops) : [[z1, z0]];
+          const segs = y - 0.14 < DOOR ? cut(z1, z0, opsG) : [[z1, z0]];
           for (const [a, b] of segs) B.log(M.log, s * 2.14, y, (a + b) / 2, 0.146, b - a, 'z');
         }
         if (overBudget()) yield;
@@ -1385,12 +1543,12 @@ function* corridorGen(ctx) {
       yield;
     }
     buildStage = 'openings';
-    for (const [a, b] of cut(-100, 0, ops)) {
-      B.box(M.earth, s * 2.38, CH / 2, (a + b) / 2, 0.12, CH, b - a, 0, 0, 0, 0.5);
-      ctx.solid(s * 2.25, (a + b) / 2, 0.5, b - a, 0, 'up');
-    }
+    for (const [a, b] of cut(-100, 0, opsG)) B.box(M.earth, s * 2.38, CH / 2, (a + b) / 2, 0.12, CH, b - a, 0, 0, 0, 0.5);
+    for (const [a, b] of cut(-100, 0, ops)) ctx.solid(s * 2.25, (a + b) / 2, 0.5, b - a, 0, 'up');
     for (const o of ops) {
-      B.box(M.earth, s * 2.38, (o.top + CH) / 2, o.z, 0.12, CH - o.top, 2 * o.h);
+      // the earth over the door starts above the lintel, not level with its underside
+      const y0 = o.rough ? o.top : o.top + 0.17, hw = o.rough ? o.h : o.h + 0.06;
+      B.box(M.earth, s * 2.38, (y0 + CH) / 2, o.z, 0.12, CH - y0, 2 * hw);
       if (o.rough) {
         // a cave mouth: the logs simply stop, held up by rough stone jambs and a heavy unhewn lintel
         const RJ = new Rng(hash32(ctx.L, Math.round(o.z * 10), 9));
@@ -1407,7 +1565,7 @@ function* corridorGen(ctx) {
       } else {
         for (const e of [-1, 1]) B.box(M.wood, s * 2.22, o.top / 2, o.z + e * (o.h + 0.08), 0.5, o.top, 0.16);
         B.box(M.wood, s * 2.22, o.top + 0.08, o.z, 0.52, 0.16, 2 * o.h + 0.34);
-        B.box(M.plank, s * 2.24, -0.045, o.z, 0.5, 0.09, 2 * o.h);
+        B.box(M.plank, s * 2.24, -0.04, o.z, 0.5, 0.104, 2 * o.h);     // the sill stands a finger's width proud of both floors
       }
     }
     yield;
@@ -2773,9 +2931,9 @@ const LOFT = (() => {
 const _lfm = {
   straw: () => cachedMat('lf-straw', () => lam(strawTex(0), { bumpScale: 1.2 })),
   hay: () => cachedMat('lf-hay', () => lam(strawTex(1), { bumpScale: 1.2 })),
-  beam: () => cachedMat('lf-beam', () => lam(T.wood, { color: 0xb8a68e, bumpScale: 1.6 })),     // old timber, pale with dust
-  roof: () => cachedMat('lf-roof', () => lam(T.board, { color: 0x8c7e6e })),
-  wall: () => cachedMat('lf-wall', () => lam(T.board, { color: 0xa89a88 })),
+  beam: () => cachedMat('lf-beam', () => Object.assign(lam(T.wood, { color: 0xb8a68e, bumpScale: 1.6 }), { userData: { vary: true } })),     // old timber, pale with dust
+  roof: () => cachedMat('lf-roof', () => Object.assign(lam(T.board, { color: 0x8c7e6e }), { userData: { vary: true } })),
+  wall: () => cachedMat('lf-wall', () => Object.assign(lam(T.board, { color: 0xa89a88 }), { userData: { vary: true } })),
 };
 // straw: a mat of stalks, gold for the oat straw, grey-green with crumbs of dried leaf for the lucerne
 const _strawTex = [];
@@ -5116,7 +5274,9 @@ function updatePlayer(dt) {
   if (S.inField && S.field) S.field.walked = (S.field.walked || 0) + moved;
   if (dt > 0) { P.vel.x = (P.pos.x - x0) / dt * 0.5 + P.vel.x * 0.5; P.vel.z = (P.pos.z - z0) / dt * 0.5 + P.vel.z * 0.5; }
   if (pushed > 0.003 && _wish.lengthSq() > 1 && S.t - P.lastBump > 0.55 && moved < speed * dt * 0.45) { P.lastBump = S.t; AU.bump(); }
-  const stride = P.hurry ? 1.0 : 0.78;
+  // a footfall every 2.2 m walking (about 1.8 a second) and 2.9 m hurrying, a man's pace rather than a sprint;
+  // the head's sway keeps time with them
+  const stride = (P.hurry ? 1.0 : 0.78) / 0.35;
   P.stepDist += moved; P.bob += moved / stride * Math.PI;
   if (P.stepDist > stride) { P.stepDist -= stride; AU.step(S.inField ? 'grass' : (P.inRoute ? 'dirt' : 'wood')); }
   P.pos.y = S.inField ? field.heightAt(P.pos.x, P.pos.z) : floorHere();
@@ -5812,7 +5972,7 @@ const AU = (() => {
     init, wake, state: () => ctx ? ctx.state : 'none',
     step(kind) {
       if (!on()) return; const t = ctx.currentTime, d = out(null);
-      d.gain.value = P.hurry ? 1.15 : 0.9;
+      d.gain.value = P.hurry ? 0.575 : 0.45;
       if (kind === 'grass') { noise(d, t, 0.16, 'highpass', 2600, 0.5, 0.09, 0.03); noise(d, t + 0.02, 0.1, 'bandpass', 900, 0.8, 0.04, 0.02); return; }
       if (kind === 'dirt') { noise(d, t, 0.09, 'lowpass', 900, 0.7, 0.22); tone(d, t, 0.08, 75, 0.2); return; }
       const hi = kind === 'stair' ? 1.25 : 1;
@@ -5999,7 +6159,7 @@ const AU = (() => {
       // the hum follows the current length on a 107-step scale
       const L = S.inField ? -1 : (P.mode === 'corridor' ? originA : P.lenA) % C.LENGTHS;
       if (L !== lastL && L >= 0) { drone.voice.frequency.setTargetAtTime(87.307 * Math.pow(2, L / 107), t, 1.6); lastL = L; }
-      const dg = S.inField || S.dead ? 0 : 0.016 * (P.inRoute ? 1 - P.routeP : 1);
+      const dg = S.inField || S.dead ? 0 : 0.0032 * (P.inRoute ? 1 - P.routeP : 1);      // the hum, kept low under everything
       drone.gain.gain.setTargetAtTime(dg, t, S.inField ? 3 : 1.5);
       if (S.inField) {
         windGain.gain.setTargetAtTime(0.07 + 0.04 * Math.sin(t * 0.21) + 0.02 * Math.sin(t * 0.67), t, 0.5);
@@ -7937,7 +8097,7 @@ function updateDeath(dt) {
 }
 
 /* ---------- light ---------- */
-const LANTERN_REACH = 1.2, FOG_D = 0.085 / LANTERN_REACH, CAM_FOV = 72;
+const LANTERN_REACH = 1.38, FOG_D = 0.085 / LANTERN_REACH, CAM_FOV = 72;
 const BLACK = new THREE.Color(0, 0, 0), HAZE = new THREE.Color(0.96, 0.9, 0.8), _fc = new THREE.Color();
 function updateLight(t, lf) {
   const gut = 1 - lf;
@@ -8091,7 +8251,7 @@ function devKey(code) {
   if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID, BELLS_ID]) if (S.inv.length < C.INV_SLOTS && ((id !== HARP_ID && id !== BELLS_ID) || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; if (S.inv.includes(BELLS_ID)) S.bells = 'taken'; toast('Goods for trading.'); }
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
-window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera };
+window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera, T };
 
 // the song at 75 starts the first time the daylight can be seen at the top of the climb, and rises with you
 const _songV = new THREE.Vector3();
@@ -8110,6 +8270,7 @@ function updateSong() {
 /* ---------- boot ---------- */
 let pendingSave = null;
 function boot(data) {
+  setTimeout(startFineWood, 300);
   const s = (data && data.save) ? deserialize(data.save) : loadSaved();
   if (s && !s.dead) { pendingSave = s; $('btnCont').hidden = false; }
   requestAnimationFrame(frame);
