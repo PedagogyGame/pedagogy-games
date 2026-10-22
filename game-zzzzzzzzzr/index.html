@@ -5256,7 +5256,11 @@ function updatePlayer(dt) {
   }
   P.hurry = keys.has('ShiftLeft') || keys.has('ShiftRight');
   let speed = P.hurry ? C.RUN : C.WALK;
-  if (P.inRoute && P.routeP > 0.001 && P.routeP < 0.999) speed *= 0.72;
+  // on the stairs you walk yourself (the climb at 75, the loft stair at 82), hurrying is held back by a third
+  const climb = P.inRoute && P.routeP > 0.001 && P.routeP < 0.999;
+  const loftStair = P.zone && P.zone.z.loft && P.pos.y > 0.02 && P.pos.y < P.zone.z.loft.rise - 0.02;
+  if (climb) speed *= 0.72;
+  if ((climb || loftStair) && P.hurry) speed *= 0.7;
   if (S.inField) speed *= 1.05;
   const sy = Math.sin(P.yaw), cy = Math.cos(P.yaw);
   _wish.set(-sy * f + cy * s, 0, -cy * f - sy * s);
@@ -5896,7 +5900,7 @@ const AU = (() => {
     // one silent sample, which some browsers wait for before they let a page make any sound at all
     try { const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (e) { }
     if (ctx.state !== 'running') ctx.resume().catch(() => { });
-    master = ctx.createGain(); master.gain.value = 0.85;
+    master = ctx.createGain(); master.gain.value = 0.765;     // everything, a tenth down from where it was
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 4;
     master.connect(comp); comp.connect(ctx.destination);
     reverb = ctx.createConvolver(); reverb.buffer = impulse(2.8, 2.4);
@@ -8097,7 +8101,7 @@ function updateDeath(dt) {
 }
 
 /* ---------- light ---------- */
-const LANTERN_REACH = 1.38, FOG_D = 0.085 / LANTERN_REACH, CAM_FOV = 72;
+const LANTERN_REACH = 1.55, FOG_D = 0.085 / LANTERN_REACH, CAM_FOV = 72;
 const BLACK = new THREE.Color(0, 0, 0), HAZE = new THREE.Color(0.96, 0.9, 0.8), _fc = new THREE.Color();
 function updateLight(t, lf) {
   const gut = 1 - lf;
