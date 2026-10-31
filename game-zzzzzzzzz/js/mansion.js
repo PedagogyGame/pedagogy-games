@@ -1,7 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic7";
-import { OBJECTS } from "./data/objects.js?v=logic7";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic7";
+import { ROOMS } from "./data/rooms.js?v=logic21";
+import { OBJECTS } from "./data/objects.js?v=logic21";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic21";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic21";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic21";
+import { buildLabGarage } from "./labGarage.js?v=logic21";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -12,6 +15,7 @@ export class Mansion {
     this.interactives = [];
     this.colliders = [];
     this.floorRegions = [];
+    this.rugRegions = []; // logic9: rugs / floor frame lips are drivable surfaces (car sits ON them)
     this.ramps = [];
     this.roomLabels = [];
     this.fireflies = null;
@@ -96,7 +100,7 @@ export class Mansion {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     this._texCache[key] = tex;
     return tex;
   }
@@ -189,7 +193,7 @@ export class Mansion {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     this._texCache[key] = tex;
     return tex;
   }
@@ -284,7 +288,7 @@ export class Mansion {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     this._texCache[key] = tex;
     return tex;
   }
@@ -320,7 +324,7 @@ export class Mansion {
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 4;
+    tex.anisotropy = 8;
     this._texCache[key] = tex;
     return tex;
   }
@@ -404,8 +408,186 @@ export class Mansion {
     this._buildDoorConnectors();
     this._buildExteriorFacade();
     this._buildBalcony();
+    this._buildServiceGalleries(); // logic20: the dark strip between Library Hall and Nursery/Study (Ben t183u)
     this._buildGardenFeatures();
     this._buildFireflies();
+    this._declashCoplanar();
+    this._buildBookSteps();
+    this._buildChandelier(); // logic11 centerpiece (Upper Landing)
+    { // logic13: the conservatory west skirting runs inside the dining shell overlap — lift it a hair
+      // (now in view from the Green-Wall Road; zfight-scan)
+      const cons = this.root.getObjectByName && this.root.getObjectByName("conservatory");
+      const bb = new THREE.Box3();
+      if (cons) { cons.updateMatrixWorld(true); cons.traverse((o) => { if (!o.isMesh || o.isInstancedMesh) return; bb.setFromObject(o); if (bb.max.x < -10.6 && bb.min.x > -11.2 && bb.max.y < 1.5 && bb.max.y - bb.min.y < 0.7) o.position.y += 0.0016; }); }
+    }
+  }
+
+  /** logic11 free-roam playground: every low piece of furniture (tables, desks, beds, benches…)
+   *  gets a little staircase of stacked books against one clear side, each book a kerb-high step
+   *  (≤4.5 cm, under the car's 5.6 cm step-up) — so the toy car can climb onto and drive over it.
+   *  One InstancedMesh (1 draw call). DriveWorld registers furnitureTops + bookSteps as surfaces. */
+  /** logic11 CHANDELIER — brass frame merged into 1 mesh, crystals + candle flames instanced
+   *  (MeshBasic = self-lit, no lights). Hangs on 3 chains clear of the lift pad above it. */
+  _buildChandelier() {
+    const C = CHANDELIER, cx = C.cx, cz = C.cz;
+    const merge = (list) => {
+      const pos = [], nor = [];
+      for (const [geo, m] of list) {
+        const g = geo.index ? geo.toNonIndexed() : geo; g.applyMatrix4(m);
+        pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array);
+      }
+      const out = new THREE.BufferGeometry();
+      out.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      out.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+      return out;
+    };
+    const M = (x, y, z, rx = 0) => new THREE.Matrix4().makeRotationX(rx).setPosition(x, y, z);
+    const parts = [];
+    parts.push([new THREE.CylinderGeometry(0.05, 0.08, 1.15, 12), M(cx, 6.6, cz)]);          // stem
+    parts.push([new THREE.SphereGeometry(0.11, 14, 10), M(cx, 6.25, cz)]);                    // knop
+    parts.push([new THREE.ConeGeometry(0.07, 0.25, 12), M(cx, 5.75, cz, Math.PI)]);           // finial
+    parts.push([new THREE.CylinderGeometry(0.3, 0.16, 0.08, 16), M(cx, 7.22, cz)]);           // crown
+    const tiers = [[6.0, 0.38, 12], [6.5, 0.3, 10], [6.95, 0.2, 8]];
+    for (const [y, r] of tiers) {
+      parts.push([new THREE.TorusGeometry(r, 0.014, 6, 32), M(cx, y, cz, Math.PI / 2)]);
+      for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; const arm = new THREE.CylinderGeometry(0.008, 0.008, r, 4); arm.rotateZ(Math.PI / 2); arm.rotateY(-a); parts.push([arm, M(cx + Math.cos(a) * r / 2, y + 0.02, cz + Math.sin(a) * r / 2)]); }
+    }
+    for (const [dx, dz] of [[-0.25, -0.2], [0.25, -0.2], [0, -0.3]]) {                     // chains up to the ceiling
+      const x = cx + dx, z = cz + dz, y0 = 7.24, y1 = 8.2, len = Math.hypot(y1 - y0, dx * 0.2);
+      parts.push([new THREE.CylinderGeometry(0.007, 0.007, len, 4), M(x, (y0 + y1) / 2, z)]);
+      parts.push([new THREE.CylinderGeometry(0.045, 0.06, 0.03, 10), M(x, 8.185, z)]);       // ceiling rose
+    }
+    { // logic12: Explore sees a closed wooden hatch over the hidden lift shaft (hidden in Drive)
+      const b = CONVEYOR.shaft, hatch = new THREE.Group(); hatch.name = "attic_hatch"; hatch.userData.noBatch = true;
+      const wood = new THREE.MeshLambertMaterial({ color: 0x5a3a24 }), iron = new THREE.MeshLambertMaterial({ color: 0x2a2622 });
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(b.maxX - b.minX + 0.08, 0.03, b.maxZ - b.minZ + 0.08), wood); lid.position.set((b.minX + b.maxX) / 2, 8.4 + 0.016, (b.minZ + b.maxZ) / 2);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.008, 6, 16), iron); ring.rotation.x = Math.PI / 2; ring.position.set(lid.position.x, 8.4 + 0.034, lid.position.z);
+      const under = new THREE.Mesh(new THREE.BoxGeometry(b.maxX - b.minX + 0.08, 0.03, b.maxZ - b.minZ + 0.08), wood); under.position.set(lid.position.x, 8.2 - 0.016, lid.position.z); // landing-ceiling side
+      hatch.add(lid, ring, under); this.root.add(hatch);
+    }
+    const frame = new THREE.Mesh(merge(parts), new THREE.MeshLambertMaterial({ color: 0xc9a043, emissive: 0x3a2a08 }));
+    frame.name = "chandelier_frame"; this.root.add(frame);
+    const cr = [], fl = [];
+    for (const [y, r, n] of tiers) {
+      for (let k = 0; k < n * 2; k++) { const a = k * Math.PI / n; cr.push([cx + Math.cos(a) * r, y - 0.09 - (k % 2) * 0.05, cz + Math.sin(a) * r, 0.022 + (k % 2) * 0.008]); }
+      for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; fl.push([cx + Math.cos(a) * r, y + 0.07, cz + Math.sin(a) * r, 0.018]); }
+    }
+    for (let k = 0; k < 18; k++) { const a = k * 2.4, rr = 0.06 + (k % 6) * 0.045; cr.push([cx + Math.cos(a) * rr, 5.85 + (k % 6) * 0.06, cz + Math.sin(a) * rr, 0.03]); }
+    const inst = (geo, mat, L, name, sy = 1.8) => {
+      const im = new THREE.InstancedMesh(geo, mat, L.length), m = new THREE.Matrix4();
+      L.forEach(([x, y, z, sc], i) => { m.makeScale(sc, sc * sy, sc).setPosition(x, y, z); im.setMatrixAt(i, m); });
+      im.name = name; this.root.add(im); return im;
+    };
+    inst(new THREE.OctahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: 0xdff3ff, transparent: true, opacity: 0.85 }), cr, "chandelier_crystals", 2.2);
+    inst(new THREE.SphereGeometry(1, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffd27a }), fl, "chandelier_flames", 1.6);
+    // candle sleeves (white) under each flame
+    inst(new THREE.CylinderGeometry(0.5, 0.5, 1, 6), new THREE.MeshLambertMaterial({ color: 0xf4efe2 }), fl.map(([x, y, z]) => [x, y - 0.035, z, 0.022]), "chandelier_candles", 2.4);
+  }
+
+  _buildBookSteps() {
+    this.bookSteps = []; this.furnitureTops = []; this.bookStairs = [];
+    const cols = this.colliders.filter((c) => c.driveKind === "furniture");
+    const floorAt = (x, z, y) => {
+      let best = null;
+      for (const f of this.floorRegions) if (x >= f.minX && x <= f.maxX && z >= f.minZ && z <= f.maxZ && f.y <= y + 0.05 && (best == null || f.y > best)) best = f.y;
+      return best;
+    };
+    const free = (x0, x1, z0, z1, y0, y1, self) => !this.colliders.some((c) => c !== self && c.max.x > x0 && c.min.x < x1 && c.max.z > z0 && c.min.z < z1 && c.max.y > y0 && c.min.y < y1);
+    const segs = [];
+    for (const tp of TRACK_PATHS) { const P = tp.points || []; for (let i = 1; i < P.length; i++) segs.push([P[i - 1], P[i]]); }
+    const nearTrack = (x0, x1, z0, z1, y0, y1) => segs.some(([a, b]) => {
+      const nS = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 0.1));
+      for (let k = 0; k <= nS; k++) { const t = k / nS;
+        const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t;
+        if (x > x0 && x < x1 && z > z0 && z < z1 && y > y0 && y < y1) return true;
+      }
+      return false;
+    });
+    const perRoom = new Map();
+    for (const c of cols) {
+      const cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2;
+      const fy = floorAt(cx, cz, c.min.y);
+      if (fy == null) continue;
+      const h = c.max.y - fy, w = c.max.x - c.min.x, d = c.max.z - c.min.z;
+      if (h < 0.12 || h > (c.min.y - fy > 0.3 && cx < -12 && cz < -23 && fy < 0.5 ? 1.4 : 1.05) || w < 0.25 || d < 0.25) continue; // logic11: raised table tops (dining table run) up to 1.4
+      this.furnitureTops.push({ minX: c.min.x, maxX: c.max.x, minZ: c.min.z, maxZ: c.max.z, y: c.max.y, base: fy });
+      const key = Math.round(cx / 6) + "," + Math.round(cz / 6) + "," + Math.round(fy);
+      const cur = perRoom.get(key);
+      if (!cur || w * d > cur.w * cur.d) perRoom.set(key, { c, fy, h, w, d });
+    }
+    const RISE = 0.045, RUN = 0.09, SW = 0.16;
+    const inst = [];
+    for (const { c, fy, h } of perRoom.values()) {
+      const n = Math.ceil((h - 0.01) / RISE);
+      const len = n * RUN + 0.11;
+      const cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2;
+      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (const [sx, sz] of sides) {
+        const ox = sx > 0 ? c.max.x : sx < 0 ? c.min.x : cx, oz = sz > 0 ? c.max.z : sz < 0 ? c.min.z : cz;
+        const x0 = sx ? (sx > 0 ? ox : ox - len) : ox - SW / 2, x1 = sx ? (sx > 0 ? ox + len : ox) : ox + SW / 2;
+        const z0 = sz ? (sz > 0 ? oz : oz - len) : oz - SW / 2, z1 = sz ? (sz > 0 ? oz + len : oz) : oz + SW / 2;
+        // stair footprint + a 0.45 run-up beyond its foot must be clear of every solid
+        const rx0 = Math.min(x0, sx < 0 ? x0 - 0.45 : x0), rx1 = Math.max(x1, sx > 0 ? x1 + 0.45 : x1);
+        const rz0 = Math.min(z0, sz < 0 ? z0 - 0.45 : z0), rz1 = Math.max(z1, sz > 0 ? z1 + 0.45 : z1);
+        if (!free(rx0 - 0.1, rx1 + 0.1, rz0 - 0.1, rz1 + 0.1, fy + 0.005, fy + h + 0.15, c)) continue;
+        if (nearTrack(rx0 - 0.5, rx1 + 0.5, rz0 - 0.5, rz1 + 0.5, fy - 0.1, fy + h + 0.4)) continue; // never on a road
+        if (floorAt(x0, z0, fy) !== fy || floorAt(x1, z1, fy) !== fy) continue;
+        this.bookStairs.push({ x: sx ? ox + sx * (len + 0.25) : ox, z: sz ? oz + sz * (len + 0.25) : oz, yaw: Math.atan2(-sx, -sz), floorY: fy, topY: c.max.y, cx, cz });
+        for (let k = 0; k < n; k++) {
+          const top = Math.min(c.max.y - 0.004, fy + RISE * (n - k)); // step k=0 touches the furniture
+          const a = k ? 0.11 + k * RUN : 0, b = 0.11 + (k + 1) * RUN; // top landing 0.2 deep
+          const bx0 = sx > 0 ? ox + a : sx < 0 ? ox - b : x0, bx1 = sx > 0 ? ox + b : sx < 0 ? ox - a : x1;
+          const bz0 = sz > 0 ? oz + a : sz < 0 ? oz - b : z0, bz1 = sz > 0 ? oz + b : sz < 0 ? oz - a : z1;
+          this.bookSteps.push({ minX: bx0, maxX: bx1, minZ: bz0, maxZ: bz1, y: top, base: fy });
+          inst.push([bx0, bx1, bz0, bz1, fy, top]);
+        }
+        break;
+      }
+    }
+    if (!inst.length) return;
+    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, inst.length);
+    const m = new THREE.Matrix4(), col = new THREE.Color();
+    const spines = [0x7a2e2a, 0x2f4a3a, 0x3a3f6a, 0x8a6a34, 0x5a3a5a, 0x6b4a2e];
+    inst.forEach(([x0, x1, z0, z1, y0, y1], i) => {
+      m.makeScale(x1 - x0 - 0.004, y1 - y0, z1 - z0 - 0.004).setPosition((x0 + x1) / 2, (y0 + y1) / 2 + 0.0005, (z0 + z1) / 2);
+      im.setMatrixAt(i, m); im.setColorAt(i, col.setHex(spines[i % spines.length]));
+    });
+    im.name = "book_steps";
+    this.root.add(im);
+  }
+
+  /** logic10: shared walls / stacked slabs between neighbouring rooms were built as coplanar
+   *  boxes (two rooms each own the wall between them) → depth-fight shimmer + dark stray lines.
+   *  Nudge every structural box a hair (0.5–3 mm, unique per room/mesh) along its thin axis.
+   *  Visual only — colliders/floor regions are untouched. Slabs only ever move DOWN. */
+  _declashCoplanar() {
+    // every structural box shrinks by its own 0.4–2.4 mm per face (unique per room/mesh), so no two
+    // boxes ever share a face plane (tops, ends, faces); centres stay put, physics untouched.
+    this.root.children.forEach((g, gi) => {
+      let mi = 0;
+      g.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || !o.geometry) return;
+        if (o.geometry.type !== "BoxGeometry") return;
+        const pr = o.geometry.parameters;
+        const dims = [pr.width * o.scale.x, pr.height * o.scale.y, pr.depth * o.scale.z];
+        if (Math.min(...dims) < 0.05 || Math.max(...dims) < 0.5) return; // trims / decor keep their exact size
+        const n = gi * 7 + mi++;
+        const k = 0.0003 + 0.0021 * (Math.abs(Math.sin(n * 12.9898) * 43758.5453) % 1);
+        // + a stable per-mesh depth bias (8 bins): exact-coplanar leftovers resolve the same way every frame
+        const bin = n % 8;
+        if (bin && o.material && !Array.isArray(o.material)) {
+          const cache = (this._biasMats ||= new Map());
+          const key = o.material.uuid + ":" + bin;
+          let m = cache.get(key);
+          if (!m) { m = o.material.clone(); m.polygonOffset = true; m.polygonOffsetFactor = -0.15 * bin; m.polygonOffsetUnits = -bin; cache.set(key, m); }
+          o.material = m;
+        }
+        o.scale.x *= (dims[0] - 2 * k) / dims[0];
+        o.scale.y *= (dims[1] - 2 * k) / dims[1];
+        o.scale.z *= (dims[2] - 2 * k) / dims[2];
+      });
+    });
   }
 
   // ─── Estate lawn, drive, paths, boundary ─────────────────────────
@@ -416,7 +598,7 @@ export class Mansion {
     // Deep green lawn (large)
     const lawn = new THREE.Mesh(
       new THREE.CircleGeometry(72, 64),
-      this._mat(0x2d5a27, 0.95, 0)
+      this._mat(0x1f2f1a, 0.97, 0) // logic17: darker, realer turf (was 0x2d5a27)
     );
     lawn.rotation.x = -Math.PI / 2;
     lawn.position.y = -0.04;
@@ -435,10 +617,11 @@ export class Mansion {
 
     // Gravel drive (front)
     const drive = new THREE.Mesh(
-      new THREE.BoxGeometry(8, 0.06, 30),
+      new THREE.BoxGeometry(8, 0.004, 30),
       this._mat(0x7a7368, 0.9, 0.05)
     );
-    drive.position.set(0, 0.01, 28);
+    drive.position.set(0, 0.0, 28); // logic10: skin, top 0.002
+    drive.name = "gravel_drive";
     drive.receiveShadow = true;
     g.add(drive);
 
@@ -452,15 +635,17 @@ export class Mansion {
       { w: 40, d: 1.8, x: 0, z: 18 }, // front loop
     ];
     for (const p of paths) {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.05, p.d), pathMat);
-      mesh.position.set(p.x, 0.02, p.z);
+      // logic10: thin flagstone skin (top 0.008) — car + garden road ride on its true top
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.006, p.d), pathMat);
+      mesh.position.set(p.x, 0.005, p.z);
+      mesh.name = "outdoor_path";
       mesh.receiveShadow = true;
       g.add(mesh);
     }
 
     // Global outdoor floor so player never falls off near house
     this.floorRegions.push({
-      minX: -70, maxX: 70, minZ: -70, maxZ: 70,
+      minX: -72, maxX: 72, minZ: -72, maxZ: 72, // logic20: covers the whole lawn disc (r 72), was ±70
       y: 0, priority: -5, roomId: "grounds",
     });
 
@@ -549,6 +734,49 @@ export class Mansion {
     for (const wall of shells) {
       if (wall.door) {
         this._addFacadeDoorWall(g, wall, stone, trim);
+      } else if (wall.pos[0] === -26.5) {
+        // logic13 GREEN-WALL ROAD: an ivy-framed toy-car arch through the west shell at z −24.7
+        // (Breakfast Parlor road out to the garden). Wall = 3 boxes (south / north / lintel).
+        const z0 = -25.45, z1 = -23.95, top = 0.95, x = wall.pos[0], t = wall.size[0];
+        const zA = wall.pos[2] - wall.size[2] / 2, zB = wall.pos[2] + wall.size[2] / 2;
+        const parts = [
+          { c: [x, facadeH / 2, (zA + z0) / 2], sz: [t, facadeH, z0 - zA] },
+          { c: [x, facadeH / 2, (z1 + zB) / 2], sz: [t, facadeH, zB - z1] },
+          { c: [x, (top + facadeH) / 2, (z0 + z1) / 2], sz: [t, facadeH - top, z1 - z0] },
+        ];
+        for (const q of parts) {
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(...q.sz), stone);
+          mesh.position.set(...q.c); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh);
+          this.colliders.push(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(...q.c), new THREE.Vector3(...q.sz)));
+        }
+        const ivy = this._mat(0x2f6b2a, 0.95, 0.0);
+        for (const [cx, cy, cz, sx, sy, sz] of [[x, top + 0.06, -24.7, t + 0.12, 0.12, 1.74], [x, top / 2, z0 - 0.06, t + 0.12, top + 0.12, 0.12], [x, top / 2, z1 + 0.06, t + 0.12, top + 0.12, 0.12],
+          [x - 0.25, 1.6, -24.7, 0.06, 1.4, 2.6], [x + 0.25, 1.6, -24.7, 0.06, 1.4, 2.6]]) {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), ivy); m.position.set(cx, cy, cz); g.add(m);
+        }
+        this._addExteriorWindows(g, wall);
+      } else if (wall.pos[0] === 26.5) {
+        // logic18 GUTTER: full-height vertical slot down the east shell for the straight plunge chute
+        // (timber attic → lawn). Slot spans gutter + flat entry lip. Soft trough lives in the opening.
+        const z0 = -16.25, z1 = 0.2, x = wall.pos[0], t = wall.size[0];
+        const zA = wall.pos[2] - wall.size[2] / 2, zB = wall.pos[2] + wall.size[2] / 2;
+        const parts = [
+          { c: [x, facadeH / 2, (zA + z0) / 2], sz: [t, facadeH, z0 - zA] },
+          { c: [x, facadeH / 2, (z1 + zB) / 2], sz: [t, facadeH, zB - z1] },
+        ];
+        for (const q of parts) {
+          if (q.sz[2] <= 0.01) continue;
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(...q.sz), stone);
+          mesh.position.set(...q.c); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh);
+          this.colliders.push(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(...q.c), new THREE.Vector3(...q.sz)));
+        }
+        // gunmetal lip trim on the slot edges (visual only)
+        const lip = this._mat(0x3a4248, 0.55, 0.35);
+        for (const [cz, sy] of [[z0, facadeH], [z1, facadeH]]) {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(t + 0.08, sy, 0.08), lip);
+          m.position.set(x, facadeH / 2, cz); g.add(m);
+        }
+        this._addExteriorWindows(g, wall);
       } else {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(...wall.size), stone);
         mesh.position.set(...wall.pos);
@@ -702,8 +930,8 @@ export class Mansion {
     this._addGazebo(g, -34, 0, 18);
     // Greenhouse shed
     this._addGreenhouse(g, 34, 0, 18);
-    // Carriage house nook
-    this._addCarriageHouse(g, 36, 0, 0);
+    // logic19: the carriage-house nook became the backyard LAB GARAGE (drivable chemistry workshop)
+    this.labGarage = buildLabGarage(g, (box, kind) => this._pushCollider(box, kind));
 
     // Topiary spheres + hedges
     const topiary = [
@@ -816,8 +1044,9 @@ export class Mansion {
     // Stepping stones toward pond + orchard crate stacks (edge of paths)
     for (const [x, z] of [[12, -40], [16, -42], [20, -44], [14, -46]]) {
       const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.5, 0.12, 8), this._mat(0x9e9e9e, 0.85));
-      stone.position.set(x, 0.06, z);
-      g.add(stone);
+      stone.position.set(x, -0.01, z); // logic20: set into the turf (top 0.05) and a real rug-like surface —
+      g.add(stone);                    // the car used to drive THROUGH the 12 cm stones (no surface/collider)
+      this.rugRegions.push({ minX: x - 0.42, maxX: x + 0.42, minZ: z - 0.42, maxZ: z + 0.42, y: 0.05, roomId: "pond", kind: "rug" });
     }
     for (const [x, z] of [[-38, -36], [-20, -48]]) {
       for (let i = 0; i < 2; i++) {
@@ -879,6 +1108,12 @@ export class Mansion {
     rim.rotation.x = Math.PI / 2;
     rim.position.set(x, y + 0.15, z);
     g.add(rim);
+    // logic20: the stone rim is solid (ring of small blocks). Before, the car rolled through the torus and
+    // drove along the pond floor 12 cm UNDER the water surface.
+    for (let i = 0; i < 56; i++) {
+      const a = (i / 56) * Math.PI * 2, px = x + Math.cos(a) * 4.2, pz = z + Math.sin(a) * 4.2;
+      this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(px, y + 0.25, pz), new THREE.Vector3(0.5, 0.5, 0.5)), "wall");
+    }
     const water = new THREE.Mesh(
       new THREE.CircleGeometry(4.0, 40),
       new THREE.MeshStandardMaterial({
@@ -1079,10 +1314,12 @@ export class Mansion {
 
     // Subtle zone tint on ground (not a hard floor box — lawn shows through)
     const tint = new THREE.Mesh(
-      new THREE.BoxGeometry(w * 0.92, 0.04, d * 0.92),
+      new THREE.BoxGeometry(w * 0.92, 0.004, d * 0.92),
       this._mat(p.floor, 0.95, 0)
     );
-    tint.position.set(cx, cy + 0.03, cz);
+    // logic10: a skin, not a slab — top at cy+0.004 so roads (ride 0.012) and rugs sit ON it
+    tint.position.set(cx, cy + 0.003, cz); // top cy+0.005
+    tint.name = "zone_tint";
     tint.receiveShadow = true;
     g.add(tint);
 
@@ -1143,6 +1380,7 @@ export class Mansion {
           const hz0 = s.p[2] - s.s[2] / 2, hz1 = s.p[2] + s.s[2] / 2;
           if (climbHoles.some((h) => hx1 > h.minX && hx0 < h.maxX && hz1 > h.minZ && hz0 < h.maxZ)) continue;
         }
+        this.rugRegions.push({ minX: s.p[0] - s.s[0] / 2, maxX: s.p[0] + s.s[0] / 2, minZ: s.p[2] - s.s[2] / 2, maxZ: s.p[2] + s.s[2] / 2, y: cy + 0.034, roomId: room.id, kind: "frame" });
         const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), woodF);
         m.position.set(...s.p);
         m.receiveShadow = true;
@@ -1189,12 +1427,14 @@ export class Mansion {
       // Center at cy+0.036, h=0.028 → sits fully above frame brass (~cy+0.026)
       const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.028, rd), rugMat);
       rug.position.set(rx, cy + 0.036, rz);
+      this.rugRegions.push({ minX: rx - rw / 2, maxX: rx + rw / 2, minZ: rz - rd / 2, maxZ: rz + rd / 2, y: cy + 0.05, roomId: room.id, kind: "rug" });
       rug.receiveShadow = true;
       rug.frustumCulled = true;
       g.add(rug);
     }
 
-    const ceilMat = this._mat(room.glass ? 0x88aacc : 0x1a1410, room.glass ? 0.3 : 0.9, room.glass ? 0.2 : 0);
+    const ceilMat = this._mat(room.glass ? 0x88aacc : 0x6b5d52, room.glass ? 0.3 : 0.9, room.glass ? 0.2 : 0);
+    if (!room.glass) { ceilMat.emissive = new THREE.Color(room.palette && room.palette.light != null ? room.palette.light : 0xffe0b2); ceilMat.emissiveIntensity = 0.1; } // logic21: ceilings were #1a1410 (read as black voids overhead)
     if (room.glass) {
       ceilMat.transparent = true;
       ceilMat.opacity = 0.35;
@@ -1542,6 +1782,7 @@ export class Mansion {
 
     // Corner planters for every outdoor zone
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      if (id === "carriage_yard" && sx > 0) continue; // logic19: lab garage + window road stand there
       const x = cx + sx * (w * 0.38);
       const z = cz + sz * (d * 0.38);
       addCyl(0.35, 0.4, 0.45, x, cy + 0.22, z, this._mat(0x6d4c41, 0.85), 10);
@@ -1661,7 +1902,7 @@ export class Mansion {
           new THREE.CylinderGeometry(0.35, 0.35, 0.04, 12),
           this._mat(0x43a047, 0.8)
         );
-        pad.position.set(cx + dx, cy + 0.08, cz + dz);
+        pad.position.set(26 + dx * 0.6, cy + 0.125, -46 + dz * 0.6); // logic20: float ON the koi pond (they sat on the lawn 6 cm up)
         group.add(pad);
       }
       // Dock planks from west edge
@@ -1683,10 +1924,10 @@ export class Mansion {
 
     if (id === "carriage_yard") {
       // Hay bales, barrels, spare wheel, workbench along shed wall
-      for (const [dx, dz] of [[-6, 8], [-4, 8], [6, -6]]) {
+      for (const [dx, dz] of [[-6, 8], [-4, 8], [3, 3.5]]) { // logic19: third bale moved out of the lab garage
         addCyl(0.45, 0.45, 0.7, cx + dx, cy + 0.35, cz + dz, this._mat(0xc9a227, 0.85), 12);
       }
-      for (const [dx, dz] of [[7, 6], [8, 4]]) {
+      for (const [dx, dz] of [[5.6, 4.2], [6.4, 4.9]]) { // logic19: barrels moved off the lab window road
         addCyl(0.35, 0.38, 0.75, cx + dx, cy + 0.38, cz + dz, this._wood(0x5d4037), 14);
         addCyl(0.37, 0.37, 0.05, cx + dx, cy + 0.78, cz + dz, this._brass(0x8d6e63), 14);
       }
@@ -3058,8 +3299,9 @@ export class Mansion {
     // Cut where the stair passes the landing ceiling / attic floor (eye ≤ ceiling south of
     // z≈4.7; the attic only spans z<5 so the well stays fully under the attic).
     if ((which === "ceiling" && room.id === "landing") || (which === "floor" && room.id === "attic_loft")) {
-      return [ATTIC_STAIRWELL];
+      return [ATTIC_STAIRWELL, CONVEYOR.shaft]; // logic11/14: + hidden conveyor shaft above the chandelier
     }
+    if (which === "ceiling" && room.id === "attic_loft") return [ROOF_LIFT.shaft, CONVEYOR.shaft]; // logic13 roof lift + logic14 conveyor top
     if (which === "ceiling" && room.id === "foyer") return all;
     if (which === "floor" && room.id === "landing") return all;
     // logic3: every ground ceiling / first floor that overlaps a climb strip gets the same cut
@@ -3078,7 +3320,45 @@ export class Mansion {
    * Drive asphalt passages through walls — real architectural openings (never ghost mesh).
    * Returns [{ along, width, y0, y1 }] in wall-local along-axis (X for N/S, Z for E/W).
    */
+  /** logic10: hand-authored openings + every Skyline auto-portal on this wall (unless an existing
+   *  door/arch already covers it — then the portal is flagged covered: no neon frame either). */
   _driveOpeningsForWall(room, side) {
+    const out = this._driveOpeningsForWallBase(room, side) || [];
+    if (room.outdoor) return out;
+    const [w, , d] = room.size, [cx, , cz] = room.pos;
+    const wallC = side === "north" ? cz - d / 2 : side === "south" ? cz + d / 2 : side === "west" ? cx - w / 2 : cx + w / 2;
+    const axis = side === "north" || side === "south" ? "z" : "x";
+    for (const P of LOFT_AUTO_PORTALS) {
+      if (P.axis !== axis || Math.abs((axis === "z" ? P.z : P.x) - wallC) > 0.05) continue;
+      const along = axis === "z" ? P.x : P.z;
+      const lo = cx - w / 2, hi = cx + w / 2, lo2 = cz - d / 2, hi2 = cz + d / 2;
+      if (axis === "z" ? (along < lo || along > hi) : (along < lo2 || along > hi2)) continue;
+      if (P.y0 < room.pos[1] - 0.01 || P.y0 > room.pos[1] + room.size[1] - 0.3) continue;
+      let covered = false, clash = false;
+      for (const o of out) {
+        const ov = Math.abs(o.along - along) < (o.width + P.w) / 2 + 0.05 && o.y0 < P.y1 && o.y1 > P.y0;
+        if (!ov) continue;
+        if (Math.abs(o.along - along) + P.w / 2 <= o.width / 2 + 0.02 && o.y0 <= P.y0 + 0.01 && o.y1 >= P.y1 - 0.08) covered = true;
+        else clash = true;
+      }
+      if (covered) { P.covered = true; continue; }
+      if (clash) {
+        // merge: widen into one framed slot spanning both (keeps the wall builder's openings disjoint)
+        for (let i = out.length - 1; i >= 0; i--) {
+          const o = out[i];
+          if (!(Math.abs(o.along - along) < (o.width + P.w) / 2 + 0.05 && o.y0 < P.y1 && o.y1 > P.y0)) continue;
+          const a0 = Math.min(o.along - o.width / 2, along - P.w / 2), a1 = Math.max(o.along + o.width / 2, along + P.w / 2);
+          out[i] = { ...o, along: (a0 + a1) / 2, width: a1 - a0, y0: Math.min(o.y0, P.y0), y1: Math.max(o.y1, P.y1) };
+        }
+        P.covered = true;
+        continue;
+      }
+      out.push({ along, width: P.w, y0: P.y0, y1: P.y1, noFrame: true, loftPortal: true });
+    }
+    return out;
+  }
+
+  _driveOpeningsForWallBase(room, side) {
     const cy = room.pos[1];
     const doorH = Math.min((room.size[1] || 4) * 0.88, 3.35);
     const tallH = Math.min((room.size[1] || 4) * 0.92, 3.85);
@@ -3097,15 +3377,20 @@ export class Mansion {
       notch(-6.10, -2.95, 3.55); // Climb A crest deck over the foyer north wall top
       notch(3.30, 8.10, 3.55);   // Climb B crest
       add(0.00, 2.80, cy, cy + doorH);
+      out.push({ along: 2.55, width: 1.50, y0: cy + 2.98, y1: cy + 3.80, noFrame: true, loftPortal: true }); // logic9 Skyline
+
       return out;
     }
     if (room.id === "hall_ground" && side === "south") {
       add(0.00, 2.80, cy, cy + doorH); // centre door only (old ±climb slots were unused)
+      out.push({ along: 2.55, width: 1.50, y0: cy + 2.98, y1: cy + 3.80, noFrame: true, loftPortal: true }); // logic9 Skyline
       return out;
     }
     // Front drive exit (door_foyer_outdoor near x≈-3.7)
     if (room.id === "foyer" && side === "south") {
       add(-3.70, 3.40, cy, cy + doorH);
+      out.push({ along: -1.07, width: 1.50, y0: cy + 2.98, y1: cy + 3.80, noFrame: true, loftPortal: true }); // logic9 mouse run entry
+      out.push({ along: 1.00, width: 1.40, y0: cy, y1: cy + 0.90, noFrame: true, loftPortal: true });          // logic9 mouse hole exit
       return out;
     }
     // Landing French doors onto the balcony: widened east to 5.8 for balcony_to_climb_b (x=4.4)
@@ -3837,6 +4122,116 @@ export class Mansion {
     this.root.add(g);
   }
 
+
+  /**
+   * logic20 SERVICE GALLERIES (Ben t183u "this dark spot … you fall through").
+   * Between the Library Hall walls (x ±3.6) and the Nursery / Study walls (x ±6.0) the first floor had
+   * NO slab: you looked straight onto the dark top of the Armoury / Cabinet ceiling (y 4.18) and the car
+   * dropped 4.2 m through it. Each strip is now a finished dark-2100s catwalk at landing height:
+   * graphite deck + cyan edge neon + centre guide dashes, a closed end wall at the north end (z −15),
+   * a glass balustrade where the strip meets the stair / climb wells, and it links the Upper Landing
+   * (east) and both door bridges into one drivable gallery.
+   */
+  _buildServiceGalleries() {
+    const g = new THREE.Group(); g.name = "service_gallery";
+    const Y = 4.2, X0 = 3.77, X1 = 5.83, ZN = -15.0;
+    // logic21: LIT gallery (Ben t184u "still black"): polished gunmetal deck, pale clad walls, luminous
+    // ceiling — all glow from materials (no new lights), so it reads as a finished room from the landing.
+    const lit = (hex, em, ei, rough = 0.4, metal = 0.35) => { const m = this._mat(hex, rough, metal); m.emissive = new THREE.Color(em); m.emissiveIntensity = ei; return m; };
+    const deckMat = lit(0x5f6875, 0x26303c, 0.7, 0.28, 0.5);
+    const panelMat = lit(0x7d8797, 0x2c3542, 0.6, 0.5, 0.3);
+    const cladMat = lit(0x6f7f99, 0x26324a, 0.55, 0.6, 0.15);
+    const ceilMatG = lit(0x8d97a8, 0x343e4e, 0.6, 0.6, 0.1);
+    const lumen = this._emissiveGlow(0xeaf8ff, 1.35); lumen.transparent = false; lumen.opacity = 1;
+    const amber = this._emissiveGlow(0xffc46b, 1.0); amber.transparent = false; amber.opacity = 1;
+    const neon = this._emissiveGlow(0x34e7ff, 1.25); neon.transparent = false; neon.opacity = 1;
+    const neonDim = this._emissiveGlow(0x9ff3ff, 1.0); neonDim.transparent = false; neonDim.opacity = 1;
+    const glass = this._glass(0x6fdcff, 0.22);
+    this.serviceGalleries = [];
+    for (const sx of [1, -1]) {
+      const a = sx * X0, b = sx * X1, minX = Math.min(a, b), maxX = Math.max(a, b), cx = (minX + maxX) / 2, w = maxX - minX;
+      // east strip opens onto the Upper Landing at z −2.0 (landing north wall gap x 4.35..5.65);
+      // west strip meets the scenic stair cut (landing hole z −2.6..) → balustrade there.
+      const zS = sx > 0 ? -2.0 : -2.6;
+      const region = { minX, maxX, minZ: ZN, maxZ: zS, y: Y, priority: 6, roomId: sx > 0 ? "service_gallery_east" : "service_gallery_west" };
+      this.floorRegions.push(region); this.serviceGalleries.push(region);
+      const len = zS - ZN, cz = (zS + ZN) / 2;
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, len), deckMat);
+      deck.position.set(cx, Y - 0.05 + 0.004, cz); deck.receiveShadow = true; deck.name = "service_gallery_deck"; g.add(deck);
+      // cyan edge trim along both walls (8 cm wide, 3 mm proud — a rolled-over strip, not a kerb)
+      for (const ex of [minX + 0.05, maxX - 0.05]) {
+        const e = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.006, len - 0.1), neon);
+        e.position.set(ex, Y + 0.004 + 0.003, cz); e.name = "service_gallery_neon"; g.add(e);
+      }
+      // wall cladding (pale panels, 3 cm inside the wall collider pad) with glowing pilasters + an amber
+      // dado band; gaps + lit frames at the door-bridge openings (z −9.3..−6.7)
+      const zTop = sx > 0 ? -2.67 : zS; // east side: the climb-well stub at the mouth
+      for (const [wx, side] of [[minX + 0.015, -1], [maxX - 0.015, 1]]) {
+        const zEnd = (sx > 0 && side > 0) || (sx < 0 && side < 0) ? zTop : zS - 0.02;
+        for (const [z0, z1] of [[ZN, -9.3], [-6.7, zEnd]]) {
+          const L = z1 - z0; if (L < 0.2) continue;
+          const pnl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 3.68, L), cladMat);
+          pnl.position.set(wx, Y + 1.84, (z0 + z1) / 2); pnl.name = "service_gallery_clad"; g.add(pnl);
+          const band = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.05, L - 0.04), amber);
+          band.position.set(wx - side * 0.004, Y + 0.95, (z0 + z1) / 2); g.add(band);
+          for (let z = z0 + 0.4; z < z1 - 0.2; z += 1.6) {
+            const pil = new THREE.Mesh(new THREE.BoxGeometry(0.03, 3.2, 0.06), neonDim);
+            pil.position.set(wx - side * 0.013, Y + 2.05, z); pil.name = "service_gallery_pilaster"; g.add(pil);
+          }
+        }
+        for (const zd of [-9.3, -6.7]) { const fr = new THREE.Mesh(new THREE.BoxGeometry(0.06, 3.34, 0.1), neon); fr.position.set(wx - side * 0.022, Y + 1.67, zd); g.add(fr); }
+        const lin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 2.7), neon); lin.position.set(wx - side * 0.022, Y + 3.38, -8.0); g.add(lin);
+      }
+      // luminous ceiling liner just under the attic slab (above the y 7.2 sky bridge) + light panels
+      const ceil = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, len), ceilMatG);
+      ceil.position.set(cx, 7.98, cz); ceil.name = "service_gallery_ceiling"; g.add(ceil);
+      for (let z = ZN + 1.2; z < zS - 0.6; z += 2.4) {
+        const lp = new THREE.Mesh(new THREE.BoxGeometry(w - 0.5, 0.02, 1.1), lumen);
+        lp.position.set(cx, 7.945, z); lp.name = "service_gallery_lightpanel"; g.add(lp);
+      }
+      // display plinths with glowing curios against the walls (out of the 1.6 m lane)
+      for (const [pz, side] of (sx > 0 ? [[-4.6, 1], [-10.6, -1]] : [[-4.6, -1], [-10.6, 1]]) /* end bay z<−10.3 kept clear for U-turns */) {
+        const px = side > 0 ? maxX - 0.17 : minX + 0.17;
+        const ped = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), panelMat); ped.position.set(px, Y + 0.31, pz); ped.name = "service_gallery_plinth"; g.add(ped);
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), (pz > -6 ? amber : neon)); orb.position.set(px, Y + 0.72, pz); g.add(orb);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.02, 0.26), lumen); cap.position.set(px, Y + 0.63, pz); g.add(cap);
+        this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(px, Y + 0.4, pz), new THREE.Vector3(0.26, 0.8, 0.26)), "furniture");
+      }
+      // centre guide dashes (flush, 3 mm proud — the wheels roll over them)
+      for (let z = ZN + 0.6; z < zS - 0.4; z += 0.9) {
+        const d = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.006, 0.42), neonDim);
+        d.position.set(cx, Y + 0.004 + 0.003, z); d.name = "service_gallery_dash"; g.add(d);
+      }
+      // closed north end: dark panel wall with neon bars (no more drop into the z<−15 void)
+      const endW = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 3.96, 0.2), panelMat);
+      endW.position.set(cx, Y + 1.98, ZN - 0.1); endW.name = "service_gallery_endwall"; g.add(endW);
+      this._pushCollider(new THREE.Box3().setFromCenterAndSize(endW.position.clone(), new THREE.Vector3(w + 0.1, 3.96, 0.26)), "wall");
+      for (let k = 0; k < 3; k++) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(w - 0.4, 0.035, 0.02), k === 1 ? neon : neonDim);
+        bar.position.set(cx, Y + 0.45 + k * 0.5, ZN + 0.012); g.add(bar);
+      }
+      // end wall feature: a big glowing panel (reads as a lit wall, not a hole, from the landing)
+      const feat = new THREE.Mesh(new THREE.BoxGeometry(w - 0.5, 1.5, 0.02), lumen); feat.position.set(cx, Y + 2.6, ZN + 0.012); feat.name = "service_gallery_feature"; g.add(feat);
+      const featF = new THREE.Mesh(new THREE.BoxGeometry(w - 0.36, 1.64, 0.015), amber); featF.position.set(cx, Y + 2.6, ZN + 0.006); g.add(featF);
+      if (sx < 0) { // west: glass balustrade across the stair well edge
+        const zb = zS + 0.04;
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, 0.06), neon); rail.position.set(cx, Y + 0.62, zb); g.add(rail);
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(w, 0.56, 0.02), glass); pane.position.set(cx, Y + 0.32, zb); g.add(pane);
+        for (const px of [minX + 0.06, cx, maxX - 0.06]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.64, 0.05), panelMat); post.position.set(px, Y + 0.32, zb); g.add(post); }
+        this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(cx, Y + 0.33, zb), new THREE.Vector3(w, 0.66, 0.12)), "wall");
+      } else { // east: the climb well nibbles x 5.65..5.83 at z −2.6..−2.0 → a short glass-capped stub wall
+        // header over the landing → gallery mouth: the landing painting used to float in mid-air here
+        const hdr = new THREE.Mesh(new THREE.BoxGeometry(5.83 - 4.35, 2.2, 0.34), lit(0x5e35b1, 0x2a1a5c, 0.6, 0.8, 0.05));
+        hdr.position.set((4.35 + 5.83) / 2, Y + 1.8 + 1.1, -2.0); hdr.name = "service_gallery_header"; g.add(hdr);
+        this._pushCollider(new THREE.Box3().setFromCenterAndSize(hdr.position.clone(), new THREE.Vector3(5.83 - 4.35, 2.2, 0.36)), "wall");
+        const lip = new THREE.Mesh(new THREE.BoxGeometry(5.83 - 4.35, 0.04, 0.36), neon); lip.position.set((4.35 + 5.83) / 2, Y + 1.8 - 0.02, -2.0); g.add(lip);
+        const sw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.66, 0.66), panelMat); sw.position.set(5.75, Y + 0.33, -2.3); g.add(sw);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.68), neon); cap.position.set(5.75, Y + 0.68, -2.3); g.add(cap);
+        this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(5.75, Y + 0.33, -2.3), new THREE.Vector3(0.2, 0.66, 0.66)), "wall");
+      }
+    }
+    this.root.add(g);
+  }
 
   /** Bright Climb B landmark — asphalt mouth + chevron pylons, findable from foyer/landing. */
   _addClimbLandmarks() {

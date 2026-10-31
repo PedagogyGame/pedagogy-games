@@ -1,13 +1,14 @@
 import * as THREE from "three";
-import { Player } from "./player.js?v=logic7";
-import { Mansion } from "./mansion.js?v=logic7";
-import { InspectMode } from "./inspect.js?v=logic7";
-import { SliceSystem } from "./slice.js?v=logic7";
-import { DriveMode } from "./drive/driveMode.js?v=logic7";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic7";
-import { OBJECTS } from "./data/objects.js?v=logic7";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic7";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic7";
+import { batchStatic } from "./batch.js?v=logic21";
+import { Player } from "./player.js?v=logic21";
+import { Mansion } from "./mansion.js?v=logic21";
+import { InspectMode } from "./inspect.js?v=logic21";
+import { SliceSystem } from "./slice.js?v=logic21";
+import { DriveMode } from "./drive/driveMode.js?v=logic21";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic21";
+import { OBJECTS } from "./data/objects.js?v=logic21";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic21";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic21";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -260,6 +261,7 @@ function enterEstate() {
 }
 
 window.__MOTU_ENTER__ = enterEstate;
+window.__MOTU_SETMODE__ = (m) => setPlayMode(m);
 
 window.__MOTU_DUMP__ = () => ({
   boot: { ...boot },
@@ -436,7 +438,7 @@ function updateDriveRenderScale(rawDt) {
   st.acc += d; st.n++;
   if (st.acc < 1.0 || st.n < 2) return;
   st.acc = 0; st.n = 0;
-  if (st.ema > 0.11 && _driveRenderScale > 0.5) setDriveRenderScale(_driveRenderScale >= 0.99 ? 0.8 : _driveRenderScale >= 0.79 ? 0.65 : 0.5);
+  if (st.ema > 0.11 && _driveRenderScale > 0.66) setDriveRenderScale(_driveRenderScale >= 0.99 ? 0.8 : 0.65); // logic10: floor 0.65 (no pixel crawl)
   else if (st.ema < 0.045 && _driveRenderScale < 1) setDriveRenderScale(_driveRenderScale <= 0.51 ? 0.65 : _driveRenderScale <= 0.66 ? 0.8 : 1);
 }
 
@@ -487,7 +489,9 @@ if (mansion && !boot.failed) {
     slice = new SliceSystem();
     drive = new DriveMode(scene, camera);
     window.__MOTU_DRIVE__ = drive;
-    drive.setWallColliders(mansion.getColliders());
+    drive.attachMansion(mansion); // logic8: drivable house (floors, holes, solids) + colliders
+    if (/[?&]batch=1/.test(location.search)) { // opt-in: no measured fps gain on software GL (see POLISH-LOGIC12)
+      const st = batchStatic(mansion.root); window.__MOTU_BATCH__ = st; console.info("[motu] static batch", st); } // logic12
   } catch (err) {
     showBootError(err);
   }
@@ -911,8 +915,25 @@ function onResize() {
 }
 window.addEventListener("resize", onResize);
 
+// logic12 SHOT MODE (?shot=1): the rAF loop idles and a capture harness steps the game
+// deterministically — __MOTU_STEP__(n, dt) runs n fixed updates then renders ONE frame. Lets a
+// software-GL box take real, correct frames (the live loop runs at ~0.5–1.5 fps there).
+const SHOT_MODE = /[?&]shot=1/.test(location.search);
+window.__MOTU_STEP__ = (n = 60, dt = 1 / 60, doRender = true) => {
+  const t0 = performance.now();
+  for (let i = 0; i < n; i++) {
+    if ((mode === "drive" || playMode === "drive") && drive) { drive.update(dt); updateRoomBadge(drive.car.position); }
+    else if (mode === "roam" && player) player.update(Math.min(dt, 0.05), mansion.getColliders());
+    if (mansion) mansion.updateFireflies(clock.elapsedTime + i * dt);
+  }
+  const t1 = performance.now();
+  if (doRender) renderer.render(scene, camera);
+  if (doRender) renderer.getContext().finish();
+  return { updMs: (t1 - t0) / Math.max(1, n), renderMs: performance.now() - t1, calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+};
 function tick() {
   requestAnimationFrame(tick);
+  if (SHOT_MODE && mansion && !boot.failed) { clock.getDelta(); return; }
   const rawDt = clock.getDelta();
   const dt = Math.min(rawDt, 0.05);
   const t = clock.elapsedTime;
