@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic21";
-import { OBJECTS } from "./data/objects.js?v=logic21";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic21";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic21";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic21";
-import { buildLabGarage } from "./labGarage.js?v=logic21";
+import { ROOMS } from "./data/rooms.js?v=logic22";
+import { OBJECTS } from "./data/objects.js?v=logic22";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic22";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic22";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic22";
+import { buildLabGarage } from "./labGarage.js?v=logic22";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -4229,6 +4229,21 @@ export class Mansion {
         const cap = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.04, 0.68), neon); cap.position.set(5.75, Y + 0.68, -2.3); g.add(cap);
         this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(5.75, Y + 0.33, -2.3), new THREE.Vector3(0.2, 0.66, 0.66)), "wall");
       }
+    }
+    // logic22 (Ben t186u "drive through it and drop to the lower level"): the landing's east edge over the
+    // Climb-B well (x 5.65) had no guard — driving off it dropped to the Foyer. Glass + neon balustrade
+    // along it, leaving the Climb-B ramp mouth (z −1.46..−0.46) open.
+    { const xg = 5.73, glassG = this._glass(0x6fdcff, 0.22), postM = this._mat(0x7d8797, 0.5, 0.3);
+      const guard = (cx, cz, sx, sz) => { // sx/sz: run along x or z
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(Math.max(sx, 0.06), 0.05, Math.max(sz, 0.06)), neon); rail.position.set(cx, 4.2 + 0.62, cz); rail.name = "landing_well_guard"; g.add(rail);
+        const pane = new THREE.Mesh(new THREE.BoxGeometry(Math.max(sx, 0.02), 0.56, Math.max(sz, 0.02)), glassG); pane.position.set(cx, 4.2 + 0.32, cz); g.add(pane);
+        const L = Math.max(sx, sz), n = Math.max(1, Math.round(L / 1.2));
+        for (let k = 0; k <= n; k++) { const t = -L / 2 + 0.03 + (L - 0.06) * k / n; const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.64, 0.05), postM); post.position.set(cx + (sx > sz ? t : 0), 4.2 + 0.32, cz + (sz >= sx ? t : 0)); g.add(post); }
+        this._pushCollider(new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(cx, 4.2 + 0.33, cz), new THREE.Vector3(Math.max(sx, 0.14), 0.66, Math.max(sz, 0.14))), "wall");
+      };
+      guard(xg, (-1.98 - 1.47) / 2, 0, 0.51);          // north of the ramp mouth
+      guard(xg, (-0.4 + 9.98) / 2, 0, 10.38);          // west lip of the well, mouth → balcony approach
+      guard((5.66 + 8.06) / 2, 9.98, 2.4, 0);          // south lip (balcony approach side)
     }
     this.root.add(g);
   }

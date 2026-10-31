@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic21";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic21";
-import { buildConveyor } from "./conveyor.js?v=logic21";
-import { buildYard } from "./treehouse.js?v=logic21";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic21";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic21";
-import { ROOMS } from "../data/rooms.js?v=logic21";
-import { LAB, inLab } from "../data/labGarage.js?v=logic21";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic22";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic22";
+import { buildConveyor } from "./conveyor.js?v=logic22";
+import { buildYard } from "./treehouse.js?v=logic22";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic22";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic22";
+import { ROOMS } from "../data/rooms.js?v=logic22";
+import { LAB, inLab } from "../data/labGarage.js?v=logic22";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -101,7 +101,10 @@ export function loftSolids(segments) {
   // logic16: Climb B's low sweeping bend (x 5.5–7, z 10.8–12, deck 0.25–0.6 up) gets kerb rails —
   // super-turbo ran wide off it and wedged against the deck side.
   const bend = segments.filter((s) => (s.pathId === "climb_b" || s.pathId === "climb_a") && Math.min(s.a.y, s.b.y) > 0.25 && Math.max(s.a.y, s.b.y) < 0.8
-    && Math.abs(s.a.x) > 4.5 && Math.abs(s.a.x) < 7.4 && s.a.z > 10.2 && s.a.z < 12.2); // (Climb A mirrors it on the west)
+    && Math.abs(s.a.x) > 4.5 && Math.abs(s.a.x) < 7.4 && s.a.z > 10.2 && s.a.z < 12.2) // (Climb A mirrors it on the west)
+    // logic22 (Ben t186u): Climb B's top turn leaves the Upper Landing over the open well — its sides get rails
+    // once the deck is clear of the landing floor (x > 5.75), so a diagonal entry can't drop into the Foyer.
+    .concat(segments.filter((s) => s.pathId === "climb_b" && Math.min(s.a.y, s.b.y) > 3.3 && Math.max(s.a.x, s.b.x) > 5.75 && Math.max(s.a.x, s.b.x) < 7.3 && Math.max(s.a.z, s.b.z) < 1.2 && Math.min(s.a.z, s.b.z) > -2.0));
   bend.forEach((s, i) => { s._k = 100000 + i; });
   const rails = [], solids = [];
   for (const s of [...segs, ...bend]) {
