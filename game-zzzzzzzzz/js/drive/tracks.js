@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET, PRIMARY_CIRCUIT } from "../data/tracks.js?v=logic7";
+import { buildLoftMeshes } from "./loftNet.js?v=logic21";
+import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET, PRIMARY_CIRCUIT } from "../data/tracks.js?v=logic21";
 
 function makeCanvas(w, h) {
   if (typeof document !== "undefined" && document.createElement) {
@@ -11,74 +12,176 @@ function makeCanvas(w, h) {
   return null;
 }
 
-function makeAsphaltTexture() {
-  const c = makeCanvas(256, 256);
+/**
+ * logic11: the "roads" are no longer asphalt — a dark-oak runner that reads as part of the house:
+ * long boards with soft grain, faint board joints, and a barely-there brass inlay near each edge.
+ * No lane paint. 512² + mipmaps + anisotropy 8 (no 1-px sparkle that crawls when minified).
+ */
+function makeRunnerTexture(base = "#4b3424", grainHi = [104, 74, 50], grainLo = [44, 30, 20], seed0 = 11) {
+  const N = 512;
+  const c = makeCanvas(N, N);
   if (!c) return null;
   const ctx = c.getContext("2d");
-  // Readable asphalt gray (not pure black void) — house cruise under lite Drive lights
-  ctx.fillStyle = "#2a2c32";
-  ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 900; i++) {
-    const v = 28 + Math.random() * 36;
-    ctx.fillStyle = `rgba(${v},${v + 1},${v + 3},0.35)`;
-    ctx.fillRect(Math.random() * 256, Math.random() * 256, 1 + (Math.random() > 0.85 ? 1 : 0), 1);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, N, N);
+  let seed = seed0;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // logic14: 5 boards (odd → no seam down the middle reading as a centre line)
+  const boards = 5, bw = N / boards;
+  for (let b = 0; b < boards; b++) {
+    const tint = (rnd() - 0.5) * 14;
+    ctx.fillStyle = `rgba(${(grainHi[0] + tint) | 0},${(grainHi[1] + tint) | 0},${(grainHi[2] + tint) | 0},0.10)`;
+    ctx.fillRect(b * bw, 0, bw, N);
+    for (let g = 0; g < 26; g++) {
+      const x = b * bw + 3 + rnd() * (bw - 6), w = 1 + rnd() * 2.5;
+      const hi = rnd() > 0.5;
+      const col = hi ? grainHi : grainLo;
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.10 + rnd() * 0.12})`;
+      ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(x, 0);
+      for (let y = 0; y <= N; y += 32) ctx.lineTo(x + Math.sin((y + b * 97) * 0.012 + g) * 2.2, y);
+      ctx.stroke();
+    }
+    // soft board seam (2 px, low contrast)
+    ctx.fillStyle = "rgba(20,12,8,0.22)";
+    if (b) ctx.fillRect(b * bw, 0, 2, N);
+    // staggered butt joint
+    const jy = (b * 173 + 64) % N;
+    ctx.fillStyle = "rgba(20,12,8,0.30)";
+    ctx.fillRect(b * bw, jy, bw, 2);
   }
-  // Subtle darker mottling
-  for (let i = 0; i < 120; i++) {
-    const v = 18 + Math.random() * 14;
-    ctx.fillStyle = `rgba(${v},${v},${v + 2},0.22)`;
-    ctx.fillRect(Math.random() * 256, Math.random() * 256, 3, 2);
-  }
-  // WHITE edge lanes — crisp, not oversized
-  ctx.strokeStyle = "#f2f4f8";
-  ctx.lineWidth = 7;
-  ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(14, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(242, 0); ctx.lineTo(242, 256); ctx.stroke();
-  // YELLOW center dashes — thin dashed strip (not giant tread squares)
-  ctx.strokeStyle = "#e8c42a";
-  ctx.lineWidth = 4;
-  ctx.setLineDash([22, 18]);
-  ctx.beginPath(); ctx.moveTo(128, 0); ctx.lineTo(128, 256); ctx.stroke();
+  // logic14: brass edge inlays removed (they read as lane lines)
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+  return tex;
+}
+/** logic14: ONE classic striped-asphalt parody stretch keeps this look (dashes + white edge lines). */
+export function makeParodyAsphaltTexture() {
+  const tex = makeSkyAsphaltTexture();
+  if (!tex || !tex.image || !tex.image.getContext) return tex;
+  const ctx = tex.image.getContext("2d"), N = tex.image.width;
+  ctx.setLineDash([]); ctx.fillStyle = "#eeeeea"; ctx.fillRect(18, 0, 9, N); ctx.fillRect(N - 27, 0, 9, N);
+  tex.needsUpdate = true;
+  return tex;
+}
+/** logic14 themed deck surfaces — NO centre dashes, NO lane lines. u across, v along the road. */
+/** logic17 (Ben: "darker, realer, less 1990s, more 2100s"): every deck theme is a dark, real
+ *  material — brushed gunmetal / midnight alloy, polished dark stone, smoked glass, burnt copper,
+ *  weathered bark, grungy card. Fine micro-grain + faint TRANSVERSE panel seams only (no lane lines).
+ *  Keys are kept (area → key mapping unchanged); only what each key looks like changed. */
+export const THEME_LOOK = {
+  //            base       hi (rgb)          lo (rgb)       style      rough metal
+  purple:   ["#141c2e", [52, 70, 104], [6, 9, 16], "brushed", 0.42, 0.55],   // Skyline: midnight alloy
+  sapphire: ["#0f1d36", [48, 78, 126], [4, 8, 18], "brushed", 0.32, 0.65],   // spiral: deep navy anodised
+  slate:    ["#1b222c", [70, 82, 98], [8, 10, 14], "brushed", 0.45, 0.6],    // roof: gunmetal
+  graphite: ["#17191d", [60, 64, 70], [6, 7, 8], "brushed", 0.5, 0.5],       // conveyor road
+  plum:     ["#1d1c24", [66, 62, 80], [8, 8, 12], "brushed", 0.48, 0.5],     // ground-floor rings: smoked titanium
+  teal:     ["#0e1a1f", [40, 70, 80], [3, 7, 9], "glass", 0.22, 0.35],       // 1st-floor rings: smoked glass
+  emerald:  ["#101a19", [44, 70, 66], [4, 8, 8], "stone", 0.3, 0.1],         // dark petrol stone
+  crimson:  ["#1f1214", [80, 44, 48], [8, 4, 5], "stone", 0.3, 0.1],         // oxblood granite
+  stone:    ["#24262a", [86, 88, 92], [10, 10, 12], "stone", 0.34, 0.05],    // polished basalt
+  orange:   ["#3a2414", [140, 90, 52], [22, 12, 6], "copper", 0.38, 0.85],   // garden skyway: dark amber
+  descent:  ["#4a2a16", [168, 104, 58], [26, 12, 6], "copper", 0.33, 0.9],   // Grand Descent: burnt copper
+  moss:     ["#231a13", [74, 56, 40], [10, 7, 5], "bark", 0.85, 0.0],        // treehouse: weathered bark wood
+  wood:     ["#2a2018", [80, 62, 44], [12, 9, 6], "bark", 0.7, 0.0],
+  brass:    ["#2c2416", [110, 92, 56], [14, 11, 6], "copper", 0.4, 0.8],
+  card:     ["#5b4a36", [120, 102, 78], [34, 26, 18], "card", 0.95, 0.0],    // mouse world: grungy card
+};
+/** logic17: one MeshStandardMaterial per theme (roughness/metalness from THEME_LOOK; lit by the
+ *  scene's existing lights — no env map, no new lights). Cached, so it is a handful of materials. */
+const _themeMatCache = {};
+export function themeMaterial(theme) {
+  if (_themeMatCache[theme]) return _themeMatCache[theme];
+  const L = THEME_LOOK[theme] || THEME_LOOK.graphite, tx = makeThemeTexture(theme);
+  const m = new THREE.MeshStandardMaterial(tx ? { color: 0xffffff, map: tx, roughness: Math.max(0.46, L[4]), metalness: L[5] * 0.55 } : { color: new THREE.Color(L[0]), roughness: Math.max(0.46, L[4]), metalness: L[5] * 0.55 }); // roughness ≥0.46: the car-follow light made a blown hot-spot on the glossiest decks // ×0.55: no env map, full metal would read as black
+  m.name = "deck_" + theme;
+  return (_themeMatCache[theme] = m);
+}
+export function makeThemeTexture(theme) {
+  const N = 256, c = makeCanvas(N, N);
+  if (!c) return null;
+  const ctx = c.getContext("2d");
+  let seed = 97 + theme.length * 31;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const T = THEME_LOOK[theme] || ["#1a1c20", [70, 70, 74], [8, 8, 9], "brushed"];
+  const style = T[3];
+  ctx.fillStyle = T[0]; ctx.fillRect(0, 0, N, N);
+  const rgba = (col, a) => `rgba(${col[0]},${col[1]},${col[2]},${a})`;
+  // micro-grain for everything (2-px, low contrast — no 1-px sparkle when minified)
+  for (let i = 0; i < 2200; i++) { ctx.fillStyle = rgba(rnd() > 0.5 ? T[1] : T[2], 0.05 + rnd() * 0.08); ctx.fillRect(rnd() * N, rnd() * N, 2, 2); }
+  if (style === "brushed" || style === "copper") { // fine streaks ALONG travel (v axis), very low contrast
+    for (let i = 0; i < 180; i++) { ctx.fillStyle = rgba(rnd() > 0.45 ? T[1] : T[2], 0.04 + rnd() * 0.06); ctx.fillRect(rnd() * N, 0, 1, N); }
+    if (style === "copper") for (let i = 0; i < 60; i++) { ctx.fillStyle = `rgba(40,70,64,${0.05 + rnd() * 0.07})`; const r = 2 + rnd() * 6; ctx.fillRect(rnd() * N, rnd() * N, r, r * 0.6); } // faint verdigris
+    ctx.fillStyle = rgba(T[2], 0.6); ctx.fillRect(0, 0, N, 1); ctx.fillStyle = rgba(T[1], 0.18); ctx.fillRect(0, 1, N, 1); // panel seam across
+  } else if (style === "stone" || style === "glass") { // polished dark stone / smoked glass: soft cloud + faint veins
+    for (let i = 0; i < 40; i++) { const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); void g; ctx.fillStyle = rgba(rnd() > 0.5 ? T[1] : T[2], style === "glass" ? 0.03 : 0.05); ctx.beginPath(); ctx.arc(rnd() * N, rnd() * N, 10 + rnd() * 40, 0, 7); ctx.fill(); }
+    if (style === "stone") for (let i = 0; i < 9; i++) { ctx.strokeStyle = rgba(T[1], 0.1 + rnd() * 0.1); ctx.lineWidth = 0.8 + rnd(); ctx.beginPath(); let x = rnd() * N, y = rnd() * N; ctx.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (rnd() - 0.5) * 60; y += (rnd() - 0.3) * 50; ctx.lineTo(x, y); } ctx.stroke(); }
+    ctx.fillStyle = rgba(T[2], 0.7); ctx.fillRect(0, 0, N, 1); if (style === "glass") { ctx.fillStyle = "rgba(160,200,230,0.05)"; ctx.fillRect(0, N * 0.55, N, N * 0.12); } // slab joint + sheen band
+  } else if (style === "bark") { // weathered planks ACROSS the road, deep grain, worn
+    for (let k = 0; k < 8; k++) { const y = k * N / 8; ctx.fillStyle = rgba(rnd() > 0.5 ? T[1] : T[2], 0.1 + rnd() * 0.1); ctx.fillRect(0, y, N, N / 8); ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(0, y, N, 2);
+      for (let g = 0; g < 7; g++) { ctx.fillStyle = rgba(T[2], 0.25); ctx.fillRect(0, y + 3 + rnd() * (N / 8 - 6), N, 1); } }
+    for (let i = 0; i < 30; i++) { ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.ellipse(rnd() * N, rnd() * N, 2 + rnd() * 4, 1 + rnd() * 2, 0, 0, 7); ctx.fill(); } // knots
+  } else if (style === "card") { // grungy corrugated card: flutes, water stains, scuffs, tape
+    for (let y = 0; y < N; y += 8) { ctx.fillStyle = rgba(T[2], 0.22); ctx.fillRect(0, y, N, 3); }
+    for (let i = 0; i < 10; i++) { ctx.fillStyle = `rgba(40,28,16,${0.08 + rnd() * 0.12})`; ctx.beginPath(); ctx.arc(rnd() * N, rnd() * N, 8 + rnd() * 26, 0, 7); ctx.fill(); }
+    for (let i = 0; i < 18; i++) { ctx.fillStyle = rgba(T[1], 0.12); ctx.fillRect(rnd() * N, rnd() * N, 10 + rnd() * 30, 1 + rnd() * 3); }
+    ctx.fillStyle = "rgba(150,130,90,0.16)"; ctx.fillRect(0, N * 0.3, N, 14); // old packing tape across
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+  return tex;
+}
+function makeSkyAsphaltTexture() {
+  // logic10: 512² fine-grain asphalt — low-contrast 2-px aggregate (no 1-px sparkle that crawls when
+  // minified), soft-edged centre dash (bright core + feather) so it stays crisp without aliasing.
+  const N = 512;
+  const c = makeCanvas(N, N);
+  if (!c) return null;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#2b2d33";
+  ctx.fillRect(0, 0, N, N);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 5200; i++) {
+    const v = 34 + rnd() * 26;
+    ctx.fillStyle = `rgba(${v | 0},${(v + 1) | 0},${(v + 4) | 0},0.30)`;
+    ctx.fillRect(rnd() * N, rnd() * N, 2, 2);
+  }
+  for (let i = 0; i < 260; i++) {
+    const v = 20 + rnd() * 10;
+    ctx.fillStyle = `rgba(${v | 0},${v | 0},${(v + 3) | 0},0.18)`;
+    ctx.beginPath(); ctx.ellipse(rnd() * N, rnd() * N, 4 + rnd() * 6, 3 + rnd() * 4, rnd() * 3, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.setLineDash([44, 52]);
+  ctx.lineCap = "butt";
+  ctx.strokeStyle = "rgba(217,207,154,0.35)"; ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.moveTo(N / 2, 0); ctx.lineTo(N / 2, N); ctx.stroke();
+  ctx.strokeStyle = "#e4dba6"; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(N / 2, 0); ctx.lineTo(N / 2, N); ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
   return tex;
 }
 
-function makeChevronTexture() {
-  const c = makeCanvas(128, 256);
-  if (!c) return null;
-  const ctx = c.getContext("2d");
-  ctx.fillStyle = "#2a2c32";
-  ctx.fillRect(0, 0, 128, 256);
-  for (let i = 0; i < 200; i++) {
-    const v = 12 + Math.random() * 18;
-    ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},0.26)`;
-    ctx.fillRect(Math.random() * 128, Math.random() * 256, 1, 1);
-  }
-  // WHITE edges — readable, not oversized
-  ctx.strokeStyle = "#f2f4f8";
-  ctx.lineWidth = 7;
-  ctx.setLineDash([]);
-  ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(10, 256); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(118, 0); ctx.lineTo(118, 256); ctx.stroke();
-  // YELLOW chevrons + thin center spine
-  ctx.strokeStyle = "#e8c42a";
-  ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(64, 256); ctx.stroke();
-  ctx.lineWidth = 5;
-  for (let y = 10; y < 256; y += 40) {
-    ctx.beginPath();
-    ctx.moveTo(22, y + 22); ctx.lineTo(64, y); ctx.lineTo(106, y + 22);
-    ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+function makeAsphaltTexture() { return makeRunnerTexture(); }
+function makeChevronTexture() { return makeRunnerTexture("#46301f", [98, 70, 46], [40, 27, 18], 23); }
+/** Skyline wall-top ledges: lighter walnut "picture rail / crown ledge" (no paint at all) */
+export function makeLedgeTexture() { return makeRunnerTexture("#5a3e2a", [120, 86, 58], [52, 36, 24], 37); }
 
 function makeStartFinishTexture() {
   const c = makeCanvas(128, 64);
@@ -200,19 +303,14 @@ export class TrackSystem {
     this._railPostPositions = [];
     this._curbSegmentPositions = [];
     this._underfillPositions = [];
-    this._addSpawnPadMesh();
+    // logic8: plain roads & ramps only. No spawn pad / start disc, no kerbs, no chevrons, no
+    // rail posts, no climb-end bands, no junction arrows — a road is just an asphalt surface
+    // with a thin dashed centre line. Ramp under-fill keels stay (structure, and real colliders).
     for (const job of this._pendingVisuals) {
-      this._addRibbonRoad(job.visualPts, job.width, job.kind, job.closed, job.gap, job.isRail, job.pathId);
-      if (job.climbChevrons) this._addClimbChevrons(job.visualPts, job.width);
-      if (job.curb) this._addCurbRails(job.visualPts, job.width, job.kind);
-      if (job.voidBarriers) this._addVoidBarriers(job.visualPts, job.width);
-      if (job.cornerChevrons) this._addCornerChevrons(job.visualPts, job.width, job.pathId);
+      this._addRibbonRoad(job.visualPts, job.width, job.kind, job.closed, null, false, job.pathId);
     }
-    this._flushCornerChevrons();
-    this._addJunctionFlowChevrons();
-    this._flushRailPosts();
-    this._flushCurbSegments();
     this._flushUnderfill();
+    if (this._loftJobs && this._loftJobs.length) { if (!this._skyTex) this._skyTex = makeParodyAsphaltTexture(); this._themeMat = themeMaterial; this._themeTex = (th) => (this._themeCache || (this._themeCache = {}))[th] || (this._themeCache[th] = makeThemeTexture(th)); buildLoftMeshes(this, this._loftJobs); }
     let meshCount = 0;
     this.root.traverse((o) => { if (o.isMesh) meshCount++; });
     const ms = ((typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now()) - t0;
@@ -225,27 +323,23 @@ export class TrackSystem {
     // Lambert only — no Standard under moving fill (SwiftShader). Slight emissive so
     // white/yellow lane paint stays readable with lite Drive lights.
     const asphaltOpts = {
-      color: 0x3a3c44,
-      emissive: 0x0a0a0c,
-      emissiveIntensity: 0.06,
+      color: 0x2e2219, roughness: 0.62, metalness: 0.0,
     };
-    if (this._asphalt) { asphaltOpts.map = this._asphalt; asphaltOpts.color = 0xffffff; }
-    const asphalt = new THREE.MeshLambertMaterial(asphaltOpts);
+    // logic17: the foyer oak runner becomes a dark smoked oak with a satin finish
+    if (this._asphalt) { asphaltOpts.map = this._asphalt; asphaltOpts.color = 0x8a7a6c; }
+    const asphalt = new THREE.MeshStandardMaterial(asphaltOpts);
     const chevronOpts = {
-      color: 0x22222a,
-      emissive: 0x2a2810,
-      emissiveIntensity: 0.28,
+      color: 0x46301f,
     };
     if (this._chevron) { chevronOpts.map = this._chevron; chevronOpts.color = 0xffffff; }
     const chevron = new THREE.MeshLambertMaterial(chevronOpts);
     const rail = new THREE.MeshLambertMaterial({
-      color: 0xc9a227,
-      emissive: 0x3a2a08, emissiveIntensity: 0.12,
+      color: 0x3a414c, // logic17: dark gunmetal (logic16 steel 0x8c96ac)
     });
     // logic4: deck sides / bottoms / keels were 0x2a2c34 — overhead Climb B deck read as a
     // pure-black slab at spawn. Mid slate so the ramp structure reads as structure.
     const side = new THREE.MeshLambertMaterial({
-      color: 0x4a4d58,
+      color: 0x14171c, // logic17: near-black deck edge (logic16 0x2e3442)
     });
     // logic6: curbs were 0x1e2028 — near-black on dark asphalt, they never read. Now classic
     // red/white kerb blocks: material is white and each instance carries its colour
@@ -469,7 +563,7 @@ export class TrackSystem {
       const dash = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.006, r * 1.55), dashMat);
       dash.position.set(CAR_SPAWN.x, topY + 0.004, CAR_SPAWN.z);
       dash.name = "spawn_apron_lane";
-      this.root.add(dash);
+      // logic16: no lane lines outside the parody stretch — dash not added
     }
     // Start/finish checkered band (#10) — IGNORED: mesh not added (ramps1)
     // (this._startFinish forced null in ensureMeshes)
@@ -484,7 +578,7 @@ export class TrackSystem {
 
     let visualPts = pts;
     let snapPts = pts;
-    if (pts.length >= 3) {
+    if (pts.length >= 3 && !path.raw) {
       const curve = new THREE.CatmullRomCurve3(pts, !!path.closed, "catmullrom", tension);
       const climb = kind === "ramp";
       const foyerClimb = path.id === "climb_a" || path.id === "climb_b";
@@ -492,8 +586,9 @@ export class TrackSystem {
       const visN = Math.max(pts.length * (foyerClimb ? 2 : climb ? 2 : path.fancy ? 2 : 2),
         foyerClimb ? 14 : climb ? 12 : path.fancy ? 10 : 8);
       const snapN = Math.max(pts.length * (climb ? 3 : 2), climb ? 16 : 10);
-      visualPts = curve.getPoints(visN);
-      snapPts = curve.getPoints(snapN);
+      // logic8: ONE sampling for mesh and physics — the wheels ride exactly the drawn surface
+      snapPts = curve.getPoints(Math.max(visN, snapN));
+      visualPts = snapPts;
       if (path.closed && visualPts.length > 2
           && visualPts[0].distanceTo(visualPts[visualPts.length - 1]) < 0.04) {
         visualPts = visualPts.slice(0, -1);
@@ -502,10 +597,12 @@ export class TrackSystem {
           && snapPts[0].distanceTo(snapPts[snapPts.length - 1]) < 0.04) {
         snapPts = snapPts.slice(0, -1);
       }
+      visualPts = snapPts;
     }
 
     const isRail = !!path.rail || kind === "ramp" || kind === "balcony" || kind === "elevated";
 
+    const segStart = this.segments.length;
     for (let i = 0; i < snapPts.length - 1; i++) {
       const a = snapPts[i], b = snapPts[i + 1];
       const dir = new THREE.Vector3().subVectors(b, a);
@@ -523,9 +620,31 @@ export class TrackSystem {
         elevated: ELEV_KINDS.has(kind),
         tube: false,
         visual: true,
+        yAt: path.yAt || null, // logic15: surface-height field (Foyer Bridge merge)
       });
     }
 
+    // logic8: open path ends are hard edges for the free-drive surface query; interior joints
+    // are round (no wedge gaps on the outside of a bend).
+    if (this.segments.length > segStart) {
+      this.segments[segStart].openStart = !path.closed;
+      this.segments[this.segments.length - 1].openEnd = !path.closed;
+      // Miter allowance at each interior joint: how far past its end a segment still owns the
+      // outside of the bend (halfW·tan(bend/2)) — closes the wedge gap without capsule "domes"
+      // that would reach along the road onto higher ground.
+      const segs = this.segments;
+      for (let k = segStart; k < segs.length; k++) {
+        const sg = segs[k];
+        sg.extA = 0; sg.extB = 0;
+        const bendTo = (o) => {
+          const h0 = Math.atan2(sg.b.x - sg.a.x, sg.b.z - sg.a.z), h1 = Math.atan2(o.b.x - o.a.x, o.b.z - o.a.z);
+          let d = Math.abs(h1 - h0); if (d > Math.PI) d = 2 * Math.PI - d;
+          return Math.min(d, 1.2);
+        };
+        if (k > segStart) sg.extA = (width * 0.5) * Math.tan(bendTo(segs[k - 1]) / 2) + 0.004;
+        if (k < segs.length - 1) sg.extB = (width * 0.5) * Math.tan(bendTo(segs[k + 1]) / 2) + 0.004;
+      }
+    }
     const gap = (path.id === "foyer_sf" || path.id === "foyer_finish"
       || path.id === "foyer_to_climb_a")
       ? { x: CAR_SPAWN.x, z: CAR_SPAWN.z, r: Math.max(0.6, (this._spawnApron?.r || 1.18) - 0.10) }
@@ -542,6 +661,15 @@ export class TrackSystem {
       }
     }
 
+    if (kind === "ramp") {
+      if (!this.keels) this.keels = [];
+      this.keels.push(...this._keelsFor(snapPts, width, path.id));
+    }
+    if (path.loft) {
+      // logic9: Skyline / mouse run — merged into a handful of meshes by buildLoftMeshes
+      (this._loftJobs || (this._loftJobs = [])).push({ path, pts: snapPts, width, kind });
+      return;
+    }
     // Queue ribbon/rail visuals — built only on first Drive enter
     this._pendingVisuals.push({
       pathId: path.id,
@@ -557,6 +685,45 @@ export class TrackSystem {
       cornerChevrons: path.id === "landing_hairpin" || path.id === "balcony_arc",
       curb: true,
     });
+  }
+
+
+  /** logic8: ramp under-fill keels (structure) — shared by mesh flush AND Drive collision. */
+  _keelsFor(slice, width, pathId) {
+    const out = [];
+    if (!slice || slice.length < 2) return out;
+    const yLift = pathId ? visualLiftFor(pathId) : ribbonYLift("ramp");
+    const thick = ASPHALT_THICK_RAMP;
+    const tops = slice.map((p) => p.y + yLift);
+    const step = Math.max(3, Math.floor(slice.length / 6));
+    const headAt = (k) => {
+      const a = slice[Math.max(0, k - 1)], b = slice[Math.min(slice.length - 1, k + 1)];
+      return Math.atan2(b.x - a.x, b.z - a.z);
+    };
+    const bend = (i0, j0) => {
+      let d = Math.abs(headAt(j0) - headAt(i0));
+      if (d > Math.PI) d = Math.PI * 2 - d;
+      return d;
+    };
+    for (let i = 0, j; i < slice.length - 1; i = j) {
+      j = Math.min(slice.length - 1, i + step);
+      while (j > i + 1 && bend(i, j) > 0.18) j = i + Math.max(1, Math.floor((j - i) / 2));
+      let deckY = Infinity;
+      for (let k = i; k <= j; k++) deckY = Math.min(deckY, tops[k]);
+      const yTop = deckY - thick;
+      const pathY = Math.min(slice[i].y, slice[j].y);
+      const plantY = pathY >= 2.1 ? 4.20 : 0.0;
+      // keel only where the deck is clearly off the floor (a low deck is its own wall)
+      if (yTop - plantY < 0.12) continue;
+      const keelH = Math.min(1.05, yTop - plantY);
+      const span = Math.hypot(slice[j].x - slice[i].x, slice[j].z - slice[i].z) || 0.4;
+      const yaw = Math.atan2(slice[j].x - slice[i].x, slice[j].z - slice[i].z);
+      out.push({
+        x: (slice[i].x + slice[j].x) * 0.5, y: yTop - keelH * 0.5, z: (slice[i].z + slice[j].z) * 0.5,
+        sx: width * 0.6, sy: keelH, sz: Math.min(0.5, span * 0.5), yaw, pathId,
+      });
+    }
+    return out;
   }
 
   _addRibbonRoad(pts, width, kind, closed, gap, isRail, pathId = null) {
@@ -609,7 +776,10 @@ export class TrackSystem {
       geo.computeVertexNormals();
       // Ramps: dark asphalt + white edges + yellow center (Mario Kart readable).
       // Chevrons are foot markers only — never the whole ribbon.
-      const mat = this._sharedMats.asphalt;
+      // logic16: oak runner only on the foyer floor roads; the climbs/balcony get jewel resins
+      const MT = { climb_a: "emerald", landing_hairpin: "crimson", balcony_arc: "crimson", balcony_to_climb_b: "slate", climb_b: "plum" }[pathId];
+      let mat = this._sharedMats.asphalt;
+      if (MT) { this._mainThemeMats = this._mainThemeMats || {}; mat = this._mainThemeMats[MT] || (this._mainThemeMats[MT] = themeMaterial(MT)); }
       const mesh = new THREE.Mesh(geo, mat);
       mesh.name = kind === "ramp" ? "ribbon_ramp" : (kind === "balcony" ? "ribbon_balcony" : "ribbon_floor");
       mesh.userData.ribbon = true;
@@ -660,41 +830,7 @@ export class TrackSystem {
         botMesh.name = "ramp_bottom";
         this.root.add(botMesh);
 
-        const bucket = this._underfillPositions || (this._underfillPositions = []);
-        // Sparse keels — ~6 per climb, one InstancedMesh later
-        const step = Math.max(3, Math.floor(left.length / 6));
-        // logic4: adaptive keels — a long straight chord box across the Climb B apex U-turn
-        // poked out past the INNER ribbon edge and hid the car from the trailing chase cam.
-        // Shorten the chord until it bends ≤ ~10° (still one InstancedMesh).
-        const headAt = (k) => {
-          const a = slice[Math.max(0, k - 1)], b = slice[Math.min(slice.length - 1, k + 1)];
-          return Math.atan2(b.x - a.x, b.z - a.z);
-        };
-        const bend = (i0, j0) => {
-          let d = Math.abs(headAt(j0) - headAt(i0));
-          if (d > Math.PI) d = Math.PI * 2 - d;
-          return d;
-        };
-        for (let i = 0, j; i < left.length - 1; i = j) {
-          j = Math.min(left.length - 1, i + step);
-          while (j > i + 1 && bend(i, j) > 0.18) j = i + Math.max(1, Math.floor((j - i) / 2));
-          let deckY = Infinity;
-          for (let k = i; k <= j; k++) deckY = Math.min(deckY, tops[k]);
-          const yTop = deckY - thick;
-          const pathY = Math.min(slice[i].y, slice[j].y);
-          const plantY = pathY >= 2.1 ? 4.20 : 0.0;
-          let keelH = Math.max(0.16, Math.min(1.05, yTop - plantY - 0.02));
-          const midX = (left[i].x + right[i].x + left[j].x + right[j].x) * 0.25;
-          const midZ = (left[i].z + right[i].z + left[j].z + right[j].z) * 0.25;
-          const midY = yTop - keelH * 0.5;
-          const span = Math.hypot(slice[j].x - slice[i].x, slice[j].z - slice[i].z) || 0.4;
-          const yaw = Math.atan2(slice[j].x - slice[i].x, slice[j].z - slice[i].z);
-          bucket.push({
-            x: midX, y: midY, z: midZ,
-            sx: width * 0.90, sy: keelH, sz: Math.max(0.45, span * 0.92),
-            yaw,
-          });
-        }
+        // logic8: keels are computed in the CPU logic pass (this.keels) — they are colliders
       }
 
       if (isRail && (kind === "balcony" || kind === "ramp")) {
@@ -932,8 +1068,7 @@ export class TrackSystem {
 
 
   _flushUnderfill() {
-    const list = this._underfillPositions || [];
-    this._underfillPositions = [];
+    const list = this.keels || [];
     if (!list.length || !this._sharedMats) return;
     const geo = new THREE.BoxGeometry(1, 1, 1);
     const inst = new THREE.InstancedMesh(geo, this._sharedMats.side, list.length);
