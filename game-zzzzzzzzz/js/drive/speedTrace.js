@@ -71,6 +71,15 @@ export class SpeedTrace {
     this._fpsN++;
     if (now - this._fpsT0 > 1000) { this.fps = this._fpsN * 1000 / (now - this._fpsT0); this._fpsN = 0; this._fpsT0 = now; }
     this._render(t);
+    // logic8 live check: the box CDP socket stalls under SwiftShader, so the live script reads
+    // the pose from the window title instead (debug-only, `&speedtrace=1`).
+    if (now - (this._titleT || 0) > 90) {
+      this._titleT = now;
+      const c = d.car.position, f = d._lastFlags || {};
+      const r = (v) => Math.round(v * 1000) / 1000;
+      document.title = "POSE " + JSON.stringify({ x: r(c.x), y: r(c.y), z: r(c.z), yaw: r(d.car.yaw), v: r(d.car.speed),
+        air: !!d.car.airborne, surf: f.surface || null, hit: !!f.hit, resp: d._respawns || 0, fps: r(this.fps), room: d._lastLabel || null });
+    }
   }
 
   _render(t) {
