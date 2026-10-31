@@ -336,7 +336,7 @@ export const ROOMS = {
     ],
   },
   carriage_yard: {
-    id: "carriage_yard", name: "Carriage House · Shed", floor: "Gardens",
+    id: "carriage_yard", name: "Lab Garage · Chemistry Workshop", floor: "Gardens",
     size: [22, 3.5, 26], pos: [30, 0, 8],
     palette: { wall: 0x4e342e, floor: 0x5d4037, trim: 0xffc107, light: 0xffe082 },
     exits: { west: "front_drive", south: "rockery", north: "front_drive" },
@@ -347,9 +347,9 @@ export const ROOMS = {
       { id: "super_soaker", pos: [34, 1.0, 14], surface: "bench" },
       { id: "golf_ball_5piece", pos: [26, 1.0, 4], surface: "crate" },
       { id: "solar_cell", pos: [30, 1.0, 4], surface: "crate" },
-      { id: "spinning_reel", pos: [34, 1.0, 4], surface: "bench" },
+      { id: "spinning_reel", pos: [31.5, 1.0, 12.5], surface: "bench" }, // logic19: was inside the lab garage
       { id: "binoculars", pos: [28, 1.0, -2], surface: "bench" },
-      { id: "thermos", pos: [32, 1.0, -2], surface: "bench" },
+      { id: "thermos", pos: [30, 1.0, -3.2], surface: "bench" }, // logic19: was on the lab workbench line
     ],
   },
 };

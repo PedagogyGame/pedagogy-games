@@ -1,3 +1,4 @@
+import { LOFT_PATHS } from "./loftNet.js?v=logic21";
 /**
  * Drive tracks — OPEN CIRCUIT · logic3 polish.
  *
@@ -11,16 +12,16 @@
  */
 export const ROAD_WIDTH_SCALE = 1.0;
 export const RAMP_WIDTH_MULT = 1.0;
-export const RAMP_WIDTH_MIN = 2.2;
-export const FLOOR_WIDTH_MIN = 2.2;
-export const DOOR_WIDTH_MIN = 2.2;
-export const DECK_WIDTH_MIN = 2.2;
+export const RAMP_WIDTH_MIN = 1.1;
+export const FLOOR_WIDTH_MIN = 1.1;
+export const DOOR_WIDTH_MIN = 1.1;
+export const DECK_WIDTH_MIN = 1.1;
 export const RAMP_MAX_GRADE = 0.30;
 export const RAMP_DISABLE_MEAN_GRADE = 0.305;
 // logic6: was 0.19 — that is car.js CAR_SCALE, not the car's length. The real body length is
 // 0.45 × CAR_SCALE = 0.0855u. Audit: this export is imported by NOTHING (no js module, no sim),
 // so the wrong value never affected behaviour; corrected for documentation only. Lane widths
-// (*_WIDTH_MIN = 2.2) are deliberately unchanged.
+// logic8: lane widths halved to 1.1 (house-scale plain roads).
 export const CAR_LENGTH_U = 0.0855;
 
 // ── logic3 plan helpers ───────────────────────────────────────────────
@@ -117,12 +118,12 @@ const _PATHS = [
   {
     id: "foyer_sf",
     kind: "floor",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     tension: 0.06,
     closed: false,
     fancy: true,
     points: [
-      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Start / Finish" },
+      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Grand Foyer" },
       { x: 0.52, y: 0.0, z: GROUND_Z },
       { x: 0.05, y: 0.0, z: GROUND_Z }, // kiss foyer_to_climb_a
     ],
@@ -132,7 +133,7 @@ const _PATHS = [
   {
     id: "foyer_to_climb_a",
     kind: "floor",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     tension: 0.03,
     fancy: true,
     points: [
@@ -146,7 +147,7 @@ const _PATHS = [
   {
     id: "climb_a",
     kind: "ramp",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     gentleStart: false,
     noLateralBow: true,
     authoredGrade: true,
@@ -169,7 +170,7 @@ const _PATHS = [
   {
     id: "landing_hairpin",
     kind: "floor",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     tension: 0.10,
     fancy: true,
     points: [
@@ -189,7 +190,7 @@ const _PATHS = [
   {
     id: "balcony_arc",
     kind: "balcony",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     rail: true,
     tension: 0.05,
     closed: false,
@@ -212,7 +213,7 @@ const _PATHS = [
   {
     id: "balcony_to_climb_b",
     kind: "floor",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     tension: 0.06,
     fancy: true,
     points: [
@@ -228,7 +229,7 @@ const _PATHS = [
   {
     id: "climb_b",
     kind: "ramp",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     gentleStart: false,
     noLateralBow: true,
     authoredGrade: true,
@@ -249,18 +250,19 @@ const _PATHS = [
   {
     id: "foyer_finish",
     kind: "floor",
-    width: 2.20,
+    width: 1.10, // logic8: house-scale plain road (was 2.20)
     tension: 0.04,
     fancy: true,
     points: [
       { x: B_FOOT_X, y: 0.0, z: GROUND_Z }, // kiss climb_b foot
       { x: 2.55, y: 0.0, z: GROUND_Z },
-      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Start / Finish" },
+      { x: SF_X, y: 0.0, z: GROUND_Z, label: "Grand Foyer" },
     ],
   },
 ];
 
-export const TRACK_PATHS = _PATHS;
+// logic9: Skyline wall-top tracks + mouse run (own merged meshes; see js/drive/loftNet.js)
+export const TRACK_PATHS = _PATHS.concat(LOFT_PATHS);
 
 export const ROAD_WIDTH_DESIGN = Object.fromEntries(
   TRACK_PATHS.map((p) => [p.id, p.width])
@@ -285,6 +287,13 @@ for (const path of TRACK_PATHS) {
   } else if (path.kind === "elevated" || path.kind === "cornice" || path.kind === "balcony") {
     if (path.width < DECK_WIDTH_MIN) path.width = DECK_WIDTH_MIN;
   }
+}
+
+// logic14: every road ~12% narrower (Ben: "a bit thinner"). Applied after the legacy mins so the
+// design/min bands stay documented; smoke re-derives the same value.
+export const ROAD_NARROW = 0.80; // logic16: a further ~9% (0.88→0.80) with the 13%-smaller car
+for (const path of TRACK_PATHS) {
+  if (typeof path.width === "number" && !path.keepWidth) path.width = Math.round(path.width * ROAD_NARROW * 1000) / 1000;
 }
 
 function _softenRampGrades(path) {
