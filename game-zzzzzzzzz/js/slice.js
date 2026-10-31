@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { SHARED_CLIP_PLANE, isConcentricDef } from "./meshes.js?v=logic21";
+import { SHARED_CLIP_PLANE, isConcentricDef } from "./meshes.js?v=logic22";
 
 const TRANSITION_MS = 360;
 const PEEL_OUTER = 0.14;
