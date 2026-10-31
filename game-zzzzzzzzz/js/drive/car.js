@@ -5,10 +5,13 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_SCALE = 0.190; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
+export const CAR_K = 0.87; // logic16: car ~13% smaller (mesh, wheels, collider, camera rig all × CAR_K)
+export const CAR_SCALE = 0.190 * CAR_K; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
-/** Optional whisper of road grip when wheels on surface. OFF by default. */
-export const ASSIST_MAGNET = false;
+/** logic8: free drive — the car has NO road grip assist / magnet of any kind. */
+const GRAV_AIR = 9.5;    // logic15: floatier flight (was 12) — real air time off kickers   // logic13: flight gravity (toy-scale feel; jumps read as hops, not drops)
+const KICKER_POP = 2.0;  // logic13: kicker ramps have a sprung lip
+const STICK_DOWN_CAR = 0.06; // drops bigger than this per step are real falls (matches world.STICK_DOWN)
 
 /**
  * Visual orientation caps (radians) — keep car planted/upright.
@@ -490,7 +493,7 @@ export class RCCar {
     this._smoothGrade = 0;
     this._kissY = null;
     this._crestSquat = 0;
-    this._prevGrade = 0;
+    this._prevGrade = 0; this._lastGoodGrade = 0;
     this._brakeLight = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
@@ -507,470 +510,288 @@ export class RCCar {
     this._boosting = false;
   }
 
-  _storyFloors() {
-    // Match asphalt ride height (pathY = plank top + ASPHALT_RIDE 0.012)
-    return [8.412, 4.212, 0.012, -4.188];
-  }
-
-  /** Nearest walkable story floor within band, or null if mid-air between stories. */
-  _nearestStoryFloor(y) {
-    let best = null;
-    let bd = 0.55;
-    for (const f of this._storyFloors()) {
-      const d = Math.abs(y - f);
-      if (d < bd) { bd = d; best = f; }
-    }
-    return best;
-  }
-
-  /** Highest mansion floor strictly below fall start (story-aware crash landings). */
-  _landingFloorY() {
-    const start = this._fallStartY;
-    for (const f of this._storyFloors()) {
-      if (f < start - 0.35) return f;
-    }
-    return 0.012;
-  }
-
   /**
-   * Manual RC step.
-   * snap: {x,y,z,yaw,onTrack,supported,bank,grade,kind,wallBounce,carpet,elevated,steep?}
-   * Returns { scrape, landed, fell } flags for FX.
+   * logic8 FREE-DRIVE step. No paths, no snapping, no magnets, no lateral pulls.
+   * env = { world: DriveWorld, boxesNear(x,z,r) → AABB colliders, radius }
+   * The car goes where its wheels take it; height = the real surface under the wheels;
+   * walls/furniture/pillars/ramp keels/deck sides stop it; holes and deck edges drop it.
+   * Returns { scrape, landed, fell, void, hit, hitHeadOn, surface, grade } for FX / sims.
    */
-  update(dt, keys, snap) {
-    const flags = { scrape: 0, landed: false, fell: false };
+  update(dt, keys, env) {
+    const flags = { scrape: 0, landed: false, fell: false, void: false, hit: false, hitHeadOn: false, surface: null, grade: 0 };
     if (this.crashed) return flags;
+    const world = env && env.world;
+    if (!world) return flags;
+    const r = (env && env.radius) || 0.09 * CAR_K;
+    const p = this.root.position;
 
     const throttle = (keys.forward ? 1 : 0) - (keys.back ? 1 : 0);
-    const steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
-    // Planted steer — readable turn-in, no float/veer junk
+    let steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+    // logic20 MOUSE STEER: an analog wheel (−1..1, +left) when no steering key is held — keys always win
+    if (!steer && typeof keys.steerAnalog === "number" && Number.isFinite(keys.steerAnalog)) steer = Math.max(-1, Math.min(1, keys.steerAnalog));
+    // Steering wheel eases toward the key (input smoothing only — no road alignment of any kind)
     this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.55 * dt));
 
-    const supported = !!(snap && (snap.supported || snap.onTrack || snap.carpet));
-    const elevated = !!(snap?.elevated);
-    const kind = snap?.kind || "";
-    const inTube = kind === "shortcut" || kind === "mouse" || kind === "shaft" || kind === "tunnel";
-
-    // Truly elevated = cornice/balcony/furniture/mid-ramp above story floor.
-    // Ramp bases / floor asphalt must NEVER latch elevated (that caused floor crashes).
-    const storyYNow = this._nearestStoryFloor(this.root.position.y);
-    const trulyElevated = !!(elevated && snap && (
-      snap.kind === "cornice" || snap.kind === "balcony"
-      || (snap.y != null && storyYNow != null && snap.y > storyYNow + 0.45)
-      || (snap.y != null && storyYNow == null && snap.y > 0.55)
-    ));
-    // Do not latch elevated grace while still under a ceiling deck
-    const underCeiling = !!(elevated && snap?.y != null
-      && (snap.y - this.root.position.y) > 0.28
-      && kind !== "ramp" && !snap?.steep);
-    if (supported && trulyElevated && !underCeiling) this._lastElevated = true;
-    if (underCeiling) this._lastElevated = false;
-    if (supported && (snap?.carpet || snap?.kind === "floor" || snap?.kind === "outdoor" || snap?.kind === "flower")) {
-      this._lastElevated = false;
+    const boxes = env.boxesNear ? env.boxesNear(p.x, p.z, r + 0.3) : [];
+    let onRoadNow = false;
+    const isBlocked = (x, z, y) => world.blocked(boxes, x, z, y, r, onRoadNow);
+    // Spawned / landed overlapping a solid box: push straight out of it first (never "through")
+    if (isBlocked(p.x, p.z, p.y) && env.clear) {
+      const c = env.clear(p.x, p.z, p.y);
+      p.x = c.x; p.z = c.z;
     }
-    if (supported && snap?.onTrack && !trulyElevated) this._lastElevated = false;
+    const startBlocked = isBlocked(p.x, p.z, p.y); // still wedged (e.g. under a deck lip) → allow moves that free it
 
-    // Floor / outdoor / carpet = slow only. Crash ONLY after leaving elevated rail into void.
-    if (supported && !this.airborne) {
-      this._unsupportedFrames = 0;
-      this._fallStartY = 0;
-    } else if (!this.airborne) {
-      this._unsupportedFrames += 1;
-      const fromElev = !!(this._lastElevated || trulyElevated);
-      const storyY = this._nearestStoryFloor(this.root.position.y);
-      // Any story floor / outdoor ground band → carpet crawl, never fall
-      const onFloorBand = storyY != null
-        && Math.abs(this.root.position.y - storyY) < 0.85;
-      if (onFloorBand) {
-        this._lastElevated = false;
-        this.root.position.y = THREE.MathUtils.lerp(
-          this.root.position.y, storyY, Math.min(1, 10 * dt)
-        );
-        this._unsupportedFrames = 0;
-      } else if (fromElev && this._unsupportedFrames >= 6) {
-        // Brief grace after leaving deck — softens junction blips; hard crash only for true void
-        this.airborne = true;
-        this._fallStartY = this.root.position.y;
-        this._lastElevated = false;
-        this.vy = Math.min(this.vy, 0.15);
-        flags.fell = true;
-      } else if (!fromElev && this._unsupportedFrames >= 14) {
-        // Mid-air between stories with no surface — rare; allow fall
-        this.airborne = true;
-        this._fallStartY = this.root.position.y;
-        this.vy = Math.min(this.vy, 0.15);
-        flags.fell = true;
-      }
-    }
-
-    if (this.airborne) {
-      // Tumble + gravity — committed falls, little air authority
-      this.vy -= 16.8 * dt;
-      this.speed *= 1 - Math.min(1, 1.35 * dt);
-      this._tumble += dt;
-      this.root.position.x += Math.sin(this.yaw) * this.speed * dt;
-      this.root.position.z += Math.cos(this.yaw) * this.speed * dt;
-      this.root.position.y += this.vy * dt;
-      this.bodyPivot.rotation.x += 3.8 * dt;
-      this.bodyPivot.rotation.z += 5.2 * dt * Math.sign(this._steerInput || 1);
-      this.root.rotation.y = this.yaw;
-
-      const floorY = this._landingFloorY();
-      if (this.root.position.y <= floorY + 0.04 && this.vy < 0) {
-        this.root.position.y = floorY;
-        const bigFall = (this._fallStartY - floorY) > 0.7;
-        if (this._tumble > 0.18 || Math.abs(this.vy) > 2.2 || bigFall) {
-          this.crashed = true;
-          this.speed = 0;
-          this.vy = 0;
-        } else {
-          this.airborne = false;
-          this.vy = 0;
-          this._tumble = 0;
-          this._justLanded = 0.35;
-          flags.landed = true;
-          this.bodyPivot.rotation.x = 0;
-          this.bodyPivot.rotation.z = 0;
+    // Move horizontally by (dx,dz) at ride height y with hard collision + wall slide.
+    // Returns achieved fraction along the intended direction.
+    const moveXZ = (dx, dz, y) => {
+      const want = Math.hypot(dx, dz);
+      if (want < 1e-9) return 1;
+      if (!isBlocked(p.x + dx, p.z + dz, y)) { p.x += dx; p.z += dz; return 1; }
+      if (startBlocked && !world._boxBlocks(boxes, p.x + dx, p.z + dz, y, r)) { p.x += dx; p.z += dz; return 1; }
+      // logic16 SOFT RAIL: a deck-edge rail redirects the car along itself (keeps the along-rail
+      // part of the motion + a nudge back into the lane) instead of stopping it.
+      const rb = world._boxBlocks(boxes, p.x + dx, p.z + dz, y, r);
+      if (rb && rb.rail) {
+        // logic16 SOFT RAIL: project the move off every rail it would touch (iterating, so rail
+        // joints on a curve — concave or convex — never pin the car), plus a tiny nudge inward.
+        const railN = (tx, tz) => { let nx = 0, nz = 0, hard = false;
+          for (const b of boxes) {
+            if (!world._boxBlocks([b], tx, tz, y, r)) continue;
+            if (!b.rail) { hard = true; continue; }
+            const R = b.rail, ax = R.x1 - R.x0, az = R.z1 - R.z0, L2 = ax * ax + az * az || 1e-9;
+            const u = Math.max(0, Math.min(1, ((tx - R.x0) * ax + (tz - R.z0) * az) / L2));
+            const qx = tx - (R.x0 + ax * u), qz = tz - (R.z0 + az * u), ql = Math.hypot(qx, qz) || 1; nx += qx / ql; nz += qz / ql;
+          }
+          const l = Math.hypot(nx, nz); return { hard, nx: l ? nx / l : 0, nz: l ? nz / l : 0, any: l > 0 }; };
+        let mx = dx, mz = dz;
+        for (let it = 0; it < 4; it++) {
+          const n = railN(p.x + mx, p.z + mz);
+          if (n.hard) break;
+          if (!n.any) { p.x += mx; p.z += mz; flags.railSlide = true; this._railYaw = Math.atan2(mx, mz) * Math.sign(this.speed || 1); return 1; }
+          const into = mx * n.nx + mz * n.nz;
+          if (into < 0) { mx -= into * n.nx; mz -= into * n.nz; }
+          mx += n.nx * 0.0015; mz += n.nz * 0.0015;
         }
       }
-      if (this.root.position.y < -7) {
-        this.crashed = true;
-        this.speed = 0;
+      flags.hit = true;
+      const okX = !isBlocked(p.x + dx, p.z, y);
+      const okZ = !isBlocked(p.x, p.z + dz, y);
+      let mx = 0, mz = 0;
+      if (okX && okZ) { if (Math.abs(dx) >= Math.abs(dz)) mx = dx; else mz = dz; }
+      else if (okX) mx = dx;
+      else if (okZ) mz = dz;
+      p.x += mx; p.z += mz;
+      const along = (mx * dx + mz * dz) / (want * want);
+      if (along < 0.25) flags.hitHeadOn = true;
+      return along;
+    };
+
+    // ── Airborne: gravity, no air steering, land on whatever is below ──────────────
+    if (this.airborne) {
+      const yPrev = p.y;
+      this.vy -= GRAV_AIR * dt;
+      this._airT = (this._airT || 0) + dt;
+      this.speed *= 1 - Math.min(1, 0.15 * dt); // logic15: launch keeps its ramp speed
+      // logic15 gentle AIR CONTROL: a little yaw from the wheel while flying
+      this.yaw += this._steerInput * 0.85 * dt * Math.sign(this.speed || 1);
+      const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+      const frac = moveXZ(fx * this.speed * dt, fz * this.speed * dt, p.y);
+      if (frac < 0.999) this.speed *= Math.max(0, frac);
+      p.y += this.vy * dt;
+      // logic13: a kerb-step-high top swept into sideways while falling (threshold, rug edge) is
+      // landed ON — never end up inside it (no burial)
+      const g = world.groundAt(p.x, p.z, yPrev, 0.054);
+      if (g && p.y <= g.y) {
+        const impact = Math.abs(this.vy);
+        p.y = g.y; // logic13: land ON the surface top (never below it → no burial)
+        this._squash = Math.min(1, 0.25 + impact * 0.9); // suspension squash on touchdown
+        this._lastAir = this._airT || 0; this._airT = 0; this.jumps = (this.jumps || 0) + (this._launched ? 1 : 0); this._launched = false;
         this.vy = 0;
+        this.airborne = false;
+        this._justLanded = Math.min(0.3, 0.1 + impact * 0.04);
+        this._noLaunchT = 0.22; // logic15: no re-launch bounce on touchdown
+        this._landingDamp = Math.min(1, impact * 0.12);
+        flags.landed = true;
+        flags.surface = g.kind;
       }
+      if (p.y < -6.5) flags.void = true;
+      // logic13: nose follows the flight path (up off a kicker, tipping over at the apex)
+      const airPitch = THREE.MathUtils.clamp(-Math.atan2(this.vy, Math.max(0.3, Math.abs(this.speed))) * 0.7, -0.35, 0.35)
+        * Math.max(0.3, 1 - (this._airT || 0) * 1.1); // logic15: body levels out in flight → flat landings
+      this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x, airPitch, Math.min(1, 6 * dt));
+      this.bodyPivot.scale.set(1, 1, 1);
+      this.root.rotation.y = this.yaw;
       return flags;
     }
 
-    // Grounded driving — slow precise toy feel
-    this._boosting = !!(keys.boost && Math.abs(this.speed) > 0.4);
-    let maxV = keys.boost ? this.boostMax : this.maxSpeed;
-    if ((snap?.carpet && !snap.onTrack) || (!snap?.onTrack && !elevated && this._nearestStoryFloor(this.root.position.y) != null)) {
-      maxV *= 0.78; // brief off-ribbon slow — not sticky death (was 0.58 → felt like 3 km/h pin)
-    }
-    if (kind === "flower" || kind === "outdoor") maxV *= 0.88;
-    const onRailDeck = elevated || kind === "cornice" || kind === "balcony" || kind === "elevated";
-    if (onRailDeck && snap?.onTrack) maxV *= 0.88;
+    // ── Grounded ────────────────────────────────────────────────────────────────────
+    const ground = world.groundAt(p.x, p.z, p.y);
+    const onRoad = !!(ground && ground.kind === "road");
+    onRoadNow = onRoad;
+    flags.surface = ground ? ground.kind : null;
 
-    let fric = this.friction;
-    if (snap?.onTrack) {
-      if (kind === "cornice" || kind === "balcony") fric *= 1.78;
-      else if (elevated || kind === "ramp") fric *= 1.58;
-      else fric *= 1.18;
-    }
+    // Real slope under the wheels: front/rear axle samples along the heading
+    const fwdX0 = Math.sin(this.yaw), fwdZ0 = Math.cos(this.yaw);
+    const AX = 0.045;
+    const gF = world.groundAt(p.x + fwdX0 * AX, p.z + fwdZ0 * AX, p.y + 0.03);
+    const gR = world.groundAt(p.x - fwdX0 * AX, p.z - fwdZ0 * AX, p.y + 0.03);
+    let grade = 0;
+    if (gF && gR && Math.abs(gF.y - gR.y) < 0.08) grade = (gF.y - gR.y) / (2 * AX);
+    grade = THREE.MathUtils.clamp(grade, -0.6, 0.6);
+    // logic13: at a lip the front axle is already over the drop (no valid sample) — the takeoff
+    // keeps the slope the wheels were just on
+    const gradeValid = !!(gF && gR && Math.abs(gF.y - gR.y) < 0.08);
+    const lipGrade = gradeValid ? grade : (this._lastGoodGrade || 0);
+    if (gradeValid) this._lastGoodGrade = grade;
+    flags.grade = grade;
 
-    // Surface feel — asphalt vs carpet (strengthened #8; still binary on-road)
-    const onAsphalt = !!(snap?.onTrack && !snap?.carpet);
-    const onCarpet = !!(snap?.carpet && !snap?.onTrack);
-    let accelMul = 1;
-    if (onCarpet) { fric *= 1.34; accelMul = 0.74; maxV *= 0.88; }
-    else if (onAsphalt) { fric *= 0.93; accelMul = 1.08; }
-    this._surfaceCarpet = onCarpet ? 1 : 0;
-    // Extra grip when soft rim fence is active (casual play stays ON deck)
-    // Rim fence grip while onTrack OR brief nearDeck Y-assist (still not "on road")
-    if (onRailDeck && snap?.wallBounce && (snap?.onTrack || snap?.nearDeck)) {
-      fric *= 1.18;
-    }
+    this._boosting = !!(keys.boost && (this.turboLevel || 0) >= 1 && Math.abs(this.speed) > 0.4);
+    // logic15 TURBO (ghost books): Shift = +17% top speed & accel once unlocked (6 books);
+    // Shift+Space = SUPER TURBO, a further +25% (12 books). Locked → Shift does nothing.
+    const tl = this.turboLevel || 0;
+    const turboMul = (keys.boost && tl >= 1) ? (keys.superTurbo && tl >= 2 ? 1.17 * 1.25 : 1.17) : 1;
+    this.turboMul = turboMul;
+    let maxV = this.maxSpeed * turboMul;
+    // Surface feel: asphalt grippy & quick; wood/carpet a little softer (still fully drivable)
+    let accelMul = 1, surfDrag = 1;
+    if (onRoad) { accelMul = 1.08; surfDrag = 0.95; }
+    else { accelMul = 0.9; surfDrag = 1.08; maxV *= 0.9; }
+    this._surfaceCarpet = onRoad ? 0 : 1;
 
-    // Soft throttle ease — responsive on climb, calm on floor cruise (upright caps unchanged)
     if (this._throttleSmooth == null) this._throttleSmooth = 0;
-    // logic3: floor ramp-up eased (5.8→4.4/s) — W from rest builds speed over ~0.6 s, no lurch
-    // logic4: the ease applies to PRESSING only. On release the pedal lifts quickly (12/s) —
-    // the old symmetric 4.4/s ease kept pushing for ~0.9 s after W-up and then hit a hard
-    // friction wall (see coast below), which read as "holds, then snaps to 0 km/h".
-    const thrRate = (Math.abs(throttle) < Math.abs(this._throttleSmooth) || throttle === 0)
-      ? 16.0
-      : ((kind === "ramp" || snap?.steep) ? 6.8 : 4.4);
+    const thrRate = (Math.abs(throttle) < Math.abs(this._throttleSmooth) || throttle === 0) ? 16.0 : 4.4;
     this._throttleSmooth = THREE.MathUtils.lerp(this._throttleSmooth, throttle, Math.min(1, thrRate * dt));
     if (throttle === 0 && Math.abs(this._throttleSmooth) < 0.02) this._throttleSmooth = 0;
     const thr = this._throttleSmooth;
     if (thr > 0.02) {
-      const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
-      const curve = 0.45 + 0.55 * headroom * headroom;
-      // Climb-only plant — floor cruise torque unchanged so ribbon onRate stays green
-      const climbPlant = (kind === "ramp" || snap?.steep) ? 1.06 : 1;
-      this.speed += this.accel * thr * curve * climbPlant * accelMul * dt;
-      // logic4: pedal lifting (W released) — rolling drag fades in as the throttle fades out,
-      // so there is no cruise plateau followed by a drop.
-      if (throttle <= 0 && this.speed > 0) {
-        const surfL = THREE.MathUtils.clamp(fric / (this.friction * 1.18 * 0.93), 0.85, 1.15);
-        this.speed = Math.max(0, this.speed - (0.55 + 0.9 * this.speed) * surfL * (1 - thr) * dt);
+      if (this.speed < 0) {
+        this.speed = Math.min(0, this.speed + this.brake * thr * dt); // W while rolling back = brake
+      } else {
+        const headroom = 1 - Math.min(1, Math.abs(this.speed) / maxV);
+        const curve = 0.45 + 0.55 * headroom * headroom;
+        this.speed = Math.min(this.speed + this.accel * turboMul * thr * curve * accelMul * dt, Math.max(this.speed, maxV));
       }
     } else if (thr < -0.02) {
-      this.speed -= this.brake * Math.abs(thr) * dt;
-    } else {
-      // logic4: COAST = rolling drag, not a brake. The old path subtracted the full surface
-      // friction (~8.3 u/s² on floor asphalt) → cruise 1.38 → 0 in ~0.17 s (1–3 frames on
-      // SwiftShader) — the physics itself snapped the speedo to 0 km/h. Now: constant rolling
-      // resistance + speed-proportional drag, scaled by the surface's friction ratio:
-      // floor asphalt 1.38 → 0 in ≈1.3 s. logic5: surface ratio clamped 0.85–1.15 so a release on a
-      // ramp foot / deck still coasts ≈1.1 s wall-clock (was 1.58× → 0.83 s live).
-      const surf = THREE.MathUtils.clamp(fric / (this.friction * 1.18 * 0.93), 0.85, 1.15);
-      const coast = (0.55 + 0.9 * Math.abs(this.speed)) * surf;
+      if (this.speed > 0) this.speed = Math.max(0, this.speed - this.brake * Math.abs(thr) * dt);
+      else {
+        const headroom = 1 - Math.min(1, Math.abs(this.speed) / (maxV * 0.42));
+        this.speed -= this.accel * 0.6 * Math.abs(thr) * (0.45 + 0.55 * headroom) * dt;
+      }
+    }
+    // Rolling drag (coast ≈1.1–1.3 s from cruise) — applied whenever the pedal is not pushing
+    if (Math.abs(thr) <= 0.02 || (thr > 0 && throttle <= 0)) {
+      const coast = (0.55 + 0.9 * Math.abs(this.speed)) * surfDrag * (1 - Math.min(1, Math.abs(thr)));
       if (this.speed > 0) this.speed = Math.max(0, this.speed - coast * dt);
       else if (this.speed < 0) this.speed = Math.min(0, this.speed + coast * dt);
     }
-    this.speed = THREE.MathUtils.clamp(this.speed, -maxV * 0.42, maxV);
+    // Gravity along the slope (toy-scale): climbing slows a little, rolling downhill speeds up
+    const SLOPE_G = 1.4;
+    if (Math.abs(this.speed) > 0.02 || Math.abs(grade) > 0.45) this.speed -= SLOPE_G * grade * dt;
+    // logic16: over the (new, lower) top speed — e.g. Shift released — bleed off smoothly
+    // (≈1.6 m/s²) instead of the old hard clamp that braked 32% in a single frame.
+    if (this.speed > maxV) this.speed = Math.max(maxV, this.speed - 1.6 * dt);
+    this.speed = Math.max(this.speed, -maxV * 0.42);
 
-    if (kind === "flower" || kind === "outdoor") {
-      this.speed *= 1 - Math.min(0.28, 0.28 * dt);
-    }
+    if (this._landingDamp > 0) this._landingDamp = Math.max(0, this._landingDamp - 1.8 * dt);
 
-    if (snap?.steep || kind === "chute") {
-      this._landingDamp = Math.min(1, this._landingDamp + 2.5 * dt);
-    } else {
-      this._landingDamp = Math.max(0, this._landingDamp - 1.8 * dt);
-      if (this._landingDamp > 0.15) {
-        this.speed *= 1 - Math.min(0.5, this._landingDamp * 1.2 * dt);
-      }
-    }
-
+    if (this._noLaunchT > 0) this._noLaunchT -= dt;
     const absV = Math.abs(this.speed);
-    // Milder low-speed steer boost — planted, not twitchy at crawl
     const lowBoost = 1.08 - 0.08 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
     const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
-    const railGrip = (onRailDeck && snap?.onTrack) ? 1.05 : 1;
-    // Near-wall / scrape: damp steering so corners don't yaw harder into the stud
-    const wallSteerDamp = 1 - 0.38 * THREE.MathUtils.clamp(this._scrape, 0, 1);
-    const rimSteerDamp = (snap?.onTrack && typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.08)
-      ? 0.82 : 1;
-    const steerEff =
-      this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14)
-      * lowBoost * highDamp * railGrip * wallSteerDamp * rimSteerDamp;
-    // Soft yaw-rate limit (rad/s) — smooth turn-in/out without killing fun
-    const yawDelta = steerEff * Math.sign(this.speed || 1) * dt;
-    const maxYawRate = 2.05; // rad/s soft cap — planted turn-in, no veer
-    const maxDyaw = maxYawRate * dt;
-    this.yaw += THREE.MathUtils.clamp(yawDelta, -maxDyaw, maxDyaw);
+    const steerEff = this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14) * lowBoost * highDamp;
+    const maxDyaw = 2.05 * dt;
+    // Steering only turns the car when the wheels roll (no pivot on the spot)
+    const rollF = Math.min(1, absV / 0.05);
+    this.yaw += THREE.MathUtils.clamp(steerEff * Math.sign(this.speed || 1) * dt * rollF, -maxDyaw, maxDyaw);
     while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
     while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
 
-    this._driftTrail = THREE.MathUtils.lerp(
-      this._driftTrail,
-      Math.abs(this._steerInput) * THREE.MathUtils.smoothstep(absV, 0.9, 2.2) * 0.8,
-      Math.min(1, 8 * dt)
-    );
+    this._driftTrail = THREE.MathUtils.lerp(this._driftTrail,
+      Math.abs(this._steerInput) * THREE.MathUtils.smoothstep(absV, 0.9, 2.2) * 0.8, Math.min(1, 8 * dt));
 
-    const fwdX = Math.sin(this.yaw);
-    const fwdZ = Math.cos(this.yaw);
-    let x = this.root.position.x + fwdX * this.speed * dt;
-    let z = this.root.position.z + fwdZ * this.speed * dt;
-    let y = this.root.position.y;
-
-    this.onTrack = !!(snap?.onTrack);
-
-    if (snap?.wallBounce) {
-      x += snap.wallBounce.x;
-      z += snap.wallBounce.z;
-      const scrape = Math.hypot(snap.wallBounce.x, snap.wallBounce.z);
-      if (scrape > 0.0005) {
-        // On-ribbon: light scrape speed kill so cruise stays smooth
-        const onRibbon = !!snap.onTrack;
-        const kill = onRibbon ? 7.5 : 16;
-        const cap = onRibbon ? 0.20 : 0.42;
-        this.speed *= 1 - Math.min(cap, scrape * kill * dt);
-        this._scrape = Math.min(1, this._scrape + scrape * (onRibbon ? 22 : 40));
-        flags.scrape = scrape;
-      }
+    const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
+    const x0 = p.x, z0 = p.z, y0 = p.y;
+    const frac = moveXZ(fwdX * this.speed * dt, fwdZ * this.speed * dt, p.y);
+    if (flags.railSlide && !flags.hit && this.speed > 0 && !globalThis.__NOREDIR) { // logic16: the rail turns the car along itself
+      let dyw = Math.atan2(p.x - x0, p.z - z0) - this.yaw; while (dyw > Math.PI) dyw -= 2 * Math.PI; while (dyw < -Math.PI) dyw += 2 * Math.PI;
+      this.yaw += THREE.MathUtils.clamp(dyw, -0.06, 0.06);
+      this.speed *= 1 - Math.min(0.04, Math.abs(dyw) * 0.08); // light rub, never a stop
+    }
+    if (flags.hit) {
+      // Hard obstacle: the into-wall part of the motion is gone. Head-on = stop.
+      if (flags.hitHeadOn) this.speed = 0;
+      else this.speed *= Math.max(0, Math.min(1, frac));
+      this._scrape = Math.min(1, this._scrape + 0.25);
+      flags.scrape = 0.01 * (1 - frac);
     } else {
       this._scrape = Math.max(0, this._scrape - 3 * dt);
     }
 
-    // Height follow: stick to surface under wheels (NO full-floor centerline magnet).
-    // Climb ramps get a SOFT lateral hold + yaw settle so real cars do not slide off
-    // narrow ribbons (smoke centerline sampling used to hide this).
-    // Never yank upward onto cornice/balcony/furniture from below (under ≠ on).
-    const belowElevDeck = !!(elevated && snap && snap.y != null
-      && (snap.y - y) > 0.28
-      && kind !== "ramp" && !snap.steep);
-    if (supported && snap && !belowElevDeck) {
-      const sticky = (elevated || kind === "cornice" || kind === "balcony" || !!snap.nearDeck)
-        && !belowElevDeck;
-      // Stickier on elevated decks; nearDeck Y-assist stays glued without flipping onTrack
-      const nearRim = sticky && (
-        !!snap.nearDeck
-        || (typeof snap.edgeMargin === "number" && snap.edgeMargin < 0.10)
-      );
-      // Ramp climb: firm Y-lock along surface; flat decks sticky; never from under
-      // Foyer climb first segments: stronger Y-lock so foot mount does not drop back to asphalt
-      const foyerClimb = snap.pathId === "climb_a" || snap.pathId === "climb_b";
-      const foyerFootHold = foyerClimb && (snap.y == null || snap.y < 1.35);
-      const yLock = snap.steep || kind === "ramp"
-        ? (foyerFootHold ? 92 : 62)
-        : (sticky ? (nearRim ? 36 : 32) : 28);
-      // Foyer climb: snap Y must lead — never let car Y trail rising ribbon
-      // (browser dt clamp / hitch used to leave Y at foot while XZ advanced).
-      if (foyerClimb && snap.y != null && Number.isFinite(snap.y)
-          && (snap.onTrack || snap.nearDeck || snap.rampContinuity || foyerFootHold)) {
-        const climbLock = Math.max(yLock, 140);
-        y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, climbLock * dt));
-        if (snap.y > y) {
-          // Keep wheels within 2cm under surface while ascending
-          const gap = snap.y - y;
-          if (gap > 0.02 && gap < 0.65) y = snap.y - 0.02;
-          else if (gap >= 0.65) y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, 0.85));
-        }
-      } else {
-        y = THREE.MathUtils.lerp(y, snap.y, Math.min(1, yLock * dt));
-      }
-
-      // Climb-only soft lateral magnet (NOT full floor ASSIST_MAGNET)
-      const rampAssist = kind === "ramp" && (
-        !!snap.onTrack || !!snap.nearDeck || !!snap.rampContinuity
-      );
-      // Hard gate: never lerp XZ toward a snap centerline more than ~0.55m away
-      // (path-label flips / apron ghosts must not teleport the car onto another ribbon).
-      const snapJump = (snap.x != null && snap.z != null)
-        ? Math.hypot(snap.x - x, snap.z - z) : 99;
-      const snapNear = snapJump < 0.55;
-      // logic6: every XZ magnet below is LATERAL-ONLY. The snap point's along-track offset is
-      // removed using the ribbon tangent (snap.yaw). Before this, a car still on the runway
-      // (x≈-1.55) that engaged climb_a got its snap point clamped to the climb's first vertex
-      // (the foot, x=-2.11) and the 0.72/frame "lateral" pull dragged it ~0.5u FORWARD in
-      // ~0.15 s (0.129u in one 1/60 frame at 1.21 u/s = the Climb A foot surge).
-      let magX = snap.x, magZ = snap.z;
-      if (snap.x != null && snap.z != null && Number.isFinite(snap.yaw)) {
-        const fx = Math.sin(snap.yaw), fz = Math.cos(snap.yaw);
-        const along = (snap.x - x) * fx + (snap.z - z) * fz;
-        magX = snap.x - along * fx;
-        magZ = snap.z - along * fz;
-      }
-      if (rampAssist && snapNear && snap.x != null && snap.z != null) {
-        const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        // Strong climb hold — imperfect human steer still crests (not centerline magnet)
-        const rimFactor = em < 0.14 ? (foyerClimb ? 2.95 : 2.45)
-          : (em < 0.26 ? (foyerClimb ? 2.15 : 1.75) : (foyerClimb ? (foyerFootHold ? 1.55 : 1.35) : 1.10));
-        const pullCap = foyerFootHold ? 0.72 : (foyerClimb ? 0.68 : 0.58);
-        const pull = Math.min(pullCap,
-          (0.26 + 0.26 * rimFactor) * Math.min(1, 18 * dt));
-        x = THREE.MathUtils.lerp(x, magX, pull);
-        z = THREE.MathUtils.lerp(z, magZ, pull);
-      } else if (snapNear && snap.onTrack && snap.x != null && snap.z != null
-        && (kind === "floor" || kind === "outdoor" || kind === "flower")) {
-        // Soft rim hold — keep cruise on ribbon without centerline yank / path teleport
-        const em = typeof snap.edgeMargin === "number" ? snap.edgeMargin : 0.2;
-        if (em < 0.10) {
-          const pull = Math.min(0.14, (0.05 + (0.10 - em) * 0.8) * Math.min(1, 12 * dt));
-          x = THREE.MathUtils.lerp(x, magX, pull);
-          z = THREE.MathUtils.lerp(z, magZ, pull);
-        }
-      } else if (ASSIST_MAGNET && snapNear && snap.onTrack) {
-        const whisper = Math.min(1, 0.08 * 10 * dt);
-        x = THREE.MathUtils.lerp(x, magX, whisper);
-        z = THREE.MathUtils.lerp(z, magZ, whisper);
-      }
-
-
-      // Kiss handoff polish (#9) — tighter soft-settle, no hitch / no snapJump yank
-      if (this._kissY == null) this._kissY = y;
-      const yDelta = y - this._kissY;
-      if (Math.abs(yDelta) > 0.08 && !foyerClimb) {
-        // Soft settle only — never teleport Y at ribbon kisses
-        y = this._kissY + Math.sign(yDelta) * Math.min(Math.abs(yDelta), 0.032 + absV * 0.022);
-      } else if (Math.abs(yDelta) > 0.22 && foyerClimb) {
-        y = this._kissY + Math.sign(yDelta) * Math.min(Math.abs(yDelta), 0.078 + absV * 0.032);
-      }
-      this._kissY = THREE.MathUtils.lerp(this._kissY, y, Math.min(1, 18 * dt));
-
-      // Lateral bank ONLY (hard-capped). Grade is separate — never tip sideways on climbs.
-      const bankCap = kind === "chute" ? VISUAL_BANK_MAX_CHUTE : VISUAL_BANK_MAX;
-      const rawBank = THREE.MathUtils.clamp(snap.bank || 0, -bankCap, bankCap);
-      // Heavy low-pass — crease / ribbon-join spikes must not twitch roll
-      const bankSmooth = sticky || rampAssist ? 2.6 : 2.1;
-      this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, rawBank, Math.min(1, bankSmooth * dt));
-      const bank = THREE.MathUtils.clamp(this._smoothBank, -bankCap, bankCap);
-      // Along-track grade → subtle pitch (not roll)
-      const rawGrade = (snap.grade != null && Number.isFinite(snap.grade)) ? snap.grade : 0;
-      const gradeSmooth = sticky || rampAssist ? 3.0 : 2.4;
-      this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade, rawGrade, Math.min(1, gradeSmooth * dt));
-      // Crest compression (#5) — fire on RAW grade drop. Smoothed grade never spans
-      // 0.10→0.06 in one frame (prev tracked smooth too), so crest never armed.
-      const gPrev = this._prevGrade || 0;
-      const leavingClimb = gPrev > 0.10 && rawGrade < 0.06 && absV > 0.20
-        && (kind === "floor" || kind === "balcony" || kind === "elevated" || !snap.steep);
-      if (leavingClimb && this._crestSquat < 0.20) this._crestSquat = 1;
-      this._prevGrade = rawGrade;
-      if (this._crestSquat > 0) {
-        // Slightly longer settle so the "compression" reads
-        this._crestSquat = Math.max(0, this._crestSquat - 2.2 * dt);
-      }
-      // Gentle yaw settle — climb ramps / decks only. Floor cruise: NO ribbon yaw magnet
-      // (player must be able to hold W and go straight on skirting without constant correction).
-      const floorAssist = false;
-      // Yaw settle on ribbon; foyer foot also settles while nearDeck so approach mounts turn uphill
-      if ((sticky || rampAssist) && (snap.onTrack || foyerFootHold) && snap.yaw != null && Number.isFinite(snap.yaw) && absV > 0.12) {
-        let dyaw = snap.yaw - this.yaw;
-        while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-        while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-        // Bidirectional ribbon yaw — reverse travel must not U-turn.
-        // EXCEPTION: foyer climb foot — always settle toward uphill segment yaw so a
-        // west/north approach does not glue to the foot facing the wrong way.
-        // logic3: feet are tangent-aligned now — no forced uphill spin (was yawLim π)
-        {
-          let dyawR = dyaw + Math.PI;
-          while (dyawR > Math.PI) dyawR -= Math.PI * 2;
-          while (dyawR < -Math.PI) dyawR += Math.PI * 2;
-          if (Math.abs(dyawR) < Math.abs(dyaw)) dyaw = dyawR;
-        }
-        const yawLim = rampAssist ? (foyerClimb ? 1.35 : 1.20) : 0.45;
-        const yawK = rampAssist ? (foyerClimb ? (foyerFootHold ? 0.60 : 0.52) : 0.44) : 0.12;
-        const yawRate = rampAssist ? (foyerClimb ? (foyerFootHold ? 5.2 : 4.6) : 4.0) : 1.2;
-        if (Math.abs(dyaw) < yawLim) {
-          this.yaw += dyaw * Math.min(yawK, yawRate * dt) * Math.min(1, absV / 0.9);
-        }
-      }
-      // Steer lean subtle; bank already capped — do NOT add grade into roll
-      const steerLean = -this._steerInput * STEER_LEAN_MAX * Math.min(1, absV / 1.2);
-      const targetRoll = THREE.MathUtils.clamp(bank + steerLean, -(bankCap + STEER_LEAN_MAX), bankCap + STEER_LEAN_MAX);
-      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, targetRoll, Math.min(1, 3.4 * dt));
+    // Height = real surface under the wheels at the new spot
+    const gN = world.groundAt(p.x, p.z, y0);
+    // logic13 JUMPS: leaving a lip keeps the takeoff velocity (v·sinθ up a ramp/kicker), and a
+    // fast crest whose next surface drops away from the ballistic line launches instead of sticking.
+    const stepD = Math.hypot(p.x - x0, p.z - z0);
+    const lipDrop = gN ? (y0 + Math.max(0, grade) * stepD) - gN.y : 0;
+    const crestLaunch = gN && grade > 0.12 && absV > 0.6 && lipDrop > 0.012 && !this._noLaunch && !(this._noLaunchT > 0) && !(gF && gF.rug === "flap") && !(gR && gR.rug === "flap"); // logic14: a passing conveyor flap is not a ramp lip
+    if (!gN || gN.y < y0 - STICK_DOWN_CAR || crestLaunch) {
+      // Rolled off an edge / into a hole / off a ramp lip → real flight
+      this.airborne = true;
+      const gT = crestLaunch ? grade : Math.max(lipGrade, this._prevGrade || 0); // the lip itself can read as a drop
+      const sinA = gT / Math.sqrt(1 + gT * gT);
+      const kick = ground && ground.rug === "kicker" ? KICKER_POP : 1;
+      const kk = ground && ground.kicker;
+      this.vy = gT > 0 ? (kk && kk.pop ? Math.abs(this.speed) * (sinA + kk.pop) : sinA * Math.abs(this.speed) * kick) : Math.min(0, -Math.max(0, -gT) * absV * 0.5);
+      this._launched = gT > 0.08 && absV > 0.4;
+      if (crestLaunch) p.y = y0 + Math.max(0, grade) * stepD; // leave along the ramp line
+      this._airT = 0;
+      this._fallStartY = y0;
+      flags.fell = !this._launched;
+      flags.launch = this._launched;
     } else {
-      this._smoothBank = THREE.MathUtils.lerp(this._smoothBank, 0, Math.min(1, 4 * dt));
-      this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade, 0, Math.min(1, 4 * dt));
-      this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, 0, Math.min(1, 5 * dt));
+      p.y = gN.y;
+      flags.surface = gN.kind;
     }
+    this.onTrack = flags.surface === "road";
+
+    // Crest settle (#5) — fire when the slope under the wheels flattens after a climb
+    const gPrev = this._prevGrade || 0;
+    if (gPrev > 0.12 && grade < 0.05 && absV > 0.2 && this._crestSquat < 0.2) this._crestSquat = 1;
+    this._prevGrade = grade;
+    if (this._crestSquat > 0) this._crestSquat = Math.max(0, this._crestSquat - 2.2 * dt);
+
+    this._smoothGrade = THREE.MathUtils.lerp(this._smoothGrade || 0, grade, Math.min(1, 10 * dt));
+    const steerLean = -this._steerInput * STEER_LEAN_MAX * Math.min(1, absV / 1.2);
+    this._bodyRoll = THREE.MathUtils.lerp(this._bodyRoll, steerLean, Math.min(1, 3.4 * dt));
 
     if (this._justLanded > 0) {
       this._justLanded = Math.max(0, this._justLanded - dt);
-      this.speed *= 1 - Math.min(0.4, 1.2 * dt);
+      this.speed *= 1 - Math.min(0.4, 0.6 * dt); // logic15: soft landings keep momentum
     }
 
-    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(this.yaw)
-        || !Number.isFinite(this.speed) || !Number.isFinite(this.vy)) {
-      // Do not write NaN into the scene graph — reset planted pose
-      this.speed = 0;
-      this.vy = 0;
-      if (!Number.isFinite(this.yaw)) this.yaw = 0;
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z) || !Number.isFinite(this.speed)) {
+      p.set(x0, y0, z0);
+      this.speed = 0; this.vy = 0;
       return flags;
     }
 
-    this.root.position.set(x, y, z);
     this.root.rotation.y = this.yaw;
-    // Roll = lateral bank + steer lean ONLY (never grade)
     this.bodyPivot.rotation.z = this._bodyRoll;
-    // Pitch = along-track grade (capped) — not a second copy of bank
-    const pitchFromGrade = THREE.MathUtils.clamp(
-      -(this._smoothGrade || 0) * GRADE_PITCH_SCALE,
-      -GRADE_PITCH_MAX,
-      GRADE_PITCH_MAX
-    );
-    const crestDip = (this._crestSquat || 0) * 0.040; // brief squat (strengthened #5), not a jump
-    this.bodyPivot.position.y = THREE.MathUtils.lerp(this.bodyPivot.position.y || 0, -crestDip, Math.min(1, 12 * dt));
-    this.bodyPivot.rotation.x = THREE.MathUtils.lerp(
-      this.bodyPivot.rotation.x,
-      pitchFromGrade - this._landingDamp * 0.08 + crestDip * 0.9,
-      Math.min(1, 3.8 * dt)
-    );
-
-    if (inTube) {
-      this.bodyPivot.rotation.z += Math.sin(this._idlePhase * 9) * 0.01 * absV;
-    }
+    // Body pitch follows the real slope under the axles (nose up on a climb)
+    const pitch = -Math.atan(this._smoothGrade || 0);
+    const crestDip = (this._crestSquat || 0) * 0.040;
+    // logic13 landing squash: body drops + flattens, springs back over ~0.3 s
+    this._squash = Math.max(0, (this._squash || 0) - 3.4 * dt);
+    const sq = this._squash * this._squash;
+    this.bodyPivot.scale.set(1 + 0.06 * sq, 1 - 0.2 * sq, 1 + 0.04 * sq);
+    this.bodyPivot.position.y = THREE.MathUtils.lerp(this.bodyPivot.position.y || 0, -crestDip * 0.25 - 0.012 * sq, Math.min(1, 12 * dt));
+    this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x,
+      pitch - this._landingDamp * 0.08 + crestDip * 0.9, Math.min(1, 10 * dt));
 
     const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
-
-    // Reactive brake lights: braking OR reverse-intent coast
-    const brakingNow = (thr < -0.05) || (thr < 0.02 && this.speed > 0.15 && !keys.boost);
-    this._updateBrakeLights(brakingNow, dt);
-
+    this._updateBrakeLights(false, dt);
     this._idlePhase += dt;
     return flags;
   }

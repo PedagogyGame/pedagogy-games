@@ -1,13 +1,23 @@
+import { loftSolids } from "./loftNet.js?v=logic21";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS } from "./car.js?v=logic7";
-import { TrackSystem } from "./tracks.js?v=logic7";
-import { EngineAudio } from "./engineAudio.js?v=logic7";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic7";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic21";
+import { TrackSystem } from "./tracks.js?v=logic21";
+import { DriveWorld, railHit } from "./world.js?v=logic21";
+import { EngineAudio } from "./engineAudio.js?v=logic21";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic21";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic21";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic21";
+import { TreeCritters } from "./treehouse.js?v=logic21";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic21";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
  * Explore: tiny parked car, tracks hidden. Drive: free steer, can fall.
  */
+/** logic20: localStorage that never throws (private mode / sims / file://). */
+function lsGet(k) { try { return globalThis.localStorage ? globalThis.localStorage.getItem(k) : null; } catch (_) { return null; } }
+function lsSet(k, v) { try { if (globalThis.localStorage) globalThis.localStorage.setItem(k, v); } catch (_) {} }
+
 export class DriveMode {
   constructor(scene, camera) {
     this.scene = scene;
@@ -17,6 +27,19 @@ export class DriveMode {
     this.vehicleId = "car";
     this.car = new RCCar(this.vehicleId);
     this.scene.add(this.car.root);
+    // logic15: ghost books, turbo tiers, muffler flames, opt-in mouse look
+    this.books = new GhostBooks(scene);
+    this.books.setVisible(false);
+    this.car.turboLevel = this.books.turboLevel;
+    this._flames = makeFlames();
+    this.car.root.add(this._flames);
+    this.flamesOn = true;
+    this.mouseLook = { on: false, yaw: 0, pitch: 0, idle: 99 };
+    this._onMouseMove = this._onMouseMove.bind(this);
+    // logic20: mouse-look invert (I = vertical, Shift+I = horizontal) + MOUSE STEER (N), all saved
+    this.mouseInvert = { y: lsGet("motu.mouseInvertY") === "1", x: lsGet("motu.mouseInvertX") === "1" };
+    this.mouseSteer = { on: lsGet("motu.mouseSteer") === "1", raw: 0, out: 0, dead: 0.1, gain: 0.32, rate: 9, armed: false, lastX: null }; // logic21: armed only by real movement
+    this._mouseListening = false;
 
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
     this._onKey = this._onKey.bind(this);
@@ -33,9 +56,11 @@ export class DriveMode {
     this._camElevated = 0; // smoothed elevated chase blend
     this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
-    this._driveFov = 70; // calmer tour FOV (was arcade-wide 74; logic7 68→70)
-    this._wallFov = 54; // tighter echo-y FOV in walls
-    this._leisureFov = 72; // logic7: was 62 — at rest the spawn read as a narrow corridor
+    this._driveFov = 76; // logic11: driver-eye scale — wide so the rooms loom full-size
+    this._camMode = "chase"; // "chase" | "bumper" (C key)
+    void 0; // calmer tour FOV (was arcade-wide 74; logic7 68→70)
+    this._wallFov = 66; // tighter echo-y FOV in walls
+    this._leisureFov = 76; // logic7: was 62 — at rest the spawn read as a narrow corridor
     this._fov = this._baseFov;
     this._tunnelDark = 0;
     this._time = 0;
@@ -73,7 +98,7 @@ export class DriveMode {
     this._wallGridCell = 3.0;
     this._wallGridOriginX = 0;
     this._wallGridOriginZ = 0;
-    this._carRadius = 0.09;
+    this._carRadius = 0.09 * CAR_K; // logic16: collider shrinks with the car
     this._passKinds = new Set(["shortcut", "mouse", "shaft", "tunnel", "chute"]);
     this._stuckTimer = 0;
     this._stuckNudgeCd = 0;
@@ -121,6 +146,17 @@ export class DriveMode {
    * Furniture AABBs are raised/shrunk for Drive only — tiny car is not caged under tables
    * or between wall and furniture bases. Room walls stay hard. Explore keeps full boxes.
    */
+  /** logic8: the drivable house (floors with real holes + road surfaces + solids). */
+  attachMansion(mansion) {
+    this.mansion = mansion;
+    this.world = new DriveWorld(mansion, this.tracks);
+    if (mansion && mansion.getColliders) {
+      // logic9: Skyline drop-side rails + barricades are hard solids too
+      const ls = this.tracks._loftSolidsCache || (this.tracks._loftSolidsCache = loftSolids(this.tracks.segments));
+      this.setWallColliders(mansion.getColliders().concat(ls.solids));
+    }
+  }
+
   setWallColliders(colliders) {
     if (!colliders || !colliders.length) {
       this._wallColliders = null;
@@ -140,69 +176,13 @@ export class DriveMode {
    * stringers stay (already inset inside stair footprint in mansion build).
    */
   _driveSoftCollider(box) {
+    // logic8: every solid is HARD in Drive — walls, pillars, furniture, stairs. No shrink,
+    // no raised crawl gaps, no pierce rules. (Explore keeps its own copy.)
     const out = box.clone();
     out.driveKind = box.driveKind || "wall";
-    // Pillar / column / post — never soft-shrink or raise (car must bounce)
-    if (out.driveKind === "pillar") return out;
-    // Heuristic: tall skinny "furniture" posts that should have been pillars
-    if (out.driveKind === "furniture") {
-      const bw = out.max.x - out.min.x;
-      const bd = out.max.z - out.min.z;
-      const bh = out.max.y - out.min.y;
-      const maxXZ = Math.max(bw, bd);
-      const minXZ = Math.min(bw, bd);
-      if (bh >= 1.2 && maxXZ <= 0.55 && minXZ <= 0.45) {
-        out.driveKind = "pillar";
-        return out;
-      }
-    }
-    if (out.driveKind === "stair") {
-      const bw = out.max.x - out.min.x;
-      const bd = out.max.z - out.min.z;
-      const thinStringer = Math.min(bw, bd) < 0.35 && Math.max(bw, bd) > 0.75;
-      if (thinStringer) {
-        // Authored stair side AABBs span both stories. Leave a car-height portal at
-        // each floor so skirting that crosses a stair foot/crest cannot pillar-grab;
-        // the middle still blocks off-road cuts and ramp snaps pierce it while climbing.
-        out.min.y += 0.54;
-        out.max.y -= 0.55;
-      } else if (bw > 0.75 && bd > 0.75) {
-        // Underside / tread slab (both axes wide): raise relative to story floor.
-        // Built as yLo-0.15 … yLo+… — story floor ≈ min.y + 0.15.
-        const storyFloor = out.min.y + 0.15;
-        const raised = storyFloor + 0.52;
-        // Never invert AABB (descending cellar underside max is below ground 0.52).
-        if (raised < out.max.y - 0.05) {
-          out.min.y = Math.max(out.min.y, raised);
-        } else {
-          out.min.y = Math.min(out.max.y - 0.08, Math.max(out.min.y, storyFloor + 0.42));
-        }
-      }
-      return out;
-    }
-    if (out.driveKind !== "furniture") return out;
-    const cx = (out.min.x + out.max.x) * 0.5;
-    const cz = (out.min.z + out.max.z) * 0.5;
-    const hx = Math.max(0.06, (out.max.x - out.min.x) * 0.5 * 0.74);
-    const hz = Math.max(0.06, (out.max.z - out.min.z) * 0.5 * 0.74);
-    out.min.x = cx - hx;
-    out.max.x = cx + hx;
-    out.min.z = cz - hz;
-    out.max.z = cz + hz;
-    // Raise collision floor — leave a crawl gap for the RC car
-    const raise = 0.36;
-    if (out.max.y - out.min.y > raise + 0.12) {
-      out.min.y = Math.min(out.max.y - 0.12, out.min.y + raise);
-    } else {
-      // Short volumes: shrink further in XZ instead of fully blocking floor
-      const hx2 = hx * 0.85;
-      const hz2 = hz * 0.85;
-      out.min.x = cx - hx2;
-      out.max.x = cx + hx2;
-      out.min.z = cz - hz2;
-      out.max.z = cz + hz2;
-      out.min.y = Math.min(out.max.y - 0.08, out.min.y + 0.22);
-    }
+    if (box.rail && !globalThis.__NORAIL) out.rail = box.rail; // logic16: keep the exact rail segment (the AABB is only a broad-phase)
+    if (box.conveyor) out.conveyor = true;
+    if (box.gutter) out.gutter = true; if (box.timber) out.timber = true; if (box.lab) out.lab = true; // logic19 // logic14: conveyor cage (car-only; the camera sees through it)
     return out;
   }
 
@@ -363,6 +343,19 @@ export class DriveMode {
       code === "KeyA" || code === "ArrowLeft" ||
       code === "KeyD" || code === "ArrowRight" ||
       code === "ShiftLeft" || code === "ShiftRight";
+    if (this.active && code === "KeyC" && e.type === "keydown" && !e.repeat) {
+      this._camMode = this._camMode === "bumper" ? "chase" : "bumper"; // logic11: C = bumper / chase cam
+      if (this.onHint) this.onHint(this._camMode === "bumper" ? "Bumper cam" : "Chase cam");
+      return;
+    }
+    if (this.active && code === "KeyM" && e.type === "keydown" && !e.repeat) { this.setMouseLook(!this.mouseLook.on); return; }
+    if (this.active && code === "KeyI" && e.type === "keydown" && !e.repeat) { if (e.shiftKey) this.setMouseInvert("x", !this.mouseInvert.x); else this.setMouseInvert("y", !this.mouseInvert.y); return; }
+    if (this.active && code === "KeyN" && e.type === "keydown" && !e.repeat) { this.setMouseSteer(!this.mouseSteer.on); return; }
+    if (this.active && code === "Space") { // logic15: Shift+Space = SUPER TURBO (12 books)
+      if (e.cancelable) e.preventDefault();
+      this.keys.superTurbo = e.type === "keydown";
+      return;
+    }
     if (!this.active || this._inputsFrozen) {
       if (this._inputsFrozen) {
         // Still clear keys so they don't stick after restart
@@ -406,8 +399,171 @@ export class DriveMode {
     }
   }
 
+  _setHatch(closed) {
+    const h = this.mansion && this.mansion.root && this.mansion.root.getObjectByName("attic_hatch");
+    if (h) h.visible = closed;
+  }
+
+  /** logic15 MOUSE LOOK (opt-in, M / menu): mouse orbits the chase cam; eases back after ~1.5 s idle. */
+  setMouseLook(on) {
+    const ml = this.mouseLook; ml.on = !!on;
+    if (!ml.on) { ml.yaw = 0; ml.pitch = 0; ml.idle = 99; }
+    this._syncMouseListener();
+    if (!ml.on) { const doc = typeof document !== "undefined" ? document : null; try { if (doc && doc.pointerLockElement) doc.exitPointerLock(); } catch (_) {} }
+    if (this.onHint) this.onHint(ml.on ? (this.mouseSteer.on ? "Mouse look ON (M) — mouse steer has the mouse, camera follows behind" : "Mouse look ON (M) — move the mouse to look around · I invert") : "Mouse look off");
+    this._syncBookHud();
+  }
+  /** logic20: flip a mouse-look axis ("y" vertical, "x" horizontal); saved in localStorage. */
+  setMouseInvert(axis, on) {
+    const k = axis === "x" ? "x" : "y"; this.mouseInvert[k] = !!on;
+    lsSet(k === "x" ? "motu.mouseInvertX" : "motu.mouseInvertY", on ? "1" : "0");
+    if (this.onHint) this.onHint(`Invert ${k === "x" ? "horizontal" : "vertical"} ${on ? "ON" : "off"} (${k === "x" ? "Shift+I" : "I"})`);
+    this._syncBookHud();
+  }
+  /** logic20 MOUSE STEER (N): horizontal mouse position steers the car (dead zone + smoothing). Keys still work. */
+  setMouseSteer(on) {
+    const ms = this.mouseSteer; ms.on = !!on; ms.raw = 0; ms.out = 0; ms.armed = false; ms.lastX = null;
+    lsSet("motu.mouseSteer", ms.on ? "1" : "0");
+    if (this.keys) this.keys.steerAnalog = null;
+    this._syncMouseListener();
+    if (this.onHint) this.onHint(ms.on ? "Mouse steer ON (N) — mouse left/right of centre steers" + (this.mouseInvert.x ? " (inverted)" : "") : "Mouse steer off");
+    this._syncBookHud();
+  }
+  _syncMouseListener() {
+    const doc = typeof document !== "undefined" ? document : null; if (!doc || !doc.addEventListener) return;
+    const want = this.active && (this.mouseLook.on || this.mouseSteer.on);
+    // logic21: the wheel centres and DISARMS when the mouse leaves the window/canvas or the tab loses focus;
+    // it re-arms only on a real movement (no twitch from a resting mouse or synthetic mousemove events)
+    if (!this._onMouseOut) this._onMouseOut = (e) => { if (!e.relatedTarget || (e.relatedTarget.tagName && e.relatedTarget.tagName !== "CANVAS" && e.target && e.target.tagName === "CANVAS")) this._mouseSteerRelease(); };
+    if (!this._onBlurSteer) this._onBlurSteer = () => this._mouseSteerRelease();
+    const win = typeof window !== "undefined" && window.addEventListener ? window : null;
+    if (want && !this._mouseListening) { doc.addEventListener("mousemove", this._onMouseMove, true); doc.addEventListener("mouseout", this._onMouseOut, true); if (win) win.addEventListener("blur", this._onBlurSteer); this._mouseListening = true; }
+    if (!want && this._mouseListening) { doc.removeEventListener("mousemove", this._onMouseMove, true); doc.removeEventListener("mouseout", this._onMouseOut, true); if (win) win.removeEventListener("blur", this._onBlurSteer); this._mouseListening = false; }
+    if (!want) this._mouseSteerRelease();
+  }
+  _mouseSteerRelease() { const ms = this.mouseSteer; ms.raw = 0; ms.armed = false; ms.lastX = null; }
+  _onMouseMove(e) {
+    if (this.mouseSteer.on) { // steer owns the mouse; the chase cam simply follows behind
+      const ms = this.mouseSteer, w = (typeof window !== "undefined" && window.innerWidth) || 1280;
+      const locked = typeof document !== "undefined" && document.pointerLockElement;
+      if (!locked && e.target && e.target.tagName && e.target.tagName !== "CANVAS") { this._mouseSteerRelease(); return; } // over HUD buttons → no steer
+      if (!locked && typeof e.clientX === "number") {
+        if (ms.lastX != null && Math.abs(e.clientX - ms.lastX) < 1 && !e.movementX) return; // synthetic / zero-move event
+        const first = ms.lastX == null; ms.lastX = e.clientX;
+        if (first && !e.movementX) return; // need a REAL move before the wheel arms
+        ms.armed = true; this.steerFromMouse((e.clientX - w / 2) / (w / 2));
+      } else if (e.movementX) { ms.armed = true; this.steerFromMouse(ms.raw + e.movementX / (w / 2)); }
+      return;
+    }
+    this.orbitLook(e.movementX || 0, e.movementY || 0);
+  }
+  /** logic20: horizontal mouse offset nx (−1 = left edge … +1 = right edge, 0 = centre) → steer target. */
+  steerFromMouse(nx) { this.mouseSteer.armed = true; this.mouseSteer.raw = Math.max(-1, Math.min(1, Number(nx) || 0)); }
+  /** logic20: raw mouse offset → analog wheel (+ = left, like the A key): dead zone, gain, invert. */
+  mouseSteerTarget(raw = this.mouseSteer.raw) {
+    const ms = this.mouseSteer, a = Math.abs(raw);
+    if (a <= ms.dead) return 0;
+    const v = Math.min(1, (a - ms.dead) / Math.max(0.05, ms.gain)) * Math.sign(raw); // full lock at dead+gain of the half-screen
+    return (this.mouseInvert.x ? 1 : -1) * Math.max(-1, Math.min(1, v)); // mouse right of centre = steer right
+  }
+  _tickMouseSteer(dt) {
+    const ms = this.mouseSteer;
+    if (!ms.on) { if (this.keys && this.keys.steerAnalog != null) this.keys.steerAnalog = null; return; }
+    ms.out += ((ms.armed ? this.mouseSteerTarget() : 0) - ms.out) * Math.min(1, ms.rate * dt); // smoothing (disarmed → centre)
+    if (Math.abs(ms.out) < 1e-3) ms.out = 0;
+    this.keys.steerAnalog = ms.out;
+  }
+  /** Orbit by a mouse delta in pixels (also used by sims / ?shot). */
+  orbitLook(dx, dy) {
+    const ml = this.mouseLook; if (!ml.on || !this.active || this.mouseSteer.on) return;
+    if (this.mouseInvert.x) dx = -dx;
+    if (this.mouseInvert.y) dy = -dy;
+    ml.yaw -= dx * 0.005;
+    while (ml.yaw > Math.PI) ml.yaw -= 2 * Math.PI; while (ml.yaw < -Math.PI) ml.yaw += 2 * Math.PI;
+    ml.pitch = Math.max(-0.25, Math.min(0.75, ml.pitch + dy * 0.004));
+    if (dx || dy) ml.idle = 0;
+  }
+  setFlames(on) { this.flamesOn = !!on; this._syncBookHud(); }
+  resetBooks() { this.books.reset(); this.car.turboLevel = this.books.turboLevel; this._syncBookHud(); if (this.onHud) this.onHud({ mode: "toast", text: "Ghost Books reset" }); }
+  _tickBooks(dt) {
+    // logic16 treehouse critters: per-zone pass counters (squirrel every 4th, nest every 9th)
+    if (!this.critters && this.tracks && this.tracks.yard) {
+      this.critters = new TreeCritters(this.tracks.yard);
+      try { const q = typeof location !== "undefined" ? new URLSearchParams(location.search) : null; if (q && q.get("critters") === "1") this.critters.force = true; } catch (_) {}
+    }
+    if (this.critters) {
+      if (globalThis.__MOTU_CRITTERS__ != null) this.critters.force = !!globalThis.__MOTU_CRITTERS__;
+      const c = this.critters.tick(dt, this.car.position);
+      if (c && this.onHud) this.onHud({ mode: "toast", text: c === "squirrel" ? `A squirrel! (pass ${this.critters.counts.squirrel})` : `Baby birds! (pass ${this.critters.counts.nest})` });
+    }
+    const b = this.books.touch(this.car.position);
+    if (b) {
+      const n = this.books.count;
+      const extra = n === BOOKS_FOR_TURBO ? " — TURBO unlocked! Hold Shift" : n === BOOKS_FOR_SUPER ? " — FLAMES + SUPER TURBO! Shift+Space" : "";
+      if (this.onHud) this.onHud({ mode: "toast", text: `Ghost Book! ${n}/${this.books.total}${extra}` });
+      this.car.turboLevel = this.books.turboLevel;
+      this._syncBookHud();
+    }
+    this.car.turboLevel = this.books.turboLevel;
+    // muffler flames: idle flicker at 12 books, roaring while turbo is held
+    const fl = this._flames, show = this.flamesOn && this.books.turboLevel >= 2;
+    fl.visible = show;
+    if (show) {
+      const m = this.car.turboMul || 1, roar = m > 1.3 ? 1.6 : m > 1.05 ? 1.2 : 0.55;
+      const f = roar * (0.85 + 0.3 * Math.random());
+      for (const c of fl.children) c.scale.set(1, f, 1);
+    }
+    this.flamesVisible = show;
+  }
+  _syncBookHud() {
+    const doc = typeof document !== "undefined" ? document : null; if (!doc || !doc.getElementById) return;
+    let el = doc.getElementById("ghost-hud");
+    if (!el) {
+      const host = doc.getElementById("drive-hud"); if (!host) return;
+      el = doc.createElement("div"); el.id = "ghost-hud";
+      el.innerHTML = '<div id="ghost-count">Ghost Books 0/12</div>'
+        + '<div id="turbo-btns"><button type="button" id="btn-turbo" class="turbo-btn">TURBO</button><button type="button" id="btn-super" class="turbo-btn super">SUPER TURBO</button></div>'
+        + '<div id="ghost-menu"><button type="button" id="btn-mouselook">Mouse look: off (M)</button><button type="button" id="btn-invert-y">Invert Y: off (I)</button><button type="button" id="btn-invert-x">Invert X: off (Shift+I)</button><button type="button" id="btn-mousesteer">Mouse steer: off (N)</button><button type="button" id="btn-flames">Flames: on</button><button type="button" id="btn-books-reset">Reset ghost books</button></div>';
+      host.appendChild(el);
+      const hold = (id, sup) => {
+        const b = doc.getElementById(id);
+        const on = (e) => { e.preventDefault(); this.keys.boost = true; if (sup) this.keys.superTurbo = true; b.classList.add("held"); };
+        const off = () => { this.keys.boost = false; this.keys.superTurbo = false; b.classList.remove("held"); };
+        b.addEventListener("pointerdown", on); for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, off);
+      };
+      hold("btn-turbo", false); hold("btn-super", true);
+      doc.getElementById("btn-mouselook").addEventListener("click", () => this.setMouseLook(!this.mouseLook.on));
+      doc.getElementById("btn-invert-y").addEventListener("click", () => this.setMouseInvert("y", !this.mouseInvert.y));
+      doc.getElementById("btn-invert-x").addEventListener("click", () => this.setMouseInvert("x", !this.mouseInvert.x));
+      doc.getElementById("btn-mousesteer").addEventListener("click", () => this.setMouseSteer(!this.mouseSteer.on));
+      doc.getElementById("btn-flames").addEventListener("click", () => this.setFlames(!this.flamesOn));
+      doc.getElementById("btn-books-reset").addEventListener("click", () => { if (!window.confirm || window.confirm("Reset all ghost books?")) this.resetBooks(); });
+    }
+    const lv = this.books.turboLevel;
+    doc.getElementById("ghost-count").textContent = `Ghost Books ${this.books.count}/${this.books.total}`;
+    doc.getElementById("btn-turbo").style.display = lv >= 1 ? "" : "none";
+    doc.getElementById("btn-super").style.display = lv >= 2 ? "" : "none";
+    doc.getElementById("btn-flames").style.display = lv >= 2 ? "" : "none";
+    doc.getElementById("btn-flames").textContent = "Flames: " + (this.flamesOn ? "on" : "off");
+    doc.getElementById("btn-mouselook").textContent = "Mouse look: " + (this.mouseLook.on ? "ON" : "off") + " (M)";
+    doc.getElementById("btn-mouselook").classList.toggle("on", this.mouseLook.on);
+    // logic20: invert toggles appear once mouse look is on (horizontal invert also matters for mouse steer)
+    const iy = doc.getElementById("btn-invert-y"), ix = doc.getElementById("btn-invert-x"), st = doc.getElementById("btn-mousesteer");
+    // logic21 (Ben t184u "the inverted option didn't show up"): both invert pills are ALWAYS shown; dimmed
+    // (still clickable — the choice is saved) while the mouse mode they affect is off, with a tooltip.
+    if (iy) { iy.style.display = ""; iy.textContent = "Invert Y: " + (this.mouseInvert.y ? "ON" : "off") + " (I)"; iy.classList.toggle("on", this.mouseInvert.y); iy.classList.toggle("dim", !this.mouseLook.on);
+      iy.title = "Invert vertical mouse look (up/down)" + (this.mouseLook.on ? "" : " — applies when Mouse look is ON (M)"); }
+    if (ix) { const live = this.mouseLook.on || this.mouseSteer.on; ix.style.display = ""; ix.textContent = "Invert X: " + (this.mouseInvert.x ? "ON" : "off") + " (Shift+I)"; ix.classList.toggle("on", this.mouseInvert.x); ix.classList.toggle("dim", !live);
+      ix.title = "Invert horizontal mouse look and mouse steer" + (live ? "" : " — applies when Mouse look (M) or Mouse steer (N) is ON"); }
+    if (st) { st.textContent = "Mouse steer: " + (this.mouseSteer.on ? "ON" : "off") + " (N)"; st.classList.toggle("on", this.mouseSteer.on); }
+  }
+
   enter() {
+    this.books.setVisible(true);
+    try { this._syncBookHud(); } catch (_) {}
+    this._setHatch(false); // logic12: attic hatch lid opens for the driver's lift shaft
     this.active = true;
+    this._mouseSteerRelease(); this._syncMouseListener(); // logic20: saved mouse-steer preference re-listens on entry (logic21: wheel stays centred until the mouse moves)
     try { this.car.setVehicle(this.vehicleId); } catch (err) {
       console.warn("[DriveMode] setVehicle failed", err);
     }
@@ -509,6 +665,11 @@ export class DriveMode {
   }
 
   exit() {
+    this.books.setVisible(false);
+    if (this.mouseLook.on) this.setMouseLook(false);
+    this.active = false; this._syncMouseListener(); // logic20: mouse steer listener off outside Drive
+    if (this.keys) this.keys.steerAnalog = null;
+    this._setHatch(true);
     this._clearAutodriveUI();
     this._autodrive = null;
     this._autoLastWall = 0;
@@ -516,6 +677,7 @@ export class DriveMode {
     this.car.speed = 0;
     this.keys = { forward: false, back: false, left: false, right: false, boost: false };
     this.camera.fov = this._baseFov;
+    this.camera.near = 0.08; this.camera.far = 240; this.camera.updateProjectionMatrix(); // logic11: Explore camera exactly as before
     this.camera.updateProjectionMatrix();
     if (this._fillLight) this._fillLight.visible = false;
     if (this._climbFill) this._climbFill.visible = false;
@@ -622,24 +784,27 @@ export class DriveMode {
     // Open road: closer chase — car fills frame (not a speck); still clears walls
     // logic7: a little higher + further at rest/leisure so the spawn reads as a room (was a
     // low "brown corridor" view); cruise framing nearly unchanged.
-    const back = (inWall ? 0.15 : 0.21 + leisure * 0.13 + elev * 0.03) + Math.min(0.10, spd * 0.040);
-    const up = (inWall ? 0.11 : 0.115 + leisure * 0.11 + elev * 0.028) + Math.min(0.045, spd * 0.014);
-    this._camBack = back;
-    this._camUp = up;
+    const hi = inWall ? 0 : (this._camHigh || 0);
+    // logic11 DRIVER-EYE SCALE: the camera rides just above/behind the 3 cm car (≈ a toy driver's
+    // eye), not at human standing height — furniture and rooms loom full-size.
+    const bumper = this._camMode === "bumper";
+    const back = bumper ? -0.045 : (inWall ? 0.10 : 0.125 + leisure * 0.03 + elev * 0.01) + Math.min(0.05, spd * 0.02) + hi * 0.12;
+    const up = bumper ? 0.024 : (inWall ? 0.042 : 0.046 + leisure * 0.012 + elev * 0.008) + Math.min(0.012, spd * 0.004) + hi * 0.17;
+    this._camBack = back * CAR_K; // logic16: rig scales with the car → same framing
+    this._camUp = up * CAR_K;
     this._camLookYaw = lookYaw;
-    const cx = p.x - Math.sin(yaw) * back;
-    const cy = p.y + up;
-    const cz = p.z - Math.cos(yaw) * back;
+    const cx = p.x - Math.sin(yaw) * back * CAR_K;
+    const cy = p.y + up * CAR_K;
+    const cz = p.z - Math.cos(yaw) * back * CAR_K;
     this._camPos.set(cx, cy, cz);
 
     // Look along tube / track — shorter ahead in walls keeps view readable
-    const ahead = (inWall ? 0.26 : 0.22 + leisure * 0.10 + elev * 0.03) + Math.min(0.22, spd * 0.055);
-    // Cap leisure push-out so look-into-turn never becomes a far sightseeing yank
-    const aheadUse = Math.min(ahead, inWall ? 0.32 : 0.38);
+    const ahead = (inWall ? 0.5 : 0.55 + leisure * 0.15) + Math.min(0.3, spd * 0.08);
+    const aheadUse = bumper ? 1.2 : ahead + hi * 0.25;
     this._lookAhead.set(
-      p.x + Math.sin(lookYaw) * aheadUse,
-      p.y + (inWall ? 0.055 : 0.032 + leisure * 0.030 + elev * 0.012) + Math.min(0.022, spd * 0.005),
-      p.z + Math.cos(lookYaw) * aheadUse
+      p.x + Math.sin(bumper ? yaw : lookYaw) * aheadUse,
+      p.y + ((bumper ? 0.022 : (inWall ? 0.035 : 0.038 + leisure * 0.01)) - hi * 0.3) * CAR_K,
+      p.z + Math.cos(bumper ? yaw : lookYaw) * aheadUse
     );
     this._camTarget.copy(this._lookAhead);
 
@@ -653,6 +818,8 @@ export class DriveMode {
 
   /** logic7: drop smoothed chase state so the next frame starts exactly on the framing. */
   _resetChaseSmoothing() {
+    this._camOccK = 1;
+    this._camSolK = null; this._camBaseY = null;
     this._camYawS = null;
     this._camBackS = null;
     this._camUpS = null;
@@ -711,6 +878,50 @@ export class DriveMode {
    * Push an XZ point out of Drive wall/furniture AABBs (car radius pad).
    * Skirting centerlines sometimes clip stair stringers — magnets must aim clear.
    */
+  /** logic8: first hit (0..1) of segment a→b against nearby solid boxes, or 1 if clear. */
+  _segSolidHit(ax, ay, az, bx, by, bz, pad = 0.03) {
+    const cx = (ax + bx) / 2, cz = (az + bz) / 2;
+    const len = Math.hypot(bx - ax, bz - az);
+    const boxes = this._wallsNear ? this._wallsNear(cx, cz, len / 2 + 0.4) : [];
+    const d = [bx - ax, by - ay, bz - az], o = [ax, ay, az];
+    let best = 1;
+    for (const b of boxes) {
+      if (b.conveyor) continue; // logic14: the open conveyor cage never pulls the camera in
+      const mn = [b.min.x - pad, b.min.y - pad, b.min.z - pad], mx = [b.max.x + pad, b.max.y + pad, b.max.z + pad];
+      let t0 = 0, t1 = best, ok = true;
+      for (let k = 0; k < 3 && ok; k++) {
+        if (Math.abs(d[k]) < 1e-9) { if (o[k] < mn[k] || o[k] > mx[k]) ok = false; continue; }
+        let ta = (mn[k] - o[k]) / d[k], tb = (mx[k] - o[k]) / d[k];
+        if (ta > tb) { const t = ta; ta = tb; tb = t; }
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        if (t0 > t1) ok = false;
+      }
+      if (ok && t0 < best) best = t0;
+    }
+    return best;
+  }
+
+  _camClearOfSolids(pp, camX, camY, camZ) {
+    const minUp = 0.1; // camera always above the car roof line
+    camY = Math.max(camY, pp.y + minUp);
+    const ax = pp.x, ay = pp.y + 0.07, az = pp.z; // aim point = car body centre
+    let t = this._segSolidHit(ax, ay, az, camX, camY, camZ);
+    // Blocked: first try lifting the camera (look down over low furniture/walls) before pulling in
+    if (t < 1) {
+      for (const lift of [0.15, 0.3, 0.45]) {
+        const t2 = this._segSolidHit(ax, ay, az, camX, camY + lift, camZ);
+        if (t2 >= 1) { t = 1; camY += lift; break; }
+      }
+    }
+    if (t < 1) {
+      const dist = Math.hypot(camX - ax, camY - ay, camZ - az) || 1;
+      const k = Math.max(0.12 / dist, t - 0.04 / dist);
+      camX = ax + (camX - ax) * k; camY = Math.max(pp.y + minUp, ay + (camY - ay) * k); camZ = az + (camZ - az) * k;
+    }
+    this._camSolidPull = t < 1 ? 1 - t : 0;
+    return { x: camX, y: camY, z: camZ };
+  }
+
   _clearPointFromWalls(x, z, y, pad = 0.02) {
     const r = this._carRadius + pad;
     const y0 = y + 0.02; // logic3: tyres ride ON a wall top flush with the deck (4.2 vs 4.212)
@@ -724,6 +935,13 @@ export class DriveMode {
         if (y1 < box.min.y || y0 > box.max.y) continue;
         if (!(px + r > box.min.x && px - r < box.max.x &&
               pz + r > box.min.z && pz - r < box.max.z)) continue;
+        if (box.rail) { // logic16: only a real rail contact needs clearing; a shallow graze is pushed straight off the segment
+          const R = box.rail; if (!railHit(R, px, pz, y0, y1, r)) continue;
+          const ax = R.x1 - R.x0, az = R.z1 - R.z0, L2 = ax * ax + az * az || 1e-9;
+          const u = Math.max(0, Math.min(1, ((px - R.x0) * ax + (pz - R.z0) * az) / L2));
+          const cx = R.x0 + ax * u, cz = R.z0 + az * u, nx = px - cx, nz = pz - cz, nl = Math.hypot(nx, nz);
+          if (nl > 1e-6 && r + R.t - nl < 0.03) { const k = (r + R.t + 0.004) / nl; px = cx + nx * k; pz = cz + nz * k; moved = true; continue; }
+        }
         const ol = (px + r) - box.min.x;
         const orr = box.max.x - (px - r);
         const od = (pz + r) - box.min.z;
@@ -762,16 +980,7 @@ export class DriveMode {
    * immediately nose into a wall or furniture collider (T-junction safe).
    */
   _pickOpenRoadYaw(x, y, z, fallback) {
-    const snap = this.tracks.querySnap(x, y, z, 2.0, fallback);
-    let base = (snap && Number.isFinite(snap.yaw)) ? snap.yaw : fallback;
-    // Prefer floor ribbon yaw when a kissing ramp stole the junction snap
-    if (snap && (snap.kind === "ramp" || snap.kind === "elevated")) {
-      const esc = this.tracks.findEscapeSnap ? this.tracks.findEscapeSnap(x, y, z, 2.2) : null;
-      if (esc && (esc.kind === "floor" || esc.kind === "outdoor")
-          && Number.isFinite(esc.yaw) && esc.dist < 0.55) {
-        base = esc.yaw;
-      }
-    }
+    const base = fallback;
     // Dense forward samples so thin posts/pillars between coarse distances cannot sneak through
     const probeClear = (yaw, dist = 0.85) => {
       const dx = Math.sin(yaw) * dist;
@@ -825,341 +1034,41 @@ export class DriveMode {
     return Number.isFinite(fallback) ? fallback : base;
   }
 
-  /** Foyer climb approach corridor — stair/furniture/junction walls must not pin. */
-  _nearFoyerClimbCorridor(x, z) {
-    // logic3 feet: tangent-continuous foot arcs off the S/F straight (z≈11.4)
-    // Climb A foot sweep x∈[-6.45,-2.0], Climb B x∈[4.0,8.45], z∈[9.0,12.6]
-    if (z >= 9.0 && z <= 12.6 && ((x >= -6.45 && x <= -2.0) || (x >= 4.0 && x <= 8.45))) return true;
-    // Climb strips (holeA_climb / holeB_climb, end at z=10)
-    if (x >= -6.45 && x <= -3.55 && z >= -2.25 && z <= 10.2) return true;
-    if (x >= 5.55 && x <= 8.45 && z >= -2.25 && z <= 10.2) return true;
-    return false;
-  }
-
   /**
-   * Soft wall slide — depenetrate along outward normal, keep tangential speed,
-   * scrub only when head-on. Grazing along skirting must NOT pin to ~0.
-   * Passages / on-track ramp climbs still pierce.
+   * logic8: stuck / void recovery. The ONLY time the car is moved by anything but its own
+   * wheels: it fell out of the world, or W has been held for 2.5 s with the car not moving
+   * (wedged). Then it respawns, stopped, on the nearest road. No nudges, no pulls.
    */
-  _resolveDriveWalls(prevX, prevZ, snap) {
-    this._frameWallHits = 0;
-    if (!this._wallColliders || !this._wallColliders.length) return;
-    const kind = snap?.kind || "";
-    if (this._passKinds.has(kind) || snap?.tube) return;
-    // Pierce while climbing OR approaching foot (nearDeck / continuity) so stair
-    // stringers / underside never pin the ribbon path onto the ramp.
-    if (kind === "ramp" && (snap?.onTrack || snap?.nearDeck || snap?.rampContinuity)) return;
-    const r = this._carRadius;
-    const p = this.car.root.position;
-    const y = p.y;
-    const y0 = y + 0.02; // logic3: tyres ride ON a wall top flush with the deck (4.2 vs 4.212)
-    const y1 = y + 0.12;
-    // Climb corridor: pierce ONLY intentional soft volumes (stair underside /
-    // furniture). NEVER pierce walls or pillars — freestanding posts stay solid.
-    // Door/climb apertures are already cut in meshes; do not ghost thin pillars.
-    const climbApproach = this._nearFoyerClimbCorridor(p.x, p.z);
-    let cols = this._wallsNear(p.x, p.z, r + 0.35);
-    if (climbApproach) {
-      const climbRibbon = (kind === "ramp" || kind === "floor" || !kind
-        || snap?.onTrack || snap?.nearDeck || snap?.rampContinuity);
-      if (climbRibbon) {
-        cols = cols.filter((b) => {
-          const k = b.driveKind || "wall";
-          // Soft only — walls + pillars always collide
-          if (k === "stair" || k === "furniture") return false;
-          return true;
-        });
-      } else {
-        // Off-ribbon in climb band: keep hard solids (wall + pillar)
-        cols = cols.filter((b) => {
-          const k = b.driveKind || "wall";
-          return k === "wall" || k === "pillar";
-        });
-      }
-    }
-    if (!cols.length) return;
-
-    const onRibbon = !!(snap && snap.onTrack);
-    let hitCount = 0;
-    let accNX = 0;
-    let accNZ = 0;
-
-    for (let pass = 0; pass < 3; pass++) {
-      let hit = false;
-      for (const box of cols) {
-        if (y1 < box.min.y || y0 > box.max.y) continue;
-        const overlaps =
-          p.x + r > box.min.x && p.x - r < box.max.x &&
-          p.z + r > box.min.z && p.z - r < box.max.z;
-        if (!overlaps) continue;
-        hit = true;
-
-        // Depenetrate along shallowest axis → outward normal
-        const ol = (p.x + r) - box.min.x;
-        const orr = box.max.x - (p.x - r);
-        const od = (p.z + r) - box.min.z;
-        const ou = box.max.z - (p.z - r);
-        if (!(ol > 0 && orr > 0 && od > 0 && ou > 0)) continue;
-        const eps = 0.006;
-        const bw = box.max.x - box.min.x;
-        const bd = box.max.z - box.min.z;
-        const thinX = bw < bd * 0.65;
-        const thinZ = bd < bw * 0.65;
-        const minX = Math.min(ol, orr);
-        const minZ = Math.min(od, ou);
-        let useX;
-        if (thinX && minX < 0.55) useX = true;
-        else if (thinZ && minZ < 0.55) useX = false;
-        else useX = minX <= minZ;
-        let nx = 0;
-        let nz = 0;
-        if (useX) {
-          if (ol < orr) { p.x = box.min.x - r - eps; nx = -1; }
-          else { p.x = box.max.x + r + eps; nx = 1; }
-        } else {
-          if (od < ou) { p.z = box.min.z - r - eps; nz = -1; }
-          else { p.z = box.max.z + r + eps; nz = 1; }
-        }
-
-        hitCount += 1;
-        accNX += nx;
-        accNZ += nz;
-        this._frameWallHits = (this._frameWallHits || 0) + 1;
-        const soft = box.driveKind === "furniture" || box.driveKind === "stair"; // pillar/wall = hard
-        if (!soft) this._jamHits = (this._jamHits || 0) + 1;
-        // Floor asphalt onTrack: positional depenetrate ONLY — no speed scrub / yaw yank
-        // (aggressive scrub was killing W cruise to ~3 km/h / pin on apron edge).
-        const floorCruise = onRibbon && (kind === "floor" || kind === "outdoor" || kind === "flower");
-        if (floorCruise) {
-          this.car._scrape = Math.min(1, (this.car._scrape || 0) + 0.08);
-          // Still kill into-wall speed when nose-in — otherwise HUD speed>0 while position frozen
-          const fwdX0 = Math.sin(this.car.yaw);
-          const fwdZ0 = Math.cos(this.car.yaw);
-          const headOn0 = Math.max(0, -(fwdX0 * nx + fwdZ0 * nz));
-          if (headOn0 > 0.55) {
-            const spd0 = this.car.speed;
-            const vx0 = fwdX0 * spd0;
-            const vz0 = fwdZ0 * spd0;
-            const nDot0 = vx0 * nx + vz0 * nz;
-            if (nDot0 < 0) {
-              const vx2 = vx0 - nDot0 * nx;
-              const vz2 = vz0 - nDot0 * nz;
-              const spd2 = Math.hypot(vx2, vz2);
-              const signed = Math.sign(spd0 || 1);
-              if (spd2 > 0.05) {
-                const slideYaw = Math.atan2(vx2, vz2);
-                let dyaw = slideYaw - this.car.yaw;
-                while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-                while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-                this.car.yaw += dyaw * Math.min(0.55, 0.18 + headOn0 * 0.4);
-                this.car.root.rotation.y = this.car.yaw;
-                this.car.speed = signed * Math.max(spd2 * 0.92, 0.45);
-              } else {
-                this.car.speed *= 0.55;
-              }
-            }
-          }
-          continue;
-        }
-        // Feed car scrape FX while sliding mansion walls off-ribbon / elevated
-        // Softer scrape on-ribbon — cruise stays smooth, less speed-kill jerk
-        this.car._scrape = Math.min(1, (this.car._scrape || 0) + (soft ? 0.12 : (onRibbon ? 0.12 : 0.34)));
-
-        // Fresh forward each hit (yaw may have slid on prior collider)
-        const fwdX = Math.sin(this.car.yaw);
-        const fwdZ = Math.cos(this.car.yaw);
-
-        // Project velocity onto wall tangent — slide, don't pin
-        const spd = this.car.speed;
-        const vx = fwdX * spd;
-        const vz = fwdZ * spd;
-        const nDotV = vx * nx + vz * nz;
-        const headOn = Math.max(0, -(fwdX * nx + fwdZ * nz)); // 0=graze, 1=nose-in
-
-        if (nDotV < 0) {
-          // Remove into-wall component; keep tangential slide
-          const vx2 = vx - nDotV * nx;
-          const vz2 = vz - nDotV * nz;
-          const spd2 = Math.hypot(vx2, vz2);
-          if (spd2 > 0.04) {
-            const slideYaw = Math.atan2(vx2, vz2);
-            let dyaw = slideYaw - this.car.yaw;
-            while (dyaw > Math.PI) dyaw -= Math.PI * 2;
-            while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-            // Light yaw slide only when clearly head-on — grazing must not yank steer
-            const yawBlend = Math.min(0.42, 0.10 + headOn * 0.32);
-            this.car.yaw += dyaw * yawBlend;
-            this.car.root.rotation.y = this.car.yaw;
-            const loss = soft
-              ? (0.02 + headOn * 0.10)
-              : (onRibbon ? (0.025 + headOn * 0.12) : (0.05 + headOn * 0.22));
-            const signed = Math.sign(spd || 1);
-            this.car.speed = signed * spd2 * (1 - Math.min(0.55, loss));
-            if (onRibbon && headOn < 0.65) {
-              const floor = Math.min(this.car.maxSpeed * 0.78, 0.95);
-              const keep = headOn < 0.25 ? 0.82 : (headOn < 0.45 ? 0.68 : 0.58);
-              if (Math.abs(this.car.speed) < floor * keep) {
-                this.car.speed = signed * Math.max(Math.abs(this.car.speed), floor * keep);
-              }
-            }
-          } else {
-            // Truly jammed into wall with no tangent — soft bounce reverse
-            this.car.speed *= soft ? 0.48 : 0.32;
-            const tx = -nz;
-            const tz = nx;
-            const intend = (prevX !== p.x || prevZ !== p.z)
-              ? Math.atan2(p.x - prevX, p.z - prevZ)
-              : this.car.yaw;
-            const tYawA = Math.atan2(tx, tz);
-            const tYawB = Math.atan2(-tx, -tz);
-            let dA = tYawA - intend;
-            let dB = tYawB - intend;
-            while (dA > Math.PI) dA -= Math.PI * 2;
-            while (dA < -Math.PI) dA += Math.PI * 2;
-            while (dB > Math.PI) dB -= Math.PI * 2;
-            while (dB < -Math.PI) dB += Math.PI * 2;
-            this.car.yaw = Math.abs(dA) <= Math.abs(dB) ? tYawA : tYawB;
-            this.car.root.rotation.y = this.car.yaw;
-            if (Math.abs(this.car.speed) < 0.25) {
-              this.car.speed = Math.sign(this.car.speed || 1) * 0.35;
-            }
-          }
-        } else {
-          // Parallel / moving away — whisper scrub only
-          this.car.speed *= soft ? 0.99 : 0.97;
-        }
-      }
-      if (!hit) break;
-    }
-
-    // Under wall pressure: light outward + tiny wall-safe centerline nudge — NO yaw magnet.
-    // (Full 0.42 shove + yaw settle was yanking steer into furniture; keep positional only.)
-    if (hitCount > 0 && onRibbon && snap && snap.x != null && snap.z != null) {
-      const nLen = Math.hypot(accNX, accNZ) || 1;
-      const nnx = accNX / nLen;
-      const nnz = accNZ / nLen;
-      const toSX = snap.x - p.x;
-      const toSZ = snap.z - p.z;
-      const nDot = toSX * nnx + toSZ * nnz;
-      // Drop into-wall component of magnet
-      const adjX = toSX - Math.min(0, nDot) * nnx;
-      const adjZ = toSZ - Math.min(0, nDot) * nnz;
-      const pull = (kind === "floor" || kind === "outdoor" || kind === "flower") ? 0.10 : 0.08;
-      p.x += adjX * pull;
-      p.z += adjZ * pull;
-      p.x += nnx * 0.010;
-      p.z += nnz * 0.010;
-    }
-  }
-
-
-  /**
-   * Auto-unstuck: forward input but speed≈0 for >0.6s, or jammed in colliders.
-   * Soft-nudge toward nearest visible onTrack asphalt (prefer floor/outdoor).
-   */
-  _updateStuckEscape(dt, keys, snap, prevX, prevZ) {
-    if (!this.active || this._inputsFrozen || this.car.airborne || this.car.crashed) {
-      this._stuckTimer = 0;
-      this._jamHits = 0;
-      return;
-    }
-    this._stuckNudgeCd = Math.max(0, (this._stuckNudgeCd || 0) - dt);
-    const forward = !!(keys && keys.forward);
-    const absV = Math.abs(this.car.speed);
-    const p = this.car.root.position;
+  _updateStuckRespawn(dt, keys, prevX, prevZ, flags) {
+    if ((flags && flags.lift) || this._onFlap >= 0) { this._stuckTimer = 0; return; } // logic11 lift / logic14 conveyor ride
+    const p = this.car.position;
+    if (flags && flags.void) { this._respawnNearestRoad("Hopped back on"); return; }
+    if (this.car.airborne) { this._stuckTimer = 0; return; }
     const moved = Math.hypot(p.x - prevX, p.z - prevZ);
-    const onRibbon = !!(snap && snap.onTrack);
-    // Stall: forward but barely moving (0 km/h screenshot) OR scraping wall while off-ribbon
-    const stalled = forward && !onRibbon && absV < 0.08 && moved < 0.005;
-    const slowOffRoad = forward && !onRibbon && absV < 0.20 && moved < 0.012
-      && ((this._frameWallHits || 0) >= 1 || (snap && snap.carpet));
-    const jammed = forward && absV < 0.15 && (
-      (this._frameWallHits || 0) >= 2 || (this._jamHits || 0) >= 3
-    );
-    // On-ribbon wall pin (skirting scrape that still dies) — escape sooner
-    const wallPin = forward && onRibbon && absV < 0.18 && moved < 0.004
-      && (this._frameWallHits || 0) >= 1;
-    // Ben freeze class: HUD speed>0 but position locked against wall/furniture
-    const speedFrozen = forward && moved < 0.0025 && absV > 0.25
-      && ((this._frameWallHits || 0) >= 1 || (this._jamHits || 0) >= 1);
+    const pushing = !!(keys && (keys.forward || keys.back));
+    if (pushing && moved < 0.0015 * Math.max(1, dt * 60)) this._stuckTimer = (this._stuckTimer || 0) + dt;
+    else this._stuckTimer = 0;
+    if (this._stuckTimer > 2.5) this._respawnNearestRoad("Stuck — hopped back on");
+  }
 
-    if (stalled || jammed || slowOffRoad || wallPin || speedFrozen) {
-      this._stuckTimer = (this._stuckTimer || 0) + dt;
-    } else if (!forward || (onRibbon && !speedFrozen && absV > 0.35 && moved > 0.008)) {
-      this._stuckTimer = 0;
-      this._jamHits = 0;
-    } else if (!forward || (onRibbon && moved > 0.01)) {
-      this._stuckTimer = Math.max(0, (this._stuckTimer || 0) - dt * 0.5);
-      this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
-    } else {
-      this._stuckTimer = Math.max(0, (this._stuckTimer || 0) - dt * 0.35);
-      this._jamHits = Math.max(0, (this._jamHits || 0) - 1);
-    }
-
-    // Escape sooner on ribbon wall-pin / speed-freeze / ramp-approach grab
-    const nearClimb = !!(snap && (snap.kind === "ramp" || snap.nearDeck || snap.rampContinuity));
-    const stuckNeed = (wallPin || speedFrozen || nearClimb) ? 0.28 : 0.6;
-    if (this._stuckTimer < stuckNeed || this._stuckNudgeCd > 0) return;
-
-    const escape = this.tracks.findEscapeSnap
-      ? this.tracks.findEscapeSnap(p.x, p.y, p.z, 2.4)
-      : null;
-    // Prefer SAME ribbon / continuous junction — never jump to a parallel track across the room
-    const lastId = this.tracks._lastPathId;
-    let target = null;
-    if (snap && snap.onTrack && snap.x != null) target = snap;
-    else if (escape && escape.onTrack && escape.x != null) {
-      const jump = Math.hypot(escape.x - p.x, escape.z - p.z);
-      const samePath = !lastId || escape.pathId === lastId;
-      if (samePath && jump < 1.25) target = escape;
-      else if (!samePath && jump < 0.55) target = escape; // tiny adjacent junction only
-    }
-    if (!target || target.x == null) {
-      // Local forward nudge along current facing — no distant asphalt teleport
-      const fx = Math.sin(this.car.yaw);
-      const fz = Math.cos(this.car.yaw);
-      const cleared = this._clearPointFromWalls(p.x + fx * 0.28, p.z + fz * 0.28, p.y, 0.04);
-      p.x = cleared.x;
-      p.z = cleared.z;
-      this.car.speed = Math.max(0.55, Math.min(this.car.maxSpeed * 0.45, Math.abs(this.car.speed) + 0.35));
-      this._stuckTimer = 0;
-      this._jamHits = 0;
-      this._stuckNudgeCd = 0.85;
-      if (this.onHint) this.onHint("Unstuck — keep moving");
-      return;
-    }
-    let yaw = (target.yaw != null && Number.isFinite(target.yaw)) ? target.yaw : this.car.yaw;
-    // Choose ribbon direction closest to current facing / travel intent
-    let dYaw = yaw - this.car.yaw;
-    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
-    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
-    let dYawR = dYaw + Math.PI;
-    while (dYawR > Math.PI) dYawR -= Math.PI * 2;
-    while (dYawR < -Math.PI) dYawR += Math.PI * 2;
-    if (Math.abs(dYawR) < Math.abs(dYaw)) yaw += Math.PI;
-    // Soft nudge toward nearby centerline (cap step) then along road — never hard teleport
-    const toX = target.x - p.x;
-    const toZ = target.z - p.z;
-    const toLen = Math.hypot(toX, toZ) || 1;
-    const step = Math.min(0.32, toLen * 0.55);
-    let nx = p.x + (toX / toLen) * step + Math.sin(yaw) * 0.18;
-    let nz = p.z + (toZ / toLen) * step + Math.cos(yaw) * 0.18;
-    const cleared = this._clearPointFromWalls(nx, nz, p.y, 0.04);
-    p.x = cleared.x;
-    p.z = cleared.z;
-    if (target.y != null && Math.abs(target.y - p.y) < 0.45) {
-      p.y = Math.max(p.y, Math.min(target.y, p.y + 0.08));
-    }
-    this.car.yaw = yaw;
-    this.car.root.rotation.y = this.car.yaw;
-    this.car.speed = Math.max(0.75, Math.min(this.car.maxSpeed * 0.60, Math.abs(this.car.speed) + 0.60));
-    this.car.airborne = false;
-    this.car.vy = 0;
-    this.car._unsupportedFrames = 0;
+  _respawnNearestRoad(hint) {
+    const p = this.car.position;
+    const w = this.world;
+    const road = w ? w.nearestRoad(p.x, Math.max(p.y, -0.2), p.z) : null;
+    if (!road) { this._respawnAtStart(); return; }
+    // face along the road, in the direction closest to the old heading
+    let yaw = road.yaw;
+    let d = yaw - this.car.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    if (Math.abs(d) > Math.PI / 2) yaw += Math.PI;
+    this.car.setPose(road.x, road.y, road.z, yaw);
+    this.car.speed = 0;
     this._stuckTimer = 0;
-    this._jamHits = 0;
-    this._stuckNudgeCd = 1.0;
-    if (this.onHint) this.onHint("Unstuck — back on the road");
+    this._respawns = (this._respawns || 0) + 1;
+    this._resetChaseSmoothing();
+    this._snapCamera(true);
+    if (hint && this.onHint) this.onHint(hint);
   }
 
   _updateFx(dt, snap, flags) {
@@ -1326,15 +1235,127 @@ export class DriveMode {
     // for a few seconds only reached ~6 km/h. Now main passes real dt (≤1 s since logic5) and we
     // integrate it in ≤1/30 s sub-steps (identical to before for normal 60 fps frames).
     // logic5: accept up to 1 s (live box Chrome ran Drive at ~0.8 fps); still ≤1/30 s sub-steps.
-    const d = Math.max(0, Math.min(Number(dt) || 0, 1.0));
-    const n = Math.max(1, Math.ceil(d * 30 - 1e-6));
-    for (let i = 0; i < n; i++) {
-      this._updateFrame(d / n);
+    // logic11: FIXED-TIMESTEP physics + render interpolation (see POLISH-LOGIC11.md)
+    const root = this.car.root, cam = this.camera;
+    // logic21: undo LAST frame's interpolation (car AND camera) before stepping physics. logic11 only
+    // interpolated on frames that ran a physics step and never restored the camera, so at 120/144 Hz
+    // (ProMotion, gaming monitors) the shown car and the chase camera advanced on ALTERNATE frames —
+    // the "car glitches slightly as I go forward" shimmer — and the camera smoothing integrated its own
+    // render offset. Now every rendered frame shows lerp(prevPhys, curPhys, acc/step) for both.
+    if (this._physPos && this._interpShown && this._shownPos && root.position.distanceToSquared(this._shownPos) < 1e-12) {
+      root.position.copy(this._physPos); root.rotation.y = this._physYaw; this.car.yaw = this._physYaw;
+      if (cam && this._camPhys && this._camShown && cam.position.distanceToSquared(this._camShown) < 1e-12) cam.position.copy(this._camPhys);
+    }
+    this._interpShown = false;
+    let d = Math.max(0, Math.min(Number(dt) || 0, 1.0));
+    this._dtAvg = this._dtAvg ? this._dtAvg + (Math.min(d, 0.5) - this._dtAvg) * 0.1 : Math.min(d, 0.1);
+    if (d > 0.1 && d > 4 * this._dtAvg) d = Math.min(d, 2 * this._dtAvg + 1 / 60); // hitch clamp
+    const step = this._dtAvg > 0.045 ? 1 / 30 : 1 / 60;
+    if (this._physStep !== step) { this._physStep = step; this._physPrev = null; }
+    this._acc = Math.min((this._acc || 0) + d, step * 40);
+    const prev = this._prevPhys || (this._prevPhys = new THREE.Vector3());
+    const cur = this._physPos || (this._physPos = new THREE.Vector3());
+    // the pose was changed outside update() (teleport / setPose / reset) → no stale interpolation
+    if (!this._physPrev || root.position.distanceToSquared(cur) > 1e-12) {
+      cur.copy(root.position); this._physYaw = this.car.yaw;
+      prev.copy(cur); this._prevPhysYaw = this.car.yaw; this._physPrev = prev;
+    }
+    let stepped = 0;
+    while (this._acc >= step && stepped < 40) {
+      prev.copy(root.position); this._prevPhysYaw = this.car.yaw;
+      this._updateFrame(step);
+      this._acc -= step; stepped++;
       if (!this.active) break;
+    }
+    this._fixedSteps = (this._fixedSteps || 0) + stepped;
+    if (stepped) {
+      cur.copy(root.position); this._physYaw = this.car.yaw;
+      if (cam) (this._camPhys || (this._camPhys = new THREE.Vector3())).copy(cam.position);
+    }
+    if (this.active && this._camPhys && prev.distanceToSquared(cur) < 0.25 && prev.distanceToSquared(cur) > 0) {
+      const alpha = Math.max(0, Math.min(1, this._acc / step));
+      const ix = prev.x + (cur.x - prev.x) * alpha, iy = prev.y + (cur.y - prev.y) * alpha, iz = prev.z + (cur.z - prev.z) * alpha;
+      let dy = this._physYaw - this._prevPhysYaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+      if (cam && cam.position.distanceToSquared(this._camPhys) < 1e-12) {
+        cam.position.set(this._camPhys.x + ix - cur.x, this._camPhys.y + iy - cur.y, this._camPhys.z + iz - cur.z);
+        (this._camShown || (this._camShown = new THREE.Vector3())).copy(cam.position);
+      }
+      root.position.set(ix, iy, iz); root.rotation.y = this._prevPhysYaw + dy * alpha;
+      this._interpShown = true; (this._shownPos || (this._shownPos = new THREE.Vector3())).copy(root.position);
+      if (this.tracks._conveyor && this.world && this.world.conveyor) this.tracks._conveyor.update(this.world.conveyor.t - (1 - alpha) * step); // logic14: flaps interpolated like the car
     }
   }
 
   /** Single simulation frame (physics + cam + FX). */
+  /**
+   * logic11 CHANDELIER LIFT — a continuous elevator in the hidden shaft above the chandelier.
+   * Pull onto the pad at the top of the spiral (or onto the attic pad) and the car is carried
+   * smoothly (cosine ease, no teleport) to the other end, centred and turned to face out, then
+   * released rolling gently onto the attic road (up) or back down the spoke (down). Re-arms only
+   * after the car has left both pads. Returns frame flags while riding, else null.
+   */
+  _tickLift(dt) {
+    const car = this.car, p = car.position;
+    const onPad = (C, y) => Math.hypot(p.x - C.pad.x, p.z - C.pad.z) < C.padR && Math.abs(p.y - (y + 0.012)) < 0.06 && !car.airborne;
+    let L = this._lift;
+    let C = L ? L.C : null;
+    if (!L) {
+      // logic13: several lifts (chandelier shaft, roof shaft) — same ride, own pads/headings
+      let atBot = false, atTop = false;
+      for (const c of LIFTS) { if (c.conveyor) continue; atBot = onPad(c, c.padY); atTop = onPad(c, c.topY); if (atBot || atTop) { C = c; break; } }
+      if (!atBot && !atTop) { this._liftArmed = true; return null; }
+      if (this._liftArmed === false) return null;
+      const up = atBot;
+      const T = 2.6 * Math.max(1, Math.abs(C.topY - C.padY) / 1.6) ** 0.5;
+      L = this._lift = { C, t: 0, up, x0: p.x, z0: p.z, y0: p.y, y1: (up ? C.topY : C.padY) + 0.012, yaw0: car.yaw, yaw1: up ? C.yawUp : C.yawDown, T };
+      this._liftId = C.id;
+      this._liftArmed = false; this._liftRides = (this._liftRides || 0) + 1;
+      if (this.onHud) this.onHud({ mode: "toast", text: up ? "Going up…" : "Going down…" });
+    }
+    L.t += dt;
+    const u = Math.min(1, L.t / L.T), e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+    const c = Math.min(1, L.t / 0.5), ec = 0.5 - 0.5 * Math.cos(Math.PI * c); // centre on the pad first
+    let dy = L.yaw1 - L.yaw0; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    const yaw = L.yaw0 + dy * e;
+    p.set(L.x0 + (C.pad.x - L.x0) * ec, L.y0 + (L.y1 - L.y0) * e, L.z0 + (C.pad.z - L.z0) * ec);
+    car.yaw = yaw; car.root.rotation.y = yaw; car.root.rotation.x = 0; car.root.rotation.z = 0;
+    car.speed = 0; car.vy = 0; car.airborne = false; this._stuckTimer = 0;
+    if (u >= 1) { this._lift = null; car.speed = 0.25; } // gentle roll-off onto the road
+    return { surface: "road", grade: 0, lift: true };
+  }
+
+  /**
+   * logic14 PADDLE CONVEYOR. The flaps are real moving floors (DriveWorld.surfacesAt), so riding
+   * is ordinary physics: the car stands on a flap and rises with it (no scripted carry → no
+   * jitter). Only the TIP at the top is scripted: if the car is still on a flap when it rounds
+   * the top pulley, it slides off (eased, ~0.75 s, no teleport) onto the exit deck. Never buried.
+   */
+  _tickConveyor(dt) {
+    const w = this.world;
+    if (!w || !w.conveyor) return null;
+    w.conveyor.t += dt;
+    const car = this.car, p = car.position, K = CONVEYOR;
+    let S = this._convSlide;
+    if (!S) {
+      const i = this._onFlap ?? -1;
+      if (i < 0) return null;
+      const f = w.flapAt(i);
+      if (!this._convToast && f.y > K.deckY - 0.06 && this.onHud) { this._convToast = true; this.onHud({ mode: "toast", text: "Top! Drive straight off!" }); }
+      if (f.carrying) return null;
+      S = this._convSlide = { t: 0, T: 0.75, x0: p.x, y0: p.y, z0: p.z, x1: K.exit.x - 0.26, y1: K.deckY + 0.012, z1: K.exit.z, yaw0: car.yaw, yaw1: -Math.PI / 2 };
+      this._onFlap = -1; this._convTips = (this._convTips || 0) + 1;
+      if (this.onHud) this.onHud({ mode: "toast", text: "Whoops — the flap tipped you off!" });
+    }
+    S.t += dt;
+    const u = Math.min(1, S.t / S.T), e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+    let dyaw = S.yaw1 - S.yaw0; while (dyaw > Math.PI) dyaw -= 2 * Math.PI; while (dyaw < -Math.PI) dyaw += 2 * Math.PI;
+    p.set(S.x0 + (S.x1 - S.x0) * e, S.y0 + (S.y1 - S.y0) * e + 0.05 * Math.sin(Math.PI * u), S.z0 + (S.z1 - S.z0) * e);
+    car.yaw = S.yaw0 + dyaw * e; car.root.rotation.set(0, car.yaw, 0);
+    car.speed = 0; car.vy = 0; car.airborne = false; this._stuckTimer = 0;
+    if (u >= 1) { this._convSlide = null; this._convToast = false; car.speed = 0.3; }
+    return { surface: "road", grade: 0, lift: true, conveyor: true };
+  }
+
   _updateFrame(dt) {
     if (!this.active) return;
     this._time += dt;
@@ -1381,54 +1402,79 @@ export class DriveMode {
     }
 
     const pos = this.car.position;
-    const snap = this.tracks.querySnap(pos.x, pos.y, pos.z, 1.65, this.car.yaw);
-    // Floor/outdoor ribbon magnets must aim at a wall-cleared point (stair stringers
-    // often overlap authored skirting centerlines by a few cm).
-    if (snap && snap.onTrack && snap.x != null && snap.z != null
-        && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")) {
-      const cleared = this._clearPointFromWalls(snap.x, snap.z, pos.y);
-      snap.x = cleared.x;
-      snap.z = cleared.z;
-    }
-
-    if (this.tracks.onBoostPad(pos.x, pos.z) && this.car.speed > 0.35 && !this.car.airborne) {
-      this.car.speed = Math.min(this.car.boostMax, this.car.speed + 3.2 * dt);
-    }
-
+    this._tickMouseSteer(dt); // logic20
     const driveKeys = this._inputsFrozen
       ? { forward: false, back: false, left: false, right: false, boost: false }
       : this.keys;
 
     const prevX = pos.x;
     const prevZ = pos.z;
-    const flags = this.car.update(dt, driveKeys, snap);
-    this._sanitizeCar();
-    this._resolveDriveWalls(prevX, prevZ, snap);
-    // Guarantee: holding W on floor asphalt keeps cruise — but NOT while wall-pinned
-    // (forcing 0.55 during a freeze made HUD read 17 km/h with zero translation).
-    const movedFrame = Math.hypot(this.car.position.x - prevX, this.car.position.z - prevZ);
-    if (driveKeys.forward && snap && snap.onTrack
-        && (snap.kind === "floor" || snap.kind === "outdoor" || snap.kind === "flower")
-        && !this.car.airborne && !this.car.crashed
-        && movedFrame > 0.0015 && (this._frameWallHits || 0) < 2) {
-      // logic3: ease UP toward the cruise floor (was an instant 0→0.55 snap = 0.49/frame jolt)
-      if (this.car.speed < 0.55) {
-        this.car.speed = Math.min(0.55, this.car.speed + 1.8 * dt);
-      }
+    // logic8: free drive — the car reads only the world (surfaces + solids). No path snap.
+    const env = this._env || (this._env = {
+      world: this.world,
+      radius: this._carRadius,
+      boxesNear: (x, z, r) => this._wallsNear(x, z, r),
+      clear: (x, z, y) => this._clearPointFromWalls(x, z, y, 0.004),
+    });
+    env.world = this.world;
+    const flags = this._tickConveyor(dt) || this._tickLift(dt) || (this.world ? this.car.update(dt, driveKeys, env) : { surface: null, grade: 0 });
+    this._lastFlags = flags;
+    this._tickBooks(dt); // logic15
+    // logic14: standing on a carrying conveyor flap?
+    this._onFlap = (this.world && !this._convSlide && !this.car.airborne && this.world.flapUnder) ? this.world.flapUnder(pos.x, pos.z, pos.y) : -1;
+    if (this._onFlap < 0 && !this._convSlide) this._convToast = false;
+    if (this._onFlap >= 0) { // logic16: belt guide — riders ease to the middle of the flaps (no grinding the cage at the lip)
+      const P = CONVEYOR.phys, zc = (P.minZ + P.maxZ) / 2;
+      pos.z += (zc - pos.z) * Math.min(1, 1.5 * dt);
     }
-    this._updateStuckEscape(dt, driveKeys, snap, prevX, prevZ);
+    if (this.tracks._conveyor && this.world && this.world.conveyor) this.tracks._conveyor.update(this.world.conveyor.t);
+    this._frameWallHits = flags.hit ? 1 : 0;
+    if (flags.hit) this._wallHitCount = (this._wallHitCount || 0) + 1;
+    if (flags.hitHeadOn) this._impactPulse = Math.max(this._impactPulse || 0, 0.12);
+    this._sanitizeCar();
+    this._updateStuckRespawn(dt, driveKeys, prevX, prevZ, flags);
     this.car.idleTwitch(dt);
     this.tracks.updateVisuals(this._time);
-    this._updateFx(dt, snap, flags);
+    this.books.update(this._time, dt);
+    this._updateFx(dt, null, flags);
 
     if (this.car.crashed && !this._crashPhase) {
       this._beginCrash();
     }
 
-    const onElevDeck = !!(snap && (snap.elevated || snap.nearDeck || snap.kind === "cornice"
-      || snap.kind === "balcony" || snap.kind === "ramp"));
+    // Camera "elevated" feel on ramps / high decks (from the real slope + height above the floor)
+    const onElevDeck = Math.abs(flags.grade || 0) > 0.08 || (flags.surface === "road" && pos.y > 0.3 && pos.y < 4.1);
     this._camElevated = THREE.MathUtils.lerp(this._camElevated, onElevDeck ? 1 : 0, 1 - Math.exp(-2.4 * dt));
     this._camDt = dt;
+    // logic9 toy-train view: on a high wall-top track, lift + pull the chase cam and tilt the
+    // aim down over the rooms below (h = height above the floor under the car).
+    {
+      let floorY = null;
+      let pathId = null;
+      if (this.world && !this.car.airborne) {
+        for (const sf of this.world.surfacesAt(pos.x, pos.z)) {
+          if (sf.kind === "floor" && sf.y < pos.y - 0.3 && (floorY == null || sf.y > floorY)) floorY = sf.y;
+          if (sf.kind === "road" && Math.abs(sf.y - pos.y) < 0.06) pathId = sf.pathId;
+        }
+      }
+      const h = floorY == null ? 0 : pos.y - floorY;
+      const want = (this.car.airborne || pathId === "mouse_run" || pathId === "sky_chandelier" || this._lift || this._onFlap >= 0 || this._convSlide) ? 0 : THREE.MathUtils.smoothstep(h, 1.2, 2.8);
+      this._camHigh = THREE.MathUtils.lerp(this._camHigh || 0, want, 1 - Math.exp(-2.2 * dt));
+      this._inMouseRun = (pathId === "mouse_run" && pos.z > 13.1) || pathId === "sky_roofrun" || pathId === "sky_westchute" || pathId === "sky_carriage";
+
+    this._onGutter = pathId === "gutter" || pathId === "gutter_entry";
+    // logic18 gutter: soft trough lets the car wiggle; speed assist only on the plunge (not the flat lip)
+    // so the entry does not launch east. Whoosh builds on both. Steer still works via keys + soft rails.
+    if (this._onGutter && !this.car.airborne) {
+      if (pathId === "gutter" && this.car.speed > 0.12) {
+        this.car.speed = Math.min(this.car.speed * (1 + 0.4 * Math.min(1, dt * 4)), this.car.maxSpeed * 1.6);
+      }
+      if (!this._gutterWhoosh) this._gutterWhoosh = 0;
+      this._gutterWhoosh = Math.min(1, this._gutterWhoosh + dt * (pathId === "gutter" ? 2.4 : 1.2));
+    } else if (this._gutterWhoosh) {
+      this._gutterWhoosh = Math.max(0, this._gutterWhoosh - dt * 1.5);
+    }
+    }
     this._snapCamera(false);
 
     // logic7 chase rig — CAR-RELATIVE and frame-rate independent.
@@ -1452,29 +1498,105 @@ export class DriveMode {
     this._camUpS += (this._camUp - this._camUpS) * ease(7.0);
     const camX = pp.x - Math.sin(this._camYawS) * this._camBackS;
     const camZ = pp.z - Math.cos(this._camYawS) * this._camBackS;
-    let camY = pp.y + this._camUpS;
+    // logic13: in the air (and just after touchdown) the rig's height follows a low-passed car
+    // height, so a hop reads as the car flying — not the whole world bobbing.
+    const airish = this.car.airborne || (this.car._justLanded || 0) > 0;
+    if (this._camBaseY == null || this._lift || this._convSlide || this._onFlap >= 0 || this._camMode === "bumper") this._camBaseY = pp.y; // logic14: conveyor ride = lift
+    this._camBaseY += (pp.y - this._camBaseY) * ease(airish ? 16.0 : 14.0); // rug lips / kerb steps glide too
+    if (Math.abs(pp.y - this._camBaseY) > 0.6) this._camBaseY = pp.y; // a real drop: follow
+    this._camBaseY = THREE.MathUtils.clamp(this._camBaseY, pp.y - 0.03, pp.y + 0.03); // never lose the car out of frame
+    let camY = this._camBaseY + this._camUpS;
     // Never let the chase cam sink below the car's own deck height (ramp-body clip guard)
-    let camFloor = pp.y + 0.06;
+    let camFloor = pp.y + 0.03; // logic11: driver-eye scale (was 0.06 for the 0.26u chase)
     // logic4: ...and never under the ribbon deck BEHIND the car. On the Climb B descent the
     // chase cam trails up a 29% grade; the guard samples the car→camera sight line so the ray to
     // the car clears the deck (and its under-fill keel) everywhere between them.
-    if (this.tracks.surfaceYAt) {
-      const pid = this.tracks._lastPathId;
-      const aimY = pp.y + 0.06;
+    if (this.world) {
+      const aimY = pp.y + 0.03;
       for (const f of [0.3, 0.45, 0.6, 0.75, 0.9, 1.0]) {
         const sx = pp.x + (camX - pp.x) * f, sz = pp.z + (camZ - pp.z) * f;
-        const ys = this.tracks.surfaceYAt(sx, sz, pp.y, pid);
-        if (ys == null) continue;
-        const need = f >= 1 ? ys + 0.14 : aimY + (ys + 0.06 - aimY) / f;
+        const ys = this.world.surfaceTopNear(sx, sz, pp.y);
+        if (ys == null || ys > pp.y + 0.25) continue; // logic12: a deck ABOVE (next helix ring) is an occluder, not a floor
+        if (f < 1 && ys < pp.y + 0.06) continue; // logic13: a rug lip / kerb step behind the car never pops the rig
+        const need = f >= 1 ? ys + 0.05 : aimY + (ys + 0.03 - aimY) / f;
         camFloor = Math.max(camFloor, Math.min(pp.y + 0.9, need));
       }
     }
     // Lift rises immediately (never inside a deck) and relaxes smoothly (no pop when it clears)
     const wantLift = Math.max(0, camFloor - camY);
-    this._camLift = wantLift >= (this._camLift || 0) ? wantLift
-      : this._camLift + (wantLift - this._camLift) * ease(4.0);
+    // logic13: rises fast but CONTINUOUSLY (a rug lip / threshold behind the car used to pop the
+    // rig up 0.14 in one frame); a big deck is never more than 0.06 under the line of sight.
+    const cl = this._camLift || 0;
+    this._camLift = wantLift >= cl ? Math.max(cl + (wantLift - cl) * ease(12.0), wantLift - 0.06)
+      : cl + (wantLift - cl) * ease(4.0);
     camY += this._camLift;
-    this.camera.position.set(camX, camY, camZ);
+    // logic11: at driver-eye scale a crest/grade lift is large relative to the 0.17u rig — swing
+    // the camera UP-and-IN (keep the rig length) instead of only up, so the car never shrinks.
+    let hX = camX - pp.x, hZ = camZ - pp.z;
+    if (this._camLift > 1e-4) {
+      const nom = Math.hypot(this._camBackS, this._camUpS) * 1.08, dy = camY - pp.y;
+      const h = Math.hypot(hX, hZ), want = Math.sqrt(Math.max(0.04 * 0.04, nom * nom - dy * dy));
+      if (h > want) { hX *= want / h; hZ *= want / h; }
+    }
+    // logic15 MOUSE LOOK: orbit the rig around the car (yaw/pitch offsets), before every
+    // occlusion / solid guard below so the orbiting camera stays just as safe.
+    {
+      const ml = this.mouseLook;
+      ml.idle += dt;
+      if (!ml.on || ml.idle > 1.5) { const k = Math.exp(-2.6 * dt); ml.yaw *= k; ml.pitch *= k; if (Math.abs(ml.yaw) < 1e-4) ml.yaw = 0; if (Math.abs(ml.pitch) < 1e-4) ml.pitch = 0; }
+      if (ml.yaw || ml.pitch) {
+        const c = Math.cos(ml.yaw), s = Math.sin(ml.yaw), rx = hX * c + hZ * s, rz = -hX * s + hZ * c;
+        hX = rx; hZ = rz;
+        const h = Math.hypot(hX, hZ), pc = Math.cos(ml.pitch);
+        hX *= pc; hZ *= pc; camY += h * Math.sin(ml.pitch);
+      }
+    }
+    // logic8: off-road the car can run under/beside furniture. Never let the chase cam sit
+    // inside a solid or behind one: pull it in along the car→camera ray to just before the
+    // first solid (never closer than 0.12u), and keep it above the car's roof.
+    // logic12: DECK OCCLUSION — never look at the car through a deck overhead (spiral turns,
+    // skybridges over rugs, the next helix ring). Walk the car→camera line; if a road deck's slab
+    // (top … top−0.13) cuts it, pull the camera in to just before that point (smoothed out again).
+    if (this.world) {
+      let fCut = 1;
+      for (const f of [0.25, 0.4, 0.55, 0.7, 0.85, 1.0]) {
+        const sx = pp.x + hX * f, sz = pp.z + hZ * f, sy = pp.y + 0.03 + (camY - pp.y - 0.03) * f;
+        for (const sf of this.world.surfacesAt(sx, sz)) {
+          if (sf.kind !== "road" || sf.y < pp.y + 0.05) continue;
+          if (sy > sf.y - 0.15 && sy < sf.y + 0.02) { fCut = Math.min(fCut, f - 0.15); break; }
+        }
+        if (fCut < 1) break;
+      }
+      const want = Math.max(0.35, fCut);
+      this._camOccK = want < (this._camOccK ?? 1) ? want : (this._camOccK ?? 1) + (want - (this._camOccK ?? 1)) * ease(3.0);
+      if (this._camOccK < 0.999) { hX *= this._camOccK; hZ *= this._camOccK; }
+    }
+    let cam = this._camClearOfSolids(pp, pp.x + hX, camY, pp.z + hZ);
+    // logic13 STEADY OCCLUSION: also probe where the car will be in ~0.3 s so a door jamb /
+    // tunnel mouth / furniture edge starts easing the camera in (and up) BEFORE it occludes;
+    // the eased rig never sits less safe than what this frame needs, and relaxes back slowly.
+    {
+      const hl = Math.hypot(hX, hZ) || 1;
+      const kOf = (c, ox, oz) => Math.min(1, Math.hypot(c.x - (pp.x + ox), c.z - (pp.z + oz)) / hl);
+      const kNow = kOf(cam, 0, 0), yNow = cam.y - camY;
+      const v = this.car.speed || 0, la = 0.3;
+      const ox = Math.sin(this.car.yaw) * v * la, oz = Math.cos(this.car.yaw) * v * la;
+      let kT = kNow, yT = yNow;
+      if (Math.abs(v) > 0.05 && this._camMode !== "bumper") {
+        const ahead = this._camClearOfSolids({ x: pp.x + ox, y: pp.y, z: pp.z + oz }, pp.x + ox + hX, camY, pp.z + oz + hZ);
+        kT = Math.min(kT, kOf(ahead, ox, oz)); yT = Math.max(yT, ahead.y - camY);
+        this._camClearOfSolids(pp, pp.x + hX, camY, pp.z + hZ); // restore _camSolidPull for this frame
+      }
+      if (this._camSolK == null) { this._camSolK = kT; this._camSolY = yT; }
+      this._camSolK += (kT - this._camSolK) * ease(kT < this._camSolK ? 9.0 : 2.4);
+      this._camSolY += (yT - this._camSolY) * ease(yT > this._camSolY ? 9.0 : 2.4);
+      const kF = Math.min(this._camSolK, kNow), yF = Math.max(this._camSolY, yNow);
+      if (this._camMode !== "bumper" && (kF < kNow - 1e-4 || yF > yNow + 1e-4)) {
+        const c2 = { x: pp.x + hX * kF, y: camY + yF, z: pp.z + hZ * kF };
+        if (this._segSolidHit(pp.x, pp.y + 0.07, pp.z, c2.x, c2.y, c2.z) >= 1) cam = c2;
+      }
+    }
+    this.camera.position.set(cam.x, cam.y, cam.z);
     this._camVel.set(0, 0, 0);
     this._camPrevTarget = null;
 
@@ -1485,13 +1607,13 @@ export class DriveMode {
     this._camLookOff.z += (offZ - this._camLookOff.z) * ease(6.5);
     this._camLookOff.y += (offY - this._camLookOff.y) * ease(3.0);
     if (!this._camLookSmooth) this._camLookSmooth = new THREE.Vector3();
-    this._camLookSmooth.set(pp.x + this._camLookOff.x, pp.y + this._camLookOff.y, pp.z + this._camLookOff.z);
+    const lk = Math.min(1, (this._camLift || 0) / 0.05); // lifted rig: aim nearer the car so it stays framed
+    const mlK = Math.min(1, (Math.abs(this.mouseLook.yaw) + Math.abs(this.mouseLook.pitch)) / 0.5); // orbiting: look at the car
+    this._camLookSmooth.set(pp.x + this._camLookOff.x * (1 - 0.6 * lk) * (1 - mlK), pp.y + this._camLookOff.y * (1 - mlK) + 0.03 * mlK, pp.z + this._camLookOff.z * (1 - 0.6 * lk) * (1 - mlK));
     this.camera.lookAt(this._camLookSmooth);
     this._sanitizeCamera();
 
-    const inDark =
-      snap?.kind === "shortcut" || snap?.kind === "mouse" || snap?.kind === "shaft"
-      || snap?.kind === "tunnel" || snap?.kind === "chute";
+    const inDark = !!this._inMouseRun; // logic9: inside the hollow-wall mouse run
     this._tunnelDark = THREE.MathUtils.lerp(this._tunnelDark, inDark ? 1 : 0, 1 - Math.exp(-3.5 * dt));
 
     // Echo-y tighter FOV in walls; leisurely cruise uses calmer FOV; boost is a treat
@@ -1503,9 +1625,12 @@ export class DriveMode {
     wantFov -= (this._voidEdge || 0) * 4.6;
     this._fov = THREE.MathUtils.lerp(this._fov, wantFov, 1 - Math.exp(-2.8 * dt));
     // Shrink near-plane in walls so chase cam doesn't clip inside cavity meshes
-    const wantNear = THREE.MathUtils.lerp(0.08, 0.035, this._tunnelDark);
+    // logic11: driver-eye camera sits 2–5 cm from the car → small near; far trimmed to keep the
+    // depth range (far/near) ≈ the logic10 one per unit of distance in view.
+    const wantNear = this._camMode === "bumper" ? 0.008 : THREE.MathUtils.lerp(0.014, 0.01, this._tunnelDark);
+    if (this.camera.far !== 110) { this.camera.far = 110; this.camera.updateProjectionMatrix(); }
     let projDirty = Math.abs(this.camera.fov - this._fov) > 0.08;
-    if (Math.abs(this.camera.near - wantNear) > 0.004) {
+    if (Math.abs(this.camera.near - wantNear) > 0.0015) {
       this.camera.near = wantNear;
       projDirty = true;
     }
@@ -1540,65 +1665,40 @@ export class DriveMode {
         boost: !!this.keys.boost || !!this.car.isBoosting,
         scrape: scrapeAmt,
         impact,
-        grade: (snap && snap.grade != null) ? snap.grade : (this.car._smoothGrade || 0),
+        grade: this.car._smoothGrade || 0,
         steer: this.car._steerInput || 0,
         voidEdge: this._voidEdge || 0,
-        carpet: !!(snap && snap.carpet && !snap.onTrack),
+        carpet: !!(this._lastFlags && this._lastFlags.surface === "floor"),
         braking: thr < -0.05 || (thr < 0.02 && Math.abs(this.car.speed) > 0.15),
+        gutter: this._gutterWhoosh || 0,
       });
     }
 
     this._labelCooldown = Math.max(0, this._labelCooldown - dt);
     this._hintCooldown = Math.max(0, this._hintCooldown - dt);
 
-    const cp = this.tracks.nearestCheckpoint(pos.x, pos.z, 2.4, pos.y);
-    if (cp && cp.label !== this._lastLabel && this._labelCooldown <= 0) {
-      this._lastLabel = cp.label;
+    // logic8: plain "Entering <room>" toasts from where the car actually is (on or off road)
+    const room = (!this.car.airborne && this.world) ? this.world.roomAt(pos.x, pos.y, pos.z) : null;
+    const roomName = room && room.name ? room.name : "";
+    if (roomName && roomName !== this._lastLabel && this._labelCooldown <= 0) {
+      this._lastLabel = roomName;
       this._labelCooldown = 2.5;
-      if (this.onCheckpoint) {
-        const isShortcut = SHORTCUT_TOAST_RE.test(cp.label);
-        this.onCheckpoint(cp.label, { shortcut: isShortcut });
-      }
+      if (this.onCheckpoint) this.onCheckpoint(roomName, { shortcut: false });
     }
 
-    const portal = this.tracks.nearestPortal(pos.x, pos.y, pos.z, 1.8);
-    if (portal && this._hintCooldown <= 0 && !this._crashPhase) {
-      const hint =
-        portal.kind === "flower" ? "Shortcut — petal path"
-          : portal.kind === "shaft" || portal.kind === "chute" ? "Shortcut — pipe shaft"
-            : "Wall run";
-      if (hint !== this._lastHint) {
-        this._lastHint = hint;
-        this._hintCooldown = 3.0;
-        if (this.onHint) this.onHint(hint);
-        if (hint === "Wall run" && this.onHud) {
-          this.onHud({ mode: "wall", text: "Wall run" });
-        }
-      }
-    }
-
-
-    // Void-edge warning — balcony inner lip: soft rumble + tiny FOV tighten; NEVER teleport
+    // Void-edge warning (kept): probe the ground just ahead of the bumper; a drop of more than a
+    // kerb (hole / deck edge / balcony lip) ahead → soft vignette + tiny FOV tighten. Never moves the car.
     this._edgeHintCd = Math.max(0, this._edgeHintCd - dt);
     let edgeAmt = 0;
     let voidEdge = 0;
-    if (snap && snap.onTrack && typeof snap.edgeMargin === "number") {
-      if (snap.elevated && snap.edgeMargin < 0.075) {
-        edgeAmt = THREE.MathUtils.clamp(1 - snap.edgeMargin / 0.075, 0, 1);
+    if (this.world && !this.car.airborne) {
+      const fx = Math.sin(this.car.yaw), fz = Math.cos(this.car.yaw);
+      const sgn = this.car.speed < -0.02 ? -1 : 1;
+      for (const [d, w] of [[0.10, 1.0], [0.18, 0.7], [0.28, 0.45]]) {
+        const g = this.world.groundAt(pos.x + fx * d * sgn, pos.z + fz * d * sgn, pos.y);
+        if (!g || g.y < pos.y - 0.3) { voidEdge = Math.max(voidEdge, w); }
       }
-      // Balcony void lip (#7) — slightly earlier/stronger warning on the drop side
-      if (snap.pathId === "balcony_arc" && snap.edgeMargin < 0.13) {
-        // logic3: balcony_arc loops OUT onto the deck (x∈[-5.75,6.75], z≤17.5) and back;
-        // the drop is on the OUTER side of the loop (balustrade / deck ends), south of the facade.
-        const atriumX = 0.1, atriumZ = 14.6;
-        const toAtrium = Math.hypot(pos.x - atriumX, pos.z - atriumZ);
-        const ribbonToAtrium = Math.hypot((snap.x ?? pos.x) - atriumX, (snap.z ?? pos.z) - atriumZ);
-        const onInner = pos.z > 14.0 && toAtrium >= ribbonToAtrium - 0.05; // (name kept: "void side")
-        if (onInner) {
-          voidEdge = THREE.MathUtils.clamp(1 - snap.edgeMargin / 0.13, 0, 1);
-          edgeAmt = Math.max(edgeAmt, voidEdge * 0.92);
-        }
-      }
+      edgeAmt = voidEdge * 0.92;
     }
     this._edgeWarn = THREE.MathUtils.lerp(this._edgeWarn, edgeAmt, Math.min(1, 6 * dt));
     this._voidEdge = THREE.MathUtils.lerp(this._voidEdge || 0, voidEdge, Math.min(1, 5 * dt));
@@ -1708,16 +1808,10 @@ export class DriveMode {
       result: "",
     };
 
-    if (this.tracks) {
-      this.tracks._lastPathId = latchPath;
-      this.tracks._lastPathKind = latchKind;
-    }
     this._crashPhase = null;
     this._crashTimer = 0;
     this._inputsFrozen = false;
     this._stuckTimer = 0;
-    this._jamHits = 0;
-    this._stuckNudgeCd = 0;
     this.car.setPose(ax, ay, az, yaw);
     this.car.speed = 0.45;
     this.car.crashed = false;
@@ -1869,7 +1963,7 @@ export class DriveMode {
     };
     const trackRoot = this.tracks && this.tracks.root;
     const inTracks = (o) => { for (let q = o; q; q = q.parent) if (q === trackRoot) return true; return false; };
-    const ROAD = /^(ribbon_|spawn_clean_pad|spawn_apron_lane|climb_end_band|corner_chevrons|junction_flow_chevrons)/;
+    const ROAD = /^ribbon_/; // logic8: plain road surfaces only
     const hits = rc.intersectObjects(this.scene.children, true);
     for (const h of hits) {
       const o = h.object;
@@ -1881,6 +1975,39 @@ export class DriveMode {
       return { ok: road && Math.abs(gap) < 0.08, hit: o.name || o.parent?.name || o.type, gap };
     }
     return { ok: false, hit: null, gap: null };
+  }
+
+  /** Pure-pursuit look-ahead point along the harness route (keys only; never moves the car). */
+  _autodriveTarget(ad, p, ahead) {
+    if (!ad.route) {
+      const ids = ad.side === "b"
+        ? ["balcony_to_climb_b", "climb_b", "foyer_finish"]
+        : ["foyer_to_climb_a", "climb_a", "landing_hairpin"];
+      const pts = [];
+      for (const id of ids) {
+        for (const sg of this.tracks.segments) {
+          if (sg.pathId !== id) continue;
+          if (!pts.length) pts.push(sg.a);
+          pts.push(sg.b);
+        }
+      }
+      ad.route = pts;
+      ad.routeI = 0;
+    }
+    const R = ad.route;
+    if (R.length < 2) return null;
+    let bi = ad.routeI || 0, bd = Infinity;
+    for (let i = Math.max(0, bi - 2); i < Math.min(R.length, bi + 25); i++) {
+      const d = Math.hypot(R[i].x - p.x, R[i].z - p.z) + Math.abs(R[i].y - p.y) * 0.5;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    ad.routeI = bi;
+    let acc = 0;
+    for (let i = bi; i < R.length - 1; i++) {
+      acc += Math.hypot(R[i + 1].x - R[i].x, R[i + 1].z - R[i].z);
+      if (acc >= ahead) return R[i + 1];
+    }
+    return R[R.length - 1];
   }
 
   _tickAutodriveClimb(dt) {
@@ -1936,8 +2063,11 @@ export class DriveMode {
     this.keys.back = false;
     this.keys.boost = false;
 
-    const snap = this.tracks.querySnap(p.x, p.y, p.z, 1.65, this.car.yaw);
-    const pathId = (snap && snap.pathId) || this.tracks._lastPathId || "-";
+    // logic8: the harness is a DRIVER, not a rail: it reads which road (if any) is really under
+    // the wheels and presses A/D toward a point ~0.45u ahead on the route — nothing else.
+    const gnd = (this.world && !this.car.airborne) ? this.world.groundAt(p.x, p.z, p.y) : null;
+    const snap = gnd ? { onTrack: gnd.kind === "road", pathId: gnd.pathId || null, y: gnd.y } : null;
+    const pathId = (snap && snap.pathId) || "-";
     if (isB && pathId === "climb_b") ad.sawPath = true;
     if (!isB && pathId === "climb_a") ad.sawPath = true;
 
@@ -1945,7 +2075,7 @@ export class DriveMode {
     // the pass metric is reached; PASS needs ≥90% visible samples on the climb AND the last
     // 6 frames visible (camera→car ray clear + car inside the frustum).
     ad.visFrame = (ad.visFrame || 0) + 1;
-    const nearPassMetric = isB ? ad.drop >= 3.6 : ad.maxY >= 3.9;
+    const nearPassMetric = isB ? ad.drop >= 3.8 : ad.maxY >= 4.0;
     if (ad.sawPath && (nearPassMetric || ad.visFrame % 6 === 0)) {
       const vis = this._carVisibleInFrame();
       const asph = this._asphaltUnderCar();
@@ -1964,19 +2094,13 @@ export class DriveMode {
 
     let left = false;
     let right = false;
-    // logic3: plain ribbon follow — authored snap.yaw + lateral error (a human holding the lane).
-    // No aim-point flips, no hard-coded crest coordinates.
     let cmd = 0;
-    if (snap && Number.isFinite(snap.yaw)) {
-      let d = snap.yaw - this.car.yaw;
+    const tgt = this._autodriveTarget(ad, p, 0.45);
+    if (tgt) {
+      let d = Math.atan2(tgt.x - p.x, tgt.z - p.z) - this.car.yaw;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      cmd += d * 1.6;
-      if (snap.x != null && snap.z != null) {
-        const rx = -Math.cos(this.car.yaw), rz = Math.sin(this.car.yaw);
-        const latErr = (snap.x - p.x) * rx + (snap.z - p.z) * rz; // + = ribbon centre to the right
-        cmd -= latErr * 1.2;
-      }
+      cmd = d * 1.6;
     }
     if (cmd > 0.04) left = true;
     else if (cmd < -0.04) right = true;
@@ -1994,7 +2118,7 @@ export class DriveMode {
         : `maxY=${ad.maxY.toFixed(2)}`;
       const visNow = (ad.visLast ? (ad.visLast.ok ? "car=vis" : `car=HIDDEN(${ad.visLastBlock})`) : "car=-")
         + (ad.asphLast ? (ad.asphLast.ok ? " road=asphalt" : ` road=MISSING(${ad.asphLast.hit || "none"})`) : "");
-      const line = `t=${ad.t.toFixed(1)}s y=${p.y.toFixed(2)} snap.y=${snapY} on=${onTrk} xz=${p.x.toFixed(2)},${p.z.toFixed(2)} spd=${Number(kmh).toFixed(0)} km/h path=${pathId} ${metric} ${visNow}`;
+      const line = `t=${ad.t.toFixed(1)}s y=${p.y.toFixed(2)} ground.y=${snapY} on=${onTrk} xz=${p.x.toFixed(2)},${p.z.toFixed(2)} spd=${Number(kmh).toFixed(0)} km/h path=${pathId} ${metric} ${visNow}`;
       console.log("[autodrive]", line);
       if (ad.logEl) ad.logEl.textContent = line + (ad.result ? `\n${ad.result}` : "");
     }
@@ -2003,7 +2127,7 @@ export class DriveMode {
       // PASS on Y drop ≥2.5 with climb_b path seen (landing → foyer)
       const onB = !!(snap && snap.onTrack);
       // logic3: full descent to the foyer (drop ≥4.0 of 4.2), live on=1
-      if (ad.drop >= 4.0 && ad.sawPath && onB && (pathId === "climb_b" || pathId === "foyer_finish") && !this._crashPhase && !this.car?.crashed && visOkNow) {
+      if (ad.drop >= 4.19 && ad.sawPath && onB && (pathId === "climb_b" || pathId === "foyer_finish") && !this._crashPhase && !this.car?.crashed && visOkNow) {
         finish(true, `CLIMB B AUTO PASS drop=${ad.drop.toFixed(2)} on=1 path=${pathId} ${visTag} car-in-frame`);
         return;
       }
@@ -2020,7 +2144,7 @@ export class DriveMode {
 
     // Honest PASS: near crest height, still on ribbon, no crash overlay
     const onOk = !!(snap && snap.onTrack);
-    const crestOk = ad.maxY >= 4.15; // logic3: full crest (tip flat is 4.2), not 3.8 mid-arc
+    const crestOk = ad.maxY >= 4.205; // logic8: on the flat crest top, not mid-slope // logic3: full crest (tip flat is 4.2), not 3.8 mid-arc
     const pathOk = pathId === "climb_a" || pathId === "landing_hairpin";
     const noCrash = !this._crashPhase && !this.car?.crashed;
     if (crestOk && onOk && pathOk && noCrash && visOkNow) {

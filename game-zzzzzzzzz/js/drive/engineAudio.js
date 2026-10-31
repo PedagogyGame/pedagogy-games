@@ -32,6 +32,7 @@ export class EngineAudio {
     this._screechAmt = 0;
     this._voidAmt = 0;
     this._surfaceAmt = 0; // 0 asphalt, 1 carpet bed
+    this._gutterAmt = 0;
   }
 
   /** Call on Drive enter (after user gesture via Enter/Drive click). */
@@ -148,6 +149,13 @@ export class EngineAudio {
     const scVol = this._scrapeAmt * 0.055;
     this._safeSet(this._scrapeGain.gain, scVol, t, 0.04);
     this._safeSet(this._scrapeFilter.frequency, 700 + this._scrapeAmt * 1400, t);
+    // logic18 gutter whoosh
+    const gut = Math.max(0, Math.min(1, s.gutter || 0));
+    this._gutterAmt += (gut - this._gutterAmt) * 0.18;
+    if (this._gutterGain) {
+      this._safeSet(this._gutterGain.gain, this._gutterAmt > 0.02 ? 0.04 + this._gutterAmt * 0.10 : 0, t, 0.08);
+      this._safeSet(this._gutterFilter.frequency, 700 + this._gutterAmt * 1800, t);
+    }
 
     // Soft procedural tire screech (#3) — always silent (no-op)
     if (this._screechGain) this._safeSet(this._screechGain.gain, 0, t, 0.05);
@@ -296,6 +304,21 @@ export class EngineAudio {
     this._scrapeFilter.connect(this._scrapeGain);
     this._scrapeGain.connect(this._master);
     this._scrapeSrc.start();
+
+    // logic18 gutter whoosh (bandpass rush / light metal)
+    this._gutterSrc = ctx.createBufferSource();
+    this._gutterSrc.buffer = buf;
+    this._gutterSrc.loop = true;
+    this._gutterFilter = ctx.createBiquadFilter();
+    this._gutterFilter.type = "bandpass";
+    this._gutterFilter.frequency.value = 900;
+    this._gutterFilter.Q.value = 0.7;
+    this._gutterGain = ctx.createGain();
+    this._gutterGain.gain.value = 0;
+    this._gutterSrc.connect(this._gutterFilter);
+    this._gutterFilter.connect(this._gutterGain);
+    this._gutterGain.connect(this._master);
+    this._gutterSrc.start();
 
     // Soft tire screech (#3) — IGNORED: nodes created muted, NOT connected to master
     this._screechSrc = null;
