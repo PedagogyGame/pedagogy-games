@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic22";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic22";
-import { buildConveyor } from "./conveyor.js?v=logic22";
-import { buildYard } from "./treehouse.js?v=logic22";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic22";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic22";
-import { ROOMS } from "../data/rooms.js?v=logic22";
-import { LAB, inLab } from "../data/labGarage.js?v=logic22";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic23";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic23";
+import { buildConveyor } from "./conveyor.js?v=logic23";
+import { buildYard } from "./treehouse.js?v=logic23";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic23";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic23";
+import { ROOMS } from "../data/rooms.js?v=logic23";
+import { LAB, inLab } from "../data/labGarage.js?v=logic23";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -132,6 +132,26 @@ export function loftSolids(segments) {
       box.driveKind = "rail";
       // logic16: the real collider is the rail SEGMENT (a thin capsule along the deck edge), not
       // this axis-aligned box — on the curved spiral the AABB of a diagonal piece poked ~0.1 into the lane.
+      box.rail = { x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE, t: RAIL_T / 2, h: RAIL_H };
+      rails.push({ box, x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE });
+      solids.push(box);
+    }
+  }
+  // logic23 (Ben t187u "a barrier here which you can drive through"): where Gutter Entry leaves the Timber
+  // Attic (x 25.42–25.95) both its edge rails were skipped as "on another deck" — the attic's wide deck
+  // overlaps the mouth — so the cyan kerb visibly stopped short and the car ran through the gap and fell
+  // ~5 m. Those first entry pieces now carry their low kerb on both sides (the travel direction stays open).
+  for (const s of segs) {
+    const shaftS = s.pathId === "timber_shaft" && Math.abs(s.a.z + 15.8) < 0.02 && Math.abs(s.b.z + 15.8) < 0.02 && Math.min(s.a.x, s.b.x) > 25.0;
+    if (!shaftS && (s.pathId !== "gutter_entry" || Math.min(s.a.x, s.b.x) > 25.95)) continue;
+    for (const side of [-1, 1]) {
+      const [x0, z0, x1, z1] = edgeOf(s, side);
+      if (shaftS && (z0 + z1) / 2 > -15.9) continue; // shaft's last east piece: south lip only (north is the attic/entry mouth)
+      const yMin = Math.min(s.a.y, s.b.y);
+      const box = new THREE.Box3(
+        new THREE.Vector3(Math.min(x0, x1) - RAIL_T / 2, yMin + RIDE - 0.01, Math.min(z0, z1) - RAIL_T / 2),
+        new THREE.Vector3(Math.max(x0, x1) + RAIL_T / 2, Math.max(s.a.y, s.b.y) + RIDE + RAIL_H, Math.max(z0, z1) + RAIL_T / 2));
+      box.driveKind = "rail"; box.logic23 = true;
       box.rail = { x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE, t: RAIL_T / 2, h: RAIL_H };
       rails.push({ box, x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE });
       solids.push(box);

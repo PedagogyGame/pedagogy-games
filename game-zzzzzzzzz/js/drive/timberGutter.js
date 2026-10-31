@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic22";
+import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic23";
 
 /**
  * logic18: east-cavity TIMBER FRAMING (studs, joists, braces, beams, batting, wiring) +
@@ -89,9 +89,14 @@ export function buildTimberAndGutter(root, tracks) {
     const len = Math.abs(lipZ - zLip0);
     const midZ = (zLip0 + lipZ) / 2;
     gParts.push([new THREE.BoxGeometry(U.width + 0.08, 0.025, len + 0.08), zincD, M(gx, yA - 0.02, midZ)]);
+    // logic23 (Ben t187u "a barrier here which you can drive through"): the WEST lip wall used to start at the
+    // trough's north end, right across the mouth where the Gutter Entry arc drives in — its physics rail
+    // (loftSolids) already started after the arc, so the wall was visual-only. It now starts where the rail does.
+    const zArc = T.zN + (U.x - T.x - 0.5);
     for (const s of [-1, 1]) {
-      gParts.push([new THREE.BoxGeometry(0.038, wh, len + 0.04), zinc, M(gx + s * (U.width / 2 + 0.01), yA + wh / 2 - 0.01, midZ)]);
-      gParts.push([new THREE.BoxGeometry(0.012, 0.008, len), lip, M(gx + s * (U.width / 2 + 0.02), yA + wh - 0.005, midZ)]);
+      const z0 = s < 0 ? Math.max(zLip0, zArc - 0.05) : zLip0, L = Math.abs(lipZ - z0), mz = (z0 + lipZ) / 2;
+      gParts.push([new THREE.BoxGeometry(0.038, wh, L + (s < 0 ? 0 : 0.04)), zinc, M(gx + s * (U.width / 2 + 0.01), yA + wh / 2 - 0.01, mz + (s < 0 ? 0.0 : 0))]);
+      gParts.push([new THREE.BoxGeometry(0.012, 0.008, L), lip, M(gx + s * (U.width / 2 + 0.02), yA + wh - 0.005, mz)]);
     }
     gParts.push([new THREE.BoxGeometry(U.width + 0.28, 0.04, 0.45), zinc, M(gx, yA + 0.02, zLip0)]);
   }
