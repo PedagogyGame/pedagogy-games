@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic22";
-import { OBJECTS } from "./data/objects.js?v=logic22";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic22";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic22";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic22";
-import { buildLabGarage } from "./labGarage.js?v=logic22";
+import { ROOMS } from "./data/rooms.js?v=logic23";
+import { OBJECTS } from "./data/objects.js?v=logic23";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic23";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic23";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic23";
+import { buildLabGarage } from "./labGarage.js?v=logic23";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
