@@ -931,6 +931,45 @@
       opacity: 1;
     }
 
+
+    .seek{
+      margin: 18px auto 0;
+      width: min(420px, 88vw);
+      position: relative;
+      z-index: 4;
+    }
+    .seek-label{
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+    .seek input{
+      width: 100%;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #ddd;
+      background: rgba(8,8,8,.72);
+      border: 1px solid #3a3348;
+      border-radius: 4px;
+      padding: 10px 14px;
+      outline: none;
+      text-align: center;
+    }
+    .seek input::placeholder{ color: #5c5668; letter-spacing: 3px; }
+    .seek input:focus{
+      border-color: var(--neon-blue);
+      box-shadow: 0 0 6px rgba(2,136,209,.45);
+    }
+    .seek.miss input{ animation: seekmiss .4s ease; }
+    @keyframes seekmiss{
+      20%{ border-color: var(--neon-pink); }
+      100%{ border-color: #3a3348; }
+    }
+
     /* 18+ tobacco / alcohol tiles — locked unless the toggle is on */
     .adult-toggle{
       margin-top: 22px;
@@ -1033,6 +1072,10 @@
   <header>
     <h1>Pedagogy</h1>
     <p class="subtitle">Insert Coin to Begin</p>
+    <form class="seek" id="seek" autocomplete="off">
+      <label class="seek-label" for="seekInput">Search</label>
+      <input id="seekInput" type="search" name="q" maxlength="80" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Search" enterkeyhint="go">
+    </form>
     <label class="adult-toggle">
       <input type="checkbox" id="adultToggle" autocomplete="off">
       <span class="switch" aria-hidden="true"></span>
@@ -1250,6 +1293,42 @@
           e.stopPropagation();
         }
       });
+    });
+  })();
+  </script>
+
+
+  <script>
+  (function () {
+    // Hidden doors. The key is a sha256 of the normalized phrase, not the phrase.
+    var DOORS = {
+      "0631f934c89e5c80b65bc90b5dd69fbd823eb488df16ebac4730e29b4a4f201f": "h/ad-baculum/"
+    };
+    var form = document.getElementById("seek");
+    var input = document.getElementById("seekInput");
+    if (!form || !input) return;
+    function norm(s) {
+      return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    }
+    function hex(buf) {
+      var b = new Uint8Array(buf), out = "";
+      for (var i = 0; i < b.length; i++) out += b[i].toString(16).padStart(2, "0");
+      return out;
+    }
+    function miss() {
+      form.classList.remove("miss");
+      void form.offsetWidth;
+      form.classList.add("miss");
+    }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var phrase = norm(input.value);
+      if (!phrase || !window.crypto || !crypto.subtle || !window.TextEncoder) { miss(); return; }
+      crypto.subtle.digest("SHA-256", new TextEncoder().encode(phrase)).then(function (buf) {
+        var door = DOORS[hex(buf)];
+        if (door) window.location.href = door;
+        else miss();
+      }).catch(miss);
     });
   })();
   </script>
