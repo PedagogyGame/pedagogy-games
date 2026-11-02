@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v2.9 — Climbing & Door Stability</title>
+<title>Spicy Rodents v2.10 — Playability & Camera Repair</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -97,7 +97,7 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 </style>
 </head>
 <body>
-<div id="loading">LOADING SPICY RODENTS v2.7...</div>
+<div id="loading">LOADING SPICY RODENTS v2.10...</div>
 <canvas id="world"></canvas><div id="focusVignette"></div>
 <div id="hud"><div id="hudTop"><div class="brand">SPICY<br>RODENTS<small>TOPEKA · OLD TOWN / PARK / HOSPITAL</small></div><div class="hudpanel scores"><div class="score-item power-stat"><small>POWER</small><b class="accent" id="score">0000</b><div class="powerTrack" aria-hidden="true"><div id="powerFill"></div></div></div><div class="score-item"><small>SUCCESSFUL BITES</small><b id="hits">0</b></div><div class="score-item"><small>HIDDEN CHILIS</small><b id="chiliCount">0 / 8</b></div><div class="score-item"><small>NEXT POWER FADE</small><b id="fadeTimer">10:00</b></div><div class="score-item"><small>SQUIRREL COINS</small><b id="coinScore">0</b></div><div class="score-item"><small>GOLD</small><b id="goldScore">0</b></div><div class="score-item infection-stat"><small>INFECTION</small><b id="infectionScore">0.0%</b><div class="powerTrack"><div id="infectionFill"></div></div></div><div class="score-item"><small>STATE</small><b id="evolution">FERAL</b></div></div></div>
 <div id="boostBadge" class="hudpanel"><span class="pepperIcon">🌶</span><div><b id="boostLabel">CHILI RUSH</b><small id="boostTime">FIND A HIDDEN PEPPER</small></div></div>
@@ -122,7 +122,7 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v2.8</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v2.10</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
       <p class="start-subtitle">A mischievous squirrel. A whole neighborhood to explore, climb, and terrorize.</p>
     </header>
@@ -1962,7 +1962,9 @@ for(const [i,x,z] of [[0,-64,93],[1,72,96],[2,-97,-70],[3,206,325]]){
 const player={pos:v(-36,.31,-36),vel:v(0,0,0),yaw:0,grounded:true,rail:null,railT:0,railDir:1,transferCooldown:0,railVelocity:0,moveSpeed:0,focus:false,points:0,hits:0,inactiveSeconds:0,boostRemaining:0,cooldown:0,attack:0,attackWindow:0,attackAlert:null,attackTarget:null,cameraCommit:0,committedAirborne:false,turnLean:0,alive:true,nearRoute:null,visible:true};
 // Model is exactly 50% of the v0.4 squirrel size; movement speed stays agile.
 const SQUIRREL_VISUAL_SCALE=.335;
-const squirrel=new THREE.Group();squirrel.scale.setScalar(SQUIRREL_VISUAL_SCALE);scene.add(squirrel);const sqroot=new THREE.Group();squirrel.add(sqroot);let fur=mat('#87694d'),fur2=mat('#725b48'),furDark=mat('#3f3d37'),eyeMat=new THREE.MeshStandardMaterial({color:0xbe2f25,emissive:0xad1e16,emissiveIntensity:.92,roughness:.23});
+const squirrel=new THREE.Group();squirrel.scale.setScalar(SQUIRREL_VISUAL_SCALE);
+// The squirrel, camera and physics share the same origin from frame zero.
+squirrel.position.copy(player.pos);scene.add(squirrel);const sqroot=new THREE.Group();squirrel.add(sqroot);let fur=mat('#87694d'),fur2=mat('#725b48'),furDark=mat('#3f3d37'),eyeMat=new THREE.MeshStandardMaterial({color:0xbe2f25,emissive:0xad1e16,emissiveIntensity:.92,roughness:.23});
 let sqBody=ball(.55,fur,0,.39,-.04,sqroot);sqBody.scale.set(.79,.67,1.51);let sqHead=ball(.36,fur,0,.62,.65,sqroot);sqHead.scale.set(.79,.84,1.06);
 // Warm countershading separates the tiny animal from near-identical bark colors.
 ball(.33,mat('#c2a78a'),0,.33,.40,sqroot).scale.set(.65,.45,.95);
@@ -2068,10 +2070,16 @@ refreshPowerUI();
 // Human-readable status messages and camera orientation.
 let messageTime=0;function flash(str,time=3){$('status').textContent=str;$('status').classList.add('show');messageTime=time}
 let yaw=PI,pitch=.12;const keys=new Set();let pointer=false,playing=false,focusMouse=false,focusToggle=false;let time=0;const raycaster=new THREE.Raycaster();
+let mouseLockSettlingUntil=0;
+function stableMouseDelta(delta){
+ if(!Number.isFinite(delta)||Math.abs(delta)>240)return 0;
+ return THREE.MathUtils.clamp(delta,-55,55);
+}
 function requestMouse(){if(document.pointerLockElement!==canvas)canvas.requestPointerLock?.()}
 function startNeighborhood(){
  if(playing)return;
- playing=true;
+ playing=true;keys.clear();focusMouse=false;focusToggle=false;player.focus=false;
+ yaw=PI;pitch=.12;cameraHardCut=true;mouseLockSettlingUntil=performance.now()+400;
  $('start').classList.add('hidden');
  $('start').setAttribute('aria-hidden','true');
  if(speechOn&&'speechSynthesis'in window){try{speechSynthesis.resume();refreshHumanVoices();}catch(e){}}
@@ -2082,17 +2090,30 @@ $('playButton').addEventListener('click',startNeighborhood);
 $('start').addEventListener('keydown',e=>{
  if(e.code==='Enter'&&!(e.target.closest('summary')||e.target.closest('button'))){e.preventDefault();startNeighborhood();}
 });
-document.addEventListener('pointerlockchange',()=>{pointer=document.pointerLockElement===canvas;if(!pointer){focusMouse=false;focusToggle=false;player.focus=false}});
+document.addEventListener('pointerlockchange',()=>{
+ const next=document.pointerLockElement===canvas;
+ if(next&&!pointer)mouseLockSettlingUntil=performance.now()+250;
+ pointer=next;
+ if(!pointer){focusMouse=false;focusToggle=false;player.focus=false;keys.clear();}
+});
 // Pounce works in normal traversal as well as in stalking view; one event per button-down.
 canvas.addEventListener('mousedown',e=>{if(!playing||gamePaused)return;if(!pointer){requestMouse();return}if(e.button===0){e.preventDefault();attemptPounce()}});
-document.addEventListener('mousemove',e=>{if(!pointer||!playing||gamePaused)return;const sensitivity=player.focus?.0025:.00315;const boost=Math.min(1.25,Math.hypot(e.movementX,e.movementY)/35);if(player.rail)routeFreeLook=1.7;yaw-=e.movementX*sensitivity*(1+.18*boost);
+document.addEventListener('mousemove',e=>{
+ if(!pointer||!playing||gamePaused||performance.now()<mouseLockSettlingUntil)return;
+ const mx=stableMouseDelta(e.movementX),my=stableMouseDelta(e.movementY);
+ if(mx===0&&my===0)return;
+ const sensitivity=player.focus?.0025:.00315;
+ const boost=Math.min(1.25,Math.hypot(mx,my)/35);
+ if(player.rail)routeFreeLook=1.7;
+ yaw-=mx*sensitivity*(1+.18*boost);
  if(player.rail?.kind==='trunk'&&!player.focus){
   // Orbit the climbing squirrel around the bark, keeping body and camera on the same visible side.
-  player.trunkNormal?.applyAxisAngle(v(0,1,0),-e.movementX*.004);
+  player.trunkNormal?.applyAxisAngle(v(0,1,0),-mx*.004);
  }
- pitch=THREE.MathUtils.clamp(pitch-e.movementY*sensitivity,-.60,1.07)});
+ pitch=THREE.MathUtils.clamp(pitch-my*sensitivity,-.60,1.07)});
 document.addEventListener('mousedown',e=>{if(e.button===2){e.preventDefault();focusMouse=true}});document.addEventListener('mouseup',e=>{if(e.button===2)focusMouse=false});window.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('keydown',e=>{if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(!e.repeat&&e.code==='KeyM'){toggleAllHud();return}if(!e.repeat&&e.code==='Tab'){cycleHudView();return}if(!e.repeat&&e.code==='KeyK'){toggleHudEditor();return}if(!playing)return;if(e.code==='KeyP'&&!e.repeat){gamePaused=!gamePaused;flash(gamePaused?'PAUSED · P to resume':'RESUMED',2);return}if(e.code==='KeyH'&&!e.repeat)toggleHelp();if(gamePaused)return;if(!e.repeat&&(e.code==='KeyA'||e.code==='KeyD')&&player.rail){
+window.addEventListener('keydown',e=>{if(['Space','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.code);if(!e.repeat&&e.code==='KeyM'){toggleAllHud();return}if(!e.repeat&&e.code==='Tab'){cycleHudView();return}if(!e.repeat&&e.code==='KeyK'){toggleHudEditor();return}if(!playing)return;if(e.code==='KeyP'&&!e.repeat){gamePaused=!gamePaused;flash(gamePaused?'PAUSED · P to resume':'RESUMED',2);return}if(e.code==='KeyH'&&!e.repeat)toggleHelp();if(gamePaused)return;
+ if(e.code==='KeyC'&&!e.repeat){yaw=player.yaw+PI;pitch=.12;focusToggle=false;cameraHardCut=true;flash('CAMERA RECENTERED · C centers behind the squirrel',1.9);return;}if(!e.repeat&&(e.code==='KeyA'||e.code==='KeyD')&&player.rail){
    const choiceSide=e.code==='KeyD'?1:-1;
    if(player.rail.kind==='trunk')chooseCanopyFork(choiceSide);
    else if(player.rail.kind==='branch'){if(!sideStepToSibling(choiceSide))chooseRouteJunction(choiceSide)}
@@ -2187,8 +2208,8 @@ function attachRoute(){
    if(takeSelectedJunction())return;
    if(takeSelectedFork())return;
    if(pendingFork&&player.rail.kind==='trunk'){flash('Climb closer to the highlighted branch; then press E.',2);return}
-   const next=nearestRoute(1.55,player.rail);
-   if(next && next.route.curve.getPointAt(next.t).distanceTo(player.pos)<1.55){
+   const next=nearestRoute(1.15,player.rail);
+   if(next && next.route.curve.getPointAt(next.t).distanceTo(player.pos)<1.15){
     const previous=player.rail;enterRoute(next);flash(`Transferred: ${previous.name} → ${next.route.name}`,2.5)
    }
    else flash('Continue toward a branch junction, or press Q to drop.',1.5)
@@ -2578,7 +2599,7 @@ function updatePlayer(dt){
       const sense=dir!==0?Math.sign(dir)*player.railDir:player.railDir;
       const angle=Math.atan2(sense*tangent.x,sense*tangent.z);player.yaw=turnToward(player.yaw,angle,14,dt);
       // Follow behind the squirrel except while the player is manually orbiting.
-      if(dir!==0&&routeFreeLook<=0)yaw=turnToward(yaw,player.yaw+PI,1.9,dt);
+      if(dir!==0&&routeFreeLook<=0)yaw=turnToward(yaw,player.yaw+PI,.85,dt);
    }
    player.vel.set(0,0,0);
  }else{
@@ -2927,8 +2948,16 @@ function updateAimPath(){
 }
 // Predator mode places the eye at the squirrel's head; committing the jump
 // immediately cuts to a wider, trailing camera for spatial awareness.
-let camPos=v(-29,5,-25),lookPoint=v(-29,2,-31),cameraHardCut=false;
+let camPos=player.pos.clone().add(v(0,2.7,5.35)),lookPoint=player.pos.clone().add(v(0,.9,-2)),cameraHardCut=true;
+let lastCameraAnchor=player.pos.clone();
 function updateCamera(dt){
+ // NPC groups NEVER own the camera. The player's physics state is authoritative.
+ // Short model smoothing is visual-only and must not drive the entire viewpoint.
+ const cameraAnchor=player.pos.clone();
+ if(!Number.isFinite(cameraAnchor.x+cameraAnchor.y+cameraAnchor.z)){
+   player.pos.copy(lastCameraAnchor);cameraHardCut=true;
+ }else lastCameraAnchor.copy(cameraAnchor);
+ const followAnchor=player.pos.clone();
  const horizontal=v(-Math.sin(yaw),0,-Math.cos(yaw));
  let desired,target;
  if(player.inDuct){
@@ -2952,7 +2981,7 @@ function updateCamera(dt){
  }else if(player.rail?.kind==='trunk'){
    // Level, side-on third-person view: visible animal OUTSIDE the bark.
    const n=player.trunkNormal||v(0,0,1);
-   target=squirrel.position.clone().add(v(0,.15,0));
+   target=followAnchor.clone().addScaledVector(n,(player.rail.surfaceRadius||1.3)+.26).add(v(0,.15,0));
    desired=target.clone().addScaledVector(n,4.58).add(v(0,.55,0));
  }else if(player.rail&&player.rail.kind!=='trunk'){
    // On branches: elevated camera looking down at the squirrel's back.
@@ -2963,15 +2992,15 @@ function updateCamera(dt){
    along.lerp(horizontal,orbit*.8).normalize();
    const wire=player.rail.kind==='wire',roof=player.rail.kind==='roof';
    const behind=wire?4.2:roof?4.6:3.7;
-   target=squirrel.position.clone().addScaledVector(along,2.15).add(v(0,.38,0));
-   desired=squirrel.position.clone().addScaledVector(along,-behind).addScaledVector(v(-along.z,0,along.x),.45).add(v(0,wire?2.35:2.6+Math.sin(pitch)*.55,0));
+   target=followAnchor.clone().addScaledVector(along,2.15).add(v(0,wire?.60:.87,0));
+   desired=followAnchor.clone().addScaledVector(along,-behind).addScaledVector(v(-along.z,0,along.x),.45).add(v(0,wire?2.55:3.0+Math.sin(pitch)*.55,0));
  }else{
    const airborne=player.committedAirborne||(!player.grounded&&!player.rail);
    const distance=airborne?8.15:player.moveSpeed>11?6.05:5.35;
    const rise=airborne?2.5:2.05;
-   desired=squirrel.position.clone().addScaledVector(horizontal,-distance*Math.cos(pitch*.60)).add(v(0,rise+Math.sin(pitch)*distance*.57,0));
+   desired=followAnchor.clone().addScaledVector(horizontal,-distance*Math.cos(pitch*.60)).add(v(0,rise+Math.sin(pitch)*distance*.57,0));
    desired.y=Math.max(.75,desired.y);
-   target=squirrel.position.clone().addScaledVector(horizontal,3.4).add(v(0,airborne?1.2:.90,0));
+   target=followAnchor.clone().addScaledVector(horizontal,3.4).add(v(0,airborne?1.2:.90,0));
  }
  if(player.inHospital&&!player.inDuct){
    desired.x=THREE.MathUtils.clamp(desired.x,HOSP_X-HOSP_W/2+1.8,HOSP_X+HOSP_W/2-1.8);
@@ -4794,6 +4823,8 @@ function newLivingEvent(kind,center,offset,count){
   const a=i*2*Math.PI/count;
   const dest=v(center.x+Math.cos(a)*(isBall?10:7),0,center.z+Math.sin(a)*(isBall?10:7));
   const origin=v(center.x+Math.cos(a)*(isBall?33:35),0,center.z+Math.sin(a)*(isBall?25:30));
+  n.root.position.copy(origin);n.root.position.y=terrainHeight(origin.x,origin.z)+.13;
+  n.station=origin.clone();
   data.actors.push({n,dest,origin,phase:i*1.8});
  }
  for(let j=0;j<3;j++){
@@ -4815,7 +4846,11 @@ function updateLivingEvents(dt){
   const departing=elapsed>=0&&phase>=600&&phase<655;
   if(ongoing&&e.cycle!==cycle){
    e.cycle=cycle;e.active=true;
-   for(const a of e.actors)if(!a.n.injured){a.n.visible=true;a.n.root.visible=true;a.n.sayCooldown=0;}
+   for(const a of e.actors)if(!a.n.injured){
+    a.n.root.position.copy(a.origin);
+    a.n.root.position.y=terrainHeight(a.origin.x,a.origin.z)+.13;
+    a.n.visible=true;a.n.root.visible=true;a.n.sayCooldown=0;
+   }
    for(const c of e.cars)c.car.visible=true;
   }
   if(!ongoing&&!departing){
@@ -5262,13 +5297,84 @@ function updateEmergencyBeacons(){
 }
 // ============================================================================
 
-const clock=new THREE.Clock();let wallLast=performance.now();function tick(){requestAnimationFrame(tick);const wallNow=performance.now(),wallDelta=Math.max(0,(wallNow-wallLast)/1000);wallLast=wallNow;const activeDt=Math.min(clock.getDelta(),.25),dt=Math.min(activeDt,.045);if(!gamePaused)time+=dt;if(!gamePaused)messageTime-=dt;if(messageTime<=0)$('status').classList.remove('show');if(playing&&!gamePaused&&player.alive){updatePowerAndHeat(wallDelta);updatePlayer(dt);updatePepperPickups(dt);if(!player.inSewer&&!player.inHospital){updateHumans(dt);updateCars(dt);updateWildlife(dt);updateYardCats(dt);updateAmbulance(dt)}updateInfection(Math.min(wallDelta,.20));updateHospital(Math.min(wallDelta,.20));updateNewSystems(wallDelta,dt);updateWestside(dt);updateLivingEvents(dt);animateHouseDoors(dt);updateHouseInteriors(dt);updateInteriorMotion(dt);updatePosterAwareness(dt);updatePoliceResponse(dt)}else if(!playing&&player.alive){yaw=PI+Math.sin(time*.08)*.18;pitch=.20;updateTail(time*.7)}for(const leaf of canopyAnimated){
+const clock=new THREE.Clock();
+let wallLast=performance.now(),lastSafePlayer=player.pos.clone(),gameplayErrorCount=0,globalFrameErrors=0;
+const gameplaySubsystemFaults=new Map();
+function runWorldSystem(name,fn,dt){
+ if((gameplaySubsystemFaults.get(name)||0)>=3)return;
+ try{fn(dt)}catch(err){
+  const count=(gameplaySubsystemFaults.get(name)||0)+1;gameplaySubsystemFaults.set(name,count);
+  console.error('Spicy Rodents subsystem error:',name,err);
+  if(count===1)flash(`${name} encountered an error. Movement remains available.`,5);
+ }
+}
+function verifyPlayerPosition(){
+ const p=player.pos;
+ if(!Number.isFinite(p.x+p.y+p.z)){
+  p.copy(lastSafePlayer);player.vel.set(0,0,0);player.rail=null;cameraHardCut=true;
+  flash('A movement error was safely corrected.',3);return;
+ }
+ const step=p.distanceTo(lastSafePlayer);
+ // Door and duct transfers are explicitly controlled; ordinary movement is not allowed to teleport.
+ if(step>11&&!houseTransit&&!oldHomeTransit&&!hospitalTransition&&!player.inDuct&&!player.inSewer&&!player.inHospital){
+  p.copy(lastSafePlayer);player.vel.set(0,0,0);player.rail=null;cameraHardCut=true;
+  flash('An unexpected position jump was prevented.',3);return;
+ }
+ lastSafePlayer.copy(p);
+}
+function tick(){requestAnimationFrame(tick);try{const wallNow=performance.now(),wallDelta=Math.max(0,(wallNow-wallLast)/1000);wallLast=wallNow;const activeDt=Math.min(clock.getDelta(),.25),dt=Math.min(activeDt,.045);if(!gamePaused)time+=dt;if(!gamePaused)messageTime-=dt;if(messageTime<=0)$('status').classList.remove('show');if(playing&&!gamePaused&&player.alive){updatePowerAndHeat(wallDelta);
+ try{updatePlayer(dt)}catch(err){
+  gameplayErrorCount++;console.error('Player controller error:',err);
+  player.pos.copy(lastSafePlayer);player.vel.set(0,0,0);player.rail=null;cameraHardCut=true;
+  if(gameplayErrorCount<=2)flash('MOVEMENT ERROR · Please send the browser console message.',6);
+ }
+ verifyPlayerPosition();
+ runWorldSystem('Chili pickups',updatePepperPickups,dt);
+ if(!player.inSewer&&!player.inHospital){
+  runWorldSystem('People',updateHumans,dt);
+  runWorldSystem('Traffic',updateCars,dt);
+  runWorldSystem('Animals',updateWildlife,dt);
+  runWorldSystem('Cats',updateYardCats,dt);
+  runWorldSystem('Ambulance',updateAmbulance,dt);
+ }
+ runWorldSystem('Infection',updateInfection,Math.min(wallDelta,.20));
+ runWorldSystem('Hospital',updateHospital,Math.min(wallDelta,.20));
+ runWorldSystem('Neighborhood',()=>updateNewSystems(wallDelta,dt),dt);
+ runWorldSystem('Westside',updateWestside,dt);
+ runWorldSystem('Gatherings',updateLivingEvents,dt);
+ runWorldSystem('Doors',animateHouseDoors,dt);
+ runWorldSystem('Interiors',updateHouseInteriors,dt);
+ runWorldSystem('Interior animations',updateInteriorMotion,dt);
+ runWorldSystem('Posters',updatePosterAwareness,dt);
+ runWorldSystem('Police',updatePoliceResponse,dt)}else if(!playing&&player.alive){yaw=PI+Math.sin(time*.08)*.18;pitch=.20;updateTail(time*.7)}for(const leaf of canopyAnimated){
  const breeze=Math.sin(time*.51+leaf.phase)*leaf.amplitude;
  leaf.mesh.rotation.z=breeze;
  leaf.mesh.rotation.x=Math.sin(time*.37+leaf.phase*1.3)*leaf.amplitude*.6;
  }
- updateCanopyShadows();updateEmergencyBeacons();if(playing&&!gamePaused)animateBiteDance(dt);updateCamera(dt);updateCompass();updateBubbles(dt);renderer.render(scene,camera)}
-drawInfection();flash('v2.8: CLEAN START SCREEN · DEFENSIVE NEIGHBORS',5);tick();window.__spicyBootOk=true;$('loading').classList.add('done');document.getElementById('spicyBootError')?.remove();try{$('playButton').focus({preventScroll:true})}catch(e){}
+ runWorldSystem('Canopy shadows',updateCanopyShadows,dt);
+ runWorldSystem('Beacons',updateEmergencyBeacons,dt);
+ if(playing&&!gamePaused)runWorldSystem('Bite animations',animateBiteDance,dt);
+ try{updateCamera(dt)}catch(err){
+  console.error('Camera update error:',err);camPos.copy(player.pos).add(v(0,3,5));
+  lookPoint.copy(player.pos).add(v(0,.9,-1));camera.position.copy(camPos);camera.lookAt(lookPoint);
+ }
+ runWorldSystem('Compass',updateCompass,dt);
+ runWorldSystem('Speech bubbles',updateBubbles,dt);
+ try{renderer.render(scene,camera)}catch(err){console.error('Rendering error:',err)}
+ }catch(err){
+   globalFrameErrors++;
+   if(globalFrameErrors<=3){
+    console.error('Uncaught gameplay frame error:',err);
+    // Keep the canvas available and show an actionable diagnostic rather than silently freezing.
+    const box=document.getElementById('spicyRuntimeError')||document.createElement('div');
+    box.id='spicyRuntimeError';box.setAttribute('role','alert');
+    box.style.cssText='position:fixed;z-index:9999;top:10px;left:50%;transform:translateX(-50%);max-width:min(700px,95vw);background:#1b2927f4;border:2px solid #d1ee83;border-radius:8px;padding:12px 18px;color:#f0f4e4;font:12px/1.5 Arial,sans-serif';
+    box.textContent='Game update error: '+String(err?.message||err).slice(0,240)+' · Press C to recenter the camera or reload the page. Please send this message if it persists.';
+    if(!box.isConnected)document.body.appendChild(box);
+   }
+ }
+}
+drawInfection();flash('v2.10: CONTROLS RESTORED · C RECENTERS CAMERA',4);tick();window.__spicyBootOk=true;$('loading').classList.add('done');document.getElementById('spicyBootError')?.remove();try{$('playButton').focus({preventScroll:true})}catch(e){}
 </script>
 </body>
 </html>
