@@ -1,14 +1,14 @@
-import { loftSolids } from "./loftNet.js?v=logic24";
+import { loftSolids } from "./loftNet.js?v=logic25";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic24";
-import { TrackSystem } from "./tracks.js?v=logic24";
-import { DriveWorld, railHit } from "./world.js?v=logic24";
-import { EngineAudio } from "./engineAudio.js?v=logic24";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic24";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic24";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic24";
-import { TreeCritters } from "./treehouse.js?v=logic24";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic24";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic25";
+import { TrackSystem } from "./tracks.js?v=logic25";
+import { DriveWorld, railHit } from "./world.js?v=logic25";
+import { EngineAudio } from "./engineAudio.js?v=logic25";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic25";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic25";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic25";
+import { TreeCritters } from "./treehouse.js?v=logic25";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic25";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -818,6 +818,7 @@ export class DriveMode {
 
   /** logic7: drop smoothed chase state so the next frame starts exactly on the framing. */
   _resetChaseSmoothing() {
+    this._camPrevCam = this._camPrevCar = null; // logic25 rig rate-limit restarts
     this._camOccK = 1;
     this._camSolK = null; this._camBaseY = null;
     this._camYawS = null;
@@ -887,6 +888,7 @@ export class DriveMode {
     let best = 1;
     for (const b of boxes) {
       if (b.conveyor) continue; // logic14: the open conveyor cage never pulls the camera in
+      if (b.driveKind === "rail" && b.max.y < ay + 0.08) continue; // logic25: low kerb rails (spiral helix steps) sit under the rig — they flipped it up 0.3 m for a frame
       const mn = [b.min.x - pad, b.min.y - pad, b.min.z - pad], mx = [b.max.x + pad, b.max.y + pad, b.max.z + pad];
       let t0 = 0, t1 = best, ok = true;
       for (let k = 0; k < 3 && ok; k++) {
@@ -1601,6 +1603,22 @@ export class DriveMode {
         if (this._segSolidHit(pp.x, pp.y + 0.07, pp.z, c2.x, c2.y, c2.z) >= 1) cam = c2;
       }
     }
+    // logic25 (Ben t191u "glitches on the spiral drive"): the solid guard can flip between "pull in" and "lift over"
+    // frame-to-frame (brass spiral posts / chandelier arms) — a 0.4 m one-frame camera pop. Rate-limit the rig's
+    // motion RELATIVE to the car; keep the limited spot only while it still has a clear line to the car.
+    if (this._camPrevCam && this._camPrevCar && this._camMode !== "bumper" && !this._lift) {
+      const ex = this._camPrevCam.x + (pp.x - this._camPrevCar.x), ey = this._camPrevCam.y + (pp.y - this._camPrevCar.y), ez = this._camPrevCam.z + (pp.z - this._camPrevCar.z);
+      const dx = cam.x - ex, dy = cam.y - ey, dz = cam.z - ez, d = Math.hypot(dx, dy, dz), lim = 1.2 * dt;
+      if (d > lim && d < 1.5) {
+        // nearest-to-smooth spot with a clear sight line: the limited step, else progressively closer to the guard's pick
+        for (const k of [lim / d, 0.25, 0.5, 0.75]) {
+          if (k < lim / d - 1e-6) continue;
+          const c3 = { x: ex + dx * k, y: ey + dy * k, z: ez + dz * k };
+          if (this._segSolidHit(pp.x, pp.y + 0.07, pp.z, c3.x, c3.y, c3.z) >= 1) { cam = c3; break; }
+        }
+      }
+    }
+    this._camPrevCam = { x: cam.x, y: cam.y, z: cam.z }; this._camPrevCar = { x: pp.x, y: pp.y, z: pp.z };
     this.camera.position.set(cam.x, cam.y, cam.z);
     this._camVel.set(0, 0, 0);
     this._camPrevTarget = null;

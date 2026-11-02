@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic24";
-import { OBJECTS } from "./data/objects.js?v=logic24";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic24";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic24";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic24";
-import { buildLabGarage } from "./labGarage.js?v=logic24";
+import { ROOMS } from "./data/rooms.js?v=logic25";
+import { OBJECTS } from "./data/objects.js?v=logic25";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic25";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic25";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic25";
+import { buildLabGarage } from "./labGarage.js?v=logic25";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -1411,18 +1411,18 @@ export class Mansion {
         // logic3: the hairpin lane (x≈0) and balcony_to_climb_b (x≈4.4) cross the landing —
         // a rug above asphalt hid the road. Long runner on the centre island only.
         rw = 1.7;
-        rd = 7.0;
+        rd = 4.35; // logic25: starts north of the chandelier spiral's foot (it lay over the bottom coil — car sank 3.5 cm into it)
         rx = cx + 2.25;
-        rz = cz + 0.9;
+        rz = cz + 2.225;
       }
+      if (room.id === "science_attic") { rw = Math.min(rw, 5.6); rd = Math.min(rd, 3.4); } // logic25: inside the Science Attic Ring lane (rug overlapped it)
       const rugTex = this._rugTex(p.trim, p.wall);
       const rugMat = this._stdMat({
         ...(rugTex ? { map: rugTex } : { color: p.trim || 0x6d4c41 }),
         roughness: 0.95,
         metalness: 0.02,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1,
+        // logic25 (Ben t191u "you go into the floor a bit"): NO polygonOffset — the rug box already floats 2.2 cm clear
+        // of the floor, and the slope-scaled offset pulled the big rug in front of the tyres at low chase-cam angles.
       });
       // Center at cy+0.036, h=0.028 → sits fully above frame brass (~cy+0.026)
       const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.028, rd), rugMat);

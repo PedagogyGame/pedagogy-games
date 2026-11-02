@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic24";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic24";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic25";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic25";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic24";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic24";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic24";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic24";
+import { ROOMS } from "../data/rooms.js?v=logic25";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic25";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic25";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic25";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -308,19 +308,22 @@ export class DriveWorld {
         // bevelled edge — rolling on/off it is a smooth ramp, not a 4–5 cm pop.
         const edge = s.width * 0.5 - d;
         const yRaw = yR;
-        const nearJoin = edge < 0.08 && t._segmentsNear(x, z, 0.4).some((o) => { // logic16: a junction mouth is not an edge
+        // logic25 (Ben t191u spiral glitches): the 8 cm floor bevel dipped the swung-wide car 3 cm INTO the visible chandelier-spiral
+        // foot deck at speed (+ a speed snag). The spiral keeps a 6 cm lip bevel (any narrower and a car swung off the foot snags the lip coming back).
+        const BEV = s.pathId === "sky_chandelier" ? 0.06 : 0.08;
+        const nearJoin = edge < BEV && t._segmentsNear(x, z, 0.4).some((o) => { // logic16: a junction mouth is not an edge
           if (o.pathId === s.pathId) return false;
           const ox = o.b.x - o.a.x, oz = o.b.z - o.a.z, l2 = ox * ox + oz * oz; if (l2 < 1e-8) return false;
           const v = Math.max(0, Math.min(1, ((x - o.a.x) * ox + (z - o.a.z) * oz) / l2));
           return Math.hypot(x - (o.a.x + ox * v), z - (o.a.z + oz * v)) < o.width * 0.5 + 0.15 && Math.abs(o.a.y + (o.b.y - o.a.y) * v + ASPHALT_RIDE - yR) < 0.07;
         });
-        if (edge < 0.08 && !nearJoin && s.kind !== "mouse" && s.pathId !== "sky_conveyor_exit") {
+        if (edge < BEV && !nearJoin && s.kind !== "mouse" && s.pathId !== "sky_conveyor_exit") {
           let done = false;
           for (let i = 0; i < out.length && !done; i++) { // a rug just proud of the deck beside it: ramp UP to it
             const e = out[i]; if (!e.rug || e.rug === "kicker" || e.rug === "flap" || e.rug === "trap") continue;
-            const h = e.y - yR; if (h > 0.003 && h < 0.07) { yR += h * 0.75 * (1 - edge / 0.08); done = true; }
+            const h = e.y - yR; if (h > 0.003 && h < 0.07) { yR += h * 0.75 * (1 - edge / BEV); done = true; }
           }
-          for (let i = 0; i < out.length && !done; i++) { if (out[i].kind !== "floor" || out[i].rug) continue; const fy = out[i].y, h = yR - fy; if (h > 0.005 && h < 0.085) { yR = fy + h * (0.3 + 0.7 * edge / 0.08); done = true; } }
+          for (let i = 0; i < out.length && !done; i++) { if (out[i].kind !== "floor" || out[i].rug) continue; const fy = out[i].y, h = yR - fy; if (h > 0.005 && h < 0.085) { yR = fy + h * (0.3 + 0.7 * edge / BEV); done = true; } }
         }
         out.push({
           y: yR,
