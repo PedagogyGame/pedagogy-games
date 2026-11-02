@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic23";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic23";
-import { buildConveyor } from "./conveyor.js?v=logic23";
-import { buildYard } from "./treehouse.js?v=logic23";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic23";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic23";
-import { ROOMS } from "../data/rooms.js?v=logic23";
-import { LAB, inLab } from "../data/labGarage.js?v=logic23";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic24";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic24";
+import { buildConveyor } from "./conveyor.js?v=logic24";
+import { buildYard } from "./treehouse.js?v=logic24";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic24";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic24";
+import { ROOMS } from "../data/rooms.js?v=logic24";
+import { LAB, inLab } from "../data/labGarage.js?v=logic24";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -157,6 +157,55 @@ export function loftSolids(segments) {
       solids.push(box);
     }
   }
+  // logic24 (Ben t188u "i got stuck right here"): the shaft foot (Timber Shaft → Timber Lawn, z 12.1–13.9) had no
+  // kerbs — the shaft/lawn "branch" gore stripped them — so the car rolled off sideways onto the cavity floor beside the
+  // lane and into the dead-end pocket under the outer ramp. Kerbs run continuously through the foot now, and the pocket
+  // mouths under the cavity header (z ≈ 13.35) are boarded shut (visual in timberGutter.js).
+  for (const s of segs) {
+    const zs = Math.min(s.a.z, s.b.z), ze = Math.max(s.a.z, s.b.z);
+    const foot = (s.pathId === "timber_shaft" && Math.max(s.a.y, s.b.y) < 0.2 && ze > 12.0 && zs < 13.3 && Math.abs(s.a.x - TIMBER.x) < 0.05)
+      || (s.pathId === "timber_lawn" && zs >= 13.15 && ze <= 13.9 && Math.abs(s.a.x - TIMBER.x) < 0.05);
+    if (!foot) continue;
+    for (const side of [-1, 1]) {
+      const [x0, z0, x1, z1] = edgeOf(s, side);
+      const box = new THREE.Box3(new THREE.Vector3(Math.min(x0, x1) - RAIL_T / 2, Math.min(s.a.y, s.b.y) + RIDE - 0.01, Math.min(z0, z1) - RAIL_T / 2),
+        new THREE.Vector3(Math.max(x0, x1) + RAIL_T / 2, Math.max(s.a.y, s.b.y) + RIDE + RAIL_H, Math.max(z0, z1) + RAIL_T / 2));
+      box.driveKind = "rail"; box.logic24 = true;
+      box.rail = { x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE, t: RAIL_T / 2, h: RAIL_H };
+      rails.push({ box, x0, z0, x1, z1, y0: s.a.y + RIDE, y1: s.b.y + RIDE }); solids.push(box);
+    }
+  }
+  // logic24: edge seal for the attic / roof-run / shaft / gutter-entry network — any lane edge whose outside is open air
+  // (no deck within 12 cm of height just past it) and that has no kerb yet gets one. Two parallel decks that each skipped
+  // their rail because the other "covered" it (Timber Attic + Sky Roof Run) left the attic's north lip bare → 5 m drop.
+  {
+    const net = segments.filter((q) => /^(timber_|gutter_entry$|sky_roofrun$)/.test(q.pathId) && Math.min(q.a.y, q.b.y) > 0.6
+      && (q.pathId !== "sky_roofrun" || (Math.max(q.a.x, q.b.x) > 8 && Math.min(q.a.z, q.b.z) < -12)));
+    const allS = segments.filter((q) => LOFT_IDS.has(q.pathId) || /^timber_|^gutter|^sky_/.test(q.pathId));
+    const railNear = (x, y, z) => rails.some((r) => {
+      const ax = r.x1 - r.x0, az = r.z1 - r.z0, l2 = ax * ax + az * az; const u = l2 < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - r.x0) * ax + (z - r.z0) * az) / l2));
+      return Math.hypot(x - (r.x0 + ax * u), z - (r.z0 + az * u)) < 0.09 && Math.abs(r.y0 + (r.y1 - r.y0) * u - y) < 0.2; });
+    const deckAt = (x, y, z) => allS.some((q) => { const sy = laneHit(q, x, z, 0); return sy != null && Math.abs(sy - y) < 0.12; });
+    const otherDeck = (q, x, y, z) => allS.some((o) => { if (o.pathId === q.pathId) return false; const sy = laneHit(o, x, z, -0.02); return sy != null && Math.abs(sy - y) < 0.12; });
+    const N = 4;
+    for (const q of net) for (const side of [-1, 1]) {
+      const [ex0, ez0, ex1, ez1] = edgeOf(q, side); const nx = q.dir.z * side, nz = -q.dir.x * side;
+      for (let k = 0; k < N; k++) {
+        const t0 = k / N, t1 = (k + 1) / N, P = (t) => [ex0 + (ex1 - ex0) * t, q.a.y + (q.b.y - q.a.y) * t, ez0 + (ez1 - ez0) * t];
+        const pts = [P(t0), P((t0 + t1) / 2), P(t1)];
+        if (pts.some(([x, y, z]) => deckAt(x + nx * 0.05, y, z + nz * 0.05))) continue;      // something drivable just outside
+        if (pts.some(([x, y, z]) => otherDeck(q, x, y, z))) continue;                          // edge lies on another lane — never rail across it
+        if (railNear(pts[1][0], pts[1][1] + RIDE, pts[1][2])) continue;
+        const [x0, y0, z0] = pts[0], [x1, y1, z1] = pts[2];
+        const box = new THREE.Box3(new THREE.Vector3(Math.min(x0, x1) - RAIL_T / 2, Math.min(y0, y1) + RIDE - 0.01, Math.min(z0, z1) - RAIL_T / 2),
+          new THREE.Vector3(Math.max(x0, x1) + RAIL_T / 2, Math.max(y0, y1) + RIDE + RAIL_H, Math.max(z0, z1) + RAIL_T / 2));
+        box.driveKind = "rail"; box.logic24 = true; box.seal = true;
+        box.rail = { x0, z0, x1, z1, y0: y0 + RIDE, y1: y1 + RIDE, t: RAIL_T / 2, h: RAIL_H };
+        rails.push({ box, x0, z0, x1, z1, y0: y0 + RIDE, y1: y1 + RIDE }); solids.push(box);
+      }
+    }
+  }
+  for (const [xa, xb] of TIMBER_FOOT_BOARDS) { const box = new THREE.Box3(new THREE.Vector3(xa, -0.05, 13.30), new THREE.Vector3(xb, 0.6, 13.40)); box.driveKind = "wall"; box.timber = true; box.logic24 = true; solids.push(box); }
   // The façade hollow is only closed between the foyer S wall and the façade for x∈[-9.17, 9];
   // west of the foyer the mouse run would be out on the lawn. Drive-only lining wall + roof
   // keep it a real tunnel inside the wall until it pops out at the façade's west end.
@@ -349,6 +398,27 @@ export function labUnderfill(segments) {
   return out;
 }
 
+// logic24: lane footprint helpers for hanger rods
+function laneHit(s, x, z, pad) {
+  const abx = s.b.x - s.a.x, abz = s.b.z - s.a.z, L2 = abx * abx + abz * abz; if (L2 < 1e-8) return null;
+  const u = ((x - s.a.x) * abx + (z - s.a.z) * abz) / L2; if (u < -0.02 || u > 1.02) return null;
+  const uc = Math.max(0, Math.min(1, u)), px = s.a.x + abx * uc, pz = s.a.z + abz * uc;
+  if (Math.hypot(x - px, z - pz) > s.width / 2 + pad) return null;
+  return s.a.y + (s.b.y - s.a.y) * uc;
+}
+function rodInLane(all, self, x, y, z) {
+  for (const s of all) { if (s === self) continue; const sy = laneHit(s, x, z, 0.02); if (sy != null && Math.abs(sy - y) < 0.35) return true; }
+  return false;
+}
+function rodClip(all, self, x, z, lo, hi, up) {
+  let v = up ? hi : lo;
+  for (const s of all) { if (s === self) continue; const sy = laneHit(s, x, z, 0.06); if (sy == null) continue;
+    if (up && sy > lo + 0.05 && sy - 0.08 < v) v = sy - 0.08;
+    if (!up && sy < hi - 0.05 && sy + 0.01 > v) v = sy + 0.01; }
+  return v;
+}
+// logic24: boards closing the cavity floor pockets beside the shaft-foot lane (x ranges, z 13.30–13.40, y 0–0.6)
+export const TIMBER_FOOT_BOARDS = [[24.40, 24.535], [25.315, 26.4]]; // logic24: outer board runs into the shell (a 0.2 m slot at x 26.0–26.2 pinned cars)
 function pushBox(arr, cx, cy, cz, sx, sy, sz, yaw = 0) {
   arr.push({ cx, cy, cz, sx, sy, sz, yaw });
 }
@@ -480,6 +550,7 @@ export function buildLoftMeshes(tracks, jobs) {
   // Hangers (toy-train trestle rods to the ceiling) + wall brackets
   const hang = [];
   const segs = tracks.segments.filter((s) => LOFT_IDS.has(s.pathId) && Math.min(s.a.y, s.b.y) > 0.6);
+  const allLoft = tracks.segments.filter((s) => LOFT_IDS.has(s.pathId));
   let acc = 0, lastPath = null;
   for (const s of segs) {
     if (s.pathId !== lastPath) { acc = 0; lastPath = s.pathId; }
@@ -492,6 +563,9 @@ export function buildLoftMeshes(tracks, jobs) {
       for (const sd of [-1, 1]) {
         const o = s.width / 2 + 0.05;
         if (onOtherDeck(segs, s, mx + s.dir.z * sd * o, my - RIDE, mz - s.dir.x * sd * o)) continue; // branch mouth stays open
+        { // logic24 (Ben t188u "drove through what looked like a wall"): no tube side wall standing on another lane (shaft top → attic)
+          const wx = mx + s.dir.z * sd * o, wz = mz - s.dir.x * sd * o, hl = Math.hypot(len, dy) / 2;
+          if ([-1, 0, 1].some((t) => rodInLane(allLoft, s, wx + s.dir.x * hl * t * 0.9, my - RIDE + 0.05, wz + s.dir.z * hl * t * 0.9))) continue; }
         pushBox(hang, mx + s.dir.z * sd * o, my + 0.2, mz - s.dir.x * sd * o, 0.03, 0.42, Math.hypot(len, dy), yaw);
         hang[hang.length - 1].pitch = pitch;
       }
@@ -506,10 +580,17 @@ export function buildLoftMeshes(tracks, jobs) {
       const nx = s.dir.z * sd, nz = -s.dir.x * sd, o = s.width / 2 + 0.035;
       const x = s.b.x + nx * o, z = s.b.z + nz * o, y0 = s.b.y - 0.1;
       if (s.pathId === "sky_chandelier" && Math.hypot(x - 2.2, z - 3.75) < 0.95) continue; // logic14: no inner rods through the upper helix turns / conveyor
-      if (sup.ceil != null && sup.ceil > y0 + 0.05) pushBox(hang, x, (y0 + sup.ceil) / 2, z, 0.025, sup.ceil - y0, 0.025);
-      else if (sup.ceil == null && y0 - sup.below > 0.1) pushBox(hang, x, (y0 + sup.below) / 2, z, 0.04, y0 - sup.below, 0.04); // trestle leg
+      // logic24 (Ben t188u "drove through what looked like a wall"): a rod must never stand in drivable space —
+      // skip it if its foot sits on another lane (branch mouths), and clip it at any deck it would pierce.
+      if (rodInLane(allLoft, s, x, y0 + 0.1, z)) continue;
+      if (sup.ceil != null && sup.ceil > y0 + 0.05) { const top = rodClip(allLoft, s, x, z, y0, sup.ceil, true); if (top > y0 + 0.05) pushBox(hang, x, (y0 + top) / 2, z, 0.025, top - y0, 0.025); }
+      else if (sup.ceil == null && y0 - sup.below > 0.1) { const bot = rodClip(allLoft, s, x, z, sup.below, y0, false); if (y0 - bot > 0.1 && bot <= sup.below + 1e-6) pushBox(hang, x, (y0 + bot) / 2, z, 0.04, y0 - bot, 0.04); } // trestle leg
     }
-    pushBox(hang, s.b.x, s.b.y - 0.13, s.b.z, s.width + 0.2, 0.025, 0.04, yaw);
+    { // logic24: the under-deck cross beam may not poke into a neighbouring lane (twin shaft runs)
+      const nx = s.dir.z, nz = -s.dir.x, hw = (s.width + 0.2) / 2, yb = s.b.y - 0.13;
+      const clash = [-1, 1].some((sd) => rodInLane(allLoft, s, s.b.x + nx * sd * hw, yb, s.b.z + nz * sd * hw));
+      pushBox(hang, s.b.x, yb, s.b.z, clash ? s.width - 0.02 : s.width + 0.2, 0.025, 0.04, yaw);
+    }
   }
   for (const b of sol.linings || []) pushBox(hang, (b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, (b.min.z + b.max.z) / 2, b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
   const darkMat = new THREE.MeshLambertMaterial({ color: 0x77738a, emissive: 0x1c1a26 }); // logic21: was #23202c — read as black slashes

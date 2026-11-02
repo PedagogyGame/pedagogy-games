@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic23";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic23";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic24";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic24";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic23";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic23";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic23";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic23";
+import { ROOMS } from "../data/rooms.js?v=logic24";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic24";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic24";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic24";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -259,6 +259,7 @@ export class DriveWorld {
 
   /** All surface tops at (x,z): [{y, kind:'road'|'floor', pathId?, roadKind?}] */
   surfacesAt(x, z) {
+    const SEAM = globalThis.__SEAM ?? 0.03; // logic24 (Ben t188u): bent joints left hair-thin wedge holes at the lane edges (car sank at the shaft/Gutter-Entry seam)
     const out = [];
     for (const f of this.floors) {
       if (x < f.minX || x > f.maxX || z < f.minZ || z > f.maxZ) continue;
@@ -297,7 +298,8 @@ export class DriveWorld {
         if (L2 < 1e-8) continue;
         const tr = ((x - s.a.x) * abx + (z - s.a.z) * abz) / L2;
         const L = Math.sqrt(L2);
-        if (tr < -(s.extA || 0) / L || tr > 1 + (s.extB || 0) / L) continue; // ends / miter only
+        const sm = /^(timber_|gutter)/.test(s.pathId) ? SEAM : 0; // only the timber/gutter network (elsewhere a 3 cm overhang broke Climb A)
+        if (tr < -((s.extA || 0) + sm) / L || tr > 1 + ((s.extB || 0) + sm) / L) continue; // ends / miter only (logic24: + 3 cm seam overlap)
         const u = Math.max(0, Math.min(1, tr));
         const d = Math.hypot(x - (s.a.x + abx * u), z - (s.a.z + abz * u));
         if (d > s.width * 0.5) continue;

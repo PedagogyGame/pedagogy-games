@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic23";
+import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic24";
 
 /**
  * logic18: east-cavity TIMBER FRAMING (studs, joists, braces, beams, batting, wiring) +
@@ -39,40 +39,59 @@ export function buildTimberAndGutter(root, tracks) {
   const xI = T.xInner, xO = T.xOuter, z0 = T.zN - 0.4, z1 = T.zS + 0.4;
   // Vertical studs every ~1.1 m on both cavity faces
   for (let z = z0; z <= z1; z += 1.1) {
-    box(0.08, 8.6, 0.1, wood, xI + 0.04, 4.3, z);
-    box(0.08, 8.6, 0.1, woodD, xO - 0.04, 4.3, z);
+    const top = z < T.zN + 0.75 ? T.yT - 0.08 : 8.6; // logic24: under the Timber Attic crossing the studs stop below its deck
+    box(0.08, top, 0.1, wood, xI + 0.04, top / 2, z);
+    box(0.08, top, 0.1, woodD, xO - 0.04, top / 2, z);
   }
-  // Floor joists / ledgers at story heights
-  for (const y of [0.15, 3.35, 6.7, 8.35]) {
-    box(xO - xI - 0.1, 0.1, z1 - z0, woodL, (xI + xO) / 2, y, (z0 + z1) / 2);
-    // cross joists
-    for (let z = z0 + 0.55; z < z1; z += 1.1) box(xO - xI - 0.15, 0.07, 0.08, wood, (xI + xO) / 2, y + 0.08, z);
+  // logic24 (Ben t188u "drove through what looked like a wall"): the story ledgers used to be full-width slabs
+  // with cross joists spanning the cavity — the shaft lanes ran straight through them, and the diagonal braces
+  // crossed both lanes. Now everything hugs the two cavity faces: ledger strips + braces in the wall planes.
+  for (const y of [0.15, 3.35, 6.7, 8.35]) for (let z = z0; z < z1 - 1e-6; z += 1.1) { // in 1.1 m runs so branch mouths can drop a piece
+    const L = Math.min(1.1, z1 - z);
+    box(0.06, 0.1, L, woodL, xI + 0.03, y, z + L / 2);
+    box(0.06, 0.1, L, woodL, xO - 0.07, y, z + L / 2);
   }
-  // Diagonal cross-bracing (every other bay)
   for (let z = z0; z < z1 - 1.2; z += 2.2) {
     const mid = z + 1.1, h = 3.2;
     for (const y0 of [0.2, 3.4]) {
-      // brace as a thin rotated box
       const L = Math.hypot(1.1, h), ang = Math.atan2(h, 1.1);
-      parts.push([new THREE.BoxGeometry(0.06, L, 0.06), woodD, M(xI + 0.12, y0 + h / 2, mid, 0, 0, -ang + Math.PI / 2)]);
-      parts.push([new THREE.BoxGeometry(0.06, L, 0.06), woodD, M(xO - 0.12, y0 + h / 2, mid, 0, 0, ang - Math.PI / 2)]);
+      parts.push([new THREE.BoxGeometry(0.04, L, 0.06), woodD, M(xI + 0.07, y0 + h / 2, mid, ang - Math.PI / 2, 0, 0)]);
+      parts.push([new THREE.BoxGeometry(0.04, L, 0.06), woodD, M(xO - 0.07, y0 + h / 2, mid, -ang + Math.PI / 2, 0, 0)]);
     }
   }
+  // logic24: boards closing the cavity-floor pockets beside the shaft-foot lane, under the header (colliders in loftSolids)
+  for (const [xa, xb] of [[24.40, 24.535], [25.315, 26.4]]) box(xb - xa, 0.6, 0.1, woodL, (xa + xb) / 2, 0.25, 13.35);
   // Insulation batting scraps (soft yellow-brown pads between studs)
   let sd = 11; const rnd = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   for (let i = 0; i < 28; i++) {
     const z = z0 + 0.4 + rnd() * (z1 - z0 - 0.8), y = 0.4 + rnd() * 7.5;
-    box(0.04, 0.35 + rnd() * 0.5, 0.55 + rnd() * 0.4, bat, rnd() > 0.5 ? xI + 0.1 : xO - 0.1, y, z);
+    box(0.04, 0.35 + rnd() * 0.5, 0.55 + rnd() * 0.4, bat, rnd() > 0.5 ? xI + 0.1 : xO - 0.08, y, z); // logic24: outer pads flush to the shell face
   }
   // Wiring runs (thin dark cables along joists)
   for (let i = 0; i < 6; i++) {
     const y = 1.2 + i * 1.2;
-    box(0.02, 0.02, z1 - z0 - 1, wire, xI + 0.18 + (i % 2) * 0.15, y, (z0 + z1) / 2);
+    for (let z = z0 + 0.5; z < z1 - 0.5 - 1e-6; z += 1.1) { const L = Math.min(1.1, z1 - 0.5 - z); // logic24: inner face, in runs
+      box(0.02, 0.02, L, wire, xI + 0.09 + (i % 2) * 0.02, y, z + L / 2); }
   }
   // A few hanging scrap planks / blocking
   for (let i = 0; i < 10; i++) {
     const z = z0 + 1 + rnd() * (z1 - z0 - 2), y = 1 + rnd() * 6;
-    box(0.04, 0.5 + rnd() * 0.8, 0.12, woodL, (xI + xO) / 2 + (rnd() - 0.5) * 0.6, y, z, rnd() * 0.4);
+    const hgt = 0.5 + rnd() * 0.8, side = rnd() - 0.5; rnd(); // logic24: blocking sits on the cavity faces, not in the lanes
+    box(0.03, hgt, 0.12, woodL, side < 0 ? xI + 0.065 : xO - 0.065, y, z);
+  }
+  // logic24 (Ben t188u): nothing of the framing may stand in a lane's car band — the branch roads (Timber G / F, the
+  // Attic) pass through the cavity faces, and studs / ledgers / pads used to run straight across their mouths.
+  {
+    const lanes = (tracks && tracks.segments ? tracks.segments : []).filter((q) => /^(timber_|gutter)/.test(q.pathId));
+    const pts = [];
+    for (const q of lanes) { const n = Math.max(2, Math.ceil(q.len / 0.05)); for (let i = 0; i <= n; i++) { const t = i / n;
+      const cx = q.a.x + (q.b.x - q.a.x) * t, cz = q.a.z + (q.b.z - q.a.z) * t, cy = q.a.y + (q.b.y - q.a.y) * t;
+      for (let k = -10; k <= 10; k++) { const o = k / 20; pts.push([cx + q.dir.z * o * (q.width - 0.02), cy, cz - q.dir.x * o * (q.width - 0.02)]); } } }
+    const bb = new THREE.Box3();
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const [g, , m] = parts[i]; g.computeBoundingBox(); bb.copy(g.boundingBox).applyMatrix4(m);
+      if (pts.some(([x, y, z]) => x > bb.min.x - 0.005 && x < bb.max.x + 0.005 && z > bb.min.z - 0.005 && z < bb.max.z + 0.005 && bb.max.y > y + 0.005 && bb.min.y < y + 0.16)) parts.splice(i, 1);
+    }
   }
   const timber = new THREE.Mesh(merged(parts), new THREE.MeshLambertMaterial({ vertexColors: true }));
   timber.name = "timber_framing"; timber.raycast = () => {}; root.add(timber);

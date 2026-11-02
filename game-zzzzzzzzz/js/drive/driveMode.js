@@ -1,14 +1,14 @@
-import { loftSolids } from "./loftNet.js?v=logic23";
+import { loftSolids } from "./loftNet.js?v=logic24";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic23";
-import { TrackSystem } from "./tracks.js?v=logic23";
-import { DriveWorld, railHit } from "./world.js?v=logic23";
-import { EngineAudio } from "./engineAudio.js?v=logic23";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic23";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic23";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic23";
-import { TreeCritters } from "./treehouse.js?v=logic23";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic23";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic24";
+import { TrackSystem } from "./tracks.js?v=logic24";
+import { DriveWorld, railHit } from "./world.js?v=logic24";
+import { EngineAudio } from "./engineAudio.js?v=logic24";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic24";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic24";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic24";
+import { TreeCritters } from "./treehouse.js?v=logic24";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic24";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -1043,12 +1043,17 @@ export class DriveMode {
     if ((flags && flags.lift) || this._onFlap >= 0) { this._stuckTimer = 0; return; } // logic11 lift / logic14 conveyor ride
     const p = this.car.position;
     if (flags && flags.void) { this._respawnNearestRoad("Hopped back on"); return; }
-    if (this.car.airborne) { this._stuckTimer = 0; return; }
-    const moved = Math.hypot(p.x - prevX, p.z - prevZ);
+    // logic24 (Ben t188u "i got stuck right here"): wedged cars jitter (or flick airborne for a frame), which reset the
+    // old per-frame test forever. Now: net progress from an anchor — pushing with < 10 cm of travel for 0.7 s = stuck.
     const pushing = !!(keys && (keys.forward || keys.back));
-    if (pushing && moved < 0.0015 * Math.max(1, dt * 60)) this._stuckTimer = (this._stuckTimer || 0) + dt;
-    else this._stuckTimer = 0;
-    if (this._stuckTimer > 2.5) this._respawnNearestRoad("Stuck — hopped back on");
+    const A = this._stuckAnchor;
+    if (!pushing || !A || (Math.abs(this.car.speed) > 0.1 && Math.hypot(p.x - A.x, p.z - A.z) > 0.015) || Math.hypot(p.x - A.x, p.z - A.z) > 0.1 || Math.abs(p.y - A.y) > 0.25) {
+      this._stuckAnchor = { x: p.x, y: p.y, z: p.z }; this._wedgeT = 0; this._stuckTimer = 0; return;
+    }
+    if (this.car.airborne && Math.abs(this.car.vy || 0) > 0.6) { this._wedgeT = 0; this._stuckTimer = 0; return; } // genuinely flying/falling
+    if (Math.abs(this.car.speed) > 0.3) { this._wedgeT = 0; return; } // still driving (slow climb / kicker run-up) — not wedged
+    this._wedgeT = (this._wedgeT || 0) + dt; this._stuckTimer = this._wedgeT; // own timer: crash/recovery code zeroes _stuckTimer
+    /* logic24: 0.7 s hop-out in the timber/gutter/attic cavity, 2.5 s elsewhere (house climbs pause legitimately) */ if (this._wedgeT > (globalThis.__WEDGE_T ?? (p.x > 23.0 ? 0.7 : 2.5))) { this._wedgeT = 0; this._stuckAnchor = null; this._respawnNearestRoad("Stuck — hopped back on"); }
   }
 
   _respawnNearestRoad(hint) {
