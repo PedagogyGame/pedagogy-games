@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GHOST_BOOKS, BOOK_TOUCH_R, BOOK_TOUCH_DY, BOOK_CAR_DY, BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic23";
+import { GHOST_BOOKS, BOOK_TOUCH_R, BOOK_TOUCH_DY, BOOK_CAR_DY, BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic24";
 
 const STORE_KEY = "motu.ghostBooks.v1";
 const ls = () => { try { return typeof localStorage !== "undefined" ? localStorage : null; } catch (_) { return null; } };
