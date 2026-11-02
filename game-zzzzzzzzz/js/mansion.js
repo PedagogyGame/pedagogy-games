@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic23";
-import { OBJECTS } from "./data/objects.js?v=logic23";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic23";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic23";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic23";
-import { buildLabGarage } from "./labGarage.js?v=logic23";
+import { ROOMS } from "./data/rooms.js?v=logic24";
+import { OBJECTS } from "./data/objects.js?v=logic24";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic24";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic24";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic24";
+import { buildLabGarage } from "./labGarage.js?v=logic24";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -1783,6 +1783,7 @@ export class Mansion {
     // Corner planters for every outdoor zone
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       if (id === "carriage_yard" && sx > 0) continue; // logic19: lab garage + window road stand there
+      if (id === "carriage_yard" && sz > 0) continue; // logic24 (Ben t188u): this planter stood on the East Lawn kicker run-up — drive-through; removed
       const x = cx + sx * (w * 0.38);
       const z = cz + sz * (d * 0.38);
       addCyl(0.35, 0.4, 0.45, x, cy + 0.22, z, this._mat(0x6d4c41, 0.85), 10);
@@ -1924,8 +1925,10 @@ export class Mansion {
 
     if (id === "carriage_yard") {
       // Hay bales, barrels, spare wheel, workbench along shed wall
-      for (const [dx, dz] of [[-6, 8], [-4, 8], [3, 3.5]]) { // logic19: third bale moved out of the lab garage
+      for (const [dx, dz] of [[-7.2, 6.6], [-4, 8], [3, 3.5]]) { // logic24: west bale moved off the Timber Lawn bend (it sat on the road) // logic19: third bale moved out of the lab garage
         addCyl(0.45, 0.45, 0.7, cx + dx, cy + 0.35, cz + dz, this._mat(0xc9a227, 0.85), 12);
+        // logic24 (Ben t188u): the bales flank the Timber Lawn exit — they were drive-through; now solid
+        this.colliders.push(new THREE.Box3(new THREE.Vector3(cx + dx - 0.4, cy, cz + dz - 0.4), new THREE.Vector3(cx + dx + 0.4, cy + 0.7, cz + dz + 0.4)));
       }
       for (const [dx, dz] of [[5.6, 4.2], [6.4, 4.9]]) { // logic19: barrels moved off the lab window road
         addCyl(0.35, 0.38, 0.75, cx + dx, cy + 0.38, cz + dz, this._wood(0x5d4037), 14);
@@ -2816,6 +2819,8 @@ export class Mansion {
           const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.85, 0.1), this._mat(0x4e342e, 0.7));
           leg.position.set(px + sx, cy + 0.42, pz);
           group.add(leg);
+          // logic24 (Ben t188u): the Lab Garage bench by the Timber Lawn exit — its legs were drive-through
+          if (room.id === "carriage_yard") this.colliders.push(new THREE.Box3(new THREE.Vector3(px + sx - 0.05, cy, pz - 0.05), new THREE.Vector3(px + sx + 0.05, cy + 0.85, pz + 0.05)));
         }
       } else if (surface === "garden") {
         const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.38, 10), this._mat(0xa1887f, 0.75));
