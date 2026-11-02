@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v2.8 — Accessible Start Screen</title>
+<title>Spicy Rodents v2.9 — Climbing & Door Stability</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -192,7 +192,15 @@ function ball(radius,m,x,y,z,p=scene,s=1){let b=mesh(new THREE.IcosahedronGeomet
 function cyl(r1,r2,h,m,x,y,z,p=scene,n=9){return mesh(new THREE.CylinderGeometry(r1,r2,h,n),m,x,y,z,p)}
 function span(a,b,r1,r2,m,p=scene,n=8){let d=b.clone().sub(a);let ob=mesh(new THREE.CylinderGeometry(r2,r1,d.length(),n),m,0,0,0,p);ob.position.copy(a).add(b).multiplyScalar(.5);ob.quaternion.setFromUnitVectors(v(0,1,0),d.normalize());return ob}
 function linePath(points,m,r=.065,segments=40){const curve=new THREE.CatmullRomCurve3(points.map(p=>p.clone()),false,'centripetal');const obj=mesh(new THREE.TubeGeometry(curve,segments,r,5,false),m);return {curve,obj}}
-const routes=[];let uid=0;const routeSpatial=new Map();function addRoute(name,points,opts={}){const crv=new THREE.CatmullRomCurve3(points.map(p=>p.clone()),false,'centripetal');const steps=Math.max(20,Math.ceil(crv.getLength()*3));const sampled=crv.getSpacedPoints(steps);const route={id:uid++,name,curve:crv,sampled,kind:opts.kind||'branch',length:crv.getLength(),speed:opts.speed||1,center:opts.center||null,surfaceRadius:opts.surfaceRadius||1.35};routes.push(route);return route}
+const routes=[];let uid=0;const routeSpatial=new Map();let routeIndexLive=false;
+function indexRouteSamples(route){
+ for(let i=0;i<route.sampled.length;i++){
+  const p=route.sampled[i],key=`${Math.floor(p.x/8)},${Math.floor(p.y/8)},${Math.floor(p.z/8)}`;
+  if(!routeSpatial.has(key))routeSpatial.set(key,[]);
+  routeSpatial.get(key).push({route,pos:p,t:i/(route.sampled.length-1)});
+ }
+}
+function addRoute(name,points,opts={}){const crv=new THREE.CatmullRomCurve3(points.map(p=>p.clone()),false,'centripetal');const steps=Math.max(20,Math.ceil(crv.getLength()*3));const sampled=crv.getSpacedPoints(steps);const route={id:uid++,name,curve:crv,sampled,kind:opts.kind||'branch',length:crv.getLength(),speed:opts.speed||1,center:opts.center||null,surfaceRadius:opts.surfaceRadius||1.35};routes.push(route);if(routeIndexLive)registerLateRoute(route);return route}
 function noiseCanvas(kind){const c=document.createElement('canvas');c.width=256;c.height=256;const g=c.getContext('2d');if(kind==='grass'){g.fillStyle='#929f70';g.fillRect(0,0,256,256);for(let i=0;i<10000;i++){const x=R(0,256),y=R(0,256);g.fillStyle=random()>.5?'#64774e':'#b3b78d';g.globalAlpha=R(.09,.34);g.fillRect(x,y,R(.6,2.5),R(1,5))}}else if(kind==='road'){g.fillStyle='#555b5b';g.fillRect(0,0,256,256);for(let i=0;i<15000;i++){let col=Math.floor(R(55,125));g.globalAlpha=.11;g.fillStyle=`rgb(${col},${col},${col})`;g.fillRect(R(0,256),R(0,256),R(.3,2.3),R(.3,2.3))}}else if(kind==='bark'){g.fillStyle='#736354';g.fillRect(0,0,256,256);for(let i=0;i<2200;i++){g.strokeStyle=pick(['#392f2a','#4d4035','#b5a58e','#625043']);g.globalAlpha=R(.11,.65);g.lineWidth=R(.3,2.4);let x=R(0,256),y=R(0,256);g.beginPath();g.moveTo(x,y);g.lineTo(x+R(-4,4),y+R(10,90));g.stroke()}}else if(kind==='roof'){g.fillStyle='#796c64';g.fillRect(0,0,256,256);for(let y=0;y<256;y+=12){for(let x=(y%24?0:-13);x<256;x+=27){g.fillStyle=pick(['#756963','#91817c','#6d6360','#83736d']);g.globalAlpha=R(.4,.7);g.fillRect(x+1,y+1,25,10)}}}
 g.globalAlpha=1;const tex=new THREE.CanvasTexture(c);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;return tex}
 const grassTex=noiseCanvas('grass'),roadTex=noiseCanvas('road'),barkTex=noiseCanvas('bark'),roofTex=noiseCanvas('roof');grassTex.repeat.set(70,70);roadTex.repeat.set(4,28);barkTex.repeat.set(1,3);roofTex.repeat.set(3,2);
@@ -1604,11 +1612,7 @@ function addHouseGutters(){
 addHouseGutters();
 // Overhead wires between branches and homes become the skeleton of the traversal network.
 // Index sampled route points spatially so 40 trees and long wires remain responsive.
-for(const route of routes)for(let i=0;i<route.sampled.length;i++){
- const pt=route.sampled[i],key=`${Math.floor(pt.x/8)},${Math.floor(pt.y/8)},${Math.floor(pt.z/8)}`;
- if(!routeSpatial.has(key))routeSpatial.set(key,[]);
- routeSpatial.get(key).push({route,pos:pt,t:i/(route.sampled.length-1)})
-}
+for(const route of routes)indexRouteSamples(route);
 // Squirrel-readable tree forks: built ONLY from existing routes, not new playable branches.
 // Each bough begins at the trunk; this registers its attachment even between sampled points.
 const canopyForks=new Map();
@@ -1633,6 +1637,40 @@ for(const trunk of routes.filter(q=>q.kind==='trunk')){
  }
  if(forks.length)canopyForks.set(trunk,forks.sort((a,b)=>a.height-b.height));
 }
+// v2.9: Treehouse, westside and extra-canopy trees are constructed AFTER the
+// original graph. Every new route must be searchable and every new bough must
+// be selectable from its own trunk. Do not rely on the one-time startup scan.
+function registerNewTreeFork(trunk,branch){
+ if(trunk.kind!=='trunk'||!['branch','bridge','lookout'].includes(branch.kind))return;
+ const prefix=trunk.name.replace(/ (?:giant |tree )?trunk$/,'');
+ if(!branch.name.startsWith(prefix+' '))return;
+ const existing=canopyForks.get(trunk)||[];
+ if(existing.some(f=>f.branch===branch))return;
+ const start=branch.curve.getPointAt(0);
+ let best=null,bestDistance=2.65;
+ for(let i=0;i<trunk.sampled.length;i++){
+  const pt=trunk.sampled[i],d=pt.distanceTo(start);
+  if(d<bestDistance){bestDistance=d;best={t:i/(trunk.sampled.length-1),pos:pt};}
+ }
+ if(!best)return;
+ const toward=branch.curve.getPointAt(.19).sub(start).setY(0);
+ if(toward.lengthSq()<.000001)return;
+ branch.trunkClearance=Math.max(branch.trunkClearance||0,trunk.surfaceRadius||1.3);
+ existing.push({trunk,branch,t:best.t,height:best.pos.y,origin:start,outward:toward.normalize()});
+ existing.sort((a,b)=>a.height-b.height);
+ canopyForks.set(trunk,existing);
+}
+function registerLateRoute(route){
+ indexRouteSamples(route);
+ if(route.kind==='trunk'){
+  // A freshly added trunk may be joined by a previously constructed bridge.
+  for(const candidate of routes)if(candidate!==route)registerNewTreeFork(route,candidate);
+ }else if(['branch','bridge','lookout'].includes(route.kind)){
+  for(const trunk of routes)if(trunk.kind==='trunk')registerNewTreeFork(trunk,route);
+ }
+ cachedGroundTrunks=null; // rebuild the ground-grab cache for new trees
+}
+routeIndexLive=true;
 const forkVisual=new THREE.Group();scene.add(forkVisual);forkVisual.visible=false;
 const forkMarkerMat=new THREE.MeshBasicMaterial({color:0xe6faac,transparent:true,opacity:.87,depthTest:false,depthWrite:false});
 const forkMarkers=[];
@@ -2108,7 +2146,7 @@ function enterRoute(found){
 let cachedGroundTrunks=null;
 function groundTrunkCandidate(maxDistance=2.9){
  if(player.rail||player.inDuct||player.inHospital||activeHouseInterior||!player.grounded)return null;
- if(!cachedGroundTrunks)cachedGroundTrunks=routes.filter(route=>route.kind==='trunk'&&!route.name.includes('gutter')&&!route.name.includes('downspout'))
+ if(!cachedGroundTrunks)cachedGroundTrunks=routes.filter(route=>route.kind==='trunk'&&!route.name.includes('gutter')&&!route.name.includes('downspout')&&!route.name.includes('telephone pole'))
    .map(route=>({route,foot:route.curve.getPointAt(0)}));
  let best=null,score=Infinity;
  for(const {route,foot} of cachedGroundTrunks){
@@ -2130,14 +2168,14 @@ function grabGroundTrunk(candidate){
  enterRoute({route:candidate.route,t:0,dir:1});
  player.trunkNormal=outward;
  player.railDir=1;player.railVelocity=0;player.moveSpeed=0;
- player.gripArrival=.19;
+ player.gripArrival=.19;player.gripFrom=squirrel.position.clone();
  flash('GRIPPED THE TRUNK · W climb · S descend · A/D choose a bough · E transfer',2.8);
  return true;
 }
 function tryAutoGrabTrunk(fw,side){
  if(fw<=0||player.attackWindow>0||!player.grounded||player.focus)return false;
- const candidate=groundTrunkCandidate(2.45);
- if(!candidate)return false;
+ const candidate=groundTrunkCandidate(2.75);
+  if(!candidate)return false;
  const dx=candidate.foot.x-player.pos.x,dz=candidate.foot.z-player.pos.z;
  const d=Math.hypot(dx,dz);if(d<.01)return false;
  const input=v(-Math.sin(yaw)*fw+Math.cos(yaw)*side,0,-Math.cos(yaw)*fw-Math.sin(yaw)*side);
@@ -2149,8 +2187,10 @@ function attachRoute(){
    if(takeSelectedJunction())return;
    if(takeSelectedFork())return;
    if(pendingFork&&player.rail.kind==='trunk'){flash('Climb closer to the highlighted branch; then press E.',2);return}
-   const next=nearestRoute(2.45,player.rail);
-   if(next){const previous=player.rail;enterRoute(next);flash(`Transferred: ${previous.name} → ${next.route.name}`,2.5)}
+   const next=nearestRoute(1.55,player.rail);
+   if(next && next.route.curve.getPointAt(next.t).distanceTo(player.pos)<1.55){
+    const previous=player.rail;enterRoute(next);flash(`Transferred: ${previous.name} → ${next.route.name}`,2.5)
+   }
    else flash('Continue toward a branch junction, or press Q to drop.',1.5)
  }else{
    const trunk=groundTrunkCandidate(3.25);
@@ -2330,6 +2370,16 @@ function collisionHouses(lastPos){for(const b of commercialBounds){if(Math.abs(p
 // diagonal stride just because its forward component grazes a fence or car.
 function outdoorBlocked(x,z,height){
  const r=.32;
+ // Westside homes are separate from the original four houses. Their walls
+ // must still block the squirrel; only the four open-bay homes can be entered.
+ for(const h of oldDistrictHomes){
+  if(height>=h.by+h.height+.15)continue;
+  const inside=Math.abs(x-h.x)<h.depth/2+r&&Math.abs(z-h.z)<h.width/2+r;
+  if(!inside)continue;
+  if(h===activeOldHome)return false;
+  if(oldHomeTransit?.home===h)return false;
+  return true;
+ }
  if(activeHouseInterior){
   const h=activeHouseInterior;
   if(Math.abs(x-h.x)>h.w/2-.68-r*.08||Math.abs(z-h.z)>h.d/2-.68-r*.08)return true;
@@ -2480,8 +2530,8 @@ function updatePlayer(dt){
  player.cooldown=Math.max(0,player.cooldown-dt);player.attack=Math.max(0,player.attack-dt);
  const priorWindow=player.attackWindow;player.attackWindow=Math.max(0,player.attackWindow-dt);
  if(priorWindow>0&&player.attackWindow===0&&!player.attackTarget)flash('Missed. Look down the landing path before committing.',1.7);
- const fw=houseTransit?0:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0);
- const side=houseTransit?0:(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0);
+ const fw=(houseTransit||oldHomeTransit)?0:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0);
+ const side=(houseTransit||oldHomeTransit)?0:(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0);
  const moving=(player.rail||player.inDuct)?fw!==0:Math.hypot(fw,side)>0;const sprint=keys.has('ShiftLeft')||keys.has('ShiftRight');
  const treeTravel=player.rail&&['trunk','branch','bridge','lookout'].includes(player.rail.kind);
  const base=(player.inDuct?(sprint?3.8:2.8):player.focus?1.65:sprint?16.8:8.0)*(player.boostRemaining>0&&!player.focus?1.6:1)*(treeTravel?.60:1);
@@ -2521,6 +2571,7 @@ function updatePlayer(dt){
    player.transferCooldown=Math.max(0,player.transferCooldown-dt);
    player.railT=THREE.MathUtils.clamp(player.railT,0,1);
    player.pos.copy(player.rail.curve.getPointAt(player.railT)); // do not lag physics behind route
+   if((player.railT<=.00001&&player.railVelocity<0)||(player.railT>=.99999&&player.railVelocity>0))player.railVelocity=0;
    if(player.railT===0||player.railT===1){if(Math.abs(player.railVelocity)<.08)player.railVelocity=0;}
    const tangent=player.rail.curve.getTangentAt(player.railT);
    if(tangent.lengthSq()>.1&&Math.abs(tangent.x)+Math.abs(tangent.z)>.25){
@@ -2603,6 +2654,11 @@ function updatePlayer(dt){
     player.pos.y-terrainHeight(player.pos.x,player.pos.z)<.55;
  if(onGroundSurface)visualPos.y-=.095;
  const routeChanged=routeVisualAnchor!==player.rail;
+ if(isTrunk&&player.gripArrival>0){
+  player.gripArrival=Math.max(0,player.gripArrival-dt);
+  const t=1-THREE.MathUtils.smoothstep(player.gripArrival,0,.19);
+  visualPos.lerpVectors(player.gripFrom||squirrel.position,visualPos,t);
+ }else if(!isTrunk){player.gripArrival=0;player.gripFrom=null;}
  const visualGap=squirrel.position.distanceTo(visualPos);
  // The route has authoritative physics; only the model is eased on transitions.
  // Never allow long visual lag or a phantom leap origin.
@@ -2669,13 +2725,13 @@ function beginHomeRetreat(n){
  }
  path.push(door.outside.clone());
  n.doorEscape={stage:'approach',waypoints:path,time:0,replans:0};n.state='homeRetreat';n.defenseUntil=0;n.speed=6.5;
- n.reacting=Math.max(n.reacting,4);door.hold=Math.max(door.hold,3);
+ n.reacting=Math.max(n.reacting,4);if(dist<4.5)door.hold=Math.max(door.hold,2.0);
  return true;
 }
 function advanceHomeRetreat(n,dt){
  const d=houseDoors[n.home];if(!d||!n.doorEscape){n.doorEscape=null;return;}
  const r=n.doorEscape;r.time+=dt;
- d.hold=Math.max(d.hold,1.2);
+ if(r.stage!=='approach'||Math.hypot(n.root.position.x-d.outside.x,n.root.position.z-d.outside.z)<4.5)d.hold=Math.max(d.hold,1.8);
  // Wait for the door to swing open before crossing the threshold.
  let destination=r.stage==='approach'?(r.waypoints?.[0]||d.outside):r.stage==='threshold'?d.threshold:d.inside;
  const p=n.root.position;
@@ -2690,7 +2746,7 @@ function advanceHomeRetreat(n,dt){
  }
  const dx=destination.x-p.x,dz=destination.z-p.z,dist=Math.hypot(dx,dz);
  if(r.stage==='approach'&&dist<.65){r.waypoints.shift();if(!r.waypoints.length){r.stage='threshold';d.hold=3.1;}return;}
- if(r.stage==='threshold'&&d.open<.72)return;
+ if(r.stage==='threshold'&&!houseDoorPassable(d))return;
  if(r.stage==='threshold'&&dist<.22){r.stage='inside';return;}
  if(r.stage==='inside'&&dist<.42){
   n.defenseUntil=0;n.visible=false;n.root.visible=false;n.doorEscape=null;n.hiddenInHomeUntil=time+16+Math.random()*12;
@@ -2707,6 +2763,7 @@ function advanceHomeRetreat(n,dt){
  n.legs.forEach((leg,k)=>leg.rotation.x=(k?1:-1)*run*.46);
  n.head.rotation.y=Math.sin(time*11)*.3;
 }
+function houseDoorPassable(d){return Boolean(d&&d.open>=.86)}
 function animateHouseDoors(dt){
  for(const d of houseDoors){if(!d)continue;
   d.hold=Math.max(0,d.hold-dt);
@@ -3931,6 +3988,12 @@ function oldHouse(index){
   let by2=terrainHeight(x+dx,z-8);box(.75,1.35,.85,mat('#686a61'),x+dx,by2+.68,z-8);
  }
  if(index%2===0){box(3.4,2.25,2.3,mat('#71786d'),width/2+4.4,1.15,0,g);}
+ if(canEnter){
+  // Distinct open garage bays with a short exterior concrete lip: player enters
+  // with E at the opening, while three closed properties remain scenery.
+  box(5.8,.09,2.4,trim,0,.14,depth/2+1.25,g);
+  box(6.3,.19,.34,weatheredWood,0,height-.80,depth/2+.31,g);
+ }
  const home={index,x,z,by,width,depth,height,roof:houseRoof,enterable:canEnter,door:v(x+depth/2+2.8,by+.30,z)};
  oldDistrictHomes.push(home);if(canEnter)oldHomeInteriors.push(home);
  if(index%2===0){const bx=x-31,bz=z+6,yy=terrainHeight(bx,bz);
@@ -4034,33 +4097,45 @@ for(const [i,x,z] of [[0,-125,328],[1,-104,349],[2,-25,84],[3,164,-448],[4,-406,
 }
 let activeOldHome=null,oldHomeTransit=null,gasCloseAnnouncement=false;
 function openOldHome(home,enter){
- if(oldHomeTransit)return;
+ if(oldHomeTransit||houseTransit||player.rail||player.inHospital||player.inSewer)return;
  const pos=player.pos.clone();const door=home.door;
  const to=enter?v(home.x+home.depth/2-4,home.by+.35,home.z):v(home.x+home.depth/2+5,terrainHeight(home.x+home.depth/2+5,home.z)+.35,home.z);
  oldHomeTransit={home,enter,from:pos,to,t:0,duration:.85};
  activeOldHome=enter?home:activeOldHome;player.vel.set(0,0,0);player.rail=null;player.grounded=true;cameraHardCut=false;
- home.roof.visible=false;
+ home.roof.visible=enter;
  flash(enter?'INSIDE THE OLD HOUSE · E near doorway to go outside.':'LEAVING THE HOUSE',1.6);
 }
 function handleOldHomeInteraction(){
+ if(activeHouseInterior||houseTransit)return false;
  if(oldHomeTransit)return true;
  if(activeOldHome){
   const home=activeOldHome;
-  if(Math.hypot(player.pos.x-(home.x+home.depth/2-4),player.pos.z-home.z)<8){openOldHome(home,false);return true;}
+  if(Math.hypot(player.pos.x-(home.x+home.depth/2-4),player.pos.z-home.z)<6){openOldHome(home,false);return true;}
   return false;
  }
  for(const h of oldHomeInteriors){
-  if(Math.hypot(player.pos.x-h.door.x,player.pos.z-h.door.z)<7 && Math.abs(player.pos.y-h.by)<4){openOldHome(h,true);return true;}
+  if(Math.hypot(player.pos.x-h.door.x,player.pos.z-h.door.z)<5.0 && Math.abs(player.pos.y-h.by)<3){openOldHome(h,true);return true;}
  }
  return false;
 }
 function updateWestside(dt){
  updateHospitalDoors(dt);
+  if(!activeHouseInterior&&!activeOldHome&&!oldHomeTransit&&!player.inSewer&&!player.inHospital){
+   const nearest=oldDistrictHomes.map(h=>({h,d:Math.hypot(player.pos.x-h.door.x,player.pos.z-h.door.z)}))
+     .filter(o=>o.d<6).sort((a,b)=>a.d-b.d)[0];
+   if(nearest){
+     const h=nearest.h;
+     $('scoutText').innerHTML=h.enterable
+      ?`WESTSIDE HOME ${h.index+1} · OPEN GARAGE · E to enter<br>Walk-in living space · E near garage to exit`
+      :`WESTSIDE HOME ${h.index+1} · CLOSED PROPERTY<br>No accessible entrance`;
+   }
+  }
  if(Math.hypot(player.pos.x+33,player.pos.z-80)>9)trampolineBounceCount=0;
  trampolineFlex=Math.max(0,trampolineFlex-dt*2.8);
  if(trampolineGroup?.children[1])trampolineGroup.children[1].position.y=1.45-.35*Math.sin(trampolineFlex*Math.PI);
  if(oldHomeTransit){const q=oldHomeTransit;q.t=Math.min(q.duration,q.t+dt);const t=q.t/q.duration,s=t*t*(3-2*t);
   player.pos.copy(q.from).lerp(q.to,s);player.vel.set(0,0,0);player.rail=null;player.grounded=true;
+  q.home.roof.visible=q.enter?t<.53:t>.88;
   if(q.t>=q.duration){activeOldHome=q.enter?q.home:null;q.home.roof.visible=!q.enter;oldHomeTransit=null;}
  }
  if(activeOldHome && !oldHomeTransit){
@@ -5072,15 +5147,17 @@ function setHouseRoof(h,inside){
  h.indoorCeiling.visible=!inside;
 }
 function houseInteriorEntry(h,enter){
- const d=houseDoors[h.id];if(!d)return;
+ const d=houseDoors[h.id];if(!d||houseTransit||oldHomeTransit||player.inDuct||player.rail)return false;
+ if(enter&&activeHouseInterior)return false;
+ if(!enter&&activeHouseInterior!==h)return false;
  d.hold=Math.max(d.hold,3.0);
  player.rail=null;player.vel.set(0,0,0);player.grounded=true;
  player.committedAirborne=false;player.attackWindow=0;
  const from=player.pos.clone(),to=enter?d.inside.clone():d.outside.clone();
  to.y=terrainHeight(to.x,to.z)+.28;
- houseTransit={h,enter,from,to,elapsed:0,duration:.85};
+ houseTransit={h,enter,from,to,elapsed:0,duration:.95,waited:0};
  if(enter){activeHouseInterior=h;setHouseRoof(h,true)}
- flash(enter?`Opening ${h.indoorName} · exploring indoors`:`Leaving the ${h.indoorName}`,1.8);
+ flash(enter?`Opening ${h.indoorName} · exploring indoors`:`Leaving the ${h.indoorName}`,1.8);return true;
 }
 function handleHouseInteriorInteraction(){
  if(houseTransit)return true;
@@ -5101,10 +5178,15 @@ handleInteraction=function(){if(handleHouseInteriorInteraction())return true;ret
 function updateHouseInteriors(dt){
  for(const h of enterableHouses)h.indoorGroup.visible=(h===activeHouseInterior||Math.hypot(player.pos.x-h.x,player.pos.z-h.z)<32);
  if(houseTransit){
-  const q=houseTransit;q.elapsed=Math.min(q.duration,q.elapsed+dt);
+  const q=houseTransit,d=houseDoors[q.h.id];
+  if(!d){houseTransit=null;activeHouseInterior=null;return;}
+  // The first leg approaches the sill; the next leg waits for the animated
+  // hinged door to clear the opening. Time freezes at the threshold if needed.
+  if(q.elapsed>=q.duration*.34&&!houseDoorPassable(d))q.waited+=dt;
+  else q.elapsed=Math.min(q.duration,q.elapsed+dt);
   const f=q.elapsed/q.duration;
   // Open the real front door before crossing it, using the same threshold as residents.
-  houseDoors[q.h.id].hold=3.0;
+  d.hold=3.0;
   if(f<.36){ // ease toward the outside threshold while door swings
    player.pos.copy(q.from).lerp(q.enter?houseDoors[q.h.id].outside:houseDoors[q.h.id].inside,THREE.MathUtils.smoothstep(f/.36,0,1));
   }else{
@@ -5119,7 +5201,7 @@ function updateHouseInteriors(dt){
   if(q.elapsed>=q.duration){
    player.pos.copy(q.to);player.vel.set(0,0,0);
    if(!q.enter){activeHouseInterior=null;setHouseRoof(q.h,false)}
-   houseTransit=null;cameraHardCut=true;
+   houseTransit=null;cameraHardCut=false; // avoid an abrupt camera teleport at the doorstep
    flash(q.enter?'INSIDE · WASD walk · E by the front door to exit.':'BACK IN THE NEIGHBORHOOD',2.6);
   }
   return;
@@ -5127,7 +5209,7 @@ function updateHouseInteriors(dt){
  if(!activeHouseInterior&&!houseTransit&&!player.inSewer&&!player.inHospital&&!activeOldHome){
    for(const h of enterableHouses){const d=houseDoors[h.id];
     if(Math.hypot(player.pos.x-d.outside.x,player.pos.z-d.outside.z)<5&&player.pos.y<3.5){
-      $('scoutText').innerHTML=`${h.indoorName.toUpperCase()} · E at the door to go inside<br>Living room · kitchen · dining · bedroom`;break;
+      $('scoutText').innerHTML=`${h.indoorName.toUpperCase()} · DOOR ACCESSIBLE · E to open<br>Living room · kitchen · dining · bedroom`;break;
     }
    }
  }
