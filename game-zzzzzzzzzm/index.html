@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v3.3 — Canopy Traversal & Fuel Stations</title>
+<title>Spicy Rodents v3.4 — Witnesses & Police Stability</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -125,7 +125,7 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.3</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.4</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
       <p class="start-subtitle">A faster, steadier recovery build based on v2.1.</p>
     </header>
@@ -1855,7 +1855,7 @@ function spawnNpc(npc){
    const h=houses[npc.home],side=Math.sign(h.z);
    npc.pedLane={axis:'x',fixed:side*12.1};
    const x=h.x+R(-2,2),z=h.frontZ-side*R(0,2.4);
-   npc.root.position.set(x,terrainHeight(x,z)+.13,z);
+   npc.root.position.set(x,terrainHeight(x,z)+.13,z);npc.accessX=x;
    npc.goal=pointOnLane({axis:'z',fixed:x},side*12.1)
  }else{
    npc.pedLane=pick(sidewalkLanes.slice(0,random()<.8?4:sidewalkLanes.length));
@@ -2473,7 +2473,8 @@ function resolvePounce(n){
  const perfectCounter=(n.kickWindup||0)>0&&n.kickWindup<.34&&aim.dot(to)>.72;
  player.attackWindow=0;player.attackTarget=n;
  const alreadyAlert=(player.attackAlert?.get(n.idx)||0)>.45;
- const successful=Boolean(n.motorcycle?.active)||perfectCounter|| (alreadyAlert?Math.random()<.32:Math.random()<.965);
+ // Stealth should decide the encounter. Alerted people dodge almost all ordinary head-on attacks.
+ const successful=Boolean(n.motorcycle?.active)||perfectCounter||(alreadyAlert?Math.random()<.035:Math.random()<.955);
  if(perfectCounter&&successful){goldCoins++;n.kickWindup=0;n.kickCooldown=12;flash('PERFECT COUNTER! +1 GOLDEN SQUIRREL COIN',2.8);fx(880,.12,'triangle',.06)}
  if(successful){
    const pts=player.pos.y>4?150:100;player.points+=pts;player.hits++;player.inactiveSeconds=0;squirrelCoins+=10;totalCoinsEarned+=10;onSuccessfulBite(n);grantInfectionBite(n);
@@ -2495,6 +2496,8 @@ function updatePounceCollision(){
    const dy=player.pos.y-n.root.position.y;
    if(dist<(n.motorcycle?.active?2.00:1.38)&&dy>-.35&&dy<(n.motorcycle?.active?3.2:2.7)){resolvePounce(n);return}
  }
+ // Officers are dangerous, but an unseen approach can still bite and stun them.
+ if(tryPolicePounce())return;
  tryWildlifePounce();
 }
 function turnToward(old,desired,rate,dt){return old+Math.atan2(Math.sin(desired-old),Math.cos(desired-old))*(1-Math.exp(-rate*dt))}
@@ -2718,7 +2721,8 @@ function animateHouseDoors(dt){
 }
 function humanHouseCollision(n,beforeX,beforeZ){
  const pos=n.root.position;
- for(const h of houses){
+ // Both residential and commercial walls are solid for pedestrians.
+ for(const h of houses.concat(commercialBounds)){
   const a=h.w/2+.30,b=h.d/2+.30;
   if(Math.abs(pos.x-h.x)>=a||Math.abs(pos.z-h.z)>=b)continue;
   const canX=Math.abs(beforeX-h.x)>=a,canZ=Math.abs(beforeZ-h.z)>=b;
@@ -2750,25 +2754,44 @@ let towards=v(Math.sin(n.facing),0,Math.cos(n.facing));const inView=diff.clone()
  if(player.hits>=15&&(!n.wantedSawAt||time-n.wantedSawAt>=90)){
   for(const poster of wantedPosters){if(Math.hypot(pos.x-poster.x,pos.z-poster.z)<10){n.wantedSawAt=time;n.wantedCalled=false;break;}}
  }
-if(spotted&&n.alert<=0&&n.state!=='flee'&&n.state!=='homeRetreat'){n.state='flee';n.alert=8;n.reacting=3;if(n.sayCooldown<=0)say(n,chooseLine(n,'spot'));fx(410,.09,'sine',.009);if(beginHomeRetreat(n)){advanceHomeRetreat(n,dt);continue}}
-if(player.inSewer||player.inHospital)continue;handleKickWindup(n,dt,dist2,spotted);let target=n.state==='kick'?pos.clone():n.goal;if(n.state==='flee'){
+if(spotted&&n.alert<=0&&!['flee','homeRetreat','defend','kick'].includes(n.state)){n.state='flee';n.alert=8;n.reacting=3;if(n.sayCooldown<=0)say(n,chooseLine(n,'spot'));fx(410,.09,'sine',.009);if(beginHomeRetreat(n)){advanceHomeRetreat(n,dt);continue}}
+if(player.inSewer||player.inHospital)continue;handleKickWindup(n,dt,dist2,spotted);
+ n.dodgeCooldown=Math.max(0,(n.dodgeCooldown||0)-dt);
+ if(n.dodgeTimer>0)n.dodgeTimer=Math.max(0,n.dodgeTimer-dt);
+ if(player.attackWindow>0&&spotted&&n.alert>1.5&&dist2<5.4&&n.dodgeCooldown<=0&&!n.doorEscape&&n.state!=='kick'){
+   n.dodgeCooldown=2.4;n.dodgeTimer=.38;n.dodgeSide=n.idx%2?1:-1;
+ }
+ if(n.state==='defend'&&((n.defenseUntil||0)<=time||!spotted||dist2>17)){n.defenseUntil=0;n.state='flee';}
+ let target=n.state==='kick'?pos.clone():n.goal;
+ if(n.state==='defend'){
+   if(dist2>2.8&&dist2<17){target=player.pos.clone().addScaledVector(pos.clone().sub(player.pos).setY(0).normalize(),2.4);n.speed=5.6;}
+   else{target=pos.clone();n.speed=0;}
+ }
+ if(n.state==='flee'){
   // Panic keeps to the footpath instead of charging diagonally across traffic.
   const along=n.onAccess?'z':n.pedLane.axis;
   const val=along==='x'?pos.x:pos.z,enemy=along==='x'?player.pos.x:player.pos.z;
   const delta=(val>=enemy?1:-1)*22;
   const corridor=n.onAccess?{axis:'z',fixed:pos.x}:n.pedLane;
   target=pointOnLane(corridor,THREE.MathUtils.clamp(val+delta,n.pedLane?.commercial?385:-260,n.pedLane?.commercial?655:260));
-  n.speed=n.role==='cyclist'?5.5:4.8;
+  n.speed=n.role==='cyclist'?8.25:7.1;
   if(n.alert<2){n.state='walk';npcDestination(n);n.speed=n.role==='cyclist'?4.2:R(.9,1.8)}
 }
-if(!target)npcDestination(n),target=n.goal;let dd=target.clone().sub(pos).setY(0);if(dd.length()<1.7){npcDestination(n);dd=n.goal.clone().sub(pos).setY(0)}if(dd.lengthSq()>.3){dd.normalize();let step=dd.clone().multiplyScalar(n.speed*dt);
+if(!target)npcDestination(n),target=n.goal;let dd=target.clone().sub(pos).setY(0);
+ if(n.state!=='kick'&&n.state!=='defend'&&dd.length()<1.7){npcDestination(n);dd=n.goal.clone().sub(pos).setY(0)}
+ if(n.state!=='kick'&&dd.lengthSq()>.3){dd.normalize();let step=dd.clone().multiplyScalar(n.speed*dt);
 // Pedestrians physically wait if a vehicle is already occupying the next step.
 const next=pos.clone().add(step);if(cars.some(c=>c.moving&&Math.hypot(c.group.position.x-next.x,c.group.position.z-next.z)<3.25))step.set(0,0,0);
-pos.add(step);const desired=Math.atan2(dd.x,dd.z);let turn=((desired-n.facing+PI*3)%(PI*2))-PI;n.facing+=THREE.MathUtils.clamp(turn,-dt*4,dt*4);n.root.rotation.y=n.facing}
+pos.add(step);if(n.dodgeTimer>0){
+ const side=v(dd.z*n.dodgeSide,0,-dd.x*n.dodgeSide);
+ pos.addScaledVector(side,dt*8.6);
+ }
+ const desired=Math.atan2(dd.x,dd.z);let turn=((desired-n.facing+PI*3)%(PI*2))-PI;n.facing+=THREE.MathUtils.clamp(turn,-dt*4,dt*4);n.root.rotation.y=n.facing}
 pos.x=THREE.MathUtils.clamp(pos.x,-265,671);pos.z=THREE.MathUtils.clamp(pos.z,-241,436);
 // Lock pedestrians to their walkable corridor: no invisible cross-lot diagonals.
-if(n.onAccess)pos.x=n.goal.x;
-else if(n.pedLane){if(n.pedLane.axis==='x')pos.z=n.pedLane.fixed;else pos.x=n.pedLane.fixed}
+// Do not snap fleeing or defending people onto a different path each frame.
+if(n.state==='walk'&&n.onAccess)pos.x=THREE.MathUtils.damp(pos.x,n.accessX??pos.x,8,dt);
+else if(n.state==='walk'&&n.pedLane){if(n.pedLane.axis==='x')pos.z=THREE.MathUtils.damp(pos.z,n.pedLane.fixed,8,dt);else pos.x=THREE.MathUtils.damp(pos.x,n.pedLane.fixed,8,dt)}
 humanHouseCollision(n,prevPedX,prevPedZ);pos.y=terrainHeight(pos.x,pos.z)+.13;
 const gait=Math.sin(time*(n.role==='cyclist'?8:n.state==='flee'?12:n.role==='jogger'?10:6)+n.phase),panic=n.reacting>0;for(let k=0;k<2;k++){n.arms[k].rotation.x=panic?(-2.5+Math.sin(time*14+k*3)*.45):(k?1:-1)*gait*.45;n.arms[k].rotation.z=panic?(k?.35:-.35):0;n.legs[k].rotation.x=n.role==='cyclist'?.1:((k?1:-1)*gait*.52)}n.head.rotation.y=panic?Math.sin(time*13)*.28:Math.sin(time*1.5+n.phase)*.05;n.body.rotation.z=panic?Math.sin(time*11)*.095:0;if(n.kickWindup>0)n.legs[1].rotation.x=-1.1-(1-n.kickWindup)*.65;
 if(n.timeAway>n.maxLife||pos.x>670||pos.x< -265||(pos.z<-242||pos.z>438)){n.visible=false;n.root.visible=false;n.timeAway=0;n.maxLife=R(24,56);for(const b of bubbles.filter(b=>b.npc===n))b.life=0}
@@ -2970,52 +2993,125 @@ box(.8,.22,.65,mat('#202c41'),0,3.22,0,officer);box(.21,.18,.15,mat('#e6c46f'),0
 for(const side of [-1,1]){span(v(side*.29,1.2,0),v(side*.32,.12,0),.16,.11,mat('#343c4d'),officer);
  span(v(side*.58,2.30,0),v(side*.76,1.36,.05),.13,.12,copBlue,officer)}
 const copBaton=span(v(.74,1.45,.11),v(.83,.56,.8),.08,.07,mat('#45403e'),officer);
-const copState={out:false,alert:0,hitCooldown:0,phase:0,patrolDir:1};
+const copState={out:false,alert:0,hitCooldown:0,phase:0,patrolDir:1,windup:0,stun:0};
 function onSuccessfulBite(n){
  // A bite triggers medical response; police are probabilistic, or called by poster witnesses.
  if(n.kickWindup>0){n.kickWindup=0;n.kickCooldown=12}
 }
 function dispatchCop(reason){if(copState.out)return;copState.out=true;copState.alert=23;officer.visible=true;officer.position.copy(patrolCar.position).add(v(0,0,3.4));officer.position.y=terrainHeight(officer.position.x,officer.position.z);flash(`POLICE OFFICER! ${reason} · Baton only.`,3.3)}
+function officerBatonContact(p,knock=12){
+ const away=player.pos.clone().sub(p).setY(0);
+ if(away.lengthSq()<.001)away.set(Math.sin(player.yaw),0,Math.cos(player.yaw));
+ away.normalize();player.vel.x=away.x*knock;player.vel.z=away.z*knock;
+ player.vel.y=Math.max(player.vel.y,3.1);player.rail=null;player.grounded=false;
+ player.points=Math.max(0,player.points-19);refreshPowerUI();
+ fx(180,.18,'square',.05);
+}
+// A chase is fast, but a visible baton wind-up keeps a dodge possible.
 function updateCop(dt){
  if(player.inSewer)return;
  if(!copState.out){
-  const dx=dt*10.5*copState.patrolDir;patrolCar.position.x+=dx;
+  patrolCar.position.x+=dt*10.5*copState.patrolDir;
   if(patrolCar.position.x>645){copState.patrolDir=-1;patrolCar.rotation.y=-PI/2}
   if(patrolCar.position.x<55){copState.patrolDir=1;patrolCar.rotation.y=PI/2}
   patrolCar.position.y=terrainHeight(patrolCar.position.x,patrolCar.position.z)+.05;
-  // Patrol officers do not auto-dispatch just because an attack button was pressed.
   return;
  }
- copState.alert=Math.max(0,copState.alert-dt);copState.hitCooldown=Math.max(0,copState.hitCooldown-dt);
- const dx=player.pos.x-officer.position.x,dz=player.pos.z-officer.position.z,dist=Math.hypot(dx,dz);
- if(copState.alert>0 && !player.inSewer&&!activeHouseInterior&&dist>1.5&&dist<70){const prev=officer.position.clone();officer.position.x+=dx/dist*dt*4.1;officer.position.z+=dz/dist*dt*4.1;keepEmergencyActorsOutside(officer.position,prev)}
- officer.position.y=terrainHeight(officer.position.x,officer.position.z);officer.rotation.y=Math.atan2(dx,dz);
- copState.phase+=dt;copBaton.rotation.x=Math.sin(copState.phase*8)*.65;
- if(dist<2.2&&!activeHouseInterior&&player.pos.y-officer.position.y<2.2&&copState.hitCooldown<=0){
-  copState.hitCooldown=3.3;player.vel.x+=dx/dist*9;player.vel.z+=dz/dist*9;player.vel.y=2.3;
-  flash(Math.random()<.35?'Baton missed! He smacked a trash can instead.':'WHACK! The officer sent you tumbling.',2.5);fx(200,.17,'square',.033);
+ copState.alert=Math.max(0,copState.alert-dt);
+ copState.hitCooldown=Math.max(0,copState.hitCooldown-dt);
+ copState.stun=Math.max(0,copState.stun-dt);
+ const delta=player.pos.clone().sub(officer.position).setY(0),dist=delta.length();
+ const canEngage=!player.inSewer&&!activeHouseInterior&&player.pos.y-officer.position.y<2.4;
+ if(copState.stun>0){copState.windup=0;copBaton.rotation.x=-.8;}
+ else if(copState.windup>0){
+  copState.windup-=dt;copBaton.rotation.x=-1.2+Math.sin(time*15)*.2;
+  if(copState.windup<=0){
+   copState.windup=0;copState.hitCooldown=2.0;
+   if(canEngage&&dist<2.85){officerBatonContact(officer.position,14);flash('POLICE BATON! Dodge the wind-up or ambush from behind.',2.4)}
+   else if(dist<6)flash('The officer swung and missed.',1.35);
+  }
+ }else{
+  if(copState.alert>0&&canEngage&&dist>2.55&&dist<86){
+   const prev=officer.position.clone();officer.position.addScaledVector(delta.normalize(),Math.min(dist-2.5,dt*6.15));
+   keepEmergencyActorsOutside(officer.position,prev);
+  }
+  if(copState.alert>0&&canEngage&&dist<3.6&&copState.hitCooldown<=0){
+   copState.windup=.54;flash('The officer raises a baton — jump or retreat!',1.45);
+  }
+  copBaton.rotation.x=Math.sin(time*10)*.57;
  }
- if(copState.alert<=0||dist>140){copState.out=false;officer.visible=false}
+ officer.position.y=terrainHeight(officer.position.x,officer.position.z);
+ if(dist>.001)officer.rotation.y=turnToward(officer.rotation.y,Math.atan2(delta.x,delta.z),9,dt);
+ if(copState.alert<=0||dist>155){copState.out=false;officer.visible=false;copState.windup=0}
+}
+// Police are not magically bite-proof: stealth and height can overcome even
+// the toughest officers, but a direct approach is exceptionally unlikely.
+function tryPolicePounce(){
+ if(player.attackWindow<=0||player.inSewer||player.inHospital||activeHouseInterior)return false;
+ const candidates=[];
+ if(copState.out&&officer.visible)candidates.push({g:officer,owner:copState,name:'patrol officer'});
+ for(const o of incidentPoliceOfficers)if(o.g.visible)candidates.push({g:o.g,owner:o,name:'responding officer'});
+ for(const o of stationReinforcements)if(o.g.visible)candidates.push({g:o.g,owner:o,name:'station officer'});
+ for(const o of precinctOfficers)if(o.g.visible)candidates.push({g:o.g,owner:o,name:'station guard'});
+ for(const c of candidates){
+  const dx=player.pos.x-c.g.position.x,dz=player.pos.z-c.g.position.z;
+  const distance=Math.hypot(dx,dz),dy=player.pos.y-c.g.position.y;
+  if(distance>1.85||dy<-.3||dy>2.8)continue;
+  const toSquirrel=v(dx/(distance||1),0,dz/(distance||1));
+  const forward=v(Math.sin(c.g.rotation.y),0,Math.cos(c.g.rotation.y));
+  const behind=toSquirrel.dot(forward)<-.30;
+  const surprised=behind||dy>1.35||(c.owner.stun||0)>0;
+  const chance=surprised?.88:.035;
+  const success=Math.random()<chance;
+  player.attackWindow=0;player.attackTarget={officer:true};
+  if(success){
+   c.owner.stun=5.5;c.owner.windup=0;c.owner.hitCooldown=6;
+   if(c.owner===copState)copState.alert=Math.max(copState.alert,30);
+   player.points+=130;player.hits++;squirrelCoins+=10;totalCoinsEarned+=10;
+   player.inactiveSeconds=0;grantInfectionBite({});refreshPowerUI();
+   player.vel.multiplyScalar(.14);player.vel.y=2.6;
+   flash(`SURPRISE BITE! ${c.name} stunned — escape before backup arrives.`,2.6);
+   fx(180,.23,'triangle',.05);
+  }else{
+   c.owner.windup=0;c.owner.hitCooldown=0;
+   player.vel.x=toSquirrel.x*8;player.vel.z=toSquirrel.z*8;player.vel.y=3.2;
+   flash(`${c.name} anticipated your attack!`,1.9);
+  }
+  return true;
+ }
+ return false;
 }
 // No instant NPC kicking. Brave characters telegraph a readable wind-up first.
 function handleKickWindup(n,dt,dist,spotted){
- const hotHere=crimeScenes.some(s=>s.ttl>0&&Math.hypot(n.root.position.x-s.center.x,n.root.position.z-s.center.z)<s.radius);
- const remembered=(n.witnessUntil||0)>time;
+ // A defensive witness keeps the role assigned at the injury scene. Don't let
+ // the scene updater force that person back into "flee" mid-kick.
+ const committed=(n.defenseUntil||0)>time;
+ const brave=n.personality==='brave';
  n.kickCooldown=Math.max(0,(n.kickCooldown||0)-dt);
  if(n.kickWindup>0){
-  n.kickWindup-=dt;n.state='kick';n.legs[1].rotation.x=-1.2-(.85-n.kickWindup)*.65;
+  n.kickWindup=Math.max(0,n.kickWindup-dt);
+  n.state='kick';n.legs[1].rotation.x=-1.25-(1-n.kickWindup)*.7;
   n.facing=Math.atan2(player.pos.x-n.root.position.x,player.pos.z-n.root.position.z);
-  if(n.kickWindup<=0){
-   n.kickWindup=0;n.kickCooldown=9;n.state='flee';n.alert=6;
-   const away=v(player.pos.x-n.root.position.x,0,player.pos.z-n.root.position.z).normalize();
+  if(n.kickWindup===0){
+   n.kickCooldown=committed?2.6:6.0;
+   n.state=committed?'defend':'flee';n.alert=7;
+   const delta=player.pos.clone().sub(n.root.position).setY(0);
+   const away=delta.lengthSq()>.001?delta.normalize():v(1,0,0);
    const facing=v(Math.sin(n.facing),0,Math.cos(n.facing));
-   if(dist<2.3&&player.pos.y-n.root.position.y<1.5&&facing.dot(away)>.65&&player.attackWindow<=0){
-    player.vel.x=away.x*12;player.vel.z=away.z*12;player.vel.y=2.7;player.rail=null;flash('THE KICK CONNECTED! You tumble backward.',2.6);fx(180,.17,'square',.05);
-   }else flash('The kick missed! Pounce during the wind-up to counter.',2.0);
-  }return;
+   if(dist<2.65&&player.pos.y-n.root.position.y<1.6&&facing.dot(away)>.55&&player.attackWindow<=0){
+    officerBatonContact(n.root.position,11);
+    flash(`${n.name} kicked the squirrel away!`,1.65);
+   }else if(dist<5.1)flash(`${n.name}'s kick missed — move away or counter.`,1.1);
+  }
+  return;
  }
- if((n.personality==='brave'||((hotHere||remembered)&&n.personality!=='panic'))&&n.kickCooldown<=0&&dist<4.2&&player.pos.y-n.root.position.y<1.8&&player.attackWindow<=0&&spotted&&Math.random()<dt*((hotHere||remembered)?1.2:.6)){
-  n.kickWindup=.85;n.state='kick';n.speed=0;flash(`${n.name} is winding up a kick! Aim a pounce to counter.`,2.0);
+ const ready=(committed||(brave&&(n.witnessUntil||0)>time))&&!n.doorEscape&&
+   !n.injured&&n.kickCooldown<=0&&dist<3.7&&player.pos.y-n.root.position.y<1.7&&
+   player.attackWindow<=0&&spotted&&!player.inSewer;
+ if(ready){
+  n.kickWindup=.58;n.state='kick';n.speed=0;
+  if(n.sayCooldown<=0)say(n,pick(['Get back!','I said get away!','Back off!']));
+  if(dist<6.1)flash(`${n.name} prepares to kick — dodge or counter!`,1.2);
  }
 }
 // Independent 13-minute *movement* watchdog with a one-second warning and contextual predators.
@@ -3451,12 +3547,23 @@ function scheduleCrimeScene(victim){
 function alarmNearbyWitnesses(victim){
  if(!victim?.root)return;
  const center=victim.root.position;
- const people=humanoids.filter(n=>n!==victim&&n.visible&&!n.hospital&&!n.injured&&n.root.position.distanceTo(center)<23).sort((a,b)=>a.root.position.distanceTo(center)-b.root.position.distanceTo(center));
- for(const [i,n] of people.entries()){
-  n.state='flee';n.alert=Math.max(n.alert,8);n.reacting=Math.max(n.reacting,4.2);
+ const nearby=humanoids.filter(n=>n!==victim&&n.visible&&!n.hospital&&!n.injured&&
+   n.root.position.distanceTo(center)<25).sort((a,b)=>a.root.position.distanceTo(center)-b.root.position.distanceTo(center));
+ // A minority stand their ground. Most citizens escape or call for help.
+ let defenders=0;
+ for(const [i,n] of nearby.entries()){
+  const defend=defenders<2 && (n.personality==='brave'||(i<4&&n.personality==='wary'&&n.idx%5===0));
+  n.alert=Math.max(n.alert,10);n.reacting=Math.max(n.reacting,3.4);
+  n.witnessUntil=Math.max(n.witnessUntil||0,time+70);
   n.facing=Math.atan2(center.x-n.root.position.x,center.z-n.root.position.z);
-  if(i<3&&n.sayCooldown<=0)say(n,pick(['Help! Somebody call an ambulance!','It bit somebody! Get inside!','Look out! That squirrel is dangerous!','Stay back! Get away from it!']));
-  if(i<2)beginHomeRetreat(n);
+  if(defend){
+   defenders++;n.defenseUntil=time+19;n.state='defend';n.doorEscape=null;n.kickCooldown=.3+i*.36;
+   if(i<3&&n.sayCooldown<=0)say(n,pick(['Hey! Get away from them!','Back off!','Leave them alone!']));
+  }else{
+   n.defenseUntil=0;n.state='flee';n.speed=n.role==='cyclist'?8.2:7.1;
+   if(i<4&&n.sayCooldown<=0)say(n,pick(['Call an ambulance!','Look out! Get inside!','That squirrel bit someone!','Get away from it!']));
+   if(i<3)beginHomeRetreat(n);
+  }
  }
 }
 const __oldOnSuccessfulBite = onSuccessfulBite;
@@ -3476,8 +3583,8 @@ function updateCrimeScenes(dt){
        if(!n.visible || n===s.victim || n.hospital) continue;
        const d=n.root.position.distanceTo(s.center);
        if(d<s.radius){
-         n.alert=Math.max(n.alert,8);
-         n.state='flee';
+         n.alert=Math.max(n.alert,7);
+         if(n.state==='walk'&&!n.doorEscape)n.state='flee';
          n.reacting=Math.max(n.reacting,2.2);
        }
      }
@@ -3506,7 +3613,7 @@ function updateCrimeScenes(dt){
      for(const other of humanoids){
        if(!other.visible || other===n || other.hospital) continue;
        const d=other.root.position.distanceTo(n.root.position);
-       if(d<20){other.alert=Math.max(other.alert,7); if(other.state!=='flee')other.state='flee';}
+       if(d<20){other.alert=Math.max(other.alert,4); /* preserve kicks, defenders and door retreats */}
      }
    }
    if(s.ttl<=0)crimeScenes.splice(i,1);
@@ -3664,8 +3771,14 @@ function gatherAtCrime(scene){
   const angle=(i+.33)*Math.PI*2/n;
   const side=scene.stage?.stop || base;
   const offX=Math.cos(angle)*8,offZ=Math.sin(angle)*8;
-  p.root.position.set(base.x+offX*1.65,terrainHeight(base.x+offX*1.65,base.z+offZ*1.65)+.13,base.z+offZ*1.65);
-  p.sceneTarget=v(base.x+offX,terrainHeight(base.x+offX,base.z+offZ)+.13,base.z+offZ);
+  const clear=(x,z)=>!houses.concat(commercialBounds).some(h=>Math.abs(x-h.x)<h.w/2+2&&Math.abs(z-h.z)<h.d/2+2);
+  let sx=base.x+offX*1.65,sz=base.z+offZ*1.65,tx=base.x+offX,tz=base.z+offZ;
+  if(!clear(sx,sz)||!clear(tx,tz)){const road=scene.stage?.stop||base;
+    sx=road.x+(i-1)*2.8;sz=road.z+(i%2?4:-4);tx=sx;tz=sz;
+    if(!clear(sx,sz)){sx=road.x+6+i*2.6;sz=road.z+9;tx=sx;tz=sz;}
+  }
+  p.root.position.set(sx,terrainHeight(sx,sz)+.13,sz);
+  p.sceneTarget=v(tx,terrainHeight(tx,tz)+.13,tz);
   p.body.position.y=0;
   p.reactionSpeech=2.2+i*.85;
  }
@@ -3678,7 +3791,8 @@ function updateEmergencyBystanders(dt){
   // Squirrel returns to the crime scene: civilians recoil instead of calmly greeting it.
   const danger=!player.inSewer&&!player.inHospital&&player.pos.distanceTo(p)<7;
   if(danger){d.copy(p).sub(player.pos).setY(0).normalize().multiplyScalar(4.0);}
-  if(distance>.35||danger){d.normalize();p.addScaledVector(d,dt*(danger?3.3:1.5));p.y=terrainHeight(p.x,p.z)+.13;n.root.rotation.y=Math.atan2(scene.center.x-p.x,scene.center.z-p.z);}
+  if(distance>.35||danger){const before=p.clone();d.normalize();p.addScaledVector(d,dt*(danger?5.4:1.5));keepEmergencyActorsOutside(p,before);p.y=terrainHeight(p.x,p.z)+.13;
+    n.root.rotation.y=Math.atan2(d.x,d.z);}
   n.reactionSpeech-=dt;
   if(n.reactionSpeech<=0){n.reactionSpeech=999;
    if(n.sayCooldown<=0)say(n,['Somebody call an ambulance!','Stay back — it might still be here!','Is that another squirrel bite?','Give them some room!'][Math.floor(Math.random()*4)]);
@@ -4438,7 +4552,8 @@ function updatePoliceResponse(dt){
  for(const o of incidentPoliceOfficers){
   o.g.visible=patrol;
   if(!patrol)continue;
-  o.hitCooldown=Math.max(0,o.hitCooldown-dt);o.phase+=dt;
+  o.hitCooldown=Math.max(0,o.hitCooldown-dt);o.stun=Math.max(0,(o.stun||0)-dt);o.phase+=dt;
+  if(o.stun>0){o.windup=0;o.baton.rotation.x=-.85;continue;}
   const p=o.g.position,delta=player.pos.clone().sub(p).setY(0),dist=delta.length();
   const assigned=policeIncidents.find(e=>e.phase==='patrol');
   const investigating=assigned && (dist>27||player.inHospital||player.inSewer||activeHouseInterior);
@@ -4458,15 +4573,17 @@ function updatePoliceResponse(dt){
    o.baton.rotation.x=slot===0?-.18+Math.sin(o.phase*1.8)*.10:slot===1?-.55:Math.sin(o.phase*.8)*.19;
   }else{
    o.scenePath=null;
-   if(dist>1.6&&!player.inHospital&&!player.inSewer&&!activeHouseInterior){const before=p.clone();p.addScaledVector(delta.normalize(),dt*3.6);keepEmergencyActorsOutside(p,before)}
+   if(dist>2.0&&!player.inHospital&&!player.inSewer&&!activeHouseInterior&&!(o.stun>0)){const before=p.clone();p.addScaledVector(delta.normalize(),dt*5.5);keepEmergencyActorsOutside(p,before)}
    o.g.rotation.y=Math.atan2(player.pos.x-p.x,player.pos.z-p.z);
    o.baton.rotation.x=Math.sin(o.phase*8)*.50;
   }
   p.y=terrainHeight(p.x,p.z);
-  if(dist<2.4&&!activeHouseInterior&&player.pos.y-p.y<2.4&&o.hitCooldown===0){
-   o.hitCooldown=3.6;const away=delta.lengthSq()>.01?delta.normalize():v(1,0,0);
-   player.vel.x=away.x*8;player.vel.z=away.z*8;player.vel.y=2.5;
-   flash('An officer swings a baton — get away from the incident!',2);
+  if(o.windup>0){o.windup=Math.max(0,o.windup-dt);o.baton.rotation.x=-1.25;
+    if(o.windup===0){o.hitCooldown=2.4;if(dist<2.9&&!activeHouseInterior&&player.pos.y-p.y<2.3&&!(o.stun>0)){
+      officerBatonContact(p,12);flash('An officer landed a baton strike!',1.8);}
+    }
+  }else if(dist<3.4&&!activeHouseInterior&&player.pos.y-p.y<2.4&&o.hitCooldown<=0&&!(o.stun>0)){
+    o.windup=.48;flash('Police closing in — baton raised!',1.1);
   }
  }
  // The police station is not a dungeon to clear: approach the locked entrance
@@ -4476,6 +4593,8 @@ function updatePoliceResponse(dt){
   const active=stationDistance<40&&!player.inSewer;
   o.g.visible=active;
   if(!active){o.t=0;continue;}
+  o.stun=Math.max(0,(o.stun||0)-dt);
+  if(o.stun>0)continue;
   o.t=Math.min(10,o.t+dt);
   const entrance=pathPoint(policeStation.x+(i?2:-2),policeStation.z+19);
   const p=o.g.position;
@@ -4493,6 +4612,8 @@ function updatePoliceResponse(dt){
  }
 
  for(const [i,o] of precinctOfficers.entries()){
+  o.stun=Math.max(0,(o.stun||0)-dt);
+  if(o.stun>0)continue;
   if(stationDistance<34 && !player.inSewer){
    const target=player.pos.clone(),p=o.g.position;
    const d=target.sub(p).setY(0),dist=d.length();
@@ -4619,7 +4740,7 @@ function updateLivingEvents(dt){
   const departing=elapsed>=0&&phase>=600&&phase<655;
   if(ongoing&&e.cycle!==cycle){
    e.cycle=cycle;e.active=true;
-   for(const a of e.actors)if(!a.n.injured){a.n.visible=true;a.n.root.visible=true;a.n.sayCooldown=0;}
+   for(const a of e.actors)if(!a.n.injured){a.n.root.position.copy(a.origin);a.n.root.position.y=terrainHeight(a.origin.x,a.origin.z)+.13;a.n.visible=true;a.n.root.visible=true;a.n.sayCooldown=0;}
    for(const c of e.cars)c.car.visible=true;
   }
   if(!ongoing&&!departing){
@@ -4649,12 +4770,14 @@ function updateLivingEvents(dt){
    if(threatened){
     n.witnessUntil=Math.max(n.witnessUntil||0,time+600);
     n.reacting=Math.max(n.reacting,3.5);
+    const previousPosition=n.root.position.clone();
     const flee=n.root.position.clone().sub(player.pos).setY(0);
     if(flee.lengthSq()>.2){
      const separation=flee.normalize();
      n.root.position.addScaledVector(separation,dt*(squirrelDistance<7?6.5:4.2));
      n.root.rotation.y=Math.atan2(separation.x,separation.z);
     }
+    keepEmergencyActorsOutside(n.root.position,previousPosition);
     n.root.position.y=terrainHeight(n.root.position.x,n.root.position.z)+.13;
     if(n.sayCooldown<=0)say(n,pick(['Oh no, it’s that squirrel!','Everybody, get away from it!','What the hell is that thing doing here?!','Get back! It just attacked someone!']));
    }
@@ -5123,7 +5246,7 @@ function updateDiagnostics(dt){
  const element=document.getElementById('spicyDiagnostic');
  if(!element||!element.classList.contains('open'))return;
  const p=player.pos;
- element.textContent=`v3.3 · Canopy junctions · ${player.rail?.name||'ground'}\n`+
+ element.textContent=`v3.4 · Witness responses · ${player.rail?.name||'ground'}\n`+
    `player ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)} · ${player.grounded?'grounded':'air/route'}\n`+
    `routes ${routes.length}/${routes.filter(r=>r.indexed).length} indexed · forks ${canopyForks.size} · errors ${runtimeErrors.length}`+
    (runtimeErrors.length?'\n'+runtimeErrors.slice(-2).join(' | '):'');
@@ -5158,7 +5281,7 @@ verifyRouteRegistry();
 rebuildCanopyForks();
 if(routes.some(r=>!r.indexed))console.warn('[Spicy Rodents] Incomplete route registry');
 try{
- drawInfection();flash('v3.3 · SMOOTHER JUNCTIONS · FUEL STATION UPGRADE',6);
+ drawInfection();flash('v3.4 · RESPONSIVE WITNESSES · TOUGHER POLICE',6);
  tick();
  if(!mainLoopFailed){window.__spicyBootOk=true;
   $('loading').classList.add('done');
