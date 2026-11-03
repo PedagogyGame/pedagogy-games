@@ -13,6 +13,7 @@
  *         lab window road. 120 s without seeing the car → it gives up, walks home, lies down (cooldown).
  */
 import * as THREE from "three";
+import { LIFT_APRONS } from "./world.js?v=logic28";
 
 export const DOG_T = {
   house: { x: 45.4, z: 15.2, yaw: -Math.PI / 2 }, // door faces west (toward the garage / yard)
@@ -23,7 +24,7 @@ export const DOG_T = {
   cooldown: 25,      // s after he lies back down (or after a no-wake roll: rollCd)
   rollCd: 6,
   alertT: 1.1, barkT: 0.75,
-  runMax: 1.30,      // car top 1.38 (boost 1.88) — beatable flat out, faster than a slow car
+  runMax: 1.40,      // logic28: car top 1.49 (boost 2.03) — same 6% margin as 1.30 vs 1.38; — beatable flat out, faster than a slow car
   accel: 3.4, decel: 4.5,
   turnLo: 3.0, turnHi: 1.55, // rad/s at standstill → at full run (min turn radius ≈ 0.84 m flat out)
   walk: 0.55, searchSpeed: 0.75,
@@ -508,7 +509,7 @@ export class YardLife {
       const fx = Math.sin(car.yaw) * car.speed, fz = Math.cos(car.yaw) * car.speed;
       let best = 9, bt = 0;
       for (let t = 0; t <= 1.2; t += 0.1) { const cx = p.x + fx * t, cz = p.z + fz * t; const dd = Math.hypot(cx - m.x, cz - m.z); if (dd < best) { best = dd; bt = t; } }
-      if (best < 0.32 && (Math.abs(car.speed) > 0.08 || best < 0.16)) threat = { fx, fz, t: bt, d: best };
+      if (best < 0.30 && (Math.abs(car.speed) > 0.08 || best < 0.16)) threat = { fx, fz, t: bt, d: best };
     }
     if (threat && m.mode !== "dodge") {
       // step aside perpendicular to the car's path, on the side the mouse is already on; freeze if both sides are walls
@@ -643,4 +644,69 @@ export function buildLandingBridge(root, X = 1.4, Y = 7.2) {
     }
   }
   return g;
+}
+
+// logic28 (Ben 12:11 PM "the weird roof level at the very top … a proper drivable floor laid with basic tiles"): the house's
+// flat roof deck (filled_top, y 11.979, x −11…11, z −17…5) gets graphite/slate tiles with thin cyan grout (an overlay
+// 6 mm up with polygon offset — never coplanar) and a low kerb round its outer edge, except where a road crosses it.
+export function buildRoofDeck(root, tops, segs) {
+  const deck = (tops || []).filter((f) => f.y > 11.5 && f.y < 12.5); const solids = [];
+  { // logic28: lift hop-off apron plates (drive surfaces live in world.js LIFT_APRONS)
+    const am = new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.6, roughness: 0.45 });
+    const em = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+    for (const A of LIFT_APRONS) {
+      const ax0 = A.mx0 ?? A.x0, w = A.x1 - ax0, d = A.z1 - A.z0;
+// logic28 fix: plate starts 3 mm INSIDE the cage wall (2.745–2.79) so its end face is buried, not coplanar with the wall face (zfight), and nothing enters the shaft camera column (L12)
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w - 0.003, 0.02, d), am); m.position.set((ax0 + A.x1) / 2 + 0.0015, A.y - 0.008, (A.z0 + A.z1) / 2); m.name = A.id; root.add(m);
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, d), em); e.position.set(ax0 + 0.006, A.y + 0.003, m.position.z); root.add(e); // lit lip edge
+    }
+  }
+  if (!deck.length) return { solids };
+  const c = (typeof document !== "undefined" && document.createElement) ? document.createElement("canvas") : null;
+  let mat;
+  if (c && c.getContext) {
+    c.width = c.height = 128; const g = c.getContext("2d");
+    if (g) {
+      const tones = ["#23272e", "#262b33", "#1f2329", "#292e36"];
+      for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { g.fillStyle = tones[i * 2 + j]; g.fillRect(i * 64, j * 64, 64, 64); }
+      g.strokeStyle = "rgba(63,224,240,0.38)"; g.lineWidth = 1.5; for (const v of [1, 63, 65, 127]) { g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 128); g.stroke(); g.beginPath(); g.moveTo(0, v); g.lineTo(128, v); g.stroke(); }
+      const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 4; if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+      mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    }
+  }
+  if (!mat) mat = new THREE.MeshStandardMaterial({ color: 0x252a31, roughness: 0.62, metalness: 0.25, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const grp = new THREE.Group(); grp.name = "roof_tiles"; root.add(grp);
+  const TILE = 0.5; // two tiles per texture repeat → 0.25 m tiles
+  // logic28 fix (zfight roof_tiles×roof_tiles 40 pairs): the deck floor rects OVERLAP, so their tile planes were
+  // coplanar where they met. Tile the UNION instead — split on every rect edge, keep covered cells, merge each row.
+  const xs = [...new Set(deck.flatMap((f) => [f.minX, f.maxX]))].sort((a, b) => a - b), zs = [...new Set(deck.flatMap((f) => [f.minZ, f.maxZ]))].sort((a, b) => a - b);
+  const cells = [];
+  for (let j = 0; j + 1 < zs.length; j++) { let run = null; const zc = (zs[j] + zs[j + 1]) / 2;
+    for (let i = 0; i + 1 < xs.length; i++) { const xc = (xs[i] + xs[i + 1]) / 2, hit = deck.find((f) => xc > f.minX && xc < f.maxX && zc > f.minZ && zc < f.maxZ);
+      if (hit && run && Math.abs(run.y - hit.y) < 1e-6) run.maxX = xs[i + 1]; else { if (run) cells.push(run); run = hit ? { minX: xs[i], maxX: xs[i + 1], minZ: zs[j], maxZ: zs[j + 1], y: hit.y } : null; } }
+    if (run) cells.push(run); }
+  for (const f of cells) {
+    const w = f.maxX - f.minX, d = f.maxZ - f.minZ; if (w < 0.005 || d < 0.005) continue;
+    const geo = new THREE.PlaneGeometry(w, d); geo.rotateX(-Math.PI / 2);
+    const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) { uv.setXY(i, (f.minX + uv.getX(i) * w) / TILE, (f.minZ + (1 - uv.getY(i)) * d) / TILE); }
+    const m = new THREE.Mesh(geo, mat); m.position.set((f.minX + f.maxX) / 2, f.y + 0.006, (f.minZ + f.maxZ) / 2); m.receiveShadow = true; m.userData.roofTiles = true; grp.add(m);
+  }
+  const y = deck[0].y; let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const f of deck) { x0 = Math.min(x0, f.minX); x1 = Math.max(x1, f.maxX); z0 = Math.min(z0, f.minZ); z1 = Math.max(z1, f.maxZ); }
+  x0 += 0.06; x1 -= 0.06; z0 += 0.06; z1 -= 0.06;
+  const crossed = (x, z) => (segs || []).some((s) => { const sy = Math.min(s.a.y, s.b.y); if (sy > y + 0.45 || Math.max(s.a.y, s.b.y) < y - 0.2) return false;
+    const ax = s.b.x - s.a.x, az = s.b.z - s.a.z, L2 = ax * ax + az * az || 1e-9, u = Math.max(0, Math.min(1, ((x - s.a.x) * ax + (z - s.a.z) * az) / L2));
+    return Math.hypot(x - s.a.x - ax * u, z - s.a.z - az * u) < (s.width || 0.8) / 2 + 0.25; });
+  const kerbM = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.5, metalness: 0.5 }), neon = new THREE.MeshBasicMaterial({ color: 0x3fe0f0 });
+  const STEP = 0.5, H = 0.09;
+  const run = (ax, az, bx, bz) => { const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / STEP);
+    for (let i = 0; i < n; i++) { const t0 = i / n, t1 = (i + 1) / n, px0 = ax + (bx - ax) * t0, pz0 = az + (bz - az) * t0, px1 = ax + (bx - ax) * t1, pz1 = az + (bz - az) * t1;
+      if (crossed((px0 + px1) / 2, (pz0 + pz1) / 2)) continue;
+      const box = new THREE.Box3(new THREE.Vector3(Math.min(px0, px1) - 0.03, y - 0.02, Math.min(pz0, pz1) - 0.03), new THREE.Vector3(Math.max(px0, px1) + 0.03, y + H, Math.max(pz0, pz1) + 0.03));
+      box.driveKind = "rail"; box.rail = { x0: px0, z0: pz0, x1: px1, z1: pz1, y0: y, y1: y, t: 0.03, h: H }; box.roofKerb = true; solids.push(box);
+      const len = Math.hypot(px1 - px0, pz1 - pz0), ry = Math.atan2(px1 - px0, pz1 - pz0);
+      const k = new THREE.Mesh(new THREE.BoxGeometry(0.05, H, len), kerbM); k.position.set((px0 + px1) / 2, y + H / 2, (pz0 + pz1) / 2); k.rotation.y = ry; grp.add(k);
+      const l = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.008, len), neon); l.position.set(k.position.x, y + H + 0.004, k.position.z); l.rotation.y = ry; grp.add(l); } };
+  run(x0, z0, x1, z0); run(x1, z0, x1, z1); run(x1, z1, x0, z1); run(x0, z1, x0, z0);
+  return { solids, group: grp };
 }
