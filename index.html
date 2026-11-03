@@ -1307,8 +1307,29 @@
     var form = document.getElementById("seek");
     var input = document.getElementById("seekInput");
     if (!form || !input) return;
-    function norm(s) {
-      return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    function fold(s) {
+      return String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim().replace(/\s+/g, " ");
+    }
+    var tiles = [];
+    document.querySelectorAll(".arcade a.tile .title").forEach(function (el) {
+      var a = el.closest("a");
+      if (!a) return;
+      tiles.push({ name: fold(el.textContent), href: a.getAttribute("href") });
+    });
+    function listed(phrase) {
+      var hits = [];
+      var i, bare, name;
+      for (i = 0; i < tiles.length; i++) if (tiles[i].name === phrase) hits.push(tiles[i].href);
+      if (hits.length === 1) return hits[0];
+      if (hits.length > 1) return null;
+      bare = phrase.replace(/^the /, "");
+      if (!bare) return null;
+      hits = [];
+      for (i = 0; i < tiles.length; i++) {
+        name = tiles[i].name.replace(/^the /, "");
+        if (name === bare) hits.push(tiles[i].href);
+      }
+      return hits.length === 1 ? hits[0] : null;
     }
     function hex(buf) {
       var b = new Uint8Array(buf), out = "";
@@ -1322,8 +1343,11 @@
     }
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var phrase = norm(input.value);
-      if (!phrase || !window.crypto || !crypto.subtle || !window.TextEncoder) { miss(); return; }
+      var phrase = fold(input.value);
+      if (!phrase) { miss(); return; }
+      var href = listed(phrase);
+      if (href) { window.location.href = href; return; }
+      if (!window.crypto || !crypto.subtle || !window.TextEncoder) { miss(); return; }
       crypto.subtle.digest("SHA-256", new TextEncoder().encode(phrase)).then(function (buf) {
         var door = DOORS[hex(buf)];
         if (door) window.location.href = door;
