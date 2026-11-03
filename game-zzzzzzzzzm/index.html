@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v3.0 — Foundation Recovery (v2.1 baseline)</title>
+<title>Spicy Rodents v3.1 — Foundation Recovery (v2.1 baseline)</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -125,7 +125,7 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.0</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.1</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
       <p class="start-subtitle">A faster, steadier recovery build based on v2.1.</p>
     </header>
@@ -2248,6 +2248,91 @@ function collisionHouses(lastPos){for(const b of commercialBounds){if(Math.abs(p
     }
     continue;
    }if(Math.abs(player.pos.x-h.x)<h.w/2+.53&&Math.abs(player.pos.z-h.z)<h.d/2+.53&&player.pos.y<h.cfg.h-.35){player.pos.x=lastPos.x;player.pos.z=lastPos.z;return}}}
+// v2.3 — grounded swept 2D motion with per-axis sliding.
+// Ground motion has physical momentum, but colliders no longer cancel a
+// diagonal stride just because its forward component grazes a fence or car.
+function outdoorBlocked(x,z,height){
+ const r=.32;
+ // Westside homes are separate from the original four houses. Their walls
+ // must still block the squirrel; only the four open-bay homes can be entered.
+ for(const h of oldDistrictHomes){
+  if(height>=h.by+h.height+.15)continue;
+  const inside=Math.abs(x-h.x)<h.depth/2+r&&Math.abs(z-h.z)<h.width/2+r;
+  if(!inside)continue;
+  if(h===activeOldHome)return false;
+  if(oldHomeTransit?.home===h)return false;
+  return true;
+ }
+ if(activeHouseInterior){
+  const h=activeHouseInterior;
+  if(Math.abs(x-h.x)>h.w/2-.68-r*.08||Math.abs(z-h.z)>h.d/2-.68-r*.08)return true;
+  if((h.interiorObstacles||[]).some(o=>Math.abs(x-o.x)<o.w/2+r&&Math.abs(z-o.z)<o.d/2+r))return true;
+ }else{
+  for(const h of houses){
+   if(height>=h.cfg.h-.35)continue;
+   if(Math.abs(x-h.x)<h.w/2+.53&&Math.abs(z-h.z)<h.d/2+.53)return true;
+  }
+ }
+ for(const b of commercialBounds){
+  if(height<b.roof-.35&&Math.abs(x-b.x)<b.w/2+r&&Math.abs(z-b.z)<b.d/2+r)return true;
+ }
+ if(height<3.1){
+  for(const t of trees){
+   const dx=x-t.x,dz=z-t.z;
+   if(Math.abs(dx)<2&&Math.abs(dz)<2&&dx*dx+dz*dz<1.48*1.48)return true;
+  }
+  for(const f of fenceCollisions){
+   if(height>f.height+.25)continue;
+   const minx=Math.min(f.x1,f.x2)-r-.08,maxx=Math.max(f.x1,f.x2)+r+.08;
+   const minz=Math.min(f.z1,f.z2)-r-.08,maxz=Math.max(f.z1,f.z2)+r+.08;
+   if(x<minx||x>maxx||z<minz||z>maxz)continue;
+   const dx=f.x2-f.x1,dz=f.z2-f.z1;
+   const t=THREE.MathUtils.clamp(((x-f.x1)*dx+(z-f.z1)*dz)/(dx*dx+dz*dz||1),0,1);
+   if(Math.hypot(x-f.x1-t*dx,z-f.z1-t*dz)<r+.05)return true;
+  }
+ }
+ // Broad phase before vehicle rectangle tests. Each car has a rotation.
+ for(const c of cars){
+  if(!c.group.visible)continue;
+  const g=c.group,dx=x-g.position.x,dz=z-g.position.z;
+  if(Math.abs(dx)>4.5||Math.abs(dz)>4.5)continue;
+  const a=g.rotation.y,lx=Math.cos(a)*dx-Math.sin(a)*dz,lz=Math.sin(a)*dx+Math.cos(a)*dz;
+  if(Math.abs(lx)<1.175+r&&Math.abs(lz)<2.225+r&&height<terrainHeight(g.position.x,g.position.z)+1.94)return true;
+ }
+ for(const o of tallVehicles){
+  const g=o.group,dx=x-g.position.x,dz=z-g.position.z;
+  if(Math.abs(dx)>o.length+2||Math.abs(dz)>o.length+2)continue;
+  const a=g.rotation.y,lx=Math.cos(a)*dx-Math.sin(a)*dz,lz=Math.sin(a)*dx+Math.cos(a)*dz;
+  if(Math.abs(lx)<o.width/2+r&&Math.abs(lz)<o.length/2+r&&height<terrainHeight(g.position.x,g.position.z)+o.height-.1)return true;
+ }
+ return false;
+}
+function resolveOutdoorMovement(previous){
+ const goalX=player.pos.x,goalZ=player.pos.z,dx=goalX-previous.x,dz=goalZ-previous.z;
+ const length=Math.hypot(dx,dz),steps=Math.max(1,Math.min(18,Math.ceil(length/.24)));
+ let x=previous.x,z=previous.z,blockedX=false,blockedZ=false;
+ const stepX=dx/steps,stepZ=dz/steps;
+ for(let i=0;i<steps;i++){
+  const px=x,pz=z;
+  // Separate axes keep a glancing run moving along the wall or fence.
+  if(Math.abs(stepX)>1e-7){
+   if(!outdoorBlocked(x+stepX,z,player.pos.y))x+=stepX;
+   else blockedX=true;
+  }
+  if(Math.abs(stepZ)>1e-7){
+   if(!outdoorBlocked(x,z+stepZ,player.pos.y))z+=stepZ;
+   else blockedZ=true;
+  }
+  // If both axes fail, try diagonal once; important around rotated cars.
+  if(x===px&&z===pz&&!outdoorBlocked(px+stepX,pz+stepZ,player.pos.y)){
+   x=px+stepX;z=pz+stepZ;blockedX=false;blockedZ=false;
+  }
+ }
+ player.pos.x=x;player.pos.z=z;
+ if(blockedX)player.vel.x*=.28;
+ if(blockedZ)player.vel.z*=.28;
+}
+
 let audioContext=null;function fx(f=440,d=.12,wave='sine',volume=.07){if(!playing)return;try{audioContext||=new (window.AudioContext||window.webkitAudioContext)();const o=audioContext.createOscillator(),g=audioContext.createGain();o.type=wave;o.frequency.setValueAtTime(f,audioContext.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(40,f*.64),audioContext.currentTime+d);g.gain.setValueAtTime(volume,audioContext.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioContext.currentTime+d);o.connect(g);g.connect(audioContext.destination);o.start();o.stop(audioContext.currentTime+d)}catch(e){}}
 // Pounce uses an actual launch vector. The same velocity is used by the subtle
 // first-person arc, so the guidance predicts the committed trajectory.
@@ -2370,7 +2455,7 @@ function updatePlayer(dt){
    if(player.focus&&!moving)player.yaw=turnToward(player.yaw,yaw+PI,11,dt);
    player.vel.y-=SQUIRREL_GRAVITY*dt;player.pos.addScaledVector(player.vel,dt);
    if(player.inHospital)adjustHospitalMovement(old);
-   else if(!player.inSewer){collisionHouses(old);preventVehicleOverlap(old);
+   else if(!player.inSewer){resolveOutdoorMovement(old);
      if(insideHospitalBuilding()&&!hospitalTransition){player.pos.x=old.x;player.pos.z=old.z}
    }else constrainSewer(old);
    const ground=player.inSewer?sewerFloorY+.25:player.inHospital?(player.inDuct?ductNearestPoint(player.pos).y-.72:HOSPITAL_FLOOR+.2):getGroundAt(player.pos.x,player.pos.z);
@@ -2486,7 +2571,7 @@ function advanceHomeRetreat(n,dt){
  const destination=r.stage==='approach'?(r.waypoints?.[0]||d.outside):r.stage==='threshold'?d.threshold:d.inside;
  const p=n.root.position,dx=destination.x-p.x,dz=destination.z-p.z,dist=Math.hypot(dx,dz);
  if(r.stage==='approach'&&dist<.65){r.waypoints.shift();if(!r.waypoints.length){r.stage='threshold';d.hold=3.1;}return;}
- if(r.stage==='threshold'&&d.open<.72)return;
+ if(r.stage==='threshold'&&!houseDoorPassable(d))return;
  if(r.stage==='threshold'&&dist<.22){r.stage='inside';return;}
  if(r.stage==='inside'&&dist<.42){
   n.visible=false;n.root.visible=false;n.doorEscape=null;n.hiddenInHomeUntil=time+16+Math.random()*12;
@@ -2502,6 +2587,9 @@ function advanceHomeRetreat(n,dt){
  n.legs.forEach((leg,k)=>leg.rotation.x=(k?1:-1)*run*.46);
  n.head.rotation.y=Math.sin(time*11)*.3;
 }
+// A shared clearance rule for pedestrians and squirrel interior transitions.
+// The collision/visual animation may lag the interaction trigger on slow frames.
+function houseDoorPassable(d){return Boolean(d&&d.open>=.86)}
 function animateHouseDoors(dt){
  for(const d of houseDoors){if(!d)continue;
   d.hold=Math.max(0,d.hold-dt);
@@ -4759,14 +4847,19 @@ function updateHouseInteriors(dt){
   const f=q.elapsed/q.duration;
   // Open the real front door before crossing it, using the same threshold as residents.
   houseDoors[q.h.id].hold=3.0;
-  if(f<.36){ // ease toward the outside threshold while door swings
-   player.pos.copy(q.from).lerp(q.enter?houseDoors[q.h.id].outside:houseDoors[q.h.id].inside,THREE.MathUtils.smoothstep(f/.36,0,1));
+  // Hold just outside the threshold until the door has physically cleared.
+  if(f>=.36&&!houseDoorPassable(houseDoors[q.h.id])){
+   q.elapsed=Math.min(q.elapsed,q.duration*.35);
+  }
+  const passF=q.elapsed/q.duration;
+  if(passF<.36){ // ease toward the outside threshold while door swings
+   player.pos.copy(q.from).lerp(q.enter?houseDoors[q.h.id].outside:houseDoors[q.h.id].inside,THREE.MathUtils.smoothstep(passF/.36,0,1));
   }else{
    const threshold=houseDoors[q.h.id].threshold;
    const base=q.enter?houseDoors[q.h.id].outside:houseDoors[q.h.id].inside;
-   const passage=f<.62?(f-.36)/.26:1;
-   if(f<.62)player.pos.copy(base).lerp(threshold,THREE.MathUtils.smoothstep(passage,0,1));
-   else player.pos.copy(threshold).lerp(q.to,THREE.MathUtils.smoothstep((f-.62)/.38,0,1));
+   const passage=passF<.62?(passF-.36)/.26:1;
+   if(passF<.62)player.pos.copy(base).lerp(threshold,THREE.MathUtils.smoothstep(passage,0,1));
+   else player.pos.copy(threshold).lerp(q.to,THREE.MathUtils.smoothstep((passF-.62)/.38,0,1));
   }
   player.pos.y=terrainHeight(player.pos.x,player.pos.z)+.28;
   player.vel.set(0,0,0);player.grounded=true;
