@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic26";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic26";
-import { buildConveyor } from "./conveyor.js?v=logic26";
-import { buildYard } from "./treehouse.js?v=logic26";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic26";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic26";
-import { ROOMS } from "../data/rooms.js?v=logic26";
-import { LAB, inLab } from "../data/labGarage.js?v=logic26";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic27";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic27";
+import { buildConveyor } from "./conveyor.js?v=logic27";
+import { buildYard } from "./treehouse.js?v=logic27";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic27";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic27";
+import { ROOMS } from "../data/rooms.js?v=logic27";
+import { LAB, inLab } from "../data/labGarage.js?v=logic27";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -206,6 +206,16 @@ export function loftSolids(segments) {
     }
   }
   for (const [xa, xb] of TIMBER_FOOT_BOARDS) { const box = new THREE.Box3(new THREE.Vector3(xa, -0.05, 13.30), new THREE.Vector3(xb, 0.6, 13.40)); box.driveKind = "wall"; box.timber = true; box.logic24 = true; solids.push(box); }
+  // logic27 (Ben 4:02 AM "this ramp's base is still a problem … that is where i got stuck"): beside the lane, the deck strip
+  // x 25.34–26.27 (between the lane's east kerb and the shell wall) ran north into the logic24 foot board — a 0.93 m wide
+  // cul-de-sac with the kerb on one side, the shell on the other and the board ahead: a corner the car could only back
+  // out of. A slanted guide board now closes it and funnels a car driving north along the deck back onto the lane foot.
+  for (const [x0, z0, x1, z1] of TIMBER_FOOT_FUNNEL) {
+    const box = new THREE.Box3(new THREE.Vector3(Math.min(x0, x1) - 0.03, -0.05, Math.min(z0, z1) - 0.03), new THREE.Vector3(Math.max(x0, x1) + 0.03, 0.6, Math.max(z0, z1) + 0.03));
+    box.driveKind = "wall"; box.timber = true; box.logic27 = true;
+    box.rail = { x0, z0, x1, z1, y0: -0.05, y1: -0.05, t: 0.03, h: 0.65 };
+    solids.push(box);
+  }
   // The façade hollow is only closed between the foyer S wall and the façade for x∈[-9.17, 9];
   // west of the foyer the mouse run would be out on the lawn. Drive-only lining wall + roof
   // keep it a real tunnel inside the wall until it pops out at the façade's west end.
@@ -418,6 +428,8 @@ function rodClip(all, self, x, z, lo, hi, up) {
   return v;
 }
 // logic24: boards closing the cavity floor pockets beside the shaft-foot lane (x ranges, z 13.30–13.40, y 0–0.6)
+// logic27: slanted guide closing the deck cul-de-sac east of the shaft-foot lane (x0,z0 → x1,z1)
+export const TIMBER_FOOT_FUNNEL = [[25.335, 14.22, 26.27, 15.62]];
 export const TIMBER_FOOT_BOARDS = [[24.40, 24.535], [25.315, 26.4]]; // logic24: outer board runs into the shell (a 0.2 m slot at x 26.0–26.2 pinned cars)
 function pushBox(arr, cx, cy, cz, sx, sy, sz, yaw = 0) {
   arr.push({ cx, cy, cz, sx, sy, sz, yaw });

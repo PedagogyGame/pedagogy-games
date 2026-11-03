@@ -1,15 +1,17 @@
-import { loftSolids } from "./loftNet.js?v=logic26";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic26";
+import { loftSolids } from "./loftNet.js?v=logic27";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic27";
+import { YardLife } from "./yardLife.js?v=logic27";
+import { ROOMS } from "../data/rooms.js?v=logic27";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic26";
-import { TrackSystem } from "./tracks.js?v=logic26";
-import { DriveWorld, railHit } from "./world.js?v=logic26";
-import { EngineAudio } from "./engineAudio.js?v=logic26";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic26";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic26";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic26";
-import { TreeCritters } from "./treehouse.js?v=logic26";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic26";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic27";
+import { TrackSystem } from "./tracks.js?v=logic27";
+import { DriveWorld, railHit } from "./world.js?v=logic27";
+import { EngineAudio } from "./engineAudio.js?v=logic27";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic27";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic27";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic27";
+import { TreeCritters } from "./treehouse.js?v=logic27";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic27";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -154,7 +156,9 @@ export class DriveMode {
     if (mansion && mansion.getColliders) {
       // logic9: Skyline drop-side rails + barricades are hard solids too
       const ls = this.tracks._loftSolidsCache || (this.tracks._loftSolidsCache = loftSolids(this.tracks.segments));
-      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids))));
+      // logic27: backyard dog + doghouse + hiding spots, ambient house mouse
+      if (!this.yardLife) { this.yardLife = new YardLife(this.scene, this); this.yardLife.roomDefs = Object.values(ROOMS); }
+      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders()));
     }
   }
 
@@ -731,6 +735,7 @@ export class DriveMode {
   }
 
   _respawnAtStart() {
+    if (this.yardLife) this.yardLife.onRespawn(); // logic27
     const spawnYaw = this._pickOpenRoadYaw(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, CAR_SPAWN.yaw);
     this.car.setPose(CAR_SPAWN.x, CAR_SPAWN.y, CAR_SPAWN.z, spawnYaw);
     this.car.speed = 0;
@@ -765,8 +770,9 @@ export class DriveMode {
     this.car.vy = 0;
     this._flash = 1;
     this._spawnSmash();
-    if (this.onCrash) this.onCrash({ phase: "crash", message: "CRASH" });
-    if (this.onHud) this.onHud({ mode: "crash", text: "CRASH" });
+    const msg = this._crashMessage || "CRASH"; this._crashMessage = null; this._lastCrashMessage = msg; // logic27: "The dog got you!" rides the big-fall crash
+    if (this.onCrash) this.onCrash({ phase: "crash", message: msg });
+    if (this.onHud) this.onHud({ mode: "crash", text: msg });
   }
 
   _spawnSmash() {
@@ -1433,8 +1439,9 @@ export class DriveMode {
         this._crashPhase = "restarting";
         this._crashTimer = 0;
         this._fade = 0;
-        if (this.onCrash) this.onCrash({ phase: "restarting", message: "Crashed! Restarting…" });
-        if (this.onHud) this.onHud({ mode: "restart", text: "Crashed! Restarting…" });
+        const rmsg = this._lastCrashMessage && this._lastCrashMessage !== "CRASH" ? this._lastCrashMessage + " Restarting…" : "Crashed! Restarting…"; // logic27
+        if (this.onCrash) this.onCrash({ phase: "restarting", message: rmsg });
+        if (this.onHud) this.onHud({ mode: "restart", text: rmsg });
       }
       this._applyFlashFade();
       return;
@@ -1487,6 +1494,7 @@ export class DriveMode {
     this.car.idleTwitch(dt);
     this.tracks.updateVisuals(this._time);
     this.books.update(this._time, dt);
+    if (this.yardLife) this.yardLife.update(dt, true); // logic27
     this._updateFx(dt, null, flags);
 
     if (this.car.crashed && !this._crashPhase) {

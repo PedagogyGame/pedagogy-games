@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic26";
+import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic27";
 
 /**
  * logic18: east-cavity TIMBER FRAMING (studs, joists, braces, beams, batting, wiring) +
@@ -92,6 +92,11 @@ export function buildTimberAndGutter(root, tracks) {
       const [g, , m] = parts[i]; g.computeBoundingBox(); bb.copy(g.boundingBox).applyMatrix4(m);
       if (pts.some(([x, y, z]) => x > bb.min.x - 0.005 && x < bb.max.x + 0.005 && z > bb.min.z - 0.005 && z < bb.max.z + 0.005 && bb.max.y > y + 0.005 && bb.min.y < y + 0.16)) parts.splice(i, 1);
     }
+  }
+  { // logic27: slanted guide board + a dark trim strip (added after the lane-mouth filter, whose AABB test would drop a slanted board; closes the deck cul-de-sac beside the lane foot; collider in loftNet)
+    const x0 = 25.335, z0 = 14.22, x1 = 26.27, z1 = 15.62, L = Math.hypot(x1 - x0, z1 - z0), ry = Math.atan2(x1 - x0, z1 - z0);
+    box(0.06, 0.6, L, woodL, (x0 + x1) / 2, 0.3, (z0 + z1) / 2, ry);
+    box(0.07, 0.05, L + 0.02, woodD, (x0 + x1) / 2, 0.58, (z0 + z1) / 2, ry);
   }
   const timber = new THREE.Mesh(merged(parts), new THREE.MeshLambertMaterial({ vertexColors: true }));
   timber.name = "timber_framing"; timber.raycast = () => {}; root.add(timber);
