@@ -12,7 +12,7 @@
  *
  * Points are authored dense; tracks.js uses them RAW (no spline) so grade is exactly as written.
  */
-import { LAB_PATH_DEFS } from "./labGarage.js?v=logic26";
+import { LAB_PATH_DEFS } from "./labGarage.js?v=logic27";
 const H = 3.2;          // wall-top height on the ground story (ceiling slab bottom ≈ 4.0)
 const MAX_G = 0.28;     // peak grade (eased ends) — hard cap 0.30
 const R = (v) => Math.round(v * 1000) / 1000;
@@ -107,6 +107,7 @@ function EXPANSION_PATHS() {
   add("sky_l_annex", "loft", link(8.9, -27.0, 10.85, -27.0, F), "Annex Link");
   add("sky_l_workshop", "loft", link(-14.0, -14.25, -14.0, -21.75, F), "Workshop Bridge");
   add("sky_l_landing", "loft", link(-1.0, -0.75, -1.0, 0.75, F), "Landing Link");
+  add("sky_l_landing_b", "loft", link(1.4, -0.75, 1.4, 0.75, F), "Landing Bridge", { bridge27: true }); // logic27 (Ben 3:59 AM): second cross-link, navy truss bridge
   // Attic circuit: a low toy track ON the attic floor (+5 cm) + the Science attic
   add("sky_attic", "floor", ring(-10.0, 10.0, -16.0, 0.9, AT, 1.2), "Attic Circuit");
   add("sky_science", "floor", ring(-3.9, 3.9, -31.25, -20.75, AT), "Science Attic Ring");
@@ -545,7 +546,7 @@ export const LOFT_PORTALS_LEGACY = [
 
 /** logic10: every place a Skyline path pierces a room wall gets a framed opening (+ neon trim).
  *  mansion._driveOpeningsForWall appends these (skipping any already covered by a door/arch). */
-import { ROOMS as _ROOMS } from "./rooms.js?v=logic26";
+import { ROOMS as _ROOMS } from "./rooms.js?v=logic27";
 function autoPortals() {
   const out = [];
   const near = (q) => LOFT_PORTALS_LEGACY.some((L) => Math.hypot(L.x - q.x, L.z - q.z) < 0.8 && Math.abs(L.y0 - q.y0) < 1.5)
