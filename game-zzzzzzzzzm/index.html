@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v3.1 — Foundation Recovery (v2.1 baseline)</title>
+<title>Spicy Rodents v3.2 — Foundation Recovery (v2.1 baseline)</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -125,7 +125,7 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.1</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.2</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
       <p class="start-subtitle">A faster, steadier recovery build based on v2.1.</p>
     </header>
@@ -164,8 +164,8 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
  const indicator=document.getElementById('loading');
  const info=document.createElement('div');
  info.id='spicyBootError';
- info.style.cssText='display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:520px;width:90%;z-index:100000;padding:24px;background:#182722;color:#f6efdf;border:2px solid #d1ee83;border-radius:12px;box-shadow:0 15px 55px #000a;font:15px/1.6 Arial,sans-serif;text-align:left';
- info.innerHTML='<strong style="font-size:23px">Spicy Rodents could not start</strong><p id="spicyBootReason">An unexpected initialization problem occurred.</p><p style="font-size:12px;color:#cbd9c8">Try reloading. If this continues, please send the error message shown here.</p><button style="padding:9px 18px;cursor:pointer;border-radius:6px;border:0;background:#d1ee83;color:#102018" onclick="location.reload()">RELOAD GAME</button>';
+ info.style.cssText='display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);max-width:520px;max-height:80vh;overflow:auto;width:90%;z-index:100000;padding:24px;background:#182722;color:#f6efdf;border:2px solid #d1ee83;border-radius:12px;box-shadow:0 15px 55px #000a;font:15px/1.6 Arial,sans-serif;text-align:left';
+ info.innerHTML='<strong style="font-size:23px">Spicy Rodents could not start</strong><p id="spicyBootReason" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace">An unexpected initialization problem occurred.</p><p style="font-size:12px;color:#cbd9c8">Try reloading. If this continues, please send the error message shown here.</p><button style="padding:9px 18px;cursor:pointer;border-radius:6px;border:0;background:#d1ee83;color:#102018" onclick="location.reload()">RELOAD GAME</button>';
  document.body.appendChild(info);
  function show(reason){
    if(window.__spicyBootOk)return;
@@ -174,8 +174,8 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
    info.style.display='block';
    if(indicator)indicator.style.display='none';
  }
- window.addEventListener('error',e=>{if(!window.__spicyBootOk)show(e.message||'Failed to load a game script or 3D dependency.')});
- window.addEventListener('unhandledrejection',e=>{if(!window.__spicyBootOk)show(e.reason?.message||e.reason||'A game script was rejected.')});
+ window.addEventListener('error',e=>{if(!window.__spicyBootOk){const place=e.filename?` (${e.filename.split('/').pop()}:${e.lineno||'?'}:${e.colno||'?'})`:'';show((e.message||'Failed to load a game script or 3D dependency.')+place+(e.error?.stack?'\n'+e.error.stack.split('\n').slice(0,5).join('\n'):''));}});
+ window.addEventListener('unhandledrejection',e=>{if(!window.__spicyBootOk)show((e.reason?.message||e.reason||'A game script was rejected.')+(e.reason?.stack?'\n'+e.reason.stack.split('\n').slice(0,5).join('\n'):''))});
  setTimeout(()=>{if(!window.__spicyBootOk)show('The 3D engine or neighborhood is taking too long to initialize. Check the network connection and try reloading.')},30000);
 })();
 </script>
@@ -210,6 +210,9 @@ const RouteMotion={
 const routes=[];let uid=0;const routeSpatial=new Map();let routeIndexLive=false;
 function indexRoute(route){
  if(route.indexed)return;
+ if(!route.sampled?.length || route.sampled.some(p=>!p||![p.x,p.y,p.z].every(Number.isFinite))){
+  throw new Error(`Invalid sampled climbing route: ${route.name}`);
+ }
  for(let i=0;i<route.sampled.length;i++){
   const pos=route.sampled[i],key=`${Math.floor(pos.x/8)},${Math.floor(pos.y/8)},${Math.floor(pos.z/8)}`;
   let bucket=routeSpatial.get(key);if(!bucket){bucket=[];routeSpatial.set(key,bucket)}
@@ -218,9 +221,15 @@ function indexRoute(route){
  route.indexed=true;
 }
 function addRoute(name,points,opts={}){
+ if(!Array.isArray(points)||points.length<2||points.some(p=>!p||![p.x,p.y,p.z].every(Number.isFinite))){
+  throw new Error(`Invalid climbing route control points: ${name}`);
+ }
  const crv=new THREE.CatmullRomCurve3(points.map(p=>p.clone()),false,'centripetal');
- const length=crv.getLength(),steps=Math.max(20,Math.ceil(length*3));
+ const length=crv.getLength();
+ if(!Number.isFinite(length)||length<.04)throw new Error(`Zero-length or malformed climbing route: ${name}`);
+ const steps=Math.max(20,Math.ceil(length*3));
  const sampled=crv.getSpacedPoints(steps);
+ if(sampled.some(p=>!p||![p.x,p.y,p.z].every(Number.isFinite)))throw new Error(`Invalid sampled climbing route: ${name}`);
  const route={id:uid++,name,curve:crv,sampled,kind:opts.kind||'branch',length,speed:opts.speed||1,center:opts.center||null,surfaceRadius:opts.surfaceRadius||1.35};
  routes.push(route);if(routeIndexLive)indexRoute(route);return route;
 }
@@ -575,7 +584,18 @@ const treeSpec=[{name:'BUR OAK',x:-34,z:-33,seed:7,h:29,crown:20.5,color:['#4476
 {name:'SYCAMORE',x:-37,z:29,seed:29,h:32,crown:22.5,color:['#6c9a48','#82ab54','#5c8745','#a9b76a'],branches:6,sycamore:true},
 {name:'RED MAPLE',x:34,z:34,seed:61,h:27,crown:18.8,color:['#658f40','#8ca953','#698a3b','#acb65a'],branches:7}];
 const trees=[];const canopyAnimated=[];const canopyShadowCasters=[];const leavesGeometry=new THREE.IcosahedronGeometry(.42,0);const leafPalette=[];
-function makeTree(spec){let r=rng(spec.seed);const rr=(lo,hi)=>lo+(hi-lo)*r();const x=spec.x,z=spec.z,H=spec.h,treeY=terrainHeight(x,z);const tree=new THREE.Group();tree.position.set(x,treeY,z);scene.add(tree);let bark=spec.sycamore?mat('#a3a089'):M.bark;const trunkH=H*.61;
+// Supports the original lowercase `h` tree specs as well as later `H` specs.
+// A missing height used to produce NaN branch geometry and crash startup in Three.js.
+function makeTree(spec){
+ const height=Number.isFinite(spec.h)?spec.h:spec.H;
+ if(!Number.isFinite(spec.x)||!Number.isFinite(spec.z)||!Number.isFinite(height)||height<=2||
+    !Number.isFinite(spec.crown)||spec.crown<=0||!Number.isFinite(spec.branches)||spec.branches<2||
+    !Array.isArray(spec.color)||spec.color.length===0){
+   throw new Error(`Invalid tree specification for ${spec.name||'(unnamed)'}: height=${String(height)}, crown=${String(spec.crown)}, branches=${String(spec.branches)}`);
+ }
+ let r=rng(spec.seed);const rr=(lo,hi)=>lo+(hi-lo)*r();const x=spec.x,z=spec.z,H=height,treeY=terrainHeight(x,z);
+ if(!Number.isFinite(treeY))throw new Error(`Invalid terrain height for tree ${spec.name} at ${x}, ${z}`);
+const tree=new THREE.Group();tree.position.set(x,treeY,z);scene.add(tree);let bark=spec.sycamore?mat('#a3a089'):M.bark;const trunkH=H*.61;
 const mainTrunk=[];for(let j=0;j<=7;j++){let t=j/7;mainTrunk.push(v(rr(-.45,.45)*t, .35+t*trunkH,rr(-.5,.5)*t))}for(let j=0;j<7;j++)span(mainTrunk[j],mainTrunk[j+1],1.3*(1-j/9),1.3*(1-(j+1)/9),bark,tree,11);
 addRoute(spec.name+' trunk',mainTrunk.map(a=>a.clone().add(v(x,treeY,z))),{kind:'trunk',speed:.82,center:v(x,treeY,z),surfaceRadius:1.18});
 // Roots twist irregularly through grass, rather than looking like cylinders stuck in dirt.
@@ -3421,7 +3441,7 @@ function addExtraCanopy(){
   {name:'Villa Oak South',x:377,z:-354,H:28,crown:7.4,branches:9,seed:7205,color:['#69823b','#8aa14f','#b0c067'],canopyBoost:3,acorn:true},
   {name:'Villa Sycamore South',x:438,z:-327,H:27,crown:7.1,branches:8,seed:7206,color:['#71934c','#8bac58','#a9c266'],canopyBoost:2,sycamore:true},
  ];
- for(const s of specs){ try{ makeTree(s);}catch(e){} }
+ for(const spec of specs){try{makeTree(spec)}catch(error){console.error('[Spicy Rodents] Tree build rejected:',spec.name,error)}}
 }
 addExtraCanopy();
 
@@ -4939,7 +4959,7 @@ function reportRuntimeError(name,error,critical=false){
   mainLoopFailed=true;
   const panel=document.getElementById('spicyBootError');
   const reason=document.getElementById('spicyBootReason');
-  if(reason)reason.textContent=`Game loop error — ${message}`;
+  if(reason)reason.textContent=`Game loop error — ${message}${error?.stack?'\n'+error.stack.split('\n').slice(0,4).join('\n'):''}`;
   if(panel)panel.style.display='block';
   gamePaused=true;
  }else if(!disabledSubsystems.has(name)){
@@ -4988,7 +5008,7 @@ function updateDiagnostics(dt){
  const element=document.getElementById('spicyDiagnostic');
  if(!element||!element.classList.contains('open'))return;
  const p=player.pos;
- element.textContent=`v3.0 · Baseline v2.1 · ${player.rail?.name||'ground'}\n`+
+ element.textContent=`v3.2 · Baseline v2.1 · ${player.rail?.name||'ground'}\n`+
    `player ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)} · ${player.grounded?'grounded':'air/route'}\n`+
    `routes ${routes.length}/${routes.filter(r=>r.indexed).length} indexed · forks ${canopyForks.size} · errors ${runtimeErrors.length}`+
    (runtimeErrors.length?'\n'+runtimeErrors.slice(-2).join(' | '):'');
@@ -5010,11 +5030,20 @@ function tick(){
   renderer.render(scene,camera);
  }catch(error){reportRuntimeError('Main movement/render loop',error,true)}
 }
+// Fail safely on a malformed climbing route rather than quietly poisoning the
+// whole spatial index or having the camera jump to an invalid coordinate.
+function verifyRouteRegistry(){
+ const bad=routes.filter(r=>!Number.isFinite(r.length)||r.length<.04||!r.sampled?.length||
+   r.sampled.some(p=>!p||![p.x,p.y,p.z].every(Number.isFinite)));
+ if(bad.length)throw new Error(`Corrupt climbing routes (${bad.length}): ${bad.slice(0,5).map(r=>r.name).join(', ')}`);
+ return routes.length;
+}
 // Final registry rebuild includes westside trees and the later treehouse.
+verifyRouteRegistry();
 rebuildCanopyForks();
 if(routes.some(r=>!r.indexed))console.warn('[Spicy Rodents] Incomplete route registry');
 try{
- drawInfection();flash('v3.0 RECOVERY · v2.1 GAMEPLAY · TREE ROUTES REPAIRED',6);
+ drawInfection();flash('v3.2 · VALIDATED TREE ROUTES · STARTUP FIX',6);
  tick();
  if(!mainLoopFailed){window.__spicyBootOk=true;
   $('loading').classList.add('done');
