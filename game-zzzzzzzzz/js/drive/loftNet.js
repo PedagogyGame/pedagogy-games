@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic27";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic27";
-import { buildConveyor } from "./conveyor.js?v=logic27";
-import { buildYard } from "./treehouse.js?v=logic27";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic27";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic27";
-import { ROOMS } from "../data/rooms.js?v=logic27";
-import { LAB, inLab } from "../data/labGarage.js?v=logic27";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic28";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic28";
+import { buildConveyor } from "./conveyor.js?v=logic28";
+import { buildYard } from "./treehouse.js?v=logic28";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic28";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic28";
+import { ROOMS } from "../data/rooms.js?v=logic28";
+import { LAB, inLab } from "../data/labGarage.js?v=logic28";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -236,8 +236,15 @@ export function loftSolids(segments) {
   { // logic14 paddle conveyor guards: boarding stop on the pad + cage round the ascending run
     const K = CONVEYOR, B = (a, b, kind = "wall") => { const box = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); box.driveKind = kind; box.conveyor = true; solids.push(box); };
     B([2.51, K.padY, 3.92], [2.53, 7.95, 4.75]);                  // stop: car waits over the flap path (centre x 2.62)
-    B([1.74, 7.95, 3.9], [1.79, K.deckY - 0.01, 4.78]);          // west: opens only once the flap is within a kerb step of the exit deck
-    B([2.745, 7.84, 3.9], [2.79, K.yT + 0.1, 4.78]);             // east (from just above a pad-level car: no slipping back off)
+    // logic28 (Ben 12:12 PM "drive or jump off onto any level they pass"): the west cage wall has a hop-off window at the
+    // attic floor (8.45) and at the roof deck (11.98) — open while the flap is from a kerb step below to 0.75 m above (time to roll across the flap at lift speed;
+    // worst hop-off drop 0.75 m is far under the 60% fall rule).
+    for (const [ya, yb] of CONVEYOR_HOP_WALL) B([1.74, ya, 3.9], [1.79, yb, 4.78]); // west: + top exit once the flap reaches the deck
+    // east (from just above a pad-level car: no slipping back off). logic28: roof-deck hop-off window on this side — the
+    // west side at that level is the deck-exit slab, so the roof landing is reached by reversing off east.
+    B([2.745, 7.84, 3.9], [2.79, 8.40 - 0.05, 4.78]);              // logic28 east hop-off windows: attic floor 8.40 + roof deck 11.979
+    B([2.745, 8.40 + 0.75, 3.9], [2.79, 11.979 - 0.05, 4.78]);     // (reverse off the flap; each open from a kerb step below to 0.75 m above)
+    B([2.745, 11.979 + 0.75, 3.9], [2.79, K.yT + 0.1, 4.78]);
     B([1.74, 7.84, 4.73], [2.79, K.yT + 0.1, 4.78]);             // south
     B([1.74, 7.6, 3.9], [2.79, K.yT + 0.1, 3.96]);               // belt side
   }
@@ -429,6 +436,8 @@ function rodClip(all, self, x, z, lo, hi, up) {
 }
 // logic24: boards closing the cavity floor pockets beside the shaft-foot lane (x ranges, z 13.30–13.40, y 0–0.6)
 // logic27: slanted guide closing the deck cul-de-sac east of the shaft-foot lane (x0,z0 → x1,z1)
+export const CONVEYOR_HOP_LEVELS = [8.40, 11.979];
+export const CONVEYOR_HOP_WALL = [[7.95, 12.49]]; // west wall whole again: holding W still rides to the deck exit (logic14 behaviour)
 export const TIMBER_FOOT_FUNNEL = [[25.335, 14.22, 26.27, 15.62]];
 export const TIMBER_FOOT_BOARDS = [[24.40, 24.535], [25.315, 26.4]]; // logic24: outer board runs into the shell (a 0.2 m slot at x 26.0–26.2 pinned cars)
 function pushBox(arr, cx, cy, cz, sx, sy, sz, yaw = 0) {

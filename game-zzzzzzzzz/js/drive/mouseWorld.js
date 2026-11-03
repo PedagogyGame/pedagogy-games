@@ -44,6 +44,18 @@ P.dining = [...P.table, ["c", -0.055, 0, 0.012, 0.016, 0.024, 0.016, 0, C.thimbl
 P.stash = [...P.coins, ...P.buttons.map((q) => ["c", q[1] + 0.06, q[2], q[3] + 0.003, q[4], q[5], q[6], 0, q[8]]), ...P.crumbs.map((q) => ["b", q[1] - 0.06, q[2], q[3], q[4], q[5], q[6], q[7], q[8]]), ["c", -0.02, 0.015, 0.02, 0.012, 0.04, 0.012, 0, C.thread2]];
 const ORDER = ["matchboxBed", "cheese", "spool", "crumbs", "trap", "buttons", "dining", "cap", "sock", "pencils", "thimbleBed", "coins", "ladder", "stash", "cheese", "table"];
 
+function inOtherLane(segments, own, x, y, z, pad) {
+  for (const q of segments) {
+    if (q.pathId === own.pathId) continue;
+    if (Math.max(q.a.x, q.b.x) + q.width < x || Math.min(q.a.x, q.b.x) - q.width > x || Math.max(q.a.z, q.b.z) + q.width < z || Math.min(q.a.z, q.b.z) - q.width > z) continue;
+    const ax = q.b.x - q.a.x, az = q.b.z - q.a.z, L2 = ax * ax + az * az || 1e-9;
+    const u = Math.max(0, Math.min(1, ((x - q.a.x) * ax + (z - q.a.z) * az) / L2));
+    if (Math.hypot(x - (q.a.x + ax * u), z - (q.a.z + az * u)) > q.width / 2 + pad) continue;
+    if (Math.abs(q.a.y + (q.b.y - q.a.y) * u - y) < 0.15) return true;
+  }
+  return false;
+}
+
 /** Deterministic layout (also used by DriveWorld for the mouse-trap bump surfaces). */
 export function mouseWorldLayout(segments, tubeIds) {
   const segs = segments.filter((s) => tubeIds.has(s.pathId) || (s.pathId === "mouse_run" && Math.min(s.a.z, s.b.z) > 13.3));
@@ -62,6 +74,9 @@ export function mouseWorldLayout(segments, tubeIds) {
       const nx = tz * side, nz = -tx * side, off = s.width / 2 - (kindNext === "trap" ? 0.12 : 0.07); // trap sits a car-width in from the rail
       const cx = x + nx * off, cz = z + nz * off;
       if (placed.some((q) => Math.hypot(q[0] - cx, q[1] - cz) < 0.3 && Math.abs(q[2] - y) < 0.2)) { side = -side; continue; }
+      // logic28 obstruction audit: a prop may not sit in ANOTHER road's lane where a tube run meets / crosses it (they were
+      // drive-through clutter on the Timber Shaft, Timber Attic, Roof Run, Sky Attic and the Timber lawn road).
+      if (inOtherLane(segments, s, cx, y - RIDE, cz, 0.09)) { side = -side; continue; }
       placed.push([cx, cz, y]);
       const yaw = Math.atan2(tx, tz);
       const kind = ORDER[k++ % ORDER.length];

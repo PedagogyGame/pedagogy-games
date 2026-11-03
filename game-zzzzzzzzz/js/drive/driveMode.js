@@ -1,17 +1,17 @@
-import { loftSolids } from "./loftNet.js?v=logic27";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic27";
-import { YardLife } from "./yardLife.js?v=logic27";
-import { ROOMS } from "../data/rooms.js?v=logic27";
+import { loftSolids } from "./loftNet.js?v=logic28";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic28";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic28";
+import { ROOMS } from "../data/rooms.js?v=logic28";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic27";
-import { TrackSystem } from "./tracks.js?v=logic27";
-import { DriveWorld, railHit } from "./world.js?v=logic27";
-import { EngineAudio } from "./engineAudio.js?v=logic27";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic27";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic27";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic27";
-import { TreeCritters } from "./treehouse.js?v=logic27";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic27";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic28";
+import { TrackSystem } from "./tracks.js?v=logic28";
+import { DriveWorld, railHit, LIFT_APRONS } from "./world.js?v=logic28";
+import { EngineAudio } from "./engineAudio.js?v=logic28";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic28";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic28";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic28";
+import { TreeCritters } from "./treehouse.js?v=logic28";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic28";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -21,6 +21,12 @@ import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic2
 function lsGet(k) { try { return globalThis.localStorage ? globalThis.localStorage.getItem(k) : null; } catch (_) { return null; } }
 function lsSet(k, v) { try { if (globalThis.localStorage) globalThis.localStorage.setItem(k, v); } catch (_) {} }
 
+// logic28 gap scan: slots the 12%-smaller car newly fits into (old Ø 0.157 m, new Ø 0.138 m) — dead-end slivers behind
+// furniture are closed with an invisible filler flush to the furniture back (nothing visible changes).
+export const SLOT_FILLERS28 = [
+  [[3.9, 0, -0.325], [6.5, 1.5, -0.17]], // foyer/landing: 15.5 cm slot between the long sideboard (x 3.9–6.5) and the wall at z −0.17
+];
+export const CAM_TIGHT = { b: 0.94, u: 0.9, l: 0.2 }; // logic28 chase-rig tightening (× the CAR_K size scaling)
 export class DriveMode {
   constructor(scene, camera) {
     this.scene = scene;
@@ -59,7 +65,7 @@ export class DriveMode {
     this._camElevated = 0; // smoothed elevated chase blend
     this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
-    this._driveFov = 76; // logic11: driver-eye scale — wide so the rooms loom full-size
+    this._driveFov = globalThis.__CAM_L27 ? 76 : 74; // logic28: 2° narrower — more scale, no fisheye · logic11: driver-eye scale — wide so the rooms loom full-size
     this._camMode = "chase"; // "chase" | "bumper" (C key)
     void 0; // calmer tour FOV (was arcade-wide 74; logic7 68→70)
     this._wallFov = 66; // tighter echo-y FOV in walls
@@ -158,7 +164,8 @@ export class DriveMode {
       const ls = this.tracks._loftSolidsCache || (this.tracks._loftSolidsCache = loftSolids(this.tracks.segments));
       // logic27: backyard dog + doghouse + hiding spots, ambient house mouse
       if (!this.yardLife) { this.yardLife = new YardLife(this.scene, this); this.yardLife.roomDefs = Object.values(ROOMS); }
-      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders()));
+      if (!this._roofDeck) this._roofDeck = buildRoofDeck(this.scene, this.world.filledTops, this.tracks.segments); // logic28 tiled roof deck + kerb
+      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; })));
     }
   }
 
@@ -758,6 +765,18 @@ export class DriveMode {
     if (this.onHud) this.onHud({ mode: "manual", text: "" });
   }
 
+  /** logic28: floor-to-ceiling height of the (indoor) room containing (x,z) whose floor is just below y; null outdoors. */
+  _roomHeightAt(x, y, z) {
+    let best = null;
+    for (const r of Object.values(ROOMS)) {
+      if (r.outdoor || !r.size || !r.pos) continue; const [w, h, d] = r.size, [cx, fy, cz] = r.pos;
+      if (x < cx - w / 2 || x > cx + w / 2 || z < cz - d / 2 || z > cz + d / 2) continue;
+      if (y < fy - 0.3 || y > fy + h) continue;
+      if (!best || fy > best.fy) best = { fy, h };
+    }
+    return best ? best.h : null;
+  }
+
   _beginCrash() {
     if (this._crashPhase) return;
     this._crashPhase = "smash";
@@ -770,6 +789,7 @@ export class DriveMode {
     this.car.vy = 0;
     this._flash = 1;
     this._spawnSmash();
+    if (!this._crashMessage && this.car.crashReason === "fall") this._crashMessage = "Too far a fall!"; // logic28
     const msg = this._crashMessage || "CRASH"; this._crashMessage = null; this._lastCrashMessage = msg; // logic27: "The dog got you!" rides the big-fall crash
     if (this.onCrash) this.onCrash({ phase: "crash", message: msg });
     if (this.onHud) this.onHud({ mode: "crash", text: msg });
@@ -828,8 +848,12 @@ export class DriveMode {
     // logic11 DRIVER-EYE SCALE: the camera rides just above/behind the 3 cm car (≈ a toy driver's
     // eye), not at human standing height — furniture and rooms loom full-size.
     const bumper = this._camMode === "bumper";
-    const back = bumper ? -0.045 : (inWall ? 0.10 : 0.125 + leisure * 0.03 + elev * 0.01) + Math.min(0.05, spd * 0.02) + hi * 0.12;
-    const up = bumper ? 0.024 : (inWall ? 0.042 : 0.046 + leisure * 0.012 + elev * 0.008) + Math.min(0.012, spd * 0.004) + hi * 0.17;
+    let back = bumper ? -0.045 : (inWall ? 0.10 : 0.125 + leisure * 0.03 + elev * 0.01) + Math.min(0.05, spd * 0.02) + hi * 0.12;
+    let up = bumper ? 0.024 : (inWall ? 0.042 : 0.046 + leisure * 0.012 + elev * 0.008) + Math.min(0.012, spd * 0.004) + hi * 0.17;
+    // logic28 (Ben 12:05 PM "slightly tighter … the whole house feel a little larger … more grand"): on top of the
+    // size scaling the rig sits 13% closer, 12% lower and looks 20% lower — along the floor, up at the furniture.
+    const T28 = globalThis.__CAM_L27 ? { b: 1, u: 1, l: 1 } : CAM_TIGHT;
+    back *= bumper ? 1 : T28.b; up *= bumper ? 1 : T28.u;
     this._camBack = back * CAR_K; // logic16: rig scales with the car → same framing
     this._camUp = up * CAR_K;
     this._camLookYaw = lookYaw;
@@ -843,7 +867,7 @@ export class DriveMode {
     const aheadUse = bumper ? 1.2 : ahead + hi * 0.25;
     this._lookAhead.set(
       p.x + Math.sin(bumper ? yaw : lookYaw) * aheadUse,
-      p.y + ((bumper ? 0.022 : (inWall ? 0.035 : 0.038 + leisure * 0.01)) - hi * 0.3) * CAR_K,
+      p.y + ((bumper ? 0.022 : (inWall ? 0.035 : 0.038 + leisure * 0.01) * T28.l) - hi * 0.3) * CAR_K,
       p.z + Math.cos(bumper ? yaw : lookYaw) * aheadUse
     );
     this._camTarget.copy(this._lookAhead);
@@ -944,7 +968,7 @@ export class DriveMode {
   }
 
   _camClearOfSolids(pp, camX, camY, camZ) {
-    const minUp = 0.1; // camera always above the car roof line
+    const minUp = 0.1 * (CAR_K / 0.87) * (globalThis.__CAM_L27 ? 1 : CAM_TIGHT.u); // camera always above the car roof line (logic28: scales with the car + tight rig)
     camY = Math.max(camY, pp.y + minUp);
     const ax = pp.x, ay = pp.y + 0.07, az = pp.z; // aim point = car body centre
     let t = this._segSolidHit(ax, ay, az, camX, camY, camZ);
@@ -1473,6 +1497,7 @@ export class DriveMode {
       radius: this._carRadius,
       boxesNear: (x, z, r) => this._wallsNear(x, z, r),
       clear: (x, z, y) => this._clearPointFromWalls(x, z, y, 0.004),
+      roomHeightAt: (x, y, z) => this._roomHeightAt(x, y, z), // logic28 fall rule
     });
     env.world = this.world;
     const flags = this._tickConveyor(dt) || this._tickLift(dt) || (this.world ? this.car.update(dt, driveKeys, env) : { surface: null, grade: 0 });
@@ -1484,6 +1509,12 @@ export class DriveMode {
     if (this._onFlap >= 0) { // logic16: belt guide — riders ease to the middle of the flaps (no grinding the cage at the lip)
       const P = CONVEYOR.phys, zc = (P.minZ + P.maxZ) / 2;
       pos.z += (zc - pos.z) * Math.min(1, 1.5 * dt);
+      // logic28 fix (L11 teleport): the east hop-off windows are GATES — a rider can only pass the cage face line
+      // (2.745 − car r) while it is DRIVEN out (vx > 0.15 m/s) with its flap −3…+25 cm of (a reversing car needs ~0.3 s to reach the face; it steps down ≤ 15 cm onto the apron, as before) with an apron; between landings it stays inside the cage, so
+      // the wall above a window never has to shove a half-out car back (was a 7.5 cm per-frame jump).
+      const xIn = 2.745 - 0.0689, fy = this.world.flapAt(this._onFlap).y;
+      const vx = (pos.x - prevX) / Math.max(1e-4, dt), atLanding = LIFT_APRONS.some((A) => fy > A.y - 0.03 && fy < A.y + 0.25);
+      if (pos.x > xIn && !(atLanding && vx > 0.15)) pos.x = Math.max(xIn, prevX <= xIn ? xIn : Math.min(pos.x, prevX)); // a deliberate drive-out at a landing passes; a drift is held
     }
     if (this.tracks._conveyor && this.world && this.world.conveyor) this.tracks._conveyor.update(this.world.conveyor.t);
     this._frameWallHits = flags.hit ? 1 : 0;
@@ -1566,18 +1597,19 @@ export class DriveMode {
     this._camBaseY = THREE.MathUtils.clamp(this._camBaseY, pp.y - 0.03, pp.y + 0.03); // never lose the car out of frame
     let camY = this._camBaseY + this._camUpS;
     // Never let the chase cam sink below the car's own deck height (ramp-body clip guard)
-    let camFloor = pp.y + 0.03; // logic11: driver-eye scale (was 0.06 for the 0.26u chase)
+    const K28 = CAR_K / 0.87; // logic28: car-relative clearances follow the smaller car
+    let camFloor = pp.y + 0.03 * K28; // logic11: driver-eye scale (was 0.06 for the 0.26u chase)
     // logic4: ...and never under the ribbon deck BEHIND the car. On the Climb B descent the
     // chase cam trails up a 29% grade; the guard samples the car→camera sight line so the ray to
     // the car clears the deck (and its under-fill keel) everywhere between them.
     if (this.world) {
-      const aimY = pp.y + 0.03;
+      const aimY = pp.y + 0.03 * K28;
       for (const f of [0.3, 0.45, 0.6, 0.75, 0.9, 1.0]) {
         const sx = pp.x + (camX - pp.x) * f, sz = pp.z + (camZ - pp.z) * f;
         const ys = this.world.surfaceTopNear(sx, sz, pp.y);
         if (ys == null || ys > pp.y + 0.25) continue; // logic12: a deck ABOVE (next helix ring) is an occluder, not a floor
         if (f < 1 && ys < pp.y + 0.06) continue; // logic13: a rug lip / kerb step behind the car never pops the rig
-        const need = f >= 1 ? ys + 0.05 : aimY + (ys + 0.03 - aimY) / f;
+        const need = f >= 1 ? ys + 0.05 * K28 : aimY + (ys + 0.03 * K28 - aimY) / f;
         camFloor = Math.max(camFloor, Math.min(pp.y + 0.9, need));
       }
     }
