@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic27";
+import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic28";
 
 /**
  * logic18: east-cavity TIMBER FRAMING (studs, joists, braces, beams, batting, wiring) +
@@ -30,6 +30,7 @@ function merged(parts) {
   geo.setIndex(I); return geo;
 }
 
+export const TIMBER_BRACES_DROPPED = (globalThis.__TIMBER_BRACES_DROPPED = []);
 export function buildTimberAndGutter(root, tracks) {
   const T = TIMBER, U = GUTTER;
   const wood = 0x3a2a1a, woodD = 0x2a1c12, woodL = 0x5a4030, bat = 0x6b5a3e, wire = 0x2a2e34, rust = 0x5a3a22;
@@ -51,12 +52,15 @@ export function buildTimberAndGutter(root, tracks) {
     box(0.06, 0.1, L, woodL, xI + 0.03, y, z + L / 2);
     box(0.06, 0.1, L, woodL, xO - 0.07, y, z + L / 2);
   }
+  const braces = []; // logic28: diagonal braces, checked against the lanes as true slanted bars below
   for (let z = z0; z < z1 - 1.2; z += 2.2) {
     const mid = z + 1.1, h = 3.2;
     for (const y0 of [0.2, 3.4]) {
       const L = Math.hypot(1.1, h), ang = Math.atan2(h, 1.1);
       parts.push([new THREE.BoxGeometry(0.04, L, 0.06), woodD, M(xI + 0.07, y0 + h / 2, mid, ang - Math.PI / 2, 0, 0)]);
+      braces.push({ g: parts[parts.length - 1][0], x: xI + 0.07, y0, z0: mid + 0.55, y1: y0 + h, z1: mid - 0.55 });
       parts.push([new THREE.BoxGeometry(0.04, L, 0.06), woodD, M(xO - 0.07, y0 + h / 2, mid, -ang + Math.PI / 2, 0, 0)]);
+      braces.push({ g: parts[parts.length - 1][0], x: xO - 0.07, y0, z0: mid - 0.55, y1: y0 + h, z1: mid + 0.55 });
     }
   }
   // logic24: boards closing the cavity-floor pockets beside the shaft-foot lane, under the header (colliders in loftSolids)
@@ -91,6 +95,18 @@ export function buildTimberAndGutter(root, tracks) {
     for (let i = parts.length - 1; i >= 0; i--) {
       const [g, , m] = parts[i]; g.computeBoundingBox(); bb.copy(g.boundingBox).applyMatrix4(m);
       if (pts.some(([x, y, z]) => x > bb.min.x - 0.005 && x < bb.max.x + 0.005 && z > bb.min.z - 0.005 && z < bb.max.z + 0.005 && bb.max.y > y + 0.005 && bb.min.y < y + 0.16)) parts.splice(i, 1);
+    }
+    // logic28 (Ben 12:14 PM: "dark timber X-bracing near the timber ramp" read as a drive-through blocker): the AABB
+    // test above can't judge a slanted bar — a brace whose box missed the 16 cm car band still crossed in front of the
+    // car a little higher up. Test the real diagonal: drop any brace within 4 cm of a lane point's 0–0.45 m headroom.
+    const near = (B, x, y, z) => { if (Math.abs(x - B.x) > 0.06) return false;
+      const ay = B.y1 - B.y0, az = B.z1 - B.z0, L2 = ay * ay + az * az;
+      for (const yy of [y + 0.03, y + 0.15, y + 0.3, y + 0.45]) { const u = Math.max(0, Math.min(1, ((yy - B.y0) * ay + (z - B.z0) * az) / L2));
+        if (Math.hypot(yy - (B.y0 + ay * u), z - (B.z0 + az * u)) < 0.04 + 0.035) return true; }
+      return false; };
+    for (const B of braces) {
+      const hit = pts.some(([x, y, z]) => near(B, x, y, z));
+      if (hit) { const i = parts.findIndex((q) => q[0] === B.g); if (i >= 0) { parts.splice(i, 1); TIMBER_BRACES_DROPPED.push({ x: B.x, y0: B.y0, z: (B.z0 + B.z1) / 2 }); } }
     }
   }
   { // logic27: slanted guide board + a dark trim strip (added after the lane-mouth filter, whose AABB test would drop a slanted board; closes the deck cul-de-sac beside the lane foot; collider in loftNet)

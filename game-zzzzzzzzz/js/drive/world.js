@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic27";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic27";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic28";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic28";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic27";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic27";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic27";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic27";
+import { ROOMS } from "../data/rooms.js?v=logic28";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic28";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic28";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic28";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -27,7 +27,7 @@ export const STEP_UP = 0.056; // logic9: rugs (+0.05) and floor frame lips (+0.0
 //         // largest lip the wheels roll over (ramp grade/substep ≈0.02)
 export const STICK_DOWN = 0.06;       // larger drops than this are real falls
 const SLAB_THICK = 0.22;              // floor slabs / ramp decks treated as this thick from below
-const CAR_TOP = 0.12 * 0.87; // logic16 CAR_K                 // car body band above ride height (collision)
+const CAR_TOP = 0.12 * 0.87 * 0.88; // logic28 car ×0.88; // logic16 CAR_K                 // car body band above ride height (collision)
 const EPS_HOLE = 0.0;
 
 /** logic16: car disc (r, band y0..y1) vs a deck-edge rail segment (capsule of radius t, height h above the deck). */
@@ -39,6 +39,11 @@ export function railHit(R, x, z, y0, y1, r) {
   const ry = R.y0 + (R.y1 - R.y0) * u;
   return y1 >= ry - 0.01 && y0 <= ry + R.h + 0.06; // collider taller than the low visual rail (no hopping it off a flap/bump)
 }
+// logic28 fix: aprons start at the cage east wall inner face 2.745 (= flap phys maxX, so no gap) — the old 2.64 plate poked 10 cm into the shaft camera column and hid the car at both landings (L12), and its walk surface caught a riding car (L11).
+export const LIFT_APRONS = [
+  { id: "lift_apron_attic", x0: 2.745, x1: 2.84, z0: 3.96, z1: 4.73, y: 8.40 },
+  { id: "lift_apron_roof", x0: 2.745, x1: 2.84, z0: 3.96, z1: 4.73, y: 11.979 },
+];
 export class DriveWorld {
   constructor(mansion, tracks) {
     this.mansion = mansion;
@@ -300,6 +305,8 @@ export class DriveWorld {
         if (x >= 2.5 && z >= 4.05 && z <= 4.6) out.push({ y: K.padY + 0.012, kind: "floor", roomId: "conveyor_sill" }); // logic16: boarding sill — the smaller car can roll past the spiral's end into the cage
       }
     }
+    // logic28: lift hop-off aprons — flush lips bridging the shaft-hole gap at the attic (west) and roof deck (east)
+    for (const A of LIFT_APRONS) if (x >= A.x0 && x <= A.x1 && z >= A.z0 && z <= A.z1) out.push({ y: A.y, kind: "floor", roomId: A.id });
     const t = this.tracks;
     if (t && t.segments && t.segments.length) {
       for (const s of t._segmentsNear(x, z, 0.4)) {
