@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic25";
-import { OBJECTS } from "./data/objects.js?v=logic25";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic25";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic25";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic25";
-import { buildLabGarage } from "./labGarage.js?v=logic25";
+import { ROOMS } from "./data/rooms.js?v=logic26";
+import { OBJECTS } from "./data/objects.js?v=logic26";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic26";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic26";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic26";
+import { buildLabGarage } from "./labGarage.js?v=logic26";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -414,11 +414,33 @@ export class Mansion {
     this._declashCoplanar();
     this._buildBookSteps();
     this._buildChandelier(); // logic11 centerpiece (Upper Landing)
+    this._settleCurios(); // logic26
     { // logic13: the conservatory west skirting runs inside the dining shell overlap — lift it a hair
       // (now in view from the Green-Wall Road; zfight-scan)
       const cons = this.root.getObjectByName && this.root.getObjectByName("conservatory");
       const bb = new THREE.Box3();
       if (cons) { cons.updateMatrixWorld(true); cons.traverse((o) => { if (!o.isMesh || o.isInstancedMesh) return; bb.setFromObject(o); if (bb.max.x < -10.6 && bb.min.x > -11.2 && bb.max.y < 1.5 && bb.max.y - bb.min.y < 0.7) o.position.y += 0.0016; }); }
+    }
+  }
+
+  /** logic26 audit: curios whose stand sits inside a room's own workbench / desk / case were buried in it.
+   *  Lift each onto the highest furniture top under its footprint (≤ 0.75 m up), with its hit proxy + glow ring. */
+  _settleCurios() {
+    const bb = new THREE.Box3();
+    for (const obj of this.interactives) {
+      if (obj.userData.target || obj.userData.supportY == null) continue;
+      obj.updateMatrixWorld(true); bb.setFromObject(obj);
+      let top = -Infinity;
+      for (const c of this.colliders) {
+        if (c.driveKind !== "furniture") continue;
+        if (c.max.x < bb.min.x + 0.02 || c.min.x > bb.max.x - 0.02 || c.max.z < bb.min.z + 0.02 || c.min.z > bb.max.z - 0.02) continue;
+        if (c.max.y > bb.min.y + 0.005 && c.max.y < bb.min.y + 0.75 && c.min.y < bb.min.y + 0.05) top = Math.max(top, c.max.y);
+      }
+      if (top === -Infinity) continue;
+      const dy = top + 0.004 - bb.min.y;
+      obj.position.y += dy; obj.userData.supportY = top;
+      if (obj.userData.hitProxy) obj.userData.hitProxy.position.y += dy;
+      if (obj.userData.accent) obj.userData.accent.position.y = top + 0.003;
     }
   }
 
@@ -811,6 +833,18 @@ export class Mansion {
     roof.position.set(0, facadeH + 1.5, -8);
     roof.rotation.y = Math.PI / 4;
     g.add(roof);
+    { // logic26 (Ben "you drive right through it"): the peak's four faces are now the drivable floor over the roof-deck
+      // hole (DriveWorld.surfacesAt roof-peak term). Thin solid collar round the roof-lift shaft where it pierces the face.
+      const S = ROOF_LIFT.shaft, t = 0.05, y0 = 12.3, y1 = 13.2;
+      for (const [a0, a1, b0, b1] of [[S.minX - t, S.maxX + t, S.minZ - t, S.minZ], [S.minX - t, S.maxX + t, S.maxZ, S.maxZ + t], [S.minX - t, S.minX, S.minZ, S.maxZ], [S.maxX, S.maxX + t, S.minZ, S.maxZ]])
+        this._pushCollider(new THREE.Box3(new THREE.Vector3(a0, y0, b0), new THREE.Vector3(a1, y1, b1)), "wall");
+      // kerbs on the roof deck along the Roof Slope Run cutting (where the road has dropped > 6 cm below the deck)
+      const kerbM = this._mat(0x1b1f2a, 0.6, 0.3);
+      for (const zc of [-8.575, -7.425]) {
+        const k = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, 0.05), kerbM); k.position.set(10.1, 11.979 + 0.03, zc); g.add(k);
+        this._pushCollider(new THREE.Box3(new THREE.Vector3(8.9, 11.97, zc - 0.025), new THREE.Vector3(11.3, 12.06, zc + 0.025)), "wall");
+      }
+    }
 
     this.root.add(g);
   }
@@ -977,6 +1011,7 @@ export class Mansion {
       const a = (i / 12) * Math.PI * 2;
       const x = -28 + Math.cos(a) * 5;
       const z = 8 + Math.sin(a) * 5;
+      if (i === 9) continue; // logic26: this bush stood in the Rose Walk Kicker's run-up (-28, 3) — car drove through it
       const rose = new THREE.Mesh(
         new THREE.SphereGeometry(0.35, 10, 8),
         this._mat(i % 2 ? 0xc62828 : 0xad1457, 0.7)
@@ -1783,6 +1818,8 @@ export class Mansion {
     // Corner planters for every outdoor zone
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       if (id === "carriage_yard" && sx > 0) continue; // logic19: lab garage + window road stand there
+      if (id === "front_drive" && sx > 0 && sz < 0) continue; // logic26: stood on the Grand Descent's run-out — drive-through
+      if (id === "garden" && sx < 0 && sz > 0) continue; // logic26: stood on the Garden Road (sky_garden) — drive-through
       if (id === "carriage_yard" && sz > 0) continue; // logic24 (Ben t188u): this planter stood on the East Lawn kicker run-up — drive-through; removed
       const x = cx + sx * (w * 0.38);
       const z = cz + sz * (d * 0.38);
@@ -1791,6 +1828,9 @@ export class Mansion {
       leaf.position.set(x, cy + 0.65, z);
       leaf.frustumCulled = true;
       group.add(leaf);
+      (this.cornerPlanters || (this.cornerPlanters = [])).push({ id, x, z, cy });
+      // logic26 drive-through scan: corner planters had no collider (the car drove through pot + shrub)
+      this._pushCollider(new THREE.Box3(new THREE.Vector3(x - 0.4, cy, z - 0.4), new THREE.Vector3(x + 0.4, cy + 1.05, z + 0.4)), "pillar");
     }
 
     if (id === "front_drive") {
@@ -1814,9 +1854,9 @@ export class Mansion {
       }
       // Welcome urns near mansion door approach
       for (const sx of [-3.5, 3.5]) {
-        addCyl(0.4, 0.48, 0.7, sx, cy + 0.35, 18, this._mat(0xb0bec5, 0.5, 0.25), 12);
+        addCyl(0.4, 0.48, 0.7, sx, cy + 0.35, 17.6, this._mat(0xb0bec5, 0.5, 0.25), 12);
         const bush = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), green);
-        bush.position.set(sx, cy + 0.95, 18);
+        bush.position.set(sx, cy + 0.95, 17.6); // logic26: urns 40 cm off the Garden Road edge
         group.add(bush);
       }
     }
@@ -1846,13 +1886,13 @@ export class Mansion {
 
     if (id === "garden") {
       // Birdbath + more flower mounds at edges
-      addCyl(0.15, 0.2, 0.9, cx + 6, cy + 0.45, cz - 4, stone, 10);
-      addCyl(0.55, 0.5, 0.12, cx + 6, cy + 0.95, cz - 4, stone, 14);
+      addCyl(0.15, 0.2, 0.9, cx + 6, cy + 0.45, cz - 3.4, stone, 10);
+      addCyl(0.55, 0.5, 0.12, cx + 6, cy + 0.95, cz - 3.4, stone, 14);
       const water = new THREE.Mesh(
         new THREE.CylinderGeometry(0.4, 0.4, 0.04, 16),
         new THREE.MeshStandardMaterial({ color: 0x4fc3f7, roughness: 0.2, metalness: 0.5, transparent: true, opacity: 0.7 })
       );
-      water.position.set(cx + 6, cy + 1.02, cz - 4);
+      water.position.set(cx + 6, cy + 1.02, cz - 3.4); // logic26: birdbath 60 cm off the Parlor Greenwall lane
       group.add(water);
       for (const [dx, dz, col] of [[-8, 4, 0xe91e63], [8, 6, 0xffeb3b], [-6, -6, 0x9c27b0], [4, -7, 0xff9800]]) {
         addBox(1.6, 0.28, 0.7, cx + dx, cy + 0.14, cz + dz, this._mat(col, 0.85));
@@ -2110,9 +2150,12 @@ export class Mansion {
     const mullion = this._mat(0xc9a227, 0.35, 0.55);
     // Vertical mullions on glass walls (visual only on north/south inward)
     for (let i = -3; i <= 3; i++) {
+      if (i === 0) continue; // logic26: this one stood in the middle of the terrace doorway (walk/drive-through post)
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.08, h * 0.9, 0.08), mullion);
       m.position.set(cx + i * 2.5, cy + h * 0.45, cz - d / 2 + 0.2);
       group.add(m);
+      const mx = cx + i * 2.5, mz = cz - d / 2 + 0.2; // logic26 drive-through scan: solid now (ground level, under the lane deck)
+      this._pushCollider(new THREE.Box3(new THREE.Vector3(mx - 0.05, cy, mz - 0.05), new THREE.Vector3(mx + 0.05, cy + 2.6, mz + 0.05)), "pillar");
     }
     // Moonlight wash (budgeted)
     const moon = this._allocPointLight(0xb3e5fc, 5, 18, 2);
@@ -2686,7 +2729,7 @@ export class Mansion {
         addBox(1.6, 0.12, 0.5, cx, cy + 0.48, z, this._velvet(0x4e342e));
         for (const sx of [-0.6, 0.6]) addBox(0.1, 0.48, 0.45, cx + sx, cy + 0.24, z, wood);
       }
-      addFloorLamp(cx + 2.2, cz - 10);
+      addFloorLamp(cx + 3.3, cz - 10); // logic26: was in the Climb A lane (cx+2.2)
       addFloorLamp(cx - 2.2, cz + 8);
     }
 
@@ -2773,7 +2816,7 @@ export class Mansion {
       for (let r = 0; r < 4; r++) for (let b = 0; b < 3; b++) {
         addBox(0.35, 0.12, 0.22, cx + w / 2 - 0.4, cy + 0.35 + r * 0.45, cz - 2.5 + b * 0.4, this._mat(0xb0bec5, 0.5));
       }
-      addFloorLamp(cx + 4, cz + 3);
+      addFloorLamp(cx - 3, cz - 2.5); // logic26: was standing in the Science Ring lane (cx+4, cz+3)
     }
   }
 
@@ -2843,6 +2886,15 @@ export class Mansion {
       else if (surface === "table" || surface === "bench" || surface === "desk" || surface === "planter" || surface === "shelf" || surface === "stand") yOff = 1.08;
       obj.position.set(px, cy + yOff, pz);
       if (def.monument) obj.scale.multiplyScalar(1.1);
+      // logic26 audit: one fixed yOff per surface left small curios hovering up to 28 cm and big ones sunk up to 31 cm
+      // into their pedestal / bench / crate / pot. Sit every curio's lowest point exactly on its support's top.
+      {
+        const SUP = { pedestal: 0.97, crate: 0.5, stump: 0.55, rock: 0.6, table: 0.9, bench: 0.9, desk: 0.9, planter: 0.9, shelf: 0.995, stand: 0.995, garden: 0.39, rug: 0.05, floor: 0.0 };
+        obj.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(obj);
+        if (Number.isFinite(bb.min.y)) { obj.position.y += cy + (def.monument ? 0 : (SUP[surface] ?? 0.97)) + 0.004 - bb.min.y; yOff = obj.position.y - cy; }
+        obj.userData.supportY = cy + (def.monument ? 0 : (SUP[surface] ?? 0.97));
+      }
       obj.userData.interactable = true;
       obj.userData.objectId = def.id;
       obj.visible = true;
@@ -2868,9 +2920,10 @@ export class Mansion {
           })
         );
         accent.rotation.x = -Math.PI / 2;
-        accent.position.set(px, cy + yOff - 0.02, pz);
+        accent.position.set(px, cy + ({ crate: 0.5, stump: 0.55, rock: 0.6, garden: 0.39, shelf: 0.995, stand: 0.995 }[surface] ?? 0.9) + 0.003, pz); // logic26: on the support top (it hovered mid-air)
         accent.renderOrder = 1;
         group.add(accent);
+        obj.userData.accent = accent;
       }
 
       // Generous hit proxy — small shells were easy to miss with the crosshair
@@ -2883,6 +2936,7 @@ export class Mansion {
       hit.userData.interactable = true;
       hit.userData.objectId = def.id;
       hit.userData.target = obj;
+      obj.userData.hitProxy = hit;
       group.add(hit);
       this.interactives.push(hit);
     }
@@ -3306,7 +3360,7 @@ export class Mansion {
     if ((which === "ceiling" && room.id === "landing") || (which === "floor" && room.id === "attic_loft")) {
       return [ATTIC_STAIRWELL, CONVEYOR.shaft]; // logic11/14: + hidden conveyor shaft above the chandelier
     }
-    if (which === "ceiling" && room.id === "attic_loft") return [ROOF_LIFT.shaft, CONVEYOR.shaft]; // logic13 roof lift + logic14 conveyor top
+    if (which === "ceiling" && room.id === "attic_loft") return [ROOF_LIFT.shaft, CONVEYOR.shaft, { minX: 8.45, maxX: 11.3, minZ: -8.55, maxZ: -7.45 }]; // logic26: cutting for the Roof Slope Run (it dived INTO the roof deck past x 8.5) // logic13 roof lift + logic14 conveyor top
     if (which === "ceiling" && room.id === "foyer") return all;
     if (which === "floor" && room.id === "landing") return all;
     // logic3: every ground ceiling / first floor that overlaps a climb strip gets the same cut
@@ -4096,7 +4150,7 @@ export class Mansion {
     const bracketMat = this._mat(0x5d4037, 0.55, 0.2);
     for (let x = -5; x <= 5; x += 2.5) {
       const brace = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.18), bracketMat);
-      brace.position.set(x, deckY - 0.55, 12.4);
+      brace.position.set(x, deckY - 0.55, 13.15); // logic26: was z 12.4 — the braces hung across the Skyline lane under the balcony (drive-through)
       brace.rotation.x = 0.4;
       g.add(brace);
       const foot = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.7, 0.25), bracketMat);
