@@ -12,7 +12,7 @@
  *
  * Points are authored dense; tracks.js uses them RAW (no spline) so grade is exactly as written.
  */
-import { LAB_PATH_DEFS } from "./labGarage.js?v=logic25";
+import { LAB_PATH_DEFS } from "./labGarage.js?v=logic26";
 const H = 3.2;          // wall-top height on the ground story (ceiling slab bottom ≈ 4.0)
 const MAX_G = 0.28;     // peak grade (eased ends) — hard cap 0.30
 const R = (v) => Math.round(v * 1000) / 1000;
@@ -358,6 +358,12 @@ function EXPANSION_PATHS() {
     const s0 = 3.0, run = 8.6;
     add("sky_roof_edge", "loftramp", poly([{ line: [s0, -8.0, s0 + run, -8.0] }],
       (s) => L.topY - ROOF_SLOPE * Math.max(0, s - 0.6) * 0.98, 0.4), "Roof Slope Run");
+    // logic26 (Ben "you drive right through it … create … supplemental ramps"): the roof peak stands on the roof deck
+    // (filled_top 11.979) as a solid now — two ramps link the Roof Ring down to that deck, west and south (27%, flush feet).
+    const DECK = 11.979 - 0.012, ROOF_G = 0.27;
+    const roofRamp = (s) => s < 0.6 ? L.topY : Math.max(DECK, L.topY - ROOF_G * (s - 0.6));
+    add("sky_roof_west", "loftramp", poly([{ line: [-3.0, -8.0, -9.4, -8.0] }], roofRamp, 0.4), "Roof West Ramp");
+    add("sky_roof_south", "loftramp", poly([{ line: [-1.8, -5.0, -1.8, 1.4] }], roofRamp, 0.4), "Roof South Ramp");
     // logic16 GRAND DESCENT: carries straight on from the Roof Slope Run's end (no barricade
     // now), flies east over the roof and clears the east shell's cornice, corkscrews 2¾ turns round
     // the Descent Turret, then sweeps down the east yard and round onto the front lawn.
@@ -539,7 +545,7 @@ export const LOFT_PORTALS_LEGACY = [
 
 /** logic10: every place a Skyline path pierces a room wall gets a framed opening (+ neon trim).
  *  mansion._driveOpeningsForWall appends these (skipping any already covered by a door/arch). */
-import { ROOMS as _ROOMS } from "./rooms.js?v=logic25";
+import { ROOMS as _ROOMS } from "./rooms.js?v=logic26";
 function autoPortals() {
   const out = [];
   const near = (q) => LOFT_PORTALS_LEGACY.some((L) => Math.hypot(L.x - q.x, L.z - q.z) < 0.8 && Math.abs(L.y0 - q.y0) < 1.5)
