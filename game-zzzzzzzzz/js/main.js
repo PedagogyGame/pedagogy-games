@@ -1,14 +1,14 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic25";
-import { Player } from "./player.js?v=logic25";
-import { Mansion } from "./mansion.js?v=logic25";
-import { InspectMode } from "./inspect.js?v=logic25";
-import { SliceSystem } from "./slice.js?v=logic25";
-import { DriveMode } from "./drive/driveMode.js?v=logic25";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic25";
-import { OBJECTS } from "./data/objects.js?v=logic25";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic25";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic25";
+import { batchStatic } from "./batch.js?v=logic26";
+import { Player } from "./player.js?v=logic26";
+import { Mansion } from "./mansion.js?v=logic26";
+import { InspectMode } from "./inspect.js?v=logic26";
+import { SliceSystem } from "./slice.js?v=logic26";
+import { DriveMode } from "./drive/driveMode.js?v=logic26";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic26";
+import { OBJECTS } from "./data/objects.js?v=logic26";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic26";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic26";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -20,6 +20,8 @@ const roomFloorEl = document.getElementById("room-floor");
 const roomNameEl = document.getElementById("room-name");
 const crosshair = document.getElementById("crosshair");
 const inspectPanel = document.getElementById("inspect-panel");
+const inspectExitBar = document.getElementById("inspect-exit-bar"); // logic26: always-visible way out of inspect
+const exitTip = document.getElementById("exit-tip");
 const layerTerm = document.getElementById("layer-term");
 const layerDef = document.getElementById("layer-def");
 const layerMeta = document.getElementById("layer-meta");
@@ -579,14 +581,41 @@ player.controls.addEventListener("unlock", () => {
 canvas.addEventListener("click", () => {
   if (mode === "title" || boot.failed) return;
   if (playMode === "drive") return;
+  if (performance.now() - (exitInspect._at || 0) < 350) return; // logic26: the click that closed inspect never re-opens it
   if (mode === "roam" && !player.locked) player.lock();
   else if (mode === "roam" && hoverTarget) enterInspect(hoverTarget);
 });
 
+// logic26 (Ben): obvious exits from inspect — ✕ / ← Back buttons, Esc, right-click, click/tap off the object.
+for (const id of ["btn-exit-inspect", "btn-back-explore"]) {
+  document.getElementById(id)?.addEventListener("click", (e) => { e.stopPropagation(); if (mode === "inspect") exitInspect(true); });
+}
+canvas.addEventListener("contextmenu", (e) => { if (mode === "inspect") { e.preventDefault(); exitInspect(false); } });
+{
+  let down = null;
+  const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2();
+  canvas.addEventListener("pointerdown", (e) => { down = mode === "inspect" && e.button === 0 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+  canvas.addEventListener("pointerup", (e) => {
+    if (!down || mode !== "inspect" || !inspect || !inspect.targetObject) { down = null; return; }
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), quick = performance.now() - down.t < 450;
+    down = null;
+    if (moved > 6 || !quick) return; // a drag is an orbit, not a click-off
+    const r = canvas.getBoundingClientRect();
+    _ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    _ray.setFromCamera(_ndc, camera);
+    if (_ray.intersectObject(inspect.targetObject, true).length) return; // clicked the object itself
+    exitInspect(e.pointerType === "mouse");
+  });
+}
+window.__MOTU_EXIT_INSPECT__ = () => exitInspect(false);
+window.__MOTU_INSPECT__ = (id) => { const t = mansion && mansion.getInteractives().find((o) => o.userData.objectId === id && o.userData.layers); if (t) enterInspect(t); return mode; }; // logic26 test hook
+window.__MOTU_MODE__ = () => mode;
+window.__MOTU_CAM__ = () => camera.position.toArray().map((v) => +v.toFixed(3));
+
 window.addEventListener("keydown", (e) => {
   if (boot.failed || !mansion) return;
-  if (e.code === "Escape") {
-    if (mode === "inspect") exitInspect();
+  if (e.code === "Escape" || e.key === "Escape" || e.key === "Esc") { // logic26: key too (some keyboards / older Safari report no code)
+    if (mode === "inspect") { e.preventDefault(); exitInspect(false); return; } // Safari: no pointer-lock from Esc; next click re-locks
   }
   if (e.code === "Digit1" && mode !== "inspect" && mode !== "title") {
     setPlayMode("explore");
@@ -668,6 +697,8 @@ function enterInspect(target) {
   slice.attach(obj, scene);
   inspectPanel.classList.remove("hidden");
   requestAnimationFrame(() => inspectPanel.classList.add("open"));
+  inspectExitBar?.classList.remove("hidden");
+  showExitTipOnce();
   promptEl.classList.add("hidden");
   crosshair.classList.remove("hot");
   objectTitle.textContent = def.name;
@@ -682,13 +713,27 @@ function enterInspect(target) {
   syncSliceUI();
 }
 
+function showExitTipOnce() { // logic26: subtle first-time tooltip (once per browser)
+  if (!exitTip) return;
+  let seen = false; try { seen = localStorage.getItem("motu_exitTipSeen") === "1"; } catch (_) {}
+  if (seen) return;
+  try { localStorage.setItem("motu_exitTipSeen", "1"); } catch (_) {}
+  exitTip.classList.remove("hidden");
+  void exitTip.offsetWidth; exitTip.classList.add("show"); // reflow first so the fade still runs (rAF can be paused in background tabs)
+  setTimeout(() => { exitTip.classList.remove("show"); setTimeout(() => exitTip.classList.add("hidden"), 450); }, window.__MOTU_TIPMS__ || 5200);
+}
+
 function exitInspect(relock = true) {
-  if (!slice || !inspect) return;
+  if (!slice || !inspect || mode !== "inspect") return;
+  exitInspect._at = performance.now();
   slice.detach(scene);
   inspect.exit(scene);
   inspectPanel.classList.remove("open");
   inspectPanel.classList.add("hidden");
+  inspectExitBar?.classList.add("hidden");
+  exitTip?.classList.remove("show");
   promptEl.classList.remove("hidden");
+  if (!relock) promptEl.textContent = "Click to look around · Walk to a curiosity";
   if (playMode === "explore") {
     mode = "roam";
     player.enabled = true;

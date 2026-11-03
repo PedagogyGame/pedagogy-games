@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic25";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic25";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic26";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic26";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic25";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic25";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic25";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic25";
+import { ROOMS } from "../data/rooms.js?v=logic26";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic26";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic26";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic26";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -179,6 +179,8 @@ export class DriveWorld {
     }
     for (const r of rects) {
       const f = { minX: Math.max(r.sl.min.x, r.ix0 * C), maxX: Math.min(r.sl.max.x, (r.ix1 + 1) * C), minZ: Math.max(r.sl.min.z, r.iz0 * C), maxZ: Math.min(r.sl.max.z, (r.iz1 + 1) * C), y: r.y, roomId: "filled_top", holes: [] };
+      // logic26: close the hairline seams between merged deck rects (a car stopped exactly on one fell to the storey below)
+      f.minX -= 0.025; f.maxX += 0.025; f.minZ -= 0.025; f.maxZ += 0.025;
       this.floors.push(f); this.filledTops.push(f);
     }
   }
@@ -265,6 +267,14 @@ export class DriveWorld {
       if (x < f.minX || x > f.maxX || z < f.minZ || z > f.maxZ) continue;
       if (this._inHole(f, x, z)) continue;
       out.push({ y: f.y, kind: "floor", roomId: f.roomId });
+    }
+    { // logic26 (Ben): ROOF PEAK — the roofline pyramid (apex 13.25 at (0,-8), half-side 15.556, 4.5 tall; faces 28.9%)
+      // fills the roof-deck hole round it: its faces are real floor now (it was drive-through into the attic).
+      const d = Math.max(Math.abs(x), Math.abs(z + 8));
+      if (d < 4.56 && !(x > -0.4 && x < 0.4 && z > -10.7 && z < -9.9)) out.push({ y: Math.max(11.979, 13.25 - d * (4.5 / 15.556)), kind: "floor", roomId: "roof_peak" });
+      // logic26: the deck cells are cut out under the new roof ramps; their feet left a hairline gap (car fell to the attic there)
+      if ((x > -10.3 && x < -4.4 && z > -9.05 && z < -6.95) || (x > -3.05 && x < -0.7 && z > -3.6 && z < 2.3)) out.push({ y: 11.979, kind: "floor", roomId: "roof_deck" });
+      if (x > 1.7 && x < 2.8 && z > 3.4 && z < 3.93) out.push({ y: 11.979, kind: "floor", roomId: "roof_deck" }); // logic26: open sliver in front of the roof hatch frame
     }
     const cell = this._grid && this._grid.get(Math.floor(x / 2) + "," + Math.floor(z / 2));
     if (cell) {
