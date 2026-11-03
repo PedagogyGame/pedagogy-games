@@ -12,7 +12,7 @@
  *
  * Points are authored dense; tracks.js uses them RAW (no spline) so grade is exactly as written.
  */
-import { LAB_PATH_DEFS } from "./labGarage.js?v=logic27";
+import { LAB_PATH_DEFS } from "./labGarage.js?v=logic28";
 const H = 3.2;          // wall-top height on the ground story (ceiling slab bottom ≈ 4.0)
 const MAX_G = 0.28;     // peak grade (eased ends) — hard cap 0.30
 const R = (v) => Math.round(v * 1000) / 1000;
@@ -202,6 +202,13 @@ function EXPANSION_PATHS() {
       { line: [U.x, lipZ, U.x, U.z1] },
     ], (s) => R(U.y0 + (U.y1 - U.y0) * Math.min(1, Math.max(0, s / Math.abs(U.z1 - lipZ)))), 0.3),
       "East Gutter", { width: U.width, keepWidth: true });
+    // logic28 (Ben 12:09 PM, 3rd ramp-foot report): the plunge used to land at z 0 nose-first into the shell wall end
+    // (z 0.2) with the trough jambs either side — no room to turn. Now it lands at z −1 and a flat 0.75 m-radius
+    // run-out arc swings east out onto the yard road at x ≈ 28.
+    add("gutter_out", "loftramp", poly([
+      { arc: { cx: U.x + 0.75, cz: U.z1, r: 0.75, a0: PI, a1: PI / 2 } },
+      { line: [U.x + 0.75, U.z1 + 0.75, 27.6, U.z1 + 0.75] }, // logic28 fix: ends flush where Grand Descent crosses (y 0.032); past 27.6 it lay 4 cm under that road
+    ], () => U.y1, 0.05, 0.12), "Gutter Run-out", { width: 1.0, keepWidth: true }); // logic28 fix: 1.0 m — a no-input car coming off the 2.4 m/s plunge swings ~0.4 m wide through the arc
   }
   // Mouse run 3: Roof Run — from the Carriage Climb top, on up the cavity to the attic floor
   {
@@ -261,6 +268,23 @@ function EXPANSION_PATHS() {
       { line: [C.hx + r - 0.55, C.hz + 0.55, C.pad.x, C.pad.z] },
     ], (s) => { const u = Math.max(0, Math.min(1, (s - C.hx) / HL)); return y0 + rise * (0.5 - 0.5 * Math.cos(PI * u)); }, 0.3, 0.2);
     add("sky_chandelier", "loft", pts, "Chandelier Spiral", { width: 0.8, lift: "bottom" });
+    { // logic28 (Ben 12:11 PM): exit off the spiral's last turn where it passes the Landing Ring level —
+      // peel off at the south point heading east, swing right (outward) and run south down to the ring at z 0.75.
+      const uS = 6 / 6.5; // last pass of the south point (arc length 6π·r of the 6.5π·r helix)
+      const yA = y0 + rise * (0.5 - 0.5 * Math.cos(PI * uS)), yB = F, rr = 0.6, xa = C.hx, za = C.hz - r;
+      const ePts = poly([
+        { line: [xa - 0.05, za, xa, za] },
+        { arc: { cx: xa, cz: za - rr, r: rr, a0: PI / 2, a1: 0 } },
+        { line: [xa + rr, za - rr, xa + rr, 0.75] },
+      ], () => 0, 0.2);
+      let L = 0; const acc = ePts.map((q, i) => (L += i ? Math.hypot(q.x - ePts[i - 1].x, q.z - ePts[i - 1].z) : 0));
+      // logic28 fix (NETWORK pop 5 cm): the shared span used to sit LEVEL while the helix under it keeps climbing (+2-3 cm by
+      // the peel point) → the car dropped off the helix onto the exit. Now the shared span rises WITH the helix grade
+      // (gH) until the lanes separate (S0), then the eased descent runs from there.
+      const gH = rise * PI * 0.5 * Math.sin(PI * uS) / HL, S0 = 0.55, yS = yA + gH * S0;
+      add("sky_chandelier_exit", "loftramp", ePts.map((q, i) => ({ ...q, y: R(acc[i] <= S0 ? yA + gH * acc[i] : yS + (yB - yS) * ((u) => 0.85 * u + 0.15 * (0.5 - 0.5 * Math.cos(PI * u)))((acc[i] - S0) / (L - S0))) })),
+        "Spiral Landing Exit", { width: 1.0 }); // 1.0 × ROAD_NARROW 0.8 = 0.8 m // level for 0.45 m while it shares the helix deck (flush peel-off), then 0.45 m over ≈ 1.95 m: max grade < 30% (logic28-sim checks)
+    }
     // logic14: the hidden lift became a PADDLE CONVEYOR (see CONVEYOR). The spiral now ends on a
     // boarding pad that a passing flap scoops; the car rides up and drives off WEST at the top
     // onto this brass road, which curves north over the attic ceiling and rises to the Roof Ring.
@@ -471,7 +495,7 @@ export const TIMBER = {
  *  Separate from Grand Descent (turret/corkscrew further east). Entered from the timber shaft top. */
 export const GUTTER = {
   x: 26.50,           // seated in the east-façade full-height slot (shell centre)
-  z0: -15.5, z1: 0.0, // north → mid-yard (shorter = steeper ~55%)
+  z0: -15.5, z1: -1.0, // logic28: foot pulled 1 m north (was z 0, 0.2 m short of the shell wall end — Ben's dead end) → run-out arc east
   y0: 8.45, y1: 0.02,  // attic → lawn
   width: 0.70,
   wallH: 0.14,        // soft trough walls — tall enough to nudge, short enough to wiggle over a bit
@@ -492,7 +516,7 @@ export const CONVEYOR = {
   id: "conveyor", conveyor: true,
   x: 2.24, zc: 3.8, Rp: 0.2,
   flapX0: 1.86, flapX1: 2.62, flapL: 0.64,    // visual flap: x 1.86..2.62, z 4.0..4.64
-  phys: { minX: 1.84, maxX: 2.665, minZ: 4.0, maxZ: 4.65 }, // = every car centre the cage allows
+  phys: { minX: 1.831, maxX: 2.745, minZ: 3.991, maxZ: 4.659 }, // = every car centre the cage allows (logic28: cage faces ∓ car radius 0.0689, was ∓0.0783 for the 1.0× car; maxX runs to the east cage face 2.745 because the attic/roof hop-off windows let a centre past 2.676 — the apron walk surface takes over exactly there, no gap/overlap, L11)
   yB: 7.5, yT: 12.95, deckY: 12.5, v: 0.5, n: 14,
   pad: { x: 2.62, z: 4.3 }, padY: 7.7, padR: 0.3,
   exit: { x: 1.86, z: 4.3 }, topPad: { x: 1.86, z: 4.3 }, topY: 12.5,
@@ -546,7 +570,7 @@ export const LOFT_PORTALS_LEGACY = [
 
 /** logic10: every place a Skyline path pierces a room wall gets a framed opening (+ neon trim).
  *  mansion._driveOpeningsForWall appends these (skipping any already covered by a door/arch). */
-import { ROOMS as _ROOMS } from "./rooms.js?v=logic27";
+import { ROOMS as _ROOMS } from "./rooms.js?v=logic28";
 function autoPortals() {
   const out = [];
   const near = (q) => LOFT_PORTALS_LEGACY.some((L) => Math.hypot(L.x - q.x, L.z - q.z) < 0.8 && Math.abs(L.y0 - q.y0) < 1.5)

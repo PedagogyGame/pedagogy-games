@@ -5,7 +5,7 @@ import * as THREE from "three";
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_K = 0.87; // logic16: car ~13% smaller (mesh, wheels, collider, camera rig all × CAR_K)
+export const CAR_K = 0.87 * 0.88; // logic28 (Ben 12:04 PM "12% smaller and yet 8% faster"): 0.7656 · logic16: car ~13% smaller (mesh, wheels, collider, camera rig all × CAR_K)
 export const CAR_SCALE = 0.190 * CAR_K; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
 /** logic8: free drive — the car has NO road grip assist / magnet of any kind. */
@@ -22,6 +22,12 @@ export const VISUAL_BANK_MAX = 0.020;       // ±1.15° normal floor/ramp/deck (
 export const VISUAL_BANK_MAX_CHUTE = 0.14;  // ±8° intentional chute barrel
 export const GRADE_PITCH_SCALE = 0.18;      // visual pitch from snap.grade (softer)
 export const GRADE_PITCH_MAX = 0.085;       // ±4.9° body pitch cap
+// logic28 steering pipeline (keys + mouse steer). Tap (≈50 ms) → ≈0.05 of lock; hold → full lock at rampT.
+export const YAW_MAX = 2.05 * 1.08; // rad/s (logic27 2.05): r = v/ω stays the logic27 turning circle at 1.08× speed
+export const FALL = { frac: 0.6, outdoorH: 4.2 }; // logic28 fall-damage rule
+export const STEER = { rampT: 0.32, ease: 1.25, buildRate: 9.0, returnRate: 12, reverseRate: 9, lockHigh: 1.0, vLockLo: 0.5, vLockHi: 1.75, yawDamp: 14, graceT: 0.15 };
+// logic28 fix: lockHigh 0.85→1.0 — the high-speed authority cut widened the super-turbo turning circle ~18% past logic27, so the car overran the chandelier-spiral foot onto the landing (L25/SPIRAL). Steadiness at speed comes from rampT/buildRate instead. Same pass: returnRate 7.5→12 / reverseRate 6→9 — with full authority at speed the slower self-centre let the wheel overshoot each correction (tour driver ran off the climb_b bend into the landing wall); quicker centring kills the overshoot without touching tap/hold response.
+if (globalThis.__STEER_OVR) Object.assign(STEER, globalThis.__STEER_OVR); // test hook
 export const STEER_LEAN_MAX = 0.028;        // ±1.6° steer lean (softened)
 
 /** Handling / look presets (base values; tiny-car precision). */
@@ -32,9 +38,9 @@ export const VEHICLE_PRESETS = {
     id: "car",
     label: "Car",
     blurb: "Balanced · joyful cruise",
-    maxSpeed: 1.38,
-    boostMax: 1.88,
-    accel: 5.9,
+    maxSpeed: 1.49, // logic28 ×1.08 (was 1.38)
+    boostMax: 2.03, // logic28 ×1.08 (was 1.88)
+    accel: 6.372, // logic28 ×1.08 (was 5.9)
     brake: 14.0,
     friction: 7.6,
     steerRate: 3.18,
@@ -45,9 +51,9 @@ export const VEHICLE_PRESETS = {
     id: "suv",
     label: "SUV",
     blurb: "Taller · calm cruise",
-    maxSpeed: 1.28,
-    boostMax: 1.78,
-    accel: 5.4,
+    maxSpeed: 1.382, // logic28 ×1.08 (was 1.28)
+    boostMax: 1.922, // logic28 ×1.08 (was 1.78)
+    accel: 5.832, // logic28 ×1.08 (was 5.4)
     brake: 13.5,
     friction: 8.0,
     steerRate: 3.02,
@@ -58,9 +64,9 @@ export const VEHICLE_PRESETS = {
     id: "jeep",
     label: "Jeep",
     blurb: "Chunky · grippy roam",
-    maxSpeed: 1.22,
-    boostMax: 1.72,
-    accel: 5.6,
+    maxSpeed: 1.318, // logic28 ×1.08 (was 1.22)
+    boostMax: 1.858, // logic28 ×1.08 (was 1.72)
+    accel: 6.048, // logic28 ×1.08 (was 5.6)
     brake: 15,
     friction: 8.6,
     steerRate: 3.12,
@@ -71,9 +77,9 @@ export const VEHICLE_PRESETS = {
     id: "convertible",
     label: "Convertible",
     blurb: "Open-top · nimble cruise",
-    maxSpeed: 1.48,
-    boostMax: 2.00,
-    accel: 6.5,
+    maxSpeed: 1.598, // logic28 ×1.08 (was 1.48)
+    boostMax: 2.16, // logic28 ×1.08 (was 2.00)
+    accel: 7.02, // logic28 ×1.08 (was 6.5)
     brake: 13.5,
     friction: 7.0,
     steerRate: 3.55,
@@ -96,16 +102,16 @@ export class RCCar {
     this.yaw = Math.PI;
     this.vy = 0;
     this.vehicleId = "car";
-    this.maxSpeed = 1.39;
-    this.boostMax = 1.90;
-    this.accel = 6.0;
+    this.maxSpeed = 1.501; // logic28 ×1.08 (was 1.39)
+    this.boostMax = 2.052; // logic28 ×1.08 (was 1.90)
+    this.accel = 6.48; // logic28 ×1.08 (was 6.0)
     this.brake = 15;
     this.friction = 7.1;
     this.steerRate = 3.26;
     this.wheelBase = 0.055;
     this.onTrack = true;
     this.airborne = false;
-    this.crashed = false;
+    this.crashed = false; this.crashReason = null; this._airApexY = null;
     this._unsupportedFrames = 0;
     this._fallStartY = 0;
     this._lastElevated = false;
@@ -482,10 +488,11 @@ export class RCCar {
     this.root.rotation.z = 0;
     this.vy = 0;
     this.speed = 0;
+    this._yawRate = 0; this._steerHold = 0; this._steerKeyDir = 0; this._steerGap = 0;
     this._steerInput = 0; // kill residual steer so re-enter/pure-W does not yaw-drift
     this._throttleSmooth = 0; // logic3: no residual throttle after re-enter / respawn (car crept + steer jerk)
     this.airborne = false;
-    this.crashed = false;
+    this.crashed = false; this.crashReason = null; this._airApexY = null;
     this._unsupportedFrames = 0;
     this._fallStartY = 0;
     this._lastElevated = false;
@@ -529,8 +536,28 @@ export class RCCar {
     let steer = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
     // logic20 MOUSE STEER: an analog wheel (−1..1, +left) when no steering key is held — keys always win
     if (!steer && typeof keys.steerAnalog === "number" && Number.isFinite(keys.steerAnalog)) steer = Math.max(-1, Math.min(1, keys.steerAnalog));
-    // Steering wheel eases toward the key (input smoothing only — no road alignment of any kind)
-    this._steerInput = THREE.MathUtils.lerp(this._steerInput, steer, Math.min(1, 2.55 * dt));
+    // logic28 (Ben 12:09 PM "turn less with single A/D pushes … sensitive, smooth, dynamic"): analog-style keyboard
+    // steering. A held key builds its own command along an ease-in curve (full lock after STEER.rampT); release
+    // self-centres fast; reversal is rate-limited (no snap); lock shrinks with speed. Mouse steer is already analog
+    // and feeds the same rate-limited pipeline.
+    const S = STEER, keyDir = (keys.left ? 1 : 0) - (keys.right ? 1 : 0);
+    // Feathering: a re-press of the SAME key within S.graceT of letting go carries on its build (rapid taps steer like a
+    // partial hold, as on a real wheel) — an isolated tap still only nudges; the other key always starts from zero.
+    if (keyDir !== 0) {
+      if (keyDir !== this._steerKeyDir || (this._steerGap || 0) > S.graceT) { this._steerKeyDir = keyDir; this._steerHold = 0; }
+      this._steerGap = 0;
+      this._steerHold = Math.min(S.rampT, (this._steerHold || 0) + dt);
+    } else { this._steerGap = (this._steerGap || 0) + dt; if (this._steerGap > S.graceT) { this._steerKeyDir = 0; this._steerHold = 0; } }
+    const absV0 = Math.abs(this.speed || 0);
+    const lock = 1 - (1 - S.lockHigh) * THREE.MathUtils.smoothstep(absV0, S.vLockLo, S.vLockHi);
+    let cmd = keyDir !== 0 ? keyDir * Math.pow(this._steerHold / S.rampT, S.ease) : steer; // steer = analog when no key
+    cmd *= lock;
+    const cur = this._steerInput, towardZero = Math.abs(cmd) < Math.abs(cur) && Math.sign(cmd || -cur) !== Math.sign(cur) || cmd === 0;
+    const rate = cmd === 0 ? S.returnRate : (Math.sign(cmd) !== Math.sign(cur) && cur !== 0 ? S.reverseRate : (towardZero ? S.returnRate : S.buildRate));
+    const dlt = cmd - cur, mx = rate * dt;
+    this._steerInput = cur + Math.max(-mx, Math.min(mx, dlt));
+    if (cmd === 0 && Math.abs(this._steerInput) < 0.004) this._steerInput = 0;
+    if (globalThis.__STEER_L27) this._steerInput = THREE.MathUtils.lerp(cur, steer, Math.min(1, 2.55 * dt)); // diagnostic: logic27 steering
 
     const boxes = env.boxesNear ? env.boxesNear(p.x, p.z, r + 0.3) : [];
     let onRoadNow = false;
@@ -561,7 +588,7 @@ export class RCCar {
             if (!b.rail) { hard = true; continue; }
             const R = b.rail, ax = R.x1 - R.x0, az = R.z1 - R.z0, L2 = ax * ax + az * az || 1e-9;
             const u = Math.max(0, Math.min(1, ((tx - R.x0) * ax + (tz - R.z0) * az) / L2));
-            const qx = tx - (R.x0 + ax * u), qz = tz - (R.z0 + az * u), ql = Math.hypot(qx, qz) || 1; nx += qx / ql; nz += qz / ql;
+            const qx = tx - (R.x0 + ax * u), qz = tz - (R.z0 + az * u), ql = Math.hypot(qx, qz) || 1; nx += qx / ql; nz += qz / ql; this._railTan = Math.atan2(ax, az);
           }
           const l = Math.hypot(nx, nz); return { hard, nx: l ? nx / l : 0, nz: l ? nz / l : 0, any: l > 0 }; };
         let mx = dx, mz = dz;
@@ -590,6 +617,7 @@ export class RCCar {
     // ── Airborne: gravity, no air steering, land on whatever is below ──────────────
     if (this.airborne) {
       const yPrev = p.y;
+      this._airApexY = Math.max(this._airApexY ?? p.y, p.y); // logic28 fall rule: drop measured from the arc apex
       this.vy -= GRAV_AIR * dt;
       this._airT = (this._airT || 0) + dt;
       this.speed *= 1 - Math.min(1, 0.15 * dt); // logic15: launch keeps its ramp speed
@@ -614,6 +642,11 @@ export class RCCar {
         this._landingDamp = Math.min(1, impact * 0.12);
         flags.landed = true;
         flags.surface = g.kind;
+        // logic28 (Ben 12:12 PM) FALL DAMAGE: a free-fall drop (arc apex → landing) of more than 60 % of the room's
+        // floor-to-ceiling height at the landing point is a crash ("Too far a fall!"); outdoors uses one storey (4.2 m).
+        const drop = (this._airApexY ?? g.y) - g.y, roomH = (env.roomHeightAt && env.roomHeightAt(p.x, g.y, p.z)) || FALL.outdoorH;
+        this._lastDrop = drop; this._lastDropRoomH = roomH; this._airApexY = null;
+        if (!globalThis.__NO_FALL_DMG && drop > FALL.frac * roomH) { this.crashed = true; this.crashReason = "fall"; flags.fallDamage = drop; }
       }
       if (p.y < -6.5) flags.void = true;
       // logic13: nose follows the flight path (up off a kicker, tipping over at the apex)
@@ -700,10 +733,13 @@ export class RCCar {
     const lowBoost = 1.08 - 0.08 * THREE.MathUtils.smoothstep(absV, 0.08, 1.0);
     const highDamp = 1 - 0.42 * THREE.MathUtils.smoothstep(absV, 0.85, this.boostMax);
     const steerEff = this._steerInput * this.steerRate * Math.min(1.02, absV / 0.70 + 0.14) * lowBoost * highDamp;
-    const maxDyaw = 2.05 * dt;
+    const maxDyaw = YAW_MAX * dt; // logic28: yaw-rate cap ×1.08 with the speed → same turning circle in the house as logic27
     // Steering only turns the car when the wheels roll (no pivot on the spot)
     const rollF = Math.min(1, absV / 0.05);
-    this.yaw += THREE.MathUtils.clamp(steerEff * Math.sign(this.speed || 1) * dt * rollF, -maxDyaw, maxDyaw);
+    // logic28 light yaw damping: the yaw rate eases toward the steering demand (no twitch on taps / mouse jitter)
+    const wantRate = THREE.MathUtils.clamp(steerEff * Math.sign(this.speed || 1) * rollF, -YAW_MAX, YAW_MAX);
+    this._yawRate = THREE.MathUtils.lerp(this._yawRate || 0, wantRate, Math.min(1, STEER.yawDamp * dt));
+    this.yaw += THREE.MathUtils.clamp(this._yawRate * dt, -maxDyaw, maxDyaw);
     while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
     while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
 
@@ -712,10 +748,17 @@ export class RCCar {
 
     const fwdX = Math.sin(this.yaw), fwdZ = Math.cos(this.yaw);
     const x0 = p.x, z0 = p.z, y0 = p.y;
+    this._railTan = null;
     const frac = moveXZ(fwdX * this.speed * dt, fwdZ * this.speed * dt, p.y);
     if (flags.railSlide && !flags.hit && this.speed > 0 && !globalThis.__NOREDIR) { // logic16: the rail turns the car along itself
       let dyw = Math.atan2(p.x - x0, p.z - z0) - this.yaw; while (dyw > Math.PI) dyw -= 2 * Math.PI; while (dyw < -Math.PI) dyw += 2 * Math.PI;
-      this.yaw += THREE.MathUtils.clamp(dyw, -0.06, 0.06);
+      // logic28: the rail's turn-in is geometric — logic27's 0.06 rad/frame at 1.38 = 2.6 rad per metre of rub for the 0.87 car;
+      // per metre it scales with 1/car size (a 0.88× car aligns in 0.88× the distance), so at 1.49 that is 0.074 rad/frame.
+      // a car rubbing a rail ends parallel to the rail itself (its tangent, either way along it) — not to the nudged motion
+      if (this._railTan != null) { let d2 = this._railTan - this.yaw; while (d2 > Math.PI) d2 -= 2 * Math.PI; while (d2 < -Math.PI) d2 += 2 * Math.PI;
+        if (Math.abs(d2) > Math.PI / 2) d2 += d2 > 0 ? -Math.PI : Math.PI; if (Math.abs(d2) < 0.2) { this.yaw += d2; dyw = 0; } } // last ~11°: the body settles flat against the rail
+      const cap = Math.max(0.06, 0.06 * (Math.hypot(p.x - x0, p.z - z0) / (1.38 / 60)) / 0.88);
+      this.yaw += THREE.MathUtils.clamp(dyw, -cap, cap);
       this.speed *= 1 - Math.min(0.04, Math.abs(dyw) * 0.08); // light rub, never a stop
     }
     if (flags.hit) {
@@ -737,7 +780,7 @@ export class RCCar {
     const crestLaunch = gN && grade > 0.12 && absV > 0.6 && lipDrop > 0.012 && !this._noLaunch && !(this._noLaunchT > 0) && !(gF && gF.rug === "flap") && !(gR && gR.rug === "flap"); // logic14: a passing conveyor flap is not a ramp lip
     if (!gN || gN.y < y0 - STICK_DOWN_CAR || crestLaunch) {
       // Rolled off an edge / into a hole / off a ramp lip → real flight
-      this.airborne = true;
+      this.airborne = true; this._airApexY = p.y;
       const gT = crestLaunch ? grade : Math.max(lipGrade, this._prevGrade || 0); // the lip itself can read as a drop
       const sinA = gT / Math.sqrt(1 + gT * gT);
       const kick = ground && ground.rug === "kicker" ? KICKER_POP : 1;
