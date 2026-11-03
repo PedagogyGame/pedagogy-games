@@ -1,14 +1,15 @@
-import { loftSolids } from "./loftNet.js?v=logic25";
+import { loftSolids } from "./loftNet.js?v=logic26";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic26";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic25";
-import { TrackSystem } from "./tracks.js?v=logic25";
-import { DriveWorld, railHit } from "./world.js?v=logic25";
-import { EngineAudio } from "./engineAudio.js?v=logic25";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic25";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic25";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic25";
-import { TreeCritters } from "./treehouse.js?v=logic25";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic25";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic26";
+import { TrackSystem } from "./tracks.js?v=logic26";
+import { DriveWorld, railHit } from "./world.js?v=logic26";
+import { EngineAudio } from "./engineAudio.js?v=logic26";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic26";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic26";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic26";
+import { TreeCritters } from "./treehouse.js?v=logic26";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic26";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -153,8 +154,41 @@ export class DriveMode {
     if (mansion && mansion.getColliders) {
       // logic9: Skyline drop-side rails + barricades are hard solids too
       const ls = this.tracks._loftSolidsCache || (this.tracks._loftSolidsCache = loftSolids(this.tracks.segments));
-      this.setWallColliders(mansion.getColliders().concat(ls.solids));
+      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids))));
     }
+  }
+
+  /** logic26 (Ben "you drive right through it"): a full-house scan found ~300 visible props standing on drivable
+   *  floors with NO collider (table legs, urns, posts, pedestal bases, jambs, mullions, pots). Each gets a hard AABB —
+   *  except where a road runs (roads stay clear) and curios / glass / the car itself. */
+  _autoPropColliders(mansion, existing) {
+    const out = []; if (!mansion || !mansion.root || !this.world) return out;
+    const skip = new Set(); for (const o of (mansion.getInteractives ? mansion.getInteractives() : [])) o.traverse((m) => skip.add(m.id));
+    mansion.root.updateMatrixWorld(true);
+    const b = new THREE.Box3(), sz = new THREE.Vector3(), w = this.world;
+    mansion.root.traverse((o) => {
+      if (!o.isMesh || !o.visible || o.isInstancedMesh || skip.has(o.id)) return;
+      const m = o.material; if (!m || (m.transparent && m.opacity < 0.5) || m.visible === false) return;
+      b.setFromObject(o); b.getSize(sz);
+      if (sz.y < 0.14 || sz.x > 3 || sz.z > 3 || sz.x < 0.03 || sz.z < 0.03) return;
+      if (KICKERS.some((k) => { const kb = kickerBox(k), mx = kb.ax ? 1.5 : 0.3, mz = kb.ax ? 0.3 : 1.5; return Math.abs(b.min.y - k.base) < 1 && b.max.x > kb.minX - mx && b.min.x < kb.maxX + mx && b.max.z > kb.minZ - mz && b.min.z < kb.maxZ + mz; })) return; // kicker ramps + their run-up/landing lane stay as built
+      if ((mansion.furnitureTops || []).some((t) => b.max.x > t.minX - 0.1 && b.min.x < t.maxX + 0.1 && b.max.z > t.minZ - 0.1 && b.min.z < t.maxZ + 0.1 && b.max.y <= t.y + 0.05 && b.max.y >= t.y - 0.3)) return; // legs/parts of furniture the car climbs onto
+      if ((mansion.bookStairs || []).some((st) => Math.abs(b.min.y - st.floorY) < 0.3 && b.max.x > Math.min(st.x, st.cx) - 0.45 && b.min.x < Math.max(st.x, st.cx) + 0.45 && b.max.z > Math.min(st.z, st.cz) - 0.45 && b.min.z < Math.max(st.z, st.cz) + 0.45)) return; // book-stair climb paths stay as built
+      const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2;
+      const g = w.surfacesAt(cx, cz).filter((q) => Math.abs(q.y - b.min.y) < 0.06 && !q.block && q.rug !== "furniture");
+      if (!g.length) return;
+      if (w.surfacesAt(cx, cz).some((q) => q.y > b.max.y - 0.08 && q.y < b.max.y + 0.25)) return; // its top is drivable, or it holds one up (book stairs, steps, table/bench legs)
+      const top = Math.max(...g.map((q) => q.y));
+      const sh = new THREE.Box3(new THREE.Vector3(b.min.x + 0.02, top + 0.06, b.min.z + 0.02), new THREE.Vector3(b.max.x - 0.02, Math.min(b.max.y, top + 0.2), b.max.z - 0.02));
+      if (sh.min.y >= sh.max.y || existing.some((c) => c.intersectsBox(sh))) return;
+      for (let x = b.min.x - 0.15; x <= b.max.x + 0.15 + 1e-6; x += Math.max(0.05, (sz.x + 0.3) / 4))
+        for (let z = b.min.z - 0.15; z <= b.max.z + 0.15 + 1e-6; z += Math.max(0.05, (sz.z + 0.3) / 4))
+          if (w.surfacesAt(x, z).some((q) => q.kind === "road" && q.y > b.min.y - 0.3 && q.y < b.max.y)) return; // roads stay clear (props within 15 cm of a lane stay soft so lanes, book stairs and kickers keep their width)
+      const box = new THREE.Box3(new THREE.Vector3(b.min.x, top, b.min.z), b.max.clone()); box.driveKind = "pillar"; box.autoProp = true;
+      out.push(box);
+    });
+    this._autoPropCount = out.length;
+    return out;
   }
 
   setWallColliders(colliders) {
@@ -1069,7 +1103,17 @@ export class DriveMode {
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
     if (Math.abs(d) > Math.PI / 2) yaw += Math.PI;
-    this.car.setPose(road.x, road.y, road.z, yaw);
+    // logic26: the nearest road point can be a segment's open END (the roof ramps meet the deck there): the surface
+    // lookup misses on that exact edge and the car dropped through to the attic. Slide inward until it is solidly on it.
+    let rx = road.x, rz = road.z, ry = road.y;
+    const solid = (x, z) => w.surfacesAt(x, z).find((q) => Math.abs(q.y - road.y) < 0.12);
+    if (!solid(rx, rz) || !solid(rx + 0.25 * Math.sin(yaw), rz + 0.25 * Math.cos(yaw)) || !solid(rx - 0.25 * Math.sin(yaw), rz - 0.25 * Math.cos(yaw))) {
+      for (const t of [0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) {
+        const x = road.x + Math.sin(road.yaw) * t, z = road.z + Math.cos(road.yaw) * t, q = solid(x, z);
+        if (q && solid(x + 0.25 * Math.sin(road.yaw), z + 0.25 * Math.cos(road.yaw)) && solid(x - 0.25 * Math.sin(road.yaw), z - 0.25 * Math.cos(road.yaw))) { rx = x; rz = z; ry = q.y; break; }
+      }
+    }
+    this.car.setPose(rx, ry, rz, yaw);
     this.car.speed = 0;
     this._stuckTimer = 0;
     this._respawns = (this._respawns || 0) + 1;

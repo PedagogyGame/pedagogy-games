@@ -1,4 +1,4 @@
-import { LOFT_PATHS } from "./loftNet.js?v=logic25";
+import { LOFT_PATHS } from "./loftNet.js?v=logic26";
 /**
  * Drive tracks — OPEN CIRCUIT · logic3 polish.
  *
