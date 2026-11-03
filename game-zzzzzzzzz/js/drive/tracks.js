@@ -1,6 +1,6 @@
 import * as THREE from "three";
-import { buildLoftMeshes } from "./loftNet.js?v=logic26";
-import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET, PRIMARY_CIRCUIT } from "../data/tracks.js?v=logic26";
+import { buildLoftMeshes } from "./loftNet.js?v=logic27";
+import { TRACK_PATHS, CAR_SPAWN, RAMP_MOUNT_FEET, PRIMARY_CIRCUIT } from "../data/tracks.js?v=logic27";
 
 function makeCanvas(w, h) {
   if (typeof document !== "undefined" && document.createElement) {
