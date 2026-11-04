@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic31"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic32"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -26,7 +26,8 @@ export const GRADE_PITCH_MAX = 0.085;       // ±4.9° body pitch cap
 // logic28 steering pipeline (keys + mouse steer). Tap (≈50 ms) → ≈0.05 of lock; hold → full lock at rampT.
 export const YAW_MAX = 2.05 * 1.08; // rad/s (logic27 2.05): r = v/ω stays the logic27 turning circle at 1.08× speed
 export const FALL = { frac: 0.6, outdoorH: 4.2 }; // logic28 fall-damage rule
-export const STEER = { rampT: 0.32, ease: 1.25, buildRate: 9.0, returnRate: 12, reverseRate: 9, lockHigh: 1.0, vLockLo: 0.5, vLockHi: 1.75, yawDamp: 14, graceT: 0.15 };
+export const STEER = { rampT: 0.35, ease: 1.35, buildRate: 7.8, returnRate: 12, reverseRate: 9, lockHigh: 1.0, vLockLo: 0.5, vLockHi: 1.75, yawDamp: 14, graceT: 0.15 };
+// logic32 (Ben 9:22 AM "dial down the sensitivity for turning slightly, its a little too abrupt and sharp"): rampT 0.32→0.35, ease 1.25→1.35, buildRate 9.0→7.8 — 0.1 s tap 2.0°→1.5°, 0.3 s tap 23.0°→19.1°, 0.6 s hold 61.8°→58.9° at cruise 1.34; YAW_MAX untouched so full-lock hairpins keep their circle.
 // logic28 fix: lockHigh 0.85→1.0 — the high-speed authority cut widened the super-turbo turning circle ~18% past logic27, so the car overran the chandelier-spiral foot onto the landing (L25/SPIRAL). Steadiness at speed comes from rampT/buildRate instead. Same pass: returnRate 7.5→12 / reverseRate 6→9 — with full authority at speed the slower self-centre let the wheel overshoot each correction (tour driver ran off the climb_b bend into the landing wall); quicker centring kills the overshoot without touching tap/hold response.
 if (globalThis.__STEER_OVR) Object.assign(STEER, globalThis.__STEER_OVR); // test hook
 export const STEER_LEAN_MAX = 0.028;        // ±1.6° steer lean (softened)
