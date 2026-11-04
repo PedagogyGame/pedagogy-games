@@ -1,17 +1,17 @@
-import { loftSolids } from "./loftNet.js?v=logic28";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic28";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic28";
-import { ROOMS } from "../data/rooms.js?v=logic28";
+import { loftSolids } from "./loftNet.js?v=logic29";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic29";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic29";
+import { ROOMS } from "../data/rooms.js?v=logic29";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic28";
-import { TrackSystem } from "./tracks.js?v=logic28";
-import { DriveWorld, railHit, LIFT_APRONS } from "./world.js?v=logic28";
-import { EngineAudio } from "./engineAudio.js?v=logic28";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic28";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic28";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic28";
-import { TreeCritters } from "./treehouse.js?v=logic28";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic28";
+import { RCCar, VEHICLE_PRESETS, CAR_K } from "./car.js?v=logic29";
+import { TrackSystem } from "./tracks.js?v=logic29";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic29";
+import { EngineAudio } from "./engineAudio.js?v=logic29";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic29";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic29";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic29";
+import { TreeCritters } from "./treehouse.js?v=logic29";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic29";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -25,8 +25,21 @@ function lsSet(k, v) { try { if (globalThis.localStorage) globalThis.localStorag
 // furniture are closed with an invisible filler flush to the furniture back (nothing visible changes).
 export const SLOT_FILLERS28 = [
   [[3.9, 0, -0.325], [6.5, 1.5, -0.17]], // foyer/landing: 15.5 cm slot between the long sideboard (x 3.9–6.5) and the wall at z −0.17
+  // logic29 (car ×0.85, Ø 0.117 m): slots the smaller car newly fits
+  [[5.66, 4.2, -0.50], [5.80, 4.86, -0.40]],   // landing east lip: 13 cm between the stair-road rail end and the gallery wall → fell to the hall (L22)
+  [[8.52, 0, -40.52], [9.48, 0.8, -40.40]],    // terrace: 12 cm between the east pillar and the garden wall (L28 gap scan)
+  [[-9.48, 0, -40.52], [-8.52, 0.8, -40.40]],  // terrace: same, west pillar
+];
+// logic29: rail joints the Ø0.117 car squeezes through → a soft rail piece (same capsule rail as the deck edge, so road traffic slides along it)
+export const RAIL_FILLERS29 = [
+  { x0: 23.505, z0: -15.15, x1: 23.6365, z1: -15.0465, y: 8.462 }, // Timber Attic / Roof Run north lip: 13 cm joint between two edge rails → lawn drop (L24)
 ];
 export const CAM_TIGHT = { b: 0.94, u: 0.9, l: 0.2 }; // logic28 chase-rig tightening (× the CAR_K size scaling)
+// logic29 (Ben 6:36 PM "lower and closer behind the car, so the car takes up more of the screen … like the earlier versions"):
+// rig still × CAR_K, then b/u below logic27, look-at back up to a little above the car (l 1.0 = logic27), and the
+// at-rest "leisure" / high-track pull-outs mostly removed (they were what made the stopped view feel pulled back).
+export const CAM29 = Object.assign({ b: 0.95, u: 0.8, l: 1.0, leis: 0.35, high: 0.85 }, globalThis.__CAM29 || {});
+export const camRig = () => (globalThis.__CAM_L27 ? { b: 1, u: 1, l: 1, leis: 1, high: 1 } : globalThis.__CAM_L28 ? { ...CAM_TIGHT, leis: 1, high: 1 } : CAM29);
 export class DriveMode {
   constructor(scene, camera) {
     this.scene = scene;
@@ -65,7 +78,7 @@ export class DriveMode {
     this._camElevated = 0; // smoothed elevated chase blend
     this._edgeHintCd = 0;
     this._baseFov = camera.fov || 60;
-    this._driveFov = globalThis.__CAM_L27 ? 76 : 74; // logic28: 2° narrower — more scale, no fisheye · logic11: driver-eye scale — wide so the rooms loom full-size
+    this._driveFov = globalThis.__CAM_L28 ? 74 : 76; // logic29: back to the logic27 76° · // logic28: 2° narrower — more scale, no fisheye · logic11: driver-eye scale — wide so the rooms loom full-size
     this._camMode = "chase"; // "chase" | "bumper" (C key)
     void 0; // calmer tour FOV (was arcade-wide 74; logic7 68→70)
     this._wallFov = 66; // tighter echo-y FOV in walls
@@ -165,7 +178,7 @@ export class DriveMode {
       // logic27: backyard dog + doghouse + hiding spots, ambient house mouse
       if (!this.yardLife) { this.yardLife = new YardLife(this.scene, this); this.yardLife.roomDefs = Object.values(ROOMS); }
       if (!this._roofDeck) this._roofDeck = buildRoofDeck(this.scene, this.world.filledTops, this.tracks.segments); // logic28 tiled roof deck + kerb
-      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; })));
+      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; }), RAIL_FILLERS29.map((R) => { const f = new THREE.Box3(new THREE.Vector3(Math.min(R.x0, R.x1) - 0.02, R.y - 0.01, Math.min(R.z0, R.z1) - 0.02), new THREE.Vector3(Math.max(R.x0, R.x1) + 0.02, R.y + 0.035, Math.max(R.z0, R.z1) + 0.02)); f.driveKind = "rail"; f.rail = { x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, y0: R.y, y1: R.y, t: 0.02, h: 0.035 }; f.slotFiller = true; return f; })));
     }
   }
 
@@ -848,11 +861,12 @@ export class DriveMode {
     // logic11 DRIVER-EYE SCALE: the camera rides just above/behind the 3 cm car (≈ a toy driver's
     // eye), not at human standing height — furniture and rooms loom full-size.
     const bumper = this._camMode === "bumper";
-    let back = bumper ? -0.045 : (inWall ? 0.10 : 0.125 + leisure * 0.03 + elev * 0.01) + Math.min(0.05, spd * 0.02) + hi * 0.12;
-    let up = bumper ? 0.024 : (inWall ? 0.042 : 0.046 + leisure * 0.012 + elev * 0.008) + Math.min(0.012, spd * 0.004) + hi * 0.17;
+    const RIG = camRig();
+    let back = bumper ? -0.045 : (inWall ? 0.10 : 0.125 + leisure * 0.03 * RIG.leis + elev * 0.01) + Math.min(0.05, spd * 0.02) + hi * 0.12 * RIG.high;
+    let up = bumper ? 0.024 : (inWall ? 0.042 : 0.046 + leisure * 0.012 * RIG.leis + elev * 0.008) + Math.min(0.012, spd * 0.004) + hi * 0.17 * RIG.high;
     // logic28 (Ben 12:05 PM "slightly tighter … the whole house feel a little larger … more grand"): on top of the
     // size scaling the rig sits 13% closer, 12% lower and looks 20% lower — along the floor, up at the furniture.
-    const T28 = globalThis.__CAM_L27 ? { b: 1, u: 1, l: 1 } : CAM_TIGHT;
+    const T28 = RIG;
     back *= bumper ? 1 : T28.b; up *= bumper ? 1 : T28.u;
     this._camBack = back * CAR_K; // logic16: rig scales with the car → same framing
     this._camUp = up * CAR_K;
@@ -968,7 +982,7 @@ export class DriveMode {
   }
 
   _camClearOfSolids(pp, camX, camY, camZ) {
-    const minUp = 0.1 * (CAR_K / 0.87) * (globalThis.__CAM_L27 ? 1 : CAM_TIGHT.u); // camera always above the car roof line (logic28: scales with the car + tight rig)
+    const minUp = 0.1 * (CAR_K / 0.87) * camRig().u; // camera always above the car roof line (logic28: scales with the car + tight rig)
     camY = Math.max(camY, pp.y + minUp);
     const ax = pp.x, ay = pp.y + 0.07, az = pp.z; // aim point = car body centre
     let t = this._segSolidHit(ax, ay, az, camX, camY, camZ);
@@ -1414,8 +1428,24 @@ export class DriveMode {
   _tickConveyor(dt) {
     const w = this.world;
     if (!w || !w.conveyor) return null;
-    w.conveyor.t += dt;
     const car = this.car, p = car.position, K = CONVEYOR;
+    // logic29 (Ben 7:24 PM): the belt PAUSES with the rider's flap flush at every level it passes; drive off any open side.
+    { const i0 = this._onFlap ?? -1, f0 = i0 >= 0 ? w.flapAt(i0) : null;
+      if (!f0 || !f0.carrying) { this._liftHold = null; if (i0 < 0) this._liftStopDone = null; }
+      let H = this._liftHold;
+      if (!H && f0 && f0.carrying) for (const S of LIFT_STOPS) {
+        if (this._liftStopDone === S.y || f0.y > S.y + 1e-4 || f0.y + K.v * dt < S.y) continue;
+        w.conveyor.t += (S.y - f0.y) / K.v; this._liftStopDone = S.y; // land the flap exactly on the floor line
+        H = this._liftHold = { S, T: LIFT_STOP_HOLD, hintT: 0, hint: `${S.name} — ${S.west ? "← Drive off  ·  " : ""}Drive off → (reverse)` };
+        break;
+      }
+      // W held since boarding = "ride on to the top" (logic14 behaviour kept): the attic west gate needs a fresh W press
+      if (i0 >= 0 && !this._liftWasOn) this._liftWHeld = !!(this.keys && this.keys.forward);
+      if (this._liftWHeld && !(this.keys && this.keys.forward)) this._liftWHeld = false;
+      this._liftWasOn = i0 >= 0;
+      if (H && (H.hintT -= dt) <= 0) { H.hintT = 0.6; if (this.onHud) this.onHud({ mode: "toast", text: H.hint }); } // re-shown so a room banner can't hide it
+      if (H) { H.T -= dt; if (H.T <= 0) this._liftHold = null; }
+      if (!this._liftHold) w.conveyor.t += dt; }
     let S = this._convSlide;
     if (!S) {
       const i = this._onFlap ?? -1;
@@ -1509,12 +1539,19 @@ export class DriveMode {
     if (this._onFlap >= 0) { // logic16: belt guide — riders ease to the middle of the flaps (no grinding the cage at the lip)
       const P = CONVEYOR.phys, zc = (P.minZ + P.maxZ) / 2;
       pos.z += (zc - pos.z) * Math.min(1, 1.5 * dt);
+      if (this._liftHold || this._liftWHeld) pos.z = Math.min(P.maxZ - 0.004, Math.max(P.minZ + 0.004, pos.z)); // logic29: a rider pressing a closed gate can't slide off the flap's side edge
       // logic28 fix (L11 teleport): the east hop-off windows are GATES — a rider can only pass the cage face line
       // (2.745 − car r) while it is DRIVEN out (vx > 0.15 m/s) with its flap −3…+25 cm of (a reversing car needs ~0.3 s to reach the face; it steps down ≤ 15 cm onto the apron, as before) with an apron; between landings it stays inside the cage, so
       // the wall above a window never has to shove a half-out car back (was a 7.5 cm per-frame jump).
-      const xIn = 2.745 - 0.0689, fy = this.world.flapAt(this._onFlap).y;
+      const xIn = 2.745 - this._carRadius, fy = this.world.flapAt(this._onFlap).y;
       const vx = (pos.x - prevX) / Math.max(1e-4, dt), atLanding = LIFT_APRONS.some((A) => fy > A.y - 0.03 && fy < A.y + 0.25);
       if (pos.x > xIn && !(atLanding && vx > 0.15)) pos.x = Math.max(xIn, prevX <= xIn ? xIn : Math.min(pos.x, prevX)); // a deliberate drive-out at a landing passes; a drift is held
+      // logic29: attic WEST window — same gate mirrored (west apron only at the attic)
+      const xInW = 1.79 + this._carRadius, atW = LIFT_APRONS.some((A) => A.side === "w" && fy > A.y - 0.03 && fy < A.y + 0.25);
+      if (pos.x < xInW && !(atW && vx < -0.15 && !this._liftWHeld)) pos.x = Math.min(xInW, prevX >= xInW ? xInW : Math.max(pos.x, prevX));
+    }
+    if (this._onFlap < 0 && this._liftWHeld && this._liftWasOn && pos.y > 7.9 && pos.y < 9.2 && pos.z > 3.9 && pos.z < 4.78 && prevX >= 1.79 + this._carRadius - 1e-4 && pos.x < 1.79 + this._carRadius) {
+      pos.x = 1.79 + this._carRadius; pos.z = Math.min(pos.z, CONVEYOR.phys.maxZ - 0.004); // logic29: a W-held rider bumped off the flap at the attic stays in (ride-on behaviour)
     }
     if (this.tracks._conveyor && this.world && this.world.conveyor) this.tracks._conveyor.update(this.world.conveyor.t);
     this._frameWallHits = flags.hit ? 1 : 0;

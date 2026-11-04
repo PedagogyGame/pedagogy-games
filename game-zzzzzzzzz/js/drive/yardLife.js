@@ -13,7 +13,7 @@
  *         lab window road. 120 s without seeing the car → it gives up, walks home, lies down (cooldown).
  */
 import * as THREE from "three";
-import { LIFT_APRONS } from "./world.js?v=logic28";
+import { LIFT_APRONS } from "./world.js?v=logic29";
 
 export const DOG_T = {
   house: { x: 45.4, z: 15.2, yaw: -Math.PI / 2 }, // door faces west (toward the garage / yard)
@@ -655,10 +655,10 @@ export function buildRoofDeck(root, tops, segs) {
     const am = new THREE.MeshStandardMaterial({ color: 0x8a8f96, metalness: 0.6, roughness: 0.45 });
     const em = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
     for (const A of LIFT_APRONS) {
-      const ax0 = A.mx0 ?? A.x0, w = A.x1 - ax0, d = A.z1 - A.z0;
+      const ax0 = A.mx0 ?? A.x0, w = A.x1 - ax0, d = A.z1 - A.z0, W = A.side === "w";
 // logic28 fix: plate starts 3 mm INSIDE the cage wall (2.745–2.79) so its end face is buried, not coplanar with the wall face (zfight), and nothing enters the shaft camera column (L12)
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w - 0.003, 0.02, d), am); m.position.set((ax0 + A.x1) / 2 + 0.0015, A.y - 0.008, (A.z0 + A.z1) / 2); m.name = A.id; root.add(m);
-      const e = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, d), em); e.position.set(ax0 + 0.006, A.y + 0.003, m.position.z); root.add(e); // lit lip edge
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w - 0.003, 0.02, d), am); m.position.set((ax0 + A.x1) / 2 + (W ? -0.0015 : 0.0015), A.y - 0.008, (A.z0 + A.z1) / 2); m.name = A.id; root.add(m);
+      const e = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.004, d), em); e.position.set(W ? A.x1 - 0.006 : ax0 + 0.006, A.y + 0.003, m.position.z); root.add(e); // lit lip edge (shaft side)
     }
   }
   if (!deck.length) return { solids };
