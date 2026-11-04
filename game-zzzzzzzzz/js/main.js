@@ -1,14 +1,14 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic29";
-import { Player } from "./player.js?v=logic29";
-import { Mansion } from "./mansion.js?v=logic29";
-import { InspectMode } from "./inspect.js?v=logic29";
-import { SliceSystem } from "./slice.js?v=logic29";
-import { DriveMode } from "./drive/driveMode.js?v=logic29";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic29";
-import { OBJECTS } from "./data/objects.js?v=logic29";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic29";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic29";
+import { batchStatic } from "./batch.js?v=logic30";
+import { Player } from "./player.js?v=logic30";
+import { Mansion } from "./mansion.js?v=logic30";
+import { InspectMode } from "./inspect.js?v=logic30";
+import { SliceSystem } from "./slice.js?v=logic30";
+import { DriveMode } from "./drive/driveMode.js?v=logic30";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic30";
+import { OBJECTS } from "./data/objects.js?v=logic30";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic30";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic30";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -542,6 +542,10 @@ if (!boot.failed && mansion && drive && inspect && slice) {
   };
   // Drive HUD = speedometer + vehicle picker only (no lingering instruction label)
   drive.onHud = () => {};
+  { // logic30: lift stop hint ("Drive off"), shown for the whole stop
+    const el = document.getElementById("lift-hint");
+    drive.onLiftHint = (t) => { if (!el) return; el.textContent = t || ""; el.classList.toggle("show", !!t); };
+  }
   if (SPEEDTRACE_ON) {
     try { speedTrace = new SpeedTrace(drive); window.__MOTU_SPEEDTRACE__ = speedTrace; } catch (err) { console.warn("[speedtrace] init failed", err); }
   }
