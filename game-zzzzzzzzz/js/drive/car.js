@@ -1,11 +1,12 @@
 import * as THREE from "three";
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic29"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
  * Manual RC physics: free steer, surface support, gravity falls, crash.
  * Types: car | suv | jeep | convertible — distinct meshes + handling.
  */
-export const CAR_K = 0.87 * 0.88; // logic28 (Ben 12:04 PM "12% smaller and yet 8% faster"): 0.7656 · logic16: car ~13% smaller (mesh, wheels, collider, camera rig all × CAR_K)
+export const CAR_K = globalThis.__CAR_K || 0.87 * 0.88 * 0.85; // logic29 (Ben 6:36 PM "even smaller … wheels and body evenly"): ×0.85 → 0.6508 (≈0.75 of logic27 0.87, 0.65 of the logic16 car) · __CAR_K = measurement hook // logic28 (Ben 12:04 PM "12% smaller and yet 8% faster"): 0.7656 · logic16: car ~13% smaller (mesh, wheels, collider, camera rig all × CAR_K)
 export const CAR_SCALE = 0.190 * CAR_K; // ~0.42 m → ~0.079 m length — small mouse RC in mansion rooms
 
 /** logic8: free drive — the car has NO road grip assist / magnet of any kind. */
@@ -159,10 +160,9 @@ export class RCCar {
       this.bodyPivot.remove(c);
       if (c.geometry) c.geometry.dispose?.();
     }
-    for (const w of this.wheels) {
-      this.root.remove(w);
-    }
-    this.wheels = [];
+    for (const w of this.wheels) this.root.remove(w);
+    for (const w of this._wheelRoots || []) this.root.remove(w); // logic29: wheels sit in steer pivots
+    this.wheels = []; this._wheelRoots = []; this._steerWheels = [];
     this._headMats = [];
     this._glowMat = null;
 
@@ -450,11 +450,16 @@ export class RCCar {
   }
 
   _build(preset) {
-    const m = this._mats(preset);
-    if (preset.id === "suv") this._buildSuv(m);
-    else if (preset.id === "jeep") this._buildJeep(m);
-    else if (preset.id === "convertible") this._buildConvertible(m);
-    else this._buildCar(m);
+    if (globalThis.__CAR_L28_LOOK) { // logic28 block toy (before/after shots)
+      const m = this._mats(preset);
+      if (preset.id === "suv") this._buildSuv(m); else if (preset.id === "jeep") this._buildJeep(m); else if (preset.id === "convertible") this._buildConvertible(m); else this._buildCar(m);
+      return;
+    }
+    // logic29: refined 2100s bodies (carStyle.js)
+    const m = vehicleMats(preset);
+    this._headMats = [m.headMat, m.tailMat]; this._glowMat = m.underglow;
+    if (preset.id === "suv") buildSuv(this, m); else if (preset.id === "jeep") buildJeep(this, m); else if (preset.id === "convertible") buildConvertible(this, m); else buildCar(this, m);
+    this._wheelRadius = this._wheelRadiusModel * CAR_SCALE;
   }
 
   setLightsSubtle(subtle) {
@@ -666,7 +671,7 @@ export class RCCar {
 
     // Real slope under the wheels: front/rear axle samples along the heading
     const fwdX0 = Math.sin(this.yaw), fwdZ0 = Math.cos(this.yaw);
-    const AX = 0.045;
+    const AX = 0.045 * CAR_K / (0.87 * 0.88); // logic29: pitch/grade probe = half-wheelbase, scales with the car (0.045 at logic28)
     const gF = world.groundAt(p.x + fwdX0 * AX, p.z + fwdZ0 * AX, p.y + 0.03);
     const gR = world.groundAt(p.x - fwdX0 * AX, p.z - fwdZ0 * AX, p.y + 0.03);
     let grade = 0;
@@ -757,7 +762,7 @@ export class RCCar {
       // a car rubbing a rail ends parallel to the rail itself (its tangent, either way along it) — not to the nudged motion
       if (this._railTan != null) { let d2 = this._railTan - this.yaw; while (d2 > Math.PI) d2 -= 2 * Math.PI; while (d2 < -Math.PI) d2 += 2 * Math.PI;
         if (Math.abs(d2) > Math.PI / 2) d2 += d2 > 0 ? -Math.PI : Math.PI; if (Math.abs(d2) < 0.2) { this.yaw += d2; dyw = 0; } } // last ~11°: the body settles flat against the rail
-      const cap = Math.max(0.06, 0.06 * (Math.hypot(p.x - x0, p.z - z0) / (1.38 / 60)) / 0.88);
+      const cap = Math.max(0.06, 0.06 * (Math.hypot(p.x - x0, p.z - z0) / (1.38 / 60)) / (CAR_K / 0.87)); // logic29: 1/car size (was /0.88)
       this.yaw += THREE.MathUtils.clamp(dyw, -cap, cap);
       this.speed *= 1 - Math.min(0.04, Math.abs(dyw) * 0.08); // light rub, never a stop
     }
@@ -834,6 +839,7 @@ export class RCCar {
 
     const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
+    for (const g of this._steerWheels || []) g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, (this._steerInput || 0) * 0.42, Math.min(1, 14 * dt)); // logic29: front wheels steer
     this._updateBrakeLights(false, dt);
     this._idlePhase += dt;
     return flags;

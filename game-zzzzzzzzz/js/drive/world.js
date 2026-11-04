@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic28";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic28";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic29";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic29";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic28";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic28";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic28";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic28";
+import { ROOMS } from "../data/rooms.js?v=logic29";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic29";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic29";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic29";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -27,7 +27,7 @@ export const STEP_UP = 0.056; // logic9: rugs (+0.05) and floor frame lips (+0.0
 //         // largest lip the wheels roll over (ramp grade/substep ≈0.02)
 export const STICK_DOWN = 0.06;       // larger drops than this are real falls
 const SLAB_THICK = 0.22;              // floor slabs / ramp decks treated as this thick from below
-const CAR_TOP = 0.12 * 0.87 * 0.88; // logic28 car ×0.88; // logic16 CAR_K                 // car body band above ride height (collision)
+const CAR_TOP = 0.12 * 0.87 * 0.88 * 0.85; // logic29 car ×0.85 · logic28 car ×0.88; // logic16 CAR_K                 // car body band above ride height (collision)
 const EPS_HOLE = 0.0;
 
 /** logic16: car disc (r, band y0..y1) vs a deck-edge rail segment (capsule of radius t, height h above the deck). */
@@ -43,7 +43,16 @@ export function railHit(R, x, z, y0, y1, r) {
 export const LIFT_APRONS = [
   { id: "lift_apron_attic", x0: 2.745, x1: 2.84, z0: 3.96, z1: 4.73, y: 8.40 },
   { id: "lift_apron_roof", x0: 2.745, x1: 2.84, z0: 3.96, z1: 4.73, y: 11.979 },
+  // logic29 (Ben 7:24 PM "get off at the different levels"): attic WEST drive-off — bridge from the cage west face to the
+  // attic floor edge (shaft hole minX 1.72); x1 = flap phys minX 1.821 so flap → apron is gap-free and flush at the stop.
+  { id: "lift_apron_attic_w", x0: 1.722, x1: 1.821, z0: 3.96, z1: 4.73, y: 8.40, side: "w" },
 ];
+// logic29: the conveyor PAUSES at each level it passes (flap top flush with the floor) so the rider can drive off.
+export const LIFT_STOPS = [
+  { y: 8.40, name: "Attic", east: true, west: true },
+  { y: 11.979, name: "Roof deck", east: true, west: false },
+];
+export const LIFT_STOP_HOLD = 2.4;
 export class DriveWorld {
   constructor(mansion, tracks) {
     this.mansion = mansion;
