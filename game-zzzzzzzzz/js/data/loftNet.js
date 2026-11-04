@@ -12,7 +12,8 @@
  *
  * Points are authored dense; tracks.js uses them RAW (no spline) so grade is exactly as written.
  */
-import { LAB_PATH_DEFS } from "./labGarage.js?v=logic32";
+import { LAB_PATH_DEFS } from "./labGarage.js?v=logic33";
+import { TOWER_PATHS } from "./tower.js?v=logic33";
 const H = 3.2;          // wall-top height on the ground story (ceiling slab bottom ≈ 4.0)
 const MAX_G = 0.28;     // peak grade (eased ends) — hard cap 0.30
 const R = (v) => Math.round(v * 1000) / 1000;
@@ -549,6 +550,7 @@ export const LOFT_PATHS = [
   { id: "garden_return", kind: "floor", width: 1.10, points: gardenReturn, label: "Garden Return" },
   ...EXPANSION_PATHS(),
   ...LAB_PATH_DEFS, // logic19 backyard lab garage circuit + window road
+  ...(globalThis.__L33_NO_TOWER ? [] : TOWER_PATHS), // logic33 Sky Needle network
 ].map((p) => ({ ...p, loft: true, raw: true, authoredGrade: true, closed: false }));
 
 /** Intentional dead ends (Ben: 2–4, readable as features). */
@@ -570,7 +572,7 @@ export const LOFT_PORTALS_LEGACY = [
 
 /** logic10: every place a Skyline path pierces a room wall gets a framed opening (+ neon trim).
  *  mansion._driveOpeningsForWall appends these (skipping any already covered by a door/arch). */
-import { ROOMS as _ROOMS } from "./rooms.js?v=logic32";
+import { ROOMS as _ROOMS } from "./rooms.js?v=logic33";
 function autoPortals() {
   const out = [];
   const near = (q) => LOFT_PORTALS_LEGACY.some((L) => Math.hypot(L.x - q.x, L.z - q.z) < 0.8 && Math.abs(L.y0 - q.y0) < 1.5)

@@ -1,10 +1,11 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic32";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic32";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic33";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic33";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic32";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic32";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic32";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic32";
+import { ROOMS } from "../data/rooms.js?v=logic33";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic33";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic33";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic33";
+import { towerDeckAt } from "../data/tower.js?v=logic33";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -293,6 +294,7 @@ export class DriveWorld {
       if ((x > -10.3 && x < -4.4 && z > -9.05 && z < -6.95) || (x > -3.05 && x < -0.7 && z > -3.6 && z < 2.3)) out.push({ y: 11.979, kind: "floor", roomId: "roof_deck" });
       if (x > 1.7 && x < 2.8 && z > 3.4 && z < 3.93) out.push({ y: 11.979, kind: "floor", roomId: "roof_deck" }); // logic26: open sliver in front of the roof hatch frame
     }
+    if (x > 43 && x < 62 && z < -4 && z > -24 && !globalThis.__L33_NO_TOWER) for (const t of towerDeckAt(x, z)) out.push(t); // logic33 Sky Needle deck / gantry landing / catch net
     const cell = this._grid && this._grid.get(Math.floor(x / 2) + "," + Math.floor(z / 2));
     if (cell) {
       const nf = out.length;

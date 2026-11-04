@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CONVEYOR, conveyorFrame, ROOF_LIFT } from "../data/loftNet.js?v=logic32";
+import { CONVEYOR, conveyorFrame, ROOF_LIFT } from "../data/loftNet.js?v=logic33";
 
 /**
  * logic14 PADDLE CONVEYOR visuals (Drive-only secret layer). GPU-lite: 2 pulley meshes, one

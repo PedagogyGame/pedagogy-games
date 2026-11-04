@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TREEHOUSE, GRAND_DESCENT } from "../data/loftNet.js?v=logic32";
+import { TREEHOUSE, GRAND_DESCENT } from "../data/loftNet.js?v=logic33";
 
 /**
  * logic16 YARD SCENERY for the Grand Descent + Treehouse Sky Road. GPU-lite: every static piece

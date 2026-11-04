@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic32";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic32";
-import { buildConveyor } from "./conveyor.js?v=logic32";
-import { buildYard } from "./treehouse.js?v=logic32";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic32";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic32";
-import { ROOMS } from "../data/rooms.js?v=logic32";
-import { LAB, inLab } from "../data/labGarage.js?v=logic32";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic33";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic33";
+import { buildConveyor } from "./conveyor.js?v=logic33";
+import { buildYard } from "./treehouse.js?v=logic33";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic33";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic33";
+import { ROOMS } from "../data/rooms.js?v=logic33";
+import { LAB, inLab } from "../data/labGarage.js?v=logic33";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -490,7 +490,7 @@ export function buildLoftMeshes(tracks, jobs) {
   }); // logic10: overlapping branch decks never coplanar
   for (const job of jobs) {
     const pts = job.pts, hw = job.width / 2;
-    const thick = job.kind === "floor" ? 0.055 : 0.12;
+    const thick = job.kind === "floor" ? 0.055 : job.path && job.path.tower ? 0.127 : 0.12; // logic33: tower decks a hair thicker — the switchback's underside met its own deck top at one fold (z-fight @59.4,6.5,-33.1)
     const L = [], Rr = [], Lo = [], Ro = [];
     for (let i = 0; i < pts.length; i++) {
       const nP = pts.length, closed = Math.hypot(pts[0].x - pts[nP - 1].x, pts[0].z - pts[nP - 1].z) < 1e-3;
@@ -596,8 +596,12 @@ export function buildLoftMeshes(tracks, jobs) {
     if (acc < 1.6) continue;
     acc = 0;
     if (/^lab_/.test(s.pathId) && inLab(s.b.x, s.b.z, 0.3)) continue; // logic19: casework holds the lab lanes up
+    // logic33 Sky Needle: its decks hang off the tower (catwalk brackets, the core) — no forest of trestle rods; the
+    // road's out-run / sky bridge gets one slender pylon every ~5 m, the rest only the under-deck cross beam.
+    let towerRods = true;
+    if (/^tower_/.test(s.pathId)) { towerRods = s.pathId === "tower_road" && ((tracks._towerPyl = (tracks._towerPyl || 0) + 1) % 3 === 0); }
     const sup = supportAt(s.b.x, s.b.y, s.b.z);
-    for (const sd of [-1, 1]) {
+    if (towerRods) for (const sd of [-1, 1]) {
       const nx = s.dir.z * sd, nz = -s.dir.x * sd, o = s.width / 2 + 0.035;
       const x = s.b.x + nx * o, z = s.b.z + nz * o, y0 = s.b.y - 0.1;
       if (s.pathId === "sky_chandelier" && Math.hypot(x - 2.2, z - 3.75) < 0.95) continue; // logic14: no inner rods through the upper helix turns / conveyor

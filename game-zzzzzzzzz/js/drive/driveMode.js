@@ -1,17 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic32";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic32";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic32";
-import { ROOMS } from "../data/rooms.js?v=logic32";
+import { loftSolids } from "./loftNet.js?v=logic33";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic33";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic33";
+import { ROOMS } from "../data/rooms.js?v=logic33";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic32";
-import { TrackSystem } from "./tracks.js?v=logic32";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic32";
-import { EngineAudio } from "./engineAudio.js?v=logic32";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic32";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic32";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic32";
-import { TreeCritters } from "./treehouse.js?v=logic32";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic32";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic33";
+import { TrackSystem } from "./tracks.js?v=logic33";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic33";
+import { EngineAudio } from "./engineAudio.js?v=logic33";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic33";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic33";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic33";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic33";
+import { TreeCritters } from "./treehouse.js?v=logic33";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic33";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -23,6 +24,8 @@ function lsSet(k, v) { try { if (globalThis.localStorage) globalThis.localStorag
 
 // logic28 gap scan: slots the 12%-smaller car newly fits into (old Ø 0.157 m, new Ø 0.138 m) — dead-end slivers behind
 // furniture are closed with an invisible filler flush to the furniture back (nothing visible changes).
+// logic33: a part hanging lower than this over the floor is filled down to it (car body 7.8 cm + chase-camera room)
+export const LOW_CLEAR33 = 0.16;
 export const SLOT_FILLERS28 = [
   [[3.9, 0, -0.325], [6.5, 1.5, -0.17]], // foyer/landing: 15.5 cm slot between the long sideboard (x 3.9–6.5) and the wall at z −0.17
   // logic29 (car ×0.85, Ø 0.117 m): slots the smaller car newly fits
@@ -179,7 +182,7 @@ export class DriveMode {
       // logic27: backyard dog + doghouse + hiding spots, ambient house mouse
       if (!this.yardLife) { this.yardLife = new YardLife(this.scene, this); this.yardLife.roomDefs = Object.values(ROOMS); }
       if (!this._roofDeck) this._roofDeck = buildRoofDeck(this.scene, this.world.filledTops, this.tracks.segments); // logic28 tiled roof deck + kerb
-      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().flatMap((b) => (b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps : [b])).concat(ls.solids)) /* logic32: props under an open stair are judged against its treads, not the old underside block */, this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; }), RAIL_FILLERS29.map((R) => { const f = new THREE.Box3(new THREE.Vector3(Math.min(R.x0, R.x1) - 0.02, R.y - 0.01, Math.min(R.z0, R.z1) - 0.02), new THREE.Vector3(Math.max(R.x0, R.x1) + 0.02, R.y + 0.035, Math.max(R.z0, R.z1) + 0.02)); f.driveKind = "rail"; f.rail = { x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, y0: R.y, y1: R.y, t: 0.02, h: 0.035 }; f.slotFiller = true; return f; })));
+      this._explodeFurniture(mansion); this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().flatMap((b) => (b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps : b.parts && !globalThis.__L32_FURN ? b.parts : [b])).concat(ls.solids)) /* logic32: props under an open stair are judged against its treads, not the old underside block */, this.yardLife.getColliders(), this._roofDeck.solids, globalThis.__L33_NO_TOWER ? [] : towerSolids().map((d) => { const f = new THREE.Box3(new THREE.Vector3(...d.min), new THREE.Vector3(...d.max)); f.driveKind = d.kind; if (d.rail) f.rail = d.rail; f.tower = true; return f; }), SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; }), RAIL_FILLERS29.map((R) => { const f = new THREE.Box3(new THREE.Vector3(Math.min(R.x0, R.x1) - 0.02, R.y - 0.01, Math.min(R.z0, R.z1) - 0.02), new THREE.Vector3(Math.max(R.x0, R.x1) + 0.02, R.y + 0.035, Math.max(R.z0, R.z1) + 0.02)); f.driveKind = "rail"; f.rail = { x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, y0: R.y, y1: R.y, t: 0.02, h: 0.035 }; f.slotFiller = true; return f; })));
     }
   }
 
@@ -216,6 +219,54 @@ export class DriveMode {
     return out;
   }
 
+  /** logic33 (Ben 11:40 AM "open up the space under the tables and other furniture … so the car can drive all the way
+   *  underneath"): every furniture AABB (a solid block down to the floor) is replaced IN DRIVE by one box per visible mesh
+   *  inside it — legs/posts become thin boxes, tops become slabs at their real height, skirts/solid fronts stay where
+   *  they are drawn. Explore keeps the old boxes. Pieces whose parts reach the floor everywhere end up tight-fitted.
+   *  Drivable tops keep working (the top part's upper face is the same surface); their world "block" flag (solid down
+   *  to the floor) is cleared only where the top really has open space under it. */
+  _explodeFurniture(mansion) {
+    if (this._furnExploded || globalThis.__L32_FURN) return; this._furnExploded = true;
+    const cols = mansion.getColliders().filter((c) => c.driveKind === "furniture" && !c.stairSteps);
+    const skip = new Set(); for (const o of (mansion.getInteractives ? mansion.getInteractives() : [])) o.traverse((m) => skip.add(m.id));
+    mansion.root.updateMatrixWorld(true);
+    const meshes = [], cell = 1, G = new Map(), key = (i, j) => i + "," + j;
+    mansion.root.traverse((o) => { if (!o.isMesh || o.isInstancedMesh || skip.has(o.id)) return; let p = o, vis = true; while (p) { if (p.visible === false) vis = false; p = p.parent; } if (!vis) return;
+      const m = o.material; if (!m || Array.isArray(m) || (m.transparent && m.opacity < 0.5) || m.colorWrite === false) return;
+      const b = new THREE.Box3().setFromObject(o); if (b.isEmpty()) return; const sz = b.getSize(new THREE.Vector3()); if (sz.x > 6 || sz.z > 6) return;
+      const k = meshes.push(b) - 1; for (let i = Math.floor(b.min.x / cell); i <= Math.floor(b.max.x / cell); i++) for (let j = Math.floor(b.min.z / cell); j <= Math.floor(b.max.z / cell); j++) (G.get(key(i, j)) || G.set(key(i, j), []).get(key(i, j))).push(k); });
+    const rep = []; const tops = (this.world && this.world.rugs || []).filter((r) => r.kind === "furniture");
+    for (const c of cols) {
+      // logic33: a raised piece (bench/shelf box starting above the floor) still has legs/end panels down to the floor — gather and keep those too
+      const fl00 = this.world ? this.world.surfacesAt((c.min.x + c.max.x) / 2, (c.min.z + c.max.z) / 2).filter((q) => q.kind !== "road" && q.rug !== "furniture" && q.y <= c.min.y + 0.06).map((q) => q.y) : [];
+      const baseY = fl00.length ? Math.min(c.min.y, Math.max(...fl00)) : c.min.y, clip = c.clone(); clip.min.y = baseY;
+      const e = clip.clone().expandByScalar(0.03), cand = new Set();
+      for (let i = Math.floor(c.min.x / cell); i <= Math.floor(c.max.x / cell); i++) for (let j = Math.floor(c.min.z / cell); j <= Math.floor(c.max.z / cell); j++) for (const k of G.get(key(i, j)) || []) cand.add(k);
+      const parts = [], ctr = new THREE.Vector3(); for (const k of cand) { const b = meshes[k]; b.getCenter(ctr); if (e.containsPoint(ctr) && b.max.y > c.min.y - 0.02) parts.push(b.clone()); }
+      if (!parts.length) continue; // no visible geometry found — keep the old box (safe)
+      // merge identical / duplicate parts, then clip each to the old box (never grows past the old footprint)
+      const uniq = []; for (const b of parts) { b.intersect(clip.clone().expandByScalar(0.001)); if (b.isEmpty()) continue; if (!uniq.some((u) => u.min.distanceTo(b.min) < 1e-3 && u.max.distanceTo(b.max) < 1e-3)) uniq.push(b); }
+      if (!uniq.length) continue;
+      // too low for the car + chase camera (< 16 cm under it): that part stays solid down to the floor (tight to its outline)
+      const fl0 = this.world ? this.world.surfacesAt((c.min.x + c.max.x) / 2, (c.min.z + c.max.z) / 2).filter((q) => q.kind !== "road" && q.rug !== "furniture" && q.y <= c.min.y + 0.06).map((q) => q.y) : [];
+      const fy0 = fl0.length ? Math.max(...fl0) : c.min.y; for (const b of uniq) if (b.min.y < fy0 + LOW_CLEAR33) b.min.y = Math.min(b.min.y, fy0 - 0.01);
+      const fl = this.world ? this.world.surfacesAt((c.min.x + c.max.x) / 2, (c.min.z + c.max.z) / 2).filter((q) => q.kind !== "road" && q.rug !== "furniture" && q.y <= c.min.y + 0.06).map((q) => q.y) : []; const floorY = fl.length ? Math.max(...fl) : c.min.y; const lowest = Math.min(...uniq.map((b) => b.min.y));
+      // open area under the piece: its footprint minus the parts that come within CAR_TOP+2 cm of the floor
+      const reachFloor = uniq.filter((b) => b.min.y < floorY + LOW_CLEAR33);
+      const fw = (c.max.x - c.min.x) * (c.max.z - c.min.z), solidA = reachFloor.reduce((a, b) => a + (b.max.x - b.min.x) * (b.max.z - b.min.z), 0);
+      const clearance = Math.min(...uniq.filter((b) => !(b.min.y < floorY + LOW_CLEAR33)).map((b) => b.min.y - floorY).concat([Infinity]));
+      const opened = solidA < fw * 0.85 && clearance >= LOW_CLEAR33;
+      // a drivable top (books / tray rug) floating above the highest visible part: keep a thin solid slab right under it, so the
+      // gap between the parts and the top is not a fake ledge (logic20 collider scan: conservatory book shelf x 5.6–6.3)
+      { const hi = Math.max(...uniq.map((b) => b.max.y)), cx = (c.min.x + c.max.x) / 2, cz = (c.min.z + c.max.z) / 2;
+        if (this.world && this.world.surfacesAt(cx, cz).some((q) => q.y > hi + 0.03 && q.y <= c.max.y + 0.06)) uniq.push(new THREE.Box3(new THREE.Vector3(c.min.x, Math.max(hi - 0.1, c.max.y - 0.12), c.min.z), new THREE.Vector3(c.max.x, c.max.y, c.max.z))); }
+      c.parts = uniq; c.furnOpened = opened;
+      if (opened) for (const t of tops) if (Math.abs(t.minX - c.min.x) < 1e-6 && Math.abs(t.maxX - c.max.x) < 1e-6 && Math.abs(t.minZ - c.min.z) < 1e-6 && Math.abs(t.maxZ - c.max.z) < 1e-6) t.block = false;
+      rep.push({ x: (c.min.x + c.max.x) / 2, z: (c.min.z + c.max.z) / 2, y: floorY, size: [c.max.x - c.min.x, c.max.y - c.min.y, c.max.z - c.min.z], parts: uniq.length, clearance, opened, tightA: solidA / fw });
+    }
+    this._furnReport = rep;
+  }
+
   setWallColliders(colliders) {
     if (!colliders || !colliders.length) {
       this._wallColliders = null;
@@ -223,7 +274,8 @@ export class DriveMode {
       return;
     }
     // logic32: an open-riser stair's underside block becomes its treads (no invisible barrier under the flight)
-    colliders = colliders.flatMap((b) => b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps.map((t) => { const c = t.clone(); c.driveKind = "stair"; c.stairTread = true; return c; }) : [b]);
+    colliders = colliders.flatMap((b) => b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps.map((t) => { const c = t.clone(); c.driveKind = "stair"; c.stairTread = true; return c; })
+      : b.parts && !globalThis.__L32_FURN ? b.parts.map((t) => { const c = t.clone(); c.driveKind = "furniture"; c.furnPart = true; return c; }) : [b]); // logic33: furniture → its visible parts
     this._wallColliders = colliders.map((b) => this._driveSoftCollider(b));
     this._buildWallGrid();
   }
@@ -1392,6 +1444,59 @@ export class DriveMode {
    * released rolling gently onto the attic road (up) or back down the spoke (down). Re-arms only
    * after the car has left both pads. Returns frame flags while riding, else null.
    */
+  /**
+   * logic33 SKY NEEDLE ELEVATOR (Ben 11:45 AM). Same scripted, eased ride as the house lifts (no jitter,
+   * flush stops): drive onto the glowing cyan pad in the cab (base y 0, mid gantry y 16, deck y 30).
+   * Up from the base stops at the gantry (2.4 s hold, "Drive off" hint) then carries on to the deck;
+   * down from the deck stops at the gantry then the base. Boarding at the gantry rides up.
+   * Re-arms only once the car has left the cab. Publishes globalThis.__TOWER_LIFT for the visuals (cab y, doors).
+   */
+  _tickTowerLift(dt) {
+    const car = this.car, p = car.position, T = TOWER, S = T.lift.stops, cx = T.x, cz = T.z;
+    const rC = Math.hypot(p.x - cx, p.z - cz), inCab = rC < 0.5;
+    const doorYaw = [0, 0, Math.PI]; // base + gantry doors face south (+z), deck door north (−z)
+    let L = this._tower;
+    const pub = globalThis.__TOWER_LIFT || (globalThis.__TOWER_LIFT = { cabY: 0, doors: [0, 0, 0], rides: 0 });
+    const near = (y) => Math.abs(p.y - (y + 0.012)) < 0.07;
+    for (let i = 0; i < 3; i++) { // doors open when the car is close at that level (or the cab stands there with the car)
+      const want = (rC < 1.9 && near(S[i]) && Math.abs(pub.cabY - S[i]) < 0.05) ? 1 : 0;
+      pub.doors[i] += Math.max(-dt * 2.2, Math.min(dt * 2.2, want - pub.doors[i]));
+    }
+    if (!L) {
+      if (this._towerHintT > 0) { this._towerHintT -= dt; if (this._towerHintT <= 0 || !inCab) this._towerHint = null; }
+      if (!inCab || car.airborne) { this._towerArmed = true; if (rC > 0.9) this._towerHint = null; return null; }
+      const at = S.findIndex((y) => near(y));
+      if (at < 0 || this._towerArmed === false || Math.abs(pub.cabY - S[at]) > 0.05) return null;
+      const up = at < 2, route = up ? (at === 0 ? [1, 2] : [2]) : [1, 0];
+      L = this._tower = { route, k: 0, t: 0, x0: p.x, z0: p.z, y0: p.y, yaw0: car.yaw, hold: 0 };
+      this._towerArmed = false; pub.rides++; this._towerHint = up ? "Sky Needle lift — going up…" : "Sky Needle lift — going down…";
+    }
+    if (L.hold > 0) { // mid stop: the car drives freely on the gantry landing; leaving the cab ends the ride
+      L.hold -= dt;
+      if (!inCab) { this._tower = null; this._towerHint = null; return null; }
+      if (L.hold > 0) return null;
+      L.k++; L.t = 0; L.x0 = p.x; L.z0 = p.z; L.y0 = p.y; L.yaw0 = car.yaw; this._towerHint = null;
+    }
+    const iTo = L.route[L.k], y1 = S[iTo], // stops flush with the floor the car rests on (no 1.2 cm settle drop)
+      D = Math.abs(y1 - L.y0), TT = 2.4 * Math.max(1, D / 1.6) ** 0.5;
+    L.t += dt;
+    const u = Math.min(1, L.t / TT), e = 0.5 - 0.5 * Math.cos(Math.PI * u);
+    const c = Math.min(1, L.t / 0.5), ec = 0.5 - 0.5 * Math.cos(Math.PI * c);
+    let dy = doorYaw[iTo] - L.yaw0; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    const yaw = L.yaw0 + dy * e;
+    p.set(L.x0 + (cx - L.x0) * ec, L.y0 + (y1 - L.y0) * e, L.z0 + (cz - L.z0) * ec);
+    pub.cabY = p.y - 0.012;
+    car.yaw = yaw; car.root.rotation.y = yaw; car.root.rotation.x = 0; car.root.rotation.z = 0;
+    car.speed = 0; car.vy = 0; car.airborne = false; this._stuckTimer = 0;
+    if (u >= 1) {
+      pub.cabY = S[iTo]; p.y = y1;
+      const last = L.k >= L.route.length - 1;
+      if (!last) { L.hold = T.lift.hold; this._towerHint = "Mid Gantry: Drive off ↑ (forward)  ·  or wait — the lift carries on"; return { surface: "road", grade: 0, lift: true }; }
+      this._tower = null; this._towerHint = iTo === 2 ? "Observation Deck: Drive off ↑ (forward)" : "Ground: Drive off ↑ (forward)"; this._towerHintT = 3.0;
+    }
+    return { surface: "road", grade: 0, lift: true };
+  }
+
   _tickLift(dt) {
     const car = this.car, p = car.position;
     const onPad = (C, y) => Math.hypot(p.x - C.pad.x, p.z - C.pad.z) < C.padR && Math.abs(p.y - (y + 0.012)) < 0.06 && !car.airborne;
@@ -1448,7 +1553,7 @@ export class DriveMode {
       this._liftWasOn = i0 >= 0;
       if (H && (H.hintT -= dt) <= 0) { H.hintT = 0.6; if (this.onHud) this.onHud({ mode: "toast", text: H.hint }); }
       // logic30: a dedicated on-screen lift hint (logic29's toast went to the no-op onHud → never showed)
-      { const want = this._liftHold ? this._liftHold.hint : null; if (want !== this._liftHintShown) { this._liftHintShown = want; if (this.onLiftHint) this.onLiftHint(want); } }
+      { const want = this._liftHold ? this._liftHold.hint : (this._towerHint || null); if (want !== this._liftHintShown) { this._liftHintShown = want; if (this.onLiftHint) this.onLiftHint(want); } }
       if (H) { H.T -= dt; if (H.T <= 0) this._liftHold = null; }
       if (!this._liftHold) w.conveyor.t += dt; }
     let S = this._convSlide;
@@ -1535,7 +1640,7 @@ export class DriveMode {
       roomHeightAt: (x, y, z) => this._roomHeightAt(x, y, z), // logic28 fall rule
     });
     env.world = this.world;
-    const flags = this._tickConveyor(dt) || this._tickLift(dt) || (this.world ? this.car.update(dt, driveKeys, env) : { surface: null, grade: 0 });
+    const flags = this._tickConveyor(dt) || this._tickTowerLift(dt) || this._tickLift(dt) || (this.world ? this.car.update(dt, driveKeys, env) : { surface: null, grade: 0 });
     this._lastFlags = flags;
     this._tickBooks(dt); // logic15
     // logic14: standing on a carrying conveyor flap?

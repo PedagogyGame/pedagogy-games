@@ -1,14 +1,15 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic32";
-import { Player } from "./player.js?v=logic32";
-import { Mansion } from "./mansion.js?v=logic32";
-import { InspectMode } from "./inspect.js?v=logic32";
-import { SliceSystem } from "./slice.js?v=logic32";
-import { DriveMode } from "./drive/driveMode.js?v=logic32";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic32";
-import { OBJECTS } from "./data/objects.js?v=logic32";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic32";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic32";
+import { batchStatic } from "./batch.js?v=logic33";
+import { Player } from "./player.js?v=logic33";
+import { Mansion } from "./mansion.js?v=logic33";
+import { InspectMode } from "./inspect.js?v=logic33";
+import { SliceSystem } from "./slice.js?v=logic33";
+import { DriveMode } from "./drive/driveMode.js?v=logic33";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic33";
+import { OBJECTS } from "./data/objects.js?v=logic33";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic33";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic33";
+import { Skyline33 } from "./skyline33.js?v=logic33";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -444,6 +445,15 @@ function updateDriveRenderScale(rawDt) {
   else if (st.ema < 0.045 && _driveRenderScale < 1) setDriveRenderScale(_driveRenderScale <= 0.51 ? 0.65 : _driveRenderScale <= 0.66 ? 0.8 : 1);
 }
 
+let skyline33 = null;
+// logic33: backdrop (village/ridges/stars, own far camera) first, then the estate over it with a fresh depth buffer.
+function renderFrame() {
+  if (!skyline33 || !skyline33.backScene) { renderer.render(scene, camera); return; }
+  const ac = renderer.autoClear; renderer.autoClear = false; renderer.clear(true, true, true);
+  try { skyline33.renderBackdrop(renderer, camera); } catch (_) {}
+  renderer.clearDepth(); const bg = scene.background; scene.background = null;
+  renderer.render(scene, camera); scene.background = bg; renderer.autoClear = ac;
+}
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1224);
 scene.fog = new THREE.FogExp2(0x1a1830, 0.0095); // denser = less far draw on SwiftShader
@@ -467,6 +477,7 @@ await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 try {
   const tBuild = performance.now();
   mansion = new Mansion(scene);
+  try { skyline33 = new Skyline33(scene); window.__MOTU_SKYLINE__ = skyline33; } catch (err) { console.error("[motu] skyline33", err); } // logic33 Sky Needle + village + painting
   // SwiftShader: drop all mesh shadow flags (no lights cast anyway)
   try {
     mansion.root.traverse((o) => {
@@ -975,11 +986,14 @@ window.__MOTU_STEP__ = (n = 60, dt = 1 / 60, doRender = true) => {
     else if (mode === "roam" && player) player.update(Math.min(dt, 0.05), mansion.getColliders());
     if (mansion) mansion.updateFireflies(clock.elapsedTime + i * dt);
   }
+  try { if (skyline33) { window.__SHOT_T__ = (window.__SHOT_T__ || 0) + n * dt; skyline33.update(window.__SHOT_T__, dt, (mode === "drive" || playMode === "drive") && drive ? drive.car.position : camera.position); } } catch (_) {}
   const t1 = performance.now();
-  if (doRender) renderer.render(scene, camera);
+  if (doRender) renderFrame();
   if (doRender) renderer.getContext().finish();
   return { updMs: (t1 - t0) / Math.max(1, n), renderMs: performance.now() - t1, calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
 };
+// logic33 shot helper (?shot=1 only): free camera pose → one rendered frame (tower/village overview shots)
+if (SHOT_MODE) window.__MOTU_LOOK__ = (p, q, fov = 68) => { camera.position.set(p[0], p[1], p[2]); camera.fov = fov; camera.updateProjectionMatrix(); camera.lookAt(q[0], q[1], q[2]); camera.updateMatrixWorld(); renderFrame(); renderer.getContext().finish(); return renderer.info.render.calls; };
 function tick() {
   requestAnimationFrame(tick);
   if (SHOT_MODE && mansion && !boot.failed) { clock.getDelta(); return; }
@@ -1019,8 +1033,9 @@ function tick() {
       console.error("[motu] tick update error (render continues)", err);
     }
   }
+  try { if (skyline33) skyline33.update(t, dt, (mode === "drive" || playMode === "drive") && drive ? drive.car.position : camera.position); } catch (_) {}
   try {
-    renderer.render(scene, camera);
+    renderFrame();
   } catch (err) {
     if (!tick._renderErr) {
       tick._renderErr = true;
