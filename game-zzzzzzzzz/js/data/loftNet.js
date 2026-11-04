@@ -12,7 +12,7 @@
  *
  * Points are authored dense; tracks.js uses them RAW (no spline) so grade is exactly as written.
  */
-import { LAB_PATH_DEFS } from "./labGarage.js?v=logic28";
+import { LAB_PATH_DEFS } from "./labGarage.js?v=logic29";
 const H = 3.2;          // wall-top height on the ground story (ceiling slab bottom ≈ 4.0)
 const MAX_G = 0.28;     // peak grade (eased ends) — hard cap 0.30
 const R = (v) => Math.round(v * 1000) / 1000;
@@ -516,7 +516,7 @@ export const CONVEYOR = {
   id: "conveyor", conveyor: true,
   x: 2.24, zc: 3.8, Rp: 0.2,
   flapX0: 1.86, flapX1: 2.62, flapL: 0.64,    // visual flap: x 1.86..2.62, z 4.0..4.64
-  phys: { minX: 1.831, maxX: 2.745, minZ: 3.991, maxZ: 4.659 }, // = every car centre the cage allows (logic28: cage faces ∓ car radius 0.0689, was ∓0.0783 for the 1.0× car; maxX runs to the east cage face 2.745 because the attic/roof hop-off windows let a centre past 2.676 — the apron walk surface takes over exactly there, no gap/overlap, L11)
+  phys: { minX: 1.821, maxX: 2.745, minZ: 3.981, maxZ: 4.669 }, // = every car centre the cage allows (logic29: cage faces ∓ car radius 0.0586; logic28 ∓0.0689, 1.0× car ∓0.0783; maxX runs to the east cage face 2.745 because the attic/roof hop-off windows let a centre past 2.676 — the apron walk surface takes over exactly there, no gap/overlap, L11)
   yB: 7.5, yT: 12.95, deckY: 12.5, v: 0.5, n: 14,
   pad: { x: 2.62, z: 4.3 }, padY: 7.7, padR: 0.3,
   exit: { x: 1.86, z: 4.3 }, topPad: { x: 1.86, z: 4.3 }, topY: 12.5,
@@ -570,7 +570,7 @@ export const LOFT_PORTALS_LEGACY = [
 
 /** logic10: every place a Skyline path pierces a room wall gets a framed opening (+ neon trim).
  *  mansion._driveOpeningsForWall appends these (skipping any already covered by a door/arch). */
-import { ROOMS as _ROOMS } from "./rooms.js?v=logic28";
+import { ROOMS as _ROOMS } from "./rooms.js?v=logic29";
 function autoPortals() {
   const out = [];
   const near = (q) => LOFT_PORTALS_LEGACY.some((L) => Math.hypot(L.x - q.x, L.z - q.z) < 0.8 && Math.abs(L.y0 - q.y0) < 1.5)
