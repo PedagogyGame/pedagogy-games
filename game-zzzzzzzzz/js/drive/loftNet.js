@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic29";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic29";
-import { buildConveyor } from "./conveyor.js?v=logic29";
-import { buildYard } from "./treehouse.js?v=logic29";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic29";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic29";
-import { ROOMS } from "../data/rooms.js?v=logic29";
-import { LAB, inLab } from "../data/labGarage.js?v=logic29";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic30";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic30";
+import { buildConveyor } from "./conveyor.js?v=logic30";
+import { buildYard } from "./treehouse.js?v=logic30";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic30";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic30";
+import { ROOMS } from "../data/rooms.js?v=logic30";
+import { LAB, inLab } from "../data/labGarage.js?v=logic30";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */
@@ -437,7 +437,7 @@ function rodClip(all, self, x, z, lo, hi, up) {
 // logic24: boards closing the cavity floor pockets beside the shaft-foot lane (x ranges, z 13.30–13.40, y 0–0.6)
 // logic27: slanted guide closing the deck cul-de-sac east of the shaft-foot lane (x0,z0 → x1,z1)
 export const CONVEYOR_HOP_LEVELS = [8.40, 11.979];
-export const CONVEYOR_HOP_WALL = [[7.95, 8.40 - 0.05], [8.40 + 0.75, 12.49]]; // logic29: attic west drive-off window (gated like the east ones in DriveMode) // west wall whole again: holding W still rides to the deck exit (logic14 behaviour)
+export const CONVEYOR_HOP_WALL = [[7.95, 8.40 - 0.05], [8.40 + 0.75, 11.979 - 0.05], [11.979 + 0.45, 12.49]]; // logic30: + roof-deck west window 11.93–12.43 (the lip above it keeps the top-exit edge whole) // logic29: attic west drive-off window (gated like the east ones in DriveMode) // west wall whole again: holding W still rides to the deck exit (logic14 behaviour)
 export const TIMBER_FOOT_FUNNEL = [[25.335, 14.22, 26.27, 15.62]];
 export const TIMBER_FOOT_BOARDS = [[24.40, 24.535], [25.315, 26.4]]; // logic24: outer board runs into the shell (a 0.2 m slot at x 26.0–26.2 pinned cars)
 function pushBox(arr, cx, cy, cz, sx, sy, sz, yaw = 0) {

@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic29";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic29";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic30";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic30";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic29";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic29";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic29";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic29";
+import { ROOMS } from "../data/rooms.js?v=logic30";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic30";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic30";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic30";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -46,11 +46,14 @@ export const LIFT_APRONS = [
   // logic29 (Ben 7:24 PM "get off at the different levels"): attic WEST drive-off — bridge from the cage west face to the
   // attic floor edge (shaft hole minX 1.72); x1 = flap phys minX 1.821 so flap → apron is gap-free and flush at the stop.
   { id: "lift_apron_attic_w", x0: 1.722, x1: 1.821, z0: 3.96, z1: 4.73, y: 8.40, side: "w" },
+  // logic30 (Ben 9:14 PM "a roof and a higher roof area … drive off onto those levels"): roof-deck WEST drive-off onto the
+  // flat roof deck (filled_top 11.979) under the Conveyor Top Road; same flush bridge from the cage west face.
+  { id: "lift_apron_roof_w", x0: 1.722, x1: 1.821, z0: 3.96, z1: 4.73, y: 11.979, side: "w" },
 ];
 // logic29: the conveyor PAUSES at each level it passes (flap top flush with the floor) so the rider can drive off.
 export const LIFT_STOPS = [
   { y: 8.40, name: "Attic", east: true, west: true },
-  { y: 11.979, name: "Roof deck", east: true, west: false },
+  { y: 11.979, name: "Roof deck", east: true, west: true },
 ];
 export const LIFT_STOP_HOLD = 2.4;
 export class DriveWorld {
