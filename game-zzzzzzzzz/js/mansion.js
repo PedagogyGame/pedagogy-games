@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic31";
-import { OBJECTS } from "./data/objects.js?v=logic31";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic31";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic31";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic31";
-import { buildLabGarage } from "./labGarage.js?v=logic31";
+import { ROOMS } from "./data/rooms.js?v=logic32";
+import { OBJECTS } from "./data/objects.js?v=logic32";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic32";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic32";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic32";
+import { buildLabGarage } from "./labGarage.js?v=logic32";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -3710,11 +3710,12 @@ export class Mansion {
       if (o.tunnel) continue; // road is the threshold — no brass lip across the asphalt (z-fight/bump)
       // Threshold lip — reads as tunnel portal at asphalt height
       const thresh = new THREE.Mesh(
-        new THREE.BoxGeometry(horizontal ? o.width + 0.1 : jambD, 0.05, horizontal ? jambD : o.width + 0.1),
+        new THREE.BoxGeometry(horizontal ? o.width + 0.1 : jambD, 0.008, horizontal ? jambD : o.width + 0.1),
         portalBrass
       );
-      if (horizontal) thresh.position.set(o.along, o.y0 + 0.03, pz);
-      else thresh.position.set(px, o.y0 + 0.03, o.along);
+      // logic32: flush 8 mm brass inlay (was a 5 cm kerb across every doorway — a stepped lip at the small car's scale)
+      if (horizontal) thresh.position.set(o.along, o.y0 + 0.0045, pz);
+      else thresh.position.set(px, o.y0 + 0.0045, o.along);
       group.add(thresh);
     }
   }
@@ -3863,17 +3864,27 @@ export class Mansion {
     // Stair collision: side barriers + underside slab (center run stays driveable via ramp track).
     // Stringers sit INSIDE the stair footprint (not outside) so wall-skirting ribbons —
     // foyer west/east — stay clear for Drive approach onto ramp feet (no pillar grab).
+    // logic32: stringers keep their full box for Explore; Drive gets them cut per tread (bottom of tread → rail top), so
+    // the open space under the flight is not an invisible wall either.
+    const treadBand = (i) => { const y = s.fromY + rise * (i + 0.5), hy = Math.abs(rise) * 0.45; let a = 0;
+      if (dir === "north") a = s.z - run * (i + 1); else if (dir === "south") a = s.z + run * i; else if (dir === "east") a = s.x + run * i; else a = s.x - run * (i + 1);
+      return { a, b: a + run, y0: y - hy, y1: y + hy + 0.55 }; };
+    this._pushStringer = (box, kind) => { box.stairSteps = [];
+      for (let i = 0; i < steps; i++) { const t = treadBand(i), c = box.clone();
+        if (dir === "north" || dir === "south") { c.min.z = Math.max(box.min.z, t.a); c.max.z = Math.min(box.max.z, t.b); } else { c.min.x = Math.max(box.min.x, t.a); c.max.x = Math.min(box.max.x, t.b); }
+        c.min.y = Math.max(box.min.y, t.y0); c.max.y = Math.min(box.max.y, t.y1); if (c.max.x > c.min.x && c.max.z > c.min.z && c.max.y > c.min.y) box.stairSteps.push(c); }
+      this._pushCollider(box, kind); };
     const yLo = Math.min(s.fromY, s.toY);
     const yHi = Math.max(s.fromY, s.toY);
     if (dir === "north" || dir === "south") {
-      this._pushCollider(
+      this._pushStringer(
         new THREE.Box3(
           new THREE.Vector3(minX + 0.04, yLo - 0.02, minZ),
           new THREE.Vector3(minX + 0.28, yHi + 0.55, maxZ)
         ),
         "stair"
       );
-      this._pushCollider(
+      this._pushStringer(
         new THREE.Box3(
           new THREE.Vector3(maxX - 0.28, yLo - 0.02, minZ),
           new THREE.Vector3(maxX - 0.04, yHi + 0.55, maxZ)
@@ -3881,14 +3892,14 @@ export class Mansion {
         "stair"
       );
     } else {
-      this._pushCollider(
+      this._pushStringer(
         new THREE.Box3(
           new THREE.Vector3(minX, yLo - 0.02, minZ + 0.04),
           new THREE.Vector3(maxX, yHi + 0.55, minZ + 0.28)
         ),
         "stair"
       );
-      this._pushCollider(
+      this._pushStringer(
         new THREE.Box3(
           new THREE.Vector3(minX, yLo - 0.02, maxZ - 0.28),
           new THREE.Vector3(maxX, yHi + 0.55, maxZ - 0.04)
@@ -3897,13 +3908,22 @@ export class Mansion {
       );
     }
     // Underside slab — blocks ghosting; Drive softens (raises min.y) so floor approach clears
-    this._pushCollider(
-      new THREE.Box3(
-        new THREE.Vector3(minX + 0.08, yLo - 0.15, minZ + 0.08),
-        new THREE.Vector3(maxX - 0.08, yLo + Math.max(0.35, (yHi - yLo) * 0.22), maxZ - 0.08)
-      ),
-      "stair"
+    const under = new THREE.Box3(
+      new THREE.Vector3(minX + 0.08, yLo - 0.15, minZ + 0.08),
+      new THREE.Vector3(maxX - 0.08, yLo + Math.max(0.35, (yHi - yLo) * 0.22), maxZ - 0.08)
     );
+    // logic32 (Ben 9:23 AM "i ran into an invisible barrier here"): the treads float (open riser stair), so in Drive this
+    // 0.9 m block filled the open space under the flight. Drive swaps it for one box per visible tread (mesh-fitted).
+    under.stairSteps = [];
+    for (let i = 0; i < steps; i++) {
+      const y = s.fromY + rise * (i + 0.5), hy = Math.abs(rise) * 0.45;
+      let x = s.x, z = s.z;
+      if (dir === "north") z = s.z - run * (i + 0.5); else if (dir === "south") z = s.z + run * (i + 0.5);
+      else if (dir === "east") x = s.x + run * (i + 0.5); else if (dir === "west") x = s.x - run * (i + 0.5);
+      const ew = dir === "east" || dir === "west", hx = (ew ? run * 0.95 : w) / 2, hz = (ew ? w : run * 0.95) / 2;
+      under.stairSteps.push(new THREE.Box3(new THREE.Vector3(x - hx, y - hy, z - hz), new THREE.Vector3(x + hx, y + hy, z + hz)));
+    }
+    this._pushCollider(under, "stair");
 
     // Continuous brass handrails + fewer posts — kills z-fight/gap seams at yellow frames
     railMat.polygonOffset = true;
@@ -4081,15 +4101,6 @@ export class Mansion {
       roomId: "balcony",
     });
 
-    // Connection strip from Upper Landing south edge (z≈10) to balcony
-    this.floorRegions.push({
-      minX: -6.5, maxX: 7.5,
-      minZ: 9.5, maxZ: deckZ - deckD / 2 + 0.1,
-      y: deckY,
-      priority: 3,
-      roomId: "balcony_approach",
-    });
-
     const plank = this._floorMat(0x6d4c41, 0.78) || this._mat(0x6d4c41, 0.78);
     const deck = new THREE.Mesh(new THREE.BoxGeometry(deckW, 0.16, deckD), plank);
     deck.position.set(deckX, deckY - 0.08, deckZ);
@@ -4097,12 +4108,23 @@ export class Mansion {
     deck.castShadow = true;
     g.add(deck);
 
-    // Approach boards toward landing
-    const approach = new THREE.Mesh(
-      new THREE.BoxGeometry(8.5, 0.14, 3.2),
-      plank
-    );
-    approach.position.set(0.5, deckY - 0.07, 11.2);
+    // logic32 (Ben 9:22 AM "found another spot"): the old 8.5 m approach boards left the foyer ceiling slab (top 2.2 cm
+    // lower, dark 0x6b5d52) exposed either side and up to the front wall — the dark band / stepped look between the
+    // purple landing and the plank floor. Panels now tile the whole gap flush at the story line, butting (not
+    // overlapping) the landing planks (z 10), the balcony deck (z 12.1, x −5.75…6.75) and the front wall (z 12.81), and
+    // leaving the two stair-foot apertures (x −8.8…−6.4 / 8.2…9.9, to z 10.5) open.
+    const dX0 = deckX - deckW / 2, dX1 = deckX + deckW / 2, dZ0 = deckZ - deckD / 2;
+    const panels = [
+      [-6.4, 8.2, 10.0, dZ0], [-9.0, -6.4, 10.5, dZ0], [8.2, 9.0, 10.5, dZ0], // landing edge → deck line
+      [-9.0, dX0, dZ0, 12.81], [dX1, 9.0, dZ0, 12.81],                         // beside the deck → front wall
+    ];
+    let approach = null;
+    for (const [x0, x1, z0, z1] of panels) {
+      this.floorRegions.push({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, y: deckY, priority: 3, roomId: "balcony_approach" });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.14, z1 - z0), plank);
+      m.position.set((x0 + x1) / 2, deckY - 0.07, (z0 + z1) / 2); m.receiveShadow = true; g.add(m);
+      approach = approach || m;
+    }
     approach.receiveShadow = true;
     g.add(approach);
 
