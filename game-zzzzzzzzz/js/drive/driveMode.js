@@ -1,18 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic33";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic33";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic33";
-import { ROOMS } from "../data/rooms.js?v=logic33";
+import { loftSolids } from "./loftNet.js?v=logic34";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic34";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic34";
+import { ROOMS } from "../data/rooms.js?v=logic34";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic33";
-import { TrackSystem } from "./tracks.js?v=logic33";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic33";
-import { EngineAudio } from "./engineAudio.js?v=logic33";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic33";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic33";
-import { TOWER, towerSolids } from "../data/tower.js?v=logic33";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic33";
-import { TreeCritters } from "./treehouse.js?v=logic33";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic33";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic34";
+import { TrackSystem } from "./tracks.js?v=logic34";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic34";
+import { EngineAudio } from "./engineAudio.js?v=logic34";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic34";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic34";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic34";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic34";
+import { TreeCritters } from "./treehouse.js?v=logic34";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic34";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -42,7 +42,11 @@ export const CAM_TIGHT = { b: 0.94, u: 0.9, l: 0.2 }; // logic28 chase-rig tight
 // logic29 (Ben 6:36 PM "lower and closer behind the car, so the car takes up more of the screen … like the earlier versions"):
 // rig still × CAR_K, then b/u below logic27, look-at back up to a little above the car (l 1.0 = logic27), and the
 // at-rest "leisure" / high-track pull-outs mostly removed (they were what made the stopped view feel pulled back).
-export const CAM29 = Object.assign({ b: 0.95 * 1.09, u: 0.8 * 1.09, l: 1.0, leis: 0.35, high: 0.85, tilt: 1.087 } /* logic31 (Ben 11:46 PM "zoom out in view and tilt just 2% more"): rig ×1.09 back+up; tilt 1.087 on the aim = net +2 % mean downward pitch vs logic30 (the pull-back alone flattened it ~6 %) */ /* logic30: bumper margin comes from the pitch floor in the chase aim (look-at stays a little above the car) */, globalThis.__CAM29 || {});
+// logic34 (Ben pt258u "revert the steering and the view about 95% of the way back"): every rig term = logic33 + 0.95 × (logic27 − logic33).
+// logic27 rig = { b 1, u 1, l 1, leis 1, high 1, tilt 1 } (× CAR_K, so framing relative to the smaller car matches logic27). FOV 76 in both.
+const L34 = (cur, base) => cur + 0.95 * (base - cur);
+export const CAM34 = { b: L34(0.95 * 1.09, 1), u: L34(0.8 * 1.09, 1), l: 1.0, leis: L34(0.35, 1), high: L34(0.85, 1), tilt: L34(1.087, 1) };
+export const CAM29 = Object.assign({ ...CAM34 } /* logic31 (Ben 11:46 PM "zoom out in view and tilt just 2% more"): rig ×1.09 back+up; tilt 1.087 on the aim = net +2 % mean downward pitch vs logic30 (the pull-back alone flattened it ~6 %) */ /* logic30: bumper margin comes from the pitch floor in the chase aim (look-at stays a little above the car) */, globalThis.__CAM29 || {});
 export const camRig = () => (globalThis.__CAM_L27 ? { b: 1, u: 1, l: 1, leis: 1, high: 1 } : globalThis.__CAM_L28 ? { ...CAM_TIGHT, leis: 1, high: 1 } : (globalThis.__CAM29 ? Object.assign({}, CAM29, globalThis.__CAM29) : CAM29));
 export class DriveMode {
   constructor(scene, camera) {
@@ -1880,6 +1884,13 @@ export class DriveMode {
     // logic31: "tilt just 2% more" — the aim's downward pitch × RIG.tilt (applied after the bumper floor: tipping down only lifts the car in frame; tilt tuned so the mean pitch over the standard spots is +2 % vs logic30 after the 9 % pull-back)
     { const R = camRig(), C = this.camera.position, L = this._camLookSmooth; if (this._camMode !== "bumper" && !globalThis.__CAM_L27 && !globalThis.__CAM_L28 && R.tilt && R.tilt !== 1 && mlK < 0.5) {
       const th = Math.hypot(L.x - C.x, L.z - C.z) || 1e-6, e = Math.atan2(L.y - C.y, th); if (e < 0) L.y = C.y + Math.tan(e * R.tilt) * th; } }
+    // logic34 first-ramp fix: the logic30 pitch floor switched on/off as a hard clamp at the foot→grade change (pitch rate +7.5 → −9.2 °/s in one
+    // frame) and car-height kinks at the ramp joints fed straight into the aim. Low-pass the final aim elevation (car-relative, ease 7/s);
+    // the floor's 6° margin absorbs the lag, so the bumper still never leaves the frame. Orbit / bumper / lift views stay unfiltered.
+    { const C = this.camera.position, L = this._camLookSmooth, th = Math.hypot(L.x - C.x, L.z - C.z) || 1e-6, e = Math.atan2(L.y - C.y, th);
+      if (this._camMode !== "bumper" && mlK < 0.5 && !this._lift && this._camPitchS != null && Number.isFinite(this._camPitchS)) {
+        this._camPitchS += (e - this._camPitchS) * ease(7.0); L.y = C.y + Math.tan(this._camPitchS) * th;
+      } else this._camPitchS = e; }
     this.camera.lookAt(this._camLookSmooth);
     this._sanitizeCamera();
 

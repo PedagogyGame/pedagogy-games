@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic33"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic34"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -125,7 +125,7 @@ export class RCCar {
     this._brakeLight = 0; // #4 reactive brakes IGNORED — static tails only
     this._baseTailEmissive = 0.55;
     this._throttleSmooth = 0;
-    this._steerInput = 0;
+    this._steerInput = 0; this._steer33 = 0; this._steer27 = 0;
     this._bodyRoll = 0;
     this._landingDamp = 0;
     this._driftTrail = 0;
@@ -495,7 +495,7 @@ export class RCCar {
     this.vy = 0;
     this.speed = 0;
     this._yawRate = 0; this._steerHold = 0; this._steerKeyDir = 0; this._steerGap = 0;
-    this._steerInput = 0; // kill residual steer so re-enter/pure-W does not yaw-drift
+    this._steerInput = 0; this._steer33 = 0; this._steer27 = 0; // kill residual steer so re-enter/pure-W does not yaw-drift
     this._throttleSmooth = 0; // logic3: no residual throttle after re-enter / respawn (car crept + steer jerk)
     this.airborne = false;
     this.crashed = false; this.crashReason = null; this._airApexY = null;
@@ -558,12 +558,20 @@ export class RCCar {
     const lock = 1 - (1 - S.lockHigh) * THREE.MathUtils.smoothstep(absV0, S.vLockLo, S.vLockHi);
     let cmd = keyDir !== 0 ? keyDir * Math.pow(this._steerHold / S.rampT, S.ease) : steer; // steer = analog when no key
     cmd *= lock;
-    const cur = this._steerInput, towardZero = Math.abs(cmd) < Math.abs(cur) && Math.sign(cmd || -cur) !== Math.sign(cur) || cmd === 0;
+    const cur = this._steer33 ?? this._steerInput, towardZero = Math.abs(cmd) < Math.abs(cur) && Math.sign(cmd || -cur) !== Math.sign(cur) || cmd === 0;
     const rate = cmd === 0 ? S.returnRate : (Math.sign(cmd) !== Math.sign(cur) && cur !== 0 ? S.reverseRate : (towardZero ? S.returnRate : S.buildRate));
     const dlt = cmd - cur, mx = rate * dt;
-    this._steerInput = cur + Math.max(-mx, Math.min(mx, dlt));
-    if (cmd === 0 && Math.abs(this._steerInput) < 0.004) this._steerInput = 0;
-    if (globalThis.__STEER_L27) this._steerInput = THREE.MathUtils.lerp(cur, steer, Math.min(1, 2.55 * dt)); // diagnostic: logic27 steering
+    let s33 = cur + Math.max(-mx, Math.min(mx, dlt));
+    if (cmd === 0 && Math.abs(s33) < 0.004) s33 = 0;
+    // logic34 (Ben pt258u "revert the steering … 95% of the way back"): run the logic27 steering filter alongside and output
+    // logic33 + 0.95 × (logic27 − logic33). Both filters keep their own state so neither drifts.
+    this._steer33 = s33;
+    // 95 % logic27 at normal + turbo; while SUPER turbo is held the weight eases to 0 (logic33 filter) (super-turbo spiral runs at the lane edge hit the rail otherwise)
+    const wWant = (keys.boost && keys.superTurbo) ? (globalThis.__WS ?? 0) : 0.95;
+    const w27 = this._w27 = (this._w27 ?? wWant) + (wWant - (this._w27 ?? wWant)) * Math.min(1, (globalThis.__WR ?? 12) * dt); // eased: no steer step on the super toggle
+    const p27 = this._steer27 ?? 0, rel27 = Math.abs(steer) < Math.abs(p27) || steer * p27 < 0; // releasing / reversing
+    const s27 = this._steer27 = THREE.MathUtils.lerp(p27, steer, Math.min(1, (rel27 ? (globalThis.__REL27 ?? 10.0) : (globalThis.__BLD27 ?? 3.2)) * dt)); // logic34: turn-in = logic27 lerp (×1.08 speed); release faster (logic28 overshoot fix kept) // ×1.08: same lag in metres as logic27 at the logic28 +8% speed (like YAW_MAX)
+    this._steerInput = globalThis.__STEER_L33 ? s33 : globalThis.__STEER_L27 ? s27 : s33 + w27 * (s27 - s33); // diagnostics: pure logic33 / logic27
 
     const boxes = env.boxesNear ? env.boxesNear(p.x, p.z, r + 0.3) : [];
     let onRoadNow = false;
