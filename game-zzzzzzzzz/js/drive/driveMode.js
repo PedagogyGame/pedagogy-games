@@ -1,17 +1,17 @@
-import { loftSolids } from "./loftNet.js?v=logic31";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic31";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic31";
-import { ROOMS } from "../data/rooms.js?v=logic31";
+import { loftSolids } from "./loftNet.js?v=logic32";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic32";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic32";
+import { ROOMS } from "../data/rooms.js?v=logic32";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic31";
-import { TrackSystem } from "./tracks.js?v=logic31";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic31";
-import { EngineAudio } from "./engineAudio.js?v=logic31";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic31";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic31";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic31";
-import { TreeCritters } from "./treehouse.js?v=logic31";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic31";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic32";
+import { TrackSystem } from "./tracks.js?v=logic32";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic32";
+import { EngineAudio } from "./engineAudio.js?v=logic32";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic32";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic32";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic32";
+import { TreeCritters } from "./treehouse.js?v=logic32";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic32";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -28,6 +28,7 @@ export const SLOT_FILLERS28 = [
   // logic29 (car ×0.85, Ø 0.117 m): slots the smaller car newly fits
   [[5.66, 4.2, -0.50], [5.80, 4.86, -0.40]],   // landing east lip: 13 cm between the stair-road rail end and the gallery wall → fell to the hall (L22)
   [[8.52, 0, -40.52], [9.48, 0.8, -40.40]],    // terrace: 12 cm between the east pillar and the garden wall (L28 gap scan)
+  [[-8.84, 0, 9.32], [-8.70, 0.57, 10.47]],    // logic32: 13 cm slot between the foyer west stair's bottom tread and the wall (opened when the stair underside block became per-tread)
   [[-9.48, 0, -40.52], [-8.52, 0.8, -40.40]],  // terrace: same, west pillar
 ];
 // logic29: rail joints the Ø0.117 car squeezes through → a soft rail piece (same capsule rail as the deck edge, so road traffic slides along it)
@@ -178,7 +179,7 @@ export class DriveMode {
       // logic27: backyard dog + doghouse + hiding spots, ambient house mouse
       if (!this.yardLife) { this.yardLife = new YardLife(this.scene, this); this.yardLife.roomDefs = Object.values(ROOMS); }
       if (!this._roofDeck) this._roofDeck = buildRoofDeck(this.scene, this.world.filledTops, this.tracks.segments); // logic28 tiled roof deck + kerb
-      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().concat(ls.solids)), this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; }), RAIL_FILLERS29.map((R) => { const f = new THREE.Box3(new THREE.Vector3(Math.min(R.x0, R.x1) - 0.02, R.y - 0.01, Math.min(R.z0, R.z1) - 0.02), new THREE.Vector3(Math.max(R.x0, R.x1) + 0.02, R.y + 0.035, Math.max(R.z0, R.z1) + 0.02)); f.driveKind = "rail"; f.rail = { x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, y0: R.y, y1: R.y, t: 0.02, h: 0.035 }; f.slotFiller = true; return f; })));
+      this.setWallColliders(mansion.getColliders().concat(ls.solids, this._autoPropColliders(mansion, mansion.getColliders().flatMap((b) => (b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps : [b])).concat(ls.solids)) /* logic32: props under an open stair are judged against its treads, not the old underside block */, this.yardLife.getColliders(), this._roofDeck.solids, SLOT_FILLERS28.map(([a, b]) => { const f = new THREE.Box3(new THREE.Vector3(...a), new THREE.Vector3(...b)); f.driveKind = "furniture"; f.slotFiller = true; return f; }), RAIL_FILLERS29.map((R) => { const f = new THREE.Box3(new THREE.Vector3(Math.min(R.x0, R.x1) - 0.02, R.y - 0.01, Math.min(R.z0, R.z1) - 0.02), new THREE.Vector3(Math.max(R.x0, R.x1) + 0.02, R.y + 0.035, Math.max(R.z0, R.z1) + 0.02)); f.driveKind = "rail"; f.rail = { x0: R.x0, z0: R.z0, x1: R.x1, z1: R.z1, y0: R.y, y1: R.y, t: 0.02, h: 0.035 }; f.slotFiller = true; return f; })));
     }
   }
 
@@ -221,6 +222,8 @@ export class DriveMode {
       this._buildWallGrid();
       return;
     }
+    // logic32: an open-riser stair's underside block becomes its treads (no invisible barrier under the flight)
+    colliders = colliders.flatMap((b) => b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps.map((t) => { const c = t.clone(); c.driveKind = "stair"; c.stairTread = true; return c; }) : [b]);
     this._wallColliders = colliders.map((b) => this._driveSoftCollider(b));
     this._buildWallGrid();
   }
