@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v3.7 — Ice Cream Truck & Trolley</title>
+<title>Spicy Rodents v3.9 — Street-Safe Utility Lines & Canopy Control</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -125,9 +125,9 @@ body.hud-hide-settings #graphics{visibility:hidden!important;pointer-events:none
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.7</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v3.9</div><span class="start-build">NEIGHBORHOOD PROTOTYPE</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
-      <p class="start-subtitle">A living town: a roaming ice cream truck, a vintage street trolley, cyclists, a juggling mime and plenty of squirrel trouble.</p>
+      <p class="start-subtitle">A living town with climbable trees, connected telephone lines, shops, vehicles and neighborhood surprises.</p>
     </header>
     <div class="start-scroll" id="startInstructions">
       <p class="start-blurb">Run through the streets, leap between trees and telephone wires, sneak up on people, and escape the neighbors who fight back. Explore the houses, park, cemetery, shops, estates, and hospital.</p>
@@ -253,7 +253,29 @@ terrainGeom.rotateX(-PI/2);const tv=terrainGeom.attributes.position;
 for(let i=0;i<tv.count;i++)tv.setY(i,terrainHeight(tv.getX(i),tv.getZ(i))-.09);
 terrainGeom.computeVertexNormals();mesh(terrainGeom,M.grass);
 // All street surfaces are ribbons conforming to the terrain, including gradients.
+const pavementZones=[];
+function registerPavement(axis,coord,width,start,end,material){
+ if(material===M.asphalt||material===concrete)
+  pavementZones.push({axis,coord,width,start,end});
+}
+function pavementDistance(x,z){
+ let best=Infinity;
+ for(const r of pavementZones){
+  const across=r.axis==='z'?Math.abs(x-r.coord):Math.abs(z-r.coord);
+  const along=r.axis==='z'?z:x;
+  const a=Math.max(0,across-r.width*.5),b=Math.max(0,r.start-along,along-r.end);
+  best=Math.min(best,Math.hypot(a,b));
+ }
+ return best;
+}
+const utilitySupports=[];
+function verifyUtilityPlacement(){
+ const wrong=utilitySupports.filter(p=>pavementDistance(p.x,p.z)<.95);
+ if(wrong.length)throw new Error('Street poles overlap pavement: '+wrong.slice(0,8).map(p=>`${p.label}@${p.x},${p.z}`).join('; '));
+ return utilitySupports.length;
+}
 function roadRibbon(axis,coord,width,material,offset=.055){
+ registerPavement(axis,coord,width,-WORLD_HALF,WORLD_HALF,material);
  const vertices=[],indexes=[],N=104;
  for(let i=0;i<=N;i++){
   const t=-WORLD_HALF+2*WORLD_HALF*i/N;
@@ -287,6 +309,7 @@ const eastExtension=new THREE.PlaneGeometry(446,488,100,94);eastExtension.rotate
 const eastVerts=eastExtension.attributes.position;for(let i=0;i<eastVerts.count;i++)eastVerts.setY(i,terrainHeight(eastVerts.getX(i),eastVerts.getZ(i))-.083);
 eastExtension.computeVertexNormals();mesh(eastExtension,M.grass);
 function districtRibbon(axis,coord,width,start,end,material,offset=.07){
+ registerPavement(axis,coord,width,start,end,material);
  const verts=[],inds=[],segments=95;
  for(let i=0;i<=segments;i++){const t=start+(end-start)*i/segments;
   for(const side of [-1,1]){const x=axis==='x'?t:coord+side*width/2,z=axis==='z'?t:coord+side*width/2;
@@ -586,49 +609,70 @@ for(const side of [-1,1])for(const z of [-1.8,1.8]){
 }
 tallVehicles.push({group:deliveryVan,width:3.0,length:5.9,height:3.65});
 // Utility poles, ceramic insulators and many webbed aerial cables.
-const wireM=mat('#343d40',.7,.23),insulator=mat('#d6ddd0',.25,.35),poleMat=new THREE.MeshStandardMaterial({map:barkTex,color:0x88775e,roughness:1});const poles=[];
-function pole(x,z){cyl(.31,.43,17.5,poleMat,x,8.75,z,scene,12);span(v(x-2,16.4,z),v(x+2,16.4,z),.19,.19,poleMat);span(v(x-1.55,14.6,z),v(x+1.55,14.6,z),.12,.12,poleMat);for(let t of [-1.65,0,1.65]){cyl(.14,.15,.33,insulator,x+t,16.7,z);cyl(.09,.1,.26,insulator,x+t,14.91,z)}poles.push({x,z});box(.2,.24,.2,M.metal,x,17.55,z);
- addRoute('telephone pole climb', [v(x,.55,z),v(x,8.5,z),v(x,16.97,z)],{kind:'trunk',surfaceRadius:.40});}
-for(let z of [-14,14])for(let x of [-101,-50,0,50,101])pole(x,z);
-for(let x of [-14,14])for(let z of [-104,-51,0,51,104])pole(x,z);
-function droopBetween(a,b,sag=.6){const len=a.distanceTo(b);return Array.from({length:13},(_,i)=>{let t=i/12;return a.clone().lerp(b,t).add(v(0,-sag*Math.sin(t*PI),0))})}
-for(let z of [-14,14]){for(let j=0;j<4;j++){const left=[-101,-50,0,50][j],right=[-50,0,50,101][j];for(let ix of [-1.65,0,1.65]){let pts=droopBetween(v(left+ix*0.12,16.97,z),v(right+ix*.12,16.97,z),R(.3,.75));linePath(pts,wireM,.035,48);if(ix===0)addRoute('east-west utility wire',pts,{kind:'wire'})}}}
-for(let x of [-14,14])for(let j=0;j<4;j++){let za=[-104,-51,0,51][j],zb=[-51,0,51,104][j];for(let offset of [-.4,.4]){let pts=droopBetween(v(x+offset,15.6,za),v(x+offset,15.6,zb),R(.28,.7));linePath(pts,wireM,.027,36);if(offset<0)addRoute('north-south phone line',pts,{kind:'wire'})}}
-// Extended block utility spines, away from the busy road surface.
-for(let z of [-14,14,-162,159]){
- const xs=[-244,-180,-101,-50,0,50,101,178,244];
- for(let j=0;j<xs.length-1;j++){
-  const a=xs[j],b=xs[j+1],y=z===-14||z===14?16.97:17.2;
-  const pts=droopBetween(v(a,y,z),v(b,y,z),.45);
-  if(z!==-14&&z!==14 || a<-101 || a>=101){linePath(pts,wireM,.035,28);addRoute('extended east-west utility line',pts,{kind:'wire'})}
+const wireM=mat('#343d40',.7,.23),insulator=mat('#d6ddd0',.25,.35),
+      poleMat=new THREE.MeshStandardMaterial({map:barkTex,color:0x88775e,roughness:1});
+const poles=[],poleLookup=new Map();
+function poleKey(x,z){return `${x.toFixed(2)},${z.toFixed(2)}`}
+// Every support is built at its FINAL position.  The pole mesh, trunk route and
+// all cable endpoints share that coordinate; no post-hoc mesh relocation.
+function pole(x,z){
+ const k=poleKey(x,z);if(poleLookup.has(k))return poleLookup.get(k);
+ const clearance=pavementDistance(x,z);
+ if(clearance<.95)throw new Error(`Utility pole on street or sidewalk (${x},${z}): ${clearance.toFixed(2)}`);
+ const by=terrainHeight(x,z),top=v(x,by+17.05,z);
+ cyl(.30,.40,17.05,poleMat,x,by+8.525,z,scene,10);
+ span(v(x-1.75,by+16.35,z),v(x+1.75,by+16.35,z),.13,.13,poleMat);
+ for(const dx of [-1.3,0,1.3])cyl(.12,.13,.27,insulator,x+dx,by+16.56,z);
+ box(.20,.20,.20,M.metal,x,top.y+.10,z);
+ const trunk=addRoute(`telephone pole climb ${k}`,[v(x,by+.48,z),v(x,by+8.5,z),top.clone()],{kind:'trunk',surfaceRadius:.40});
+ const support={x,z,top,trunk,label:'residential'};
+ poles.push(support);poleLookup.set(k,support);utilitySupports.push(support);return support;
+}
+function droopBetween(a,b,sag=.6){return Array.from({length:13},(_,i)=>{
+ const t=i/12;return a.clone().lerp(b,t).add(v(0,-sag*Math.sin(t*PI),0));
+})}
+function stringUtilityRoute(name,a,b){
+ const dist=a.top.distanceTo(b.top);
+ const pts=droopBetween(a.top,b.top,Math.min(.84,.26+dist*.004));
+ linePath(pts,wireM,.034,Math.max(24,Math.ceil(dist*.7)));
+ return addRoute(name,pts,{kind:'wire'});
+}
+// Verge-side rows and columns. No supports at road centerlines (x=0,
+// z=0, x=-180/178, z=-174/171). Long wire spans cross those streets overhead.
+// Where rows and columns meet, they share an actual pole and identical endpoints.
+const residentialRowX=[-244,-205,-154,-101,-50,-16.5,16.5,50,101,155,205,244];
+const residentialColumnZ=[-244,-206,-156,-104,-51,-16.5,16.5,51,104,153,199,244];
+const residentialRows=[-156,-16.5,16.5,153];
+const residentialColumns=[-154,-16.5,16.5,155];
+for(const z of residentialRows){
+ const supports=residentialRowX.map(x=>pole(x,z));
+ for(let j=1;j<supports.length;j++)stringUtilityRoute('east–west utility wire',supports[j-1],supports[j]);
+}
+for(const x of residentialColumns){
+ const supports=residentialColumnZ.map(z=>pole(x,z));
+ for(let j=1;j<supports.length;j++)stringUtilityRoute('north–south telephone wire',supports[j-1],supports[j]);
+}
+// Door drops start at actual street-side support heads (not old abandoned x=0 poles).
+for(const h of houses){
+ const nearest=poles.reduce((best,p)=>{
+  const d=Math.hypot(p.x-h.x,p.z-h.frontZ);
+  return !best||d<best.d?{p,d}:best;
+ },null)?.p;
+ if(!nearest)continue;
+ const end=v(h.x,terrainHeight(h.x,h.frontZ)+8.65,h.frontZ-Math.sign(h.z)*2),
+       pts=droopBetween(nearest.top,end,1.0);
+ linePath(pts,wireM,.022,40);addRoute('house service cable',pts,{kind:'wire'});
+}
+// Commercial road is wider: supports stand beyond its sidewalks, at z=±21.2.
+// The first span bends smoothly from the residential line into the district.
+for(const side of [-1,1]){
+ const z=side*21.2;
+ let prev=pole(244,side*16.5);
+ for(const x of [310,369,433,499,567,631,667]){
+  const p=pole(x,z);
+  stringUtilityRoute('commercial utility span',prev,p);prev=p;
  }
 }
-for(let x of [-14,14,-161,183]){
- const zs=[-244,-174,-104,-51,0,51,104,171,244];
- for(let j=0;j<zs.length-1;j++){
-  const a=zs[j],b=zs[j+1],y=Math.abs(x)<20?15.6:16.2;
-  const pts=droopBetween(v(x,y,a),v(x,y,b),.45);
-  if(Math.abs(x)>20||a<-104||a>=104){linePath(pts,wireM,.032,25);addRoute('extended north-south phone line',pts,{kind:'wire'})}
- }
-}
-for(let z of [-162,159])for(let x of [-244,-180,-101,-50,0,50,101,178,244])pole(x,z);
-for(let x of [-161,183])for(let z of [-244,-174,-104,-51,0,51,104,171,244])pole(x,z);
-// Service drops snake across front gardens toward houses.
-for(const h of houses){const anchor=v(Math.sign(h.x)*50,16.7,Math.sign(h.z)*14);const out=v(h.x,8.65,h.frontZ-Math.sign(h.z)*2);const pts=droopBetween(anchor,out,1.2);linePath(pts,wireM,.022,45);addRoute('house service cable',pts,{kind:'wire'})}
-
-// The residential utility network now actually reaches the new district.
-// Sequential curves share exact endpoints for uninterrupted squirrel navigation.
-for(const z of [-14,14]){
- const poleXs=[310,369,433,499,567,631,667];let prev=v(244,16.97,z);
- for(const x of poleXs){const yy=terrainHeight(x,z);
-  cyl(.30,.40,17.7,poleMat,x,yy+8.85,z,scene,10);
-  span(v(x-2,yy+16.4,z),v(x+2,yy+16.4,z),.14,.14,poleMat);
-  const end=v(x,yy+17.1,z),pts=droopBetween(prev,end,.4);
-  linePath(pts,wireM,.038,29);addRoute('commercial utility span',pts,{kind:'wire'});
-  prev=end;
- }
-}
-
 // Four individually seeded, asymmetrical trees. Distinct branch bones, bark fissures,
 // irregular exposed roots, crown spread and leaves + acorns (oak only).
 const treeSpec=[{name:'BUR OAK',x:-34,z:-33,seed:7,h:29,crown:20.5,color:['#44763b','#6d984d','#547e42','#8ba75b'],branches:6,acorn:true},
@@ -1088,16 +1132,24 @@ function estateGateOak(cx,cz,seed){
  estateGateTreeTips.push({x:cx,z:cz,tip:v(cx+.4,by+25,cz+.1)});
 }
 for(const [x,z,s] of [[-230,-329,189],[230,-329,191],[-219,-453,193],[219,-456,197]])estateGateOak(x,z,s);
-// Easy-to-see overhead access route from estate avenue to treetops.
-const estateWire=mat('#465052',.65,.3);
-for(let x=-250;x<250;x+=50){const xx=Math.min(250,x+50);
- const from=v(x,terrainHeight(x,-293)+16,-293),to=v(xx,terrainHeight(xx,-293)+16,-293),pts=droopBetween(from,to,.26);
- linePath(pts,estateWire,.035,20);addRoute('estate avenue cable',pts,{kind:'wire'});
+// Estate utility route: the cable and supports use the SAME verge coordinates.
+// There is intentionally no pole at x=0, where the north/south driveway meets
+// the estate avenue. A cable spans that intersection overhead.
+const estateWire=mat('#465052',.65,.3),estatePoleZ=-286;
+const estateCableX=[-250,-228,-125,125,228,250];
+const estateCableNodes=estateCableX.map(x=>v(x,terrainHeight(x,estatePoleZ)+16.4,estatePoleZ));
+for(let j=1;j<estateCableNodes.length;j++){
+ const pts=droopBetween(estateCableNodes[j-1],estateCableNodes[j],.3);
+ linePath(pts,estateWire,.035,Math.max(24,Math.ceil(estateCableNodes[j].distanceTo(estateCableNodes[j-1])*.8)));
+ addRoute('estate avenue cable',pts,{kind:'wire'});
 }
-for(const x of [-228,-125,0,125,228]){
- const z=-292,by=terrainHeight(x,z);
- cyl(.30,.4,17,M.wood,x,by+8.5,z);
- span(v(x-2,by+16,z),v(x+2,by+16,z),.16,.16,M.wood);
+for(const j of [0,1,2,3,4,5]){
+ const x=estateCableX[j],z=estatePoleZ,by=terrainHeight(x,z),top=estateCableNodes[j];
+ if(pavementDistance(x,z)<.95)throw new Error('Estate pole obstructs pavement '+x+','+z);
+ cyl(.30,.40,16.4,M.wood,x,by+8.2,z);
+ span(v(x-2,by+15.85,z),v(x+2,by+15.85,z),.16,.16,M.wood);
+ utilitySupports.push({x,z,label:'estate',top:top.clone()});
+ addRoute('estate avenue telephone pole climb',[v(x,by+.48,z),v(x,by+8,z),top.clone()],{kind:'trunk',surfaceRadius:.4});
 }
 
 // Actual wood-to-cable contacts at the two estate front oaks: intersections
@@ -1141,6 +1193,7 @@ cellTower(629,218);
 
 // ---- Nineteen kinds of detailed neighborhood objects, each with variations. ----
 // Set dressing is sparse per property rather than mirrored or cloned into rows.
+const bicycleWheelMeshes=new Map();
 const decorativeTypes=['fire hydrant','park bench','trash can','streetlight','stop sign',
  'garden gnome','bird feeder','sprinkler head','porch swing','window box',
  'driveway basketball hoop','kids bike','lawn flamingo','wind chime','garden hose reel',
@@ -1197,7 +1250,7 @@ function addDetail(type,x,z,variation=0){
   const rim=new THREE.Mesh(new THREE.TorusGeometry(.66,.075,8,24),red);rim.position.set(0,6.7,1.2);rim.rotation.x=PI/2;g.add(rim);
   for(let j=0;j<9;j++){const a=j*2*PI/9;span(v(Math.cos(a)*.65,6.68,1.2+Math.sin(a)*.65),v(Math.cos(a)*.33,5.75,1.2+Math.sin(a)*.33),.023,.014,white,g,5)}
  }else if(type==='kids bike'){
-  for(const zz of [-.85,.85]){const wh=new THREE.Mesh(new THREE.TorusGeometry(.6,.1,7,16),M.black);wh.position.set(0,.68,zz);wh.rotation.y=PI/2;g.add(wh)}
+  for(const zz of [-.85,.85])makeSpokedBicycleWheel(g,zz,.60);
   span(v(0,.68,-.85),v(0,1.48,0),.07,.06,red,g);span(v(0,1.48,0),v(0,.68,.85),.07,.06,red,g);
   span(v(0,.68,-.85),v(0,.68,.85),.055,.055,red,g);span(v(-.55,1.6,.85),v(.55,1.6,.85),.06,.06,iron,g);
   box(.75,.1,.33,M.black,0,1.45,-.16,g)
@@ -1294,13 +1347,19 @@ for(const [x,z] of [[-221,355],[-115,412],[90,358]]){
  const trunk=routes.find(r=>r.kind==='trunk'&&Math.hypot(r.curve.getPointAt(0).x-x,r.curve.getPointAt(0).z-z)<2);
  if(trunk){const tip=trunk.curve.getPointAt(.83);const high=tip.clone().add(v(6,4,2));span(tip,high,.23,.09,M.bark);addRoute('park high watch perch',[tip,high,high.clone().add(v(4,-1,0))],{kind:'lookout'});}
 }
-// A real adjoining elevated wire route gives the northern park access to the original cable grid.
-const parkWireStart=v(167,16.2,244),parkWireMid=v(165,16.6,283),parkWireEnd=v(142,17.0,331);
-linePath(droopBetween(parkWireStart,parkWireMid,.36),wireM,.037,25);addRoute('north park phone wire',droopBetween(parkWireStart,parkWireMid,.36),{kind:'wire'});
-linePath(droopBetween(parkWireMid,parkWireEnd,.4),wireM,.036,25);addRoute('park branch-side phone wire',droopBetween(parkWireMid,parkWireEnd,.4),{kind:'wire'});
+// Northern park crossing: all supports live on verges, not the roadway.
+const parkWireStart=pole(159,244).top,parkWireMid=pole(159,301).top,
+      parkWireEnd=pole(142,331).top;
+for(const [name,a,b] of [
+ ['north park phone wire',parkWireStart,parkWireMid],
+ ['park branch-side phone wire',parkWireMid,parkWireEnd]
+]){
+ const pts=droopBetween(a,b,.36);
+ linePath(pts,wireM,.037,36);addRoute(name,pts,{kind:'wire'});
+}
 const farParkTree=routes.find(r=>r.kind==='trunk'&&Math.hypot(r.curve.getPointAt(0).x-90,r.curve.getPointAt(0).z-358)<2);
-if(farParkTree){const high=farParkTree.curve.getPointAt(1),pts=droopBetween(high,parkWireEnd,1.1);linePath(pts,wireM,.037,35);addRoute('high park tree to phone line',pts,{kind:'wire'})}
-for(const p of [parkWireMid,parkWireEnd]){const y=terrainHeight(p.x,p.z),h=p.y-y;cyl(.28,.36,h,poleMat,p.x,y+h/2,p.z)}
+if(farParkTree){const high=farParkTree.curve.getPointAt(1),pts=droopBetween(high,parkWireEnd,1.1);
+ linePath(pts,wireM,.037,35);addRoute('high park tree to phone line',pts,{kind:'wire'});}
 for(const [x,z,k] of [[-59,355,2],[7,333,4],[-185,326,6],[112,396,1]])addDetail('park bench',x,z,k);
 for(const [x,z,k] of [[-201,331,2],[-30,405,0],[82,311,3]])addDetail('trash can',x,z,k);
 for(const [x,z] of [[-118,326],[10,398]]){const y=terrainHeight(x,z);cyl(.12,.16,5.9,M.metal,x,y+2.95,z);ball(.43,mat('#efdf9a'),x,y+6,z)}
@@ -1781,6 +1840,41 @@ const NPC_DEFS=[
 ['Eddie','walker',-1,'#9e684d','#88946d','bluster'],['Lou','walker',-1,'#dfb28e','#c7a9a4','wary'],['Kate','walker',-1,'#b18767','#a4bada','panic'],['Ray','walker',-1,'#dfbc92','#696a63','brave'],['Nina','walker',-1,'#704f40','#c4b082','panic'],['Jordan','walker',-1,'#ba8361','#576c56','wary'],['Dale','walker',-1,'#c4a584','#9e7e75','bluster'],['Kim','jogger',-1,'#aa785d','#d36e53','wary'],
 ['Miles','cyclist',-1,'#d8b18d','#6d8586','panic'],['Zoe','cyclist',-1,'#a67753','#b65869','wary'],['Ari','cyclist',-1,'#8d6a4f','#bcb884','brave'],['Parker','skater',-1,'#dfb99b','#4e606e','bluster'],['Pat','mail',-1,'#d3b08b','#728ca6','panic'],['June','walker',-1,'#855c48','#b0a7bc','wary']];
 const humanoids=[];const fleshCache={};function sharedSkin(hex){return fleshCache[hex]||(fleshCache[hex]=mat(hex,.92))}
+// v3.9 bicycle geometry: wheel axle is X, the riding direction is local +Z.
+// The entire rim/spoke assembly spins about X; use actual travel distance for rotation.
+function makeSpokedBicycleWheel(parent,z,radius=.60){
+ const r=radius;
+ const hub=new THREE.Group();hub.position.set(0,r+.045,z);parent.add(hub);
+ hub.userData.spicyBicycleWheel=true;hub.userData.rollingRadius=r;
+ let geometry=bicycleWheelMeshes.get(r);
+ if(!geometry){geometry={tire:new THREE.TorusGeometry(r,.075,8,36),
+   rim:new THREE.TorusGeometry(r-.083,.024,6,36),
+   spoke:new THREE.CylinderGeometry(.013,.013,1,5),
+   hub:new THREE.CylinderGeometry(.105,.105,.23,12)};
+   bicycleWheelMeshes.set(r,geometry);
+ }
+ const tire=new THREE.Mesh(geometry.tire,M.rubber);tire.rotation.y=PI/2;hub.add(tire);
+ const rim=new THREE.Mesh(geometry.rim,M.metal);rim.rotation.y=PI/2;hub.add(rim);
+ // Thin paired spokes form a wheel that reads clearly from either side.
+ const count=16,spokes=new THREE.InstancedMesh(geometry.spoke,M.metal,count);
+ const origin=new THREE.Vector3(),tip=new THREE.Vector3(),mid=new THREE.Vector3();
+ const q=new THREE.Quaternion(),m=new THREE.Matrix4(),scale=new THREE.Vector3();
+ const up=new THREE.Vector3(0,1,0);
+ for(let i=0;i<count;i++){
+  const a=2*PI*i/count;
+  origin.set(i%2?.068:-.068,0,0);
+  tip.set(0,Math.sin(a)*(r-.10),Math.cos(a)*(r-.10));
+  const d=tip.clone().sub(origin);
+  mid.copy(origin).addScaledVector(d,.5);
+  q.setFromUnitVectors(up,d.clone().normalize());scale.set(1,d.length(),1);
+  m.compose(mid,q,scale);spokes.setMatrixAt(i,m);
+ }
+ spokes.instanceMatrix.needsUpdate=true;spokes.frustumCulled=false;hub.add(spokes);
+ const axle=new THREE.Mesh(geometry.hub,M.metal);axle.rotation.z=PI/2;hub.add(axle);
+ // Readable colored valve stem that visibly spins with the hub.
+ ball(.045,mat('#e4cb73'),.10,r-.10,0,hub);
+ return hub;
+}
 function makeHuman(def,idx){const [name,role,home,skinColor,dress,personality]=def;const root=new THREE.Group();scene.add(root);const body=new THREE.Group();root.add(body);let proportion=R(.87,1.13);body.scale.setScalar(proportion*.59);const skin=sharedSkin(skinColor),shirt=mat(dress),pants=mat(pick(['#3d494b','#646c61','#55585a','#827a6c','#484957'])),shoe=mat('#2f3431');let torso=box(.87,1.42,.42,shirt,0,1.82,0,body);let hips=box(.75,.37,.5,pants,0,.98,0,body);let neck=cyl(.14,.15,.3,skin,0,2.62,0,body);let head=new THREE.Group();head.position.set(0,2.9,0);body.add(head);let skull=ball(.47,skin,0,.13,0,head);skull.scale.set(.84,1.1,.78);
 let hair=mat(pick(['#40382f','#755a45','#bba27e','#666663','#2d2928','#937d57']));ball(.43,hair,0,.44,-.03,head).scale.set(.9,.45,.92);if(idx%4===0)ball(.24,hair,0,.34,-.36,head);
 for(let s of [-1,1]){ball(.045,M.black,s*.17,.22,.36,head);ball(.068,skin,s*.38,.11,0,head)}ball(.085,skin,0,.04,.4,head).scale.set(.8,1,.7);
@@ -1793,7 +1887,29 @@ for(let s of [-1,1]){
  (npc.redEyes||(npc.redEyes=[])).push(glowEye);
 }
 if(role==='mail'){box(1.4,.9,.36,mat('#6b7070'),.65,1.4,.3,body);box(.28,.14,.6,mat('#e8ebdb'),.45,1.88,.3,body);box(.85,.23,.88,mat('#54738a'),0,3.55,0,body)}
-if(role==='cyclist'||role==='skater'){const vehicle=new THREE.Group();vehicle.position.set(0,.1,0);root.add(vehicle);if(role==='cyclist'){for(let zz of [-1.05,1.05]){let tire=new THREE.Mesh(new THREE.TorusGeometry(.6,.08,7,23),M.rubber);tire.position.set(0,.63,zz);vehicle.add(tire)}span(v(0,.6,-1),v(0,1.28,0),.06,.06,mat('#405979'),vehicle);span(v(0,.6,1),v(0,1.28,0),.06,.06,mat('#405979'),vehicle);span(v(0,1.28,0),v(0,.6,-1),.05,.05,mat('#405979'),vehicle);span(v(-.49,1.64,1),v(.49,1.64,1),.06,.06,M.metal,vehicle);body.position.y=.72}else{box(.62,.14,2.1,mat('#7f4e43'),0,.22,0,vehicle);for(let s of [-1,1])for(let z of [-.73,.73])cyl(.13,.13,.13,M.rubber,s*.4,.12,z,vehicle).rotation.z=PI/2;body.position.y=.24}npc.bike=vehicle}
+if(role==='cyclist'||role==='skater'){const vehicle=new THREE.Group();vehicle.position.set(0,.1,0);root.add(vehicle);if(role==='cyclist'){
+ const paint=mat(['#405979','#b65e53','#59826d','#a58b4d'][idx%4]);
+ npc.bikeWheels=[makeSpokedBicycleWheel(vehicle,-1.05,.60),makeSpokedBicycleWheel(vehicle,1.05,.60)];
+ // Rear triangle, main diamond, steering fork and handlebars all meet real axle points.
+ const rear=v(0,.645,-1.05),front=v(0,.645,1.05),seat=v(0,1.42,-.35);
+ const crank=v(0,.83,-.23),headTube=v(0,1.39,.68);
+ for(const [a,b,w] of [[rear,seat,.065],[rear,crank,.055],[seat,crank,.066],
+                             [seat,headTube,.068],[crank,headTube,.067],[headTube,front,.072]])
+   span(a,b,w,w*.86,paint,vehicle,7);
+ span(v(0,1.42,-.35),v(0,1.59,-.35),.055,.05,M.metal,vehicle);
+ box(.76,.12,.38,M.black,0,1.61,-.36,vehicle);
+ span(v(0,1.39,.68),v(0,1.67,.90),.065,.058,M.metal,vehicle);
+ span(v(-.49,1.67,.91),v(.49,1.67,.91),.057,.057,M.metal,vehicle);
+ for(const x of [-.48,.48])ball(.075,M.black,x,1.67,.91,vehicle);
+ const pedals=new THREE.Group();pedals.position.copy(crank);vehicle.add(pedals);npc.bikeCrank=pedals;
+ for(const s of [-1,1]){
+  span(v(s*.17,0,0),v(s*.22,s*.27,0),.035,.030,M.metal,pedals,6);
+  box(.30,.07,.17,M.black,s*.22,s*.27,0,pedals);
+ }
+ ball(.085,mat('#fff3b5'),0,1.48,.91,vehicle);
+ box(.19,.16,.09,mat('#bd4d3e'),0,.99,-1.1,vehicle);
+ body.position.y=.72
+}else{box(.62,.14,2.1,mat('#7f4e43'),0,.22,0,vehicle);for(let s of [-1,1])for(let z of [-.73,.73])cyl(.13,.13,.13,M.rubber,s*.4,.12,z,vehicle).rotation.z=PI/2;body.position.y=.24}npc.bike=vehicle}
 humanoids.push(npc);return npc}
 NPC_DEFS.forEach(makeHuman);
 makeHuman(['Tori','park',-1,'#ae7c58','#829476','brave'],humanoids.length);makeHuman(['Gene','park',-1,'#e3c49b','#5e8195','wary'],humanoids.length);makeHuman(['Evelyn','mourner',-1,'#9e7662','#414743','panic'],humanoids.length);
@@ -2098,12 +2214,14 @@ function nearestRoute(maxDist=4.5,excluding=null,point=player.pos){
 function groundTrunkCandidate(point=player.pos,reach=2.85){
  let best=null,score=Infinity;
  for(const route of routes){
-  if(route.kind!=='trunk'||/telephone pole|downspout|gutter|ladder/i.test(route.name))continue;
+  if(route.kind!=='trunk'||/downspout|gutter|ladder/i.test(route.name))continue;
+  const isPole=/telephone pole/i.test(route.name);
+  if(isPole&&reach>1.85&&Math.hypot(point.x-route.sampled[0].x,point.z-route.sampled[0].z)>1.85)continue;
   const foot=route.sampled[0];if(!foot)continue;
   const horizontal=Math.hypot(point.x-foot.x,point.z-foot.z);
   const rise=Math.abs(point.y-foot.y);
   if(horizontal>reach||rise>3.1)continue;
-  const rank=horizontal+rise*.24;
+  const rank=horizontal+rise*.24+(isPole?.20:0);
   if(rank<score){score=rank;best={route,t:0,d:horizontal}}
  }
  return best;
@@ -2124,7 +2242,7 @@ function forwardIntoTrunk(candidate,fw,side){
 // These helpers are intentionally pure so they can be unit-tested independently.
 const RouteJunction={
  inward(t,desired){return t<.035?1:t>.965?-1:desired},
- canTransfer(gap,explicit=false){return Number.isFinite(gap)&&gap<=(explicit?2.15:.78)},
+ canTransfer(gap,explicit=false){return Number.isFinite(gap)&&gap<=(explicit?1.7:.48)},
  ease(p){p=Math.max(0,Math.min(1,p));return p*p*(3-2*p)}
 };
 let routeBridge=null;
@@ -2229,7 +2347,7 @@ function switchRoute(old,atStart){
  const seen=new Map(),xi=Math.floor(cur.x/8),yi=Math.floor(cur.y/8),zi=Math.floor(cur.z/8);
  for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)for(let k=-1;k<=1;k++)
   for(const e of routeSpatial.get(`${xi+i},${yi+j},${zi+k}`)||[]){
-   if(e.route===old)continue;
+   if(e.route===old||e.t>.07&&e.t<.93)continue;
    const gap=e.pos.distanceTo(cur);
    if(!RouteJunction.canTransfer(gap))continue;
    const oldCandidate=seen.get(e.route);
@@ -2793,6 +2911,13 @@ pos.x=THREE.MathUtils.clamp(pos.x,-265,671);pos.z=THREE.MathUtils.clamp(pos.z,-2
 if(n.state==='walk'&&n.onAccess)pos.x=THREE.MathUtils.damp(pos.x,n.accessX??pos.x,8,dt);
 else if(n.state==='walk'&&n.pedLane){if(n.pedLane.axis==='x')pos.z=THREE.MathUtils.damp(pos.z,n.pedLane.fixed,8,dt);else pos.x=THREE.MathUtils.damp(pos.x,n.pedLane.fixed,8,dt)}
 humanHouseCollision(n,prevPedX,prevPedZ);pos.y=terrainHeight(pos.x,pos.z)+.13;
+// Rotate road bicycles by actual displacement, not by frame count or jitter from a blocked path.
+if(n.role==='cyclist'&&n.bike?.visible&&n.bikeWheels?.length){
+ const travelled=Math.min(3,Math.hypot(pos.x-prevPedX,pos.z-prevPedZ));
+ for(const wheel of n.bikeWheels)wheel.rotation.x+=travelled/wheel.userData.rollingRadius;
+ if(n.bikeCrank)n.bikeCrank.rotation.x+=travelled/.34;
+}
+
 const gait=Math.sin(time*(n.role==='cyclist'?8:n.state==='flee'?12:n.role==='jogger'?10:6)+n.phase),panic=n.reacting>0;for(let k=0;k<2;k++){n.arms[k].rotation.x=panic?(-2.5+Math.sin(time*14+k*3)*.45):(k?1:-1)*gait*.45;n.arms[k].rotation.z=panic?(k?.35:-.35):0;n.legs[k].rotation.x=n.role==='cyclist'?.1:((k?1:-1)*gait*.52)}n.head.rotation.y=panic?Math.sin(time*13)*.28:Math.sin(time*1.5+n.phase)*.05;n.body.rotation.z=panic?Math.sin(time*11)*.095:0;if(n.kickWindup>0)n.legs[1].rotation.x=-1.1-(1-n.kickWindup)*.65;
 if(n.timeAway>n.maxLife||pos.x>670||pos.x< -265||(pos.z<-242||pos.z>438)){n.visible=false;n.root.visible=false;n.timeAway=0;n.maxLife=R(24,56);for(const b of bubbles.filter(b=>b.npc===n))b.life=0}
 }}
@@ -2919,7 +3044,7 @@ function updateCars(dt){for(const c of cars){if(!c.moving)continue;
 }}
 
 // ============================================================================
-// v3.7 — Two street vehicles; deliberately independent from the pedestrian,
+// v3.8 — Two street vehicles; deliberately independent from the pedestrian,
 // ambulance and general car schedulers. Each has one world-space position owner.
 // - Ice cream van: gently looping a central two-lane neighborhood street with
 //   actual customer stops and an animated service awning.
@@ -4087,14 +4212,20 @@ for(const dz of [-187,-171])districtRibbon('x',dz,2.1,-299,-178,concrete,.2);
 const westAsphalt=mat('#555958'), fadedConcrete=mat('#aba89d'), weatheredWood=mat('#977b5f');
 const oldGas={x:-397,z:229,closed:false,attackSeconds:0,lastAttack:-1e9,bites:0,sign:null};
 const westTrees=[];
-// Telephone poles and lines along the street are genuine squirrel routes.
+// Westside wooden poles and their overhead lines share exact attachment points.
+const westPoleTops=[];
 for(let i=0;i<7;i++){
- const z=-235+i*77,x=WEST_X-14,by=terrainHeight(x,z);
- cyl(.48,.57,17,mat('#695740'),x,by+8.5,z,scene,9);
+ const z=-235+i*77,x=WEST_X-14,by=terrainHeight(x,z),top=v(x,by+16.6,z);
+ if(pavementDistance(x,z)<.95)throw new Error('Westside pole obstructs street '+i);
+ cyl(.42,.50,16.6,mat('#695740'),x,by+8.3,z,scene,9);
  span(v(x-2.2,by+15.8,z),v(x+2.2,by+15.8,z),.15,.15,weatheredWood);
- addRoute('Westside telephone pole '+i,[v(x,by+.5,z),v(x,by+16.6,z)],{kind:'trunk',surfaceRadius:.50});
+ utilitySupports.push({x,z,label:'westside',top:top.clone()});westPoleTops.push(top);
+ addRoute('Westside telephone pole '+i,[v(x,by+.5,z),top.clone()],{kind:'trunk',surfaceRadius:.50});
 }
-for(const shift of [-1.8,1.8])addRoute('Westside overhead lines '+shift,Array.from({length:14},(_,i)=>{const z=-235+i*38.5;return v(WEST_X-14+shift,terrainHeight(WEST_X-14,z)+16.0-.45*Math.sin(i*Math.PI),z)}),{kind:'wire'});
+for(let i=1;i<westPoleTops.length;i++){
+ const pts=droopBetween(westPoleTops[i-1],westPoleTops[i],.42);
+ linePath(pts,wireM,.033,42);addRoute('Westside overhead phone line '+i,pts,{kind:'wire'});
+}
 function oldHouse(index){
  const x=-365+(index%3-1)*5,z=-224+index*61,by=terrainHeight(x,z);
  const wall=mat(['#a69a7c','#bdab92','#919b8a','#bcafa1','#99917f','#bcb28a','#9b988d'][index]);
@@ -5456,8 +5587,8 @@ for(const s of [-1,1])ball(.19,mimeFabric,s*.78,1.23,.08,mimeN.n.body);
 // The high wheel is a real visible prop, and the juggling balls follow parabolic arcs.
 const tallWheel=new THREE.Group();mimeN.n.root.add(tallWheel);
 const wheelTurn=new THREE.Group();wheelTurn.position.y=1.80;tallWheel.add(wheelTurn);
-const wheelRing=new THREE.Mesh(new THREE.TorusGeometry(1.63,.13,10,38),M.rubber);wheelTurn.add(wheelRing);
-for(let i=0;i<8;i++){const a=i*PI/4;span(v(0,0,0),v(Math.sin(a)*1.56,Math.cos(a)*1.56,0),.025,.025,M.metal,wheelTurn)}
+const wheelRing=new THREE.Mesh(new THREE.TorusGeometry(1.63,.13,10,38),M.rubber);wheelRing.rotation.y=PI/2;wheelTurn.add(wheelRing);
+for(let i=0;i<8;i++){const a=i*PI/4;span(v(0,0,0),v(0,Math.sin(a)*1.56,Math.cos(a)*1.56),.025,.025,M.metal,wheelTurn)}
 span(v(0,1.8,0),v(0,3.77,0),.11,.10,M.metal,tallWheel);
 box(1.05,.14,.58,mimeInk,0,3.80,0,tallWheel);
 for(const s of [-1,1])span(v(0,2.06,0),v(s*.65,1.93,0),.065,.06,M.metal,tallWheel);
@@ -5479,7 +5610,7 @@ for(const [i,spec] of youngRiders.entries()){
   {kind:'kid',x:spec.x,z:spec.z,heading,endX:spec.endX,endZ:spec.endZ,speed:4.6+i*.35,escapeSpeed:12.8+i*.45});
  a.n.body.scale.multiplyScalar(.76);a.n.body.position.y=.55;
  if(a.n.bike){a.n.bike.scale.setScalar(.82);a.n.bike.position.y=.08;
-  for(const wheel of a.n.bike.children)if(wheel.geometry?.type==='TorusGeometry')a.lights.push(wheel)}
+  a.lights.push(...a.n.bikeWheels)}
  // Simple bicycle helmets in different colors, mounted on the rider's head.
  const helmet=ball(.43,mat(spec.color),0,.46,-.02,a.n.head);helmet.scale.set(1,.43,1);
  box(.55,.085,.27,mat('#33383c'),0,.35,.31,a.n.head);
@@ -5617,6 +5748,7 @@ function updateNoveltyCast(dt){
    else {a.destination=a.origin.clone();a.origin=noveltyUnit(old.x,old.z);}
   }
   p.y=terrainHeight(p.x,p.z)+.13;
+  const rolled=Math.hypot(p.x-old.x,p.z-old.z); // no wheel spin while blocked
   if(a.kind==='mime'){
    if(n.state==='escape'){for(const b of jugglingBalls)b.visible=false;}
    else{
@@ -5625,11 +5757,12 @@ function updateNoveltyCast(dt){
      jugglingBalls[j].position.set(Math.sin(phase)*.82,5.70+1.15*Math.max(0,Math.cos(phase)),.15+Math.sin(phase*.5)*.10);
     }
    }
-   mimeN.wheelTurn.rotation.z-=step/1.63;
+   mimeN.wheelTurn.rotation.x+=rolled/1.63;
    n.body.rotation.z=Math.sin(time*4.5)*.055;
    for(let k=0;k<2;k++)n.arms[k].rotation.x=-1.2+Math.sin(time*8.8+k*PI)*.50;
   }else{
-   for(const wheel of a.lights)wheel.rotation.z-=step/.6;
+   for(const wheel of a.lights)wheel.rotation.x+=rolled/(wheel.userData.rollingRadius*n.bike.scale.x);
+    if(n.bikeCrank)n.bikeCrank.rotation.x+=rolled/(.34*n.bike.scale.x);
    n.body.rotation.z=Math.sin(time*6+a.phase)*.035;
    for(let k=0;k<2;k++)n.legs[k].rotation.x=Math.sin(time*10+a.phase+k*PI)*.40;
    n.arms.forEach(arm=>arm.rotation.x=-.68);
@@ -5713,7 +5846,7 @@ function updateDiagnostics(dt){
  const element=document.getElementById('spicyDiagnostic');
  if(!element||!element.classList.contains('open'))return;
  const p=player.pos;
- element.textContent=`v3.7 · Trolley + ice cream truck · ${player.rail?.name||'ground'}\n`+
+ element.textContent=`v3.9 · Bicycle wheels & canopy routes · ${player.rail?.name||'ground'}\n`+
    `player ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)} · ${player.grounded?'grounded':'air/route'}\n`+
    `routes ${routes.length}/${routes.filter(r=>r.indexed).length} indexed · forks ${canopyForks.size} · errors ${runtimeErrors.length}`+
    (runtimeErrors.length?'\n'+runtimeErrors.slice(-2).join(' | '):'');
@@ -5745,10 +5878,12 @@ function verifyRouteRegistry(){
 }
 // Final registry rebuild includes westside trees and the later treehouse.
 verifyRouteRegistry();
+const verifiedUtilityPoles=verifyUtilityPlacement();
+console.info(`[Spicy Rodents] ${verifiedUtilityPoles} utility supports verified off pavement`);
 rebuildCanopyForks();
 if(routes.some(r=>!r.indexed))console.warn('[Spicy Rodents] Incomplete route registry');
 try{
- drawInfection();flash('v3.6 · MIME UNICYCLIST · KIDS ON BIKES · STATION ESCAPES',6);
+ drawInfection();flash('v3.9 · SPOKED BICYCLE WHEELS · CONNECTED ROUTES',6);
  tick();
  if(!mainLoopFailed){window.__spicyBootOk=true;
   $('loading').classList.add('done');
@@ -5895,44 +6030,8 @@ try{
     return root;
   }
 
-  function pointInRoad(x,z){
-    // heuristic based on common road widths used in project
-    if(typeof roads !== 'undefined' && Array.isArray(roads)){
-      for(const r of roads){
-        if(!r) continue;
-        const cx = r.x || (r.position&&r.position.x) || 0;
-        const cz = r.z || (r.position&&r.position.z) || 0;
-        const w = r.w || r.width || r.roadW || 0;
-        const d = r.d || r.depth || r.roadD || 0;
-        if(Math.abs(x-cx) <= w/2 && Math.abs(z-cz) <= d/2) return true;
-      }
-    }
-    return false;
-  }
-  function moveStreetPolesOffRoad(){
-    const moved = [];
-    if(typeof utilityPoles !== 'undefined' && Array.isArray(utilityPoles)){
-      for(const p of utilityPoles){
-        if(!p || !p.position) continue;
-        let x=p.position.x, z=p.position.z;
-        if(pointInRoad(x,z)){
-          // move outward to nearest verge by checking offsets
-          const tries = [
-            {x:x+4,z},{x:x-4,z},{x,z:z+4},{x,z:z-4},
-            {x:x+6,z},{x:x-6,z},{x,z:z+6},{x,z:z-6}
-          ];
-          const target = tries.find(t=>!pointInRoad(t.x,t.z));
-          if(target){
-            p.position.set(target.x,p.position.y,target.z);
-            moved.push({p,target});
-          }
-        }
-      }
-    }
-    // reconnect wire geometry if available
-    if(typeof rebuildUtilityWires === 'function') try{ rebuildUtilityWires(); }catch(e){}
-    return moved.length;
-  }
+  // Poles, routes and cable meshes are constructed in a single road-aware
+  // utility network above. No detached post-generation pole moving is needed.
 
   function addNeighborhoodScenery(){
     // stream near park edge / west side
@@ -5954,8 +6053,7 @@ try{
   }
 
   function afterBuildWorldPass(){
-    try{ moveStreetPolesOffRoad(); }catch(e){}
-    try{ addNeighborhoodScenery(); }catch(e){}
+    try{ addNeighborhoodScenery(); }catch(e){console.warn('Environment scenery:',e)}
   }
 
   // Hook whichever world builder exists
