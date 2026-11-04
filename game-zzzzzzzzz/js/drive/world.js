@@ -1,10 +1,10 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic30";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic30";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic31";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic31";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic30";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic30";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic30";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic30";
+import { ROOMS } from "../data/rooms.js?v=logic31";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic31";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic31";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic31";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -65,7 +65,7 @@ export class DriveWorld {
     this._buildFloors();
     // logic9: rugs / perimeter frame lips are real surfaces — the car rides ON the carpet
     // (logic8 had the wheels at plank level, i.e. 5 cm UNDER the rug mesh: invisible car).
-    this.rugs = ((mansion && mansion.rugRegions) || []).map((r) => ({ ...r, base: r.y - (r.kind === "rug" ? 0.05 : 0.034) }));
+    this.rugs = ((mansion && mansion.rugRegions) || []).map((r) => ({ ...r, base: r.y - (r.kind === "rug" ? (r.roomId === "pond" ? 0.05 : 0.008) : 0.0085) })); // logic31: flush rugs (8 mm) and frame inlays (8.5 mm)
     // logic10: EVERY low flat thing on a floor (outdoor paths, zone tints, the drive apron,
     // flower beds, planters, thresholds, trims…) is a real surface at its true top. Tops within a
     // kerb step are rolled onto; taller low boxes are hard sides (no more "buried car").

@@ -1,17 +1,17 @@
-import { loftSolids } from "./loftNet.js?v=logic30";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic30";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic30";
-import { ROOMS } from "../data/rooms.js?v=logic30";
+import { loftSolids } from "./loftNet.js?v=logic31";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic31";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic31";
+import { ROOMS } from "../data/rooms.js?v=logic31";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic30";
-import { TrackSystem } from "./tracks.js?v=logic30";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic30";
-import { EngineAudio } from "./engineAudio.js?v=logic30";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic30";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic30";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic30";
-import { TreeCritters } from "./treehouse.js?v=logic30";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic30";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic31";
+import { TrackSystem } from "./tracks.js?v=logic31";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic31";
+import { EngineAudio } from "./engineAudio.js?v=logic31";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic31";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic31";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic31";
+import { TreeCritters } from "./treehouse.js?v=logic31";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic31";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -38,7 +38,7 @@ export const CAM_TIGHT = { b: 0.94, u: 0.9, l: 0.2 }; // logic28 chase-rig tight
 // logic29 (Ben 6:36 PM "lower and closer behind the car, so the car takes up more of the screen … like the earlier versions"):
 // rig still × CAR_K, then b/u below logic27, look-at back up to a little above the car (l 1.0 = logic27), and the
 // at-rest "leisure" / high-track pull-outs mostly removed (they were what made the stopped view feel pulled back).
-export const CAM29 = Object.assign({ b: 0.95, u: 0.8, l: 1.0, leis: 0.35, high: 0.85 } /* logic30: bumper margin comes from the pitch floor in the chase aim (look-at stays a little above the car) */, globalThis.__CAM29 || {});
+export const CAM29 = Object.assign({ b: 0.95 * 1.09, u: 0.8 * 1.09, l: 1.0, leis: 0.35, high: 0.85, tilt: 1.087 } /* logic31 (Ben 11:46 PM "zoom out in view and tilt just 2% more"): rig ×1.09 back+up; tilt 1.087 on the aim = net +2 % mean downward pitch vs logic30 (the pull-back alone flattened it ~6 %) */ /* logic30: bumper margin comes from the pitch floor in the chase aim (look-at stays a little above the car) */, globalThis.__CAM29 || {});
 export const camRig = () => (globalThis.__CAM_L27 ? { b: 1, u: 1, l: 1, leis: 1, high: 1 } : globalThis.__CAM_L28 ? { ...CAM_TIGHT, leis: 1, high: 1 } : (globalThis.__CAM29 ? Object.assign({}, CAM29, globalThis.__CAM29) : CAM29));
 export class DriveMode {
   constructor(scene, camera) {
@@ -1769,6 +1769,9 @@ export class DriveMode {
         const eTop = Math.atan2(pp.y + 0.06 - C.y, Math.hypot(pp.x - C.x, pp.z - C.z) || 1e-6), eMin = eTop - Math.atan(0.9 * Math.tan(half));
         L.y = C.y + Math.tan(Math.max(eMin, Math.min(eT, eR + half - mg))) * th; }
     }
+    // logic31: "tilt just 2% more" — the aim's downward pitch × RIG.tilt (applied after the bumper floor: tipping down only lifts the car in frame; tilt tuned so the mean pitch over the standard spots is +2 % vs logic30 after the 9 % pull-back)
+    { const R = camRig(), C = this.camera.position, L = this._camLookSmooth; if (this._camMode !== "bumper" && !globalThis.__CAM_L27 && !globalThis.__CAM_L28 && R.tilt && R.tilt !== 1 && mlK < 0.5) {
+      const th = Math.hypot(L.x - C.x, L.z - C.z) || 1e-6, e = Math.atan2(L.y - C.y, th); if (e < 0) L.y = C.y + Math.tan(e * R.tilt) * th; } }
     this.camera.lookAt(this._camLookSmooth);
     this._sanitizeCamera();
 
