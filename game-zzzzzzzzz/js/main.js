@@ -1,14 +1,14 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic30";
-import { Player } from "./player.js?v=logic30";
-import { Mansion } from "./mansion.js?v=logic30";
-import { InspectMode } from "./inspect.js?v=logic30";
-import { SliceSystem } from "./slice.js?v=logic30";
-import { DriveMode } from "./drive/driveMode.js?v=logic30";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic30";
-import { OBJECTS } from "./data/objects.js?v=logic30";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic30";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic30";
+import { batchStatic } from "./batch.js?v=logic31";
+import { Player } from "./player.js?v=logic31";
+import { Mansion } from "./mansion.js?v=logic31";
+import { InspectMode } from "./inspect.js?v=logic31";
+import { SliceSystem } from "./slice.js?v=logic31";
+import { DriveMode } from "./drive/driveMode.js?v=logic31";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic31";
+import { OBJECTS } from "./data/objects.js?v=logic31";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic31";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic31";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;

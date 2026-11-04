@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic30";
-import { OBJECTS } from "./data/objects.js?v=logic30";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic30";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic30";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic30";
-import { buildLabGarage } from "./labGarage.js?v=logic30";
+import { ROOMS } from "./data/rooms.js?v=logic31";
+import { OBJECTS } from "./data/objects.js?v=logic31";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic31";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic31";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic31";
+import { buildLabGarage } from "./labGarage.js?v=logic31";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -1393,8 +1393,10 @@ export class Mansion {
     // Perimeter floor frame (4 strips) — raised clear of plank top to kill shimmer
     // (never a full coplanar slab on the same Y as the floor)
     {
-      const frameY = cy + 0.014;
-      const frameH = 0.02;
+      // logic31 (Ben "just not very real, not good or smooth"): at the ×0.75 car scale the old 3.4 cm floating frame
+      // strips read as kerbs with dark seams under them. Now a flush 6 mm inlay sitting ON the planks (+brass hairline).
+      const frameY = cy + 0.003;
+      const frameH = 0.006;
       const inset = 0.16;
       const strip = 0.11;
       const woodF = this._mat(0x3e2723, 0.55, 0.12);
@@ -1415,7 +1417,7 @@ export class Mansion {
           const hz0 = s.p[2] - s.s[2] / 2, hz1 = s.p[2] + s.s[2] / 2;
           if (climbHoles.some((h) => hx1 > h.minX && hx0 < h.maxX && hz1 > h.minZ && hz0 < h.maxZ)) continue;
         }
-        this.rugRegions.push({ minX: s.p[0] - s.s[0] / 2, maxX: s.p[0] + s.s[0] / 2, minZ: s.p[2] - s.s[2] / 2, maxZ: s.p[2] + s.s[2] / 2, y: cy + 0.034, roomId: room.id, kind: "frame" });
+        this.rugRegions.push({ minX: s.p[0] - s.s[0] / 2, maxX: s.p[0] + s.s[0] / 2, minZ: s.p[2] - s.s[2] / 2, maxZ: s.p[2] + s.s[2] / 2, y: cy + 0.0085, roomId: room.id, kind: "frame" });
         const m = new THREE.Mesh(new THREE.BoxGeometry(...s.s), woodF);
         m.position.set(...s.p);
         m.receiveShadow = true;
@@ -1425,12 +1427,12 @@ export class Mansion {
         const cap = new THREE.Mesh(
           new THREE.BoxGeometry(
             s.s[0] > s.s[2] ? s.s[0] * 0.92 : 0.045,
-            0.012,
+            0.003,
             s.s[2] > s.s[0] ? s.s[2] * 0.92 : 0.045
           ),
           brassF
         );
-        cap.position.set(s.p[0], frameY + 0.014, s.p[2]);
+        cap.position.set(s.p[0], frameY + 0.004, s.p[2]); // logic31: hairline inlay, top cy+0.0085
         cap.frustumCulled = true;
         g.add(cap);
       }
@@ -1460,9 +1462,11 @@ export class Mansion {
         // of the floor, and the slope-scaled offset pulled the big rug in front of the tyres at low chase-cam angles.
       });
       // Center at cy+0.036, h=0.028 → sits fully above frame brass (~cy+0.026)
-      const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.028, rd), rugMat);
-      rug.position.set(rx, cy + 0.036, rz);
-      this.rugRegions.push({ minX: rx - rw / 2, maxX: rx + rw / 2, minZ: rz - rd / 2, maxZ: rz + rd / 2, y: cy + 0.05, roomId: room.id, kind: "rug" });
+      // logic31: a real rug lies ON the floor — 8 mm thick, no 2.2 cm air gap under a 5 cm slab (that read as a raised
+      // slab with a lip that hid half the small car, Ben's shot 4).
+      const rug = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.008, rd), rugMat);
+      rug.position.set(rx, cy + 0.004, rz);
+      this.rugRegions.push({ minX: rx - rw / 2, maxX: rx + rw / 2, minZ: rz - rd / 2, maxZ: rz + rd / 2, y: cy + 0.008, roomId: room.id, kind: "rug" });
       rug.receiveShadow = true;
       rug.frustumCulled = true;
       g.add(rug);
