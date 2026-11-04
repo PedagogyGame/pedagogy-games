@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic30"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic31"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
