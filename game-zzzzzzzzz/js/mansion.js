@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic34";
-import { OBJECTS } from "./data/objects.js?v=logic34";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic34";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic34";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic34";
-import { buildLabGarage } from "./labGarage.js?v=logic34";
+import { ROOMS } from "./data/rooms.js?v=logic35";
+import { OBJECTS } from "./data/objects.js?v=logic35";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic35";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic35";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic35";
+import { buildLabGarage } from "./labGarage.js?v=logic35";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -554,6 +554,9 @@ export class Mansion {
         if (!free(rx0 - 0.1, rx1 + 0.1, rz0 - 0.1, rz1 + 0.1, fy + 0.005, fy + h + 0.15, c)) continue;
         if (nearTrack(rx0 - 0.5, rx1 + 0.5, rz0 - 0.5, rz1 + 0.5, fy - 0.1, fy + h + 0.4)) continue; // never on a road
         if (floorAt(x0, z0, fy) !== fy || floorAt(x1, z1, fy) !== fy) continue;
+        // logic35 (Ben pt259u Hall of Echoes shot): a staircase laid across an area rug sank its lower books into the
+        // carpet and ran out over the runner — read as books poking through. Never lay one over a rug.
+        if ((this.rugRegions || []).some((r) => r.kind === "rug" && Math.abs(r.y - fy) < 0.1 && r.maxX > x0 && r.minX < x1 && r.maxZ > z0 && r.minZ < z1)) continue;
         this.bookStairs.push({ x: sx ? ox + sx * (len + 0.25) : ox, z: sz ? oz + sz * (len + 0.25) : oz, yaw: Math.atan2(-sx, -sz), floorY: fy, topY: c.max.y, cx, cz });
         for (let k = 0; k < n; k++) {
           const top = Math.min(c.max.y - 0.004, fy + RISE * (n - k)); // step k=0 touches the furniture
@@ -656,7 +659,24 @@ export class Mansion {
       { w: 48, d: 2.0, x: 0, z: -44 }, // terrace cross
       { w: 40, d: 1.8, x: 0, z: 18 }, // front loop
     ];
+    // logic35 (Ben pt259u Hall of Echoes shot): the centre spine / east rockery walks ran straight THROUGH the house — a
+    // flagstone skin (top 0.008) inside the Hall coplanar with the hall rug (top 0.008) → flickering white z-fight.
+    // Paths are outdoor: cut every span that lies inside a ground-floor room footprint.
+    const indoor = Object.values(ROOMS).filter((r) => !r.outdoor && Math.abs(r.pos[1]) < 0.01)
+      .map((r) => ({ x0: r.pos[0] - r.size[0] / 2 - 0.3, x1: r.pos[0] + r.size[0] / 2 + 0.3, z0: r.pos[2] - r.size[2] / 2 - 0.3, z1: r.pos[2] + r.size[2] / 2 + 0.3 })); // +0.3: clear of wall + frame lips
+    const pieces = [];
     for (const p of paths) {
+      const alongZ = p.d >= p.w, half = (alongZ ? p.d : p.w) / 2, c = alongZ ? p.z : p.x;
+      const lo = alongZ ? p.x - p.w / 2 : p.z - p.d / 2, hi = alongZ ? p.x + p.w / 2 : p.z + p.d / 2;
+      let spans = [[c - half, c + half]];
+      for (const R of indoor) {
+        const [rl, rh, a0, a1] = alongZ ? [R.x0, R.x1, R.z0, R.z1] : [R.z0, R.z1, R.x0, R.x1];
+        if (hi <= rl || lo >= rh) continue; // path's cross-section misses this room
+        spans = spans.flatMap(([s0, s1]) => (s1 <= a0 || s0 >= a1) ? [[s0, s1]] : [[s0, a0], [a1, s1]].filter(([u, v]) => v - u > 0.05));
+      }
+      for (const [s0, s1] of spans) pieces.push(alongZ ? { w: p.w, d: s1 - s0, x: p.x, z: (s0 + s1) / 2 } : { w: s1 - s0, d: p.d, x: (s0 + s1) / 2, z: p.z });
+    }
+    for (const p of pieces) {
       // logic10: thin flagstone skin (top 0.008) — car + garden road ride on its true top
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(p.w, 0.006, p.d), pathMat);
       mesh.position.set(p.x, 0.005, p.z);
@@ -3631,6 +3651,7 @@ export class Mansion {
         width: o.width,
         noFrame: !!o.noFrame,
         tunnel: !!o.tunnel,
+        driveNotch: !!o.driveNotch,
       }))
       .filter((o) => o.a1 - o.a0 > 0.08)
       .sort((a, b) => a.a0 - b.a0);
@@ -3670,6 +3691,16 @@ export class Mansion {
       if (o.y0 > yBot + 0.04) addPanel(o.a0, o.a1, yBot, o.y0);
       // above opening (header)
       if (yTop > o.y1 + 0.04) addPanel(o.a0, o.a1, o.y1, yTop);
+      // logic35 (Ben pt259u Explore shots): a top NOTCH is only for a Drive crest deck. In Explore the roads are hidden, so
+      // the notch read as a ragged stair-step edge with a black void above the wall (foyer painting slab). Fill it with the
+      // same wall material in Explore only — no collider (walker never reaches it; Drive hides it, deck passes as before).
+      if (o.driveNotch && o.y0 < yTop - 0.04) {
+        const aw = o.a1 - o.a0, ah = yTop - o.y0;
+        const fill = new THREE.Mesh(horizontal ? new THREE.BoxGeometry(aw, ah, sz) : new THREE.BoxGeometry(sx, ah, aw), wallMat);
+        if (horizontal) fill.position.set((o.a0 + o.a1) / 2, o.y0 + ah / 2, pz); else fill.position.set(px, o.y0 + ah / 2, (o.a0 + o.a1) / 2);
+        fill.name = "explore_notch_fill"; fill.userData.exploreOnly = true; fill.receiveShadow = true;
+        (this.exploreOnly || (this.exploreOnly = [])).push(fill); group.add(fill);
+      }
       cursor = Math.max(cursor, o.a1);
     }
     if (wallMax > cursor + 0.04) addPanel(cursor, wallMax, yBot, yTop);
@@ -4487,5 +4518,32 @@ export class Mansion {
 
   getColliders() {
     return this.colliders;
+  }
+
+  /** logic35 (Ben pt259u foyer shots: grey urn/lampshade + floor-lamp shades filling the view): the Explore walker also
+   *  bumps every free-standing indoor prop that has NO collider, so the eye can't park inside it. Walker-only — Drive
+   *  keeps getColliders() unchanged. Built once, lazily (world matrices settled). */
+  getWalkColliders() {
+    if (this._walkCols) return this._walkCols;
+    const base = this.colliders.filter((c) => c && c.isBox3);
+    const extra = [], tmp = new THREE.Vector3(), c = new THREE.Vector3();
+    const floors = [-4.2, 0, 4.2, 8.4];
+    this.root.updateMatrixWorld(true);
+    for (const grp of this.root.children) {
+      const room = ROOMS[grp.name]; if (!room || room.outdoor) continue;
+      grp.traverse((o) => {
+        if (!o.isMesh || o.isInstancedMesh || o.userData.exploreOnly) return;
+        for (let q = o; q && q !== grp; q = q.parent) if (q.visible === false || q.userData.objectId) return;
+        const m = Array.isArray(o.material) ? o.material[0] : o.material; if (m && m.transparent && m.opacity < 0.5) return;
+        const b = new THREE.Box3().setFromObject(o), sz = b.getSize(tmp);
+        if (sz.x < 0.12 || sz.z < 0.12 || sz.x > 2.5 || sz.z > 2.5 || sz.y < 0.15) return;
+        const fl = floors.find((f) => b.min.y > f - 0.3 && b.min.y < f + 1.95 && b.max.y > f + 0.15); if (fl == null) return;
+        b.getCenter(c);
+        if (base.some((k) => k.min.x <= c.x && k.max.x >= c.x && k.min.z <= c.z && k.max.z >= c.z && k.max.y > fl + 0.15 && k.min.y < fl + 1.95)) return;
+        b.driveKind = "explore_prop"; extra.push(b);
+      });
+    }
+    this._walkPropCount = extra.length;
+    return (this._walkCols = extra.length ? base.concat(extra) : this.colliders);
   }
 }

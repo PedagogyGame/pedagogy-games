@@ -1,18 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic34";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic34";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic34";
-import { ROOMS } from "../data/rooms.js?v=logic34";
+import { loftSolids } from "./loftNet.js?v=logic35";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic35";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic35";
+import { ROOMS } from "../data/rooms.js?v=logic35";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic34";
-import { TrackSystem } from "./tracks.js?v=logic34";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic34";
-import { EngineAudio } from "./engineAudio.js?v=logic34";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic34";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic34";
-import { TOWER, towerSolids } from "../data/tower.js?v=logic34";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic34";
-import { TreeCritters } from "./treehouse.js?v=logic34";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic34";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic35";
+import { TrackSystem } from "./tracks.js?v=logic35";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic35";
+import { EngineAudio } from "./engineAudio.js?v=logic35";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic35";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic35";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic35";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic35";
+import { TreeCritters } from "./treehouse.js?v=logic35";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic35";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -439,6 +439,7 @@ export class DriveMode {
     this.car.setLightsSubtle(true);
     // Explore: hide asphalt ribbons; keep subtle mouse-portal cues near tracks
     this.tracks.setVisible("explore");
+    for (const m of (this.mansion && this.mansion.exploreOnly) || []) m.visible = true; // logic35 notch fills
     this._fxRoot.visible = false;
     if (this._fillLight) this._fillLight.visible = false;
     if (this._climbFill) this._climbFill.visible = false;
@@ -690,6 +691,7 @@ export class DriveMode {
     try { this.tracks.ensureMeshes(); } catch (err) {
       console.warn("[DriveMode] tracks.ensureMeshes failed", err);
     }
+    for (const m of (this.mansion && this.mansion.exploreOnly) || []) m.visible = false; // logic35: crest decks pass the notches
     try { this.tracks.setVisible(true); } catch (err) {
       console.warn("[DriveMode] tracks.setVisible failed", err);
     }

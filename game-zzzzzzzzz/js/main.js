@@ -1,15 +1,15 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic34";
-import { Player } from "./player.js?v=logic34";
-import { Mansion } from "./mansion.js?v=logic34";
-import { InspectMode } from "./inspect.js?v=logic34";
-import { SliceSystem } from "./slice.js?v=logic34";
-import { DriveMode } from "./drive/driveMode.js?v=logic34";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic34";
-import { OBJECTS } from "./data/objects.js?v=logic34";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic34";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic34";
-import { Skyline33 } from "./skyline33.js?v=logic34";
+import { batchStatic } from "./batch.js?v=logic35";
+import { Player } from "./player.js?v=logic35";
+import { Mansion } from "./mansion.js?v=logic35";
+import { InspectMode } from "./inspect.js?v=logic35";
+import { SliceSystem } from "./slice.js?v=logic35";
+import { DriveMode } from "./drive/driveMode.js?v=logic35";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic35";
+import { OBJECTS } from "./data/objects.js?v=logic35";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic35";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic35";
+import { Skyline33 } from "./skyline33.js?v=logic35";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -983,7 +983,7 @@ window.__MOTU_STEP__ = (n = 60, dt = 1 / 60, doRender = true) => {
   const t0 = performance.now();
   for (let i = 0; i < n; i++) {
     if ((mode === "drive" || playMode === "drive") && drive) { drive.update(dt); updateRoomBadge(drive.car.position); }
-    else if (mode === "roam" && player) player.update(Math.min(dt, 0.05), mansion.getColliders());
+    else if (mode === "roam" && player) player.update(Math.min(dt, 0.05), mansion.getWalkColliders ? mansion.getWalkColliders() : mansion.getColliders());
     if (mansion) mansion.updateFireflies(clock.elapsedTime + i * dt);
   }
   try { if (skyline33) { window.__SHOT_T__ = (window.__SHOT_T__ || 0) + n * dt; skyline33.update(window.__SHOT_T__, dt, (mode === "drive" || playMode === "drive") && drive ? drive.car.position : camera.position); } } catch (_) {}
@@ -1016,7 +1016,7 @@ function tick() {
       updateRoomBadge(drive.car.position);
       mansion.updateFireflies(t);
     } else if (mode === "roam") {
-      player.update(dt, mansion.getColliders());
+      player.update(dt, mansion.getWalkColliders ? mansion.getWalkColliders() : mansion.getColliders());
       updateHover();
       updateRoomBadge(player.position, { whisper: true });
       updateCuriosityGlints(player.position, t);

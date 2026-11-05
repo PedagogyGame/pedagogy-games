@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible } from "./carStyle.js?v=logic34"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic35"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -461,6 +461,7 @@ export class RCCar {
     this._headMats = [m.headMat, m.tailMat]; this._glowMat = m.underglow;
     if (preset.id === "suv") buildSuv(this, m); else if (preset.id === "jeep") buildJeep(this, m); else if (preset.id === "convertible") buildConvertible(this, m); else buildCar(this, m);
     this._wheelRadius = this._wheelRadiusModel * CAR_SCALE;
+    try { addContactShadow35(this); } catch (_) {}
   }
 
   setLightsSubtle(subtle) {
@@ -487,6 +488,7 @@ export class RCCar {
   }
 
   setPose(x, y, z, yaw) {
+    this._prevSpeed35 = 0; this._aLong35 = 0; this._lastGroundY35 = null;
     this.root.position.set(x, y, z);
     this.yaw = yaw;
     this.root.rotation.y = yaw;
@@ -843,8 +845,15 @@ export class RCCar {
     const sq = this._squash * this._squash;
     this.bodyPivot.scale.set(1 + 0.06 * sq, 1 - 0.2 * sq, 1 + 0.04 * sq);
     this.bodyPivot.position.y = THREE.MathUtils.lerp(this.bodyPivot.position.y || 0, -crestDip * 0.25 - 0.012 * sq, Math.min(1, 12 * dt));
+    // logic35 SUSPENSION: longitudinal weight transfer (squat on throttle, dive on brake) + a small settle on surface steps
+    const aLong = dt > 1e-4 ? (this.speed - (this._prevSpeed35 ?? this.speed)) / dt : 0; this._prevSpeed35 = this.speed;
+    this._aLong35 = THREE.MathUtils.lerp(this._aLong35 || 0, THREE.MathUtils.clamp(aLong, -12, 12), Math.min(1, 6 * dt));
+    const weightPitch = THREE.MathUtils.clamp(-this._aLong35 * 0.006, -0.05, 0.05); // +accel → nose up (−x in parent frame)
+    if (this._lastGroundY35 != null && !this.airborne && Math.abs(p.y - this._lastGroundY35) > 0.0025 && Math.abs(p.y - this._lastGroundY35) < 0.05) this._squash = Math.max(this._squash, 0.28);
+    this._lastGroundY35 = p.y;
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x,
-      pitch - this._landingDamp * 0.08 + crestDip * 0.9, Math.min(1, 10 * dt));
+      pitch - this._landingDamp * 0.08 + crestDip * 0.9 + weightPitch, Math.min(1, 10 * dt));
+    this._groundWheels35();
 
     const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
@@ -852,6 +861,16 @@ export class RCCar {
     this._updateBrakeLights(false, dt);
     this._idlePhase += dt;
     return flags;
+  }
+
+  /** logic35: wheels follow the road slope (front/rear axle heights = grade × axle z) so all four tyres touch a ramp,
+   *  and the contact shadow tilts with it. Root stays level (camera rig reads root yaw only). */
+  _groundWheels35() {
+    const g = THREE.MathUtils.clamp(this._smoothGrade || 0, -0.6, 0.6);
+    for (const w of this._wheelRoots || []) { if (w.userData.y0 == null) w.userData.y0 = w.position.y; w.position.y = w.userData.y0 + w.position.z * g; }
+    if (this._shadow35) { this._shadow35.rotation.x = -Math.PI / 2 - Math.atan(g); }
+    if (!this._env35 && globalThis.__CAR_ENV35) { this._env35 = true; const env = globalThis.__CAR_ENV35;
+      this.root.traverse((o) => { const ms = o.isMesh ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) if (m && m.isMeshStandardMaterial && !m.envMap) { m.envMap = env; m.envMapIntensity = m.metalness > 0.5 ? 0.55 : 0.35; m.needsUpdate = true; } }); }
   }
 
   idleTwitch(dt) {

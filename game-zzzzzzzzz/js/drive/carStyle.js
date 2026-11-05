@@ -164,3 +164,34 @@ export function buildConvertible(car, m) {
   dress(b, m, { hw: 0.117, hl: 0.229, ly: 0.07, sillY: 0.046, seamZ: [-0.04], seamH: 0.03, seamY: 0.068 });
   addWheels(car, m, [[-0.12, -0.135], [0.12, -0.135], [-0.12, 0.13], [0.12, 0.13]], 0.045, 0.036);
 }
+
+/* logic35 GROUNDING: soft contact shadow (body blob + darker tyre patches) that rides the road, and a dim warm
+ * mansion-tone reflection map so the lacquer/chrome pick up the room instead of reading as a flat cut-out. */
+let _shadowTex35 = null;
+function shadowTex35(wheels) {
+  const c = document.createElement("canvas"); c.width = 128; c.height = 256; const x = c.getContext("2d");
+  const g = x.createRadialGradient(64, 128, 10, 64, 128, 128); g.addColorStop(0, "rgba(0,0,0,0.62)"); g.addColorStop(0.55, "rgba(0,0,0,0.38)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  x.save(); x.scale(1, 1); x.fillStyle = g; x.fillRect(0, 0, 128, 256); x.restore();
+  for (const [u, v] of wheels) { const r = x.createRadialGradient(u, v, 2, u, v, 20); r.addColorStop(0, "rgba(0,0,0,0.85)"); r.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = r; x.fillRect(u - 20, v - 20, 40, 40); }
+  const t = new THREE.CanvasTexture(c); return t;
+}
+export function addContactShadow35(car) {
+  if (car._shadow35) { car.root.remove(car._shadow35); car._shadow35.geometry.dispose(); car._shadow35 = null; }
+  car._env35 = false;
+  const roots = car._wheelRoots || []; if (!roots.length || typeof document === "undefined") return;
+  let mx = 0, mz = 0; for (const w of roots) { mx = Math.max(mx, Math.abs(w.position.x)); mz = Math.max(mz, Math.abs(w.position.z)); }
+  const W = mx * 2 + 0.09, L = mz * 2 + 0.16;
+  const wheels = roots.map((w) => [64 + (w.position.x / W) * 128, 128 + (w.position.z / L) * 256]);
+  if (!_shadowTex35) _shadowTex35 = shadowTex35(wheels);
+  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex35, color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, toneMapped: false, fog: true });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, L), mat); m.name = "car_contact_shadow"; m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.renderOrder = 1; m.castShadow = false; m.receiveShadow = false;
+  car.root.add(m); car._shadow35 = m;
+  if (!globalThis.__CAR_ENV35) try {
+    const c = document.createElement("canvas"); c.width = 256; c.height = 128; const x = c.getContext("2d");
+    const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, "#2a2f44"); g.addColorStop(0.42, "#6b5a46"); g.addColorStop(0.5, "#3a2a20"); g.addColorStop(1, "#140e0a");
+    x.fillStyle = g; x.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 6; i++) { const r = x.createRadialGradient(20 + i * 44, 22, 1, 20 + i * 44, 22, 14); r.addColorStop(0, "rgba(255,226,170,0.9)"); r.addColorStop(1, "rgba(255,226,170,0)"); x.fillStyle = r; x.fillRect(i * 44, 0, 44, 50); }
+    const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping; t.colorSpace = THREE.SRGBColorSpace || t.colorSpace;
+    globalThis.__CAR_ENV35 = t;
+  } catch (_) {}
+}
