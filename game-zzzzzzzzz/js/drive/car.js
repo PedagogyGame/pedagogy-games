@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic36"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic37"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -118,7 +118,7 @@ export class RCCar {
     this._fallStartY = 0;
     this._lastElevated = false;
     this._smoothBank = 0;
-    this._smoothGrade = 0;
+    this._smoothGrade = 0; this._shY37 = this._shG37 = this._shOp37 = null; this._shadowGroundY37 = null;
     this._kissY = null;
     this._crestSquat = 0;
     this._prevGrade = 0;
@@ -505,7 +505,7 @@ export class RCCar {
     this._fallStartY = 0;
     this._lastElevated = false;
     this._smoothBank = 0;
-    this._smoothGrade = 0;
+    this._smoothGrade = 0; this._shY37 = this._shG37 = this._shOp37 = null; this._shadowGroundY37 = null;
     this._kissY = null;
     this._crestSquat = 0;
     this._prevGrade = 0; this._lastGoodGrade = 0;
@@ -671,6 +671,7 @@ export class RCCar {
       this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x, airPitch, Math.min(1, 6 * dt));
       this.bodyPivot.scale.set(1, 1, 1);
       this.root.rotation.y = this.yaw;
+      this._groundWheels35(dt); // logic37: fade contact shadow while airborne (was skipped by the early return)
       return flags;
     }
 
@@ -854,9 +855,10 @@ export class RCCar {
     const weightPitch = THREE.MathUtils.clamp(-this._aLong35 * 0.006, -0.05, 0.05); // +accel → nose up (−x in parent frame)
     { const dyS = p.y - (this._lastGroundY35 ?? p.y) - grade * stepD * Math.sign(this.speed || 0); /* logic36: a step OFF the slope line (not the slope itself) */ if (this._lastGroundY35 != null && !this.airborne && !this._stairS36 && Math.abs(dyS) > 0.0025 && Math.abs(dyS) < 0.05) this._squash = Math.max(this._squash, 0.28); }
     this._lastGroundY35 = p.y;
+    if (!this.airborne) this._shadowGroundY37 = p.y;
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x,
       pitch - this._landingDamp * 0.08 + crestDip * 0.9 + weightPitch, Math.min(1, 10 * dt));
-    this._groundWheels35();
+    this._groundWheels35(dt);
 
     const spin = (this.speed * dt) / Math.max(0.008, this._wheelRadius);
     for (const w of this.wheels) w.rotation.x += spin;
@@ -867,11 +869,35 @@ export class RCCar {
   }
 
   /** logic35: wheels follow the road slope (front/rear axle heights = grade × axle z) so all four tyres touch a ramp,
-   *  and the contact shadow tilts with it. Root stays level (camera rig reads root yaw only). */
-  _groundWheels35() {
+   *  and the contact shadow tilts with it. Root stays level (camera rig reads root yaw only).
+   *  logic37: lift clears the tilted plane's lowest edge; height/normal/opacity are low-passed so the shadow
+   *  never flickers (z-fight / dig-in / opacity chatter). Opacity stays constant while grounded. */
+  _groundWheels35(dt = 1 / 60) {
     const g = THREE.MathUtils.clamp(this._smoothGrade || 0, -0.6, 0.6);
     for (const w of this._wheelRoots || []) { if (w.userData.y0 == null) w.userData.y0 = w.position.y; w.position.y = w.userData.y0 + w.position.z * g; }
-    if (this._shadow35) { this._shadow35.rotation.x = -Math.PI / 2 - Math.atan(g); }
+    const sh = this._shadow35;
+    if (sh) {
+      const k = Math.min(1, 12 * dt);
+      this._shG37 = this._shG37 == null ? g : THREE.MathUtils.lerp(this._shG37, g, k);
+      const theta = Math.atan(this._shG37);
+      const halfL = sh.userData.halfL || 0.22;
+      /* after tilt around centre, each end sinks by halfL*|sin θ|; lift so the lowest point stays ~2 cm clear.
+       * Never undershoot the clearance while the grade is rising (lerp lag was the residual dig/flicker). */
+      const targetY = 0.022 + halfL * Math.abs(Math.sin(theta));
+      this._shY37 = this._shY37 == null ? targetY : THREE.MathUtils.lerp(this._shY37, targetY, k);
+      if (this._shY37 < targetY) this._shY37 = targetY;
+      sh.rotation.x = -Math.PI / 2 - theta;
+      sh.position.y = this._shY37;
+      const base = sh.userData.baseOp != null ? sh.userData.baseOp : 0.46;
+      let want = base;
+      if (this.airborne) {
+        const h = Math.max(0, this.root.position.y - (this._shadowGroundY37 ?? this._lastGroundY35 ?? this.root.position.y));
+        want = base * Math.max(0, 1 - h / 0.4);
+      }
+      this._shOp37 = this._shOp37 == null ? want : THREE.MathUtils.lerp(this._shOp37, want, Math.min(1, 8 * dt));
+      sh.material.opacity = this._shOp37;
+      sh.visible = this._shOp37 > 0.01;
+    }
     if (!this._env35 && globalThis.__CAR_ENV35) { this._env35 = true; const env = globalThis.__CAR_ENV35;
       this.root.traverse((o) => { const ms = o.isMesh ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) if (m && m.isMeshStandardMaterial && !m.envMap) { m.envMap = env; m.envMapIntensity = m.metalness > 0.5 ? 0.55 : 0.35; m.needsUpdate = true; } }); }
   }

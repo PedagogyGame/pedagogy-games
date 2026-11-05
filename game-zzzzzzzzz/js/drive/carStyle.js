@@ -165,26 +165,31 @@ export function buildConvertible(car, m) {
   addWheels(car, m, [[-0.12, -0.135], [0.12, -0.135], [-0.12, 0.13], [0.12, 0.13]], 0.045, 0.036);
 }
 
-/* logic35 GROUNDING: soft contact shadow (body blob + darker tyre patches) that rides the road, and a dim warm
- * mansion-tone reflection map so the lacquer/chrome pick up the room instead of reading as a flat cut-out. */
-let _shadowTex35 = null;
-function shadowTex35(wheels) {
+/* logic35 GROUNDING + logic37: soft contact shadow. logic37 root cause of flicker was the tilted plane
+ * digging into the road (0.012 lift << halfLen*|sin θ| on grades) → z-fight. Lift clears the lowest edge,
+ * height/normal are low-passed, opacity is constant when grounded and fades only when airborne. Darkness
+ * ~−38 % vs logic36, soft even falloff. */
+let _shadowTex37 = null;
+function shadowTex37(wheels) {
   const c = document.createElement("canvas"); c.width = 128; c.height = 256; const x = c.getContext("2d");
-  const g = x.createRadialGradient(64, 128, 10, 64, 128, 128); g.addColorStop(0, "rgba(0,0,0,0.56)"); g.addColorStop(0.55, "rgba(0,0,0,0.34)"); /* logic36: × mat 0.75 → blob ≈ −32 % */ g.addColorStop(1, "rgba(0,0,0,0)");
-  x.save(); x.scale(1, 1); x.fillStyle = g; x.fillRect(0, 0, 128, 256); x.restore();
-  for (const [u, v] of wheels) { const r = x.createRadialGradient(u, v, 2, u, v, 20); r.addColorStop(0, "rgba(0,0,0,0.95)"); /* tyre contact stays (≈ −16 %) */ r.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = r; x.fillRect(u - 20, v - 20, 40, 40); }
-  const t = new THREE.CanvasTexture(c); return t;
+  /* soft even blob: lower peak, gentler mid, long falloff (logic36 was 0.56/0.34 × 0.75) */
+  const g = x.createRadialGradient(64, 128, 8, 64, 128, 120); g.addColorStop(0, "rgba(0,0,0,0.50)"); g.addColorStop(0.42, "rgba(0,0,0,0.26)"); g.addColorStop(0.78, "rgba(0,0,0,0.08)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  x.fillStyle = g; x.fillRect(0, 0, 128, 256);
+  for (const [u, v] of wheels) { const r = x.createRadialGradient(u, v, 1.5, u, v, 22); r.addColorStop(0, "rgba(0,0,0,0.68)"); r.addColorStop(0.55, "rgba(0,0,0,0.22)"); r.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = r; x.fillRect(u - 22, v - 22, 44, 44); }
+  const t = new THREE.CanvasTexture(c); t.needsUpdate = true; return t;
 }
 export function addContactShadow35(car) {
-  if (car._shadow35) { car.root.remove(car._shadow35); car._shadow35.geometry.dispose(); car._shadow35 = null; }
+  if (car._shadow35) { car.root.remove(car._shadow35); car._shadow35.geometry.dispose(); if (car._shadow35.material) car._shadow35.material.dispose(); car._shadow35 = null; }
   car._env35 = false;
   const roots = car._wheelRoots || []; if (!roots.length || typeof document === "undefined") return;
   let mx = 0, mz = 0; for (const w of roots) { mx = Math.max(mx, Math.abs(w.position.x)); mz = Math.max(mz, Math.abs(w.position.z)); }
   const W = mx * 2 + 0.09, L = mz * 2 + 0.16;
   const wheels = roots.map((w) => [64 + (w.position.x / W) * 128, 128 + (w.position.z / L) * 256]);
-  if (!_shadowTex35) _shadowTex35 = shadowTex35(wheels);
-  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex35, color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, toneMapped: false, fog: true });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, L), mat); m.name = "car_contact_shadow"; m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.renderOrder = 1; m.castShadow = false; m.receiveShadow = false;
+  if (!_shadowTex37) _shadowTex37 = shadowTex37(wheels);
+  /* opacity 0.46 ≈ −38.7 % vs logic36's 0.75; depthWrite off + stronger polygonOffset + lift in car.js stop the flicker */
+  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex37, color: 0xffffff, transparent: true, opacity: 0.46, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, toneMapped: false, fog: true });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, L), mat); m.name = "car_contact_shadow"; m.rotation.x = -Math.PI / 2; m.position.y = 0.02; m.renderOrder = 10; m.castShadow = false; m.receiveShadow = false;
+  m.userData.halfL = L * 0.5; m.userData.baseOp = 0.46;
   car.root.add(m); car._shadow35 = m;
   if (!globalThis.__CAR_ENV35) try {
     const c = document.createElement("canvas"); c.width = 256; c.height = 128; const x = c.getContext("2d");
