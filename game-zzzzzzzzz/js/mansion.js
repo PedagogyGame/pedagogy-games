@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic35";
-import { OBJECTS } from "./data/objects.js?v=logic35";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic35";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic35";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic35";
-import { buildLabGarage } from "./labGarage.js?v=logic35";
+import { ROOMS } from "./data/rooms.js?v=logic36";
+import { OBJECTS } from "./data/objects.js?v=logic36";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic36";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic36";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic36";
+import { buildLabGarage } from "./labGarage.js?v=logic36";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -3881,6 +3881,17 @@ export class Mansion {
       minZ = s.z - w / 2; maxZ = s.z + w / 2;
     }
 
+    // logic36 (Ben pt261u "let the car drive down the stairs"): every flight is a drivable bumpy slope in Drive —
+    // DriveWorld turns this lane (between the stringers) into one smooth surface floor→floor; car.js bumps per tread.
+    { const ns = dir === "north" || dir === "south", [rw, , rd] = room.size, [rcx, , rcz] = room.pos, WALL = 0.2;
+      const rX0 = rcx - rw / 2 + WALL, rX1 = rcx + rw / 2 - WALL, rZ0 = rcz - rd / 2 + WALL, rZ1 = rcz + rd / 2 - WALL;
+      const along0 = ns ? minZ : minX, along1 = ns ? maxZ : maxX, aR0 = ns ? rZ0 : rX0, aR1 = ns ? rZ1 : rX1;
+      // lane = between the stringers, clipped to the room's inner wall faces (climb_b_east straddles the foyer east wall)
+      const laneLo = Math.max((ns ? minX : minZ) + 0.3, ns ? rX0 : rZ0), laneHi = Math.min((ns ? maxX : maxZ) - 0.3, ns ? rX1 : rZ1);
+      // not drivable: a lane under 40 cm (climb_b_east: 25 cm between its stringer and the foyer east wall, foot boxed in by the
+      // cellar flight) or a flight that runs out THROUGH its room wall (cellar_down: no floor opening; Explore teleports)
+      if (laneHi - laneLo > 0.4 && along0 > aR0 - 0.4 && along1 < aR1 + 0.4)
+        (this.driveStairs || (this.driveStairs = [])).push({ id: s.id, minX, maxX, minZ, maxZ, fromY: s.fromY, toY: s.toY, dir, x0: s.x, z0: s.z, length: s.length, steps, laneLo, laneHi }); }
     if (!s.scenic) this.ramps.push({
       minX, maxX, minZ, maxZ,
       fromY: s.fromY,

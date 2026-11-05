@@ -170,9 +170,9 @@ export function buildConvertible(car, m) {
 let _shadowTex35 = null;
 function shadowTex35(wheels) {
   const c = document.createElement("canvas"); c.width = 128; c.height = 256; const x = c.getContext("2d");
-  const g = x.createRadialGradient(64, 128, 10, 64, 128, 128); g.addColorStop(0, "rgba(0,0,0,0.62)"); g.addColorStop(0.55, "rgba(0,0,0,0.38)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  const g = x.createRadialGradient(64, 128, 10, 64, 128, 128); g.addColorStop(0, "rgba(0,0,0,0.56)"); g.addColorStop(0.55, "rgba(0,0,0,0.34)"); /* logic36: × mat 0.75 → blob ≈ −32 % */ g.addColorStop(1, "rgba(0,0,0,0)");
   x.save(); x.scale(1, 1); x.fillStyle = g; x.fillRect(0, 0, 128, 256); x.restore();
-  for (const [u, v] of wheels) { const r = x.createRadialGradient(u, v, 2, u, v, 20); r.addColorStop(0, "rgba(0,0,0,0.85)"); r.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = r; x.fillRect(u - 20, v - 20, 40, 40); }
+  for (const [u, v] of wheels) { const r = x.createRadialGradient(u, v, 2, u, v, 20); r.addColorStop(0, "rgba(0,0,0,0.95)"); /* tyre contact stays (≈ −16 %) */ r.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = r; x.fillRect(u - 20, v - 20, 40, 40); }
   const t = new THREE.CanvasTexture(c); return t;
 }
 export function addContactShadow35(car) {
@@ -183,7 +183,7 @@ export function addContactShadow35(car) {
   const W = mx * 2 + 0.09, L = mz * 2 + 0.16;
   const wheels = roots.map((w) => [64 + (w.position.x / W) * 128, 128 + (w.position.z / L) * 256]);
   if (!_shadowTex35) _shadowTex35 = shadowTex35(wheels);
-  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex35, color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, toneMapped: false, fog: true });
+  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex35, color: 0xffffff, transparent: true, opacity: 0.75, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, toneMapped: false, fog: true });
   const m = new THREE.Mesh(new THREE.PlaneGeometry(W, L), mat); m.name = "car_contact_shadow"; m.rotation.x = -Math.PI / 2; m.position.y = 0.012; m.renderOrder = 1; m.castShadow = false; m.receiveShadow = false;
   car.root.add(m); car._shadow35 = m;
   if (!globalThis.__CAR_ENV35) try {

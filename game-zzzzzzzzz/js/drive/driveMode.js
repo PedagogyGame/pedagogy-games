@@ -1,18 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic35";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic35";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic35";
-import { ROOMS } from "../data/rooms.js?v=logic35";
+import { loftSolids } from "./loftNet.js?v=logic36";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic36";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic36";
+import { ROOMS } from "../data/rooms.js?v=logic36";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic35";
-import { TrackSystem } from "./tracks.js?v=logic35";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic35";
-import { EngineAudio } from "./engineAudio.js?v=logic35";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic35";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic35";
-import { TOWER, towerSolids } from "../data/tower.js?v=logic35";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic35";
-import { TreeCritters } from "./treehouse.js?v=logic35";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic35";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic36";
+import { TrackSystem } from "./tracks.js?v=logic36";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic36";
+import { EngineAudio } from "./engineAudio.js?v=logic36";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic36";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic36";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic36";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic36";
+import { TreeCritters } from "./treehouse.js?v=logic36";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic36";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -278,7 +278,13 @@ export class DriveMode {
       return;
     }
     // logic32: an open-riser stair's underside block becomes its treads (no invisible barrier under the flight)
-    colliders = colliders.flatMap((b) => b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps.map((t) => { const c = t.clone(); c.driveKind = "stair"; c.stairTread = true; return c; })
+    // logic36: the treads INSIDE a flight's drivable lane are the stair slope (DriveWorld.stairAt), not walls — drop them;
+    // the stringer pieces (side walls of the lane) stay, so the car can't tunnel out through the sides.
+    const ST = (!globalThis.__L35_STAIRS && this.mansion && this.mansion.driveStairs) || [];
+    const inLane = (t) => ST.some((S) => { const ns = S.dir === "north" || S.dir === "south";
+      const lo = S.laneLo, hi = S.laneHi, a0 = ns ? t.min.x : t.min.z, a1 = ns ? t.max.x : t.max.z;
+      return a1 - a0 > (hi - lo) * 0.6 && a0 < lo + 0.05 && a1 > hi - 0.05 && t.max.x > S.minX && t.min.x < S.maxX && t.max.z > S.minZ && t.min.z < S.maxZ; });
+    colliders = colliders.flatMap((b) => b.stairSteps && !globalThis.__L31_STAIR ? b.stairSteps.filter((t) => !inLane(t)).map((t) => { const c = t.clone(); c.driveKind = "stair"; c.stairTread = true; return c; })
       : b.parts && !globalThis.__L32_FURN ? b.parts.map((t) => { const c = t.clone(); c.driveKind = "furniture"; c.furnPart = true; return c; }) : [b]); // logic33: furniture → its visible parts
     this._wallColliders = colliders.map((b) => this._driveSoftCollider(b));
     this._buildWallGrid();

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic35"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic36"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -794,7 +794,7 @@ export class RCCar {
     const stepD = Math.hypot(p.x - x0, p.z - z0);
     const lipDrop = gN ? (y0 + Math.max(0, grade) * stepD) - gN.y : 0;
     const crestLaunch = gN && grade > 0.12 && absV > 0.6 && lipDrop > 0.012 && !this._noLaunch && !(this._noLaunchT > 0) && !(gF && gF.rug === "flap") && !(gR && gR.rug === "flap"); // logic14: a passing conveyor flap is not a ramp lip
-    if (!gN || gN.y < y0 - STICK_DOWN_CAR || crestLaunch) {
+    if (!gN || (gN.y < y0 - STICK_DOWN_CAR && !(gN.stair && gN.y > y0 - 0.16)) || crestLaunch) { // logic36: a steep flight (cellar 175%) is followed, not flown off
       // Rolled off an edge / into a hole / off a ramp lip → real flight
       this.airborne = true; this._airApexY = p.y;
       const gT = crestLaunch ? grade : Math.max(lipGrade, this._prevGrade || 0); // the lip itself can read as a drop
@@ -810,6 +810,9 @@ export class RCCar {
       flags.launch = this._launched;
     } else {
       p.y = gN.y;
+      // logic36: a drivable stair is a smooth slope physically; each tread edge passed gives the body a little bump
+      if (gN.stair) { const k = gN.stairK; if (this._stairK36 != null && k !== this._stairK36 && gN.stair === this._stairS36) this._squash = Math.max(this._squash || 0, 0.42); this._stairK36 = k; this._stairS36 = gN.stair; flags.stair = gN.stair.id; }
+      else this._stairS36 = null;
       flags.surface = gN.kind;
     }
     this.onTrack = flags.surface === "road";
@@ -849,7 +852,7 @@ export class RCCar {
     const aLong = dt > 1e-4 ? (this.speed - (this._prevSpeed35 ?? this.speed)) / dt : 0; this._prevSpeed35 = this.speed;
     this._aLong35 = THREE.MathUtils.lerp(this._aLong35 || 0, THREE.MathUtils.clamp(aLong, -12, 12), Math.min(1, 6 * dt));
     const weightPitch = THREE.MathUtils.clamp(-this._aLong35 * 0.006, -0.05, 0.05); // +accel → nose up (−x in parent frame)
-    if (this._lastGroundY35 != null && !this.airborne && Math.abs(p.y - this._lastGroundY35) > 0.0025 && Math.abs(p.y - this._lastGroundY35) < 0.05) this._squash = Math.max(this._squash, 0.28);
+    { const dyS = p.y - (this._lastGroundY35 ?? p.y) - grade * stepD * Math.sign(this.speed || 0); /* logic36: a step OFF the slope line (not the slope itself) */ if (this._lastGroundY35 != null && !this.airborne && !this._stairS36 && Math.abs(dyS) > 0.0025 && Math.abs(dyS) < 0.05) this._squash = Math.max(this._squash, 0.28); }
     this._lastGroundY35 = p.y;
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x,
       pitch - this._landingDamp * 0.08 + crestDip * 0.9 + weightPitch, Math.min(1, 10 * dt));

@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { buildMouseWorld } from "./mouseWorld.js?v=logic35";
-import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic35";
-import { buildConveyor } from "./conveyor.js?v=logic35";
-import { buildYard } from "./treehouse.js?v=logic35";
-import { buildTimberAndGutter } from "./timberGutter.js?v=logic35";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic35";
-import { ROOMS } from "../data/rooms.js?v=logic35";
-import { LAB, inLab } from "../data/labGarage.js?v=logic35";
+import { buildMouseWorld } from "./mouseWorld.js?v=logic36";
+import { LOFT_PATHS, LOFT_DEAD_ENDS, LOFT_PORTALS, LIFTS, FOUNTAIN, CONVEYOR, GUTTER, TIMBER } from "../data/loftNet.js?v=logic36";
+import { buildConveyor } from "./conveyor.js?v=logic36";
+import { buildYard } from "./treehouse.js?v=logic36";
+import { buildTimberAndGutter } from "./timberGutter.js?v=logic36";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic36";
+import { ROOMS } from "../data/rooms.js?v=logic36";
+import { LAB, inLab } from "../data/labGarage.js?v=logic36";
 const VISIBLE_IDS = new Set(["garden_return", "loft_climb", "parlor_greenwall", "court_fountain", "fountain_rim", "nursery_loft"]); // visible mansion floor roads
 const TUBE_IDS = new Set(LOFT_PATHS.filter((p) => p.tube).map((p) => p.id));
 /** ceiling above (indoors) or the roof/ground below (outdoors) for a trestle at (x,y,z) */

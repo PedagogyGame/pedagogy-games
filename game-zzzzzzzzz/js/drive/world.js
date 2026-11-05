@@ -1,11 +1,11 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic35";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic35";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic36";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic36";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic35";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic35";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic35";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic35";
-import { towerDeckAt } from "../data/tower.js?v=logic35";
+import { ROOMS } from "../data/rooms.js?v=logic36";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic36";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic36";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic36";
+import { towerDeckAt } from "../data/tower.js?v=logic36";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -96,7 +96,9 @@ export class DriveWorld {
         }
     }
     this.filledTops = [];
+    this._noStairs = true; // logic36: exposed-top filling is judged exactly as before the stairs became drivable
     try { this._fillExposedTops(); } catch (e) { this.filledTops = []; }
+    this._noStairs = false;
   }
 
   /**
@@ -278,7 +280,40 @@ export class DriveWorld {
   }
 
   /** All surface tops at (x,z): [{y, kind:'road'|'floor', pathId?, roadKind?}] */
+  /** logic36: drivable stairs — inside a flight's lane (between the stringers) the treads are ONE smooth slope from the
+   *  lower floor to the upper one (tread tops / the old floor under the flight are dropped there, so no 60 cm tread
+   *  faces block or drop the toy car). The car bumps per tread visually (car.js). */
+  stairAt(x, z) {
+    for (const S of (this.mansion && this.mansion.driveStairs) || []) {
+      const ns = S.dir === "north" || S.dir === "south";
+      const lo = S.laneLo, hi = S.laneHi, c = ns ? x : z;
+      if (c < lo || c > hi) continue;
+      const a = S.dir === "north" ? S.z0 - z : S.dir === "south" ? z - S.z0 : S.dir === "east" ? x - S.x0 : S.x0 - x;
+      // Rides ON the treads (flat tread tops, never inside a tread box); the last RHO of each tread is a ramp up to the
+      // next tread's top (bridges the riser), the first riser's ramp lies on the floor just before the flight.
+      const n = S.steps, run = S.length / n, rise = (S.toY - S.fromY) / n, RHO = 0.85;
+      if (a < -RHO * run || a > S.length) continue;
+      const T = (i) => i < 0 ? S.fromY : i >= n ? S.toY : S.fromY + rise * (i + 0.95);
+      const j = Math.min(n - 1, Math.floor(a / run)), f = a / run - j;
+      const t = f > 1 - RHO ? (f - (1 - RHO)) / RHO : 0;
+      return { S, u: Math.max(0, a / S.length), k: j, y: T(j) + (T(j + 1) - T(j)) * t, top: a > S.length - 0.06, tread: a >= 0 ? T(j) : null };
+    }
+    return null;
+  }
+
   surfacesAt(x, z) {
+    const out = this._surfacesAt0(x, z);
+    if (this._noStairs || !this.mansion || !this.mansion.driveStairs || globalThis.__L35_STAIRS) return out;
+    const st = this.stairAt(x, z);
+    if (!st) return out;
+    // tread tops / runners / the floor under an open flight all stay real surfaces; the stair surface rides ON the treads
+    // and only adds the riser ramps between them (groundAt takes the highest reachable one)
+    out.push({ y: st.y, kind: "floor", roomId: "stair_" + st.S.id, stair: st.S, stairU: st.u, stairK: st.k });
+    if (st.tread != null && st.y - st.tread > 0.005) out.push({ y: st.tread, kind: "floor", roomId: "stair_" + st.S.id + "_tread" }); // the flat tread under a riser ramp (car rolled under the ramp lip from the side)
+    return out;
+  }
+
+  _surfacesAt0(x, z) {
     const SEAM = globalThis.__SEAM ?? 0.03; // logic24 (Ben t188u): bent joints left hair-thin wedge holes at the lane edges (car sank at the shaft/Gutter-Entry seam)
     const out = [];
     for (const f of this.floors) {
