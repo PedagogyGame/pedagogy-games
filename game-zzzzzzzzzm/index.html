@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <meta name="theme-color" content="#101b19" />
-<title>Spicy Rodents v5.0 — Neighborhood Revival</title>
+<title>Spicy Rodents v5.2 — Riverside & Squirrel Visibility</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
 :root{--lime:#d1ee83;--cream:#f5f2df;--muted:#a3b8af;--dark:#0d1715}*{box-sizing:border-box}
@@ -125,6 +125,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 @media(max-height:760px){#start .start-head{padding-top:16px}#start h1{font-size:64px}.revival-strip{margin-bottom:10px}.revival-strip>small{display:none}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 
+.river-start{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:9px;border:1px solid #aabdb26b;background:#274c45;color:#f5e7c9;border-radius:4px;padding:12px 16px;cursor:pointer;font:800 15px 'Barlow Condensed',Arial,sans-serif;letter-spacing:1.2px}.river-start:hover{background:#346159}.river-start span{font:500 11px 'DM Sans',Arial,sans-serif;letter-spacing:0;color:#cbdcc7}
+@media(max-width:470px){.river-start{font-size:13px}.river-start span{font-size:10px}}
 </style>
 </head>
 <body>
@@ -153,12 +155,12 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
 <div id="start" role="dialog" aria-modal="true" aria-labelledby="startTitle">
   <div class="modal" role="document">
     <header class="start-head">
-      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v5.0</div><span class="start-build">NEIGHBORHOOD REVIVAL</span></div>
+      <div class="start-brand-row"><div class="eyebrow">SPICY RODENTS · v5.2</div><span class="start-build">RIVER & OLD TOWN</span></div>
       <h1 id="startTitle">SPICY <span>RODENTS<span class="start-dot">.</span></span></h1>
       <p class="start-subtitle">A little squirrel. A very big neighborhood. A whole lot of trouble.</p>
     </header>
     <div class="start-scroll" id="startInstructions">
-      <div class="revival-strip"><span>05 / REVIVAL</span><b>THE STREETS ARE ALIVE.</b><small>New light. Richer trees. More atmosphere.</small></div><p class="start-blurb">Run through the streets, leap between trees and telephone wires, sneak up on people, and escape the neighbors who fight back. Explore the houses, park, cemetery, shops, estates, and hospital.</p>
+      <div class="revival-strip"><span>05.2 / RIVERSIDE</span><b>A NEW TOWN ACROSS THE WATER.</b><small>Stone arches. Cobbled quays. Rooftops to explore.</small></div><p class="start-blurb">Run through the streets, leap between trees and telephone wires, sneak up on people, and escape the neighbors who fight back. Explore the houses, park, cemetery, shops, estates, and hospital. Follow the eastern road past the shops to Willow River and Bellwether Quay: a stone bridge, riverside market, and an old town of timber-framed houses.</p>
       <div class="start-keys" aria-label="Essential controls">
         <div><kbd>W A S D</kbd><span>Move</span></div>
         <div><kbd>SHIFT</kbd><span>Sprint</span></div>
@@ -183,6 +185,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visi
     </div>
     <footer class="start-footer">
       <button type="button" class="startButton" id="playButton" aria-label="Start playing Spicy Rodents">START PLAYING <span aria-hidden="true">↗</span></button>
+      <button type="button" class="river-start" id="riverPlayButton">EXPLORE THE RIVER <span>Start in the new district ↗</span></button>
       <div class="start-footer-notes"><span>Desktop mouse &amp; keyboard recommended</span><span>3D engine included · optional online detail</span></div>
     </footer>
   </div>
@@ -235,7 +238,7 @@ const M={grass:mat('#819762'),grass2:mat('#607847'),asphalt:mat('#40484a'),sidew
 function rng(seed){let a=seed|0;return ()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}const random=rng(20261008);const R=(a,b)=>a+(b-a)*random();const pick=a=>a[Math.floor(random()*a.length)];const PI=Math.PI;const v=(x,y,z)=>new THREE.Vector3(x,y,z);
 // v5 rendering foundation. All gameplay routes and collisions remain independent
 // of render meshes; immutable geometry can therefore be shared and batched safely.
-const BuildInfo=Object.freeze({version:'5.0',engine:'0.160.1',name:'Neighborhood Revival'});
+const BuildInfo=Object.freeze({version:'5.2',engine:'0.160.1',name:'River & Old Town'});
 const RenderConfig={mode:'auto',tier:'high',light:'golden',online:true,adaptiveScale:1,
   frameMs:16.7,samples:0,sampleSeconds:0,lastAdapt:0,onlineState:'ready',effectsState:'basic',
   batches:0,mergedMeshes:0,contextLost:false};
@@ -338,21 +341,41 @@ const WORLD_HALF=270, PEDESTRIAN_EDGE=12.1;
 // The original test intersection is graded. Beyond it Topeka-like ridges, hollows,
 // and asymmetric rolling streets rise several meters instead of stretching flat.
 const smoothstep=t=>{t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t)};
-function terrainHeight(x,z){
+function baseTerrainHeight(x,z){
  const dist=Math.max(Math.abs(x),Math.abs(z));const blend=smoothstep((dist-104)/86);
  const hills=3.5+2.5*Math.sin(x*.016+z*.008+1.1)+2.1*Math.cos(z*.020-x*.009)
        +1.45*Math.sin(x*.034+1.3)*Math.cos(z*.029-.8);
  return Math.max(-.02,blend*Math.max(.1,hills));
 }
+// v5.1: Bellwether Quay. The same functions describe the visible ground,
+// water channel, bridge approach, and collision surfaces.
+const RIVER=Object.freeze({startX:687,endX:1150,zMin:-244,zMax:443,centerX:850,halfWidth:52,bankY:8,waterY:2.4,bedY:-2,bridgeZ:0,deckY:15.8,bridgeStart:790,bridgeEnd:910,rampStart:744,rampEnd:956});
+function riverCenter(z){return RIVER.centerX+9*Math.sin(z*.009)}
+function inRiverDistrict(x,z){return x>=RIVER.startX&&x<=RIVER.endX&&z>=RIVER.zMin&&z<=RIVER.zMax}
+function insideRiverWater(x,z){return inRiverDistrict(x,z)&&Math.abs(x-riverCenter(z))<RIVER.halfWidth-1e-6}
+function riverDeckAt(x,z){
+ if(Math.abs(z-RIVER.bridgeZ)>7.8||x<RIVER.rampStart||x>RIVER.rampEnd)return null;
+ if(x<RIVER.bridgeStart)return RIVER.bankY+(RIVER.deckY-RIVER.bankY)*(x-RIVER.rampStart)/(RIVER.bridgeStart-RIVER.rampStart);
+ if(x>RIVER.bridgeEnd)return RIVER.deckY-(RIVER.deckY-RIVER.bankY)*(x-RIVER.bridgeEnd)/(RIVER.rampEnd-RIVER.bridgeEnd);
+ return RIVER.deckY;
+}
+function terrainHeight(x,z){
+ const original=baseTerrainHeight(x,z);
+ if(!inRiverDistrict(x,z))return original;
+ if(insideRiverWater(x,z))return RIVER.bedY;
+ const t=THREE.MathUtils.smoothstep(x,RIVER.startX,735);
+ return original*(1-t)+RIVER.bankY*t;
+}
+
 const terrainGeom=new THREE.PlaneGeometry(WORLD_HALF*2,WORLD_HALF*2,128,128);
 terrainGeom.rotateX(-PI/2);const tv=terrainGeom.attributes.position;
 for(let i=0;i<tv.count;i++)tv.setY(i,terrainHeight(tv.getX(i),tv.getZ(i))-.09);
 terrainGeom.computeVertexNormals();mesh(terrainGeom,M.grass);
 // All street surfaces are ribbons conforming to the terrain, including gradients.
 const pavementZones=[];
-function registerPavement(axis,coord,width,start,end,material){
+function registerPavement(axis,coord,width,start,end,material,offset,segments){
  if(material===M.asphalt||material===concrete)
-  pavementZones.push({axis,coord,width,start,end});
+  pavementZones.push({axis,coord,width,start,end,offset,segments});
 }
 function pavementDistance(x,z){
  let best=Infinity;
@@ -364,6 +387,26 @@ function pavementDistance(x,z){
  }
  return best;
 }
+// Match the two rendered triangles in every road strip, including hillside grades.
+function pavementHeightAt(r,x,z){
+ const across=r.axis==='z'?x:z,along=r.axis==='z'?z:x;
+ const u=(across-r.coord)/r.width+.5;
+ if(u<0||u>1||along<r.start||along>r.end)return null;
+ const f=(along-r.start)/(r.end-r.start)*r.segments,i=Math.min(r.segments-1,Math.floor(f)),t=f-i;
+ const a=r.start+(r.end-r.start)*i/r.segments,b=r.start+(r.end-r.start)*(i+1)/r.segments;
+ const height=(side,p)=>r.axis==='z'?terrainHeight(r.coord+side*r.width/2,p):terrainHeight(p,r.coord+side*r.width/2);
+ const h00=height(-1,a),h10=height(1,a),h01=height(-1,b),h11=height(1,b);
+ return r.offset+(u+t<=1?h00*(1-u-t)+h10*u+h01*t:h10*(1-t)+h01*(1-u)+h11*(u+t-1));
+}
+function outdoorSurfaceAt(x,z){
+ let y=terrainHeight(x,z)-.075;
+ for(const r of pavementZones){const h=pavementHeightAt(r,x,z);if(h!==null)y=Math.max(y,h);}
+ // These four curb blocks are .23 high, centered at y=.13.
+ for(const side of [-1,1]){
+  if((Math.abs(x)<=129&&Math.abs(z-side*10.1)<=.16)||(Math.abs(z)<=129&&Math.abs(x-side*10.1)<=.16))y=Math.max(y,.245);
+ }
+ return y;
+}
 const utilitySupports=[];
 function verifyUtilityPlacement(){
  const wrong=utilitySupports.filter(p=>pavementDistance(p.x,p.z)<.95);
@@ -371,7 +414,7 @@ function verifyUtilityPlacement(){
  return utilitySupports.length;
 }
 function roadRibbon(axis,coord,width,material,offset=.055){
- registerPavement(axis,coord,width,-WORLD_HALF,WORLD_HALF,material);
+ registerPavement(axis,coord,width,-WORLD_HALF,WORLD_HALF,material,offset,104);
  const vertices=[],indexes=[],N=104;
  for(let i=0;i<=N;i++){
   const t=-WORLD_HALF+2*WORLD_HALF*i/N;
@@ -388,8 +431,8 @@ for(const z of [0,-174,171]){roadRibbon('x',z,18,M.asphalt);for(const s of [-1,1
 // Core raised curbs, pavement joints and a striped crossing at the intersection.
 for(const dir of [-1,1]){box(258,.23,.32,mat('#aaa79c'),0,.13,dir*10.1);box(.32,.23,258,mat('#aaa79c'),dir*10.1,.13,0)}
 for(let i=-117;i<=117;i+=5.8)for(let side of [-1,1]){
- box(.04,.016,3.4,mat('#a6a79d'),i,.165,side*12.1);
- box(3.4,.016,.04,mat('#a6a79d'),side*12.1,.165,i)
+ box(.04,.016,3.4,mat('#a6a79d'),i,.098,side*12.1);
+ box(3.4,.016,.04,mat('#a6a79d'),side*12.1,.098,i)
 }
 for(const s of [-1,1])for(const t of [-1,1])for(let i=0;i<5;i++){
  box(.76,.016,.17,mat('#e0ddd1'),s*(11+i*1.2),.13,t*8.6);
@@ -405,7 +448,7 @@ const eastExtension=new THREE.PlaneGeometry(446,488,100,94);eastExtension.rotate
 const eastVerts=eastExtension.attributes.position;for(let i=0;i<eastVerts.count;i++)eastVerts.setY(i,terrainHeight(eastVerts.getX(i),eastVerts.getZ(i))-.083);
 eastExtension.computeVertexNormals();mesh(eastExtension,M.grass);
 function districtRibbon(axis,coord,width,start,end,material,offset=.07){
- registerPavement(axis,coord,width,start,end,material);
+ registerPavement(axis,coord,width,start,end,material,offset,95);
  const verts=[],inds=[],segments=95;
  for(let i=0;i<=segments;i++){const t=start+(end-start)*i/segments;
   for(const side of [-1,1]){const x=axis==='x'?t:coord+side*width/2,z=axis==='z'?t:coord+side*width/2;
@@ -2154,17 +2197,21 @@ for(let i=0;i<8;i++){
  hospitalPatients.push(n);hospitalActors.push(n);
 }
 function hospitalExitPoint(){return v(HOSP_X,HOSPITAL_FLOOR+.2,HOSP_Z-HOSP_D/2+7)}
+// Smooth, cached character geometry keeps ears, muzzle and tail readable up close.
+function squirrelBall(radius,material,x,y,z,parent){
+ return mesh(sharedGeometry(`squirrel:${radius}`,()=>new THREE.SphereGeometry(radius,16,12)),material,x,y,z,parent);
+}
 // Seven normal squirrels with independent 25-minute bite-triggered infection timers.
 const normalSquirrels=[];
 const normalSquirrelHides=[[-74,-71],[84,70],[-196,97],[217,-111],[-105,321],[103,409],[414,332]];
 const squirrelFurs=['#b78453','#9a6b47','#b19b7b','#675e4d','#a48c68','#8c7463','#c19c66'];
 for(let i=0;i<7;i++){
  const [x,z]=normalSquirrelHides[i],root=new THREE.Group();scene.add(root);
- const fur=mat(squirrelFurs[i]);const torso=ball(.30,fur,0,.27,0,root);torso.scale.set(.72,.68,1.35);
- ball(.20,fur,0,.47,.31,root);for(let s of [-1,1]){ball(.07,fur,s*.13,.65,.30,root);ball(.039,M.black,s*.12,.49,.49,root)}
- const tail=ball(.30,fur,0,.71,-.48,root);tail.scale.set(.46,1.7,.5);
- for(const side of [-1,1])for(const fore of [-1,1])ball(.068,fur,side*.18,.14,fore*.28,root);
- root.position.set(x,terrainHeight(x,z)+.22,z);
+ const fur=mat(squirrelFurs[i]);const torso=squirrelBall(.30,fur,0,.27,0,root);torso.scale.set(.72,.68,1.35);
+ squirrelBall(.20,fur,0,.47,.31,root);for(let s of [-1,1]){squirrelBall(.07,fur,s*.13,.65,.30,root);squirrelBall(.039,M.black,s*.12,.49,.49,root)}
+ const tail=squirrelBall(.30,fur,0,.71,-.48,root);tail.scale.set(.46,1.7,.5);
+ for(const side of [-1,1])for(const fore of [-1,1])squirrelBall(.068,fur,side*.18,.14,fore*.28,root);
+ root.position.set(x,outdoorSurfaceAt(x,z)-.06,z);
  normalSquirrels.push({i,root,torso,tail,x,z,phase:i*1.7,infected:false,progress:0,component:0});
 }
 // Four rabbits, each circling a distinct bush/yard anchor; evasion is guaranteed.
@@ -2183,19 +2230,48 @@ for(const [i,x,z] of [[0,-64,93],[1,72,96],[2,-97,-70],[3,206,325]]){
 const player={pos:v(-36,.31,-36),vel:v(0,0,0),yaw:0,grounded:true,rail:null,railT:0,railDir:1,transferCooldown:0,moveSpeed:0,focus:false,points:0,hits:0,inactiveSeconds:0,boostRemaining:0,cooldown:0,attack:0,attackWindow:0,attackAlert:null,attackTarget:null,cameraCommit:0,committedAirborne:false,turnLean:0,alive:true,nearRoute:null,visible:true};
 // Model is exactly 50% of the v0.4 squirrel size; movement speed stays agile.
 const SQUIRREL_VISUAL_SCALE=.335;
-const squirrel=new THREE.Group();squirrel.scale.setScalar(SQUIRREL_VISUAL_SCALE);scene.add(squirrel);const sqroot=new THREE.Group();squirrel.add(sqroot);let fur=mat('#87694d'),fur2=mat('#725b48'),furDark=mat('#3f3d37'),eyeMat=new THREE.MeshStandardMaterial({color:0xbe2f25,emissive:0xad1e16,emissiveIntensity:.92,roughness:.23});
-let sqBody=ball(.55,fur,0,.39,-.04,sqroot);sqBody.scale.set(.79,.67,1.51);let sqHead=ball(.36,fur,0,.62,.65,sqroot);sqHead.scale.set(.79,.84,1.06);
+const squirrel=new THREE.Group();squirrel.scale.setScalar(SQUIRREL_VISUAL_SCALE);scene.add(squirrel);squirrel.position.copy(player.pos);const sqroot=new THREE.Group();squirrel.add(sqroot);let fur=mat('#87694d'),fur2=mat('#725b48'),furDark=mat('#3f3d37'),eyeMat=new THREE.MeshStandardMaterial({color:0xbe2f25,emissive:0xad1e16,emissiveIntensity:.92,roughness:.23});
+let sqBody=squirrelBall(.55,fur,0,.39,-.04,sqroot);sqBody.scale.set(.79,.67,1.51);let sqHead=squirrelBall(.36,fur,0,.62,.65,sqroot);sqHead.scale.set(.79,.84,1.06);
 // Warm countershading separates the tiny animal from near-identical bark colors.
-ball(.33,mat('#c2a78a'),0,.33,.40,sqroot).scale.set(.65,.45,.95);
+squirrelBall(.33,mat('#c2a78a'),0,.33,.40,sqroot).scale.set(.65,.45,.95);
 const paleFur=mat('#c6ae8c'),snoutMat=mat('#514a41'),toothMat=mat('#e5dbb8');
-for(let side of [-1,1]){let ear=ball(.145,fur2,side*.25,.96,.53,sqroot);ear.scale.set(.69,1.35,.60);let eartip=new THREE.Mesh(new THREE.ConeGeometry(.092,.28,6),furDark);eartip.position.set(side*.25,1.135,.52);sqroot.add(eartip);ball(.057,eyeMat,side*.24,.72,.97,sqroot);ball(.016,mat('#fbe6bb',.18),side*.232,.747,1.016,sqroot);ball(.15,snoutMat,side*.12,.51,1.04,sqroot).scale.set(.7,.55,1.14)}
-ball(.056,mat('#a77972'),0,.51,1.23,sqroot);for(const side of [-1,1]){let tooth=box(.049,.14,.065,toothMat,side*.055,.37,1.16,sqroot);tooth.rotation.x=-.14;}
+// The entire face turns as one assembly; eyes cannot drift away from the head.
+const sqFace=new THREE.Group();sqFace.position.copy(sqHead.position);sqroot.add(sqFace);
+sqHead.position.set(0,0,0);sqFace.add(sqHead);
+const faceBaseline=new Set(sqroot.children);
+for(let side of [-1,1]){let ear=squirrelBall(.145,fur2,side*.25,.96,.53,sqroot);ear.scale.set(.69,1.35,.60);let eartip=new THREE.Mesh(new THREE.ConeGeometry(.092,.28,6),furDark);eartip.position.set(side*.25,1.135,.52);sqroot.add(eartip);squirrelBall(.057,eyeMat,side*.205,.72,.886,sqroot);squirrelBall(.016,mat('#fbe6bb',.18),side*.196,.747,.932,sqroot);squirrelBall(.15,snoutMat,side*.12,.51,1.04,sqroot).scale.set(.7,.55,1.14)}
+squirrelBall(.056,mat('#a77972'),0,.51,1.23,sqroot);for(const side of [-1,1]){let tooth=box(.049,.14,.065,toothMat,side*.055,.37,1.16,sqroot);tooth.rotation.x=-.14;}
+for(const part of [...sqroot.children])if(!faceBaseline.has(part)){part.position.sub(sqFace.position);sqFace.add(part);}
 for(let i=0;i<18;i++){const a=(i/18)*2*PI;let tuft=new THREE.Mesh(new THREE.ConeGeometry(.052+random()*.04,.18+random()*.20,4),i%3?fur:fur2);tuft.position.set(Math.cos(a)*.30,.41+Math.sin(a)*.19,-.45+random()*.4);tuft.rotation.z=PI/2+Math.sin(a)*.6;tuft.rotation.x=Math.cos(a)*1.15;sqroot.add(tuft)}
-const sqLegs=[];for(let side of [-1,1])for(let front of [-1,1]){let pivot=new THREE.Group();pivot.position.set(side*.29,.18,front*.46);sqroot.add(pivot);let leg=ball(.15,furDark,0,-.035,.10,pivot);leg.scale.set(.9,.57,1.52);sqLegs.push({pivot,side,front});for(let claw=0;claw<3;claw++){let nail=new THREE.Mesh(new THREE.ConeGeometry(.018,.16,4),mat('#c7bca3',.65));nail.position.set((claw-1)*.09,-.115,.30);nail.rotation.x=PI/2;pivot.add(nail)}}
-for(let side of [-1,1])for(let q=0;q<3;q++){let whisker=span(v(side*.1,.56,1.04),v(side*(.5+q*.08),.58+(q-1)*.10,1.3),.013,.004,mat('#c9baa0'),sqroot,5)}
+const sqLegs=[];for(let side of [-1,1])for(let front of [-1,1]){let pivot=new THREE.Group();pivot.position.set(side*.29,.18,front*.46);sqroot.add(pivot);let leg=squirrelBall(.15,furDark,0,-.035,.10,pivot);leg.scale.set(.9,.57,1.52);sqLegs.push({pivot,side,front});for(let claw=0;claw<3;claw++){let nail=new THREE.Mesh(new THREE.ConeGeometry(.018,.16,4),mat('#c7bca3',.65));nail.position.set((claw-1)*.09,-.115,.30);nail.rotation.x=PI/2;pivot.add(nail)}}
+for(let side of [-1,1])for(let q=0;q<3;q++){let whisker=span(v(side*.1,.56,1.04),v(side*(.5+q*.08),.58+(q-1)*.10,1.3),.013,.004,mat('#c9baa0'),sqroot,5);whisker.position.sub(sqFace.position);sqFace.add(whisker)}
 // Dense overlapping tapered sections make a flexible tail without spherical beads.
-const tailParts=[];for(let i=0;i<22;i++){const part=ball(1,i%4===0?fur:fur2,0,0,0,sqroot);tailParts.push(part)}
+const tailParts=[];for(let i=0;i<22;i++){const part=squirrelBall(1,i%4===0?fur:fur2,0,0,0,sqroot);tailParts.push(part)}
 function updateTail(t){for(let i=0;i<tailParts.length;i++){const u=i/(tailParts.length-1);const px=Math.sin(t*4.2+u*4)*(.035+u*.18);const climbing=player.rail?.kind==='trunk';const py=climbing?.26+u*.11:.43+u*1.38+Math.sin(u*PI)*.34;const pz=-.50-u*.84+u*u*.06;const segment=tailParts[i];segment.position.set(px,py,pz);const thick=.075+Math.sin(u*PI)**.8*.33;segment.scale.set(thick,thick*.95,.15+thick*.78);segment.rotation.x=-.48+u*.54}}updateTail(0);
+// Cache contact corners once; animate the real transforms before resolving feet.
+const squirrelContactSamples=[];
+for(const parent of [sqBody,...sqLegs.map(leg=>leg.pivot)])parent.traverse(part=>{
+ if(!part.isMesh)return;
+ part.geometry.computeBoundingBox();const bounds=part.geometry.boundingBox,points=[];
+ for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z])points.push(v(x,y,z));
+ squirrelContactSamples.push({part,points});
+});
+const squirrelContactPoint=v(0,0,0);
+function squirrelSurfaceAt(x,z){
+ let height=outdoorSurfaceAt(x,z);
+ const river=riverSurfaceAt(x,z);
+ if(river!==null&&player.pos.y>=river-.5)height=Math.max(height,river);
+ return height;
+}
+function settleSquirrelFeet(){
+ squirrel.updateWorldMatrix(true,true);let lift=0;
+ for(const sample of squirrelContactSamples)for(const point of sample.points){
+  squirrelContactPoint.copy(point).applyMatrix4(sample.part.matrixWorld);
+  lift=Math.max(lift,squirrelSurfaceAt(squirrelContactPoint.x,squirrelContactPoint.z)+.017-squirrelContactPoint.y);
+ }
+ squirrel.position.y+=lift;
+ squirrel.updateWorldMatrix(true,true);
+}
 
 // Hidden chilies: precisely eight one-time collectibles per run. Their entropy is
 // independent of the stable neighborhood seed so refreshing changes hiding places.
@@ -2576,7 +2652,7 @@ function preventVehicleOverlap(previous){
 // the current frame's height.  This prevents high-speed leaps from tunneling
 // beneath the gables and into house shells.
 function roofSurfaceAt(x,z){
- let best=null;
+ let best=riverRoofAt(x,z);const riverSurface=riverSurfaceAt(x,z);if(riverSurface!==null)best=Math.max(best??-Infinity,riverSurface+.18);
  for(const h of houses){
   if(h===activeHouseInterior)continue;
   const dx=x-h.x,dz=z-h.z;
@@ -2640,7 +2716,8 @@ function recoverTrappedInHouse(){
  }else player.pos.y=top;
  player.vel.set(0,0,0);player.grounded=true;player.committedAirborne=false;
 }
-function getGroundAt(x,z){let y=terrainHeight(x,z)+.18;
+function getGroundAt(x,z){let y=Math.max(terrainHeight(x,z),outdoorSurfaceAt(x,z))+.18;
+ const riverSurface=riverSurfaceAt(x,z);if(riverSurface!==null&&player.pos.y>=riverSurface-.5)y=Math.max(y,riverSurface+.18);
  const car=vehicleHitboxAt(x,z);
  if(car && player.pos.y>=car.top-.32)y=Math.max(y,car.top+.16); // Roof occupancy within building footprint and approachable while falling from above.
 const roof=roofSurfaceAt(x,z);
@@ -2671,6 +2748,7 @@ function collisionHouses(lastPos){for(const b of commercialBounds){if(Math.abs(p
 // Ground motion has physical momentum, but colliders no longer cancel a
 // diagonal stride just because its forward component grazes a fence or car.
 function outdoorBlocked(x,z,height){
+ if(riverBlocked(x,z,height))return true;
  const r=.32;
  // Westside homes are separate from the original four houses. Their walls
  // must still block the squirrel; only the four open-bay homes can be entered.
@@ -2898,7 +2976,8 @@ function updatePlayer(dt){
  }else if(player.pos.y<=ground){player.pos.y=ground;player.grounded=true;player.vel.y=0;if(player.committedAirborne){player.committedAirborne=false;player.cameraCommit=Math.max(player.cameraCommit,.35)}}else player.grounded=false;
  }
  routeFreeLook=Math.max(0,routeFreeLook-dt);
- player.pos.x=THREE.MathUtils.clamp(player.pos.x,-586,674);player.pos.z=THREE.MathUtils.clamp(player.pos.z,-560,NORTH_LIMIT-4);
+ player.pos.x=THREE.MathUtils.clamp(player.pos.x,-586,RIVER.endX-4);player.pos.z=THREE.MathUtils.clamp(player.pos.z,-560,NORTH_LIMIT-4);
+ recoverRiverFall();
  updatePounceCollision();
  // Route curves run through wood centerlines; the visible squirrel must NOT.
  updateCanopyGuide(dt);drawJunctionPreview();
@@ -2932,10 +3011,10 @@ function updatePlayer(dt){
  // On lawn/street level, set paws closer to the actual terrain without moving
  // the physics body. Do not alter roofs, wires, trees, ducts, or airborne leaps.
  const onGroundSurface=!player.rail&&player.grounded&&!player.inHospital&&!player.inSewer&&
-    player.pos.y-terrainHeight(player.pos.x,player.pos.z)<.55;
- if(onGroundSurface)visualPos.y-=.095;
+    Math.abs(player.pos.y-squirrelSurfaceAt(player.pos.x,player.pos.z))<.70;
+ if(onGroundSurface)visualPos.y=squirrelSurfaceAt(player.pos.x,player.pos.z);
  // Render smoothing is cosmetic and bounded; gameplay uses player.pos exclusively.
- if(player.rail&&!routeBridge&&squirrel.position.distanceTo(visualPos)>1.6)squirrel.position.copy(visualPos);
+ if((!routeBridge&&squirrel.position.distanceTo(visualPos)>2.5)||(player.rail&&!routeBridge&&squirrel.position.distanceTo(visualPos)>1.6))squirrel.position.copy(visualPos);
  else squirrel.position.lerp(visualPos,1-Math.exp(-dt*(routeBridge?17:23)));
  // Body banking, sprint gallop, and independent head counterturn.
  const turning=Math.atan2(Math.sin(player.yaw-oldYaw),Math.cos(player.yaw-oldYaw))/Math.max(dt,.012);
@@ -2948,8 +3027,8 @@ function updatePlayer(dt){
  sqroot.rotation.x=isTrunk?THREE.MathUtils.lerp(-.83,-1.43,grip):player.attackWindow>0?-.16:player.focus?.05:Math.sin(time*cadence)*(onGroundSurface?.022:.034);
  const squash=isTrunk?1:player.focus?.90:sprint?.92:1;eyeMat.emissiveIntensity=player.boostRemaining>0?1.65:.92;
  sqroot.scale.set(1,squash,player.attackWindow>0?1.13:1);
- sqHead.rotation.y=THREE.MathUtils.clamp(Math.atan2(Math.sin(yaw-player.yaw),Math.cos(yaw-player.yaw))*.38,-.4,.4)+Math.sin(time*1.8)*.035;
- sqHead.rotation.x=player.focus?-.05:player.attackWindow>0?-.17:0;
+ sqFace.rotation.y=THREE.MathUtils.clamp(Math.atan2(Math.sin(yaw-player.yaw),Math.cos(yaw-player.yaw))*.38,-.4,.4)+Math.sin(time*1.8)*.035;
+ sqFace.rotation.x=player.focus?-.05:player.attackWindow>0?-.17:0;
  for(const leg of sqLegs){
   if(isTrunk){
    const stepping=player.moveSpeed>1?.16:0;
@@ -2961,6 +3040,7 @@ function updatePlayer(dt){
   }
  }
  updateTail(time);
+ if(onGroundSurface)settleSquirrelFeet();
  squirrel.visible=!player.focus;
  player.nearRoute=player.rail?null:nearestRoute(2.3);
  if(player.nearRoute&&messageTime<=0&&Math.random()<dt*.09)flash(`E to grab: ${player.nearRoute.route.name}`,1.9);
@@ -3163,8 +3243,8 @@ function updateCamera(dt){
  }else if(player.rail?.kind==='trunk'){
    // Level, side-on third-person view: visible animal OUTSIDE the bark.
    const n=player.trunkNormal||v(0,0,1);
-   target=squirrel.position.clone().add(v(0,.15,0));
-   desired=target.clone().addScaledVector(n,4.58).add(v(0,.55,0));
+   target=squirrel.position.clone().add(v(0,.18,0));
+   desired=target.clone().addScaledVector(n,3.25).add(v(0,.58,0));
  }else if(player.rail&&player.rail.kind!=='trunk'){
    // On branches: elevated camera looking down at the squirrel's back.
    const tangent=player.rail.curve.getTangentAt(player.railT).multiplyScalar(player.railDir);
@@ -3173,17 +3253,21 @@ function updateCamera(dt){
    const orbit=THREE.MathUtils.clamp(routeFreeLook/1.7,0,1);
    along.lerp(horizontal,orbit*.8).normalize();
    const wire=player.rail.kind==='wire',roof=player.rail.kind==='roof';
-   const behind=wire?4.2:roof?4.6:3.7;
-   target=squirrel.position.clone().addScaledVector(along,2.15).add(v(0,.38,0));
+   const behind=wire?3.5:roof?3.7:3.2;
+   target=squirrel.position.clone().addScaledVector(along,.85).add(v(0,.28,0));
    desired=squirrel.position.clone().addScaledVector(along,-behind).addScaledVector(v(-along.z,0,along.x),.45).add(v(0,wire?2.35:2.6+Math.sin(pitch)*.55,0));
  }else{
    const airborne=player.committedAirborne||(!player.grounded&&!player.rail);
-   const distance=airborne?8.15:player.moveSpeed>11?6.3:5.48;
-   const rise=airborne?2.5:2.05;
-   desired=squirrel.position.clone().addScaledVector(horizontal,-distance*Math.cos(pitch*.60)).add(v(0,rise+Math.sin(pitch)*distance*.57,0));
-   desired.y=Math.max(.75,desired.y);
-   target=squirrel.position.clone().addScaledVector(horizontal,3.4).add(v(0,airborne?1.2:.90,0));
+   // Keep the original small animal scale, but frame its full silhouette.
+   const distance=airborne?5.5:player.moveSpeed>11?4.2:3.35;
+   const rise=airborne?2.15:1.40;
+   desired=squirrel.position.clone().addScaledVector(horizontal,-distance*Math.cos(pitch*.60))
+     .addScaledVector(v(-horizontal.z,0,horizontal.x),.62)
+     .add(v(0,rise+Math.sin(pitch)*distance*.57,0));
+   target=squirrel.position.clone().addScaledVector(horizontal,airborne?1.1:.55).add(v(0,airborne?.46:.24,0));
  }
+ if(!player.inHospital&&!player.inSewer&&!player.inDuct&&!player.focus)
+   desired.y=Math.max(desired.y,squirrelSurfaceAt(desired.x,desired.z)+.40);
  if(player.inHospital&&!player.inDuct){
    desired.x=THREE.MathUtils.clamp(desired.x,HOSP_X-HOSP_W/2+1.8,HOSP_X+HOSP_W/2-1.8);
    desired.z=THREE.MathUtils.clamp(desired.z,HOSP_Z-HOSP_D/2+1.8,HOSP_Z+HOSP_D/2-1.8);
@@ -3213,9 +3297,11 @@ function updateCamera(dt){
   camPos.copy(desired);lookPoint.lerp(target,1-Math.exp(-dt*13));cameraHardCut=false;
  }else if(cameraHardCut){camPos.copy(desired);lookPoint.copy(target);cameraHardCut=false}
  else{camPos.lerp(desired,damp);lookPoint.lerp(target,damp)}
+ if(!player.inHospital&&!player.inSewer&&!player.inDuct&&!player.focus)
+  camPos.y=Math.max(camPos.y,squirrelSurfaceAt(camPos.x,camPos.z)+.40);
  camera.position.copy(camPos);camera.lookAt(lookPoint);
  camera.near=player.inDuct?.065:.12;
- const fov=player.inDuct?66:player.focus?61:player.committedAirborne?79:player.moveSpeed>12?77:72;
+ const fov=player.inDuct?66:player.focus?61:player.committedAirborne?74:player.moveSpeed>12?68:62;
  camera.fov=THREE.MathUtils.lerp(camera.fov,fov,1-Math.exp(-dt*9));camera.updateProjectionMatrix();
  updateAimPath();updateHatchLanding();
 }
@@ -3952,8 +4038,14 @@ function updateWildlife(dt){for(const s of normalSquirrels){s.phase+=dt*(s.infec
   const wander=s.infected?6:8,x=s.x+Math.sin(s.phase*.83+s.i)*wander,z=s.z+Math.cos(s.phase*.63+s.i*1.3)*wander;
   s.root.position.x=THREE.MathUtils.lerp(s.root.position.x,x,Math.min(1,dt*2));
   s.root.position.z=THREE.MathUtils.lerp(s.root.position.z,z,Math.min(1,dt*2));
-  s.root.position.y=terrainHeight(s.root.position.x,s.root.position.z)+.21;
-  s.root.rotation.y=Math.atan2(x-s.root.position.x,z-s.root.position.z);s.tail.rotation.x=Math.sin(s.phase*7)*.17;
+  s.root.position.y=outdoorSurfaceAt(s.root.position.x,s.root.position.z)-.06;
+  s.root.rotation.y=Math.atan2(x-s.root.position.x,z-s.root.position.z);
+  const c=Math.cos(s.root.rotation.y),sn=Math.sin(s.root.rotation.y);
+  for(const side of [-1,1])for(const front of [-1,1]){
+   const px=s.root.position.x+c*side*.24+sn*front*.36,pz=s.root.position.z-sn*side*.24+c*front*.36;
+   s.root.position.y=Math.max(s.root.position.y,outdoorSurfaceAt(px,pz)-.05);
+  }
+  s.tail.rotation.x=Math.sin(s.phase*7)*.17;
  }
  for(const r of rabbits){r.phase+=dt*1.6;
   const danger=!player.inHospital&&!player.inSewer&&Math.hypot(player.pos.x-r.root.position.x,player.pos.z-r.root.position.z)<12;
@@ -6381,6 +6473,304 @@ function initRefresh(){
  if(RenderConfig.online)void loadOnlineGraphics();else{RenderConfig.onlineState='Built-in graphics · online detail off';updateGraphicsLabels();}
 }
 
+// BELLWETHER QUAY — an additive, traversable eastern district.
+const riverDistrictGroup=new THREE.Group();riverDistrictGroup.name='Bellwether Quay / Willow River';scene.add(riverDistrictGroup);
+const riverBuildings=[],riverColliders=[],riverPlatforms=[],riverBoats=[],riverBanners=[],riverWalkers=[];
+const riverVisuals={water:null,elapsed:0,rescueCooldown:0,visited:false};
+const riverMaterials={stone:mat('#aaa697'),stoneLight:mat('#d1c7ae'),stoneDark:mat('#777b70'),wood:mat('#4e4136'),oak:mat('#75604b'),copper:mat('#718679',.58,.3),iron:mat('#364b51',.55,.55),blue:mat('#4e7c87',.52,.35),glass:mat('#c3cfb5',.22,.15),roof:mat('#4c5a60')};
+const riverRand=rng(5110726);const rriv=(a,b)=>a+(b-a)*riverRand();
+function riverBox(w,h,d,m,x,y,z,parent=riverDistrictGroup){return box(w,h,d,m,x,y,z,parent)}
+function riverLine(points,material,radius,segments){const result=linePath(points,material,radius,segments);riverDistrictGroup.add(result.obj);return result}
+function riverCollider(x,z,w,d,y0,y1,label){const c={x,z,w,d,y0,y1,label};riverColliders.push(c);return c}
+function riverSurfaceAt(x,z){
+ let y=riverDeckAt(x,z);for(const s of riverPlatforms){if(Math.abs(x-s.x)<=s.w/2&&Math.abs(z-s.z)<=s.d/2)y=Math.max(y??-Infinity,s.height?s.height(x,z):s.y);}
+ return y;
+}
+function riverRoofAt(x,z){
+ let top=null;
+ for(const b of riverBuildings){const dx=x-b.x,dz=z-b.z,c=Math.cos(b.rotation),s=Math.sin(b.rotation),lx=c*dx-s*dz,lz=s*dx+c*dz;
+  if(Math.abs(lx)>b.w/2+.55||Math.abs(lz)>b.d/2+.65)continue;
+  const y=b.base+b.h+b.rise*Math.max(0,1-Math.abs(lz)/(b.d/2+.65))+.29;
+  if(top===null||y>top)top=y;
+ }
+ return top;
+}
+function riverBlocked(x,z,height){
+ if(!inRiverDistrict(x,z))return false;
+ for(const c of riverColliders){if(height>=c.y1-.05||height<c.y0-.25)continue;
+  if(Math.abs(x-c.x)<c.w/2+.32&&Math.abs(z-c.z)<c.d/2+.32)return true;
+ }
+ // Approaches have a solid ramp face. A player may walk uphill from either end,
+ // but cannot cut through the steep side of a raised bridge approach.
+ const deck=riverDeckAt(x,z);
+ if(deck!==null&&height<deck-.55)return true;
+ return false;
+}
+function cobbleTexture(){
+ const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');
+ g.fillStyle='#6b6b5e';g.fillRect(0,0,512,512);
+ for(let row=0;row<16;row++)for(let col=-1;col<13;col++){
+  const x=col*44+(row%2)*22,y=row*32;const shade=Math.round(rriv(112,158));
+  g.fillStyle=`rgb(${shade+13},${shade+9},${shade-4})`;g.beginPath();g.roundRect(x+2,y+2,40,28,5);g.fill();
+  g.strokeStyle='#dfd2b33d';g.lineWidth=2;g.stroke();
+ }
+ const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return tex;
+}
+const riverCobble=new THREE.MeshStandardMaterial({map:cobbleTexture(),color:'#c4bdab',roughness:.97});
+function groundPatch(x0,x1,z0,z1,material,heightFn,segmentsX=16,segmentsZ=32){
+ const geo=new THREE.PlaneGeometry(x1-x0,z1-z0,segmentsX,segmentsZ);geo.rotateX(-PI/2);geo.translate((x0+x1)/2,0,(z0+z1)/2);
+ const pos=geo.attributes.position,uv=geo.attributes.uv;
+ for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);pos.setY(i,heightFn(x,z));uv.setXY(i,x/8,z/8);}
+ geo.computeVertexNormals();const ob=mesh(geo,material,0,0,0,riverDistrictGroup,false);ob.receiveShadow=true;return ob;
+}
+function makeRiverBanks(){
+ for(const side of [-1,1]){
+  const vertices=[],uv=[],indices=[],rows=128,cols=20;
+  for(let j=0;j<=rows;j++){const z=RIVER.zMin+(RIVER.zMax-RIVER.zMin)*j/rows,edge=riverCenter(z)+side*RIVER.halfWidth;
+   const start=side<0?RIVER.startX:edge,end=side<0?edge:RIVER.endX;
+   for(let i=0;i<=cols;i++){const x=THREE.MathUtils.lerp(start,end,i/cols);vertices.push(x,terrainHeight(x,z)-.07,z);uv.push(x/8,z/8);}
+  }
+  for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){const a=j*(cols+1)+i;indices.push(a,a+cols+1,a+1,a+1,a+cols+1,a+cols+2);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();
+  const bank=mesh(g,riverCobble,0,0,0,riverDistrictGroup,false);bank.receiveShadow=true;
+  // Continuous curved stone embankments with coping, mooring rings and lamps.
+  for(let z=RIVER.zMin;z<RIVER.zMax;z+=6){const zz=Math.min(RIVER.zMax,z+6),mx=(riverCenter(z)+riverCenter(zz))/2+side*RIVER.halfWidth;
+   const wall=riverBox(1.3,7.8,zz-z+.15,riverMaterials.stoneDark,mx,3.95,(z+zz)/2);wall.rotation.y=Math.atan2(riverCenter(zz)-riverCenter(z),zz-z);
+   const cap=riverBox(1.9,.32,zz-z+.15,riverMaterials.stoneLight,mx,8.02,(z+zz)/2);cap.rotation.y=wall.rotation.y;
+  }
+  for(let z=-218;z<420;z+=34){const x=riverCenter(z)+side*(RIVER.halfWidth+3);
+   if(Math.abs(z)<24)continue;
+   riverLamp(x,z,8);riverBox(.55,.6,.55,riverMaterials.iron,x-side*2.2,8.3,z+7);
+  }
+ }
+ // Retain the existing eastern road and carry it to the bridge approach.
+ groundPatch(650,744,-8,8,M.asphalt,(x,z)=>terrainHeight(x,z)+.10,28,2);
+ for(const z of [-11,11])groundPatch(650,744,z-1.7,z+1.7,riverCobble,(x,zz)=>terrainHeight(x,zz)+.13,28,1);
+}
+function riverLamp(x,z,y){
+ const g=new THREE.Group();g.position.set(x,y,z);riverDistrictGroup.add(g);
+ cyl(.13,.23,4.1,riverMaterials.iron,0,2.05,0,g,8);riverBox(.57,.16,.57,riverMaterials.iron,0,4.05,0,g);
+ const glass=new THREE.MeshStandardMaterial({color:'#f5d999',emissive:'#ffc66d',emissiveIntensity:1.2,roughness:.4});
+ riverBox(.42,.67,.42,glass,0,4.43,0,g);const top=mesh(new THREE.ConeGeometry(.54,.42,4),riverMaterials.iron,0,4.95,0,g);top.rotation.y=PI/4;
+}
+function makeRiverWater(){
+ const vertices=[],uv=[],indices=[],rows=150,cols=20;
+ for(let j=0;j<=rows;j++){const z=RIVER.zMin+(RIVER.zMax-RIVER.zMin)*j/rows;
+  for(let i=0;i<=cols;i++){const x=riverCenter(z)-RIVER.halfWidth+2*RIVER.halfWidth*i/cols;vertices.push(x,RIVER.waterY,z);uv.push(i/cols,j/rows);}}
+ for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){const a=j*(cols+1)+i;indices.push(a,a+cols+1,a+1,a+1,a+cols+1,a+cols+2);}
+ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));geo.setIndex(indices);geo.computeVertexNormals();
+ const material=new THREE.ShaderMaterial({side:THREE.DoubleSide,uniforms:{t:{value:0},deep:{value:new THREE.Color('#315c61')},glint:{value:new THREE.Color('#b7d2c1')}},
+ vertexShader:`uniform float t;varying vec3 worldP;varying vec2 flowUV;void main(){vec3 p=position;p.y+=sin(p.x*.24+p.z*.08+t*.65)*.10+sin(p.z*.39-t*.8)*.035;worldP=(modelMatrix*vec4(p,1.)).xyz;flowUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+ fragmentShader:`uniform float t;uniform vec3 deep,glint;varying vec3 worldP;varying vec2 flowUV;
+ void main(){float wave=sin(worldP.x*.40+worldP.z*.18-t*.8)*sin(worldP.x*.13-worldP.z*.51+t*.54);float threads=pow(max(0.,wave),14.);float edge=pow(abs(flowUV.x-.5)*2.,14.);vec3 eye=normalize(cameraPosition-worldP);float fresnel=pow(1.-abs(eye.y),3.);vec3 col=mix(deep,glint,.13+fresnel*.28)+threads*.16+edge*.065;gl_FragColor=vec4(col,1.);
+ #include <tonemapping_fragment>
+ #include <colorspace_fragment>
+ }`});
+ const water=new THREE.Mesh(geo,material);water.name='Willow River — animated current';riverDistrictGroup.add(water);riverVisuals.water=water;
+}
+function bridgeArch(cx,width){
+ const outer=width/2,inner=outer-2.4,spring=3.5;const shape=new THREE.Shape();
+ shape.moveTo(-outer,1);shape.lineTo(-outer,RIVER.deckY-.30);shape.lineTo(outer,RIVER.deckY-.30);shape.lineTo(outer,1);shape.lineTo(inner,1);shape.lineTo(inner,spring);
+ shape.absarc(0,spring,inner,0,PI,false);shape.lineTo(-inner,1);shape.closePath();
+ const g=new THREE.ExtrudeGeometry(shape,{depth:15.7,bevelEnabled:false,curveSegments:18});g.translate(cx,0,-7.85);mesh(g,riverMaterials.stone,0,0,0,riverDistrictGroup);
+ for(const z of [-8,8])for(let i=0;i<15;i++){const a=PI*(i+.5)/15,r=inner+.7;const block=riverBox(1.9,1.25,.32,i%3?riverMaterials.stoneLight:riverMaterials.stoneDark,cx+Math.cos(a)*r,spring+Math.sin(a)*r,z);block.rotation.z=a-PI/2;}
+ // Streamlined cutwaters at the base of the piers.
+ const pier=cyl(2.3,3.0,3.6,riverMaterials.stoneDark,cx-outer,3.1,0,riverDistrictGroup,4);pier.scale.z=3.2;pieFace(pier);
+}
+function pieFace(object){object.rotation.y=PI/4;return object}
+function makeBridgeTower(x){
+ const g=new THREE.Group();g.position.set(x,RIVER.deckY,0);riverDistrictGroup.add(g);
+ for(const side of [-1,1]){
+  const z=side*10.7;riverBox(8,19,7.2,riverMaterials.stoneLight,0,9.5,z,g);riverBox(9.2,.8,8.4,riverMaterials.stone,0,.4,z,g);
+  for(const yy of [3.5,9,14.5]){riverBox(8.45,.40,7.7,riverMaterials.stone,0,yy,z,g);
+   for(const face of [-1,1]){riverBox(1.05,2.2,.12,riverMaterials.glass,face*2.1,yy+2,z-side*3.66,g);riverBox(1.05,2.2,.12,riverMaterials.glass,face*2.1,yy+2,z+side*3.66,g);}}
+  for(const xx of [-3.7,3.7])for(const zz of [-3.3,3.3]){
+   cyl(.72,.86,20.4,riverMaterials.stone,xx,10.2,z+zz,g,8);const cap=mesh(new THREE.ConeGeometry(1.04,3.1,8),riverMaterials.roof,xx,21.4,z+zz,g);cap.castShadow=true;
+  }
+  const roof=mesh(new THREE.ConeGeometry(5.5,4.5,4),riverMaterials.roof,0,21.3,z,g);roof.rotation.y=PI/4;roof.scale.z=.86;
+  riverCollider(x,z,8.4,7.6,RIVER.deckY,RIVER.deckY+19.3,'bridge tower');
+ }
+ riverBox(8,3.4,15.5,riverMaterials.stone,0,15.2,0,g);
+ riverBox(8.6,.45,15.8,riverMaterials.stoneLight,0,17.1,0,g);
+ for(const z of [-5,0,5])riverBox(.15,1.5,1.5,riverMaterials.glass,-4.1,15.4,z,g);
+ riverCollider(x,0,8,14,RIVER.deckY+13.4,RIVER.deckY+17.4,'tower overhead arch');
+ const banner=riverBox(.05,4.0,1.6,mat('#af5949'),4.5,11.6,sideForBanner(x)*8.2,g);riverBanners.push({mesh:banner,phase:x});
+ // Drainpipe routes connect deck level to the tower gallery.
+ const routeZ=7.0;span(v(x+4.5,RIVER.deckY+.2,routeZ),v(x+4.5,RIVER.deckY+17.7,routeZ),.13,.13,riverMaterials.copper,riverDistrictGroup);
+ addRoute('River bridge tower downspout',[v(x+4.5,RIVER.deckY+.25,routeZ),v(x+4.5,RIVER.deckY+17.7,routeZ)],{kind:'trunk',surfaceRadius:.15});
+ addRoute('River bridge tower gallery',[v(x+4.5,RIVER.deckY+17.7,routeZ),v(x+4.5,RIVER.deckY+17.7,-7)],{kind:'roof'});
+}
+function sideForBanner(x){return x<850?-1:1}
+function makeRiverBridge(){
+ for(let i=0;i<5;i++)bridgeArch(802+i*24,24);
+ groundPatch(RIVER.rampStart,RIVER.rampEnd,-7.8,7.8,riverCobble,(x,z)=>riverDeckAt(x,z),106,4);
+ for(const side of [-1,1]){
+  const points=[];for(let x=RIVER.rampStart;x<=RIVER.rampEnd;x+=2)points.push(v(x,riverDeckAt(x,0)+1.1,side*7.7));
+  riverLine(points,riverMaterials.stoneLight,.20,120);
+  addRoute('River bridge stone parapet '+(side<0?'north':'south'),points,{kind:'fence'});
+  for(let x=RIVER.rampStart+1;x<RIVER.rampEnd;x+=4){const y=riverDeckAt(x,0);riverBox(.32,1.05,.30,riverMaterials.stone,x,y+.52,side*7.7);riverCollider(x,side*7.7,4,.3,y,y+1.05,'bridge parapet');}
+  // Blue suspension chains give the bridge its familiar London-like silhouette.
+  const cable=[v(772,14,side*8.7),v(814,34,side*8.7),v(850,25,side*8.7),v(886,34,side*8.7),v(928,14,side*8.7)];
+  const curve=new THREE.CatmullRomCurve3(cable,false,'centripetal');
+  riverLine(cable,riverMaterials.blue,.19,100);
+  for(let i=0;i<=44;i++){const p=curve.getPointAt(i/44);if(p.x<790||p.x>910)continue;span(v(p.x,RIVER.deckY+.7,p.z),p,.055,.055,riverMaterials.blue,riverDistrictGroup,5);}
+  addRoute('River bridge suspension cable '+side,cable,{kind:'wire'});
+ }
+ makeBridgeTower(814);makeBridgeTower(886);
+ for(const x of [752,777,838,862,925,947])for(const side of [-1,1])riverLamp(x,side*6.45,riverDeckAt(x,0));
+}
+function riverWindow(parent,x,y,z,w=1.3,h=1.8){
+ riverBox(w+.22,h+.22,.10,riverMaterials.wood,x,y,z,parent);riverBox(w,h,.14,riverMaterials.glass,x,y,z-.08,parent);
+ riverBox(.09,h,.18,riverMaterials.oak,x,y,z-.16,parent);riverBox(w,.09,.18,riverMaterials.oak,x,y,z-.16,parent);
+}
+function quayRoof(parent,w,d,eave,ridge,roofMaterial,wallMaterial){
+ const hw=w/2+.5,hd=d/2+.6;
+ const positions=[-hw,eave,-hd, hw,eave,-hd, hw,ridge,0, -hw,ridge,0, -hw,eave,hd, hw,eave,hd];
+ const roof=new THREE.BufferGeometry();roof.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));roof.setIndex([0,2,1,0,3,2,4,5,2,4,2,3]);
+ roof.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,w/5,0,w/5,d/10,0,d/10,0,d/5,w/5,d/5],2));roof.computeVertexNormals();mesh(roof,roofMaterial,0,0,0,parent);
+ // End gables use explicit coordinates, avoiding rotations around the origin
+ // that would displace a tall facade triangle away from its house.
+ for(const side of [-1,1]){
+  const x=side*w/2,cap=new THREE.BufferGeometry();cap.setAttribute('position',new THREE.Float32BufferAttribute([x,eave,-d/2,x,ridge,0,x,eave,d/2],3));cap.setIndex(side>0?[0,1,2]:[2,1,0]);
+  cap.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,.5,1,1,0],2));cap.computeVertexNormals();mesh(cap,wallMaterial,0,0,0,parent);
+  span(v(x,eave,-d/2),v(x,ridge,0),.13,.13,riverMaterials.wood,parent,4);span(v(x,ridge,0),v(x,eave,d/2),.13,.13,riverMaterials.wood,parent,4);
+ }
+}
+function makeQuayBuilding(x,z,rotation,index,label){
+ const w=15+index%3*1.8,d=12+index%2*2,h=10+(index%4)*1.25,rise=4.0+(index%3)*.6,base=terrainHeight(x,z),g=new THREE.Group();
+ g.position.set(x,base,z);g.rotation.y=rotation;riverDistrictGroup.add(g);
+ const plaster=mat(['#d8c6a1','#c0b9a0','#d7b399','#b9c2b0','#c9bda7'][index%5]);const roofMat=mat(['#6e635a','#505e63','#71695b','#72615b'][index%4]);
+ riverBox(w,.65,d,riverMaterials.stoneDark,0,.325,0,g);riverBox(w,h,d,plaster,0,h/2,0,g);
+ // Overhanging upper storey, exposed framing, and diagonal Tudor braces.
+ riverBox(w+.7,h*.47,d+.6,plaster,0,h*.755,0,g);
+ for(const yy of [.9,h*.51,h-.2])riverBox(w+.9,.28,d+.8,riverMaterials.wood,0,yy,0,g);
+ for(const side of [-1,1]){
+  const zz=side*(d/2+.39);for(const xx of [-w/2,-w/4,0,w/4,w/2])riverBox(.23,h-.5,.20,riverMaterials.wood,xx,h/2,zz,g);
+  for(const xx of [-w*.36,w*.36]){span(v(xx-1.5,h*.54,zz),v(xx+1.5,h-.4,zz),.12,.12,riverMaterials.wood,g,4);}
+ }
+ quayRoof(g,w+.6,d+.6,h,h+rise,roofMat,plaster);
+ for(const xx of [-w*.32,0,w*.32]){
+  riverWindow(g,xx,h*.72,-d/2-.54,1.45,2.0);if(xx!==0)riverWindow(g,xx,2.85,-d/2-.14,2.5,2.6);
+ }
+ riverBox(1.55,3.4,.2,riverMaterials.oak,0,1.7,-d/2-.2,g);ball(.08,mat('#d3bb7e',.35,.65),.55,1.7,-d/2-.37,g);
+ riverBox(1.3,3,1.5,mat('#98755d'),w*.27,h+rise*.45,1,g);riverBox(1.6,.25,1.8,riverMaterials.stone,w*.27,h+rise*.45+1.6,1,g);
+ const fascia=signCanvas(label,index%2?'#405b51':'#745547','#f4e5bd');riverBox(w*.8,.95,.16,fascia,0,4.82,-d/2-.66,g);
+ if(index%3===0){const awning=riverBox(w*.83,.17,2.5,mat(index%2?'#80987a':'#b26d52'),0,4.3,-d/2-1.3,g);awning.rotation.x=.14;}
+ for(const xx of [-w*.38,w*.38]){riverBox(2.1,.4,.52,riverMaterials.wood,xx,1.0,-d/2-.8,g);for(let j=0;j<5;j++)ball(.21,mat(j%2?'#8caa68':'#b87b76'),xx-.8+j*.4,1.34,-d/2-.8,g);}
+ const b={x,z,rotation,w,d,h,rise,base,name:label,group:g};riverBuildings.push(b);
+ const sideways=Math.abs(Math.sin(rotation))>.5;
+ riverCollider(x,z,sideways?d+.7:w+.9,sideways?w+.9:d+.7,base,base+h-.05,label);
+ const world=(lx,ly,lz)=>new THREE.Vector3(lx,ly,lz).applyAxisAngle(new THREE.Vector3(0,1,0),rotation).add(new THREE.Vector3(x,base,z));
+ const ridges=[world(-w*.48,h+rise+.22,0),world(w*.48,h+rise+.22,0)];
+ addRoute('Bellwether roof · '+label,ridges,{kind:'roof'});
+ const pipeBase=world(w/2+.65,.24,-d/2-.65),pipeTop=world(w/2+.65,h+.32,-d/2-.65);
+ span(pipeBase,pipeTop,.12,.12,riverMaterials.copper,riverDistrictGroup);
+ addRoute('Bellwether downspout · '+label,[pipeBase,pipeTop],{kind:'trunk',surfaceRadius:.14});
+ addRoute('Bellwether gutter to ridge · '+label,[pipeTop,world(w/2+.65,h+rise+.28,0),ridges[1]],{kind:'roof'});
+ batchTreeBranches(g);return b;
+}
+function makeClockTower(){
+ const x=1051,z=35,base=8,g=new THREE.Group();g.position.set(x,base,z);riverDistrictGroup.add(g);
+ riverBox(13,1.1,13,riverMaterials.stone,0,.55,0,g);riverBox(9,29,9,riverMaterials.stoneLight,0,14.5,0,g);
+ for(const y of [2,14,24,28])riverBox(10,.6,10,riverMaterials.stone,0,y,0,g);
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=256;const c=canvas.getContext('2d');c.fillStyle='#e3d7af';c.fillRect(0,0,256,256);c.strokeStyle='#3f493e';c.lineWidth=9;c.beginPath();c.arc(128,128,112,0,PI*2);c.stroke();
+ for(let i=0;i<12;i++){const a=i*PI/6;c.beginPath();c.moveTo(128+Math.sin(a)*89,128-Math.cos(a)*89);c.lineTo(128+Math.sin(a)*103,128-Math.cos(a)*103);c.stroke();}
+ c.lineCap='round';c.lineWidth=8;c.beginPath();c.moveTo(128,128);c.lineTo(164,88);c.moveTo(128,128);c.lineTo(74,113);c.stroke();
+ const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;const m=new THREE.MeshStandardMaterial({map:tex,roughness:.8});
+ for(const side of [-1,1]){riverBox(3.6,3.6,.08,m,0,24,side*4.55,g);riverBox(.08,3.6,3.6,m,side*4.55,24,0,g);}
+ const roof=mesh(new THREE.ConeGeometry(8,8,4),riverMaterials.roof,0,33,0,g);roof.rotation.y=PI/4;
+ cyl(.13,.20,3.4,riverMaterials.iron,0,38.4,0,g,6);
+ riverCollider(x,z,9,9,8,37,'market clocktower');riverPlatforms.push({x,z,w:11.3,d:11.3,height:(px,pz)=>37+8*Math.max(0,1-Math.max(Math.abs(px-x),Math.abs(pz-z))/5.66)});
+}
+function marketStall(x,z,index){
+ const g=new THREE.Group();g.position.set(x,8,z);riverDistrictGroup.add(g);
+ const cloth=mat(index%2?'#879e76':'#b7785d');riverBox(5,1.2,2.8,riverMaterials.oak,0,.6,0,g);
+ for(const xx of [-2.6,2.6])for(const zz of [-1.5,1.5])cyl(.10,.10,3.8,riverMaterials.wood,xx,1.9,zz,g,6);
+ for(let i=0;i<7;i++)riverBox(.78,.16,3.6,i%2?cloth:mat('#dfd1a8'),-2.35+i*.78,3.85,0,g);
+ for(let i=0;i<12;i++)ball(.23,mat(['#b8773c','#a8b066','#ba6050'][i%3]),-2+i%6*.72,1.46,-.5+Math.floor(i/6),g);
+ riverCollider(x,z,5,2.8,8,9.3,'market stall');
+}
+function makeMooredBoat(x,z,index){
+ const g=new THREE.Group();g.position.set(x,RIVER.waterY+.14,z);g.rotation.y=index%2?.22:-.2;riverDistrictGroup.add(g);
+ const hull=mesh(new THREE.SphereGeometry(1,14,8),mat(index%2?'#526e68':'#856854'),0,0,0,g);hull.scale.set(2.6,.9,7.0);
+ riverBox(4.1,.14,9,riverMaterials.oak,0,.55,0,g);for(const zz of [-3,0,3])riverBox(4.5,.2,.65,riverMaterials.wood,0,.85,zz,g);
+ cyl(.11,.14,5,riverMaterials.wood,0,3,0,g,7);riverBox(2.9,2.1,.06,mat('#d3c6a3'),1.5,3.4,0,g);
+ riverBoats.push({group:g,baseY:g.position.y,phase:index*1.9});
+}
+function quayDock(side,z){
+ const x=riverCenter(z)+side*(RIVER.halfWidth-6),y=8;
+ riverBox(14,.5,7,riverMaterials.oak,x,y-.25,z);riverPlatforms.push({x,z,w:14,d:7,y});
+ for(const xx of [-5.5,5.5])for(const zz of [-2.8,2.8])cyl(.23,.30,7,riverMaterials.wood,x+xx,4.5,z+zz,riverDistrictGroup,7);
+ for(let i=-6;i<=6;i++)riverBox(.035,.02,6.8,riverMaterials.wood,x+i,8.02,z);
+ makeMooredBoat(x-side*8,z,riverBoats.length);
+}
+function riverSign(text,x,z,angle=0){const y=terrainHeight(x,z),g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=angle;riverDistrictGroup.add(g);
+ cyl(.12,.16,3.2,riverMaterials.wood,0,1.6,0,g);riverBox(8,1.3,.2,signCanvas(text,'#304c44','#f6e9bd'),0,3.1,0,g);
+}
+function makeRiverTown(){
+ const labels=['THE OLD ANCHOR','QUAYSIDE BOOKS','WILLOW BAKERY','FERRY & FINCH','COPPER KETTLE','RIVER APOTHECARY','THE LANTERN','BRIDGE HOUSE','TIDE & TIMBER','THE COBBLER','WREN COTTAGE','THE TEA ROOM'];
+ const leftZ=[-162,-141,-120,-99,63,84,105,126,147,168];
+ leftZ.forEach((z,i)=>makeQuayBuilding(758,z,-PI/2,i,labels[i]));
+ const rightZ=[-166,-144,-122,-100,62,84,106,128,150,172,194,216];
+ rightZ.forEach((z,i)=>makeQuayBuilding(950+(i%3)*2,z,PI/2,i+2,labels[(i+3)%labels.length]));
+ for(const [i,z] of [-164,-118,-72,91,137,183,229,275].entries())makeQuayBuilding(1008+(i%2)*24,z,i%2?PI:0,i+6,labels[(i+7)%labels.length]);
+ groundPatch(1075,1149,82,425,M.grass,()=>8.01,8,22);groundPatch(705,737,208,425,M.grass,(x,z)=>terrainHeight(x,z)+.015,5,20);
+ makeClockTower();
+ for(const [i,x,z] of [[0,996,-23],[1,1010,-23],[2,1024,-23],[3,994,42],[4,1007,42]])marketStall(x,z,i);
+ // Open square, planters, benches and hanging lines tie the waterfront together.
+ for(const x of [978,1010,1092])for(const z of [-40,68]){
+  riverLamp(x,z,8);riverBox(3.6,.45,1.3,riverMaterials.oak,x+5,8.6,z);for(const xx of [x+3.5,x+6.5])riverBox(.17,.7,1.3,riverMaterials.iron,xx,8.32,z);
+ }
+ for(const [x,z] of [[715,-28],[715,43],[1004,79],[1108,52],[1094,192],[1015,370]]){
+  makeTree({name:'QUAY WILLOW',x,z,seed:Math.round(x+z),h:19,crown:9,color:['#769377','#95a580','#586f5b'],branches:4,leafCount:850});
+ }
+ for(const side of [-1,1])for(let z=-180;z<350;z+=40){
+  const edge=riverCenter(z)+side*(RIVER.halfWidth+7),other=edge+side*23;const cable=[v(edge,14,z),v((edge+other)/2,12.6,z),v(other,15,z)];
+  riverLine(cable,riverMaterials.iron,.045,16);addRoute('Bellwether bunting line',cable,{kind:'wire'});
+  for(let i=1;i<8;i++){const x=THREE.MathUtils.lerp(edge,other,i/8),h=14-Math.sin(i/8*PI)*1.5+i/8;const flag=riverBox(.72,.92,.05,mat(i%2?'#b16c58':'#879a75'),x,h-.6,z);riverBanners.push({mesh:flag,phase:i+z});}
+ }
+ quayDock(-1,208);quayDock(1,-124);quayDock(1,290);
+ riverSign('BELLWETHER QUAY →',650,25,-.15);riverSign('WILLOW RIVER',780,38,PI/2);riverSign('OLD TOWN MARKET →',974,20,PI/2);
+ // Low-detail waterside figures add life without expanding the city's combat
+ // and emergency registries. They are explicitly ambient townspeople.
+ for(let i=0;i<8;i++){
+  const x=i<4?778:926,z=-150+(i%4)*105,g=new THREE.Group();g.position.set(x,8,z);riverDistrictGroup.add(g);
+  const coat=mat(['#927a60','#647e78','#a57964','#747a5f'][i%4]),skin=mat('#c1a285');
+  riverBox(.6,1.0,.34,coat,0,1.05,0,g);ball(.25,skin,0,1.83,0,g);
+  for(const xx of [-.17,.17])cyl(.09,.11,.65,riverMaterials.wood,xx,.33,0,g,6);
+  riverWalkers.push({group:g,x,z,phase:i*1.3});
+ }
+}
+function recoverRiverFall(){
+ if(player.inHospital||player.inSewer||player.inDuct||player.rail||!insideRiverWater(player.pos.x,player.pos.z)||player.pos.y>RIVER.waterY+.45)return false;
+ const side=player.pos.x<riverCenter(player.pos.z)?-1:1,z=THREE.MathUtils.clamp(player.pos.z,-225,425);
+ player.pos.set(riverCenter(z)+side*(RIVER.halfWidth+5),RIVER.bankY+.18,z);player.vel.set(0,0,0);player.grounded=true;player.committedAirborne=false;player.cameraCommit=0;player.attackWindow=0;cameraHardCut=true;
+ if(riverVisuals.rescueCooldown<=0){flash('SPLASH! You scramble back onto the quay.',3);fx(180,.18,'triangle',.035);riverVisuals.rescueCooldown=2;}
+ return true;
+}
+function updateRiverDistrict(dt){
+ riverVisuals.elapsed+=dt;riverVisuals.rescueCooldown=Math.max(0,riverVisuals.rescueCooldown-dt);
+ const near=player.pos.x>610&&!player.inHospital&&!player.inSewer;
+ riverDistrictGroup.visible=near||!playing;
+ if(!near&&playing)return;
+ const t=riverVisuals.elapsed;if(riverVisuals.water)riverVisuals.water.material.uniforms.t.value=t;
+ for(const b of riverBoats){b.group.position.y=b.baseY+Math.sin(t*.7+b.phase)*.12;b.group.rotation.z=Math.sin(t*.55+b.phase)*.026;}
+ for(const b of riverBanners)b.mesh.rotation.x=Math.sin(t*1.8+b.phase)*.10;
+ for(const w of riverWalkers){w.group.position.z=w.z+Math.sin(t*.095+w.phase)*15;w.group.rotation.y=Math.cos(t*.095+w.phase)>0?0:PI;}
+ if(inRiverDistrict(player.pos.x,player.pos.z)){
+  $('districtTag').textContent=insideRiverWater(player.pos.x,player.pos.z)?'WILLOW RIVER · STONEBRIDGE':'BELLWETHER QUAY · RIVERSIDE OLD TOWN';
+  if(!riverVisuals.visited){riverVisuals.visited=true;flash('BELLWETHER QUAY · Explore the bridge, rooftops and riverside market.',5);}
+ }
+}
+function startAtRiver(){
+ player.pos.set(780,RIVER.bankY+.18,51);player.vel.set(0,0,0);player.rail=null;player.grounded=true;
+ squirrel.position.copy(player.pos);graphicsRuntime.lastSafe.copy(player.pos);
+ yaw=-.94;pitch=.30;player.yaw=yaw+PI;cameraHardCut=true;
+ $('playButton').click();updateCamera(1);flash('BELLWETHER QUAY · The stone bridge is ahead. E grabs pipes and parapets.',6);
+}
+makeRiverBanks();makeRiverWater();makeRiverBridge();makeRiverTown();
+$('riverPlayButton').addEventListener('click',startAtRiver);
+
 // GAME FRAME — central scheduler. The movement/camera core is never silently
 // swallowed; peripheral NPC and scenery subsystems are isolated and report errors.
 const clock=new THREE.Clock();let wallLast=performance.now();let mainLoopFailed=false;
@@ -6438,6 +6828,7 @@ function updateScenery(dt){
   leaf.mesh.rotation.x=Math.sin(time*.37+leaf.phase*1.3)*leaf.amplitude*.6;
  }
  updateCanopyShadows();updateEmergencyBeacons();
+ updateRiverDistrict(gamePaused?0:dt);
  if(playing&&!gamePaused)animateBiteDance(dt);
 }
 let debugAccum=0;
@@ -6446,8 +6837,8 @@ function updateDiagnostics(dt){
  const element=document.getElementById('spicyDiagnostic');
  if(!element||!element.classList.contains('open'))return;
  const p=player.pos;
- element.textContent=`v5.0 · ${Math.round(1000/Math.max(1,RenderConfig.frameMs))} fps · ${renderer.info.render.calls} draws · ${Math.round(renderer.info.render.triangles/1000)}k triangles
-${BatchingStats.before} tree meshes → ${BatchingStats.after} batches ·  · ${player.rail?.name||'ground'}\n`+
+ element.textContent=`v5.2 · ${Math.round(1000/Math.max(1,RenderConfig.frameMs))} fps · ${renderer.info.render.calls} draws · ${Math.round(renderer.info.render.triangles/1000)}k triangles
+${BatchingStats.before} static meshes → ${BatchingStats.after} batches ·  · ${player.rail?.name||'ground'}\n`+
    `player ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)} · ${player.grounded?'grounded':'air/route'}\n`+
    `routes ${routes.length}/${routes.filter(r=>r.indexed).length} indexed · forks ${canopyForks.size} · errors ${runtimeErrors.length}`+
    (runtimeErrors.length?'\n'+runtimeErrors.slice(-2).join(' | '):'');
@@ -6487,7 +6878,7 @@ console.info(`[Spicy Rodents] ${verifiedUtilityPoles} utility supports verified 
 rebuildCanopyForks();
 if(routes.some(r=>!r.indexed))console.warn('[Spicy Rodents] Incomplete route registry');
 try{
- initRefresh();drawInfection();flash('v5.0 · NEIGHBORHOOD REVIVAL · G for display settings',6);
+ initRefresh();drawInfection();flash('v5.2 · RIVER & OLD TOWN · Follow the eastern road to Bellwether Quay',6);
  tick();
  if(!mainLoopFailed){window.__spicyBootOk=true;
   $('loading').classList.add('done');
