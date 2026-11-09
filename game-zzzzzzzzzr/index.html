@@ -351,7 +351,7 @@ const KIT = {"tex":{"hewn":"data:image/webp;base64,UklGRtTyAgBXRUJQVlA4IMjyAgBQq
    State (saved) and runtime (not saved)
    ============================================================ */
 const SAVE_KEY = 'serpents-wall-v3';
-const LAYOUT_VERSION = 3;
+const LAYOUT_VERSION = 4;
 function freshState() {
   return {
     v: 1, A: 0, x: 0, z: -5, yaw: 0,
@@ -369,7 +369,7 @@ function serialize() {
   return JSON.stringify({
     v: 3, A: S.A, x: S.x, z: S.z, yaw: S.yaw, health: S.health, oil: S.oil, inv: S.inv, found: [...S.found], lens, lapAssign: S.lapAssign,
     t: S.t, lastSupply: S.lastSupply, activeSince: S.activeSince, dropN: S.dropN, mirror: S.mirror, mirrorSeen: S.mirrorSeen, inField: S.inField, field: S.field, dead: S.dead,
-    maxA: S.maxA || 0, stairRet: S.stairRet || null, harp: S.harp || null, bells: S.bells || null, cat: CAT_VERSION, layout: LAYOUT_VERSION,
+    maxA: S.maxA || 0, stairRet: S.stairRet || null, harp: S.harp || null, bells: S.bells || null, smashN: S.smashN || 0, broken: S.broken || [], cat: CAT_VERSION, layout: LAYOUT_VERSION,
   });
 }
 function deserialize(str) {
@@ -383,7 +383,11 @@ function deserialize(str) {
   s.lastInput = s.t;
   if ((o.cat || 1) < 2) migrateCatalogue(s);
   // the rooms were rebuilt since this was saved: what was broken in them is whole again, so no box answers to another's number
-  if ((o.layout || 1) < LAYOUT_VERSION) for (const st of Object.values(s.lens)) st.sm = [];
+  if ((o.layout || 1) < LAYOUT_VERSION) {
+    for (const st of Object.values(s.lens)) { st.sm = []; st.tk = []; }
+    // and the rooms are numbered afresh, so what goes where is dealt again (nothing already seen comes back)
+    s.lapAssign = {};
+  }
   s.layout = LAYOUT_VERSION;
   return s;
 }
@@ -1657,8 +1661,9 @@ const SMASH_SPEC = {
    ============================================================ */
 const VAR_LENGTHS = [4, 9, 15, 21, 27, 33, 38, 44, 50, 56, 62, 68, 81, 87, 92, 97, 101, 105];
 const VAR_SET = new Set(VAR_LENGTHS);
-const UPPER = ['store', 'collapsed', 'gallery', 'dank', 'empty', 'hanging', 'pigeon', 'toppled'];
-const UPPER_W = [3, 1.4, 1.4, 1, 2, 1.1, 1.1, 1.1];
+// and the rooms of things thrown away: heaps of scrap, a wood store left to rot, a midden (32e_scrap)
+const UPPER = ['store', 'collapsed', 'gallery', 'dank', 'empty', 'hanging', 'pigeon', 'toppled', 'scrap', 'lumber', 'midden'];
+const UPPER_W = [2.2, 1.4, 1.2, 1, 1.6, 1.0, 1.0, 1.1, 1.6, 0.9, 0.9];
 const LOWER = ['vault', 'cistern', 'crypt', 'shaft', 'cache'];
 const LOWER_W = [2, 1.1, 1.5, 1, 1.2];
 const FORCE = { 23: { i: 0, lower: false, design: 'dank', v: 0, leak: true }, 58: { i: 1, lower: true, design: 'crypt', v: 0, leak: true }, 91: { i: 2, lower: true, design: 'cistern', v: 2, leak: true } };
@@ -1706,13 +1711,16 @@ function layoutFor(L, lap) {
     const a = rooms[i - 1], b = rooms[i];
     if (a.side === b.side && b.d - a.d < 13 && L !== C.ESCAPE_L) b.side = -b.side;
   }
+  // at 34 and 36, 88 and 90, the stair rooms of the two places that join them (38c_pairs); no pits near the oval hall
+  pairGate(L, rooms);
+  if (PAIR_NEAR.has(L)) for (const r of rooms) if (r.lower && (r.design === 'cistern' || r.design === 'shaft')) r.design = 'vault';
   // fixed extras every lap: three caves, and two rooms that jut off at an angle where the rhythm starts to feel known
   if (L === C.ESCAPE_L) {
     // the deepest, most winding room on the wall; at its far end, the only stair that goes down from inside a room
     rooms.push({ i: rooms.length, d: 52, side: 1, lower: false, design: 'escape', v: 0, seed: R.int(0, 1e9), extra: true });
   }
   const extra = CAVES[L] ? 'cave' : JUTS[L] ? 'jut' : ODD[L] ? 'odd' : null;
-  const need = extra === 'odd' ? 17 : 13;
+  const need = extra === 'odd' ? 17 : 14;
   if (extra) {
     const R2 = new Rng(hash32(L, 4711, 3));
     let best = null, bestScore = -1;
@@ -1744,7 +1752,10 @@ function layoutFor(L, lap) {
         if (score > bestScore) { bestScore = score; best = { d, side }; }
       }
       if (!best) break;
-      rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: NEW_UPPER[(kind0 + k) % 3], v: R3.int(0, 1), seed: R3.int(0, 1e9), added: true });
+      // past the first ten, most of these are no longer workrooms at all, only what was left in them: so the wall is not
+      // the same smithy, loom and bunks over and over
+      const h = hash32(L, k, 5150), worked = L < 10 || h % 10 < 3;
+      rooms.push({ i: rooms.length, d: best.d, side: best.side, lower: false, design: worked ? NEW_UPPER[(kind0 + k) % 3] : SCRAP_KINDS[(h >>> 8) % 3], v: R3.int(0, 1), seed: R3.int(0, 1e9), added: true });
     }
   }
   // the two grottos go in last of all, where there is room for them to spread through the rock:
@@ -1757,7 +1768,7 @@ function layoutFor(L, lap) {
       let ok = true, minOpp = 99, room = 99;
       for (const r of rooms) {
         const dd = r.d - d;
-        if (r.side === side) { if ((dd < 0 && -dd < 14) || (dd >= 0 && dd < 7.5)) ok = false; room = Math.min(room, Math.abs(dd)); }
+        if (r.side === side) { if ((dd < 0 && -dd < 15) || (dd >= 0 && dd < 8.5)) ok = false; room = Math.min(room, Math.abs(dd)); }
         else minOpp = Math.min(minOpp, Math.abs(dd));
       }
       if (!ok || minOpp < 2.4) continue;
@@ -1775,6 +1786,7 @@ function layoutFor(L, lap) {
   moreRooms(L, rooms);
   // at 89 the room below the spiral has the bell in it
   if (L === BELL_L) { const b = rooms.find(q => q.lower && COMPOSED.has(q.design)); if (b) b.bell = true; }
+  pairOwner(L, rooms);
   const lay = { L, vi, rooms, clutterSeed, decorSeed: hash32(L, vi, 555) };
   _layCache.set(key, lay);
   return lay;
@@ -1896,7 +1908,7 @@ function* corridorGen(ctx) {
   const B = ctx.B, R = new Rng(ctx.lay.clutterSeed);
   ctx.setFrame(1, 0, 0, 0);
   const open = { '-1': [], '1': [] };
-  for (const r of ctx.lay.rooms) { const rock = r.design === 'cave' || r.design === 'grotto'; open[r.side].push({ z: -r.d, h: r.lower || r.design === 'cathedral' ? 0.95 : rock ? 0.85 : 0.72, top: rock ? CAVE_DOOR : DOOR, rough: rock }); }
+  for (const r of ctx.lay.rooms) { if (r.nodoor) continue; const rock = r.design === 'cave' || r.design === 'grotto'; open[r.side].push({ z: -r.d, h: r.doorH || (r.lower || r.design === 'cathedral' ? 0.95 : rock ? 0.85 : 0.72), top: rock ? CAVE_DOOR : DOOR, rough: rock }); }
 
   B.box(M.plank, 0, -0.05, -50, 4.1, 0.1, 100, 0, 0, 0, 0.55);
   B.box(M.board, 0, 3.07 + UP, -50, 4.9, 0.12, 100, 0, 0, 0, 0.6);
@@ -2428,13 +2440,7 @@ function stairAlcove(ctx, room, below = 3.4 * HS) {
   for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
   for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
   // newel and steps
-  B.log(M.wood, STAIR.cu, (C.LOWER_Y + H) / 2, 0, 0.13, H - C.LOWER_Y, 'y', 8);
-  for (let s = 0; s < STAIR.steps; s++) {
-    const phi = Math.PI + (s + 0.5) * (STAIR.turns * TAU / STAIR.steps);
-    const y = -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1));
-    B.box(M.plank, STAIR.cu + 0.66 * Math.cos(phi), y, 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
-    B.box(M.wood, STAIR.cu + 1.12 * Math.cos(phi), y - 0.12, 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
-  }
+  wornSpiral(B, STAIR.cu, 0, STAIR.steps, STAIR.turns, s => -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1)), C.LOWER_Y, H, (room.zc * 10) ^ (room.side * 77));
   ctx.solid(3.25, 0, 0.3, 3.6, 0, 'up');
   for (const s of [-1, 1]) { ctx.solid(1.5, s * 1.75, 3.6, 0.3, 0, 'up'); ctx.solid(0.06, s * 1.33, 0.2, 0.6, 0, 'up'); }
   const c = ctx.W(STAIR.cu, 0, 0);
@@ -2709,6 +2715,7 @@ function* buildLengthGen(A) {
   buildStage = 'corridor';
   yield* corridorGen(ctx);
   for (const r of ctx.lay.rooms) {
+    if (r.design === 'gate') continue;           // built by the length between (38c_pairs)
     const R = new Rng(r.seed);
     buildStage = (r.lower ? 'low:' : 'up:') + r.design;
     if (r.lower && COMPOSED.has(r.design)) {
@@ -3448,24 +3455,29 @@ const pickW = (R, obj) => { const ks = Object.keys(obj); return R.pickW(ks, ks.m
 function planRoom(r) {
   if (r._plan) return r._plan;
   const th = THEMES[r.design], P = new Rng(hash32(r.seed >>> 0, 999, r.lower ? 1 : 0, 31));
-  const lower = !!r.lower, u0 = lower ? -0.3 : 0, vLim = lower ? 6.0 : (th.vLim || 2.8), uMax = lower ? 13.7 : 16;
-  let D = P.range(th.D[0], th.D[1]), W = Math.min(P.range(th.W[0], th.W[1]), 2 * vLim - 0.4);
+  const lower = !!r.lower, u0 = lower ? -0.3 : 0, vLim = lower ? 6.0 : Math.max(th.vLim || 0, 3.6), uMax = lower ? 13.7 : 16;
+  // the rooms above ground run bigger than they did, and less alike: some much deeper than wide, some the other way
+  const grow = lower ? 1 : P.range(1.1, 1.5), spread = lower ? 1 : P.range(0.9, 1.3);
+  let D = P.range(th.D[0], th.D[1]) * grow, W = Math.min(P.range(th.W[0], th.W[1]) * Math.sqrt(grow) * spread, 2 * vLim - 0.4);
   if (lower) D = Math.max(D, 6.5);
   D = Math.min(D, uMax - u0);
   const H = P.range(th.H[0], th.H[1]) * HS, hw = W / 2, uB = u0 + D;
   const rects = [{ u0, u1: uB, v0: -hw, v1: hw, h: H, main: true }];
   const clearU = lower ? u0 + 4.3 : u0 + 1.2;           // nothing opens off the walls where you come in
-  // a bay off one side
-  if (P.chance(th.bay)) {
-    const s = P.chance(0.5) ? 1 : -1, room = vLim - hw;
+  // a bay off one side, and now and then one off the other as well, so the room is no plain box
+  const s1 = P.chance(0.5) ? 1 : -1;
+  for (const [s, ch] of [[s1, th.bay + (lower ? 0.1 : 0.25)], [-s1, lower ? 0.1 : 0.3]]) {
+    if (!P.chance(ch) || (s === -s1 && !rects.some(q => q.bay))) continue;
+    const room = vLim - hw;
     if (room >= 0.9) {
-      const bd = Math.min(room, P.range(0.9, lower ? 3.2 : 2.4)), len = Math.min(uB - clearU - 0.3, P.range(1.6, lower ? 5 : 3.4));
-      if (len >= 1.4) { const a = P.range(clearU, uB - len - 0.3); rects.push({ u0: a, u1: a + len, v0: s > 0 ? hw : -hw - bd, v1: s > 0 ? hw + bd : -hw, h: H * P.range(0.8, 1), bay: s, sh: s > 0 ? 'v0' : 'v1' }); }
+      const bd = Math.min(room, P.range(0.9, lower ? 3.2 : 2.8)), len = Math.min(uB - clearU - 0.3, P.range(1.6, lower ? 5 : 4.2));
+      if (len >= 1.4) { const a = P.range(clearU, uB - len - 0.3); rects.push({ u0: a, u1: a + len, v0: s > 0 ? hw : -hw - bd, v1: s > 0 ? hw + bd : -hw, h: H * P.range(0.75, 1), bay: s, sh: s > 0 ? 'v0' : 'v1' }); }
     }
   }
-  // an alcove at the back
-  if (P.chance(th.alcove)) {
-    const aw = Math.min(W - 0.6, P.range(1.1, lower ? 3.2 : 2.5)), ad = Math.min(P.range(0.8, lower ? 2.8 : 2.2), uMax - uB);
+  // an alcove at the back: above ground sometimes a room beyond the room, nearly as wide and with a lower roof
+  if (P.chance(th.alcove + (lower ? 0 : 0.2))) {
+    const deep = !lower && P.chance(0.35);
+    const aw = Math.min(W - 0.6, deep ? P.range(W * 0.6, W - 0.6) : P.range(1.1, lower ? 3.2 : 2.6)), ad = Math.min(deep ? P.range(2.0, 3.6) : P.range(0.8, lower ? 2.8 : 2.2), uMax - uB);
     if (aw >= 1.0 && ad >= 0.8) { const c = P.range(-hw + aw / 2 + 0.3, hw - aw / 2 - 0.3); rects.push({ u0: uB, u1: uB + ad, v0: c - aw / 2, v1: c + aw / 2, h: H * P.range(0.66, 0.95), alcove: true, sh: 'u0' }); }
   }
   // niches in the side walls, and below ground sometimes in the back wall too
@@ -3637,7 +3649,7 @@ function* planFixturesGen(plan, r, L) {
   const th = plan.theme || THEMES[r.design], P = new Rng(hash32(plan.seed, 1234)), lower = plan.lower, main = plan.rects[0];
   if (overBudget()) yield;
   const G = new RoomGrid(plan.rects), fx = { wall: [], center: [], posts: [], rails: [], spots: [], scatter: [], mirror: null, cont: 0, sealed: 0 };
-  const count = {}, placed = [], probes = [], cap = th.cap || (lower ? 14 : 9);
+  const count = {}, placed = [], probes = [], cap = th.cap || (lower ? 14 : Math.round(9 * clamp(plan.D * plan.W / 22, 1, 1.7)));
   if (overBudget()) yield;
   // the way in stays clear: the door and a step inside it, or below ground the foot of the spiral
   const entry = plan.entry || (lower ? [3.15, 0] : [0.5, 0]);
@@ -5157,6 +5169,193 @@ function updateBells(dt) {
   }
 }
 
+/* ---- 32e_scrap.js ---- */
+/* ============================================================
+   What was left when the place was given up, long, long ago: heaps of whatever was not worth carrying, a wood store
+   nobody came back for, a midden in a room. Rooms of discarded things, each heap different, so the wall is not the same
+   few workrooms over and over. The same stock of boxes and jars stands among it, to be broken as anywhere else.
+   ============================================================ */
+
+// a cart wheel, whole or not: rim pieces round a hub, spokes; m is the frame of the wheel (its axle along local z)
+function wheelAt(B, R, m, r = 0.5, broken = 0.25) {
+  const nf = R.int(7, 10), ns = R.int(6, 9), seg = TAU * r / nf * 1.04, gone = R.chance(broken) ? R.int(1, 3) : 0, g0 = R.int(0, nf - 1);
+  for (let i = 0; i < nf; i++) {
+    if (gone && ((i - g0 + nf) % nf) < gone) continue;
+    const a = (i + 0.5) / nf * TAU;
+    B.add(M.wood, boxGeo(seg, 0.075, 0.065), m.clone().multiply(mtx(r * Math.cos(a), r * Math.sin(a), 0, 0, 0, a + Math.PI / 2)), true);
+  }
+  for (let i = 0; i < ns; i++) {
+    if (R.chance(broken * 0.6)) continue;
+    const a = i / ns * TAU + 0.2, l = (r - 0.09) * (R.chance(broken * 0.4) ? R.range(0.4, 0.75) : 1);
+    B.add(M.wood, boxGeo(l, 0.032, 0.032), m.clone().multiply(mtx((0.08 + l / 2) * Math.cos(a), (0.08 + l / 2) * Math.sin(a), 0, 0, 0, a)), true);
+  }
+  B.add(M.log, cylGeo(0.09, 0.26, 9), m.clone().multiply(mtx(0, 0, 0, Math.PI / 2, 0, 0)), true);
+  if (R.chance(0.5)) B.add(_wm.rust(), new THREE.TorusGeometry(0.095, 0.012, 4, 12), m.clone().multiply(mtx(0, 0, 0.1)), true);
+}
+// a barrel that gave way: the staves fallen outward from its foot, a hoop or two among them
+function fallenBarrel(X, R, t, n) {
+  const ns = R.int(9, 14), r = R.range(0.2, 0.27), m = X.k.m(t, 0, n);
+  for (let i = 0; i < ns; i++) {
+    if (R.chance(0.15)) continue;
+    const a = i / ns * TAU + R.range(-0.1, 0.1), lean = R.range(0.5, 1.45), l = R.range(0.55, 0.78);
+    const rot = new THREE.Matrix4().makeRotationY(-a).multiply(mtx(r, 0.02, 0, 0, 0, -lean)).multiply(mtx(0, l / 2, 0));
+    X.B.add(M.board, boxGeo(0.02, l, R.range(0.07, 0.1), 0.8), m.clone().multiply(rot), true);
+  }
+  X.add(M.board, new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.025, 12), t, 0.013, n);
+  for (let k = 0, nh = R.int(1, 2); k < nh; k++) X.add(_wm.rust(), new THREE.TorusGeometry(r * R.range(1.0, 1.25), 0.012, 4, 18), t + R.range(-0.25, 0.25), 0.014 + k * 0.02, n + R.range(-0.2, 0.2), Math.PI / 2 + R.range(-0.06, 0.06), 0, R.range(-0.06, 0.06));
+  X.circ(t, n, r + 0.3);
+}
+// loose boards and pieces thrown down anyhow
+function throwBoards(X, R, ta, tb, n0, n1, k) {
+  for (let i = 0; i < k; i++) X.box(R.pick([M.board, M.plank, M.board]), R.range(ta, tb), 0.015 + i * 0.012, R.range(n0, n1), R.range(0.35, 1.3), R.range(0.02, 0.035), R.range(0.1, 0.24), R.range(-0.06, 0.06), R.range(0, TAU), R.range(-0.08, 0.08));
+}
+// a mound of dust and fallen muck under it all
+function muck(X, R, t, n, su, sn, h) { X.add(M.earth, new THREE.SphereGeometry(1, 12, 6, 0, TAU, 0, Math.PI / 2), t, -0.03, n, 0, R.range(0, 3), 0, su, h, sn); }
+
+Object.assign(WF, {
+  // a heap of what was not worth taking, pushed against the wall: boards, a wheel, a fallen barrel, broken pots, a basket
+  junk: { len: [1.3, 3.6], dep: [0.85, 1.35], minH: 1.4, cont: 0.45, sealed: true,
+    build(X, f, R) {
+      const d = f.dep;
+      muck(X, R, f.tm, d * 0.4, f.len * 0.5, d * 0.45, R.range(0.08, 0.2));
+      // boards leaning on the wall, every one at its own angle
+      for (let i = 0, n = R.int(2, 6); i < n; i++) {
+        const t = R.range(f.ta + 0.15, f.tb - 0.15), top = R.range(0.9, Math.min(2.0, f.h - 0.3)), foot = R.range(0.25, 0.6);
+        X.beam(R.pick([M.board, M.plank, M.wood]), [t + R.range(-0.2, 0.2), 0.02, foot], [t, top, 0.04], R.range(0.12, 0.24), R.range(0.025, 0.05));
+      }
+      const what = R.shuffle(['wheel', 'barrel', 'pots', 'basket', 'seat', 'box', 'rope', 'tub']);
+      let t = f.ta + 0.35;
+      for (const k of what) {
+        if (t > f.tb - 0.3) break;
+        if (k === 'wheel') {
+          const r = R.range(0.38, 0.55);
+          if (R.chance(0.55)) wheelAt(X.B, R, X.k.m(t + r * 0.6, r * 0.97 + 0.02, 0.2, -0.22, R.range(-0.1, 0.1), 0), r, 0.45);
+          else wheelAt(X.B, R, X.k.m(t + r * 0.6, 0.06, d * 0.5, -Math.PI / 2 + R.range(-0.1, 0.1), 0, R.range(-0.1, 0.1)), r, 0.5);
+          t += r * 1.3;
+        } else if (k === 'barrel') { fallenBarrel(X, R, t + 0.3, d * 0.5); t += 0.7; }
+        else if (k === 'pots') { brokenPot(X, R, t + 0.2, 0, d * 0.5, R.chance(0.5)); t += 0.45; }
+        else if (k === 'basket') { openBasket(X, R, t + 0.25, d * 0.55, false); t += 0.55; }
+        else if (k === 'seat') { X.seat(R.pick(['stool', 'chair', 'stool']), t + 0.25, d * 0.5, R.range(0, TAU), R, { tipped: true }); t += 0.6; }
+        else if (k === 'box' && R.chance(0.7)) { X.smash(R.pick(['box', 'crate', 'box']), t + 0.3, 0, d * 0.45, R.range(-0.6, 0.6), { nolift: true, tilt: [R.range(-0.18, 0.18), R.range(-0.18, 0.18)] }); t += 0.75; }
+        else if (k === 'rope') { ropeCoil(X, R, t + 0.15, 0, d * 0.55, R.range(0.1, 0.16)); t += 0.35; }
+        else if (k === 'tub') { X.add(M.board, new THREE.CylinderGeometry(0.24, 0.2, 0.3, 12, 1, true), t + 0.25, 0.12, d * 0.5, R.range(1.0, 1.5), R.range(0, 3), 0); t += 0.55; }
+        t += R.range(0.05, 0.3);
+      }
+      throwBoards(X, R, f.ta + 0.1, f.tb - 0.1, 0.2, d, R.int(3, 8));
+      X.solid(f.tm, d * 0.45, f.len * 0.92, d * 0.85);
+    } },
+  // staves and hoops from barrels long since fallen apart, in a heap
+  staves: { len: [0.8, 1.8], dep: 0.7, minH: 1.0, acc: false,
+    build(X, f, R) {
+      for (let i = 0, n = R.int(10, 22); i < n; i++) X.box(M.board, R.range(f.ta + 0.2, f.tb - 0.2), 0.012 + i * 0.008, R.range(0.15, 0.6), R.range(0.5, 0.8), 0.02, R.range(0.06, 0.1), R.range(-0.15, 0.15), R.range(0, TAU), R.range(-0.2, 0.2));
+      for (let i = 0, n = R.int(1, 3); i < n; i++) {
+        const lean = R.chance(0.5);
+        X.add(_wm.rust(), new THREE.TorusGeometry(R.range(0.2, 0.3), 0.012, 4, 18), R.range(f.ta + 0.3, f.tb - 0.3), lean ? 0.27 : 0.03 + i * 0.03, lean ? 0.08 : R.range(0.2, 0.5), lean ? -0.2 : Math.PI / 2, 0, 0);
+      }
+      if (R.chance(0.5)) fallenBarrel(X, R, f.tm, 0.38);
+      X.solid(f.tm, 0.35, f.len, 0.65);
+    } },
+  // planks stacked on bearers along the wall, waiting for a use that never came; warped, the top ones slid
+  plankstack: { len: [1.6, 3.4], dep: [0.6, 0.85], minH: 1.4, acc: false,
+    build(X, f, R) {
+      const d = f.dep, L = f.len - 0.1, nb = Math.max(2, Math.round(L / 1.2));
+      for (let i = 0; i < nb; i++) X.box(M.wood, f.ta + 0.15 + (L - 0.2) * i / (nb - 1), 0.05, d / 2, 0.1, 0.1, d);
+      const n = R.int(4, 14);
+      for (let i = 0; i < n; i++) {
+        const slip = i > n - 4 ? R.range(-0.25, 0.25) : R.range(-0.04, 0.04), w = R.range(0.18, 0.3);
+        X.box(i % 3 === 2 ? M.board : M.plank, f.tm + slip, 0.12 + i * 0.045, R.range(w / 2 + 0.04, d - w / 2), L * R.range(0.85, 1), 0.04, w, R.range(-0.02, 0.02), R.range(-0.05, 0.05) + (i > n - 3 ? R.range(-0.2, 0.2) : 0), R.range(-0.015, 0.015));
+      }
+      if (R.chance(0.5)) X.beam(M.plank, [f.ta + R.range(0.2, 0.6), 0.02, d + 0.5], [f.ta + R.range(0.1, 0.4), R.range(0.8, 1.4), 0.05], 0.22, 0.04);
+      X.solid(f.tm, d / 2, f.len, d);
+    } },
+});
+
+Object.assign(CF, {
+  // a heap in the middle of the floor: everything at once
+  heap: { acc: true, sealed: true, cont: () => 1,
+    make(P) { const su = P.range(1.6, 2.6), sv = P.range(1.4, 2.2); return { su, sv, a: P.range(-0.4, 0.4) }; },
+    build(X, f, R) {
+      const p = f.prm, hu = p.su / 2, hv = p.sv / 2;
+      muck(X, R, 0, 0, hu * 0.85, hv * 0.85, R.range(0.15, 0.32));
+      for (let i = 0, n = R.int(5, 11); i < n; i++) {
+        const a = R.range(0, TAU), l = R.range(0.7, 1.8);
+        X.beam(R.pick([M.board, M.plank, M.wood, M.woodDark]), [Math.cos(a) * hu * 0.8, 0.02, Math.sin(a) * hv * 0.8], [Math.cos(a + Math.PI) * l * 0.2, R.range(0.3, 0.75), Math.sin(a + Math.PI) * l * 0.2], R.range(0.1, 0.22), R.range(0.025, 0.06));
+      }
+      if (R.chance(0.6)) wheelAt(X.B, R, X.k.m(R.range(-0.3, 0.3), R.range(0.25, 0.4), R.range(-0.2, 0.2), -Math.PI / 2 + R.range(-0.5, 0.5), R.range(0, 3), R.range(-0.4, 0.4)), R.range(0.35, 0.5), 0.6);
+      if (R.chance(0.5)) fallenBarrel(X, R, R.range(-hu, hu) * 0.5, hv + 0.15);
+      for (let i = 0, n = R.int(1, 3); i < n; i++) brokenPot(X, R, R.range(-hu, hu) * 0.7, 0, R.range(-hv, hv) * 0.7, R.chance(0.4));
+      if (R.chance(0.5)) X.seat(R.pick(['stool', 'chair', 'bench']), R.range(-hu, hu) * 0.6, -hv - 0.1, R.range(0, TAU), R, { tipped: true });
+      X.smash(R.pick(['box', 'crate', 'barrel']), R.range(-0.3, 0.3), 0, R.range(-0.25, 0.25), R.range(0, TAU), { nolift: true, tilt: [R.range(-0.2, 0.2), R.range(-0.2, 0.2)] });
+      throwBoards(X, R, -hu, hu, -hv, hv, R.int(4, 9));
+      X.solid(0, 0, p.su * 0.8, p.sv * 0.8);
+    } },
+  // a cart left where it broke down: its bed tipped where the axle went, one wheel on, one lying off; or a sledge
+  wreck: { acc: true,
+    make(P) { const a = P.chance(0.5) ? 0 : Math.PI / 2, L = P.range(1.8, 2.3), Wd = P.range(1.0, 1.2), fu = L + 1.6, fv = Wd + 1.5; return { a: a + P.range(-0.25, 0.25), L, Wd, su: a ? fv : fu, sv: a ? fu : fv, sledge: P.chance(0.3) }; },
+    build(X, f, R) {
+      const { L, Wd, sledge } = f.prm, hw = Wd / 2;
+      if (sledge) {
+        for (const e of [-1, 1]) { X.beam(M.wood, [-L / 2, 0.06, e * hw], [L / 2 - 0.15, 0.06, e * hw], 0.08, 0.1); X.beam(M.wood, [L / 2 - 0.2, 0.06, e * hw], [L / 2 + 0.15, 0.3, e * hw], 0.08, 0.1); }
+        for (let t = -L / 2 + 0.15; t < L / 2 - 0.2; t += R.range(0.22, 0.32)) if (!R.chance(0.2)) X.box(M.plank, t, 0.14, R.range(-0.03, 0.03), 0.16, 0.035, Wd + 0.1, 0, R.range(-0.05, 0.05), 0);
+        for (const t of [-L / 2 + 0.25, L / 2 - 0.4]) for (const e of [-1, 1]) X.box(M.wood, t, 0.1, e * hw, 0.06, 0.1, 0.06);
+      } else {
+        // the bed, down on one side where that wheel came off and the axle end dropped to the floor
+        const tilt = R.range(0.32, 0.42), Mb = X.k.m(0, 0.3, 0, -tilt, 0, 0), bed = (mat, x, y, z, a, b, c, rz = 0) => X.B.add(mat, boxGeo(a, b, c, 0.9), Mb.clone().multiply(mtx(x, y, z, 0, 0, rz)), true);
+        for (let k = 0; k < 6; k++) { if (R.chance(0.15)) continue; bed(M.plank, R.range(-0.03, 0.03), 0.04, -hw + (k + 0.5) * Wd / 6, L, 0.04, Wd / 6 - 0.012); }
+        for (const e of [-1, 1]) bed(M.wood, 0, -0.03, e * (hw - 0.06), L + 0.1, 0.08, 0.08);
+        bed(M.wood, 0, -0.1, 0, 0.1, 0.09, Wd + 0.3);                                  // the axle-tree under it
+        bed(M.board, 0, 0.21, hw, L, 0.32, 0.03);                                       // the side still on
+        X.box(M.board, R.range(-0.3, 0.3), 0.017, -hw - 0.3, L * 0.85, 0.03, 0.3, 0, R.range(-0.15, 0.15), 0);   // the other, fallen
+        wheelAt(X.B, R, X.k.m(0, 0.47, hw + 0.2, 0, 0, R.range(0, 1)), 0.46, 0.15);
+        wheelAt(X.B, R, X.k.m(R.range(-0.4, 0.4), 0.05, -hw - 0.62, -Math.PI / 2, R.range(0, 3), 0), 0.42, 0.5);
+        // the shafts: one whole, resting on the floor; one snapped, its end lying by it
+        X.beam(M.wood, [L / 2, 0.36, 0.28], [L / 2 + 0.78, 0.03, 0.34], 0.07, 0.07);
+        X.beam(M.wood, [L / 2, 0.2, -0.28], [L / 2 + 0.42, 0.12, -0.32], 0.07, 0.07);
+        X.beam(M.wood, [L / 2 + 0.3, 0.035, -0.55], [L / 2 + 0.78, 0.035, -0.3], 0.07, 0.07);
+      }
+      X.solid(0, 0, L + 0.2, Wd + 0.1);
+    } },
+  // planks laid crosswise in a crib to dry, and left
+  plankpile: { acc: false,
+    make(P) { const s = P.range(1.6, 2.4); return { su: s, sv: s * P.range(0.6, 0.85), a: P.range(-0.2, 0.2), n: P.int(4, 9) }; },
+    build(X, f, R) {
+      const p = f.prm;
+      for (let i = 0; i < p.n; i++) {
+        const along = i % 2 === 0, len = (along ? p.su : p.sv) * R.range(0.9, 1.05), across = along ? p.sv : p.su, k = Math.max(2, Math.round(across / 0.32));
+        for (let j = 0; j < k; j++) {
+          if (i === p.n - 1 && R.chance(0.4)) continue;
+          const c = -across / 2 + 0.12 + (across - 0.24) * j / (k - 1), y = 0.03 + i * 0.05;
+          along ? X.box(M.plank, R.range(-0.04, 0.04), y, c, len, 0.045, 0.2, 0, R.range(-0.03, 0.03), R.range(-0.012, 0.012)) : X.box(M.plank, c, y, R.range(-0.04, 0.04), 0.2, 0.045, len, R.range(-0.012, 0.012), R.range(-0.03, 0.03), 0);
+        }
+      }
+      if (R.chance(0.5)) X.beam(M.plank, [p.su / 2 + 0.6, 0.02, R.range(-0.3, 0.3)], [p.su / 2 - 0.2, p.n * 0.05 + 0.03, R.range(-0.3, 0.3)], 0.2, 0.045);
+      X.solid(0, 0, p.su, p.sv);
+    } },
+});
+
+Object.assign(THEMES, {
+  // heaps of everything nobody wanted
+  scrap: { D: [4.2, 7.6], W: [3.6, 6.2], H: [2.5, 2.85], bay: 0.35, alcove: 0.4, niche: 0.2,
+    walls: { board: 2, log: 2, wattle: 1.2, daub: 1, earth: 1, stone: 0.4 }, floor: { earth: 2.5, plank: 1.5, straw: 0.6 },
+    must: ['junk'],
+    wall: { junk: 2.4, staves: 1, plankstack: 0.6, drift: 0.9, toppled: 0.5, timber: 0.8, crates: 0.8, barrels: 0.6, seat: 0.5, ladder: 0.3, bones: 0.3, buckets: 0.4, coil: 0.3, gap: 1.2 },
+    center: { heap: 1.6, wreck: 1.0, beamfall: 0.5, none: 1 }, ncenter: [1, 2] },
+  // a wood store nobody came back for
+  lumber: { D: [4.6, 8.0], W: [3.8, 6.4], H: [2.6, 2.95], bay: 0.3, alcove: 0.3, niche: 0.1,
+    walls: { log: 2.5, board: 2, wattle: 0.8, earth: 0.6 }, floor: { earth: 2, plank: 1.5 },
+    must: ['plankstack'],
+    wall: { plankstack: 1.8, timber: 2, firewood: 1.2, staves: 0.6, junk: 0.6, ladder: 0.5, crates: 0.8, shoring: 0.5, rack: 0.4, barrels: 0.4, gap: 1 },
+    center: { plankpile: 1.6, wreck: 0.5, posts: 0.6, none: 1 }, ncenter: [1, 2] },
+  // where the last of them threw what they had no more use for
+  midden: { D: [3.8, 6.8], W: [3.4, 5.8], H: [2.4, 2.7], bay: 0.3, alcove: 0.35, niche: 0.25,
+    walls: { earth: 2.5, daub: 1, wattle: 1, log: 1, stone: 0.6 }, floor: { earth: 3, straw: 0.8 },
+    must: ['junk'],
+    wall: { junk: 1.6, pots: 1.2, bones: 0.8, jars: 1, baskets: 0.8, sacks: 0.6, staves: 0.8, drift: 0.6, wet: 0.4, crates: 0.5, buckets: 0.4, gap: 1.4 },
+    center: { heap: 1.4, rubble: 0.6, bones: 0.6, jarclus: 0.4, none: 1 }, ncenter: [1, 2] },
+});
+for (const k of ['scrap', 'lumber', 'midden']) COMPOSED.add(k);
+const SCRAP_KINDS = ['scrap', 'lumber', 'midden'];
+
 /* ---- 33_grottos.js ---- */
 /* ============================================================
    Two grottos, at lengths 10 and 93: natural caves in the rock, joined by passages someone cut through it.
@@ -6006,13 +6205,7 @@ function stairWell(ctx, room, H, below, doorHalf, doorTop) {
   B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
   for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
   for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
-  B.log(M.wood, STAIR.cu, (C.LOWER_Y + H) / 2, 0, 0.13, H - C.LOWER_Y, 'y', 8);
-  for (let s = 0; s < STAIR.steps; s++) {
-    const phi = Math.PI + (s + 0.5) * (STAIR.turns * TAU / STAIR.steps);
-    const y = -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1));
-    B.box(M.plank, STAIR.cu + 0.66 * Math.cos(phi), y, 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
-    B.box(M.wood, STAIR.cu + 1.12 * Math.cos(phi), y - 0.12, 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
-  }
+  wornSpiral(B, STAIR.cu, 0, STAIR.steps, STAIR.turns, s => -0.22 - s * ((-C.LOWER_Y - 0.44) / (STAIR.steps - 1)), C.LOWER_Y, H, (room.zc * 10) ^ (room.side * 77));
   ctx.solid(3.25, 0, 0.3, 3.6, 0, 'up');
   for (const s of [-1, 1]) { ctx.solid(1.5, s * 1.75, 3.6, 0.3, 0, 'up'); ctx.solid(0.06, s * (doorHalf + (1.7 - doorHalf) / 2), 0.2, 1.7 - doorHalf, 0, 'up'); }
   const c = ctx.W(STAIR.cu, 0, 0);
@@ -6332,14 +6525,8 @@ LOWER_BUILD.twostair = function* (ctx, room, R) {
   for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, c.su, y, c.sv + s * 1.2, 2.5, 0.16, 0.12);
   yield;
   const drop = C.LOWER_Y - CELLAR_Y2;
-  B.log(M.wood, c.su, (H - drop) / 2, c.sv, 0.13, drop + H, 'y', 8);
   const st = { cu: c.su, steps: 36, turns: 1.5, r: 0.7 };
-  for (let s = 0; s < st.steps; s++) {
-    const phi = Math.PI + (s + 0.5) * (st.turns * TAU / st.steps), y = -0.22 - s * ((drop - 0.44) / (st.steps - 1));
-    B.box(M.plank, c.su + 0.66 * Math.cos(phi), y, c.sv + 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
-    B.box(M.wood, c.su + 1.12 * Math.cos(phi), y - 0.12, c.sv + 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
-    if (overBudget()) yield;
-  }
+  wornSpiral(B, c.su, c.sv, st.steps, st.turns, s => -0.22 - s * ((drop - 0.44) / (st.steps - 1)), -drop, H, (room.zc * 10) ^ 991);
   yield;
   // the stair runs in a frame of its own, centred on the hole
   const sf = Object.assign({}, ctx.frame, { ov: c.sv });
@@ -6385,21 +6572,23 @@ const SPECIAL_AT = { 24: 'cathedral', 28: 'mosaic', 32: 'rose', 52: 'meander', 7
 const SPECIAL_ROOMS = new Set(Object.values(SPECIAL_AT));
 const QUIET_L = new Set([0, 31, 49, 51, 75, 82, 99]);
 // how far each kind of room reaches along the corridor either side of its door (v; negative is further along)
-const EXT_NEW = { walkfull: [-2.0, 0.8], walkhalf: [-6.45, 0.8], up: [-2.4, 2.4], round: [-3.5, 3.5], open: [-4.4, 4.4], cathedral: [-4.3, 4.3], mosaic: [-3.3, 3.3], rose: [-2.4, 2.4], meander: [-3.5, 3.5], sundial: [-2.4, 2.4], tree: [-3.6, 3.6] };
-const EXT_OLD = { cave: [-8, 8], grotto: [-4, 10.5], jut: [-8, 8], odd: [-11, 11], escape: [-12, 12], loft: [-6, 6], forge: [-3.6, 3.6], loom: [-3.6, 3.6], bunks: [-3.6, 3.6] };
+const EXT_NEW = { gate: [-2.0, 2.0], walkfull: [-2.0, 0.8], walkhalf: [-6.45, 0.8], up: [-2.4, 2.4], round: [-3.5, 3.5], open: [-4.4, 4.4], cathedral: [-4.3, 4.3], mosaic: [-3.3, 3.3], rose: [-2.4, 2.4], meander: [-3.5, 3.5], sundial: [-2.4, 2.4], tree: [-3.6, 3.6] };
+const EXT_OLD = { cave: [-8, 8], grotto: [-4, 10.5], jut: [-8, 8], odd: [-11, 11], escape: [-12, 12], loft: [-6, 6], forge: [-3.9, 3.9], loom: [-3.9, 3.9], bunks: [-3.9, 3.9] };
 const extKey = r => r.design === 'walk' ? 'walk' + (r.kind || 'full') : r.design;
-const extOf = r => EXT_NEW[extKey(r)] || EXT_OLD[r.design] || [-3, 3];
+const extOf = r => EXT_NEW[extKey(r)] || EXT_OLD[r.design] || (COMPOSED.has(r.design) && !r.lower ? [-3.9, 3.9] : [-3, 3]);
 
 // called by layoutFor once everything older is placed, so no older room moves or renumbers
 function moreRooms(L, rooms) {
   const R = new Rng(hash32(L, 4040, 13)), want = [];
   if (SPECIAL_AT[L]) want.push({ design: SPECIAL_AT[L] });
   else if (!QUIET_L.has(L)) {
+    // nothing reaches up into the crescent over 88 to 90
+    const high = !(L >= 88 && L <= 90);
     if (R.chance(0.26)) want.push({ design: 'walk', kind: R.chance(0.5) ? 'full' : 'half' });
     // one floor up, two, or two and a half: by the length, so every pass has some of each
-    if (R.chance(0.13)) want.push({ design: 'up', floors: [1, 2, 1, 2.5, 2, 1, 2.5][L % 7] });
-    if (R.chance(0.11)) want.push({ design: 'round' });
-    if (R.chance(0.11)) want.push({ design: 'open' });
+    if (R.chance(0.13) && high) want.push({ design: 'up', floors: [1, 2, 1, 2.5, 2, 1, 2.5][L % 7] });
+    if (R.chance(0.11) && high) want.push({ design: 'round' });
+    if (R.chance(0.11) && high) want.push({ design: 'open' });
   }
   const gapOf = (d1, e1, d2, e2) => Math.max((-d1 + e1[0]) - (-d2 + e2[1]), (-d2 + e2[0]) - (-d1 + e1[1]));
   for (const w of want) {
@@ -6430,6 +6619,45 @@ function moreRooms(L, rooms) {
     }
     if (!best) continue;
     rooms.push(Object.assign({ i: rooms.length, d: best.d, side: best.side, lower: false, v: R.int(0, 1), seed: R.int(0, 1e9), added: true }, w));
+  }
+}
+
+/* ---------- the old spiral itself ----------
+   Every spiral is built here: a rough post of pieced logs with a collar at each join, and treads of two old boards,
+   none quite level with the next, worn at the front where the feet came down, the odd board split or gone.
+   y(s) is the height of tread s; y0..y1 the post's foot and head. Nothing here moves the way you are carried */
+function wornSpiral(B, cu, cv, steps, turns, y, y0, y1, seed) {
+  const R = new Rng(hash32(seed | 0, steps, Math.round(cu * 100), Math.round(y0 * 100), 707));
+  // the post: two to four lengths of log, each a little thicker or thinner, a little off true, a collar where they meet
+  const len = y1 - y0, n = Math.max(2, Math.min(4, Math.round(len / 2.2)));
+  let at = y0;
+  for (let k = 0; k < n; k++) {
+    const l = k === n - 1 ? y1 - at : len / n * R.range(0.85, 1.15), r = R.range(0.118, 0.152);
+    B.log(M.log, cu + R.range(-0.012, 0.012), at + l / 2, cv + R.range(-0.012, 0.012), r, l + 0.04, 'y', 8);
+    if (k < n - 1) {
+      B.log(M.woodDark, cu, at + l, cv, r + 0.026, R.range(0.06, 0.1), 'y', 9);
+      if (R.chance(0.6)) B.box(M.woodDark, cu + 0.16, at + l - 0.09, cv, 0.08, 0.035, 0.035, 0, R.range(0, TAU), 0);
+    }
+    at += l;
+  }
+  // the treads
+  for (let s = 0; s < steps; s++) {
+    const phi = Math.PI + (s + 0.5) * (turns * TAU / steps), c = Math.cos(phi), sn = Math.sin(phi);
+    const yy = y(s) + R.range(-0.028, 0.028), sag = R.range(-0.035, 0.012);
+    const gone = R.chance(0.05);
+    for (const o of [-0.11, 0.11]) {
+      if (gone && o > 0) continue;
+      const worn = o > 0, th = R.range(0.055, 0.078), short = R.chance(0.15) ? R.range(0.04, 0.16) : 0;
+      const L = 1.08 - short, rc = 0.12 + L / 2 + R.range(-0.01, 0.01), ow = o + R.range(-0.012, 0.012), w = R.range(0.19, 0.215);
+      const x = cu + rc * c - ow * sn, z = cv + rc * sn + ow * c, yb = yy + (worn ? -0.008 : 0.004) + R.range(-0.006, 0.006);
+      const tilt = (worn ? -0.03 : 0.006) + R.range(-0.022, 0.022);
+      if (R.chance(0.08)) {
+        // split along its length: two halves that no longer sit together
+        for (const h of [-1, 1]) B.box(M.plank, x - h * 0.052 * sn, yb + h * 0.006, z + h * 0.052 * c, L, th, w / 2 - 0.012, tilt + h * 0.02, -phi, sag, 1);
+      } else B.box(M.plank, x, yb, z, L, th, w, tilt, -phi, sag, 1);
+    }
+    // the bearer under the outer end, its own height
+    B.box(M.wood, cu + 1.12 * c, yy - 0.12 + R.range(-0.015, 0.01), cv + 1.12 * sn, 0.08, 0.2 + R.range(-0.02, 0.03), 0.08, R.range(-0.04, 0.04), -phi, R.range(-0.04, 0.04));
   }
 }
 
@@ -6584,14 +6812,8 @@ function* buildUpGen(ctx, room, R) {
   B.box(M.log, 0.18, Ha + sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, Ha + sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7);
   for (const s of [-1, 1]) B.box(M.log, 1.5, Ha + sh / 2, s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
   for (let y = Ha + 1.4; y < H - 0.3; y += 1.4) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
-  B.log(M.wood, st.cu, (H + 2.6 * HS) / 2, 0, 0.13, H + 2.6 * HS, 'y', 8);
   yield;
-  for (let s = 0; s < st.steps; s++) {
-    const phi = Math.PI + (s + 0.5) * (st.turns * TAU / st.steps), y = 0.22 + s * ((H - 0.44) / (st.steps - 1));
-    B.box(M.plank, st.cu + 0.66 * Math.cos(phi), y, 0.66 * Math.sin(phi), 1.08, 0.07, 0.44, 0, -phi, 0, 1);
-    B.box(M.wood, st.cu + 1.12 * Math.cos(phi), y - 0.12, 1.12 * Math.sin(phi), 0.08, 0.2, 0.08, 0, -phi, 0);
-    if (overBudget()) yield;
-  }
+  wornSpiral(B, st.cu, 0, st.steps, st.turns, k => 0.22 + k * ((H - 0.44) / (st.steps - 1)), 0, H + 2.6 * HS, room.r.seed || room.i);
   const c = ctx.W(st.cu, 0, 0), f0 = Object.assign({}, ctx.frame);
   const trig = { st, top: 0, depth: H, dur: 2.6 + 1.5 * floors, deep: key, room, frame: f0, exitDown: { u: 3.0, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } };
   ctx.triggers.push(Object.assign({ type: 'down', cx: c.x, cz: c.z, hx: 1.18, hz: 1.18 }, trig));
@@ -7196,6 +7418,357 @@ function* mosaicBuild() {
   return _mosaicTex;
 }
 
+/* ---- 38c_pairs.js ---- */
+/* ============================================================
+   Two places that join two lengths, built by the length between them.
+   34 and 36: a spiral down at each, then a straight stair further down, into an oval hall under 35. Two biscuits and
+   three flasks of oil were left in it the first time round; an old harp with a heavy carved pillar, its strings gone
+   slack and its soundbox split; a bronze box with a snake coiled on its lid.
+   88 and 90: a spiral up at each, one floor and no more, into a long crescent of a room over 89 (well above the bell's
+   vault, which is under it). The same two biscuits and three flasks the first time; an arched harp; a little round
+   bronze box with rings cut in its lid.
+   The gates (the stair rooms) stand in 34 and 36, 88 and 90, but they and everything under or over are made by the
+   length between, so the whole of each place is one piece and one floor to walk on.
+   ============================================================ */
+const PAIRS = {
+  oval: { gates: [34, 36], owner: 35, side: -1, doorH: 0.95 },
+  crescent: { gates: [88, 90], owner: 89, side: 1, doorH: 0.72 },
+};
+const GATE_D = [92.5, 7.5];                      // where the stair rooms open off the corridor, in the first and the second length
+const PAIR_OF_GATE = { 34: 'oval', 36: 'oval', 88: 'crescent', 90: 'crescent' };
+const PAIR_OWNER = { 35: 'oval', 89: 'crescent' };
+const PAIR_NEAR = new Set([34, 35, 36, 88, 89, 90]);
+// the things kept here, one of each, found until taken or broken
+const PAIR_FINDS = { oval: { harp: 10007, box: 10009 }, crescent: { harp: 10008, box: 10010 } };
+const OVAL = { AX: 11, BZ: 38, UC: 10.1, Y: -13.5, H: 4.0, LAND: C.LOWER_Y, RUN: 6.0 };
+const CRES = { Y: UP_FLOOR, H: 3.4, SC: 20, WMIN: 1.65, WMAX: 6, VC: 50 + 7.5, N: 64 };
+
+// in layoutFor: the stair room at a gate length, before anything else is placed round it; rooms of the first set
+// that stand too near it on its side cross over to the other side
+function pairGate(L, rooms) {
+  const pair = PAIR_OF_GATE[L]; if (!pair) return;
+  const P = PAIRS[pair], end = P.gates.indexOf(L), d = GATE_D[end], side = P.side;
+  for (const r of rooms) if (r.side === side && Math.abs(r.d - d) < 14) r.side = -side;
+  rooms.push({ i: rooms.length, d, side, lower: false, design: 'gate', pair, end, v: 0, seed: hash32(L, 3436, end), added: true, doorH: P.doorH });
+}
+// and last of all at the length between: the place itself, with no door of its own
+function pairOwner(L, rooms) {
+  const pair = PAIR_OWNER[L]; if (!pair) return;
+  rooms.push({ i: rooms.length, d: 50, side: PAIRS[pair].side, lower: false, design: pair, v: 0, seed: hash32(L, 8890, 1), added: true, nodoor: true, ghost: true });
+}
+function uniqueFree(id) {
+  if (S.inv.includes(id) || (S.broken || []).includes(id)) return false;
+  for (const st of Object.values(S.lens)) if ((st.dr || []).some(d => d.id === id)) return false;
+  return true;
+}
+// where each gate stands, in the owner's own coordinates
+function pairGates(pair) {
+  const P = PAIRS[pair];
+  return P.gates.map((GL, k) => ({ k, side: P.side, zg: -GATE_D[k] - (GL - P.owner) * C.LEN_M }));
+}
+// one fitting from the common stock, set against a stretch of wall: (u, v) its middle, (nu, nv) into the room
+function pairFit(ctx, room, kind, u, v, nu, nv, len, h, R, plan) {
+  const def = WF[kind], th = Math.atan2(nu, nv), X = fxKit(ctx, room, frameKit(u, v, th));
+  const dep = Array.isArray(def.dep) ? R.range(def.dep[0], def.dep[1]) : typeof def.dep === 'number' ? def.dep : 0.6;
+  const f = { kind, ta: -len / 2, tb: len / 2, len, tm: 0, sa: -len / 2, sb: len / 2, dep, h, acc: [] };
+  const g = def.build(X, f, R, plan);
+  if (g && typeof g.next === 'function') { let r = g.next(); while (!r.done) r = g.next(); }
+}
+function pairHeap(ctx, room, kind, u, v, a, h, R) {
+  const P = new Rng(R.int(0, 1e9)), prm = CF[kind].make(P, { lower: true }, { u0: 0, u1: 9, v0: -4, v1: 4 });
+  if (!prm) return;
+  const X = fxKit(ctx, room, frameKit(u, v, a));
+  CF[kind].build(X, { prm, h, u, v }, R);
+}
+// the stock for the first pass: two biscuits and three flasks, each in its own lidded thing
+function pairStock(ctx, room, conts, tag) {
+  if (ctx.lap !== 0) return;
+  const taken = new Set(ctx.st.tk), toks = ['B', 'O', 'B', 'O', 'O'];
+  toks.forEach((tok, k) => {
+    const key = `${tag}:${tok}${k}`, c = conts[k % conts.length];
+    if (taken.has(key) || !c) return;
+    if (c.alive) c.contents.push({ tok, key });
+    else spawnItem(ctx, tok, key, new THREE.Vector3(c.pos.x + 0.2, c.floorY, c.pos.z), { floorY: c.floorY });
+  });
+}
+// a round rope wound up a stair's post, for a hand to hold
+function ropeHelix(B, cu, cv, y0, y1, turns, r = 0.17) {
+  const pts = [], n = Math.ceil(turns * 18);
+  for (let i = 0; i <= n; i++) { const t = i / n, a = t * turns * TAU; pts.push(V3(cu + Math.cos(a) * r, y0 + (y1 - y0) * t, cv + Math.sin(a) * r)); }
+  B.add(M.rope, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 2, 0.022, 5, false), new THREE.Matrix4(), true);
+}
+
+/* ---------- 34 to 36: the oval hall ---------- */
+function* buildOvalGen(ctx, room, R) {
+  const B = ctx.B, key = 'oval', O = OVAL, gates = pairGates('oval'), regions = [], drop = O.LAND - O.Y;
+  room.lvl = key; room.floorY = O.Y;
+  const stone = _cm.stone(), flag = _cm.flag();
+  const rectIn = (u0, u1, v0, v1) => { const c = ctx.W((u0 + u1) / 2, 0, (v0 + v1) / 2), f = ctx.frame; regions.push({ cx: c.x, cz: c.z, ux: f.side, uz: 0, hx: (u1 - u0) / 2, hz: (v1 - v0) / 2 }); };
+  const conts = [];
+  for (const g of gates) {
+    const dirv = g.zg > -50 ? -1 : 1;            // which way along the wall the hall lies from this gate
+    // ---- the stair room at the corridor: as every spiral's, but its shaft is stone and a rope is wound up its post
+    ctx.setFrame(g.side, C.WALL_OUT, g.zg, 0);
+    const H = 2.8 * HS, LH = 2.8 * HS;
+    B.box(M.plank, 0.125, -0.05, 0, 0.25, 0.1, 3.2); B.box(M.plank, 2.9, -0.05, 0, 0.3, 0.1, 3.2);
+    for (const s of [-1, 1]) B.box(M.plank, 1.5, -0.05, s * 1.4, 2.5, 0.1, 0.3);
+    B.box(M.board, 1.5, H + 0.06, 0, 3.4, 0.12, 3.4);
+    B.box(stone, 3.1, H / 2, 0, 0.2, H, 3.4, 0, 0, 0, 0.6);
+    for (const s of [-1, 1]) B.box(stone, 1.5, H / 2, s * 1.62, 3.2, H, 0.2, 0, 0, 0, 0.6);
+    for (const s of [-1, 1]) B.box(M.log, 0.06, H / 2, s * 1.33, 0.12, H, 0.6);
+    B.box(M.log, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 2.1);
+    const sh = -O.LAND - LH;
+    for (const [u, w] of [[0.18, 2.6], [2.82, 2.6]]) B.box(stone, u, -sh / 2, 0, 0.14, sh, w, 0, 0, 0, 0.55);
+    for (const s of [-1, 1]) B.box(stone, 1.5, -sh / 2, s * 1.32, 2.76, sh, 0.14, 0, 0, 0, 0.55);
+    B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
+    for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
+    for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
+    wornSpiral(B, STAIR.cu, 0, STAIR.steps, STAIR.turns, s => -0.22 - s * ((-O.LAND - 0.44) / (STAIR.steps - 1)), O.LAND, H, hash32(g.k, 34, 36));
+    ropeHelix(B, STAIR.cu, 0, O.LAND + 0.9, H - 0.2, 4.5);
+    ctx.solid(3.25, 0, 0.3, 3.6, 0, 'up');
+    for (const s of [-1, 1]) { ctx.solid(1.5, s * 1.75, 3.6, 0.3, 0, 'up'); ctx.solid(0.06, s * 1.33, 0.2, 0.6, 0, 'up'); }
+    const f0 = Object.assign({}, ctx.frame), top = ctx.W(STAIR.cu, 0, 0);
+    const trig = { st: STAIR, deep: key, depth: O.LAND, room, frame: f0, exitDown: { u: 3.0, v: 0, du: 1, dv: 0 }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } };
+    ctx.triggers.push(Object.assign({ type: 'down', cx: top.x, cz: top.z, hx: 1.18, hz: 1.18 }, trig));
+    ctx.triggers.push(Object.assign({ type: 'up', cx: top.x, cz: top.z, hx: 0.85, hz: 0.85 }, trig));
+    yield;
+    // ---- the landing at the foot of the spiral, and the straight stair on down, away from the corridor
+    ctx.setFrame(g.side, C.WALL_OUT, g.zg, O.LAND);
+    const u1 = 3.4, uE = u1 + O.RUN, hwS = 0.7;
+    B.box(M.plank, 1.55, -0.05, 0, 3.8, 0.1, 3.5, 0, 0, 0, 0.55);
+    for (const [a0, a1, b0, b1] of [[-0.3, 0.25, -1.75, 1.75], [2.75, u1, -1.75, 1.75], [0.25, 2.75, -1.75, -1.25], [0.25, 2.75, 1.25, 1.75]]) B.box(M.board, (a0 + a1) / 2, LH + 0.06, (b0 + b1) / 2, a1 - a0, 0.12, b1 - b0, 0, 0, 0, 0.6);
+    B.box(stone, -0.4, LH / 2, 0, 0.2, LH, 3.7, 0, 0, 0, 0.6);
+    for (const s of [-1, 1]) B.box(stone, 1.55, LH / 2, s * 1.85, 4.1, LH, 0.2, 0, 0, 0, 0.6);
+    for (const s of [-1, 1]) B.box(stone, u1 + 0.1, LH / 2, s * (hwS + (1.75 - hwS) / 2), 0.2, LH, 1.75 - hwS, 0, 0, 0, 0.6);
+    B.box(stone, u1 + 0.1, (2.3 + LH) / 2, 0, 0.2, LH - 2.3, 2 * hwS);
+    for (const [u, v] of [[-0.18, 1.62], [-0.18, -1.62], [u1 - 0.12, 1.62], [u1 - 0.12, -1.62]]) B.box(M.wood, u, LH / 2, v, 0.2, LH, 0.2);
+    ctx.circle(STAIR.cu, 0, 0.2, key);
+    rectIn(-0.3, u1, -1.75, 1.75);
+    // the treads: twenty, worn and uneven, between two walls, under a roof that falls with them
+    const n = 20, tr = O.RUN / n, ri = drop / n;
+    for (let i = 0; i < n; i++) {
+      const ua = u1 + i * tr, y = -(i + 1) * ri;
+      B.box(M.plank, ua + tr / 2, y - 0.03 + R.range(-0.015, 0.015), R.range(-0.02, 0.02), tr + 0.03, 0.06, 2 * hwS - 0.04, R.range(-0.025, 0.025), R.range(-0.03, 0.03), R.range(-0.03, 0.01), 1);
+      B.box(M.board, ua, y + ri / 2, 0, 0.035, ri, 2 * hwS - 0.04);
+    }
+    const ang = Math.atan2(drop, O.RUN), slope = Math.hypot(drop, O.RUN);
+    B.box(M.board, u1 + O.RUN / 2, -drop / 2 + 2.45, 0, slope + 0.3, 0.12, 2 * hwS + 0.3, 0, 0, -ang);
+    for (const s of [-1, 1]) B.box(M.earth, u1 + O.RUN / 2, (-drop + 2.6) / 2, s * (hwS + 0.1), O.RUN + 0.2, drop + 2.6, 0.2, 0, 0, 0, 0.5);
+    for (let k = 1; k < 4; k++) for (const s of [-1, 1]) B.box(M.wood, u1 + k * O.RUN / 4, -drop * k / 4 + 1.0, s * (hwS - 0.03), 0.12, 2.4, 0.12);
+    rectIn(u1 - 1.0, uE + 0.8, -hwS, hwS);
+    yield;
+    // ---- at its foot a turn, and the passage along the wall to the hall
+    ctx.setFrame(g.side, C.WALL_OUT, g.zg, O.Y);
+    const uc = O.UC, vTip = -50 + dirv * -O.BZ - g.zg;            // the hall's near end, in this frame
+    B.box(M.earth, (uE + uc + hwS) / 2, -0.05, 0, uc + hwS - uE + 0.2, 0.1, 2 * hwS + 0.3, 0, 0, 0, 0.5);
+    B.box(M.earth, (uE + uc + hwS) / 2, 2.4 + 0.05, 0, uc + hwS - uE + 0.2, 0.1, 2 * hwS + 0.3, 0, 0, 0, 0.5);
+    B.box(M.earth, uc + hwS + 0.1, 1.2, 0, 0.2, 2.4, 2 * hwS + 0.4, 0, 0, 0, 0.6);
+    B.box(M.earth, (uE + uc + hwS) / 2, 1.2, -dirv * (hwS + 0.1), uc + hwS - uE + 0.2, 2.4, 0.2, 0, 0, 0, 0.6);
+    B.box(M.earth, (uE + uc - hwS) / 2, 1.2, dirv * (hwS + 0.1), uc - hwS - uE + 0.2, 2.4, 0.2, 0, 0, 0, 0.6);
+    rectIn(uE - 0.8, uc + hwS, -hwS, hwS);
+    regions.push(tunnelSeg(ctx, V2(uc, dirv * hwS), V2(uc, vTip + dirv * 0.9), hwS, 2.4, { ext: 1.1 }));
+    ctx.drip(room, uc, dirv * 6, 2.4);
+    yield;
+  }
+  // ---- the hall: a long oval of dry stone under a timber roof on three rows of posts
+  ctx.setFrame(PAIRS.oval.side, C.WALL_OUT, -50, O.Y);
+  const { AX, BZ, UC, H } = O;
+  B.add(flag, boxGeoLevel(2 * AX + 0.8, 0.1, 2 * BZ + 0.8, 0.42), mtx(UC, -0.05, 0), true);
+  B.box(M.board, UC, H + 0.075, 0, 2 * AX + 1.2, 0.15, 2 * BZ + 1.2, 0, 0, 0, 0.6);
+  const NW = 84, pt = th => [UC + AX * Math.cos(th), BZ * Math.sin(th)];
+  for (let i = 0; i < NW; i++) {
+    const a = i / NW * TAU, b = (i + 1) / NW * TAU, [ua, va] = pt(a), [ub, vb] = pt(b), m = (a + b) / 2, [um, vm] = pt(m);
+    if (Math.abs(um - UC) < 1.4 && Math.abs(vm) > BZ - 1.5) continue;           // the two ends, where the passages come in
+    const du = ub - ua, dv = vb - va, len = Math.hypot(du, dv), nu = Math.cos(m) / AX, nv = Math.sin(m) / BZ, nl = Math.hypot(nu, nv);
+    B.box(stone, um + nu / nl * 0.16, H / 2, vm + nv / nl * 0.16, len + 0.12, H, 0.3, 0, -Math.atan2(dv, du), 0, 0.5);
+    if (i % 4 === 0) B.box(M.wood, um - nu / nl * 0.06, H / 2, vm - nv / nl * 0.06, 0.22, H, 0.22, 0, -Math.atan2(dv, du), 0);
+    if (overBudget()) yield;
+  }
+  // the ends, either side of each passage mouth
+  for (const e of [-1, 1]) for (const s of [-1, 1]) B.box(stone, UC + s * 1.25, H / 2, e * (BZ - 0.75), 1.0, H, 1.6, 0, 0, 0, 0.5);
+  for (const e of [-1, 1]) B.box(stone, UC, (2.4 + H) / 2, e * (BZ - 0.2), 1.6, H - 2.4, 0.3);
+  yield;
+  const posts = [];
+  for (let v = -BZ + 2.4, k = 0; v < BZ - 2.3; v += 3.6, k++) {
+    const hw = AX * Math.sqrt(Math.max(0, 1 - (v / BZ) ** 2));
+    if (hw < 1.2) continue;
+    B.box(M.woodDark, UC, H - 0.15, v, 2 * hw + 0.3, 0.3, 0.28);
+    if (k % 2 === 0) for (const du of [-5.5, 0, 5.5]) {
+      if (Math.abs(du) > hw - 1.4) continue;
+      B.log(M.log, UC + du, H / 2, v, 0.16, H, 'y', 8); ctx.circle(UC + du, v, 0.2, key); posts.push([UC + du, v]);
+      if (R.chance(0.6)) for (const e of [-1, 1]) B.beam(M.wood, V3(UC + du, H - 1.0, v), V3(UC + du, H - 0.3, v + e * 0.8), 0.12, 0.12);
+    }
+    if (overBudget()) yield;
+  }
+  yield;
+  regions.push({ ell: true, ...(c => ({ cx: c.x, cz: c.z }))(ctx.W(UC, 0, 0)), a: AX, b: BZ });
+  // ---- what was left in it: along the wall, heaps on the floor, and at the two ends the harp and the bronze box
+  const plan = { floor: 'flag', lower: true, design: 'oval' };
+  const near = (u, v, r) => posts.some(([pu, pv]) => Math.hypot(pu - u, pv - v) < r);
+  const kinds = ['junk', 'crates', 'staves', 'barrels', 'jars', 'bracket', 'timber', 'plankstack', 'junk', 'chest', 'baskets', 'sacks', 'amphorae', 'junk'];
+  for (let i = 0, k = 0; i < 22; i++) {
+    const a = (i + 0.5) / 22 * TAU + R.range(-0.05, 0.05), [u, v] = pt(a);
+    if (Math.abs(v) > BZ - 6) continue;                                           // keep the narrow ends clear
+    const nu = -Math.cos(a) / AX, nv = -Math.sin(a) / BZ, nl = Math.hypot(nu, nv), kind = kinds[k++ % kinds.length];
+    if (R.chance(0.25)) continue;
+    pairFit(ctx, room, kind, u + nu / nl * 0.02, v + nv / nl * 0.02, nu / nl, nv / nl, R.range(1.6, 2.8), H, new Rng(hash32(ctx.A, i, 3535)), plan);
+    if (overBudget()) yield;
+  }
+  for (let i = 0; i < 4; i++) {
+    const v = [-21, -5, 7, 23][i] + R.range(-1.2, 1.2), u = UC + (i % 2 ? 2.75 : -2.75) + R.range(-0.4, 0.4);
+    if (!near(u, v, 2.2)) pairHeap(ctx, room, i === 2 ? 'wreck' : 'heap', u, v, R.range(-0.4, 0.4), H, new Rng(hash32(ctx.A, i, 3636)));
+    if (overBudget()) yield;
+  }
+  // the lidded things for the first pass's stock, standing about in the open
+  for (const [u, v, t] of [[UC - 5.5, -14.5, 'chest'], [UC + 4.8, -24.0, 'crate'], [UC + 5.6, 15.6, 'barrel'], [UC - 4.6, 26.0, 'box'], [UC - 2.6, 31.0, 'jar']]) {
+    if (near(u, v, 0.8)) continue;
+    conts.push(ctx.addSmash(t, u, 0, v, R.range(0, TAU), { room, lvl: key }));
+  }
+  pairStock(ctx, room, conts, 'oval');
+  // the harp on a low dais toward one end, the bronze box on a stone block toward the other
+  const dz = -BZ + 9.5, bz = BZ - 9.5, du0 = UC + 2.75, bu0 = UC - 2.75;
+  B.box(M.plank, du0, 0.12, dz, 1.9, 0.24, 1.5, 0, 0.08, 0, 0.8); B.box(M.wood, du0, 0.05, dz, 2.0, 0.1, 1.6, 0, 0.08, 0);
+  ctx.solid(du0, dz, 1.9, 1.5, 0.08, key);
+  B.box(stone, bu0, 0.36, bz, 0.8, 0.72, 0.7, 0, -0.2, 0, 0.6); ctx.solid(bu0, bz, 0.8, 0.7, -0.2, key);
+  const F = PAIR_FINDS.oval;
+  if (uniqueFree(F.harp) && !ctx.st.tk.includes('pair:' + F.harp)) spawnItem(ctx, F.harp, 'pair:' + F.harp, ctx.W(du0 + 0.2, 0.24, dz), { yaw: ctx.yaw(Math.PI / 2 + 0.35) });
+  if (uniqueFree(F.box) && !ctx.st.tk.includes('pair:' + F.box)) spawnItem(ctx, F.box, 'pair:' + F.box, ctx.W(bu0, 0.72, bz), { yaw: 0.6 });
+  // and the people who came this far
+  ctx.skeleton('sit', du0 + 1.4, dz + 0.9, Math.PI * 0.6);
+  ctx.skeleton('lie', UC - 4.2, 2.5, 0.4);
+  ctx.bones(UC + 4.0, -2.0, R);
+  for (const [u, v] of [[UC - 3, -10], [UC + 4, 12], [UC + 1, 30]]) ctx.drip(room, u, v, H);
+  for (let i = 0; i < 6; i++) { const a = R.range(0, TAU), [u, v] = pt(a); ctx.web(V3(u - Math.cos(a) * 0.2, H - 0.05, v - Math.sin(a) * 0.4), V3(-Math.cos(a), 0, -Math.sin(a)).normalize(), V3(0, -1, 0), R.range(0.5, 1.0), R.int(0, 3)); }
+  for (let i = 0; i < 6; i++) { const u = UC + R.range(-AX * 0.6, AX * 0.6), v = R.range(-BZ * 0.7, BZ * 0.7); if (!near(u, v, 1)) ctx.surface(room, u, 0.012, v); }
+  for (let i = 0; i < 10; i++) { const u = UC + R.range(-AX * 0.7, AX * 0.7), v = R.range(-BZ * 0.75, BZ * 0.75); if (!near(u, v, 0.8)) floorBit(fxKit(ctx, room, frameKit(u, v, R.range(0, TAU))), R, plan); }
+  ctx.setBounds(room, UC - AX, UC + AX, -BZ, BZ);
+  room.D = 2 * AX; room.W = 2 * BZ; room.H = H;
+  // where the floor is: the landing, the stair, then the hall's level
+  const floor = (x, zl) => {
+    for (const g of gates) {
+      const u = g.side * x - C.WALL_OUT, v = zl - g.zg;
+      if (Math.abs(v) > 2.2 || u < -1 || u > 3.4 + O.RUN + 0.3) continue;
+      if (u <= 3.4) return O.LAND;
+      if (Math.abs(v) < 0.9) return O.LAND - drop * clamp((u - 3.4) / O.RUN, 0, 1);
+    }
+    return O.Y;
+  };
+  (ctx.deeps ||= {})[key] = { y: O.Y, regions, floor, walk: { u: () => -1, exitU: 0, levels: [O.LAND, O.Y] } };
+  ctx.setFrame(1, 0, 0, 0);
+}
+
+/* ---------- 88 to 90: the crescent ---------- */
+function* buildCrescentGen(ctx, room, R) {
+  const B = ctx.B, key = 'crescent', Q = CRES, gates = pairGates('crescent'), regions = [], side = PAIRS.crescent.side;
+  room.lvl = key; room.floorY = Q.Y;
+  const Ha = 2.8 * HS, H = Q.Y;
+  const fOf = v => Math.max(0, 1 - (v * v) / (Q.VC * Q.VC));
+  const cOf = v => 1.5 + Q.SC * fOf(v), wOf = v => Q.WMIN + (Q.WMAX - Q.WMIN) * fOf(v);
+  const conts = [];
+  for (const g of gates) {
+    // ---- the room at the foot, with the hole in its ceiling, and the shaft up
+    ctx.setFrame(g.side, C.WALL_OUT, g.zg, 0);
+    const vg = g.zg + 50, sgn = Math.sign(vg), turns = sgn > 0 ? 1.0 : 1.5, st = { cu: STAIR.cu, steps: Math.round(H / 0.22), turns, r: 0.7 };
+    B.box(M.plank, 1.5, -0.05, 0, 3.4, 0.1, 3.4, 0, 0, 0, 0.55);
+    B.box(M.board, 0.075, Ha + 0.06, 0, 0.4, 0.12, 3.4); B.box(M.board, 3.075, Ha + 0.06, 0, 0.75, 0.12, 3.4);
+    for (const s of [-1, 1]) B.box(M.board, 1.5, Ha + 0.06, s * 1.48, 2.5, 0.12, 0.45);
+    B.box(M.log, 3.1, Ha / 2, 0, 0.2, Ha, 3.4, 0, 0, 0, 0.7);
+    for (const s of [-1, 1]) B.box(M.log, 1.5, Ha / 2, s * 1.62, 3.2, Ha, 0.2, 0, 0, 0, 0.7);
+    for (const s of [-1, 1]) B.box(M.log, 0.06, Ha / 2, s * 1.17, 0.12, Ha, 0.9);
+    B.box(M.log, 0.06, (DOOR + Ha) / 2, 0, 0.12, Ha - DOOR, 1.44);
+    ctx.solid(3.25, 0, 0.3, 3.6, 0, 'up');
+    for (const s of [-1, 1]) { ctx.solid(1.5, s * 1.75, 3.6, 0.3, 0, 'up'); ctx.solid(0.06, s * 1.17, 0.2, 0.9, 0, 'up'); }
+    const shh = H - Ha;
+    B.box(M.log, 0.18, Ha + shh / 2, 0, 0.12, shh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, Ha + shh / 2, 0, 0.12, shh, 2.6, 0, 0, 0, 0.7);
+    for (const s of [-1, 1]) B.box(M.log, 1.5, Ha + shh / 2, s * 1.32, 2.76, shh, 0.12, 0, 0, 0, 0.7);
+    wornSpiral(B, st.cu, 0, st.steps, st.turns, k => 0.22 + k * ((H - 0.44) / (st.steps - 1)), 0, H + 2.4, hash32(g.k, 88, 90));
+    ropeHelix(B, st.cu, 0, 0.9, H + 1.6, 3.5);
+    const f0 = Object.assign({}, ctx.frame), c = ctx.W(st.cu, 0, 0);
+    const trig = { st, top: 0, depth: H, dur: 2.6 + 1.5, deep: key, room, frame: f0, exitDown: { u: 1.5, v: -sgn * 1.95, du: 0, dv: -sgn }, exitUp: { u: -0.5, v: 0, du: -1, dv: 0 } };
+    ctx.triggers.push(Object.assign({ type: 'down', cx: c.x, cz: c.z, hx: 1.18, hz: 1.18 }, trig));
+    ctx.triggers.push(Object.assign({ type: 'up', cx: c.x, cz: c.z, hx: 1.12, hz: 1.12 }, trig));
+    // ---- at the top: the floor round the hole, a rail on three sides of it, a wall closing the horn's end
+    ctx.setFrame(g.side, C.WALL_OUT, g.zg, H);
+    const fb = (a0, a1, b0, b1) => B.box(M.plank, (a0 + a1) / 2, -0.05, (b0 + b1) / 2, a1 - a0, 0.1, b1 - b0, 0, 0, 0, 0.55);
+    fb(-0.35, 0.25, -1.8, 1.8); fb(2.75, 3.45, -1.8, 1.8); fb(0.25, 2.75, -1.8, -1.25); fb(0.25, 2.75, 1.25, 1.8);
+    B.box(M.wood, 0.3, 0.95, 0, 0.08, 0.08, 2.5); B.box(M.wood, 2.7, 0.95, 0, 0.08, 0.08, 2.5);
+    B.box(M.wood, 1.5, 0.95, sgn * 1.27, 2.4, 0.08, 0.08);
+    for (const [u, v] of [[0.3, 1.27], [0.3, -1.27], [2.7, 1.27], [2.7, -1.27]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
+    ctx.solid(0.2, 0, 0.25, 2.7, 0, key); ctx.solid(2.8, 0, 0.25, 2.7, 0, key); ctx.solid(1.5, sgn * 1.32, 2.6, 0.2, 0, key);
+    ctx.circle(st.cu, 0, 0.2, key);
+    B.box(M.log, 1.5, Q.H / 2, sgn * 1.85, 3.8, Q.H, 0.2, 0, 0, 0, 0.7);
+    yield;
+  }
+  // ---- the band itself, in the owner's frame: walls along both curved edges, a floor, a roof, rafters, posts
+  ctx.setFrame(side, C.WALL_OUT, -50, H);
+  const N = Q.N, vEnd = Q.VC + 1.75, vs = [], posts = [];
+  for (let i = 0; i <= N; i++) vs.push(-vEnd + 2 * vEnd * i / N);
+  const edge = (v, e) => cOf(v) + e * wOf(v);
+  for (let i = 0; i < N; i++) {
+    const va = vs[i], vb = vs[i + 1], vm = (va + vb) / 2, ca = cOf(va), cb = cOf(vb), cm = cOf(vm), wm = wOf(vm);
+    const du = cb - ca, dv = vb - va, len = Math.hypot(du, dv), ang = -Math.atan2(dv, du), cosA = Math.abs(dv) / len;
+    if (Math.abs(vm) < Q.VC - 1.6) B.box(M.plank, cm, -0.05 - (i % 2) * 0.003, vm, len + 0.25, 0.1, 2 * wm + 0.5, 0, ang, 0, 0.55);
+    B.box(M.board, cm, Q.H + 0.06 + (i % 2) * 0.003, vm, len + 0.25, 0.12, 2 * wm + 0.6, 0, ang, 0, 0.6);
+    // the two walls, each just outside its edge
+    for (const e of [-1, 1]) {
+      const pa = edge(va, e), pb = edge(vb, e), l2 = Math.hypot(pb - pa, dv), a2 = -Math.atan2(dv, pb - pa);
+      const ou = e * dv / l2, ov = -e * (pb - pa) / l2;
+      B.box(M.log, (pa + pb) / 2 + ou * 0.12, Q.H / 2, vm + ov * 0.12, l2 + 0.14, Q.H, 0.22, 0, a2, 0, 0.7);
+      ctx.solid((pa + pb) / 2 + ou * 0.14, vm + ov * 0.14, l2 + 0.2, 0.26, a2, key);
+    }
+    // a rafter across at each joint, and where the room is wide a post down the middle to carry them
+    const cb2 = cOf(vb), wb = wOf(vb);
+    B.box(M.woodDark, cb2, Q.H - 0.14, vb, 2 * wb * cosA + 0.4, 0.24, 0.2, 0, -Math.atan2(-du, dv), 0);
+    if (i % 4 === 2 && wm > 3.2) { B.log(M.log, cm, Q.H / 2, vm, 0.15, Q.H, 'y', 8); ctx.circle(cm, vm, 0.2, key); posts.push([cm, vm]); }
+    // where you can stand
+    const cw = ctx.W(cm, 0, vm), ux = side * du / len, uz = dv / len;
+    regions.push({ cx: cw.x, cz: cw.z, ux, uz, hx: len / 2 + 0.35, hz: Math.max(0.5, wm * cosA - 0.08) });
+    if (overBudget()) yield;
+  }
+  for (const g of gates) { const vg = g.zg + 50, c0 = ctx.W(1.5, 0, vg); regions.push({ cx: c0.x, cz: c0.z, ux: side, uz: 0, hx: 1.75, hz: 1.7 }); }
+  yield;
+  // ---- what was left up here
+  const plan = { floor: 'plank', lower: false, design: 'crescent' };
+  const kinds = ['junk', 'bracket', 'crates', 'staves', 'timber', 'barrels', 'junk', 'baskets', 'chest', 'sacks', 'plankstack', 'jars'];
+  for (let i = 0, k = 0; i < 26; i++) {
+    const v = -Q.VC + 5 + (2 * Q.VC - 10) * (i + 0.5) / 26 + R.range(-0.6, 0.6), e = i % 2 ? 1 : -1;
+    if (wOf(v) < 2.6 || R.chance(0.2)) continue;
+    const u = edge(v, e), d = 0.6, du = cOf(v + d) - cOf(v - d), l = Math.hypot(du, 2 * d), nu = -e * (2 * d) / l, nv = e * du / l;
+    pairFit(ctx, room, kinds[k++ % kinds.length], u + nu * 0.02, v + nv * 0.02, nu, nv, R.range(1.4, 2.4), Q.H, new Rng(hash32(ctx.A, i, 8989)), plan);
+    if (overBudget()) yield;
+  }
+  const nearPost = (u, v, r) => posts.some(([pu, pv]) => Math.hypot(pu - u, pv - v) < r);
+  [-30, -12, 16, 34].forEach((v, k) => {
+    const vv = v + R.range(-1, 1), uu = cOf(vv) + (k % 2 ? 2.3 : -2.3);
+    if (wOf(vv) > 3.6 && !nearPost(uu, vv, 2.0)) pairHeap(ctx, room, k === 2 ? 'wreck' : 'heap', uu, vv, R.range(-0.5, 0.5), Q.H, new Rng(hash32(ctx.A, v, 9090)));
+  });
+  yield;
+  for (const [v, e, t] of [[-41, -1, 'chest'], [-22, 1, 'crate'], [5, -1, 'barrel'], [26, 1, 'box'], [44, -1, 'jar']]) {
+    const u = cOf(v) + e * 1.6;
+    conts.push(ctx.addSmash(t, u, 0, v, R.range(0, TAU), { room, lvl: key }));
+  }
+  pairStock(ctx, room, conts, 'crescent');
+  // at the middle, against the outer wall: a bench of planks on trestles, the little bronze box on it, the harp beside
+  const um = edge(0, 1) - 0.55;
+  B.box(M.plank, um, 0.52, 0, 0.5, 0.06, 1.6, 0, 0, 0, 0.8);
+  for (const v of [-0.6, 0.6]) { B.box(M.wood, um, 0.25, v, 0.4, 0.5, 0.08); }
+  ctx.solid(um, 0, 0.55, 1.7, 0, key);
+  const F = PAIR_FINDS.crescent;
+  if (uniqueFree(F.box) && !ctx.st.tk.includes('pair:' + F.box)) spawnItem(ctx, F.box, 'pair:' + F.box, ctx.W(um, 0.55, 0.3), { yaw: 0.4 });
+  if (uniqueFree(F.harp) && !ctx.st.tk.includes('pair:' + F.harp)) spawnItem(ctx, F.harp, 'pair:' + F.harp, ctx.W(um - 0.4, 0, -1.6), { yaw: ctx.yaw(-Math.PI / 2 + 0.3) });
+  ctx.skeleton('sit', um - 0.4, 1.4, -Math.PI / 2 + 0.2);
+  ctx.skeleton('lie', cOf(-20) - 1, -20, 1.2);
+  for (let i = 0; i < 8; i++) { const v = R.range(-Q.VC + 4, Q.VC - 4), e = R.chance(0.5) ? 1 : -1, u = edge(v, e) - e * 0.05; ctx.web(V3(u, Q.H - 0.04, v), V3(-e, 0, 0), V3(0, -1, 0), R.range(0.5, 1.0), R.int(0, 3)); }
+  for (let i = 0; i < 6; i++) { const v = R.range(-Q.VC + 6, Q.VC - 6); ctx.surface(room, cOf(v) + R.range(-1, 1), 0.012, v); }
+  for (let i = 0; i < 10; i++) { const v = R.range(-Q.VC + 4, Q.VC - 4); floorBit(fxKit(ctx, room, frameKit(cOf(v) + R.range(-1.5, 1.5), v, R.range(0, TAU))), R, plan); }
+  ctx.setBounds(room, -0.3, 1.5 + Q.SC + Q.WMAX, -vEnd, vEnd);
+  room.D = Q.SC + Q.WMAX; room.W = 2 * vEnd; room.H = Q.H;
+  (ctx.deeps ||= {})[key] = { y: H, regions };
+  ctx.setFrame(1, 0, 0, 0);
+}
+MORE_BUILD.oval = buildOvalGen;
+MORE_BUILD.crescent = buildCrescentGen;
+
 /* ---- 39_catalogue.js ---- */
 /* ============================================================
    The written catalogue: every useless thing on the wall, by hand, for the first ten passes.
@@ -7713,11 +8286,16 @@ const SPECIAL_ITEMS = {
   10003: { kind: 'coin', style: 'drachm', mat: 'metal', metal: { n: 'silver', c: 0xa8a49c }, name: 'Heavy silver coin', desc: 'Thick and well struck; a stag lies folded on one face.' },
   10004: { kind: 'coin', mat: 'metal', metal: { n: 'bronze', c: 0x8a6a3a }, name: 'Worn bronze coin', desc: 'Green and smooth, its pictures worn to shadows.' },
   // and the harp at 39, where the chord is a septimal third
-  10005: { kind: 'harp', mat: 'wood', name: 'Harp', desc: 'A steppe harp, its soundbox carved with the wall\'s own sign: the serpent of timbers, the hare walking in its ring. Most of the gut strings still hold.' },
+  10005: { kind: 'harp', mat: 'wood', name: 'Harp', desc: 'A harp, its soundbox carved with the wall\'s own sign: the serpent of timbers, the hare walking in its ring. Most of the gut strings still hold.' },
 };
 const HARP_ID = 10005, HARP_L = 39;
 SPECIAL_ITEMS[10006] = { kind: 'bells', mat: 'metal', metal: { n: 'bronze', c: 0x9c7a44 }, name: 'Seven bronze bells', desc: 'Seven small cast bells threaded on a plaited cord, each a size smaller than the last. Lifted, they ring down from the highest.' };
 const BELLS_ID = 10006;
+// the four kept in the two places that join lengths (38c_pairs): two harps, and two bronze boxes
+SPECIAL_ITEMS[10007] = { kind: 'harp', style: 'frame', mat: 'wood', name: 'Old harp', desc: 'A harp with a heavy carved forepillar and a curving neck worn smooth by hands. Its soundbox, hollowed from a single block, has split along the grain, and the strings hang slack.' };
+SPECIAL_ITEMS[10008] = { kind: 'harp', style: 'arched', mat: 'wood', name: 'Arched harp', desc: 'A small bowed harp: a neck curving up from a boat-shaped soundbox, a skin stretched over it, a few gut strings still tied between them.' };
+SPECIAL_ITEMS[10009] = { kind: 'bronzebox', style: 'cista', mat: 'metal', metal: { n: 'bronze', c: 0x8a6a3a }, name: 'Bronze box', desc: 'A round bronze box on three small feet, its sides engraved with figures and leaves in bands. A snake lies coiled on the lid, cast as its handle.' };
+SPECIAL_ITEMS[10010] = { kind: 'bronzebox', style: 'pyxis', mat: 'metal', metal: { n: 'bronze', c: 0x8a6a3a }, name: 'Bronze box', desc: 'A small round bronze box with a close-fitting lid. Rings are cut into the lid one inside another, round a little knob.' };
 for (const [id, d] of Object.entries(SPECIAL_ITEMS)) { d.id = +id; d.seed = +id; d.style = d.style || ''; _itemNames.add(d.name.toLowerCase()); }
 // the pots some of the new finds replaced, as they were, for games saved before: same look, ids of their own
 const _legacyDefs = {};
@@ -7975,10 +8553,120 @@ function wireGeo(pts, r, closed = false) {
   const curve = new THREE.CatmullRomCurve3(pts, closed);
   return new THREE.TubeGeometry(curve, Math.max(24, pts.length * 3), r, 5, closed);
 }
+// the two harps from the joined places. 'frame': a triangle of soundbox, curved neck and a heavy carved pillar, the
+// soundbox split and the strings gone slack. 'arched': a bowed neck rising out of a little boat of a soundbox
+function harpOf(st, o) {
+  const { add, addS } = o;
+  const tube = (pts, r, mat) => add(wireGeo(pts, r), mat);
+  const string = (gut, a, b, sag) => {
+    const m = a.clone().lerp(b, 0.5); m.x += sag * 0.4; m.z += sag;
+    for (const [p, q] of [[a, m], [m, b]]) { const dd = q.clone().sub(p), s = add(UNIT_CYL, gut); s.position.copy(p).add(q).multiplyScalar(0.5); s.quaternion.setFromUnitVectors(V3(0, 1, 0), dd.clone().normalize()); s.scale.set(0.0022, dd.length(), 0.0022); }
+  };
+  const gut = cachedMat('harpgut2', () => new THREE.MeshLambertMaterial({ color: 0xd8c8a0, emissive: 0x1a160c }));
+  if (st === 'frame') {
+    const wood = cachedMat('harpwood2', () => lam(T.wood, { color: 0x6e4e32, bumpScale: 0.8 }));
+    // the soundbox: the long back member, deep at its foot and narrowing toward the top
+    const sb0 = V3(0, 0.03, -0.06), sb1 = V3(0, 0.78, -0.3), dir = sb1.clone().sub(sb0), L = dir.length();
+    const box = new THREE.BoxGeometry(0.15, L, 0.13); box.translate(0, L / 2, 0);
+    const p = box.attributes.position; for (let i = 0; i < p.count; i++) { const k = 1 - 0.45 * p.getY(i) / L; p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k); }
+    box.computeVertexNormals();
+    const sbm = add(box, wood, sb0.x, sb0.y, sb0.z); sbm.quaternion.setFromUnitVectors(V3(0, 1, 0), dir.clone().normalize());
+    sbm.parent.userData.face = Math.PI / 2;
+    // the split down its face
+    const crack = add(new THREE.BoxGeometry(0.006, L * 0.6, 0.004), M.socket, 0.02, 0, 0); crack.position.copy(sb0.clone().lerp(sb1, 0.42)).add(V3(0.02, 0, 0.066)); crack.quaternion.copy(sbm.quaternion);
+    // the neck, curving down between soundbox and pillar, and the pillar, bowed out, thick, with a knob at its foot
+    const neck = [V3(0, 0.79, -0.31), V3(0, 0.84, -0.12), V3(0, 0.76, 0.06), V3(0, 0.78, 0.22), V3(0, 0.88, 0.33)];
+    tube(neck, 0.032, wood);
+    const pillar = [V3(0, 0.88, 0.33), V3(0, 0.62, 0.42), V3(0, 0.34, 0.41), V3(0, 0.1, 0.3), V3(0, 0.03, 0.2)];
+    tube(pillar, 0.034, wood);
+    addS(new THREE.BoxGeometry(1, 1, 1), wood, 0, 0.5, 0.44, 0.022, 0.4, 0.035, 0.12, 0, 0);       // the pillar's carved fin
+    for (const y of [0.3, 0.52, 0.7]) add(new THREE.TorusGeometry(0.036, 0.007, 4, 10), wood, 0, y, 0.41 - (y - 0.5) * 0.05, Math.PI / 2);
+    add(new THREE.SphereGeometry(0.04, 8, 6), wood, 0, 0.03, 0.18);
+    add(new THREE.SphereGeometry(0.035, 8, 6), wood, 0, 0.9, 0.34);
+    // the strings, slack: from the neck down to the soundbox, each sagging a little; several gone
+    const neckC = new THREE.CatmullRomCurve3(neck);
+    for (let i = 0; i < 16; i++) {
+      if (i % 5 === 3) continue;
+      const t = 0.08 + i * 0.054, a = neckC.getPointAt(t), along = clamp((0.62 - t * 0.56), 0.08, 0.95), b = sb0.clone().lerp(sb1, along).add(V3(0, 0, 0.05));
+      string(gut, a, b, 0.012 + (i % 3) * 0.006);
+    }
+    return 0.95;
+  }
+  // 'arched': the soundbox a shallow boat with a skin over it, the neck rising from its tail in a bow
+  const wood = cachedMat('harpwood3', () => lam(T.wood, { color: 0x9a7048, bumpScale: 0.6 }));
+  const skin = cachedMat('harpskin', () => lam(T.cloth, { color: 0xc8b088, bumpScale: 0.6 }));
+  const hull = new THREE.SphereGeometry(1, 16, 8, 0, TAU, Math.PI / 2, Math.PI / 2);
+  const hm = addS(hull, wood, 0, 0.075, 0, 0.075, 0.07, 0.22); hm.parent.userData.face = Math.PI / 2;
+  addS(new THREE.CircleGeometry(1, 16), skin, 0, 0.076, 0, 0.072, 0.21, 1, -Math.PI / 2);
+  addS(new THREE.BoxGeometry(1, 1, 1), wood, 0, 0.082, 0.0, 0.012, 0.008, 0.36);              // the string bar along the skin
+  const neck = [V3(0, 0.07, -0.2), V3(0, 0.22, -0.26), V3(0, 0.42, -0.22), V3(0, 0.58, -0.08), V3(0, 0.64, 0.08)];
+  tube(neck, 0.022, wood);
+  add(new THREE.SphereGeometry(0.026, 8, 6), wood, 0, 0.645, 0.09);
+  const neckC = new THREE.CatmullRomCurve3(neck);
+  for (let i = 0; i < 9; i++) {
+    if (i === 6) continue;
+    const t = 0.22 + i * 0.085, a = neckC.getPointAt(t);
+    add(new THREE.CylinderGeometry(0.006, 0.006, 0.05, 6), wood, a.x, a.y, a.z + 0.01, Math.PI / 2, 0, 0);    // the tuning pegs
+    string(gut, a, V3(0, 0.088, -0.15 + i * 0.034), 0.002);
+  }
+  return 0.66;
+}
+// the bronze boxes: one a tall round box on feet with a snake on the lid, one a little lidded round box
+function boxBronzeTex(kind) {
+  return cachedMat('bronzetex' + kind, () => {
+    const c = makeCanvas(256, 128), g = c.getContext('2d'), R = new Rng(kind === 'cista' ? 1717 : 1818);
+    g.fillStyle = '#7a5a30'; g.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(${R.int(40, 80)},${R.int(110, 150)},${R.int(90, 120)},${R.range(0.08, 0.35)})`; g.beginPath(); g.arc(R.range(0, 256), R.range(0, 128), R.range(3, 18), 0, TAU); g.fill(); }
+    g.strokeStyle = 'rgba(30,18,8,0.75)'; g.lineWidth = 1.4;
+    if (kind === 'cista') {
+      for (const y of [10, 22, 106, 118]) { g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); }
+      // a band of leaves at top and foot, and between them figures striding, very simply drawn
+      for (let x = 4; x < 256; x += 12) for (const y of [16, 112]) { g.beginPath(); g.ellipse(x, y, 3.5, 5, 0, 0, TAU); g.stroke(); }
+      for (let k = 0; k < 6; k++) {
+        const x = 20 + k * 42, y = 64;
+        g.beginPath(); g.arc(x, y - 22, 4, 0, TAU); g.stroke();
+        g.beginPath(); g.moveTo(x, y - 18); g.lineTo(x, y + 6); g.moveTo(x, y + 6); g.lineTo(x - 8, y + 26); g.moveTo(x, y + 6); g.lineTo(x + 9, y + 25);
+        g.moveTo(x, y - 10); g.lineTo(x + 12, y - 2); g.moveTo(x, y - 10); g.lineTo(x - 10, y - 4); g.stroke();
+        if (k % 2) { g.beginPath(); g.moveTo(x + 12, y - 2); g.lineTo(x + 20, y - 26); g.stroke(); }
+      }
+    } else {
+      // concentric rings, cut round from the middle
+      for (let r = 8; r < 60; r += 7) { g.beginPath(); g.arc(128, 64, r, 0, TAU); g.stroke(); }
+    }
+    jitter(g, 256, 128, 8, 4);
+    return new THREE.MeshPhongMaterial({ map: texOf(c), specular: 0x7a6a48, shininess: 36 });
+  });
+}
+function bronzeBoxOf(st, o) {
+  const { add, addS, mm } = o, tex = boxBronzeTex(st);
+  if (st === 'cista') {
+    const r = 0.1, h = 0.19, y0 = 0.035;
+    add(new THREE.CylinderGeometry(r, r, h, 24, 1, true), tex, 0, y0 + h / 2);
+    add(new THREE.CircleGeometry(r, 24), mm, 0, y0 + 0.002, 0, Math.PI / 2);
+    add(new THREE.CylinderGeometry(r + 0.006, r + 0.006, 0.014, 24), mm, 0, y0 + h + 0.007);
+    add(new THREE.CylinderGeometry(r * 0.9, r + 0.004, 0.012, 24), mm, 0, y0 + h + 0.02);
+    for (let k = 0; k < 3; k++) { const a = k / 3 * TAU + 0.4; addS(UNIT_SPH, mm, Math.cos(a) * (r - 0.012), y0 * 0.5, Math.sin(a) * (r - 0.012), 0.018, y0 * 0.55, 0.026, 0, -a, 0); }
+    // the snake coiled on the lid, its head lifted
+    const pts = [], top = y0 + h + 0.028;
+    for (let i = 0; i <= 40; i++) { const t = i / 40, a = t * TAU * 1.7, rr = 0.06 - t * 0.04; pts.push(V3(Math.cos(a) * rr, top + 0.008 + t * 0.022, Math.sin(a) * rr)); }
+    pts.push(V3(0.012, top + 0.05, 0.004), V3(0.022, top + 0.06, 0.0));
+    add(wireGeo(pts, 0.007), mm);
+    addS(UNIT_SPH, mm, 0.026, top + 0.061, 0, 0.012, 0.007, 0.008);
+    return 0.3;
+  }
+  const r = 0.065, h = 0.045;
+  add(new THREE.CylinderGeometry(r, r * 0.96, h, 22), mm, 0, h / 2);
+  add(new THREE.CylinderGeometry(r + 0.004, r + 0.004, 0.014, 22), mm, 0, h + 0.004);
+  const lid = add(new THREE.CircleGeometry(r + 0.003, 22), tex, 0, h + 0.0115, 0, -Math.PI / 2);
+  lid.material = cachedMat('pyxislid', () => { const m = tex.clone(); m.map = tex.map.clone(); m.map.repeat.set(0.5, 1); m.map.offset.set(0.25, 0); m.map.needsUpdate = true; return m; });
+  add(new THREE.SphereGeometry(0.011, 10, 8), mm, 0, h + 0.016);
+  return 0.12;
+}
 function extraModel(d, o) {
   const { add, addS, lath, mm, sm, R } = o;
   const st = d.style || '';
   switch (d.kind) {
+    case 'bronzebox': return bronzeBoxOf(st, o);
     case 'bells': {
       // seven small cast bells, each a size smaller than the last, on a plaited cord laid in a loose loop
       const cord = cachedMat('bellcord', () => lam(T.cloth, { color: 0x6a4a2a, bumpScale: 0.5 }));
@@ -7999,7 +8687,8 @@ function extraModel(d, o) {
       return 0.3;
     }
     case 'harp': {
-      // an angular harp of the kind buried with the riders in the frozen kurgans: a tall hollow soundbox,
+      if (st === 'frame' || st === 'arched') return harpOf(st, o);
+      // an angular harp: a tall hollow soundbox,
       // a rod for the strings running out from its foot, the strings between them
       const wood = cachedMat('harpwood', () => lam(T.wood, { color: 0xb88e62, bumpScale: 0.6 }));
       const gut = cachedMat('harpgut', () => new THREE.MeshLambertMaterial({ color: 0xf0e2b8, emissive: 0x2a2216 }));
@@ -8203,7 +8892,8 @@ function riderValue(id) {
   if (!d) return 0;
   const m = d.metal ? d.metal.n : '';
   switch (d.kind) {
-    case 'harp': return 1.5;                                  // everybody loves music
+    case 'harp': return d.style === 'frame' ? 1 : 1.5;        // everybody loves music (the split one a little less)
+    case 'bronzebox': return 2;
     case 'bells': return 3;
     case 'ironbar': return d.style === 'large' ? 3 : d.style === 'small' ? 1 : 2;
     case 'silk': return 2;
@@ -8212,23 +8902,25 @@ function riderValue(id) {
     case 'akinakes': return 2;
     case 'spearhead': return 1;                               // a whole weapon
     case 'hacksilver': return 1;
-    case 'fibula': case 'armring': case 'amulet': return m === 'gold' || m === 'silver' ? 1 : 0;
+    case 'fibula': case 'armring': case 'amulet': return m === 'gold' || m === 'silver' ? 1 : m === 'bronze' ? 0.5 : 0;
     case 'pommel': case 'boss': case 'mail': case 'cheekguard': return 0;   // broken war-gear is no use to them
     case 'bit': case 'phalera': return 1;                     // horse gear
     case 'arrowhead': case 'bolt': return 1;                  // weapons
-    case 'knife': return m === 'iron' && d.style !== 'razor' ? 1 : 0;
+    case 'knife': return m === 'iron' && d.style !== 'razor' ? 1 : m === 'bronze' ? 0.5 : 0;
     case 'torc': return 1;
-    case 'bracelet': case 'ring': return m === 'gold' || m === 'silver' ? 1 : 0;
+    case 'bracelet': case 'ring': return m === 'gold' || m === 'silver' ? 1 : m === 'bronze' ? 0.5 : 0;
     case 'coin': return m === 'gold' || m === 'electrum' || d.style === 'owl' || d.style === 'drachm' || d.style === 'gold' || d.style === 'lump' ? 1 : 0.5;
+    case 'fishhook': case 'needle': return 0;
   }
-  return 0;
+  // bronze they will take for the metal: any whole piece of it, half as much as iron
+  return m === 'bronze' ? 0.5 : 0;
 }
 
 /* ---------- which room holds what, per lap ---------- */
 // what an iron bar can be sealed in: boards and lids, not a jar or a basket
 const SEALED = new Set(['crate', 'box', 'chest', 'bigcrate', 'tallbox', 'barrel']);
-const BOX_OK = new Set(['store', 'collapsed', 'dank', 'toppled', 'jut', 'vault', 'cistern', 'cache', 'escape', 'odd', 'forge', 'loom', 'bunks', 'grotto', 'walk', 'up', 'round', 'open']);
-const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6, cave: 1.1, jut: 1.5, forge: 1.3, loom: 1.2, bunks: 1.2, grotto: 2.0, walk: 1.4, up: 1.6, round: 1.2, open: 1.3 };
+const BOX_OK = new Set(['store', 'collapsed', 'dank', 'toppled', 'jut', 'vault', 'cistern', 'cache', 'escape', 'odd', 'forge', 'loom', 'bunks', 'grotto', 'walk', 'up', 'round', 'open', 'scrap', 'lumber', 'midden', 'oval', 'crescent']);
+const ROOM_WEIGHT = { cache: 3, escape: 2.2, vault: 1.6, store: 1.2, pigeon: 1.3, gallery: 1.3, crypt: 1.2, empty: 0.6, cave: 1.1, jut: 1.5, forge: 1.3, loom: 1.2, bunks: 1.2, grotto: 2.0, walk: 1.4, up: 1.6, round: 1.2, open: 1.3, scrap: 1.2, lumber: 1.1, midden: 1.0, oval: 1.4, crescent: 1.4 };
 function lapAssign(lap) {
   if (S.lapAssign[lap]) return S.lapAssign[lap];
   // 100 the first time round, 50 more on the second, 20 more every lap after; anything already seen stays gone
@@ -8239,7 +8931,7 @@ function lapAssign(lap) {
   R.shuffle(avail);
   if (lap === 0 && avail.includes(0)) { avail.splice(avail.indexOf(0), 1); avail.unshift(0); }
   const rooms = [];
-  for (let L = 0; L < C.LENGTHS; L++) for (const r of layoutFor(L, lap).rooms) if (r.design !== 'loft' && r.design !== 'deep' && !SPECIAL_ROOMS.has(r.design)) rooms.push({ L, r });
+  for (let L = 0; L < C.LENGTHS; L++) for (const r of layoutFor(L, lap).rooms) if (r.design !== 'loft' && r.design !== 'deep' && r.design !== 'gate' && !SPECIAL_ROOMS.has(r.design)) rooms.push({ L, r });
   let order = rooms.map(x => ({ x, k: Math.pow(R.next(), 1 / (ROOM_WEIGHT[x.r.design] || 1)) })).sort((a, b) => b.k - a.k).map(o => o.x);
   if (lap === 0) { const first = order.findIndex(o => o.L === 0 && o.r.i === 0); if (first > 0) order.unshift(order.splice(first, 1)[0]); }
   const map = {};
@@ -9156,42 +9848,66 @@ function stairExit(trig, len, dir) {
   return { x, y: dir > 0 ? (trig.depth ?? C.LOWER_Y) : (trig.top ?? 0), z: z + len.group.position.z, yaw: Math.atan2(-fx, -fz) };
 }
 function startStair(len, trig, dir) {
-  P.anim = { t: 0, dur: trig.dur ?? 3.8, len, trig, dir, from: { x: P.pos.x, y: P.pos.y, z: P.pos.z, yaw: P.yaw, pitch: P.pitch }, tread: -1, prevE: 0 };
+  // slow and careful: about twice as long as it was, a little longer still on the long climbs
+  const st = trig.st || STAIR, dur = Math.max((trig.dur ?? 3.8) * 2.05, st.steps * 0.21);
+  P.anim = { t: 0, dur, len, trig, dir, from: { x: P.pos.x, y: P.pos.y, z: P.pos.z, yaw: P.yaw, pitch: P.pitch }, tread: -1, yawS: P.yaw, pitchS: P.pitch, roll: 0,
+    falls: Math.max(4, Math.round(st.steps / 2)), lean: Math.random() < 0.5 ? -1 : 1 };
   P.mode = dir > 0 ? 'descend' : 'ascend';
   P.vel.set(0, 0, 0);
+  AU.creak(0.8);
   if (dir > 0) {
     P.deep = trig.deep || false; P.lenA = len.A;
     if (!trig.from) { const ex = stairExit(trig, len, -1); S.stairRet = { A: len.A, x: ex.x, z: ex.z - len.group.position.z, yaw: ex.yaw }; }
   }
 }
-function stairEase(t) { const sm = t * t * t * (t * (t * 6 - 15) + 10); return sm * 0.88 + t * 0.12; }
+// how far along the stair at time t (0..1): easing in over the first steps, an even pace, easing out over the last.
+// The pace rises from nothing on a smooth ramp, so there is no jolt at either end
+function stairEase(t, a = 0.18) {
+  const vmax = 1 / (1 - a), I = u => u * u * u - u * u * u * u / 2;
+  if (t <= a) return vmax * a * I(t / a);
+  if (t >= 1 - a) return 1 - vmax * a * I((1 - t) / a);
+  return vmax * (a / 2 + (t - a));
+}
 function updateStairAnim(dt) {
   const a = P.anim;
   a.t += dt / a.dur;
-  // careful onto the first treads, quicker through the middle turns, slowing again before stepping off
-  const tt = Math.min(1, a.t), e = stairEase(tt);
+  const tt = Math.min(1, a.t), e0 = stairEase(tt), m = a.falls;
+  // each footfall a small surge and settle, as a body goes up or down a step at a time; zero at both ends
+  const e = clamp(e0 + 0.3 * Math.sin(TAU * m * e0) / (TAU * m), 0, 1);
   const s = a.dir > 0 ? e : 1 - e;
   const p = stairPose(a.trig, a.len, s);
   const fx = p.dx * a.dir * 0.85 + p.ix * 0.55, fz = p.dz * a.dir * 0.85 + p.iz * 0.55;
   const yawPath = Math.atan2(-fx, -fz);
   // looking down the way you go: down a stair that descends, up one that climbs
   const descending = (a.dir > 0) === ((a.trig.depth ?? C.LOWER_Y) < (a.trig.top ?? 0));
-  const pitchPath = descending ? -0.5 : 0.35;
-  const b0 = smooth(0, 0.16, tt), ex = stairExit(a.trig, a.len, a.dir), b1 = smooth(0.84, 1, tt);
+  const pitchPath = descending ? -0.42 : 0.3;
+  const b0 = smooth(0, 0.2, tt), ex = stairExit(a.trig, a.len, a.dir), b1 = smooth(0.8, 1, tt);
   let x = lerp(a.from.x, p.x, b0), y = lerp(a.from.y, p.y, b0), z = lerp(a.from.z, p.z, b0);
   let yaw = lerpAngle(a.from.yaw, yawPath, b0), pitch = lerp(a.from.pitch, pitchPath, b0);
   x = lerp(x, ex.x, b1); y = lerp(y, ex.y, b1); z = lerp(z, ex.z, b1); yaw = lerpAngle(yaw, ex.yaw, b1); pitch = lerp(pitch, 0, b1);
-  P.pos.set(x, y, z); P.yaw = yaw; P.pitch = pitch;
-  // one footfall every third tread, so the sound slows and quickens with the body
-  const steps = (a.trig.st || STAIR).steps;
-  P.bob += Math.abs(e - a.prevE) * (steps / 3) * Math.PI; a.prevE = e;
-  const tread = Math.floor(e * steps / 3);
-  if (tread !== a.tread) { a.tread = tread; AU.step('stair'); }
+  // the sway and waddle: the weight going from one foot to the other, a little to the side and a little lean with it
+  const mid = b0 * (1 - b1), ph = Math.PI * m * e0, side = Math.sin(ph) * mid;
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  x += rx * side * 0.035; z += rz * side * 0.035;
+  a.roll = side * 0.022 * a.lean + Math.sin(ph * 0.5 + 0.7) * 0.006 * mid;
+  // the eyes follow the way round a breath behind it, never snapping
+  // (closing up on it over the last steps, so there is nothing left to catch up when you step off)
+  const k = 1 - Math.exp(-dt * (4.2 + 10 * smooth(0.82, 1, tt)));
+  a.yawS = lerpAngle(a.yawS, yaw + Math.sin(ph * 0.5) * 0.04 * mid, k);
+  a.pitchS += (pitch - a.pitchS) * k;
+  P.pos.set(x, y, z); P.yaw = a.yawS; P.pitch = a.pitchS;
+  // one footfall each two treads: the sound slows and quickens with the body, and the old treads give a creak now and then
+  P.bob = ph;
+  const tread = Math.floor(e0 * m);
+  if (tread !== a.tread) {
+    a.tread = tread; AU.step('stair');
+    if (tread > 0 && tread < m && Math.random() < 0.42) AU.creak(0.35 + Math.random() * 0.5);
+  }
   if (a.t >= 1) {
     P.anim = null; P.armed = false;
     P.mode = a.dir > 0 || a.trig.top ? 'lower' : 'corridor';
     if (a.dir < 0) P.deep = a.trig.top ? (a.trig.topDeep || false) : false;
-    P.pos.set(ex.x, ex.y, ex.z); P.yaw = ex.yaw; P.pitch = 0;
+    P.pos.set(ex.x, ex.y, ex.z); P.yaw = a.yawS; P.pitch = a.pitchS;
     P.inRoute = false;
     AU.space(P.mode);
     if (P.mode === 'corridor') { P.deep = false; ensureLoaded(); }
@@ -9296,7 +10012,7 @@ function breakContainer(s, len) {
   lenState(s.A).sm.push(s.cid);
   const p = s.obj.position.clone();
   const wp = p.clone(); wp.z += len.group.position.z;
-  AU.smash(s.spec.sound, wp);
+  AU.smash(s.spec.sound, wp); countSmash(s.A, wp);
   const dp = p.clone(); dp.floor = s.groundY ?? s.floorY;
   spawnDebris(len, dp, s.spec.debris || (s.type === 'chest' || s.type === 'table' ? M.wood : M.board), s.type === 'box' || s.type === 'stool' ? 6 : 10, !!s.spec.debris);
   for (const c of s.contents) {
@@ -9332,14 +10048,23 @@ function destroyItem(it) {
     markSeen(it.tok, it.A); purgeDuplicates(it.tok, it);
     const d = itemDef(it.tok);
     if (it.tok === HARP_ID) { S.harp = 'broken'; AU.twang(wp); }
+    else if (it.tok === 10007 || it.tok === 10008) AU.twang(wp);
     if (it.tok === BELLS_ID) S.bells = 'broken';
+    if (it.tok >= 10007 && it.tok <= 10010) (S.broken ||= []).push(it.tok);
     const m0 = it.obj.children[0].material, dm = Array.isArray(m0) ? m0[0] : m0;
     if (d.mat === 'clay' || d.mat === 'glass') { spawnDebris(it.len, p, dm, 9, true); AU.smash('clay', wp); }
     else if (d.mat === 'metal') AU.smash('metal', wp);
     else { spawnDebris(it.len, p, dm, 5, true); AU.smash(d.mat === 'lead' ? 'metal' : d.mat === 'wood' ? 'wood' : 'bone', wp); }
   } else if (it.tok === 'O') { spawnDebris(it.len, p, OIL_MAT, 9, true); AU.smash('oil', wp); }
   else { spawnDebris(it.len, p, BISCUIT_MAT, 7, true); AU.smash('biscuit', wp); }
+  countSmash(it.A, wp);
   removeItem(it);
+}
+// every fourth thing smashed, and every tenth, rings the length's own note over the noise; on the twentieth, both, twice as loud
+function countSmash(A, wp) {
+  S.smashN = (S.smashN || 0) + 1;
+  const n = S.smashN, k = (n % 4 === 0 ? 1 : 0) + (n % 10 === 0 ? 1 : 0);
+  if (k) AU.overtone(((A % C.LENGTHS) + C.LENGTHS) % C.LENGTHS, k, wp);
 }
 function updateDynamics(dt) {
   for (let i = dyn.debris.length - 1; i >= 0; i--) {
@@ -9563,11 +10288,13 @@ function updateViewmodel(dt, lf, flick) {
   body.rotation.z = Math.sin(P.bob * 0.5) * 0.08 * sp + P.vel.x * 0.0;
   body.rotation.x = Math.sin(P.bob * 0.5 + 1) * 0.05 * sp;
   const fl = vmLant.userData.flame, gl = vmLant.userData.glow;
-  fl.visible = gl.visible = lf > 0.001;
+  fl.visible = lf > 0.001; gl.visible = lf > 0.001 && !S.inField;
   fl.scale.set(0.6 + lf * 0.5, (0.5 + lf * 0.6) * flick, 0.6 + lf * 0.5);
-  gl.material.opacity = Math.min(1, lf * 1.1) * (0.7 + 0.3 * flick);
+  // out in the sun the flame is a small thing: no glow round it worth the name, the horn panes barely lit
+  const day = S.inField ? 0.12 : 1;
+  gl.material.opacity = Math.min(1, lf * 1.1) * (0.7 + 0.3 * flick) * day;
   FLAME.opacity = 0.35 + lf * 0.6;
-  HORN_PANE.emissive.setRGB(0.85 * lf * flick, 0.42 * lf * flick, 0.1 * lf);
+  HORN_PANE.emissive.setRGB(0.85 * lf * flick * (S.inField ? 0.3 : 1), 0.42 * lf * flick * (S.inField ? 0.3 : 1), 0.1 * lf);
 }
 
 /* ============================================================
@@ -9731,9 +10458,9 @@ const RING_LONG = new Set([30, 31, 39, 71, 82, 99]);
 const AU = (() => {
   let ctx = null, master, bus, dry, wet, reverb, noiseBuf;
   let drone = null, hissGain, windGain, riverGain, windLfo;
-  let creakT = 6, phantomT = 70, birdT = 3, larkT = 8, lastL = -1, space = 'corridor';
+  let creakT = 24, phantomT = 170, birdT = 3, larkT = 8, lastL = -1, space = 'corridor';
   // the rarer things: a small metal thing settling, one timber easing; and the tree's shiver
-  let clinkT = 80 + Math.random() * 90, settleT = 40 + Math.random() * 60, shiverK = 0, tinkT = 0;
+  let clinkT = 160 + Math.random() * 160, settleT = 90 + Math.random() * 120, shiverK = 0, tinkT = 0;
   const on = () => !!ctx;
   function impulse(secs, decay) {
     const n = Math.floor(ctx.sampleRate * secs), b = ctx.createBuffer(2, n, ctx.sampleRate);
@@ -9820,31 +10547,64 @@ const AU = (() => {
     am.connect(amg); amg.connect(g.gain);
     o.connect(bp); bp.connect(g); g.connect(dest); o.start(t0); o.stop(t0 + dur + 0.05); am.start(t0); am.stop(t0 + dur + 0.05);
   }
+  // a lowpass in front of a sound, so it reaches the ear dull, as it would through old dry wood and dust
+  function muffle(dest, f) { const l = ctx.createBiquadFilter(); l.type = 'lowpass'; l.frequency.value = f; l.Q.value = 0.5; l.connect(dest); return l; }
+  // a short hollow knock of wood on wood
+  function knock(dest, t0, f, g) {
+    tone(dest, t0, 0.07, f, g, 'triangle', f * 0.82, 0.001);
+    noise(dest, t0, 0.025, 'bandpass', f * 2.2, 2, g * 0.9, 0.001);
+  }
+  // the three notes for length L, as steps of 107 above F3 with their timing: semitones above F, moved 7 per length
+  // round the circle of fifths, kept between A-flat and G so they stay where the first ones were
+  const semi = n => Math.floor(n * 107 / 12 + 0.5 - 1e-9);     // nearest step, a half rounding down (B is 53, as it was)
+  function chimeFigure(L) {
+    const shift = (((L * 7) % 12) + 12) % 12, major = L % 5 === 0 && L > 0;
+    let a = 9 + shift; while (a > 14) a -= 12; while (a < 3) a += 12;
+    const b = a - (major ? 4 : 3), c = b + 2;
+    return [[semi(a), 0, 0.05, 1.7], [semi(b), 0.48, 0.046, 1.7], [semi(c), 0.96, 0.05, 2.0]];
+  }
   // ---------- events ----------
   const api = {
     init, wake, state: () => ctx ? ctx.state : 'none',
     info: () => ctx ? { state: ctx.state, sr: ctx.sampleRate, base: +(ctx.baseLatency || 0).toFixed(3), out: +(ctx.outputLatency || 0).toFixed(3) } : { state: 'none' },
     step(kind) {
       if (!on()) return; const t = ctx.currentTime, d = out(null);
-      d.gain.value = P.hurry ? 0.575 : 0.45;
+      d.gain.value = P.hurry ? 0.5 : 0.39;
       if (kind === 'grass') { noise(d, t, 0.16, 'highpass', 2600, 0.5, 0.09, 0.03); noise(d, t + 0.02, 0.1, 'bandpass', 900, 0.8, 0.04, 0.02); return; }
       if (kind === 'dirt') { noise(d, t, 0.09, 'lowpass', 900, 0.7, 0.22); tone(d, t, 0.08, 75, 0.2); return; }
       const hi = kind === 'stair' ? 1.25 : 1;
       tone(d, t, 0.1, 82 * hi + Math.random() * 10, 0.32, 'sine', 52 * hi);
       noise(d, t, 0.06, 'bandpass', 650 * hi + Math.random() * 250, 1.1, 0.2);
-      if (Math.random() < 0.22) creakTone(d, t + 0.03, 0.22 + Math.random() * 0.2, 150 + Math.random() * 90, 0.035);
+      if (Math.random() < 0.06) creakTone(d, t + 0.03, 0.22 + Math.random() * 0.2, 150 + Math.random() * 90, 0.026);
     },
     bump() {
       if (!on()) return; const t = ctx.currentTime, d = out(null);
-      tone(d, t, 0.25, 64, 0.55, 'sine', 40); noise(d, t, 0.2, 'lowpass', 320, 0.7, 0.4); creakTone(d, t + 0.05, 0.4, 120, 0.05);
+      tone(d, t, 0.25, 64, 0.42, 'sine', 40); noise(d, t, 0.2, 'lowpass', 300, 0.7, 0.3); tone(d, t + 0.004, 0.09, 190 + Math.random() * 40, 0.05, 'triangle', 150); if (Math.random() < 0.35) creakTone(d, t + 0.05, 0.4, 120, 0.035);
     },
-    swing() { if (!on()) return; const t = ctx.currentTime, d = out(null); d.gain.value = 2; noise(d, t, 0.24, 'bandpass', 500, 1.6, 0.2, 0.06, 2600); },
+    // an old stair tread taking the weight: a low dry groan of timber, k from faint to plain
+    creak(k = 0.5) {
+      if (!on()) return; const t = ctx.currentTime + Math.random() * 0.06, d = out(null);
+      d.gain.value = 0.5 + 0.6 * k;
+      creakTone(d, t, 0.28 + Math.random() * 0.4 + k * 0.2, 95 + Math.random() * 80, 0.05);
+      if (Math.random() < 0.4) creakTone(d, t + 0.18 + Math.random() * 0.15, 0.2 + Math.random() * 0.2, 140 + Math.random() * 70, 0.03);
+    },
+    swing() { if (!on()) return; const t = ctx.currentTime, d = out(null); d.gain.value = 1.5; noise(d, t, 0.24, 'bandpass', 420, 1.6, 0.2, 0.06, 1700); },
+    // a blow that does not break the thing: the dull knock of old timber, hollow where it is hollow
     thud(kind, pos) {
-      if (!on()) return; const t = ctx.currentTime, d = out(pos);
-      if (kind === 'mirror') { for (const f of [1180, 1873, 2710, 3390]) tone(d, t, 1.4, f, 0.06); return; }
-      tone(d, t, 0.2, kind === 'barrel' ? 72 : 105, 0.45, 'sine', 60);
-      noise(d, t, 0.14, kind === 'barrel' ? 'bandpass' : 'lowpass', kind === 'barrel' ? 190 : 800, kind === 'barrel' ? 5 : 0.8, 0.35);
-      if (kind === 'chest') tone(d, t + 0.01, 0.12, 930, 0.06, 'triangle');
+      if (!on()) return; const t = ctx.currentTime, o = out(pos);
+      if (kind === 'mirror') { for (const f of [1180, 1873, 2710, 3390]) tone(o, t, 1.4, f, 0.06); return; }
+      const d = muffle(o, 1500);
+      const R = Math.random;
+      if (kind === 'barrel') {
+        tone(d, t, 0.3, 82 + R() * 10, 0.42, 'sine', 55);
+        noise(d, t, 0.22, 'bandpass', 170 + R() * 30, 4, 0.32);
+        tone(d, t + 0.003, 0.16, 210 + R() * 30, 0.07, 'triangle', 180);
+        return;
+      }
+      tone(d, t, 0.2, 118 + R() * 18, 0.38, 'sine', 66);
+      noise(d, t, 0.12, 'bandpass', 380 + R() * 120, 1.3, 0.3, 0.002);
+      knock(d, t + 0.002, 230 + R() * 90, 0.08);
+      if (kind === 'chest') knock(d, t + 0.006, 470 + R() * 60, 0.04);
     },
     // a bronze bell struck once: its partials, each with its own long fall, the lowest one the hum of this length.
     // f is that hum; above it the prime at the octave, the minor third over the prime, the fifth, the nominal, and a
@@ -9856,24 +10616,43 @@ const AU = (() => {
       noise(d, t, 0.05, 'bandpass', f * 6, 1.2, 0.14);
       tone(d, t, 0.25, f * 0.5, 0.05, 'sine', null, 0.01);
     },
+    // things giving way: a dull crack, the thud of it going, and the pieces knocking down after. Kept low and woody;
+    // the clay a little brighter, but not the bright crackle it was
     smash(kind, pos) {
-      if (!on()) return; const t = ctx.currentTime, d = out(pos);
+      if (!on()) return; const t = ctx.currentTime, o = out(pos), R = Math.random;
       if (kind === 'clay' || kind === 'oil') {
-        noise(d, t, 0.14, 'highpass', 2400, 0.7, 0.5);
-        for (let i = 0; i < 9; i++) tone(d, t + Math.random() * 0.32, 0.04 + Math.random() * 0.06, 2000 + Math.random() * 4200, 0.05);
-        if (kind === 'oil') noise(d, t + 0.05, 0.45, 'lowpass', 2200, 1.2, 0.35, 0.02, 280);
+        const d = muffle(o, 3800);
+        noise(d, t, 0.09, 'bandpass', 1500, 0.8, 0.36);
+        tone(d, t, 0.16, 150, 0.26, 'sine', 80);
+        for (let i = 0; i < 6; i++) knock(d, t + 0.04 + R() * 0.3, 900 + R() * 1500, 0.035 * (1 - i / 9));
+        if (kind === 'oil') noise(d, t + 0.05, 0.45, 'lowpass', 1600, 1.2, 0.3, 0.02, 240);
         return;
       }
-      if (kind === 'metal') { tone(d, t, 0.02, 3000, 0.2); for (const f of [523, 1312, 2119]) tone(d, t, 0.9, f * (0.95 + Math.random() * 0.1), 0.08); return; }
-      if (kind === 'bone') { noise(d, t, 0.05, 'highpass', 3000, 0.6, 0.35); for (let i = 0; i < 4; i++) noise(d, t + Math.random() * 0.25, 0.02, 'bandpass', 2500, 2, 0.12); return; }
-      if (kind === 'biscuit') { for (let i = 0; i < 6; i++) noise(d, t + i * 0.03 + Math.random() * 0.02, 0.04, 'bandpass', 1500 + Math.random() * 1500, 1.2, 0.25); return; }
+      if (kind === 'metal') { const d = muffle(o, 4200); tone(d, t, 0.02, 2400, 0.12); for (const f of [523, 1312, 2119]) tone(d, t, 0.8, f * (0.95 + R() * 0.1), 0.06); return; }
+      if (kind === 'bone') { const d = muffle(o, 3000); noise(d, t, 0.05, 'bandpass', 1700, 0.9, 0.3); for (let i = 0; i < 3; i++) knock(d, t + 0.05 + R() * 0.22, 1100 + R() * 700, 0.04); return; }
+      if (kind === 'biscuit') { const d = muffle(o, 2600); for (let i = 0; i < 5; i++) noise(d, t + i * 0.035 + R() * 0.02, 0.045, 'bandpass', 900 + R() * 900, 1.1, 0.22); return; }
       // wood, barrel, chest
-      for (let i = 0; i < 3; i++) noise(d, t + i * 0.025, 0.035, 'highpass', 1500, 0.6, 0.55);
-      noise(d, t, 0.35, 'bandpass', 480, 0.9, 0.5);
-      tone(d, t, 0.22, 95, 0.5, 'sine', 55);
-      for (let i = 0; i < 7; i++) noise(d, t + 0.12 + Math.random() * 0.55, 0.03, 'bandpass', 900 + Math.random() * 2400, 2.5, 0.16);
-      if (kind === 'barrel') { tone(d, t + 0.05, 0.6, 610, 0.05, 'triangle'); tone(d, t + 0.05, 0.6, 944, 0.04, 'triangle'); }
-      if (kind === 'chest') tone(d, t + 0.02, 0.5, 820, 0.07, 'triangle');
+      const d = muffle(o, 1800);
+      noise(d, t, 0.06, 'bandpass', 950 + R() * 250, 1.0, 0.42, 0.002);      // the crack, short and dry, not bright
+      noise(d, t + 0.015, 0.05, 'bandpass', 700 + R() * 200, 1.4, 0.3, 0.002);
+      tone(d, t, 0.32, 104 + R() * 14, 0.48, 'sine', 52);                   // the thud of it going
+      noise(d, t, 0.34, 'lowpass', 420, 0.8, 0.42);
+      knock(d, t + 0.004, 210 + R() * 60, 0.09);
+      // the pieces coming down: a few low wooden knocks on the floor
+      for (let i = 0, n = 4 + Math.floor(R() * 3); i < n; i++) knock(d, t + 0.16 + R() * 0.5, 320 + R() * 420, 0.05 * (1 - i / 8));
+      if (kind === 'barrel') { tone(d, t + 0.03, 0.45, 180 + R() * 20, 0.06, 'triangle', 160); noise(d, t + 0.02, 0.3, 'bandpass', 190, 5, 0.18); }
+      if (kind === 'chest') knock(d, t + 0.02, 480 + R() * 60, 0.05);
+    },
+    // a ring at this length's own note, over the noise of things breaking: every fourth thing smashed and every tenth,
+    // and both together (every twentieth) twice as loud
+    overtone(L, k, pos) {
+      if (!on()) return; const t = ctx.currentTime + 0.12, d = out(pos, dry);
+      d.gain.value = Math.max(d.gain.value, 0.75) * 1.1 * k;
+      const f = 174.614 * Math.pow(2, L / 107 + 1);
+      tone(d, t, 2.6, f, 0.03, 'sine', null, 0.006);
+      tone(d, t, 2.2, f * 1.0029, 0.012, 'sine', null, 0.006);
+      tone(d, t, 1.1, f * 2, 0.008, 'sine', null, 0.004);
+      tone(d, t, 0.5, f * 3, 0.003, 'sine', null, 0.003);
     },
     land(tok, pos) {
       if (!on()) return; const t = ctx.currentTime, d = out(pos);
@@ -9908,22 +10687,21 @@ const AU = (() => {
         if (i % 5 === 0) noise(o, tt, 0.05, 'highpass', 5200, 0.7, 0.05, 0.01);
       }
     },
-    // the signal at the start of each length: D, B, D-flat, a breath, then this length's own chord on the scale of 107.
-    // a second, quieter layer over the hum, which is left exactly as it was
+    // the signal at the start of each length: three notes, a breath, then this length's own chord on the scale of 107.
+    // The three keep their shape (down a minor third, up a whole step: D, B, D-flat at the first length) but each
+    // length moves them one step round the circle of fifths, so they are never quite the same notes twice running;
+    // every fifth length the drop is a major third instead (D, B-flat, C). Each note is the nearest step of 107
     chime(L) {
       if (!on()) return;
       const t = ctx.currentTime + 0.03, d = out(null);
-      d.gain.value = 1.95;                                           // up 10 dB: it has to carry on small speakers
+      d.gain.value = 1.3;                                            // down from 1.95: fainter, as asked
       const F3 = 174.614, st = (k, oct = 0) => F3 * Math.pow(2, k / 107 + oct);
       const bell = (t0, f, g, dur) => {
         tone(d, t0, dur, f, g, 'sine', null, 0.008);
         tone(d, t0, dur * 0.55, f * 2, g * 0.3, 'sine', null, 0.006);
         tone(d, t0, dur * 0.28, f * 3, g * 0.06, 'sine', null, 0.004);
       };
-      // D, B, D-flat: their nearest steps of 107 above F (80, 53, 71)
-      bell(t, st(80), 0.05, 1.7);
-      bell(t + 0.48, st(53), 0.046, 1.7);
-      bell(t + 0.96, st(71), 0.05, 2.0);
+      for (const [k, at, g, dur] of chimeFigure(L)) bell(t + at, st(k), g, dur);
       // the pause, then the chord: the root, this length's step above it, the octave
       const c0 = t + 2.15, special = RING_LONG.has(L), dur = special ? 6.5 : 3.6;
       bell(c0, F3, 0.034, dur);
@@ -9931,6 +10709,7 @@ const AU = (() => {
       bell(c0 + 0.02, F3 * 2, 0.014, dur * 0.8);
       if (special) bell(c0 + 0.03, st(L, 1), 0.012, dur * 0.9);   // at the sweet ones, a soft octave above
     },
+    figure: L => chimeFigure(L).map(n => n[0]),
     // riding home: the wall's three notes once more, slowly, and then a long soft chord on its own scale that dies with the light
     homeward() {
       if (!on()) return;
@@ -10019,11 +10798,11 @@ const AU = (() => {
       const t = ctx.currentTime;
       songTick();
       if (S.inField && song) songClose();
-      hissGain.gain.setTargetAtTime(S.inField ? 0 : 0.0056 * lf, t, 0.2);
+      hissGain.gain.setTargetAtTime(S.inField ? 0 : 0.004 * lf, t, 0.2);
       // the hum follows the current length on a 107-step scale
       const L = S.inField ? -1 : (P.mode === 'corridor' ? originA : P.lenA) % C.LENGTHS;
       if (L !== lastL && L >= 0) { drone.voice.frequency.setTargetAtTime(87.307 * Math.pow(2, L / 107), t, 1.6); lastL = L; }
-      const dg = S.inField || S.dead ? 0 : 0.00256 * (P.inRoute ? 1 - P.routeP : 1);      // the hum, kept low under everything
+      const dg = S.inField || S.dead ? 0 : 0.0019 * (P.inRoute ? 1 - P.routeP : 1);      // the hum, kept low under everything
       drone.gain.gain.setTargetAtTime(dg, t, S.inField ? 3 : 1.5);
       if (S.inField) {
         windGain.gain.setTargetAtTime(0.07 + 0.04 * Math.sin(t * 0.21) + 0.02 * Math.sin(t * 0.67), t, 0.5);
@@ -10038,31 +10817,31 @@ const AU = (() => {
       // no air moving anywhere inside the wall: nothing that says outdoors, sea or shaft
       windGain.gain.setTargetAtTime(0, t, 1);
       // down in the damp the lantern spits and catches
-      if (P.dampK > 0.4 && lf > 0.05 && Math.random() < dt * 0.3 * P.dampK) {
-        const o = out(null, dry);
+      if (P.dampK > 0.4 && lf > 0.05 && Math.random() < dt * 0.1 * P.dampK) {
+        const o = out(null, dry); o.gain.value = 0.7;
         for (let i = 0, n = 3 + Math.floor(Math.random() * 4); i < n; i++) noise(o, t + Math.random() * 0.25, 0.012, 'highpass', 2600, 0.8, 0.05);
         noise(o, t, 0.2, 'bandpass', 900, 1, 0.02, 0.01);
       }
       creakT -= dt;
       if (creakT <= 0) {
-        creakT = 9 + Math.random() * 24;
+        creakT = 28 + Math.random() * 52;
         const a = Math.random() * TAU, d = 3 + Math.random() * 10;
         camera.getWorldPosition(_av);
         const o = out(new THREE.Vector3(_av.x + Math.cos(a) * d, _av.y + 1, _av.z + Math.sin(a) * d));
-        creakTone(o, t, 0.6 + Math.random() * 0.9, 85 + Math.random() * 70, 0.075);
+        creakTone(o, t, 0.6 + Math.random() * 0.9, 85 + Math.random() * 70, 0.045);
       }
       quiet(dt, t);
       phantomT -= dt;
       if (phantomT <= 0) {
         // footsteps that are not yours
-        phantomT = 55 + Math.random() * 110;
+        phantomT = 150 + Math.random() * 200;
         camera.getWorldPosition(_av);
         const behind = Math.random() < 0.6, side = (Math.random() - 0.5) * 3;
         const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), dist = 14 + Math.random() * 16;
         const pos = new THREE.Vector3(_av.x + fx * dist * (behind ? -1 : 1) + side, _av.y, _av.z + fz * dist * (behind ? -1 : 1));
         const n = 4 + Math.floor(Math.random() * 5);
         for (let i = 0; i < n; i++) {
-          const o = out(pos); o.gain.value *= 0.9;
+          const o = out(pos); o.gain.value *= 0.6;
           tone(o, t + i * 0.56, 0.1, 78, 0.3, 'sine', 50); noise(o, t + i * 0.56, 0.06, 'bandpass', 600, 1, 0.18);
         }
       }
@@ -10093,8 +10872,8 @@ const AU = (() => {
     // a small metal thing settling: one faint tick and a short ring, as of a buckle or a ring shifting on a shelf
     clinkT -= dt;
     if (clinkT <= 0) {
-      clinkT = 90 + Math.random() * 160;
-      const o = out(aside(4, 11)); o.gain.value *= 1.25;
+      clinkT = 180 + Math.random() * 240;
+      const o = out(aside(4, 11)); o.gain.value *= 0.8;
       const f = 2300 + Math.random() * 1400;
       tone(o, t, 0.5, f, 0.018, 'sine', null, 0.001); tone(o, t, 0.28, f * 2.71, 0.0075, 'sine', null, 0.001); noise(o, t, 0.02, 'highpass', 5200, 0.7, 0.018, 0.001);
       if (Math.random() < 0.5) tone(o, t + 0.11 + Math.random() * 0.08, 0.3, f * 1.03, 0.009, 'sine', null, 0.001);
@@ -10102,15 +10881,15 @@ const AU = (() => {
     // one timber easing somewhere: a single dull knock with a dry tick in it. Once, and not again for a long while
     settleT -= dt;
     if (settleT <= 0) {
-      settleT = 45 + Math.random() * 110;
-      const o = out(aside(5, 14)); o.gain.value *= 1.3;
+      settleT = 110 + Math.random() * 170;
+      const o = out(aside(5, 14)); o.gain.value *= 0.85;
       tone(o, t, 0.16, 58 + Math.random() * 20, 0.12, 'sine', 40); noise(o, t, 0.05, 'bandpass', 1300 + Math.random() * 900, 2.5, 0.05, 0.002);
     }
     // the tree: foil leaves touching, each touch a note of this length's chord, very high and very soft
     if (shiverK > 0.01) {
       tinkT -= dt;
       if (tinkT <= 0) {
-        tinkT = (0.06 + Math.random() * 0.2) / (0.4 + shiverK);
+        tinkT = (0.12 + Math.random() * 0.35) / (0.4 + shiverK);
         const st = k => 174.614 * Math.pow(2, k / 107), f = [st(0) * 4, st(79) * 4, st(0) * 8, st(79) * 8, st(107 + 79) * 4][Math.floor(Math.random() * 5)];
         const o = out(null); o.gain.value = 1.6 * shiverK * (0.4 + Math.random() * 0.6);
         tone(o, t, 0.5 + Math.random() * 0.5, f, 0.007, 'sine', null, 0.002); tone(o, t, 0.18, f * 2.76, 0.0018, 'sine', null, 0.001);
@@ -10131,7 +10910,7 @@ const AU = (() => {
     const t = ctx.currentTime, g = ctx.createGain();
     g.gain.value = 0.0001; g.gain.setTargetAtTime(0.55, t, 2.2);
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
-    const lift = ctx.createGain(); lift.gain.value = 3;          // up nearly 10 dB, so it carries on small speakers
+    const lift = ctx.createGain(); lift.gain.value = 2.2;          // up nearly 10 dB, so it carries on small speakers
     g.connect(lp); lp.connect(lift); lift.connect(bus);       // through the long echo of the low halls
     const pad = [];
     for (const [k, gn] of [[-107, 0.012], [0, 0.017], [75, 0.015]]) for (const det of [-0.45, 0.45]) {
@@ -10529,7 +11308,7 @@ function* buildFieldGen() {
   const fs = new THREE.Scene();
   const HORIZON = new THREE.Color(0xcfdfea);
   fs.background = HORIZON.clone();
-  fs.fog = new THREE.Fog(0xcbdbe6, 160, 1900);
+  fs.fog = new THREE.Fog(0xcbdbe6, 240, 3100);
   const hemi = new THREE.HemisphereLight(0xe2efff, 0x5e6e34, 1.25); fs.add(hemi);
   const sun0 = new THREE.Vector3(-0.45, 0.62, -0.64).normalize(), sunLow = new THREE.Vector3(-0.9, 0.075, -0.43).normalize();
   const sunDir = sun0.clone();
@@ -10590,7 +11369,7 @@ function* buildFieldGen() {
   const geo = new THREE.PlaneGeometry(2, 2, N, N); geo.rotateX(-Math.PI / 2);
   yield;
   const pos = geo.attributes.position, cols = new Float32Array(pos.count * 3), luv = new Float32Array(pos.count * 2);
-  const cA = new THREE.Color(0x7c8c44), cB = new THREE.Color(0xa9a65e), cC = new THREE.Color(0x5e7c34), cDry = new THREE.Color(0x9c8a5a), cRock = new THREE.Color(0x7d7466), cSnow = new THREE.Color(0xe8ecef), tmp = new THREE.Color();
+  const cA = new THREE.Color(0x7c8c44), cB = new THREE.Color(0xa9a65e), cC = new THREE.Color(0x5e7c34), cDry = new THREE.Color(0x9c8a5a), cRock = new THREE.Color(0x726e68), cSnow = new THREE.Color(0xe8ecef), cFar = new THREE.Color(0x7e8ea4), tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const sx = pos.getX(i), sz = pos.getZ(i);
     const x = Math.sign(sx) * SPAN(Math.abs(sx)), z = Math.sign(sz) * SPAN(Math.abs(sz));
@@ -10599,7 +11378,8 @@ function* buildFieldGen() {
     const n = fbm(x * 0.02, z * 0.02, 2, 77);
     const n2 = fbm(x * 0.0045 + 9, z * 0.0045 - 3, 3, 78);
     tmp.copy(cA).lerp(cB, smooth(0.35, 0.75, n)).lerp(cDry, smooth(0.55, 0.8, n2) * 0.6).lerp(cC, smooth(12, 4, Math.abs(z - RZ(x))) * 0.7);
-    tmp.lerp(cRock, smooth(60, 150, h) * (0.55 + 0.45 * n)); tmp.lerp(cSnow, smooth(210, 280, h));
+    tmp.lerp(cRock, smooth(60, 150, h) * (0.55 + 0.45 * n)); tmp.lerp(cSnow, smooth(245, 330, h + 40 * (n2 - 0.5)));
+    tmp.lerp(cFar, smooth(900, 2300, Math.hypot(x, z)) * 0.4);                        // the far ranges blue with distance
     tmp.lerp(cC, Math.exp(-((x - FIELD_OASIS.x) ** 2 + (z - FIELD_OASIS.z) ** 2) / 9000) * 0.8);
     cols[i * 3] = tmp.r; cols[i * 3 + 1] = tmp.g; cols[i * 3 + 2] = tmp.b;
     luv[i * 2] = x / 7; luv[i * 2 + 1] = z / 7;
@@ -10742,6 +11522,53 @@ function* buildFieldGen() {
     const g = new THREE.Group(); B.finish(g); fs.add(g);
   }
   yield;
+  // a trodden way down from the hole to the ford, as if others had come out before you, and on across the water,
+  // fading. It is only where the grass has been worn away; a few flat stones are pressed into it
+  const track = [];
+  { const pts = [[0, 0.5], [1.6, -8], [-0.8, -18], [2.2, -29], [0.4, -41], [-0.6, RZ(-0.6) + HW + 0.6], [0, RZ(0) - HW - 0.6], [-2.5, -82], [-6, -104], [-4, -128], [3, -150], [9, -172]].map(([x, z]) => V3(x, 0, z));
+    const curve = new THREE.CatmullRomCurve3(pts), L = curve.getLength(), n = Math.ceil(L / 0.8);
+    for (let i = 0; i <= n; i++) { const p = curve.getPointAt(i / n); track.push({ x: p.x, z: p.z, w: 0.75 + 0.25 * Math.sin(i * 0.37) + (i / n > 0.6 ? -0.5 * smooth(0.6, 1, i / n) : 0) }); }
+  }
+  const trackGrid = new Map();
+  for (const t of track) { const k = Math.floor(t.x / 4) * 4099 + Math.floor(t.z / 4); let a = trackGrid.get(k); if (!a) trackGrid.set(k, a = []); a.push(t); }
+  const trackDist = (x, z) => {
+    let best = 9;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = trackGrid.get((Math.floor(x / 4) + i) * 4099 + Math.floor(z / 4) + j); if (a) for (const t of a) { const d = Math.hypot(t.x - x, t.z - z) - t.w; if (d < best) best = d; } }
+    return best;
+  };
+  { const B = new Builder(), R = new Rng(2424), flat = new THREE.MeshLambertMaterial({ color: 0xa49c8c, bumpMap: T.stone, bumpScale: 1.2 });
+    for (let i = 0; i < track.length; i += 3) { if (Math.abs(track[i].z - RZ(track[i].x)) < HW + 1 || !R.chance(0.45)) continue; const t = track[i], x = t.x + R.range(-0.4, 0.4), z = t.z + R.range(-0.4, 0.4); stoneLump(B, R, flat, x, heightRaw(x, z) + 0.01, z, R.range(0.12, 0.26), 0.3); }
+    // wormwood and low scrub, grey-green, here and there across the grass
+    const scrubM = [new THREE.MeshLambertMaterial({ color: 0x8c9678 }), new THREE.MeshLambertMaterial({ color: 0x75825e }), new THREE.MeshLambertMaterial({ color: 0x9a9a80 })];
+    for (let i = 0; i < 420; i++) {
+      const a = R.range(0, TAU), r = 12 + Math.pow(R.next(), 1.6) * 520, x = Math.cos(a) * r, z = Math.sin(a) * r * 0.8 + 40;
+      if (Math.abs(z - RZ(x)) < HW + 3 || Math.hypot(x - oasis.x, z - oasis.z) < 110 || trackDist(x, z) < 1.2 || Math.hypot(x - grave.x, z - grave.z) < 6) continue;
+      const g = new THREE.IcosahedronGeometry(1, 1), p = g.attributes.position;
+      for (let k = 0; k < p.count; k++) { const kk = R.range(0.75, 1.15); p.setXYZ(k, p.getX(k) * kk, Math.max(-0.2, p.getY(k)) * kk, p.getZ(k) * kk); }
+      g.computeVertexNormals();
+      const s = R.range(0.25, 0.6);
+      B.add(R.pick(scrubM), g, mtx(x, heightRaw(x, z) + s * 0.1, z, 0, R.range(0, TAU), 0, s * R.range(1, 1.5), s * R.range(0.55, 0.85), s * R.range(1, 1.4)), true);
+      if (i % 60 === 59) yield;
+    }
+    // reeds along both banks of the river, near the ford, with a gap where the track comes down
+    const reed = new THREE.MeshLambertMaterial({ color: 0x8e8a52 }), reedTop = new THREE.MeshLambertMaterial({ color: 0x6a5238 });
+    for (let i = 0; i < 260; i++) {
+      const x = R.range(-160, 160); if (Math.abs(x) < 9) continue;
+      const side = R.chance(0.5) ? 1 : -1, z = RZ(x) + side * (HW + R.range(0.2, 1.6)), y = heightRaw(x, z), hgt = R.range(1.0, 1.9), lean = R.range(-0.15, 0.15);
+      B.add(reed, new THREE.ConeGeometry(0.025, hgt, 4), mtx(x, y + hgt / 2, z, lean, 0, R.range(-0.15, 0.15)), true);
+      if (R.chance(0.3)) B.add(reedTop, new THREE.CylinderGeometry(0.03, 0.03, 0.16, 5), mtx(x + Math.sin(lean) * 0, y + hgt * 0.92, z + Math.sin(lean) * hgt * 0.45, lean), true);
+      if (i % 80 === 79) yield;
+    }
+    // cairns of piled stones on three of the hilltops, put up by nobody you will meet
+    const cairnM = new THREE.MeshLambertMaterial({ color: 0xb8b2a4, bumpMap: T.stone, bumpScale: 1.6 });
+    for (const [cx, cz] of [[-130, 236], [262, 300], [44, 520]]) {
+      const h0 = heightRaw(cx, cz);
+      for (let k = 0; k < 26; k++) { const t = k / 26, a = R.range(0, TAU), rr = (1 - t) * 1.1 * R.range(0.6, 1); stoneLump(B, R, cairnM, cx + Math.cos(a) * rr, h0 + t * 1.6 + 0.1, cz + Math.sin(a) * rr, R.range(0.2, 0.42) * (1 - t * 0.5), 0.75); }
+      trees.push({ x: cx, z: cz, r: 1.1 });
+      yield;
+    }
+    const g = new THREE.Group(); B.finish(g); fs.add(g);
+  }
   // far off toward the sun, beyond the hills, the smoke of somebody's fires
   const smokes = [];
   { const c = makeCanvas(64, 64), g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
@@ -10785,8 +11612,11 @@ function* buildFieldGen() {
   const grass = new THREE.InstancedMesh(tuftGeo, swayMat(new THREE.MeshLambertMaterial({ map: T.grass, alphaTest: 0.45 }), 0.16), GRID * GRID);
   const flowerGeo = crossCards(0.22, 0.3, 0.15);
   const flowers = new THREE.InstancedMesh(flowerGeo, swayMat(new THREE.MeshLambertMaterial({ map: T.flower, alphaTest: 0.4 }), 0.22), 900);
-  grass.frustumCulled = flowers.frustumCulled = false;
-  fs.add(grass, flowers);
+  // feather grass in clumps, its long silver awns bowing in the wind
+  const featherGeo = crossCards(0.5, 0.8, 0.36);
+  const feather = new THREE.InstancedMesh(featherGeo, swayMat(new THREE.MeshLambertMaterial({ map: featherTex(), alphaTest: 0.22, side: THREE.DoubleSide }), 0.3), 320);
+  grass.frustumCulled = flowers.frustumCulled = feather.frustumCulled = false;
+  fs.add(grass, flowers, feather);
   yield;
   const shoreAt = (x, z) => { const a = Math.atan2(z - oasis.z, x - oasis.x); return oasis.shore[(Math.round((a < 0 ? a + TAU : a) / TAU * 48)) % 48]; };
   let lastCell = null;
@@ -10798,7 +11628,7 @@ function* buildFieldGen() {
     const cx = Math.round(P.pos.x / CELL), cz = Math.round(P.pos.z / CELL);
     if (lastCell && Math.abs(cx - lastCell[0]) < 3 && Math.abs(cz - lastCell[1]) < 3) return;
     lastCell = [cx, cz];
-    let gi = 0, fi = 0;
+    let gi = 0, fi = 0, ki = 0;
     for (let i = 0; i < GRID; i++) for (let j = 0; j < GRID; j++) {
       const gx = cx + i - GRID / 2, gz = cz + j - GRID / 2, h = hash32(gx, gz, 4);
       const x = (gx + ((h & 255) / 255 - 0.5)) * CELL, z = (gz + (((h >> 8) & 255) / 255 - 0.5)) * CELL;
@@ -10807,16 +11637,23 @@ function* buildFieldGen() {
       const od = Math.hypot(x - oasis.x, z - oasis.z), nearOasis = od < 140;
       if (nearOasis && od < shoreAt(x, z) + 0.6) continue;
       if ((x - grave.x) ** 2 + (z - grave.z) ** 2 < 14 && ((h >> 3) & 3) !== 0) continue;
+      const td = Math.abs(x) < 40 && z > -190 && z < 10 ? trackDist(x, z) : 9;
+      if (td < 0 || (td < 0.6 && ((h >> 5) & 1))) continue;                       // the trodden way
       const edge = smooth(HALF, HALF - 9, Math.max(Math.abs(x - P.pos.x), Math.abs(z - P.pos.z)));
       if (edge < 0.05) continue;
       const y = cellH(gx, gz, x, z), s = (0.55 + ((h >> 16) & 255) / 255 * 0.8) * edge;
       _m4.makeRotationY(((h >> 4) & 63) / 10); _m4.scale(V3(s, s * (rd < 8 ? 1.3 : 1), s)); _m4.setPosition(x, y - 0.03, z);
       grass.setMatrixAt(gi, _m4);
       _c.setHSL(0.17 + ((h >> 12) & 15) / 250, 0.42, 0.5 + ((h >> 20) & 15) / 80); grass.setColorAt(gi, _c); gi++;
+      if (((h >> 24) & 15) >= 14 && ((h >> 2) & 1) && rd > 10 && !nearOasis && td > 1.5 && ki < 320 && fbm(x * 0.012, z * 0.012, 2, 61) > 0.52) {
+        _m4.makeRotationY(((h >> 7) & 63) / 10); const fs_ = s * 1.1; _m4.scale(V3(fs_, fs_ * (0.85 + ((h >> 11) & 7) / 20), fs_)); _m4.setPosition(x - 0.15, y - 0.03, z + 0.1);
+        feather.setMatrixAt(ki, _m4); _c.setHSL(0.14, 0.16, 0.62 + ((h >> 14) & 7) / 70); feather.setColorAt(ki, _c); ki++;
+      }
       if ((((h >> 24) & 15) === 3 || (nearOasis && ((h >> 24) & 15) < 5)) && fi < 900) { _m4.makeRotationY(((h >> 6) & 63) / 10); _m4.setPosition(x + 0.2, y - 0.02, z); flowers.setMatrixAt(fi, _m4); _c.set(FCOL[(h >> 28) & 3]); flowers.setColorAt(fi, _c); fi++; }
     }
-    grass.count = gi; flowers.count = fi;
-    grass.instanceMatrix.needsUpdate = true; flowers.instanceMatrix.needsUpdate = true;
+    grass.count = gi; flowers.count = fi; feather.count = ki;
+    grass.instanceMatrix.needsUpdate = true; flowers.instanceMatrix.needsUpdate = true; feather.instanceMatrix.needsUpdate = true;
+    if (feather.instanceColor) feather.instanceColor.needsUpdate = true;
     if (grass.instanceColor) grass.instanceColor.needsUpdate = true;
     if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true;
   }
@@ -11050,6 +11887,21 @@ function* buildFieldGen() {
   };
   return api;
 }
+// feather grass: a few long arching awns, silver, on a clear card
+function featherTex() {
+  return cachedMat('feathertex', () => {
+    const c = makeCanvas(128, 256), g = c.getContext('2d'), R = new Rng(3030);
+    g.clearRect(0, 0, 128, 256);
+    // the leaves: thin, rolled, green-grey, low; the awns: very fine, pale, arching out and over
+    for (let i = 0; i < 14; i++) { const x0 = 64 + R.range(-14, 14); g.strokeStyle = 'rgba(150,160,98,0.9)'; g.lineWidth = 1.3; g.beginPath(); g.moveTo(x0, 256); g.quadraticCurveTo(x0 + R.range(-10, 10), 215, x0 + R.range(-26, 26), R.range(165, 205)); g.stroke(); }
+    for (let i = 0; i < 34; i++) {
+      const x0 = 64 + R.range(-8, 8), bend = R.range(-62, 62), top = R.range(12, 80);
+      g.strokeStyle = `rgba(${R.int(214, 238)},${R.int(214, 234)},${R.int(192, 214)},${R.range(0.6, 0.9)})`; g.lineWidth = R.range(0.9, 1.3);
+      g.beginPath(); g.moveTo(x0, 200); g.quadraticCurveTo(x0 + bend * 0.15, (top + 200) / 2, x0 + bend, top); g.stroke();
+    }
+    return texOf(c);
+  });
+}
 function buildField() { const g = buildFieldGen(); let r = g.next(); while (!r.done) r = g.next(); return r.value; }
 let fieldGen = null;
 // the field is built quietly while you climb, so there is no pause at the top
@@ -11070,7 +11922,7 @@ function enterField() {
   // back where you were, if this is a game taken up again out here; otherwise at the hole you came out of
   const resume = S.field.x !== undefined, sx = resume ? S.field.x : 0, sz = resume ? S.field.z : 1.6;
   P.pos.set(sx, field.heightAt(sx, sz), sz); P.yaw = resume ? S.field.yaw || 0 : 0; P.pitch = 0.02; P.vel.set(0, 0, 0);
-  camera.far = 2600; camera.updateProjectionMatrix();
+  camera.far = 3300; camera.updateProjectionMatrix();
   vmSun.intensity = 2.0; vmAmbient.intensity = 0.9;
   AU.space('field');
   saveGame();
@@ -12162,6 +13014,7 @@ function updateLight(t, lf) {
     scene.fog.color.copy(BLACK); scene.background.copy(BLACK);
     scene.fog.density = FOG_D * lerp(1, 0.33, Math.max(P.loftK, 0.85 * (P.hallK || 0))) * lerp(1, 2.1, P.dampK) * (P.airF || 1);
     skyLight.intensity = 0; vmAmbient.intensity = 0;
+    if (window.__lit) { skyLight.intensity = window.__lit; scene.fog.density = 0.002; }   // for looking at rooms in tests
   }
   return flick;
 }
@@ -12309,12 +13162,12 @@ function draw(now, dt) {
   const sp = Math.min(1, P.vel.length() / C.WALK);
   // the head's sway: a soft rise and fall with each stride (no corner at the footfall), the eye settling over small
   // changes of floor height rather than jumping them, and the faintest lean into a turn or a sidestep
-  const sb = Math.sin(P.bob), bob = P.anim ? Math.sin(P.bob) * 0.02 : -sb * sb * 0.03 * sp;
+  const sb = Math.sin(P.bob), bob = P.anim ? -sb * sb * 0.04 * smooth(0, 0.2, P.anim.t) * (1 - smooth(0.8, 1, P.anim.t)) : -sb * sb * 0.03 * sp;
   const dy = P.pos.y - (cam.y ?? P.pos.y);
   cam.y = P.anim || Math.abs(dy) > 0.45 ? P.pos.y : cam.y + dy * (1 - Math.exp(-dt * 22));
   const lat = P.vel.x * Math.cos(P.yaw) - P.vel.z * Math.sin(P.yaw);
   // only a sidestep leans the head a little; turning never does, since the hand's turning comes in uneven bursts
-  const rollT = P.anim || S.inField ? 0 : clamp(-lat / C.RUN * 0.008, -0.008, 0.008);
+  const rollT = P.anim ? (P.anim.roll || 0) : S.inField ? 0 : clamp(-lat / C.RUN * 0.008, -0.008, 0.008);
   cam.roll += (rollT - cam.roll) * (1 - Math.exp(-dt * 5));
   camera.position.set(P.pos.x, cam.y + C.EYE + bob - (S.dead ? smooth(0, 3, deathT) * (S.inField ? 0.8 : 1.15) : 0), P.pos.z);
   P.kick = Math.max(0, (P.kick || 0) - dt * 6);
@@ -12382,7 +13235,7 @@ function devKey(code) {
   if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID, BELLS_ID]) if (S.inv.length < C.INV_SLOTS && ((id !== HARP_ID && id !== BELLS_ID) || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; if (S.inv.includes(BELLS_ID)) S.bells = 'taken'; toast('Goods for trading.'); }
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
-window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, stepOne: () => stepBuild(), rep, paceFrame: (now) => frame(now, 'pace'), scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, snapPng: (now) => { draw(now, 0.016); return renderer.domElement.toDataURL('image/png'); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, stage: () => buildStage, mosaicBuild, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera, T, planRoom, THEMES, COMPOSED, Builder, mtx, V3, Rng, pace,
+window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, stepOne: () => stepBuild(), rep, paceFrame: (now) => frame(now, 'pace'), scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, snapPng: (now) => { draw(now, 0.016); return renderer.domElement.toDataURL('image/png'); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, stage: () => buildStage, mosaicBuild, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera, T, planRoom, THEMES, COMPOSED, extOf, skyLight, Builder, mtx, V3, Rng, pace,
   details: { candleAt, droppingsAt, rustNail, ringChain, frayRope, ragOnHook, bucketAt, malletAt, wedgesAt, pulleyAt, handprint, turnshoe, tallyMat, tallyRooms, plane: (w, h) => new THREE.PlaneGeometry(w, h), box: (a, b, c) => boxGeo(a, b, c), boardMat: M.board },
   planFix: (r, L) => { const p = planRoom(r); if (!p.fx) { const g = planFixturesGen(p, r, L); let x = g.next(); while (!x.done) x = g.next(); p.fx = x.value; } return p; } };
 
