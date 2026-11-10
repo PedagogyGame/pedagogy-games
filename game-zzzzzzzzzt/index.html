@@ -607,7 +607,7 @@ const START_MIN = 9*60, END_MIN = 21*60;
 const WORLD_SEED = 1986;
 const SAVE_KEY = 'pkgcar-save-v5', OPT_KEY = 'pkgcar-opts-v1';
 
-const VERSION='v14.9';   /* shown on the title card and the pause menu, so it is plain which build a browser is running */
+const VERSION='v14.9.1';   /* shown on the title card and the pause menu, so it is plain which build a browser is running */
 /* ===================== helpers ===================== */
 const $ = s => document.querySelector(s);
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
@@ -1213,14 +1213,16 @@ function buildSouthStatic(ground,road,solid,glass,text,glow,wood){
   for(const [a,b] of [[rw0,FX-RW/2-SW-6],[FX+RW/2+SW+6,BX-RW/2-SW-6],[BX+RW/2+SW+6,rw1]]) solid.box(a,RIV_S-1.6,b,RIV_S-0.4,6.4,7.4,cc('#2b2b2b'));
   for(let x=rw0+40;x<rw1;x+=110){ if(Math.abs(x-BX)<90||Math.abs(x-FX)<90) continue; solid.box(x-6,RIV_S+12,x+6,RIV_S+15,2.6,3.4,cc('#6a4a2e')); solid.box(x-6,RIV_S+15,x+6,RIV_S+15.8,3.4,8,cc('#6a4a2e')); solid.box(x-5.5,RIV_S+12.5,x-4.5,RIV_S+15,0,2.6,cc('#2b2b2b')); solid.box(x+4.5,RIV_S+12.5,x+5.5,RIV_S+15,0,2.6,cc('#2b2b2b'));
     lamps.push({x:x+40,y:RIV_S+8}); }
-  // street names at Southbank corners
+  // street names at the Southbank, Prairie Grove and harbor corners, by the same rule as the town grid: the post stands in the corner yard
+  // 11 past the walk with its blades reaching back toward the corner and stopping short of the curb. Where a building comes out to the walk
+  // (Water St, Front St, the main streets) the post moves to the corner of the walk and its blades run along the two sidewalks instead.
+  // Either way no blade hangs over a roadway or through a wall. Water St and Front St corners take the south-east corner, the rest the north-east.
   const pole=cc('#5f6368');
-  for(const n of snodes){ let x=n.x+RW/2+SW+3, z=n.y-RW/2-SW-3, sd=-1; if(n.y===ZW) continue; if(bldgNear(x-23,z-1,x+1,z+23,3)){ x=n.x+RW/2+4.5; z=n.y-RW/2-4.5; sd=1; } solid.box(x-0.6,z-0.6,x+0.6,z+0.6,0,30,pole);
-    const hn=n.hn.toUpperCase(), vn=n.vn.toUpperCase(); const uh=txtCell('ST:'+hn,hn,{w:256,h:48}), uv2=txtCell('ST:'+vn,vn,{w:256,h:48});
-    text.sign(x+sd*11,29,z-0.4,0,-1,22,4,uh); text.sign(x+sd*11,29,z+0.4,0,1,22,4,uh); text.sign(x-0.4,25,z-sd*11,-1,0,22,4,uv2); text.sign(x+0.4,25,z-sd*11,1,0,22,4,uv2); }
-  for(const n of snodes){ if(n.y!==ZW) continue; const x=n.x+RW/2+SW+3, z=n.y+RW/2+SW+3; solid.box(x-0.6,z-0.6,x+0.6,z+0.6,0,30,pole);
-    const hn=n.hn.toUpperCase(), vn=n.vn.toUpperCase(); const uh=txtCell('ST:'+hn,hn,{w:256,h:48}), uv2=txtCell('ST:'+vn,vn,{w:256,h:48});
-    text.sign(x-11,29,z-0.4,0,-1,22,4,uh); text.sign(x-11,29,z+0.4,0,1,22,4,uh); text.sign(x-0.4,25,z-11,-1,0,22,4,uv2); text.sign(x+0.4,25,z-11,1,0,22,4,uv2); }
+  for(const n of snodes){ const qy=n.y===ZW?1:-1; let x=n.x+RW/2+SW+11, z=n.y+qy*(RW/2+SW+11), s=-1;
+    if(bldgNear(x-23,Math.min(z,z-qy*22)-1,x+1,Math.max(z,z-qy*22)+1,3)){ x=n.x+RW/2+4.5; z=n.y+qy*(RW/2+4.5); s=1; }
+    const tk=pBegin(); solid.box(x-0.6,z-0.6,x+0.6,z+0.6,0,30,pole);   /* a post the truck can knock down, like the ones in town, rather than one it drives through */
+    const hn=n.hn.toUpperCase(), vn=n.vn.toUpperCase(); const uh=txtCell('ST:'+hn,hn,{w:256,h:48}), uv2=txtCell('ST:'+vn,vn,{w:256,h:48}), bx=x+s*11, bz=z+qy*s*11;
+    text.sign(bx,29,z-0.4,0,-1,22,4,uh); text.sign(bx,29,z+0.4,0,1,22,4,uh); text.sign(x-0.4,25,bz,-1,0,22,4,uv2); text.sign(x+0.4,25,bz,1,0,22,4,uv2); pEnd(tk,{kind:'pole',x,y:z,r:1.2}).cols=[0x2f6a43,0x5f6368,0xf4f4f4]; }
   // ---- the Spruce Ave truss bridge ----
   const steel=cc('#5d7a63'), conc=cc('#a8a49a'), dk=cc('#3a3f44');
   const DZ0=RIV_N-12, DZ1=RIV_S+12, hwR=RW/2, hwW=RW/2+SW, TX=hwW+3;
@@ -4728,7 +4730,7 @@ function buildBizFacade(b,H,wall,solid,glass,text,glow){
     // a vent turning on the roof
     if(H2(39)<0.3){ roofTurbine(solid,ag,b.x+b.w*(0.25+H2(40)*0.5),H+0.2,b.y+b.h*(0.3+H2(41)*0.4),1.8,4+H2(42)*3); }
     // a flag off the front of the civic buildings
-    if(/Village Hall|Post Office|Library|Savings|Insurance/.test(b.name)){ const u=L*0.1, y0=Math.min(H-6,34), a=fp(b,u,y0,0), c=fp(b,u,y0+7,10); beam(solid,a,c,0.3,cc('#d8d8d8')); solid.prism(c[0],c[2],0.5,c[1]-0.2,c[1]+0.8,cc('#d8b048'),cc('#d8b048'),6);
+    if(/Village Hall|Post Office|Library|Savings|Insurance/.test(b.name)&&!(b.pg&&b.post)){ const u=L*0.1,   /* the Prairie Grove post office has its own flagpole at the curb, so no second flag off the wall */ y0=Math.min(H-6,34), a=fp(b,u,y0,0), c=fp(b,u,y0+7,10); beam(solid,a,c,0.3,cc('#d8d8d8')); solid.prism(c[0],c[2],0.5,c[1]-0.2,c[1]+0.8,cc('#d8b048'),cc('#d8b048'),6);
       let dx=WIND[0]+fx*1.3, dz=WIND[1]+fz*1.3; const dl=Math.hypot(dx,dz)||1; animFlag(ag,c[0]-fx*0.4,c[2]-fz*0.4,c[1]-0.4,11,6.4,[dx/dl,dz/dl],'us',b.id*0.9); }
   }
   const np=fp(b,L/2+9,15,0.8); text.sign(np[0],np[1],np[2],fx,fz,6,2.4,txtCell('N'+b.num,String(b.num),{w:128,h:48,bg:'#f6f1e5',fg:'#141414',fam:F_MONO}));
@@ -9448,6 +9450,14 @@ function fishLand(){ const f=FS.fish, r=fishRec(), b=r.best[f.sp.id]; FS.ph='car
   setTimeout(()=>{ if(FS.on&&FS.ph==='card') $('#catch').hidden=false; },900); }
 function fishCard(keep){ if(FS.ph!=='card'||$('#catch').hidden) return; const f=FS.fish; $('#catch').hidden=true; if(keep){ const r=fishRec(); r.kept.unshift({sp:f.sp.id,lb:f.lb,inch:f.inch,d:Date.now()}); r.kept.length=Math.min(r.kept.length,60); fishSave(r); AU.okk(); toast(`${f.sp.n} goes in the catch log.`,'good','fish',100); }
   else { fishSplash(walker.x+Math.cos(FS.aim)*14,walker.y+Math.sin(FS.aim)*14,false); toast(`You slip the ${f.sp.n.toLowerCase()} back in the water.`,'','fish',100); } fishToAim(); }
+/* Space yanks the rod whenever the bobber is out. On a nibble it can set the hook early, or the fish can strip the bait;
+   on nothing at all the bobber skips in a few feet and the fish settle again. Waiting for the bobber to go all the way under is still the sure way. */
+function fishYank(){ FS.yank=0.45; AU.noise(0.09,0.05,2600); AU.tone(210,0.09,'triangle',0.035,0,330); const nib=(FS.dip||0)>0.12;
+  if(nib&&Math.random()<0.4){ const f=fishRoll(); if(f){ FS.fish=f; fishHook(); return; } }
+  if(nib&&Math.random()<0.35){ fishLost('bait'); return; }
+  if(FS.dist>30){ const d=FS.dist-5, x=walker.x+Math.cos(FS.aim)*d, y=walker.y+Math.sin(FS.aim)*d; if(fishWater(x,y)){ FS.dist=d; FS.bx=x; FS.by=y; } } fishSplash(FS.bx,FS.by,false); FS.dip=0;
+  FS.biteT=Math.max(FS.biteT,FS.t+2.5+Math.random()*3); FS.nib=Math.max(FS.nib,1.2);
+  fishMsg(nib?'Just a nibble. Wait till the bobber goes all the way under.':'Nothing on yet. Let it sit.'); }
 function fishKey(k){ if(k==='escape'){ if(FS.ph==='box'&&FS.bait){ fishBox(false); return; } if(FS.ph==='card'){ fishCard(false); return; } fishEnd(); return; }
   if(FS.ph==='box'){ const n=TACKLE.length; if(k==='arrowright'||k==='d') FS.sel=(FS.sel+1)%n; else if(k==='arrowleft'||k==='a') FS.sel=(FS.sel+n-1)%n; else if(k==='arrowdown'||k==='s') FS.sel=(FS.sel+3)%n; else if(k==='arrowup'||k==='w') FS.sel=(FS.sel+n-3)%n; else if(k==='enter'||k===' '||k==='r'){ fishPick(FS.sel); return; } fishSel(); return; }
   if(FS.ph==='card'){ if(k==='1'||k==='r'||k==='backspace') fishCard(false); else if(k==='2'||k==='k'||k==='enter') fishCard(true); return; }
@@ -9465,12 +9475,13 @@ function fishUpdate(dt){ fishScan(dt); if(!FS.on) return; if(!walker.active||mod
   if(P==='aim'){ if(press&&!FS.chg&&FS.t>0.25){ FS.chg=true; FS.powT=0; } if(FS.chg){ FS.powT+=dt; const u=(FS.powT/1.5)%2; FS.pow=u<1?u:2-u; lift=-0.55*Math.min(1,FS.powT*3); if(!held) fishCast(); }
     bar.hidden=!FS.chg; bar.className='pow'; fill.style.width=(FS.pow*100).toFixed(0)+'%'; act.textContent=FS.chg?'RELEASE':'CAST'; }
   else if(P==='cast'){ const k=FS.t/0.75; lift=lerp(-0.6,0.7,smooth(0,0.3,k)); if(k>=1){ fishSplash(FS.bx,FS.by,false); FS.ph='wait'; FS.t=0; FS.biteT=fishWaitTime(); FS.nib=1.5+Math.random()*3; FS.twitch=0; FS.reelT=0;
-      fishMsg(FS.bait.k==='bait'?'Now wait for the bobber to go under.':'Hold to reel it back. Tap for a twitch.'); } bar.hidden=true; act.textContent='…'; }
-  else if(P==='wait'){ bar.hidden=true; if(FS.bait.k==='bait'){ act.textContent='WAIT'; FS.nib-=dt; if(FS.nib<=0&&FS.biteT-FS.t>1.2){ FS.nib=2+Math.random()*4; FS.dip=0.35; AU.tone(1300,0.04,'sine',0.02); } if(FS.t>=FS.biteT) fishBite(); else if(FS.biteT>1e8&&FS.t>14&&FS.msgT>14) fishMsg('Not a nibble. Maybe the wrong thing on the hook for this water: T opens the tackle box.','warn'); }
+      fishMsg(FS.bait.k==='bait'?'Wait for the bobber to go all the way under, then yank with Space.':'Hold to reel it back. Tap for a twitch.'); } bar.hidden=true; act.textContent='…'; }
+  else if(P==='wait'){ bar.hidden=true; if(FS.bait.k==='bait'){ act.textContent='YANK'; if(press&&FS.t>0.3) fishYank();
+      if(FS.ph==='wait'){ FS.nib-=dt; if(FS.nib<=0&&FS.biteT-FS.t>1.2){ FS.nib=2+Math.random()*4; FS.dip=0.35; AU.tone(1300,0.04,'sine',0.02); } if(FS.t>=FS.biteT) fishBite(); else if(FS.biteT>1e8&&FS.t>14&&FS.msgT>14) fishMsg('Not a nibble. Maybe the wrong thing on the hook for this water: T opens the tackle box.','warn'); } }
     else { act.textContent='REEL'; if(press){ FS.twitch=0.5; FS.dip=0.3; } FS.twitch=Math.max(0,(FS.twitch||0)-dt); if(held){ FS.dist-=dt*21; FS.reelT+=dt; if(FS.reelT>0.09){ FS.reelT=0; AU.tone(1500+Math.random()*200,0.02,'square',0.012); } }
       const mvng=held||FS.twitch>0; if(mvng){ const o=fishOdds(FS.water.k,FS.bait.id); if(o.tot>0&&FS.t>1&&Math.random()<dt*clamp((o.rate+2)/52,0.04,0.3)*(FS.twitch>0?1.8:1)) fishBite(); } lift=held?0.25:0.1;
       FS.bx=walker.x+Math.cos(FS.aim)*FS.dist; FS.by=walker.y+Math.sin(FS.aim)*FS.dist; if(FS.ph==='wait'&&(FS.dist<13||!fishWater(FS.bx,FS.by))){ FS.ph='aim'; FS.t=0; FS.chg=false; fishMsg('Reeled in. Cast again.'); } } }
-  else if(P==='bite'){ bar.hidden=true; act.textContent='STRIKE!'; FS.dip=1; if(press){ if(FS.fish) fishHook(); else fishLost('late'); } else if(FS.t>(FS.bait.k==='bait'?1.05:0.85)) fishLost(FS.bait.k==='bait'&&Math.random()<0.5?'bait':'late'); }
+  else if(P==='bite'){ bar.hidden=true; act.textContent='STRIKE!'; FS.dip=1; if(press){ if(FS.fish) fishHook(); else fishLost('late'); } else if(FS.t>(FS.bait.k==='bait'?1.4:1.0)) fishLost(FS.bait.k==='bait'&&Math.random()<0.5?'bait':'late'); }
   else if(P==='fight'){ const f=FS.fish; FS.runT-=dt; if(FS.run>0){ FS.run-=dt; if(FS.run<=0) FS.runT=1.6+Math.random()*3.2; } else if(FS.runT<=0&&f.stam>0.12){ FS.run=0.7+Math.random()*1.2*f.stam; AU.tone(500,0.5,'sawtooth',0.03,0,900); if(Math.random()<0.5&&!f.sp.st.match(/flat|cat/)){ FS.jump=0.7; fishSplash(FS.bx,FS.by,true); } }
     const run=FS.run>0, pull=run?(0.5*f.str+0.3)*(0.5+0.5*f.stam):0; FS.ten=clamp(FS.ten+((held?0.36+0.22*f.str:-0.6)+pull)*dt,0,1.12);
     if(held&&!run) FS.dist-=dt*(36-11*f.str)*(FS.ten>0.25?1:0.4); else if(held&&run) FS.dist-=dt*4; if(run) FS.dist+=dt*(held?6:15)*f.str; f.stam=Math.max(0,f.stam-dt*FS.ten*0.14/Math.sqrt(f.str)); FS.dist=Math.min(FS.dist,190);
@@ -9481,7 +9492,8 @@ function fishUpdate(dt){ fishScan(dt); if(!FS.on) return; if(!walker.active||mod
     if(FS.over>0.32) fishLost('snap'); else if(FS.slack>1.9) fishLost('slack'); else if(FS.dist<=11||!fishWater(FS.bx,FS.by)&&FS.dist<40) fishLand(); }
   else if(P==='card'){ bar.hidden=true; act.textContent='…'; lift=0; }
   else { bar.hidden=true; }
-  FS.lift+=(lift-FS.lift)*Math.min(1,dt*(P==='cast'?16:7)); FS.dip=Math.max(0,(FS.dip||0)-dt*(P==='bite'?0:2.2)); }
+  if(FS.yank>0){ FS.yank-=dt; if(FS.ph==='wait') lift=0.95; }   /* the rod snaps up on a yank */
+  FS.lift+=(lift-FS.lift)*Math.min(1,dt*(P==='cast'||FS.yank>0?16:7)); FS.dip=Math.max(0,(FS.dip||0)-dt*(P==='bite'?0:2.2)); }
 /* drawn icons for the tackle box, and a drawn fish for the catch card */
 function tackleSVG(id){ const S=(b)=>`<svg viewBox="0 0 40 28" width="40" height="28">${b}</svg>`, hook='<path d="M30 6v10a4 4 0 0 1-8 0" fill="none" stroke="#3a3a3a" stroke-width="1.6" stroke-linecap="round"/>';
   switch(id){
@@ -9538,9 +9550,9 @@ function fishRender(dt){ const Q=G.fs; if(!Q) return; if(Q.warmN>0){ Q.warmN--; 
   if(P==='aim'){ const want=FS.chg?lerp(20,168,FS.pow):46, r=fishRay(walker.x,walker.y,FS.aim,want), d=r?r.d:want; Q.ret.position.set(walker.x+Math.cos(FS.aim)*d,(r?r.w.h:gH(walker.x+Math.cos(FS.aim)*d,walker.y+Math.sin(FS.aim)*d))+0.5,walker.y+Math.sin(FS.aim)*d); Q.ret.material.color.setHex(r?0xffffff:0xff5a4a); const s=1+Math.sin(t*5)*0.08; Q.ret.scale.set(s,s,1); }
   if(lineOn){ G.walker.updateMatrixWorld(true); Q.tip.getWorldPosition(_ft); let ex=FS.bx, ey=wh+0.3, ez=FS.by;
     if(P==='cast'){ const k=clamp(FS.t/0.75,0,1); ex=lerp(_ft.x,FS.bx,k); ez=lerp(_ft.z,FS.by,k); ey=lerp(_ft.y,wh,k)+Math.sin(k*Math.PI)*(14+FS.dist*0.16); }
-    const lr=FS.bait.k==='lure', dip=(FS.dip||0); if(P==='fight'){ ey=wh-0.4; } else if(lr){ ey+=(P==='cast'?0:-0.5+(FS.twitch>0?0.9:0)); } else if(P!=='cast'){ ey+=Math.sin(t*2.2)*0.18-dip*1.7; }
+    const lr=FS.bait.k==='lure', dip=(FS.dip||0); if(P==='fight'){ ey=wh-0.4; } else if(lr){ ey+=(P==='cast'?0:-0.5+(FS.twitch>0?0.9:0)); } else if(P!=='cast'){ ey+=Math.sin(t*2.2)*0.18-dip*1.7+(FS.yank>0?Math.sin(FS.yank/0.45*Math.PI)*1.4:0); }
     const M=P==='fight'?null:(lr?Q.lure:Q.bob); if(M){ M.visible=true; M.position.set(ex,ey,ez); if(lr){ M.rotation.y=-FS.aim; M.material=MC(FS.bait.id==='worm'?'#7a3fa0':FS.bait.id==='crank'?'#6fae4a':FS.bait.id==='popper'||FS.bait.id==='spinner'?'#e8c860':FS.bait.id==='jig'?'#e8504a':FS.bait.id==='fly'?'#b08a5a':'#d8dde2'); } }
-    const A=Q.line.geometry.attributes.position.array, sag=P==='fight'?0.02+0.5*(1-FS.ten):P==='cast'?0.05:0.35, L=Math.hypot(ex-_ft.x,ez-_ft.z); for(let i=0;i<14;i++){ const k=i/13; A[i*3]=lerp(_ft.x,ex,k); A[i*3+2]=lerp(_ft.z,ez,k); A[i*3+1]=lerp(_ft.y,ey,k)-Math.sin(k*Math.PI)*sag*L*0.12; } Q.line.geometry.attributes.position.needsUpdate=true;
+    const A=Q.line.geometry.attributes.position.array, sag=P==='fight'?0.02+0.5*(1-FS.ten):P==='cast'?0.05:FS.yank>0?0.06:0.35, L=Math.hypot(ex-_ft.x,ez-_ft.z); for(let i=0;i<14;i++){ const k=i/13; A[i*3]=lerp(_ft.x,ex,k); A[i*3+2]=lerp(_ft.z,ez,k); A[i*3+1]=lerp(_ft.y,ey,k)-Math.sin(k*Math.PI)*sag*L*0.12; } Q.line.geometry.attributes.position.needsUpdate=true;
     if(P==='fight'){ FS.spl=(FS.spl||0)-dt; if(FS.spl<=0){ FS.spl=0.5+Math.random()*0.5; fishSplash(FS.bx,FS.by,FS.run>0); }
       if(FS.jump>0){ const k=1-FS.jump/0.7, s=clamp(FS.fish.inch*0.2,2,8); Q.fish.visible=true; Q.fish.material.color.set(FS.fish.sp.c); Q.fish.scale.setScalar(s); Q.fish.position.set(FS.bx,wh+Math.sin(k*Math.PI)*(7+s),FS.by); Q.fish.rotation.set(0,-FS.aim+1.2,1.2-k*2.6); } } }
   if(P==='card'&&FS.fish){ G.walker.updateMatrixWorld(true); _fh.set(0,-4.2,0); G.walker.userData.elR.localToWorld(_fh); const s=clamp(FS.fish.inch*0.16,1.6,6.5); Q.fish.visible=true; Q.fish.material.color.set(FS.fish.sp.c); Q.fish.scale.setScalar(s); Q.fish.position.set(_fh.x,_fh.y-s*0.9,_fh.z); Q.fish.rotation.set(0,-(walker.dir||0)+Math.PI/2+Math.sin(t*9)*0.12*Math.max(0,1-FS.t*0.4),Math.PI/2); }
@@ -9744,7 +9756,7 @@ function keyHint(){
   else if(D.active) h='';
   else if(CC.on||(CC.roll&&CC.roll.air)) h='';
   else if(GL.on) h=GL.st==='fly'?'<kbd>A</kbd> <kbd>D</kbd> lean and turn · <kbd>W</kbd> nose down for speed · <kbd>S</kbd> slow down, and flare just before you land':'';
-  else if(FS.on) h={box:'pick something from the tackle box · <kbd>Esc</kbd> done',aim:'<kbd>A</kbd> <kbd>D</kbd> or the pointer aims · hold <kbd>Space</kbd>, let go to cast · arrows and <kbd>W</kbd> <kbd>S</kbd> move the camera · <kbd>T</kbd> tackle box · <kbd>Esc</kbd> done',cast:'',wait:FS.bait&&FS.bait.k==='lure'?'hold <kbd>Space</kbd> to reel · tap for a twitch · <kbd>T</kbd> tackle box':'watch the bobber · <kbd>Space</kbd> the moment it goes under · <kbd>T</kbd> tackle box',bite:'<kbd>Space</kbd> strike!',fight:'hold <kbd>Space</kbd> to reel · let go when it runs',card:'<kbd>1</kbd> release · <kbd>2</kbd> keep'}[FS.ph]||'';
+  else if(FS.on) h={box:'pick something from the tackle box · <kbd>Esc</kbd> done',aim:'<kbd>A</kbd> <kbd>D</kbd> or the pointer aims · hold <kbd>Space</kbd>, let go to cast · arrows and <kbd>W</kbd> <kbd>S</kbd> move the camera · <kbd>T</kbd> tackle box · <kbd>Esc</kbd> done',cast:'',wait:FS.bait&&FS.bait.k==='lure'?'hold <kbd>Space</kbd> to reel · tap for a twitch · <kbd>T</kbd> tackle box':'watch the bobber · <kbd>Space</kbd> yanks the rod: best the moment it goes all the way under · <kbd>T</kbd> tackle box',bite:'<kbd>Space</kbd> strike!',fight:'hold <kbd>Space</kbd> to reel · let go when it runs',card:'<kbd>1</kbd> release · <kbd>2</kbd> keep'}[FS.ph]||'';
   else if(PR.cur&&!OC.offer) h=promptHint();
   else if(PP.chase) h='<kbd>W A S D</kbd> run them down · hold <kbd>Shift</kbd> to sprint';
   else if(PP.job&&walker.active) h=PP.job==='pick'?'walk over the parcel to pick it up':'carry the parcel back to the porch it came from';
