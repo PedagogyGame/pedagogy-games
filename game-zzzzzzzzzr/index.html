@@ -351,7 +351,7 @@ const KIT = {"tex":{"hewn":"data:image/webp;base64,UklGRtTyAgBXRUJQVlA4IMjyAgBQq
    State (saved) and runtime (not saved)
    ============================================================ */
 const SAVE_KEY = 'serpents-wall-v3';
-const LAYOUT_VERSION = 7;
+const LAYOUT_VERSION = 8;
 function freshState() {
   return {
     v: 1, A: 0, x: 0, z: -5, yaw: 0,
@@ -2208,7 +2208,8 @@ function* decorGen(ctx, open, used) {
 function shell(ctx, room, D, W, H, wallMat, o = {}) {
   const B = ctx.B, hw = W / 2, lvl = room.lvl;
   const u0 = o.u0 ?? 0, uB = u0 + D;
-  if (o.floorHole) {   // [u0, u1, v0, v1] left open for a stair going further down
+  if (o.noFloor) { /* the room lays its own */ }
+  else if (o.floorHole) {   // [u0, u1, v0, v1] left open for a stair going further down
     const [a0, a1, b0, b1] = o.floorHole, f = o.floor || M.plank, fb = (ua, ub, va, vb) => B.box(f, (ua + ub) / 2, -0.05, (va + vb) / 2, ub - ua, 0.1, vb - va, 0, 0, 0, 0.55);
     fb(u0 - 0.05, a0, -hw - 0.05, hw + 0.05); fb(a1, uB + 0.05, -hw - 0.05, hw + 0.05); fb(a0, a1, -hw - 0.05, b0); fb(a0, a1, b1, hw + 0.05);
   } else B.box(o.floor || M.plank, u0 + D / 2, -0.05, 0, D + 0.1, 0.1, W + 0.1, 0, 0, 0, 0.55);
@@ -6583,13 +6584,15 @@ const PLACE_AT = { 2: 'longhall', 5: 'stairhall', 7: 'poles', 45: 'sackrounds', 
   // v20.6: five wide storerooms in the lengths with least in them
   13: 'ws_vault', 20: 'ws_drawers', 42: 'ws_corbel', 57: 'ws_hang', 100: 'ws_domes',
   // v20.7: five rooms up straight flights, the long stone stair, the hall of jars, three rooms with three rooms behind
-  15: 'climb', 38: 'climb', 59: 'climb', 73: 'climb', 94: 'climb', 30: 'longsteps', 74: 'jarhall', 19: 'suite', 55: 'suite', 85: 'suite' };
+  15: 'climb', 38: 'climb', 59: 'climb', 73: 'climb', 94: 'climb', 30: 'longsteps', 74: 'jarhall', 19: 'suite', 55: 'suite', 85: 'suite',
+  // v20.8: on steps that sound 13/11, 14/11 and 11/7
+  26: 'tapestry', 37: 'bathhouse', 70: 'chapel' };
 const PLACE_ROOMS = new Set(Object.values(PLACE_AT));
 // how far each kind of room reaches along the corridor either side of its door (v; negative is further along)
 const EXT_NEW = { gate: [-2.0, 2.0], walkfull: [-2.0, 0.8], walkhalf: [-6.45, 0.8], up: [-2.4, 2.4], round: [-3.5, 3.5], open: [-4.4, 4.4], cathedral: [-4.3, 4.3], mosaic: [-3.3, 3.3], rose: [-2.4, 2.4], meander: [-3.5, 3.5], sundial: [-2.4, 2.4], tree: [-3.6, 3.6],
   longhall: [-21.0, 3.0], stairhall: [-3.4, 3.4], poles: [-5.6, 5.6], sackrounds: [-3.9, 3.4], minoan: [-3.4, 3.4], rockstair: [-3.9, 3.9],
   ws_vault: [-5.5, 5.5], ws_drawers: [-5.25, 5.25], ws_corbel: [-5.1, 5.1], ws_hang: [-5.5, 5.5], ws_domes: [-5.7, 5.7],
-  climb: [-4.3, 4.3], longsteps: [-2.4, 2.4], jarhall: [-6.9, 6.9], suite: [-4.1, 4.1] };
+  climb: [-4.3, 4.3], longsteps: [-2.4, 2.4], jarhall: [-6.9, 6.9], suite: [-4.1, 4.1], tapestry: [-3.9, 3.9], bathhouse: [-4.4, 4.4], chapel: [-2.6, 2.6] };
 const EXT_OLD = { cave: [-8, 8], grotto: [-4, 10.5], jut: [-8, 8], odd: [-11, 11], escape: [-12, 12], loft: [-6, 6], forge: [-3.9, 3.9], loom: [-3.9, 3.9], bunks: [-3.9, 3.9] };
 const extKey = r => r.design === 'walk' ? 'walk' + (r.kind || 'full') : r.design;
 const extOf = r => EXT_NEW[extKey(r)] || EXT_OLD[r.design] || (COMPOSED.has(r.design) && !r.lower ? [-3.9, 3.9] : [-3, 3]);
@@ -9611,6 +9614,269 @@ Object.assign(MORE_BUILD, {
       themes: [['store', 2], ['empty', 1], ['toppled', 1], ['bunks', 0.6], ['cache', 0.8], ['pigeon', 0.6]] });
     ctx.setBounds(room, 0.3, D - 0.3, -hw + 0.3, hw - 0.3);
     room.D = D; room.W = W; room.H = H;
+  },
+});
+
+/* ---- 38g_halls.js ---- */
+/* ============================================================
+   v20.8: three rooms on lengths whose steps sound the eleventh and thirteenth harmonics in intervals hardly anyone
+   has used: 26 (≈13/11), 37 (≈14/11), 70 (≈11/7).
+     26  a room with an old tapestry on its back wall, faded and moth-eaten, part of the wall's own sign woven into it
+     37  a bath gone to ruin: a sunk pool with steps, a hypocaust showing where the floor fell in, a broken basin on its
+         stem, and in a corner a heap of stones and tiered wooden benches for sweating; oil and a biscuit
+     70  the plainest of chapels: an earth-walled nave under a steep timber roof, split-log benches, a low screen, a
+         rounded apse with a rough stone block in it; nothing on any wall that names a faith
+   Each has a flask of oil in it on the first pass.
+   ============================================================ */
+const HALL_FIND = { 26: ['O'], 37: ['O', 'B'], 70: ['O'] };
+function hallFind(ctx, j, u, y, v) {
+  const tok = (HALL_FIND[ctx.L] || [])[j], key = 'hl' + ctx.L + ':' + tok;
+  if (!tok || ctx.lap !== 0 || ctx.st.tk.includes(key)) return;
+  spawnItem(ctx, tok, key, ctx.W(u, y, v), { floorY: ctx.frame.y0 + y });
+}
+
+/* ---------- the tapestry ---------- */
+let _tapTex = null;
+function tapestryTex() {
+  if (_tapTex) return _tapTex;
+  const W = 512, H = 400, c = makeCanvas(W, H), g = c.getContext('2d'), R = new Rng(2626);
+  // the ground, a faded madder; the weave across it
+  g.fillStyle = '#7a3e2c'; g.fillRect(0, 0, W, H - 26);
+  for (let y = 0; y < H; y += 2) { g.fillStyle = `rgba(${y % 4 ? '30,16,10' : '200,170,130'},0.06)`; g.fillRect(0, y, W, 1); }
+  for (let x = 0; x < W; x += 3) { g.fillStyle = 'rgba(20,10,6,0.05)'; g.fillRect(x, 0, 1, H); }
+  // borders: a band of stepped zigzag between narrow stripes
+  const band = (x, y, w, h, vert) => {
+    g.fillStyle = '#b08840'; g.fillRect(x, y, w, h);
+    g.strokeStyle = '#26324a'; g.lineWidth = 5; g.beginPath();
+    if (!vert) { for (let t = x; t <= x + w; t += 14) g.lineTo(t, y + (Math.floor((t - x) / 14) % 2 ? h - 5 : 5)); }
+    else { for (let t = y; t <= y + h; t += 14) g.lineTo(x + (Math.floor((t - y) / 14) % 2 ? w - 5 : 5), t); }
+    g.stroke();
+    g.fillStyle = '#2a1a12'; vert ? (g.fillRect(x, y, 3, h), g.fillRect(x + w - 3, y, 3, h)) : (g.fillRect(x, y, w, 3), g.fillRect(x, y + h - 3, w, 3));
+  };
+  band(0, 0, W, 30, false); band(0, H - 26 - 30, W, 30, false); band(0, 30, 30, H - 26 - 60, true); band(W - 30, 30, 30, H - 26 - 60, true);
+  // the field: stags and birds in rows, the stags with branching antlers, the birds with spread wings
+  const stag = (x, y, s, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, 14 * s, 7 * s, 0, 0, TAU); g.fill(); g.fillRect(x - 11 * s, y, 3 * s, 12 * s); g.fillRect(x + 8 * s, y, 3 * s, 12 * s); g.beginPath(); g.ellipse(x + 15 * s, y - 7 * s, 5 * s, 3.5 * s, -0.6, 0, TAU); g.fill(); g.strokeStyle = col; g.lineWidth = 2 * s; g.beginPath(); g.moveTo(x + 15 * s, y - 10 * s); g.lineTo(x + 10 * s, y - 22 * s); g.moveTo(x + 12 * s, y - 16 * s); g.lineTo(x + 6 * s, y - 18 * s); g.moveTo(x + 16 * s, y - 10 * s); g.lineTo(x + 22 * s, y - 21 * s); g.moveTo(x + 20 * s, y - 17 * s); g.lineTo(x + 26 * s, y - 18 * s); g.stroke(); };
+  const bird = (x, y, s, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, 6 * s, 4 * s, 0, 0, TAU); g.fill(); g.beginPath(); g.moveTo(x - 2 * s, y); g.lineTo(x - 14 * s, y - 9 * s); g.lineTo(x + 2 * s, y - 2 * s); g.lineTo(x + 14 * s, y - 9 * s); g.closePath(); g.fill(); };
+  for (let row = 0; row < 3; row++) for (let k = 0; k < 6; k++) {
+    const x = 70 + k * 74 + (row % 2) * 30, y = 82 + row * 100;
+    if (Math.hypot(x - W / 2, y - 180) < 95) continue;
+    (k + row) % 2 ? stag(x, y, 1.0, row === 1 ? '#c8a050' : '#d0c090') : bird(x, y - 6, 1.1, '#3a4a64');
+  }
+  // in the middle, worn worst: part of the sign — the ring of timbers, its serpent's head at its own tail, and the
+  // hare inside it with the bundle on its back. Only part of it is still there
+  const cx = W / 2, cy = 180, rr = 78;
+  for (let k = 0; k < 16; k++) {
+    if (k > 4 && k < 9) continue;   // worn through here
+    const a0 = k / 16 * TAU - Math.PI / 2, a1 = a0 + TAU / 16 * 0.86;
+    g.strokeStyle = k % 2 ? '#c89048' : '#9a6a30'; g.lineWidth = 16; g.beginPath(); g.arc(cx, cy, rr + (k % 2 ? 4 : -4), a0, a1); g.stroke();
+    g.strokeStyle = '#2a1a10'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + Math.cos(a1) * (rr - 10), cy + Math.sin(a1) * (rr - 10)); g.lineTo(cx + Math.cos(a1) * (rr + 10), cy + Math.sin(a1) * (rr + 10)); g.stroke();
+  }
+  { const a = -Math.PI / 2, hx = cx + Math.cos(a) * rr - 4, hy = cy + Math.sin(a) * rr; g.fillStyle = '#5a7040'; g.beginPath(); g.ellipse(hx, hy, 16, 10, 0.2, 0, TAU); g.fill(); g.fillStyle = '#1a140c'; g.beginPath(); g.arc(hx - 6, hy - 3, 2.5, 0, TAU); g.fill(); }
+  g.fillStyle = '#d8c8a0';
+  g.beginPath(); g.ellipse(cx - 4, cy + 20, 26, 16, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(cx + 22, cy + 2, 11, 9, 0, 0, TAU); g.fill();
+  g.beginPath(); g.ellipse(cx + 22, cy - 22, 4, 16, 0.15, 0, TAU); g.fill(); g.beginPath(); g.ellipse(cx + 30, cy - 20, 4, 15, 0.35, 0, TAU); g.fill();
+  g.fillStyle = '#6a4a2a'; g.fillRect(cx - 26, cy - 4, 30, 16);
+  // worn worst where it was looked at most: the sign washed toward the colour of the threads under it
+  { const gr = g.createRadialGradient(cx, cy, 10, cx, cy, 120); gr.addColorStop(0, 'rgba(140,112,84,0.5)'); gr.addColorStop(1, 'rgba(140,112,84,0)'); g.fillStyle = gr; g.fillRect(cx - 120, cy - 120, 240, 240); }
+  for (let i = 0; i < 60; i++) { g.fillStyle = 'rgba(120,90,66,0.35)'; g.fillRect(cx + R.range(-100, 100), cy + R.range(-100, 100), R.range(4, 18), 2); }
+  // the fringe along the foot
+  for (let x = 2; x < W; x += 5) { g.fillStyle = R.chance(0.15) ? 'rgba(0,0,0,0)' : '#8a6a48'; g.fillRect(x, H - 26, 3, R.range(10, 26)); }
+  // age: everything faded toward the same dun, threadbare patches, stains
+  g.fillStyle = 'rgba(150,130,100,0.28)'; g.fillRect(0, 0, W, H - 26);
+  for (let i = 0; i < 40; i++) { const x = R.range(0, W), y = R.range(0, H - 30), r = R.range(10, 50); const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${R.chance(0.5) ? '60,40,24' : '190,170,140'},${R.range(0.12, 0.3).toFixed(2)})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+  jitter(g, W, H, 18, 26);
+  // holes the moths left, and the torn corner: cut clean through to nothing
+  g.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 22; i++) { const x = R.range(20, W - 20), y = R.range(20, H - 40); g.beginPath(); g.ellipse(x, y, R.range(2, 9), R.range(2, 7), R.range(0, 3), 0, TAU); g.fill(); }
+  g.beginPath(); g.moveTo(cx - 30, cy - 30); g.quadraticCurveTo(cx - 10, cy - 50, cx + 6, cy - 34); g.quadraticCurveTo(cx - 6, cy - 20, cx - 30, cy - 30); g.fill();
+  g.beginPath(); g.moveTo(W, H - 140); g.lineTo(W - 70, H); g.lineTo(W, H); g.fill();
+  g.globalCompositeOperation = 'source-over';
+  _tapTex = texOf(c);
+  return _tapTex;
+}
+const _hm = {
+  tap: () => cachedMat('hl-tap', () => { const m = lam(tapestryTex(), { bumpScale: 0.6 }); m.alphaTest = 0.4; m.transparent = false; return m; }),
+  tess: () => cachedMat('hl-tess', () => lam(tesseraTex(), { bumpScale: 0.9 })),
+  redPl: () => cachedMat('hl-redpl', () => lam(plasterTex(), { color: 0x9a4a32, bumpScale: 0.5 })),
+  daub: () => cachedMat('hl-daub', () => lam(T.earth, { color: 0xb8a080, bumpScale: 1.6 })),
+  rush: () => cachedMat('hl-rush', () => lam(strawTex(0), { color: 0x9a9a6a, bumpScale: 1.0 })),
+};
+// a cloth hung from a pole: folds running down it, the hem sagging a little
+function hangingGeo(w, h, seed) {
+  const g = new THREE.PlaneGeometry(w, h, 48, 12), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), t = (h / 2 - y) / h;
+    p.setZ(i, (0.035 * Math.sin(x * 9 + seed) + 0.02 * Math.sin(x * 23 + seed * 2)) * (0.3 + t) + 0.02 * t * t);
+    p.setY(i, y - 0.04 * t * t * Math.cos(x * 2.1));
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/* ---------- the bath's floor: small cream tesserae, a dark border band, patches gone to the bedding ---------- */
+let _tessTex = null;
+function tesseraTex() {
+  if (_tessTex) return _tessTex;
+  const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(3737), q = 8;
+  g.fillStyle = '#6a5e50'; g.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y += q) for (let x = 0; x < S; x += q) {
+    const band = (y >= 96 && y < 128), t = R.range(-1, 1);
+    g.fillStyle = band ? rgb(40 + t * 8, 38 + t * 8, 36 + t * 8) : (R.chance(0.04) ? rgb(150, 70, 50) : rgb(206 + t * 14, 196 + t * 14, 172 + t * 12));
+    g.fillRect(x + 1 + R.range(-0.5, 0.5), y + 1 + R.range(-0.5, 0.5), q - 2, q - 2);
+  }
+  for (let i = 0; i < 9; i++) { const x = R.range(0, S), y = R.range(0, S), r = R.range(8, 26); for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { g.fillStyle = 'rgba(96,84,70,0.95)'; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * R.range(0.5, 0.9), R.range(0, 3), 0, TAU); g.fill(); } }
+  ws_grime(g, S, S, R, 500); jitter(g, S, S, 12, 37);
+  _tessTex = texOf(c);
+  return _tessTex;
+}
+
+Object.assign(MORE_BUILD, {
+  /* ---------- 26: the tapestry ---------- */
+  *tapestry(ctx, room, R) {
+    const B = ctx.B, D = 6.0, W = 7.0, hw = W / 2, H = 2.8 * HS, Q = new Rng(room.r.seed ^ 0x2626), wallM = _sm.plaster();
+    shell(ctx, room, D, W, H, wallM, { floor: M.plank });
+    // the tapestry, hung from a pole on two iron hooks across most of the back wall, its foot a hand above the floor
+    const tw = 4.8, th = 3.6, ty = 0.35 + th / 2;
+    B.add(_hm.tap(), hangingGeo(tw, th, 1.3), mtx(D - 0.08, ty, 0, 0, -Math.PI / 2, 0), true);
+    pole(B, M.wood, V3(D - 0.1, ty + th / 2 + 0.03, -tw / 2 - 0.25), V3(D - 0.1, ty + th / 2 + 0.03, tw / 2 + 0.25), 0.035);
+    for (const v of [-tw / 2 + 0.2, tw / 2 - 0.2]) B.box(M.iron, D - 0.06, ty + th / 2 + 0.08, v, 0.12, 0.03, 0.03);
+    // a smaller piece, fallen, lying folded on a chest, the same red gone browner
+    yield;
+    ctx.addSmash('chest', D - 0.7, 0, hw - 0.7, -Math.PI / 2, { room });
+    { const g = hangingGeo(1.1, 0.7, 4); B.add(_hm.tap(), g, mtx(D - 1.6, 0.03, -hw + 0.8, -Math.PI / 2, 0.4, 0), true); }
+    // a rack with rolls of cloth, a bench facing the tapestry, a stool; moth-dust under it all
+    for (const v of [-hw + 0.35]) { for (const u of [1.0, 2.6]) B.box(M.wood, u, 0.8, v, 0.07, 1.6, 0.07); for (const y of [0.7, 1.4]) B.box(M.wood, 1.8, y, v, 1.8, 0.05, 0.06); for (let k = 0; k < 5; k++) B.log(Q.pick([M.cloth, _pm.sackD(), M.leather]), 1.8 + Q.range(-0.1, 0.1), 0.78 + (k % 2) * 0.7 + 0.06, v + 0.05, Q.range(0.05, 0.08), Q.range(1.2, 1.6), 'x', 8); ctx.solid(1.8, v, 1.9, 0.3); }
+    seat(ctx, room, 'bench', D - 2.2, 0.2, -Math.PI / 2, Q, {});
+    seat(ctx, room, 'stool', 1.2, hw - 0.6, Q.range(0, 3), Q, { tipped: Q.chance(0.4) });
+    for (let k = 0; k < 30; k++) B.box(_pm.sackP(), D - Q.range(0.15, 0.9), 0.003, Q.range(-2.2, 2.2), Q.range(0.01, 0.03), 0.004, Q.range(0.01, 0.03));
+    // the oil: on the bench before the tapestry, as if someone set it down to look
+    hallFind(ctx, 0, D - 2.2, 0.47, -0.5);
+    ctx.web(V3(D - 0.04, H - 0.03, -hw + 0.04), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), Q.range(0.5, 0.9), Q.int(0, 3));
+    yield* furnishGen(ctx, room, room.r, { tag: 'tp', rect: { u0: 0, u1: D, v0: -hw, v1: hw, h: H }, entry: [0.75, 0], wall: 'board',
+      cuts: [{ axis: 'v', c: 0, lo: -0.72, hi: 0.72 }],
+      reserves: [[D - 2.8, D, -tw / 2 - 0.3, tw / 2 + 0.3, 2], [0, 1.5, -1, 1, 2], [0.6, 3.0, -hw, -hw + 0.8, 2], [D - 1.3, D, hw - 1.3, hw, 2]],
+      themes: [['empty', 2], ['store', 1], ['loom', 1.2]] });
+  },
+
+  /* ---------- 37: the bath ---------- */
+  *bathhouse(ctx, room, R) {
+    const B = ctx.B, D = 7.6, W = 8.0, hw = W / 2, H = 3.0 * HS, Q = new Rng(room.r.seed ^ 0x3737), plaster = _sm.plaster();
+    // walls: plaster above, the old red below, cracked; no floor from shell (it has its own)
+    shell(ctx, room, D, W, H, plaster, { noFloor: true });
+    const pu0 = 2.4, pu1 = 5.6, pv0 = -1.6, pv1 = 1.9, hu = 1.3, hv = -hw + 1.0, holes = [[pu0, pu1, pv0, pv1], [hu - 0.55, hu + 0.55, hv - 0.5, hv + 0.5]];
+    // the floor of small tesserae, laid round the pool and round the place where it fell through
+    { const vs = [...new Set([-hw, hw, ...holes.flatMap(h => [h[2], h[3]])])].sort((a, b) => a - b);
+      for (let i = 0; i < vs.length - 1; i++) {
+        const va = vs[i], vb = vs[i + 1], vm = (va + vb) / 2, cut = holes.filter(h => h[2] <= vm && h[3] >= vm).map(h => [h[0], h[1]]).sort((a, b) => a[0] - b[0]);
+        let t = -0.05;
+        for (const [a, b2] of [...cut, [D + 0.05, D + 0.05]]) { if (a - t > 0.01) B.box(_hm.tess(), (t + a) / 2, -0.05, vm, a - t, 0.1, vb - va, 0, 0, 0, 1); t = b2; }
+      } }
+    for (const s of [-1, 1]) band(B, _hm.redPl(), D / 2, 0.6, s * (hw - 0.005), D, 1.2, s > 0 ? Math.PI : 0, 2);
+    band(B, _hm.redPl(), D - 0.005, 0.6, 0, W, 1.2, -Math.PI / 2, 2);
+    // the pool, sunk in the floor: a stone kerb round it, three steps down at one end, a skin of black water at the bottom
+    const dep = 1.05, pum = (pu0 + pu1) / 2, pvm = (pv0 + pv1) / 2, st = _wsm.rough();
+    B.box(M.socket, pum, -dep - 0.02, pvm, pu1 - pu0, 0.04, pv1 - pv0);
+    for (const [a, b, c, along] of [[pu0, pu1, pv0, 'u'], [pu0, pu1, pv1, 'u'], [pv0, pv1, pu0, 'v'], [pv0, pv1, pu1, 'v']]) {
+      if (along === 'u') { B.box(_sm.plaster(), (a + b) / 2, -dep / 2, c, b - a, dep, 0.04); B.box(st, (a + b) / 2, 0.12, c + (c < pvm ? -0.12 : 0.12), b - a + 0.5, 0.26, 0.26, 0, 0, 0, 0.6); }
+      else { B.box(_sm.plaster(), c, -dep / 2, (a + b) / 2, 0.04, dep, b - a); B.box(st, c + (c < pum ? -0.12 : 0.12), 0.12, (a + b) / 2, 0.26, 0.26, b - a, 0, 0, 0, 0.6); }
+    }
+    B.box(_hm.tess(), pum, -dep, pvm, pu1 - pu0, 0.02, pv1 - pv0, 0, 0, 0, 1);
+    for (let k = 0; k < 3; k++) B.box(st, pu1 - 0.25 - k * 0.3, -0.3 - k * 0.3, pvm, 0.3 + k * 0.0, 0.08, pv1 - pv0 - 0.1, 0, 0, 0, 0.6);
+    { const g = new THREE.CircleGeometry(1, 20); g.rotateX(-Math.PI / 2); B.add(M.water, g, mtx(pum - 0.4, -dep + 0.03, pvm - 0.3, 0, 0.3, 0, 1.0, 1, 0.7), true); }
+    for (let k = 0; k < 8; k++) stoneLump(B, Q, Q.pick([M.stone, M.stoneB, st]), pum + Q.range(-1.2, 0.6), -dep + 0.06, pvm + Q.range(-1.4, 1.4), Q.range(0.06, 0.16), 0.6);
+    for (let k = 0; k < 10; k++) sherd(B, Q, plaster, pum + Q.range(-1.4, 1.4), pvm + Q.range(-1.6, 1.6), Q.range(0.1, 0.22));
+    ctx.solid(pum, pvm, pu1 - pu0 + 0.5, pv1 - pv0 + 0.5);
+    yield;
+    // where the floor fell through: the hot-floor's little pillars of tiles under it, a broken edge of floor round the hole
+    B.box(M.socket, hu, -0.62, hv, 1.1, 0.02, 1.0);
+    for (const s of [-1, 1]) { B.box(M.earth, hu + s * 0.55, -0.31, hv, 0.04, 0.62, 1.0); B.box(M.earth, hu, -0.31, hv + s * 0.5, 1.1, 0.62, 0.04); }
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) { const pu = hu - 0.45 + i * 0.45, pv = hv - 0.38 + j * 0.38; if (Q.chance(0.2)) continue; for (let k = 0; k < 6; k++) B.box(_ufm.tile(), pu + Q.range(-0.01, 0.01), -0.58 + k * 0.09 + 0.04, pv, 0.2, 0.07, 0.2, 0, Q.range(-0.05, 0.05), 0, 0.6); }
+    for (let k = 0; k < 7; k++) B.box(_hm.tess(), hu + Q.range(-0.6, 0.6), -0.45 + Q.range(0, 0.35), hv + Q.range(-0.5, 0.5), Q.range(0.2, 0.4), 0.06, Q.range(0.2, 0.35), Q.range(-0.6, 0.6), Q.range(0, 3), Q.range(-0.6, 0.6), 1);
+    ctx.solid(hu, hv, 1.4, 1.2);
+    // the basin on its stem, cracked through, a piece of its lip on the floor
+    { const bu = 1.6, bv = hw - 1.2, lab = new THREE.LatheGeometry([[0.001, 0], [0.5, 0.02], [0.6, 0.12], [0.62, 0.16], [0.55, 0.14], [0.001, 0.06]].map(([x, y]) => new THREE.Vector2(x, y)), 18);
+      B.log(st, bu, 0.45, bv, 0.14, 0.9, 'y', 10); B.add(st, new THREE.CylinderGeometry(0.28, 0.32, 0.12, 12), mtx(bu, 0.06, bv), true);
+      B.add(st, lab, mtx(bu, 0.88, bv, 0.06, 0, -0.04), true); B.box(M.socket, bu + 0.1, 1.0, bv, 1.0, 0.006, 0.012, 0, 0.7, 0);
+      B.box(st, bu + 0.7, 0.04, bv - 0.4, 0.3, 0.06, 0.14, 0, 0.8, 0.1); ctx.circle(bu, bv, 0.6); }
+    yield;
+    // the sweating corner: two tiers of plank benches along the side wall, a heap of stones, a bucket and a ladle
+    const sv = -hw + 0.45;
+    for (const [y, dv] of [[0.45, 0.0], [0.95, -0.25]]) { B.box(M.plank, 5.4, y, sv + dv + 0.15, 3.2, 0.06, 0.5, 0, 0, 0, 0.8); for (const u of [4.0, 5.4, 6.8]) B.box(M.wood, u, y / 2, sv + dv + 0.15, 0.08, y, 0.4); }
+    ctx.solid(5.4, sv + 0.15, 3.3, 0.7);
+    { const su = D - 0.6, sv2 = 0.9 + 1.2; for (let k = 0; k < 26; k++) { const a = Q.range(0, TAU), r = Math.sqrt(Q.next()) * 0.5; stoneLump(B, Q, Q.pick([M.stone, M.stoneB]), su + Math.cos(a) * r, 0.08 + (0.5 - r) * 0.6 * Q.next(), sv2 + Math.sin(a) * r, Q.range(0.08, 0.15), 0.8); } ctx.circle(su, sv2, 0.6);
+      B.add(M.wood, new THREE.CylinderGeometry(0.16, 0.13, 0.28, 10, 1, true), mtx(su - 0.9, 0.14, sv2 - 0.5), true); B.add(M.wood, new THREE.CircleGeometry(0.13, 10), mtx(su - 0.9, 0.01, sv2 - 0.5, -Math.PI / 2), true);
+      pole(B, M.wood, V3(su - 0.9, 0.18, sv2 - 0.5), V3(su - 0.6, 0.02, sv2 - 0.85), 0.012); }
+    // round the walls: a bench of plastered masonry under arched niches, one niche keeping the oil; the biscuit left on the benches
+    for (let k = 0; k < 3; k++) { const v = -1.6 + k * 1.6; B.box(M.socket, D - 0.03, 1.55, v, 0.02, 0.7, 0.55); B.add(M.socket, new THREE.CircleGeometry(0.275, 12, 0, Math.PI), mtx(D - 0.03, 1.9, v, 0, -Math.PI / 2, 0), true); B.box(st, D - 0.1, 1.2, v, 0.2, 0.05, 0.6); }
+    hallFind(ctx, 0, D - 0.18, 1.24, 0.0);
+    hallFind(ctx, 1, 5.0, 0.98, sv - 0.1);
+    for (let k = 0; k < 14; k++) sherd(B, Q, plaster, Q.range(0.6, D - 0.6), Q.range(-hw + 0.6, hw - 0.6), Q.range(0.1, 0.25));
+    ctx.addSmash('box', 0.8, 0, hw - 0.5, 0.2, { room });
+    ctx.addSmash('barrel', D - 0.5, 0, -hw + 1.4, 0, { room });
+    ctx.drip(room, pum - 0.6, pvm - 0.3, H);
+    ctx.web(V3(D - 0.04, H - 0.03, hw - 0.04), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), Q.range(0.6, 1.0), Q.int(0, 3));
+  },
+
+  /* ---------- 70: the plainest chapel ---------- */
+  *chapel(ctx, room, R) {
+    const B = ctx.B, Q = new Rng(room.r.seed ^ 0x7070), ent = 1.0, D = 5.6, W = 4.2, hw = W / 2, H = 2.5, rise = 2.3, daub = _hm.daub();
+    const n0 = ent, n1 = ent + D, ar = 1.45;
+    // the way in from the corridor, as the round rooms have it
+    roundShell(ctx, room, R, hw, ent, H, { wall: M.board });
+    // the nave: earth floor strewn with rushes, daubed walls on a timber sill, a steep roof of boards on rafters
+    B.box(M.earth, (n0 + n1) / 2, -0.05, 0, D, 0.1, W, 0, 0, 0, 0.5);
+    for (let k = 0; k < 120; k++) B.box(_hm.rush(), Q.range(n0 + 0.2, n1), 0.004 + Q.range(0, 0.01), Q.range(-hw + 0.2, hw - 0.2), Q.range(0.2, 0.5), 0.004, 0.014, 0, Q.range(-0.5, 0.5) + (Q.chance(0.5) ? 0 : Math.PI / 2), 0, 0.4);
+    for (const s of [-1, 1]) { B.box(daub, (n0 + n1) / 2, H / 2, s * (hw + 0.1), D, H, 0.2, 0, 0, 0, 0.6); B.box(M.woodDark, (n0 + n1) / 2, 0.1, s * (hw - 0.02), D, 0.2, 0.08); }
+    for (const s of [-1, 1]) { B.box(daub, n0 + 0.06, H / 2, s * (0.84 + (hw - 0.84) / 2), 0.12, H, hw - 0.84, 0, 0, 0, 0.6); }
+    // a band of ochre and soot-free black round the walls at eye height, nothing more
+    for (const s of [-1, 1]) { band(B, _pm.ochre(), (n0 + n1) / 2, 1.7, s * (hw - 0.003), D, 0.14, s > 0 ? Math.PI : 0, 1); band(B, _pm.black(), (n0 + n1) / 2, 1.6, s * (hw - 0.003), D, 0.05, s > 0 ? Math.PI : 0, 1); }
+    // the roof
+    const ang = Math.atan2(rise, hw + 0.15), sl = Math.hypot(hw + 0.15, rise);
+    for (const s of [-1, 1]) B.box(M.board, (n0 + n1) / 2, H + rise / 2 + 0.05, s * (hw + 0.15) / 2, D + 0.2, 0.08, sl, s * ang, 0, 0, 0.6);
+    for (let u = n0 + 0.3; u < n1; u += 0.7) for (const s of [-1, 1]) B.beam(M.wood, V3(u, H, s * (hw + 0.05)), V3(u, H + rise - 0.06, 0), 0.1, 0.12);
+    B.box(M.woodDark, (n0 + n1) / 2, H + rise - 0.06, 0, D, 0.16, 0.16);
+    for (const u of [n0 + 1.6, n0 + 3.6]) B.box(M.wood, u, H - 0.05, 0, 0.14, 0.16, W + 0.2);
+    // the front gable over the way in, closed with boards
+    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([n0 + 0.05, H, -hw - 0.15, n0 + 0.05, H, hw + 0.15, n0 + 0.05, H + rise, 0], 3)); g.setIndex([0, 1, 2]); B.add(M.board, turnFacesTo(g, n0 + 1, H + 0.5, 0), new THREE.Matrix4(), true); }
+    B.box(daub, n0 + 0.06, (DOOR + 0.12 + H) / 2, 0, 0.12, H - DOOR - 0.12, 1.7);
+    yield;
+    // the apse: a rounded end of daub, the roof's last board over it, a rough block of stone within
+    const ag = Math.asin(Math.min(0.95, (hw - 0.05) / ar));
+    B.add(daub, ellRingGeo(n1, 0, ar, hw, 0, H, -Math.PI / 2, Math.PI / 2, 70), new THREE.Matrix4(), true);
+    { const fg = new THREE.CircleGeometry(1, 20, -Math.PI / 2, Math.PI); fg.rotateX(-Math.PI / 2); B.add(M.earth, fg, mtx(n1, -0.0, 0, 0, 0, 0, ar + 0.1, 1, hw + 0.1), true);
+      const cg = new THREE.CircleGeometry(1, 20, -Math.PI / 2, Math.PI); cg.rotateX(Math.PI / 2); B.add(M.board, cg, mtx(n1, H + 0.002, 0, 0, 0, 0, ar + 0.15, 1, hw + 0.15), true); }
+    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([n1, H, -hw - 0.15, n1, H, hw + 0.15, n1, H + rise, 0], 3)); g.setIndex([0, 1, 2]); B.add(daub, turnFacesTo(g, n1 - 1, H + 0.5, 0), new THREE.Matrix4(), true); }
+    void ag;
+    const au = n1 + ar * 0.45, st = _wsm.rough();
+    B.box(st, au, 0.45, 0, 0.7, 0.9, 1.3, Q.range(-0.03, 0.03), Q.range(-0.05, 0.05), 0, 0.5);
+    B.box(st, au - 0.1, 0.92, 0, 0.9, 0.08, 1.45, 0, Q.range(-0.04, 0.04), 0, 0.5);
+    B.box(st, au - 0.55, 0.1, 0, 0.5, 0.2, 1.6, 0, 0, 0, 0.5);
+    ctx.circle(au, 0, 0.8);
+    // on the block: a small clay lamp, long dry, and the oil set beside it; a few dried stalks in a pot
+    B.add(_pm.pot(), new THREE.SphereGeometry(0.06, 10, 6, 0, TAU, 0, Math.PI / 2), mtx(au - 0.1, 0.96, -0.35, 0, 0, 0, 1.4, 0.6, 1), true);
+    hallFind(ctx, 0, au - 0.15, 0.97, 0.25);
+    { B.add(_pm.pot(), potGeo(), mtx(au + 0.2, 0.96, -0.5, 0, 0, 0, 0.9, 0.9, 0.9)); for (let k = 0; k < 5; k++) pole(B, _hm.rush(), V3(au + 0.2, 1.15, -0.5), V3(au + 0.2 + Q.range(-0.12, 0.12), 1.45 + Q.range(0, 0.2), -0.5 + Q.range(-0.12, 0.12)), 0.004); }
+    // a low screen of wattle before the apse, open in the middle
+    for (const s of [-1, 1]) { B.box(_wsm.wattle(), n1 - 0.25, 0.45, s * (hw - (hw - 0.55) / 2), 0.06, 0.9, hw - 0.55, 0, 0, 0, 0.8); for (const v of [s * 0.55, s * hw * 0.98]) B.box(M.wood, n1 - 0.25, 0.5, v, 0.08, 1.0, 0.08); ctx.solid(n1 - 0.25, s * (hw - (hw - 0.55) / 2), 0.15, hw - 0.55); }
+    yield;
+    // benches: split logs on stumps, in short rows either side, one tipped over
+    for (let k = 0; k < 4; k++) for (const s of [-1, 1]) {
+      const u = n0 + 1.0 + k * 0.95, v = s * (hw * 0.55), tip = Q.chance(0.1);
+      if (tip) { B.box(M.log, u + 0.1, 0.1, v, 0.24, 0.2, 1.1, 0, 0.2, Math.PI / 2 - 0.2); continue; }
+      for (const e of [-0.4, 0.4]) B.log(M.log, u, 0.18, v + e, 0.1, 0.36, 'y', 7);
+      B.box(M.wood, u, 0.39, v, 0.26, 0.07, 1.2, 0, Q.range(-0.04, 0.04), 0, 0.8);
+      ctx.solid(u, v, 0.32, 1.2);
+    }
+    // a stone bowl by the door, dry; a web in the roof; a bundle of rushes by the wall
+    { const g = new THREE.LatheGeometry([[0.001, 0], [0.18, 0.02], [0.24, 0.12], [0.25, 0.18], [0.2, 0.16], [0.001, 0.08]].map(([x, y]) => new THREE.Vector2(x, y)), 12); B.log(st, n0 + 0.5, 0.35, hw - 0.4, 0.09, 0.7, 'y', 8); B.add(st, g, mtx(n0 + 0.5, 0.7, hw - 0.4), true); ctx.circle(n0 + 0.5, hw - 0.4, 0.3); }
+    B.log(_hm.rush(), n0 + 0.6, 0.08, -hw + 0.3, 0.08, 0.9, 'x', 7);
+    ctx.web(V3(n1 - 0.05, H + rise * 0.6, 0.3), V3(0, -0.4, 1).normalize(), V3(-1, -0.3, 0).normalize(), Q.range(0.5, 0.8), Q.int(0, 3));
+    ctx.addSmash('box', n0 + 0.6, 0, -hw + 0.8, 0.3, { room });
+    const regions = [zoneRect(ctx, -0.6, n0 + 1.3, -0.74, 0.74), zoneRect(ctx, n0 + 0.1, n1, -hw, hw), zoneEll(ctx, n1, 0, ar - 0.1, hw - 0.1)];
+    addZone(ctx, room, regions, -0.7, n1 + ar + 0.3, -hw - 0.4, hw + 0.4);
+    ctx.setBounds(room, n0 + 0.4, n1 - 0.4, -hw + 0.4, hw - 0.4);
+    room.D = n1 + ar; room.W = W; room.H = H;
   },
 });
 
@@ -13733,7 +13999,7 @@ function nearestBiscuit() {
     // crescent, all on the first pass only; the one in the deep at 99 on the passes it is stocked
     const extra = [[CELLAR_L, lp === 0, ['sub:B1', 'sub:B2'], 'twostair', 34], [35, lp === 0, ['oval:B0', 'oval:B2'], 'oval', 26],
       [89, lp === 0, ['crescent:B0', 'crescent:B2'], 'crescent', 26], [DEEP_L, DEEP_STOCK.includes(lp), ['deep:B'], 'deep', 45], [45, lp === 0, ['sack:B'], 'sackrounds', 10],
-      [20, lp === 0, ['ws20:B'], 'ws_drawers', 6], [57, lp === 0, ['ws57:B'], 'ws_hang', 6], [55, lp === 0, ['st55:B'], 'suite', 8]];
+      [20, lp === 0, ['ws20:B'], 'ws_drawers', 6], [57, lp === 0, ['ws57:B'], 'ws_hang', 6], [55, lp === 0, ['st55:B'], 'suite', 8], [37, lp === 0, ['hl37:B'], 'bathhouse', 6]];
     for (const [L, on, keys, design, deep] of extra) {
       if (!on) continue;
       const A = lp * C.LENGTHS + L, st = S.lens[A], r = layoutFor(L, lp).rooms.find(q => q.design === design);
