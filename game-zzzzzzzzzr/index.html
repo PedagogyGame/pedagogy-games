@@ -351,7 +351,7 @@ const KIT = {"tex":{"hewn":"data:image/webp;base64,UklGRtTyAgBXRUJQVlA4IMjyAgBQq
    State (saved) and runtime (not saved)
    ============================================================ */
 const SAVE_KEY = 'serpents-wall-v3';
-const LAYOUT_VERSION = 4;
+const LAYOUT_VERSION = 7;
 function freshState() {
   return {
     v: 1, A: 0, x: 0, z: -5, yaw: 0,
@@ -2230,8 +2230,15 @@ function shell(ctx, room, D, W, H, wallMat, o = {}) {
     B.box(wallMat, uB + 0.1, H / 2, 0, 0.2, H, W + 0.4, 0, 0, 0, 0.7);
     ctx.solid(uB + 0.15, 0, 0.3, W + 0.6, 0, lvl);
   }
-  for (const s of [-1, 1]) B.box(wallMat, u0 + D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.7);
-  for (const s of [-1, 1]) ctx.solid(u0 + D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, lvl);
+  for (const s of [-1, 1]) {
+    const sg = o.sideGap && o.sideGap.s === s ? o.sideGap : null;
+    if (!sg) { B.box(wallMat, u0 + D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.7); ctx.solid(u0 + D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, lvl); continue; }
+    // a doorway in this side wall, from u = a to b, h high: the wall either side of it, a lintel and posts
+    for (const [a, b] of [[u0 - 0.1, sg.a], [sg.b, uB + 0.1]]) { B.box(wallMat, (a + b) / 2, H / 2, s * (hw + 0.1), b - a, H, 0.2, 0, 0, 0, 0.7); ctx.solid((a + b) / 2, s * (hw + 0.15), b - a + (a < u0 ? 0.3 : 0.3), 0.3, 0, lvl); }
+    B.box(wallMat, (sg.a + sg.b) / 2, (sg.h + H) / 2, s * (hw + 0.1), sg.b - sg.a, H - sg.h, 0.2);
+    for (const u of [sg.a + 0.06, sg.b - 0.06]) B.box(M.wood, u, sg.h / 2, s * (hw + 0.1), 0.12, sg.h, 0.24);
+    B.box(M.wood, (sg.a + sg.b) / 2, sg.h + 0.07, s * (hw + 0.1), sg.b - sg.a + 0.3, 0.14, 0.24);
+  }
   if (o.front === false) { /* open to whatever it adjoins */ }
   else if (o.door !== false) {
     const dh = o.dh ?? 0.72, top = DOOR;
@@ -6571,8 +6578,18 @@ const UP_FLOOR = 4.4, UP_TURNS = { 1: 1.5, 2: 2.5, 2.5: 3.5 };
 const SPECIAL_AT = { 24: 'cathedral', 28: 'mosaic', 32: 'rose', 52: 'meander', 76: 'sundial', 79: 'tree' };
 const SPECIAL_ROOMS = new Set(Object.values(SPECIAL_AT));
 const QUIET_L = new Set([0, 31, 49, 51, 75, 82, 99]);
+// v20.5: six places, each at its own length, placed before the chance rooms there so they always find room
+const PLACE_AT = { 2: 'longhall', 5: 'stairhall', 7: 'poles', 45: 'sackrounds', 63: 'minoan', 106: 'rockstair',
+  // v20.6: five wide storerooms in the lengths with least in them
+  13: 'ws_vault', 20: 'ws_drawers', 42: 'ws_corbel', 57: 'ws_hang', 100: 'ws_domes',
+  // v20.7: five rooms up straight flights, the long stone stair, the hall of jars, three rooms with three rooms behind
+  15: 'climb', 38: 'climb', 59: 'climb', 73: 'climb', 94: 'climb', 30: 'longsteps', 74: 'jarhall', 19: 'suite', 55: 'suite', 85: 'suite' };
+const PLACE_ROOMS = new Set(Object.values(PLACE_AT));
 // how far each kind of room reaches along the corridor either side of its door (v; negative is further along)
-const EXT_NEW = { gate: [-2.0, 2.0], walkfull: [-2.0, 0.8], walkhalf: [-6.45, 0.8], up: [-2.4, 2.4], round: [-3.5, 3.5], open: [-4.4, 4.4], cathedral: [-4.3, 4.3], mosaic: [-3.3, 3.3], rose: [-2.4, 2.4], meander: [-3.5, 3.5], sundial: [-2.4, 2.4], tree: [-3.6, 3.6] };
+const EXT_NEW = { gate: [-2.0, 2.0], walkfull: [-2.0, 0.8], walkhalf: [-6.45, 0.8], up: [-2.4, 2.4], round: [-3.5, 3.5], open: [-4.4, 4.4], cathedral: [-4.3, 4.3], mosaic: [-3.3, 3.3], rose: [-2.4, 2.4], meander: [-3.5, 3.5], sundial: [-2.4, 2.4], tree: [-3.6, 3.6],
+  longhall: [-21.0, 3.0], stairhall: [-3.4, 3.4], poles: [-5.6, 5.6], sackrounds: [-3.9, 3.4], minoan: [-3.4, 3.4], rockstair: [-3.9, 3.9],
+  ws_vault: [-5.5, 5.5], ws_drawers: [-5.25, 5.25], ws_corbel: [-5.1, 5.1], ws_hang: [-5.5, 5.5], ws_domes: [-5.7, 5.7],
+  climb: [-4.3, 4.3], longsteps: [-2.4, 2.4], jarhall: [-6.9, 6.9], suite: [-4.1, 4.1] };
 const EXT_OLD = { cave: [-8, 8], grotto: [-4, 10.5], jut: [-8, 8], odd: [-11, 11], escape: [-12, 12], loft: [-6, 6], forge: [-3.9, 3.9], loom: [-3.9, 3.9], bunks: [-3.9, 3.9] };
 const extKey = r => r.design === 'walk' ? 'walk' + (r.kind || 'full') : r.design;
 const extOf = r => EXT_NEW[extKey(r)] || EXT_OLD[r.design] || (COMPOSED.has(r.design) && !r.lower ? [-3.9, 3.9] : [-3, 3]);
@@ -6590,9 +6607,10 @@ function moreRooms(L, rooms) {
     if (R.chance(0.11) && high) want.push({ design: 'round' });
     if (R.chance(0.11) && high) want.push({ design: 'open' });
   }
+  if (PLACE_AT[L]) want.unshift({ design: PLACE_AT[L] });
   const gapOf = (d1, e1, d2, e2) => Math.max((-d1 + e1[0]) - (-d2 + e2[1]), (-d2 + e2[0]) - (-d1 + e1[1]));
   for (const w of want) {
-    const e = extOf(w), must = SPECIAL_ROOMS.has(w.design), underE = [-3.75, 2.55], deepE = [-6.4, 6.4];
+    const e = extOf(w), must = SPECIAL_ROOMS.has(w.design) || PLACE_ROOMS.has(w.design), underE = [-3.75, 2.55], deepE = [-6.4, 6.4];
     let best = null;
     for (const margin of must ? [1.6, 0.9, 0.3] : [1.6]) {
       let bestScore = -1;
@@ -7768,6 +7786,1833 @@ function* buildCrescentGen(ctx, room, R) {
 }
 MORE_BUILD.oval = buildOvalGen;
 MORE_BUILD.crescent = buildCrescentGen;
+
+/* ---- 38d_places.js ---- */
+/* ============================================================
+   Six places, each at its own length (v20.5):
+     2   a room with a very long hallway off its side, and a small room at the end of it
+     5   a room at the corridor's level with a straight stair down through it to a cellar
+     7   a big round room of upright logs: rows of rough shelving, poles lying along the floor and leaned on the wall
+     45  a room full of old sacks, and from it a string of round, domed rooms going out into the wall; a biscuit in a
+         corner (first pass only)
+     63  a room, and through the back of it a tall room with a little spiral up to a gallery: red columns that swell
+         toward the top, black capitals, a painted band of running spirals (after early Cretan building, no symbols)
+     106 a room at the corridor's level with a straight stair down to a room nobody finished: bare rock and some soil
+   ============================================================ */
+const _pm = {
+  sack: () => cachedMat('pl-sack', () => lam(T.cloth, { color: 0x9a8a6a, bumpScale: 1.4 })),
+  sackD: () => cachedMat('pl-sackD', () => lam(T.cloth, { color: 0x6c5e48, bumpScale: 1.4 })),
+  sackP: () => cachedMat('pl-sackP', () => lam(T.cloth, { color: 0xb0a080, bumpScale: 1.2 })),
+  grain: () => cachedMat('pl-grain', () => lam(T.earth, { color: 0xb09660, bumpScale: 0.7 })),
+  mud: () => cachedMat('pl-mud', () => lam(T.earth, { color: 0xa48a6c, bumpScale: 1.8 })),
+  mudF: () => cachedMat('pl-mudF', () => lam(T.earth, { color: 0x8a7258, bumpScale: 2.0 })),
+  pot: () => cachedMat('pl-pot', () => lam(T.earth, { color: 0x9e6a48, bumpScale: 0.5 })),
+  soil: () => cachedMat('pl-soil', () => lam(T.earth, { color: 0x5e4836, bumpScale: 2.6 })),
+  rockF: () => cachedMat('gr-rockF', () => lam(T.rock, { bumpScale: 3.2 })),
+  ochre: () => cachedMat('pl-ochre', () => lam(plasterTex(), { color: 0x9c4028, bumpScale: 0.5 })),
+  black: () => cachedMat('pl-black', () => lam(plasterTex(), { color: 0x3a302a, bumpScale: 0.6 })),
+  cream: () => cachedMat('pl-cream', () => lam(plasterTex(), { color: 0xe6d8bc, bumpScale: 0.4 })),
+  frieze: () => cachedMat('pl-frieze', () => lam(friezeTex(), { bump: false })),
+  dado: () => cachedMat('pl-dado', () => lam(dadoTex(), { bump: false })),
+  flag: () => cachedMat('pl-flag', () => lam(T.stone, { color: 0xb4ac9c, bumpScale: 1.2 })),
+};
+
+/* ---------- textures: the running spirals, and the painted stone of a dado ---------- */
+let _friezeTex = null;
+function friezeTex() {
+  if (_friezeTex) return _friezeTex;
+  const W = 512, H = 128, c = makeCanvas(W, H), g = c.getContext('2d'), R = new Rng(6363);
+  g.fillStyle = '#9a3e24'; g.fillRect(0, 0, W, H);
+  // borders: a dark band and a cream line top and bottom
+  for (const [y, h, col] of [[0, 10, '#2a1c16'], [10, 5, '#e2d4b4'], [H - 15, 5, '#e2d4b4'], [H - 10, 10, '#2a1c16']]) { g.fillStyle = col; g.fillRect(0, y, W, h); }
+  // the running spirals: four to the tile, each joined to the next by a sweeping line, top to bottom by turns
+  const n = 4, sp = W / n, cy = H / 2, r0 = 30;
+  const spiral = (cx, flip) => {
+    g.beginPath();
+    for (let t = 0; t <= 1.0001; t += 0.01) { const a = t * TAU * 1.6, r = 3 + t * r0; const x = cx + Math.cos(a) * r * flip, y = cy + Math.sin(a) * r; t ? g.lineTo(x, y) : g.moveTo(x, y); }
+    g.stroke();
+  };
+  const draw = (col, w) => {
+    g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round';
+    for (let k = -1; k <= n; k++) {
+      const cx = sp * (k + 0.5);
+      spiral(cx, 1);
+      // the tangent from this one's outer end round to the next one's
+      const a = TAU * 1.6, ex = cx + Math.cos(a) * (3 + r0), ey = cy + Math.sin(a) * (3 + r0);
+      g.beginPath(); g.moveTo(ex, ey); g.bezierCurveTo(ex + sp * 0.35, ey + 18, cx + sp - sp * 0.35, cy - r0 - 6, cx + sp + Math.cos(Math.PI) * 6, cy - r0 * 0.15); g.stroke();
+    }
+  };
+  draw('#20160f', 11); draw('#e8dcc0', 6);
+  for (let k = 0; k < n; k++) { g.fillStyle = '#2e4a64'; g.beginPath(); g.arc(sp * (k + 0.5), cy, 5, 0, TAU); g.fill(); }
+  // worn: flakes of the paint gone to the plaster under it, and grime
+  for (let i = 0; i < 240; i++) { g.fillStyle = `rgba(${R.chance(0.6) ? '200,186,160' : '40,30,24'},${R.range(0.08, 0.3).toFixed(2)})`; const x = R.range(0, W), y = R.range(0, H), s = R.range(1, 7); g.beginPath(); g.ellipse(x, y, s, s * R.range(0.4, 1), R.range(0, 3), 0, TAU); g.fill(); }
+  jitter(g, W, H, 14, 63);
+  _friezeTex = texOf(c);
+  return _friezeTex;
+}
+// a dado painted to look like veined stone slabs, the way the old plastered walls were
+let _dadoTex = null;
+function dadoTex() {
+  if (_dadoTex) return _dadoTex;
+  const W = 256, H = 128, c = makeCanvas(W, H), g = c.getContext('2d'), R = new Rng(6464);
+  g.fillStyle = '#c8a88a'; g.fillRect(0, 0, W, H);
+  const cols = ['#b07a5a', '#c49a76', '#a86a4c'];
+  for (let k = 0; k < 2; k++) {
+    g.fillStyle = cols[k % 3]; g.fillRect(k * 128 + 3, 8, 122, H - 16);
+    for (let i = 0; i < 9; i++) { g.strokeStyle = `rgba(60,30,20,${R.range(0.25, 0.5).toFixed(2)})`; g.lineWidth = R.range(1, 3); g.beginPath(); let x = k * 128 + R.range(6, 120), y = 10; g.moveTo(x, y); while (y < H - 10) { x += R.range(-10, 10); y += R.range(6, 16); g.lineTo(clamp(x, k * 128 + 4, k * 128 + 124), Math.min(y, H - 10)); } g.stroke(); }
+  }
+  g.fillStyle = '#2a1c16'; g.fillRect(0, 0, W, 6); g.fillStyle = '#9a3e24'; g.fillRect(0, H - 8, W, 8);
+  for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(${R.chance(0.6) ? '220,206,180' : '40,30,24'},${R.range(0.08, 0.25).toFixed(2)})`; g.fillRect(R.range(0, W), R.range(0, H), R.range(1, 6), R.range(1, 4)); }
+  jitter(g, W, H, 12, 64);
+  _dadoTex = texOf(c);
+  return _dadoTex;
+}
+// a painted strip on a flat face: len along its own x, facing +z before it is turned by ry
+function band(B, mat, u, y, v, len, h, ry, period) {
+  const g = new THREE.PlaneGeometry(len, h); scaleUV(g, len / period, 1);
+  B.add(mat, g, mtx(u, y, v, 0, ry, 0), true);
+}
+
+/* ---------- a pole between two points: a log on any slant ---------- */
+const _poleUp = new THREE.Vector3(0, 1, 0);
+function pole(B, mat, a, b, r) {
+  const d = b.clone().sub(a), len = d.length(), mid = a.clone().add(b).multiplyScalar(0.5);
+  const m = new THREE.Matrix4().compose(mid, new THREE.Quaternion().setFromUnitVectors(_poleUp, d.normalize()), V3(1, 1, 1));
+  if (USE_KIT && mat.map === T.log && KIT_MESH.logs.length) { B._m.multiplyMatrices(B.base, m); return B.kitLog(mat, r, len, 1, B._m); }
+  const g = new THREE.CylinderGeometry(r, r * 0.92, len, 6, 1, true), uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) { const x = uv.getX(i), y = uv.getY(i); uv.setXY(i, y * len, x * TAU * r); }
+  B.add(mat, g, m, true);
+}
+
+/* ---------- old sacks ----------
+   Six shapes: full and tied at the neck, or slumped half-empty, every one lumpy with what is in it */
+const _sackG = [];
+function oldSackGeo(k) {
+  if (_sackG[k]) return _sackG[k];
+  const g = new THREE.SphereGeometry(1, 16, 12), p = g.attributes.position, seed = 300 + k * 17, slump = [0.05, 0.3, 0.55, 0.15, 0.8, 0.4][k];
+  for (let i = 0; i < p.count; i++) {
+    let x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const a = Math.atan2(z, x), nk = smooth(0.42, 0.92, y), low = (1 - y) / 2;
+    const w = (1 - 0.74 * nk) * (1 + (0.22 + 0.3 * slump) * low) * (1 + 0.05 * Math.sin(a * 5 + y * 4 + k) + (vnoise(x * 2.3 + k, z * 2.3 + y * 1.9, seed) - 0.5) * 0.32);
+    x *= w; z *= w;
+    y = y < 0 ? y * (0.62 - 0.12 * slump) : y * (1 - 0.5 * slump * (1 - nk));
+    if (slump > 0.5 && y > 0.2) { x += (y - 0.2) * 0.5; y -= (y - 0.2) * 0.35; }   // the empty top fallen over
+    y += (vnoise(x * 1.7, z * 1.7, seed + 3) - 0.5) * 0.1;
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeBoundingBox();
+  const y0 = g.boundingBox.min.y;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i) - y0; p.setY(i, y < 0.12 ? y * 0.2 : y - 0.096); }
+  g.computeBoundingBox(); g.computeVertexNormals(); scaleUV(g, 2.2, 1.6);
+  g.userData.top = g.boundingBox.max.y; g.userData.slump = slump;
+  return (_sackG[k] = g);
+}
+const _tieG = new THREE.TorusGeometry(0.1, 0.03, 4, 9);
+// one sack, standing or lying over, its neck tied
+function oldSack(B, R, u, y, v, s, o = {}) {
+  const k = o.k ?? R.int(0, 5), g = oldSackGeo(k), mat = o.mat || R.pickW([_pm.sack(), _pm.sackD(), _pm.sackP()], [3, 2, 1]);
+  const rx = o.rx ?? R.range(-0.12, 0.12), rz = o.rz ?? R.range(-0.12, 0.12), ry = o.ry ?? R.range(0, TAU), sy = s * R.range(0.85, 1.12);
+  const m = mtx(u, y, v, rx, ry, rz, 0.3 * s, 0.4 * sy, 0.27 * s);
+  B.add(mat, g, m);
+  if (g.userData.slump < 0.5 && !o.untied) { const n = V3(0, g.userData.top - 0.16, 0).applyMatrix4(m); B.add(M.rope, _tieG, mtx(n.x, n.y, n.z, Math.PI / 2 + rx, ry, rz, s * 0.62, s * 0.62, s * 0.62)); }
+}
+// a heap: a few on the floor, one or two on top, now and then one split with its grain run out
+function sackHeap(ctx, R, u, v, n, o = {}) {
+  const B = ctx.B, lvl = o.lvl || 'up', spread = o.spread ?? 0.5;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU + R.range(-0.4, 0.4), r = n === 1 ? 0 : spread * R.range(0.4, 1);
+    const pu = u + Math.cos(a) * r, pv = v + Math.sin(a) * r * (o.flat ?? 1);
+    pts.push([pu, pv]);
+    oldSack(B, R, pu, 0, pv, R.range(0.9, 1.15), { rx: R.range(-0.25, 0.25), rz: R.range(-0.25, 0.25) });
+  }
+  for (let i = 0, m = n >= 3 ? R.int(1, 2) : 0; i < m; i++) oldSack(B, R, u + R.range(-0.15, 0.15), R.range(0.3, 0.42), v + R.range(-0.15, 0.15), R.range(0.85, 1.0), { rx: R.range(-0.9, 0.9), rz: R.range(-0.9, 0.9) });
+  if (R.chance(o.split ?? 0.3)) {
+    // split: lying over, and what was in it run out across the floor
+    const a = R.range(0, TAU), pu = u + Math.cos(a) * (spread + 0.35), pv = v + Math.sin(a) * (spread + 0.35);
+    oldSack(B, R, pu, 0.0, pv, 1.0, { k: 4, rz: 1.25, ry: -a, untied: true });
+    const sg = new THREE.SphereGeometry(1, 12, 5, 0, TAU, 0, Math.PI / 2);
+    B.add(_pm.grain(), sg, mtx(pu + Math.cos(a) * 0.45, -0.005, pv + Math.sin(a) * 0.45, 0, R.range(0, 3), 0, R.range(0.35, 0.55), 0.06, R.range(0.25, 0.4)), true);
+  }
+  const rr = n === 1 ? 0.32 : spread + 0.22;
+  ctx.circle(u, v, rr * 0.9, lvl);
+  return pts;
+}
+
+/* ---------- small furnishings ---------- */
+let _potG = null;
+function potGeo() {
+  if (_potG) return _potG;
+  const pts = [[0.001, 0], [0.07, 0.005], [0.11, 0.05], [0.13, 0.12], [0.12, 0.2], [0.08, 0.25], [0.065, 0.27], [0.075, 0.29]].map(([x, y]) => new THREE.Vector2(x, y));
+  _potG = new THREE.LatheGeometry(pts, 10); scaleUV(_potG, 1.2, 0.6);
+  return _potG;
+}
+// a big storage jar, chest-high, with a band of rope pattern
+let _pithosG = null;
+function pithosGeo() {
+  if (_pithosG) return _pithosG;
+  const pts = [[0.001, 0], [0.13, 0.01], [0.2, 0.12], [0.3, 0.42], [0.34, 0.7], [0.31, 0.96], [0.22, 1.12], [0.17, 1.18], [0.2, 1.22], [0.19, 1.25]].map(([x, y]) => new THREE.Vector2(x, y));
+  _pithosG = new THREE.LatheGeometry(pts, 14); scaleUV(_pithosG, 2.2, 1.2);
+  return _pithosG;
+}
+function pithos(ctx, R, u, v, s, lvl = 'up') {
+  const B = ctx.B, ry = R.range(0, TAU), mat = _pm.pot();
+  B.add(mat, pithosGeo(), mtx(u, 0, v, R.range(-0.02, 0.02), ry, R.range(-0.02, 0.02), s, s, s));
+  // the raised bands, and a ring of handles at the shoulder
+  for (const [y, r] of [[0.42, 0.305], [0.7, 0.345], [0.96, 0.315]]) B.add(mat, new THREE.TorusGeometry(r * s, 0.018 * s, 4, 18), mtx(u, y * s, v, Math.PI / 2, 0, 0), true);
+  for (let k = 0; k < 4; k++) { const a = ry + k * TAU / 4; B.add(mat, new THREE.TorusGeometry(0.05 * s, 0.014 * s, 4, 8, Math.PI), mtx(u + Math.cos(a) * 0.33 * s, 0.86 * s, v + Math.sin(a) * 0.33 * s, 0, -a + Math.PI / 2, 0), true); }
+  ctx.circle(u, v, 0.34 * s, lvl);
+}
+function rackRow(ctx, room, R, ua, ub, v) {
+  // a run of shelving standing on its own: forked poles for uprights, rails lashed across, split boards laid on the rails
+  const B = ctx.B, len = ub - ua, bays = Math.max(2, Math.round(len / 1.15)), bw = len / bays, hd = 0.3, levels = [0.34, 0.92, 1.5, 2.02];
+  for (let k = 0; k <= bays; k++) for (const s of [-1, 1]) {
+    const u = ua + k * bw + R.range(-0.04, 0.04), lean = R.range(-0.05, 0.05);
+    pole(B, M.log, V3(u, 0, v + s * hd), V3(u + lean, 2.12 + R.range(-0.06, 0.08), v + s * hd + R.range(-0.03, 0.03)), R.range(0.04, 0.055));
+  }
+  levels.forEach((y, li) => {
+    for (const s of [-1, 1]) pole(B, M.wood, V3(ua - 0.12, y + R.range(-0.02, 0.02), v + s * (hd - 0.03)), V3(ub + 0.12, y + R.range(-0.02, 0.02), v + s * (hd - 0.03)), 0.028);
+    // the slats: boards of any width, some gone, one bay now and then sagging
+    for (let k = 0; k < bays; k++) {
+      const sag = R.chance(0.12) ? R.range(0.03, 0.07) : 0;
+      if (li === 3 && R.chance(0.5)) continue;
+      for (let t = ua + k * bw + 0.06; t < ua + (k + 1) * bw - 0.05; t += R.range(0.16, 0.26)) {
+        if (R.chance(0.12)) continue;
+        B.box(M.board, t, y + 0.035 - sag * Math.sin(Math.PI * (t - ua - k * bw) / bw), v, R.range(0.1, 0.17), 0.025, 2 * hd + R.range(0.02, 0.12), R.range(-0.04, 0.04), R.range(-0.06, 0.06), 0, 0.8);
+      }
+      // on it: pots, a basket, a bundle of sticks, or nothing much
+      const um = ua + (k + 0.5) * bw, top = y + 0.05;
+      if (li < 3) {
+        const what = R.pickW(['pots', 'basket', 'bundle', 'none', 'spot'], [2.2, 1, 1, 1.2, 1]);
+        if (what === 'pots') for (let j = 0, n = R.int(1, 3); j < n; j++) { const s = R.range(0.8, 1.3); if (R.chance(0.15)) B.add(_pm.pot(), potGeo(), mtx(um + R.range(-0.35, 0.35), top + 0.13 * s, v + R.range(-0.15, 0.15), Math.PI / 2, R.range(0, TAU), 0, s, s, s)); else B.add(_pm.pot(), potGeo(), mtx(um + R.range(-0.38, 0.38), top, v + R.range(-0.14, 0.14), 0, R.range(0, TAU), 0, s, s, s)); }
+        else if (what === 'basket') { B.add(M.rope, new THREE.CylinderGeometry(0.17, 0.13, 0.2, 10, 1, true), mtx(um + R.range(-0.2, 0.2), top + 0.1, v, 0, 0, 0), true); B.add(M.rope, new THREE.CircleGeometry(0.13, 10), mtx(um, top + 0.004, v, -Math.PI / 2, 0, 0), true); }
+        else if (what === 'bundle') { const a = R.range(-0.3, 0.3); for (let j = 0; j < 7; j++) B.log(M.wood, um + R.range(-0.05, 0.05) + Math.sin(a) * 0, top + 0.03 + (j % 3) * 0.04, v + R.range(-0.1, 0.1), 0.014, R.range(0.6, 0.85), 'x', 4); }
+        else if (what === 'spot') ctx.surface(room, um + R.range(-0.2, 0.2), top, v + R.range(-0.08, 0.08));
+      }
+    }
+  });
+  ctx.solid((ua + ub) / 2, v, len + 0.3, 2 * hd + 0.18, 0, room.lvl);
+}
+
+/* ---------- the stair rooms at 5 and 106 ----------
+   A room at the corridor's level with a slot in its floor; a straight flight goes down the slot under the room's back
+   wall, into a cellar (5) or into rock that was never finished (106). Walked on foot, like the stairs of 20.0 */
+const STAIR_N = 14, STAIR_RISE = 0.21, STAIR_TREAD = 0.28;
+function* stairRoomGen(ctx, room, R, o) {
+  const B = ctx.B, side = room.side, zc = room.zc, key = 'w' + room.i, rock = !!o.rock;
+  const D = o.D, W = o.W, hw = W / 2, H = o.H, Hd = STAIR_N * STAIR_RISE, run = STAIR_N * STAIR_TREAD;
+  const us1 = D - 0.55, us0 = us1 - run, sv0 = o.sv0, sv1 = o.sv1, svm = (sv0 + sv1) / 2, PH = 2.45;
+  room.lvl = key; room.floorY = 0;
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+  const wallM = o.wallM, wellM = rock ? _pm.rockF() : wallM;
+  // the floor, with the slot left open; trimmers under its edges
+  const fb = (a0, a1, b0, b1) => { if (a1 - a0 > 0.02 && b1 - b0 > 0.02) B.box(M.plank, (a0 + a1) / 2, -0.05, (b0 + b1) / 2, a1 - a0, 0.1, b1 - b0, 0, 0, 0, 0.55); };
+  fb(-0.05, us0, -hw - 0.05, hw + 0.05); fb(us0, D + 0.05, -hw - 0.05, sv0); fb(us0, D + 0.05, sv1, hw + 0.05);
+  for (const v of [sv0, sv1]) if (Math.abs(v) < hw - 0.01) B.box(M.wood, (us0 + D) / 2, -0.16, v + (v === sv0 ? -0.07 : 0.07), D - us0, 0.14, 0.14);
+  B.box(M.wood, us0 - 0.07, -0.16, svm, 0.14, 0.14, sv1 - sv0 + 0.28);
+  // ceiling and joists
+  B.box(M.board, D / 2, H + 0.06, 0, D + 0.4, 0.12, W + 0.4, 0, 0, 0, 0.6);
+  for (let u = 0.7; u < D - 0.3; u += 1.6) B.box(M.wood, u, H - 0.11, 0, 0.2, 0.22, W);
+  // the side walls (down into the well where the slot runs along one), the front with its door, the back
+  for (const s of [-1, 1]) {
+    B.box(wallM, D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.7);
+    ctx.solid(D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, key);
+    if (Math.abs(s * hw - (s > 0 ? sv1 : sv0)) < 0.01) B.box(wellM, (us0 + D) / 2, -Hd / 2, s * (hw + 0.1), D - us0 + 0.2, Hd, 0.2, 0, 0, 0, 0.7);
+  }
+  for (const s of [-1, 1]) {
+    B.box(wallM, 0.06, H / 2, s * (0.72 + (hw - 0.72) / 2), 0.12, H, hw - 0.72, 0, 0, 0, 0.7);
+    for (const lv of [key, 'up']) ctx.solid(0.06, s * (0.72 + (hw - 0.72) / 2), 0.2, hw - 0.72, 0, lv);
+  }
+  B.box(wallM, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 1.44);
+  B.box(wallM, D + 0.1, H / 2, 0, 0.2, H, W + 0.4, 0, 0, 0, 0.7);
+  for (const [a, b] of [[-hw - 0.3, sv0], [sv1, hw + 0.3]]) if (b - a > 0.05) ctx.solid(D + 0.1, (a + b) / 2, 0.3, b - a, 0, key);
+  for (const [u, v] of [[0.14, hw - 0.12], [0.14, -hw + 0.12], [D - 0.12, hw - 0.12], [D - 0.12, -hw + 0.12]]) if (!(u > us0 && v > sv0 - 0.1 && v < sv1 + 0.1)) B.box(M.wood, u, H / 2, v, 0.22, H, 0.22);
+  // the well under the slot: its inner sides, its head, the lintel where it passes under the back wall
+  for (const v of [sv0, sv1]) if (Math.abs(v) < hw - 0.01) B.box(wellM, (us0 + D) / 2, -Hd / 2, v + (v === sv0 ? -0.05 : 0.05), D - us0, Hd, 0.1, 0, 0, 0, 0.7);
+  B.box(wellM, us0 - 0.05, -Hd / 2, svm, 0.1, Hd, sv1 - sv0 + 0.2, 0, 0, 0, 0.7);
+  B.box(M.woodDark, D + 0.1, -(Hd - PH) / 2, svm, 0.3, Hd - PH, sv1 - sv0 + 0.3);
+  // the rail round the slot, where the room's floor meets it
+  for (const v of [sv0, sv1]) {
+    if (Math.abs(v) > hw - 0.01) continue;
+    const vv = v + (v === sv0 ? -0.04 : 0.04);
+    for (const u of [us0 + 0.25, (us0 + D) / 2, D - 0.12]) B.box(M.wood, u, 0.5, vv, 0.09, 1.0, 0.09);
+    B.box(M.wood, (us0 + 0.2 + D) / 2, 0.98, vv, D - us0 - 0.2, 0.07, 0.08);
+    B.box(M.wood, (us0 + 0.2 + D) / 2, 0.5, vv, D - us0 - 0.2, 0.05, 0.05);
+    ctx.solid((us0 + 0.2 + D) / 2, vv, D - us0 - 0.2, 0.14, 0, key);
+  }
+  yield;
+  // the flight: treads and risers, a stringer each side, the landing at its foot under the lintel
+  for (let i = 0; i < STAIR_N; i++) {
+    const ua = us0 + i * STAIR_TREAD, y = -(i + 1) * STAIR_RISE, wv = sv1 - sv0 - 0.04;
+    B.box(M.plank, ua + STAIR_TREAD / 2, y - 0.03, svm + R.range(-0.01, 0.01), STAIR_TREAD + 0.03, 0.06, wv, R.range(-0.015, 0.015), R.range(-0.01, 0.01), 0, 1);
+    B.box(M.board, ua, y + STAIR_RISE / 2, svm, 0.035, STAIR_RISE, wv);
+  }
+  const ang = Math.atan2(Hd, run);
+  for (const v of [sv0 + 0.05, sv1 - 0.05]) B.box(M.wood, (us0 + us1) / 2, -Hd / 2 - 0.14, v, Math.hypot(run, Hd) + 0.2, 0.26, 0.06, 0, 0, -ang);
+  B.box(M.plank, (us1 + D + 0.3) / 2, -Hd - 0.05, svm, D + 0.3 - us1, 0.1, sv1 - sv0, 0, 0, 0, 0.8);
+  if (!rock) B.beam(M.wood, V3(us0 + 0.2, 0.9 - 0.1, sv1 - 0.1), V3(us1, -Hd + 0.9, sv1 - 0.1), 0.05, 0.06);
+  if (R.chance(0.6)) ctx.web(V3(us0 + 0.03, -0.25, sv1 - 0.03), V3(0, -0.4, -1).normalize(), V3(1, -1, 0).normalize(), R.range(0.4, 0.7), R.int(0, 3));
+  yield;
+  // where you can stand: the doorway, the room, and below
+  const regions = [], rect = (u0, u1, v0, v1) => regions.push(zoneRect(ctx, u0, u1, v0, v1));
+  rect.regions = regions;
+  rect(-0.45, 1.2, -0.72, 0.72);
+  rect(0.12, D, -hw, hw);
+  rect(us0, D + 0.4, sv0, sv1);
+  // what is in the room above: drawn from the same stock as every room, kept off the slot and the door
+  ctx.setBounds(room, 0.3, D - 0.3, -hw + 0.3, hw - 0.3);
+  yield* furnishGen(ctx, room, room.r, { tag: o.tag + 'u', rect: { u0: 0, u1: D, v0: -hw, v1: hw, h: H }, entry: [0.75, 0], wall: wallM === M.log ? 'log' : 'board',
+    cuts: [{ axis: 'v', c: 0, lo: -0.72, hi: 0.72 }, { axis: 'v', c: D, lo: sv0 - 0.2, hi: sv1 + 0.2 }],
+    reserves: [[us0 - 0.9, D, sv0 - 0.55, sv1 + 0.55, 2], [0, 1.5, -1.0, 1.0, 2]],
+    themes: o.themesUp });
+  yield;
+  // below
+  ctx.setFrame(side, C.WALL_OUT, zc, -Hd);
+  if (rock) yield* rockRoomGen(ctx, room, R, D, svm, sv1 - sv0, rect);
+  else yield* cellarRoomGen(ctx, room, R, D, sv0, sv1, rect, o);
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+  // how high the floor is anywhere: level above, a straight slope down the slot, level at its foot and beyond
+  const floor = (x, zl) => {
+    const u = side * x - C.WALL_OUT, v = zl - zc;
+    if (u >= D - 0.02) return -Hd;
+    if (v > sv0 - 0.02 && v < sv1 + 0.02 && u > us0) return u >= us1 ? -Hd : -(u - us0) / run * Hd;
+    return 0;
+  };
+  (ctx.deeps ||= {})[key] = { y: -Hd, regions, floor, walk: { u: x => side * x - C.WALL_OUT, exitU: 0.1, levels: [0, -Hd] } };
+  const tc = ctx.W(0.62, 0, 0), ret = ctx.W(-0.45, 0, 0);
+  ctx.triggers.push({ type: 'walk', key, room, cx: tc.x, cz: tc.z, hx: 0.32, hz: 0.6, ret: { x: ret.x, z: ret.z }, retYaw: side > 0 ? Math.PI / 2 : -Math.PI / 2 });
+  room.D = D; room.W = W; room.H = H;
+}
+// at 5: a cellar of boards under nothing but rock, reached by the stair, stocked as cellars are
+function* cellarRoomGen(ctx, room, R, D, sv0, sv1, rect, o) {
+  const B = ctx.B, LD = 5.0, LH = 2.65, u0 = D, u1 = D + LD, v1 = o.W / 2, v0 = v1 - 5.4, um = (u0 + u1) / 2, vm = (v0 + v1) / 2, key = room.lvl;
+  const wallM = R.chance(0.5) ? M.board : M.log;
+  B.box(M.plank, um, -0.05, vm, LD + 0.1, 0.1, v1 - v0 + 0.1, 0, 0, 0, 0.8);
+  B.box(M.board, um, LH + 0.06, vm, LD + 0.3, 0.12, v1 - v0 + 0.3, 0, 0, 0, 0.6);
+  for (const u of [u0 + 0.9, um, u1 - 0.9]) B.box(M.wood, u, LH - 0.11, vm, 0.2, 0.22, v1 - v0);
+  B.box(wallM, u1 + 0.1, LH / 2, vm, 0.2, LH, v1 - v0 + 0.4, 0, 0, 0, 0.7);
+  for (const v of [v0 - 0.1, v1 + 0.1]) B.box(wallM, um, LH / 2, v, LD + 0.2, LH, 0.2, 0, 0, 0, 0.7);
+  // the front wall, open where the stair comes in
+  for (const [a, b] of [[v0 - 0.2, sv0], [sv1, v1 + 0.2]]) if (b - a > 0.05) B.box(wallM, u0 + 0.06, LH / 2, (a + b) / 2, 0.12, LH, b - a, 0, 0, 0, 0.7);
+  for (const [u, v] of [[u0 + 0.12, v0 + 0.12], [u1 - 0.12, v0 + 0.12], [u1 - 0.12, v1 - 0.12]]) B.box(M.wood, u, LH / 2, v, 0.2, LH, 0.2);
+  for (const v of [sv0 - 0.07, sv1 + 0.07]) if (v > v0 && v < v1) B.box(M.wood, u0 + 0.1, 1.2, v, 0.16, 2.45, 0.14);
+  ctx.circle(um + 0.4, vm - 0.3, 0.17, key); B.box(M.wood, um + 0.4, LH / 2, vm - 0.3, 0.24, LH, 0.24);
+  rect(u0 - 0.2, u1, v0, v1);
+  yield;
+  yield* furnishGen(ctx, room, room.r, { tag: o.tag + 'c', rect: { u0, u1, v0, v1, h: LH }, entry: [u0 + 0.7, (sv0 + sv1) / 2], wall: wallM === M.log ? 'log' : 'board',
+    cuts: [{ axis: 'v', c: u0, lo: sv0, hi: sv1 }],
+    reserves: [[u0, u0 + 1.5, sv0 - 0.4, sv1, 2], [um + 0.1, um + 0.7, vm - 0.6, vm, 1]],
+    themes: [['store', 3], ['cache', 1.4], ['dank', 1], ['hanging', 0.8], ['toppled', 0.6]] });
+  if (R.chance(0.5)) ctx.drip(room, um + R.range(-1, 1), vm + R.range(-1, 1), LH);
+  ctx.web(V3(u1 - 0.03, LH - 0.03, v0 + 0.03), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), R.range(0.5, 0.9), R.int(0, 3));
+}
+// at 106: where the cutting stopped. Bare rock, a floor of rock with soil heaped and trodden over it, props, the tools
+function* rockRoomGen(ctx, room, R, D, vm, sw, rect) {
+  const B = ctx.B, seed = room.r.seed % 10000, key = room.lvl, V2 = (u, v) => new THREE.Vector2(u, v);
+  const a = 3.1, b = 2.7, c = 1.95, yc = 0.45, cc = V2(D + 3.25, vm);
+  const ch = { c: cc, a, b, h: c, yc, kf: caveK(seed + 11) };
+  // the way in, cut no wider than the stair, and the chamber it opens into
+  const P0 = V2(D - 0.6, vm), P1 = V2(D + 1.2, vm);
+  B.add(M.rock, cutGeo(caveTube(R, [P0, P1], 0.72, 1.22, 1.16, seed), insideChamber([ch])), new THREE.Matrix4(), true);
+  { const g = caveChamber(R, a, b, c, yc, seed + 11), h = _hole(P1.clone().sub(cc), V2(1, 0), 0.7, 2.3, 1.2);
+    B.add(M.rock, cutGeo(g, (x, y, z) => { const dx = x - h.u, dz = z - h.v, al = dx * h.du + dz * h.dv, ac = -dx * h.dv + dz * h.du; return Math.abs(al) < h.depth && Math.abs(ac) < h.w && y > h.y0 && y < h.y1; }), mtx(cc.x, 0, cc.y), true); }
+  rimOpening(B, seed + 5, ch, P1, V2(1, 0), 0.72, 2.3);
+  yield;
+  // soil: trodden patches, heaps against the rock, a spill from a basket; loose stone everywhere it fell from the face
+  const soil = _pm.soil(), st = [M.stone, M.stoneB, M.stoneC];
+  for (let k = 0; k < 7; k++) { const t = R.range(0, TAU), r = R.range(0, 0.6); B.add(soil, new THREE.CircleGeometry(1, 11), mtx(cc.x + Math.cos(t) * a * r, 0.012 + k * 0.002, cc.y + Math.sin(t) * b * r, -Math.PI / 2, 0, R.range(0, 3), R.range(0.5, 1.1), R.range(0.4, 0.8), 1), true); }
+  const heaps = [];
+  for (let k = 0; k < 4; k++) {
+    const t = (k + R.range(0.1, 0.9)) / 4 * TAU; if (Math.abs(Math.atan2(Math.sin(t - Math.PI), Math.cos(t - Math.PI))) < 0.7) continue;
+    const pu = cc.x + Math.cos(t) * a * 0.62, pv = cc.y + Math.sin(t) * b * 0.62, s = R.range(0.45, 0.8);
+    B.add(soil, new THREE.SphereGeometry(1, 12, 6, 0, TAU, 0, Math.PI / 2), mtx(pu, -0.03, pv, 0, R.range(0, 3), 0, s * 1.2, s * 0.55, s), true);
+    for (let j = 0; j < 5; j++) stoneLump(B, R, R.pick(st), pu + R.range(-s, s), R.range(0.02, s * 0.3), pv + R.range(-s, s), R.range(0.06, 0.14), 0.7);
+    heaps.push([pu, pv, s]); ctx.circle(pu, pv, s * 0.8, key);
+  }
+  for (let k = 0; k < 26; k++) { const t = R.range(0, TAU), r = Math.sqrt(R.next()) * 0.85; stoneLump(B, R, R.pick(st), cc.x + Math.cos(t) * a * r, 0.03, cc.y + Math.sin(t) * b * r, Math.pow(R.next(), 2) * 0.12 + 0.03, R.range(0.5, 0.8)); }
+  // where it was being cut: a face squared off, the marks of the pick on it, a block half freed and left
+  const fu = cc.x + a * 0.72, M2 = _pm.rockF();
+  B.box(M2, fu, 0.9, cc.y + 0.3, 0.3, 1.8, 1.7, 0, R.range(-0.05, 0.05), 0, 0.5);
+  for (let k = 0; k < 14; k++) B.box(M.socket, fu - 0.152, R.range(0.2, 1.7), cc.y + 0.3 + R.range(-0.75, 0.75), 0.01, R.range(0.06, 0.14), 0.012, 0, 0, R.range(-0.9, 0.9));
+  B.box(M2, fu - 0.45, 0.3, cc.y - 0.55, 0.55, 0.6, 0.5, 0, R.range(-0.3, 0.3), 0, 0.5); ctx.circle(fu - 0.45, cc.y - 0.55, 0.38, key);
+  ctx.circle(fu, cc.y + 0.3, 0.7, key);
+  yield;
+  // two props holding the roof where it cracked; the tools, dropped where the work stopped
+  for (const [pu, pv] of [[cc.x - 0.6, cc.y + b * 0.42], [cc.x + 0.9, cc.y - b * 0.45]]) {
+    const top = yc + c * 0.82; B.log(M.log, pu, top / 2, pv, 0.09, top, 'y', 7); B.box(M.wood, pu, top + 0.04, pv, 0.7, 0.08, 0.22, 0, R.range(0, 3), 0); ctx.circle(pu, pv, 0.16, key);
+  }
+  { // a pick: a haft and a bent iron head
+    const pu = cc.x + 0.4, pv = cc.y + 0.6, t = R.range(0, TAU);
+    pole(B, M.wood, V3(pu - Math.cos(t) * 0.42, 0.03, pv - Math.sin(t) * 0.42), V3(pu + Math.cos(t) * 0.42, 0.03, pv + Math.sin(t) * 0.42), 0.022);
+    B.box(M.iron, pu + Math.cos(t) * 0.42, 0.04, pv + Math.sin(t) * 0.42, 0.06, 0.05, 0.5, 0.12, -t, 0);
+  }
+  { // a wooden shovel leant on the rock
+    const t = R.range(-0.6, 0.6) + Math.PI * 0.5, pu = cc.x + Math.cos(t) * a * 0.7, pv = cc.y + Math.sin(t) * b * 0.7, ti = V3(cc.x + Math.cos(t) * a * 0.88, 1.15, cc.y + Math.sin(t) * b * 0.88);
+    pole(B, M.wood, V3(pu, 0.32, pv), ti, 0.02);
+    B.box(M.board, pu - Math.cos(t) * 0.04, 0.16, pv - Math.sin(t) * 0.04, 0.24, 0.34, 0.025, -0.3, -t + Math.PI / 2, 0);
+  }
+  { // a basket of soil, and one on its side with the soil out of it
+    const pu = cc.x - 1.1, pv = cc.y - 0.7;
+    B.add(M.rope, new THREE.CylinderGeometry(0.22, 0.17, 0.26, 12, 1, true), mtx(pu, 0.13, pv), true);
+    B.add(soil, new THREE.SphereGeometry(0.21, 10, 5, 0, TAU, 0, Math.PI / 2), mtx(pu, 0.2, pv, 0, 0, 0, 1, 0.5, 1), true);
+    B.add(M.rope, new THREE.CylinderGeometry(0.22, 0.17, 0.26, 12, 1, true), mtx(pu + 0.6, 0.17, pv + 0.35, 0, 0.6, Math.PI / 2 - 0.15), true);
+    B.add(soil, new THREE.SphereGeometry(1, 10, 5, 0, TAU, 0, Math.PI / 2), mtx(pu + 0.9, -0.01, pv + 0.42, 0, 0.6, 0, 0.35, 0.06, 0.22), true);
+    ctx.circle(pu, pv, 0.24, key);
+  }
+  // a lamp niche cut in the rock, the lamp in it long dry; somebody's food box left by the way in
+  { const t = Math.PI * 0.62, nu = cc.x + Math.cos(t) * a * 0.86, nv = cc.y + Math.sin(t) * b * 0.86; B.box(M.socket, nu, 1.5, nv, 0.3, 0.26, 0.3, 0, -t, 0); B.add(_pm.pot(), potGeo(), mtx(nu, 1.37, nv, 0, 0, 0, 0.7, 0.35, 0.7)); }
+  ctx.addSmash('box', D + 1.0, 0, vm - 0.95, 0.4, { room, lvl: key });
+  ctx.bones(cc.x + 0.2, cc.y - 1.2, R);
+  rect(D - 0.6, D + 1.4, vm - 0.62, vm + 0.62);
+  rect.regions.push(zoneEll(ctx, cc.x, cc.y, a * 0.8 - 0.25, b * 0.8 - 0.25));
+}
+
+/* ---------- 63: the gallery's little spiral ---------- */
+function smallSpiral(B, cu, cv, steps, turns, H, seed) {
+  const R = new Rng(hash32(seed | 0, steps, 6363));
+  B.log(M.log, cu, (H + 1.1) / 2, cv, 0.1, H + 1.1, 'y', 8);
+  for (let s = 0; s < steps; s++) {
+    const phi = Math.PI + (s + 0.5) * (turns * TAU / steps), c = Math.cos(phi), sn = Math.sin(phi), y = (s + 1) * H / steps;
+    const L = 0.74 - (R.chance(0.15) ? R.range(0.03, 0.1) : 0), rc = 0.1 + L / 2;
+    B.box(M.plank, cu + rc * c, y - 0.03 + R.range(-0.015, 0.015), cv + rc * sn, L, R.range(0.05, 0.07), 0.25, R.range(-0.03, 0.01), -phi, R.range(-0.02, 0.02), 1);
+    B.box(M.wood, cu + 0.8 * c, y - 0.32, cv + 0.8 * sn, 0.05, 0.62, 0.05, 0, -phi, 0);
+  }
+  // a rope run down through rings on the outer posts, for the hand
+  const pts = []; for (let s = 0; s <= steps; s += 2) { const phi = Math.PI + s * (turns * TAU / steps); pts.push(V3(cu + 0.8 * Math.cos(phi), s * H / steps + 0.75, cv + 0.8 * Math.sin(phi))); }
+  for (let i = 0; i < pts.length - 1; i++) pole(B, M.rope, pts[i], pts[i + 1], 0.016);
+}
+
+/* ---------- round walls and domes, for the string of rooms at 45 ----------
+   A ring of mud-plastered wall from y0 to y1 between two angles (th as polar(): u = cu + r cos th, v = cv + r sin th),
+   its radius wandering a little; the dome on it the same wander at its foot, so the two meet */
+const _rk = (th, y, seed) => 1 + (vnoise(Math.cos(th) * 2.2 + 7, Math.sin(th) * 2.2 + y * 1.3, seed) - 0.5) * 0.07;
+function turnFacesTo(g, cx, cy, cz) {
+  // turn every face to look toward (cx, cy, cz): decided once, from the first triangle
+  const p = g.attributes.position, I = g.index.array, a = V3().fromBufferAttribute(p, I[0]), b = V3().fromBufferAttribute(p, I[1]), c = V3().fromBufferAttribute(p, I[2]);
+  const n = b.clone().sub(a).cross(c.clone().sub(a)), toC = V3(cx, cy, cz).sub(a);
+  if (n.dot(toC) < 0) flipWinding(g);
+  g.computeVertexNormals();
+  return g;
+}
+function ringGeo(cu, cv, r, y0, y1, th0, th1, seed) {
+  const cols = Math.max(2, Math.ceil((th1 - th0) * r / 0.22)), rows = Math.max(1, Math.ceil((y1 - y0) / 0.35)), pos = [], uv = [], idx = [];
+  for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) {
+    const th = th0 + (th1 - th0) * i / cols, y = y0 + (y1 - y0) * j / rows, rr = r * _rk(th, y, seed);
+    pos.push(cu + rr * Math.cos(th), y, cv + rr * Math.sin(th)); uv.push(th * r / 1.3, y / 1.3);
+  }
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  return turnFacesTo(g, cu, (y0 + y1) / 2, cv);
+}
+function domeGeo(cu, cv, r, y1, rise, seed) {
+  const cols = Math.ceil(TAU * r / 0.25), rows = 7, pos = [], uv = [], idx = [];
+  for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) {
+    const t = j / rows, th = i / cols * TAU, y = y1 + rise * Math.sin(t * Math.PI / 2), rr = r * _rk(th, y1, seed) * Math.pow(Math.cos(t * Math.PI / 2), 0.85);
+    pos.push(cu + rr * Math.cos(th), y, cv + rr * Math.sin(th)); uv.push(th * r / 1.3, (y1 + t * r * 1.2) / 1.3);
+  }
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const a = j * (cols + 1) + i, b = a + 1, c = a + cols + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  return turnFacesTo(g, cu, y1 - 1, cv);
+}
+// one domed room: the doorways are angles (th) where the wall stands open below the lintel
+function domedRoom(ctx, cu, cv, r, WH, rise, DH, doors, seed, mat) {
+  const B = ctx.B, ga = Math.asin(0.6 / r);
+  // the lower wall, in arcs between the doorways
+  const gaps = doors.map(t => [t - ga, t + ga]).sort((a, b) => a[0] - b[0]);
+  let th = gaps.length ? gaps[0][1] : 0;
+  const end = gaps.length ? gaps[0][0] + TAU : TAU;
+  for (let k = 1; k <= gaps.length; k++) {
+    const nx = k < gaps.length ? gaps[k][0] : end;
+    if (nx - th > 0.02) B.add(mat, ringGeo(cu, cv, r, 0, DH, th, nx, seed), new THREE.Matrix4(), true);
+    if (k < gaps.length) th = gaps[k][1];
+  }
+  if (!gaps.length) B.add(mat, ringGeo(cu, cv, r, 0, DH, 0, TAU, seed), new THREE.Matrix4(), true);
+  B.add(mat, ringGeo(cu, cv, r, DH, WH, 0, TAU, seed), new THREE.Matrix4(), true);
+  B.add(mat, domeGeo(cu, cv, r, WH, rise, seed), new THREE.Matrix4(), true);
+  // a floor of beaten earth, a kerb of stones round the foot of the wall
+  { const g = new THREE.CircleGeometry(r + 0.12, 26); g.rotateX(-Math.PI / 2); scaleUV(g, r * 0.9, r * 0.9); B.add(_pm.mudF(), g, mtx(cu, 0.002, cv), true); }
+  // the doorways: posts and a lintel, the wall's thickness shown by a lining either side
+  for (const t of doors) {
+    const c = Math.cos(t), s = Math.sin(t), tu = -s, tv = c;
+    for (const e of [-1, 1]) {
+      const pu = cu + (r - 0.02) * c + e * 0.62 * tu, pv = cv + (r - 0.02) * s + e * 0.62 * tv;
+      B.box(M.wood, pu, DH / 2, pv, 0.14, DH, 0.12, 0, -t, 0);
+      B.box(mat, pu + 0.18 * c, DH / 2, pv + 0.18 * s, 0.4, DH, 0.08, 0, -t, 0, 0.6);
+    }
+    B.box(M.wood, cu + (r - 0.02) * c, DH + 0.07, cv + (r - 0.02) * s, 0.16, 0.14, 1.5, 0, -t, 0);
+  }
+}
+
+/* ---------- the new rooms, as MORE_BUILD entries ---------- */
+Object.assign(MORE_BUILD, {
+  /* ---------- 2: a room, and off its side a hallway that goes on and on ---------- */
+  *longhall(ctx, room, R) {
+    const B = ctx.B, D = 5.4, W = 5.2, hw = W / 2, H = 2.6 * HS, hu0 = 1.9, hu1 = 3.2, HL = 14.0, HH = 2.55, wallM = R.chance(0.5) ? M.board : M.log;
+    shell(ctx, room, D, W, H, wallM, { sideGap: { s: -1, a: hu0, b: hu1, h: DOOR - 0.12 } });
+    const v0 = -hw - 0.2, vE = v0 - HL, hm = (hu0 + hu1) / 2, vm = (v0 + vE) / 2;
+    // the hallway: boards underfoot laid along it, board walls, a low ceiling; timber sets every couple of metres
+    B.box(M.plank, hm, -0.05, vm, hu1 - hu0 + 0.2, 0.1, HL + 0.1, 0, 0, 0, 0.55);
+    B.box(M.board, hm, HH + 0.06, vm, hu1 - hu0 + 0.4, 0.12, HL + 0.2, 0, 0, 0, 0.6);
+    for (const u of [hu0 - 0.06, hu1 + 0.06]) { B.box(M.board, u, HH / 2, vm, 0.12, HH, HL + 0.1, 0, 0, 0, 0.7); ctx.solid(u + (u < hm ? -0.09 : 0.09), vm, 0.3, HL + 0.6); }
+    const Q = new Rng(room.r.seed ^ 0x2222), sets = Math.round(HL / 1.9);
+    for (let k = 1; k < sets; k++) {
+      const v = v0 - k * HL / sets + Q.range(-0.1, 0.1), lean = Q.chance(0.2) ? Q.range(-0.06, 0.06) : 0;
+      for (const [u, s] of [[hu0 + 0.07, 1], [hu1 - 0.07, -1]]) B.box(M.wood, u, HH / 2, v, 0.15, HH, 0.15, lean, 0, s * Q.range(-0.02, 0.02));
+      if (Q.chance(0.12)) { B.box(M.wood, hu1 - 0.3, 0.55, v + 0.4, 0.15, 0.15, hu1 - hu0 + 0.1, 0.9, Math.PI / 2 - 0.35, 0.3); B.box(M.board, hm, HH - 0.02, v, hu1 - hu0, 0.04, 0.3); }
+      else B.box(M.wood, hm, HH - 0.09, v, hu1 - hu0, 0.17, 0.17, 0, 0, Q.range(-0.03, 0.03));
+    }
+    yield;
+    // what lies along it: almost nothing, which is the point; a hole where boards went, a stool, bones, a coil of rope
+    { const v = v0 - HL * Q.range(0.28, 0.38); B.box(M.socket, hm + 0.25, 0.004, v, 0.42, 0.01, 0.7); for (let k = 0; k < 3; k++) B.box(M.plank, hm + 0.25 + Q.range(-0.25, 0.25), 0.03, v + Q.range(-0.4, 0.4), 0.13, 0.03, Q.range(0.3, 0.6), Q.range(-0.2, 0.2), Q.range(-0.6, 0.6), Q.range(-0.15, 0.15)); }
+    seat(ctx, room, 'stool', hu0 + 0.32, v0 - HL * 0.52, Q.range(0, 3), Q, { tipped: true });
+    ctx.bones(hm, v0 - HL * 0.72, Q);
+    { const v = v0 - HL * Q.range(0.12, 0.2); for (let k = 0; k < 4; k++) B.add(M.rope, new THREE.TorusGeometry(0.17 - k * 0.012, 0.016, 4, 14), mtx(hu1 - 0.24, 0.016 + k * 0.03, v, Math.PI / 2, 0, 0), true); }
+    for (let k = 0; k < 3; k++) { const v = v0 - HL * (0.2 + k * 0.3) + Q.range(-0.6, 0.6), s = Q.chance(0.5) ? 1 : -1; ctx.web(V3(s > 0 ? hu1 - 0.03 : hu0 + 0.03, HH - 0.03, v), V3(0, 0, -1), V3(-s * 0.7, -1, 0).normalize(), Q.range(0.35, 0.7), Q.int(0, 3)); }
+    if (Q.chance(0.7)) ctx.drip(room, hm + Q.range(-0.2, 0.2), v0 - HL * Q.range(0.55, 0.85), HH);
+    // and at its end, a small room
+    const eu0 = 1.1, eu1 = 4.4, ev1 = vE, ev0 = vE - 3.3, EH = 2.9, eum = (eu0 + eu1) / 2, evm = (ev0 + ev1) / 2;
+    B.box(M.plank, eum, -0.05, evm, eu1 - eu0 + 0.1, 0.1, ev1 - ev0 + 0.1, 0, 0, 0, 0.55);
+    B.box(M.board, eum, EH + 0.06, evm, eu1 - eu0 + 0.4, 0.12, ev1 - ev0 + 0.4, 0, 0, 0, 0.6);
+    B.box(M.wood, eum, EH - 0.11, evm, eu1 - eu0, 0.22, 0.2);
+    for (const u of [eu0 - 0.1, eu1 + 0.1]) { B.box(wallM, u, EH / 2, evm, 0.2, EH, ev1 - ev0 + 0.4, 0, 0, 0, 0.7); ctx.solid(u + (u < eum ? -0.05 : 0.05), evm, 0.3, ev1 - ev0 + 0.6); }
+    B.box(wallM, eum, EH / 2, ev0 - 0.1, eu1 - eu0 + 0.2, EH, 0.2, 0, 0, 0, 0.7); ctx.solid(eum, ev0 - 0.15, eu1 - eu0 + 0.6, 0.3);
+    for (const [a, b] of [[eu0 - 0.2, hu0 - 0.12], [hu1 + 0.12, eu1 + 0.2]]) { B.box(wallM, (a + b) / 2, EH / 2, ev1 + 0.1, b - a, EH, 0.2, 0, 0, 0, 0.7); ctx.solid((a + b) / 2, ev1 + 0.15, b - a, 0.3); }
+    B.box(wallM, hm, (HH + EH) / 2, ev1 + 0.1, hu1 - hu0 + 0.3, EH - HH, 0.2);
+    for (const [u, v] of [[eu0 + 0.12, ev0 + 0.12], [eu1 - 0.12, ev0 + 0.12], [eu0 + 0.12, ev1 - 0.12], [eu1 - 0.12, ev1 - 0.12]]) B.box(M.wood, u, EH / 2, v, 0.2, EH, 0.2);
+    yield;
+    // whoever walked all that way sat down by the chest at the end of it, beside the lamp they brought
+    ctx.addSmash('chest', eum + 0.3, 0, ev0 + 0.5, 0, { room });
+    ctx.skeleton('sit', eu0 + 0.4, ev0 + 0.6, Math.PI * 0.25);
+    B.add(_pm.pot(), potGeo(), mtx(eu0 + 0.75, 0, ev0 + 0.35, Math.PI / 2, 0.4, 0, 0.6, 0.35, 0.6));
+    ctx.addSmash(Q.chance(0.5) ? 'box' : 'crate', eu1 - 0.45, 0, evm + 0.4, Q.range(-0.3, 0.3), { room });
+    seat(ctx, room, 'bench', eu1 - 0.35, evm - 0.6, -Math.PI / 2, Q, {});
+    ctx.web(V3(eu1 - 0.03, EH - 0.03, ev0 + 0.03), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), Q.range(0.5, 0.9), Q.int(0, 3));
+    // and the room itself, stocked as any room is, kept clear before the hallway
+    yield* furnishGen(ctx, room, room.r, { tag: 'lh', rect: { u0: 0, u1: D, v0: -hw, v1: hw, h: H }, entry: [0.75, 0], wall: wallM === M.log ? 'log' : 'board',
+      cuts: [{ axis: 'v', c: 0, lo: -0.72, hi: 0.72 }, { axis: 'u', c: -hw, lo: hu0, hi: hu1 }],
+      reserves: [[hu0 - 0.4, hu1 + 0.4, -hw, -hw + 1.3, 2], [0, 1.5, -1.0, 1.0, 2]],
+      themes: [['store', 2], ['toppled', 1], ['empty', 1], ['cache', 0.8], ['pigeon', 0.6], ['bunks', 0.5]] });
+    ctx.setBounds(room, 0.3, D - 0.3, -hw + 0.3, hw - 0.3);
+  },
+
+  /* ---------- 5 and 106: stairs down through a room ---------- */
+  *stairhall(ctx, room, R) {
+    const W = 6.2, hw = W / 2;
+    yield* stairRoomGen(ctx, room, R, { D: 7.4, W, H: 2.7 * HS, sv0: hw - 1.2, sv1: hw, wallM: R.chance(0.5) ? M.board : M.log, tag: 'sh',
+      themesUp: [['store', 2], ['bunks', 1], ['loom', 0.6], ['empty', 0.8], ['toppled', 0.6], ['cache', 0.8]] });
+  },
+  *rockstair(ctx, room, R) {
+    yield* stairRoomGen(ctx, room, R, { D: 7.6, W: 6.8, H: 2.7 * HS, sv0: -0.65, sv1: 0.65, wallM: M.log, tag: 'rs', rock: true,
+      themesUp: [['store', 2], ['toppled', 1], ['empty', 1], ['dank', 0.8], ['cache', 0.6]] });
+  },
+
+  /* ---------- 7: the big round room of logs, shelving in rows, poles ---------- */
+  *poles(ctx, room, R) {
+    const B = ctx.B, Rr = 5.0, ent = 1.0, WH = 2.5 * HS, rise = 2.4;
+    const { cu, gap, Q } = roundShell(ctx, room, R, Rr, ent, WH, { wall: M.log });
+    { const g = new THREE.CircleGeometry(Rr + 0.15, 36); g.rotateX(-Math.PI / 2); scaleUV(g, Rr, Rr); B.add(M.earth, g, mtx(cu, -0.004, 0), true); }
+    // the wall: a ring of upright logs, short ones over the way in
+    const N = Math.ceil(TAU * Rr / 0.27);
+    for (let k = 0; k < N; k++) {
+      const th = (k + 0.5) / N * TAU, door = angOff(th, Math.PI) < gap, y0 = door ? DOOR + 0.1 : 0, hh = WH + Q.range(-0.05, 0.12) - y0, r = Rr + 0.1;
+      B.log(M.log, cu + r * Math.cos(th), y0 + hh / 2, r * Math.sin(th), Q.range(0.12, 0.15), hh, 'y', 7);
+      if (overBudget()) yield;
+    }
+    for (const s of [-1, 1]) { const [u, w] = polar(cu, Math.PI + s * gap, Rr - 0.02); B.log(M.wood, u, (DOOR + 0.1) / 2, w, 0.11, DOOR + 0.1, 'y', 7); }
+    B.box(M.wood, cu - Rr + 0.02, DOOR + 0.16, 0, 0.22, 0.16, 2 * 0.84 + 0.3);
+    // the roof: a wall plate round the top, rafters to a post in the middle, a cone of boards on them
+    for (let k = 0; k < 20; k++) { const a = k / 20 * TAU, b = (k + 1) / 20 * TAU, [u0, w0] = polar(cu, a, Rr - 0.05), [u1, w1] = polar(cu, b, Rr - 0.05); B.beam(M.wood, V3(u0, WH - 0.06, w0), V3(u1, WH - 0.06, w1), 0.18, 0.16); }
+    { const g = new THREE.ConeGeometry(Rr + 0.2, rise, 32, 1, true); inward(g); scaleUV(g, TAU * Rr * 0.5, 1.6); B.add(M.board, g, mtx(cu, WH + rise / 2, 0), true); }
+    B.log(M.log, cu, (WH + rise) / 2, 0, 0.17, WH + rise, 'y', 9); ctx.circle(cu, 0, 0.24, 'up');
+    for (let k = 0; k < 22; k++) { const th = k / 22 * TAU, [u, w] = polar(cu, th, Rr - 0.05); pole(B, M.log, V3(u, WH, w), V3(cu + 0.12 * Math.cos(th), WH + rise - 0.12, 0.12 * Math.sin(th)), 0.06); }
+    yield;
+    // rows of shelving, the way in kept clear down the middle
+    for (const v of [-3.0, -1.25, 1.25]) {
+      const hc = Math.sqrt(Math.max(0, (Rr - 0.95) * (Rr - 0.95) - (Math.abs(v) + 0.35) * (Math.abs(v) + 0.35)));
+      const ua = Math.max(cu - hc, ent + 1.4), ub = cu + hc;
+      if (ub - ua > 1.6) { rackRow(ctx, room, R, ua, ub, v); yield; }
+    }
+    // the poles: a pile lying along the floor on the other side, on chocks, a layer or two
+    const vP = 3.45, hcP = Math.sqrt((Rr - 0.4) * (Rr - 0.4) - (vP + 0.35) * (vP + 0.35));
+    for (const du of [-1.3, 0.1, 1.3]) B.log(M.woodDark, cu + du + Q.range(-0.1, 0.1), 0.05, vP, 0.05, 0.85, 'z', 6);
+    let layer = 0, y = 0.13;
+    for (const n of [6, 4, 2]) {
+      for (let k = 0; k < n; k++) {
+        const v = vP + (k - (n - 1) / 2) * 0.13 + Q.range(-0.02, 0.02), r = Q.range(0.035, 0.06), half = Math.min(hcP, Q.range(1.7, 2.5)), cu2 = cu + Q.range(-0.4, 0.4), yaw = Q.range(-0.04, 0.04);
+        pole(B, M.log, V3(cu2 - half, y + r + Q.range(-0.01, 0.01), v - yaw * half), V3(cu2 + half, y + r + Q.range(-0.01, 0.01), v + yaw * half), r);
+      }
+      y += 0.1; layer++;
+    }
+    ctx.solid(cu, vP, 2 * hcP, 0.95, 0, 'up');
+    // and a few thrown down across the rest, crooked
+    for (let k = 0; k < 2; k++) { const v = vP - 0.65 - k * 0.12, a = Q.range(-0.2, 0.2); pole(B, M.log, V3(cu - 1.6, 0.05, v - a), V3(cu + 1.4, 0.05 + Q.range(0, 0.04), v + a), Q.range(0.035, 0.05)); }
+    ctx.solid(cu - 0.1, vP - 0.7, 3.0, 0.4, 0, 'up');
+    yield;
+    // leaned on the wall round the back: long poles, their feet out from the logs, their heads on the wall plate
+    const lean = [];
+    for (let th = -1.05; th < 0.95; th += Q.range(0.07, 0.13)) lean.push(th);
+    for (let th = 1.85; th < 2.55; th += Q.range(0.08, 0.14)) lean.push(th);
+    for (const th of lean) {
+      const foot = Rr - Q.range(0.55, 0.9), top = Q.range(2.2, WH + 0.6), tw = th + Q.range(-0.06, 0.06), r = Q.range(0.03, 0.055);
+      const [fu, fv] = polar(cu, th, foot), [tu, tv] = polar(cu, tw, Rr - 0.12 - (top > WH - 0.1 ? 0.12 : 0));
+      pole(B, M.log, V3(fu, 0, fv), V3(tu, top, tv), r);
+    }
+    for (let th = -1.05; th < 0.95; th += 0.42) { const [u, w] = polar(cu, th, Rr - 0.6); ctx.circle(u, w, 0.42, 'up'); }
+    for (let th = 1.85; th < 2.55; th += 0.35) { const [u, w] = polar(cu, th, Rr - 0.6); ctx.circle(u, w, 0.4, 'up'); }
+    yield;
+    // the bench where they were shaved and split, the shavings, a drawknife; jars and a chest along the front
+    { const [u, w] = polar(cu, -2.2, Rr - 1.1); table(ctx, room, u, w, faceIn(-2.2) + Math.PI / 2); pole(B, M.log, V3(u - 0.9, 0.84, w - 0.1), V3(u + 0.9, 0.86, w + 0.1), 0.045); for (let k = 0; k < 12; k++) B.box(M.wood, u + Q.range(-0.9, 0.9), 0.01, w + Q.range(-0.7, 0.7), Q.range(0.08, 0.2), 0.008, 0.03, 0, Q.range(0, 3), 0); }
+    for (const th of [-2.7, 2.85]) { const [u, w] = polar(cu, th, Rr - 0.5); ctx.addSmash('barrel', u, 0, w, Q.range(0, TAU), { room }); }
+    { const [u, w] = polar(cu, 2.95 + 0.25, Rr - 0.55); ctx.addSmash('chest', u, 0, w, faceIn(3.2), { room }); }
+    { const [u, w] = polar(cu, -2.45, Rr - 0.5); stack(ctx, room, u, w, R); }
+    for (let k = 0; k < 3; k++) if (Q.chance(0.65)) { const th = Q.range(-2.2, 2.2), [u, w] = polar(cu, th, Rr - 0.12); ctx.web(V3(u, WH - 0.04, w), V3(-Math.sin(th), 0, Math.cos(th)), V3(-Math.cos(th) * 0.5, -1, -Math.sin(th) * 0.5).normalize(), Q.range(0.5, 1.0), Q.int(0, 3)); }
+    addZone(ctx, room, [zoneRect(ctx, -0.6, ent + 1.0, -0.74, 0.74), zoneEll(ctx, cu, 0, Rr - 0.1)], -0.7, cu + Rr + 0.3, -Rr - 0.4, Rr + 0.4);
+    ctx.setBounds(room, cu - Rr * 0.6, cu + Rr * 0.6, -Rr * 0.6, Rr * 0.6);
+    room.D = cu + Rr; room.W = 2 * Rr; room.H = WH;
+  },
+});
+
+Object.assign(MORE_BUILD, {
+  /* ---------- 45: a room of sacks, and round rooms going on from it into the wall ---------- */
+  *sackrounds(ctx, room, R) {
+    const B = ctx.B, ED = 4.4, EW = 4.6, ehw = EW / 2, EH = 2.9, DH = 2.08, Q = new Rng(room.r.seed ^ 0x4545), key = room.lvl;
+    const wallM = M.board, mud = _pm.mud();
+    // the first room: boards all round, a doorway in its back wall into the first of the round rooms
+    B.box(M.plank, ED / 2, -0.05, 0, ED + 0.1, 0.1, EW + 0.1, 0, 0, 0, 0.55);
+    B.box(M.board, ED / 2, EH + 0.06, 0, ED + 0.4, 0.12, EW + 0.4, 0, 0, 0, 0.6);
+    for (const u of [1.1, 2.4, 3.6]) B.box(M.wood, u, EH - 0.11, 0, 0.2, 0.22, EW);
+    for (const s of [-1, 1]) B.box(wallM, ED / 2, EH / 2, s * (ehw + 0.1), ED + 0.2, EH, 0.2, 0, 0, 0, 0.7);
+    for (const s of [-1, 1]) B.box(wallM, 0.06, EH / 2, s * (0.72 + (ehw - 0.72) / 2), 0.12, EH, ehw - 0.72, 0, 0, 0, 0.7);
+    B.box(wallM, 0.06, (DOOR + EH) / 2, 0, 0.12, EH - DOOR, 1.44);
+    for (const s of [-1, 1]) B.box(wallM, ED + 0.1, EH / 2, s * (0.62 + (ehw - 0.62) / 2), 0.2, EH, ehw + 0.2 - 0.62, 0, 0, 0, 0.7);
+    B.box(wallM, ED + 0.1, (DH + EH) / 2, 0, 0.2, EH - DH, 1.24);
+    for (const s of [-1, 1]) B.box(M.wood, ED + 0.1, DH / 2, s * 0.66, 0.24, DH, 0.12);
+    B.box(M.wood, ED + 0.1, DH + 0.07, 0, 0.24, 0.14, 1.6);
+    for (const [u, v] of [[0.14, ehw - 0.12], [0.14, -ehw + 0.12], [ED - 0.12, ehw - 0.12], [ED - 0.12, -ehw + 0.12]]) B.box(M.wood, u, EH / 2, v, 0.22, EH, 0.22);
+    // the round rooms: each a little off the line of the one before, joined by short cut passages
+    const rs = [2.2, 1.85, 2.3, 1.7], dirs = [0, -0.36, 0.4, -0.3], WHs = [2.3, 2.2, 2.4, 2.15], rises = [1.15, 1.0, 1.25, 0.95];
+    const cs = [], links = [];
+    let pu = ED + 0.55 + rs[0], pv = 0.1;
+    for (let k = 0; k < rs.length; k++) {
+      if (k) { const d = rs[k - 1] + 0.95 + rs[k]; pu += Math.cos(dirs[k]) * d; pv += Math.sin(dirs[k]) * d; }
+      cs.push([pu, pv]);
+    }
+    const at = (k, j) => Math.atan2(cs[j][1] - cs[k][1], cs[j][0] - cs[k][0]);
+    for (let k = 0; k < cs.length; k++) {
+      const doors = [k === 0 ? Math.atan2(0 - cs[0][1], ED - cs[0][0]) : at(k, k - 1)];
+      if (k < cs.length - 1) doors.push(at(k, k + 1));
+      domedRoom(ctx, cs[k][0], cs[k][1], rs[k], WHs[k], rises[k], DH, doors, room.r.seed % 997 + k * 31, mud);
+      if (k) links.push([k - 1, k]);
+      yield;
+    }
+    // the passages: from the first room's back wall into the first round room, and from each round room to the next
+    const regions = [zoneRect(ctx, -0.6, 0.4, -0.62, 0.62), zoneRect(ctx, 0.12, ED, -ehw, ehw)];
+    const passage = (a, b) => {
+      const du = b[0] - a[0], dv = b[1] - a[1], L = Math.hypot(du, dv), mu = (a[0] + b[0]) / 2, mv = (a[1] + b[1]) / 2, ry = -Math.atan2(dv, du), nu = -dv / L, nv = du / L;
+      B.box(_pm.mudF(), mu, -0.04, mv, L + 0.1, 0.08, 1.3, 0, ry, 0, 0.6);
+      for (const e of [-1, 1]) B.box(mud, mu + nu * e * 0.66, (DH + 0.1) / 2, mv + nv * e * 0.66, L + 0.05, DH + 0.1, 0.12, 0, ry, 0, 0.6);
+      B.box(mud, mu, DH + 0.1, mv, L + 0.05, 0.16, 1.45, 0, ry, 0, 0.6);
+      const c = ctx.W(mu, 0, mv), e = ctx.W(mu + du / L, 0, mv + dv / L).sub(c);
+      regions.push({ cx: c.x, cz: c.z, ux: e.x, uz: e.z, hx: L / 2 + 0.5, hz: 0.62 });
+    };
+    { const t = Math.atan2(0 - cs[0][1], ED - cs[0][0]); passage([ED - 0.05, 0], [cs[0][0] + Math.cos(t) * (rs[0] - 0.05), cs[0][1] + Math.sin(t) * (rs[0] - 0.05)]); }
+    for (const [a, b] of links) { const t = at(a, b); passage([cs[a][0] + Math.cos(t) * (rs[a] - 0.05), cs[a][1] + Math.sin(t) * (rs[a] - 0.05)], [cs[b][0] - Math.cos(t) * (rs[b] - 0.05), cs[b][1] - Math.sin(t) * (rs[b] - 0.05)]); }
+    for (let k = 0; k < cs.length; k++) regions.push(zoneEll(ctx, cs[k][0], cs[k][1], rs[k] - 0.12));
+    yield;
+    // sacks: heaped along the first room's walls, hung from its joists, and round every round room
+    sackHeap(ctx, Q, 1.2, -ehw + 0.5, 4, { spread: 0.45, lvl: key });
+    sackHeap(ctx, Q, 2.6, -ehw + 0.5, 5, { spread: 0.55, lvl: key, split: 0.6 });
+    sackHeap(ctx, Q, 1.6, ehw - 0.5, 3, { spread: 0.4, lvl: key });
+    sackHeap(ctx, Q, ED - 0.85, ehw - 0.62, 4, { spread: 0.42, lvl: key, split: 0 });
+    for (const [u, v] of [[1.1, -0.9], [2.4, 0.9], [3.6, -0.9]]) if (Q.chance(0.75)) sack(ctx, room, u, v, EH, EH - Q.range(0.75, 1.0), Q);
+    yield;
+    for (let k = 0; k < cs.length; k++) {
+      const [cu, cv] = cs[k], r = rs[k], doors = [k === 0 ? Math.atan2(-cv, ED - cu) : at(k, k - 1)];
+      if (k < cs.length - 1) doors.push(at(k, k + 1));
+      // round the wall, between the doorways
+      for (let th = Q.range(0, 0.6); th < TAU - 0.2; th += Q.range(0.75, 1.05)) {
+        if (doors.some(t => angOff(th, t) < 0.62)) continue;
+        const [u, v] = polar(cu, th, r - 0.5); sackHeap(ctx, Q, u, v + cv, Q.int(2, 4), { spread: 0.36, lvl: key, split: 0.25 });
+        if (overBudget()) yield;
+      }
+      // the biggest has a heap in its middle too, and one has a crate or two left among them
+      if (k === 2) sackHeap(ctx, Q, cu + 0.1, cv - 0.2, 6, { spread: 0.6, lvl: key, split: 0.7 });
+      if (k === 1 || k === 3) { const th = doors[0] + Math.PI + Q.range(-0.4, 0.4), [u, v] = polar(cu, th, r * 0.45); ctx.addSmash(Q.chance(0.5) ? 'crate' : 'box', u, 0, v + cv, Q.range(0, 3), { room }); }
+      if (k === 3) { ctx.bones(cu + 0.3, cv + 0.2, Q); ctx.skeleton('sit', ...polar(cu, doors[0] + 2.2, r - 0.45).map((x, i) => i ? x + cv : x), faceIn(doors[0] + 2.2)); }
+      ctx.web(V3(cu, WHs[k] + rises[k] - 0.1, cv), V3(1, 0, 0), V3(0, -0.3, 1).normalize(), Q.range(0.4, 0.7), Q.int(0, 3));
+    }
+    // the biscuit: in the first room, back in the corner behind the sacks, where only someone looking would see it
+    if (ctx.lap === 0 && !ctx.st.tk.includes('sack:B')) spawnItem(ctx, 'B', 'sack:B', ctx.W(ED - 0.28, 0, ehw - 0.26), { floorY: 0 });
+    ctx.addSmash('box', 0.75, 0, -ehw + 0.55, 0.3, { room });
+    const far = Math.max(...cs.map((c, k) => c[0] + rs[k])), vlo = Math.min(-ehw, ...cs.map((c, k) => c[1] - rs[k])), vhi = Math.max(ehw, ...cs.map((c, k) => c[1] + rs[k]));
+    addZone(ctx, room, regions, -0.7, far + 0.4, vlo - 0.4, vhi + 0.4);
+    ctx.setBounds(room, 0.4, ED - 0.4, -ehw + 0.4, ehw - 0.4);
+    room.D = ED; room.W = EW; room.H = EH;
+  },
+
+  /* ---------- 63: a room, and behind it the tall room with the gallery ---------- */
+  *minoan(ctx, room, R) {
+    const B = ctx.B, D1 = 5.4, W1 = 5.0, H1 = 2.6 * HS, Q = new Rng(room.r.seed ^ 0x6363);
+    const wallM = R.chance(0.5) ? M.board : M.log;
+    shell(ctx, room, D1, W1, H1, wallM, { backGap: [0.7, DOOR] });
+    const U0 = D1 + 0.2, BD = 5.6, U1 = U0 + BD, BW = 6.0, hw = BW / 2, TH = 6.9, GY = 3.3, GW = 1.7, gu = U1 - GW, gv = -hw + GW;
+    const plaster = _sm.plaster(), ochre = _pm.ochre(), black = _pm.black();
+    // the tall room: plastered walls with a painted dado, a floor of pale slabs, a ceiling of boards on beams
+    B.box(_pm.flag(), (U0 + U1) / 2, -0.05, 0, BD + 0.1, 0.1, BW + 0.1, 0, 0, 0, 0.4);
+    for (let u = U0 + 0.9; u < U1; u += 1.2) B.box(M.socket, u, 0.002, 0, 0.012, 0.004, BW);
+    for (let v = -hw + 1.0; v < hw; v += 1.0) B.box(M.socket, (U0 + U1) / 2, 0.002, v, BD, 0.004, 0.012);
+    B.box(M.board, (U0 + U1) / 2, TH + 0.06, 0, BD + 0.4, 0.12, BW + 0.4, 0, 0, 0, 0.6);
+    for (let u = U0 + 0.8; u < U1 - 0.3; u += 1.4) B.box(M.woodDark, u, TH - 0.12, 0, 0.22, 0.24, BW);
+    B.box(plaster, U1 + 0.1, TH / 2, 0, 0.2, TH, BW + 0.4, 0, 0, 0, 0.5); ctx.solid(U1 + 0.15, 0, 0.3, BW + 0.6);
+    for (const s of [-1, 1]) { B.box(plaster, (U0 + U1) / 2, TH / 2, s * (hw + 0.1), BD + 0.2, TH, 0.2, 0, 0, 0, 0.5); ctx.solid((U0 + U1) / 2, s * (hw + 0.15), BD + 0.6, 0.3); }
+    // its front: plaster over the old room's back wall, open at the doorway, and on up to the ceiling
+    for (const s of [-1, 1]) { B.box(plaster, U0 + 0.015, H1 / 2, s * (0.84 + (hw - 0.84) / 2), 0.03, H1, hw - 0.84, 0, 0, 0, 0.5); ctx.solid(U0 - 0.05, s * (0.7 + (hw + 0.3 - 0.7) / 2), 0.3, hw + 0.3 - 0.7); }
+    B.box(plaster, U0 - 0.08, (H1 + TH) / 2, 0, 0.2, TH - H1, BW + 0.4, 0, 0, 0, 0.5);
+    B.box(plaster, U0 + 0.015, (DOOR + 0.14 + H1) / 2, 0, 0.03, H1 - DOOR - 0.14, 1.68, 0, 0, 0, 0.5);
+    // the dado, round the walls under the gallery and all, a red band over it
+    const DY = 0.95;
+    band(B, _pm.dado(), U1 - 0.005, DY / 2, 0, BW, DY, -Math.PI / 2, 1.9);
+    for (const s of [-1, 1]) band(B, _pm.dado(), (U0 + U1) / 2, DY / 2, s * (hw - 0.005), BD, DY, s > 0 ? Math.PI : 0, 1.9);
+    for (const s of [-1, 1]) band(B, _pm.dado(), U0 + 0.035, DY / 2, s * (0.84 + (hw - 0.84) / 2), hw - 0.84, DY, Math.PI / 2, 1.9);
+    yield;
+    // the gallery: along the back and down one side, decked on joists, its edge a painted beam on the columns
+    const deck = (u0, u1, v0, v1) => {
+      B.box(M.plank, (u0 + u1) / 2, GY - 0.05, (v0 + v1) / 2, u1 - u0, 0.1, v1 - v0, 0, 0, 0, 0.6);
+      B.box(M.board, (u0 + u1) / 2, GY - 0.27, (v0 + v1) / 2, u1 - u0, 0.03, v1 - v0, 0, 0, 0, 0.6);
+    };
+    deck(gu, U1, -hw, hw);
+    deck(U0 + 1.78, gu, -hw, gv);
+    for (let v = -hw + 0.5; v < hw; v += 0.9) B.box(M.woodDark, (gu + U1) / 2, GY - 0.18, v, GW, 0.16, 0.12);
+    for (let u = U0 + 2.0; u < gu; u += 0.9) B.box(M.woodDark, u, GY - 0.18, (-hw + gv) / 2, 0.12, 0.16, GW);
+    // the edge beams, and on their faces the band of running spirals
+    B.box(M.woodDark, gu, GY - 0.17, (gv + hw) / 2, 0.26, 0.34, hw - gv + 0.13);
+    B.box(M.woodDark, (U0 + 1.78 + gu) / 2, GY - 0.17, gv, gu - U0 - 1.78, 0.34, 0.26);
+    band(B, _pm.frieze(), gu - 0.135, GY - 0.17, (gv + 0.13 + hw) / 2, hw - gv - 0.13, 0.3, -Math.PI / 2, 1.2);
+    band(B, _pm.frieze(), (U0 + 1.78 + gu - 0.13) / 2, GY - 0.17, gv + 0.135, gu - U0 - 1.78 - 0.13, 0.3, 0, 1.2);
+    band(B, _pm.frieze(), U0 + 1.775, GY - 0.17, (-hw + gv) / 2, GW, 0.3, -Math.PI / 2, 1.2);
+    // the parapet: a low plastered wall on the edge, capped in red
+    const PH = 0.86;
+    B.box(plaster, gu - 0.06, GY + PH / 2, (gv + hw) / 2 + 0.06, 0.13, PH, hw - gv + 0.12, 0, 0, 0, 0.5);
+    B.box(ochre, gu - 0.06, GY + PH + 0.03, (gv + hw) / 2 + 0.06, 0.19, 0.06, hw - gv + 0.18);
+    B.box(plaster, (U0 + 1.78 + gu) / 2, GY + PH / 2, gv - 0.06, gu - U0 - 1.78, PH, 0.13, 0, 0, 0, 0.5);
+    B.box(ochre, (U0 + 1.78 + gu) / 2, GY + PH + 0.03, gv - 0.06, gu - U0 - 1.78 + 0.06, 0.06, 0.19);
+    band(B, ochre, gu - 0.13, GY + 0.06, (gv + hw) / 2, hw - gv, 0.12, -Math.PI / 2, 1);
+    band(B, ochre, (U0 + 1.78 + gu) / 2, GY + 0.06, gv + 0.005, gu - U0 - 1.78, 0.12, 0, 1);
+    yield;
+    // the columns: red shafts that swell toward the top, black cushions and abacus, each on a low round stone
+    const cols = [[gu, gv], [gu, 0.25], [gu, 1.95], [U0 + 1.95, gv], [U0 + 3.1, gv]];
+    for (const [u, v] of cols) {
+      const ch = GY - 0.34, base = 0.08, cap = 0.26, sh = ch - base - cap, tilt = Q.range(-0.012, 0.012), rt = Q.range(0.15, 0.17);
+      B.add(_pm.flag(), new THREE.CylinderGeometry(0.25, 0.27, base, 14), mtx(u, base / 2, v), true);
+      const g = new THREE.CylinderGeometry(rt, rt * 0.74, sh, 12, 4); scaleUV(g, 1.2, 2.2);
+      B.add(ochre, g, mtx(u, base + sh / 2, v, tilt, Q.range(0, 3), tilt), true);
+      B.add(black, new THREE.SphereGeometry(1, 14, 7), mtx(u, base + sh + 0.08, v, 0, 0, 0, rt + 0.09, 0.1, rt + 0.09), true);
+      B.box(black, u, base + sh + 0.2, v, 0.5, 0.12, 0.5, 0, Q.range(-0.03, 0.03), 0, 0.5);
+      B.add(black, new THREE.CylinderGeometry(rt + 0.01, rt + 0.01, 0.06, 12), mtx(u, base + sh - 0.03, v), true);
+      ctx.circle(u, v, 0.27);
+    }
+    yield;
+    // the little spiral up, in the near corner, its foot by the way in
+    const vS = -hw + 0.95, uS = U0 + 0.98, steps = 17, turns = 1.5, key = 'g' + room.i;
+    smallSpiral(B, uS, vS, steps, turns, GY, room.r.seed);
+    ctx.circle(uS, vS, 0.3);
+    ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0, 0, 0, vS);
+    const f0 = Object.assign({}, ctx.frame), c = ctx.W(uS, 0, 0);
+    const st = { cu: uS, steps, turns, r: 0.48 };
+    const trig = { st, top: 0, depth: GY, dur: 3.6, deep: key, room, frame: f0, exitDown: { u: uS + 1.2, v: 0, du: 1, dv: 0 }, exitUp: { u: uS + 0.15, v: 1.35, du: 0.3, dv: 1 } };
+    ctx.triggers.push(Object.assign({ type: 'down', cx: c.x, cz: c.z, hx: 0.8, hz: 0.8 }, trig));
+    ctx.triggers.push(Object.assign({ type: 'up', cx: c.x, cz: c.z, hx: 0.8, hz: 0.8 }, trig));
+    ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+    // below: the great jars along the back wall under the gallery, one broken; a plastered bench down the open side
+    for (const v of [-1.55, -0.6, 0.45, 1.5, 2.45]) { if (Q.chance(0.15)) { for (let k = 0; k < 7; k++) sherd(B, Q, _pm.pot(), U1 - 0.6 + Q.range(-0.4, 0.4), v + Q.range(-0.4, 0.4), Q.range(0.12, 0.25)); B.add(_pm.pot(), pithosGeo(), mtx(U1 - 0.55, 0, v, 0, 0, 0, 0.95, 0.38, 0.95)); ctx.circle(U1 - 0.55, v, 0.3); } else pithos(ctx, Q, U1 - 0.55, v, Q.range(0.9, 1.08)); }
+    B.box(plaster, (U0 + 2.3 + gu - 0.5) / 2, 0.22, hw - 0.3, gu - 0.5 - U0 - 2.3, 0.44, 0.5, 0, 0, 0, 0.5);
+    ctx.solid((U0 + 2.3 + gu - 0.5) / 2, hw - 0.3, gu - 0.5 - U0 - 2.3, 0.5);
+    ctx.addSmash('chest', U0 + 3.0, 0, hw - 0.95, Math.PI, { room });
+    ctx.addSmash('box', gu - 0.6, 0, -hw + 0.5, 0.2, { room });
+    // above: a stool by the parapet, a box, a jar, and a pot of the old red
+    ctx.setFrame(room.side, C.WALL_OUT, room.zc, GY);
+    const top = { lvl: key };
+    ctx.addSmash('box', U1 - 0.45, 0, -hw + 0.55, 0.15, { room, lvl: key });
+    ctx.addSmash('chest', U1 - 0.55, 0, hw - 0.9, -Math.PI / 2, { room, lvl: key });
+    seat(ctx, Object.assign({}, room, top), 'stool', gu + 0.45, 0.8, Math.PI / 2, Q, {});
+    pithos(ctx, Q, U1 - 0.45, 0.6, 0.72, key);
+    B.add(_pm.pot(), potGeo(), mtx(U0 + 2.3, 0, -hw + 0.4, 0, 0, 0, 1.3, 1.3, 1.3));
+    ctx.web(V3(U1 - 0.03, TH - GY - 0.03, -hw + 0.03), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), Q.range(0.6, 1.0), Q.int(0, 3));
+    ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+    (ctx.deeps ||= {})[key] = { y: GY, regions: [zoneRect(ctx, gu + 0.02, U1, -hw, hw), zoneRect(ctx, U0 + 1.25, gu + 0.6, -hw, gv - 0.13)] };
+    // the old room in front, stocked as any room is, the way through kept clear
+    yield* furnishGen(ctx, room, room.r, { tag: 'mf', rect: { u0: 0, u1: D1, v0: -W1 / 2, v1: W1 / 2, h: H1 }, entry: [0.75, 0], wall: wallM === M.log ? 'log' : 'board',
+      cuts: [{ axis: 'v', c: 0, lo: -0.72, hi: 0.72 }, { axis: 'v', c: D1, lo: -0.7, hi: 0.7 }],
+      reserves: [[D1 - 1.5, D1, -1.0, 1.0, 2], [0, 1.5, -1.0, 1.0, 2]],
+      themes: [['store', 2], ['loom', 1], ['bunks', 0.8], ['pigeon', 0.6], ['empty', 0.8], ['cache', 0.8]] });
+    ctx.setBounds(room, 0.3, D1 - 0.3, -W1 / 2 + 0.3, W1 / 2 + 0.3);
+  },
+});
+
+/* ---- 38e_stores.js ---- */
+/* ============================================================
+   Five wide storerooms (v20.6), put where the wall had least in it (13, 20, 42, 57, 100). Each has a ceiling and a
+   floor found nowhere else, and on the first pass one biscuit or one flask of oil somewhere in it:
+     13  a brick barrel vault over a herringbone floor: niches full of jars, amphorae stood in banks of sand   (oil)
+     20  a coffered ceiling over hexagon tiles: walls of little drawers, a counter with a balance            (biscuit)
+     42  a corbelled stone ceiling stepping in to its capstones over crazy paving: bins of grain and beans  (oil)
+     57  sagging wattle between heavy beams over a chequered floor: everything hung from the beams          (biscuit)
+     100 a row of shallow domes on piers over fish-scale tiles: pigeonholes of rolled hides, clay tablets   (oil)
+   ============================================================ */
+const STORE_FIND = { 13: 'O', 20: 'B', 42: 'O', 57: 'B', 100: 'O' };
+
+/* ---------- the floors and ceilings, drawn ---------- */
+const _wsTex = {};
+function wsTex(name, make) { return _wsTex[name] || (_wsTex[name] = make()); }
+// speckle and ws_grime over a drawn surface
+function ws_grime(g, W, H, R, n = 600) {
+  for (let i = 0; i < n; i++) { g.fillStyle = `rgba(${R.chance(0.5) ? '30,24,18' : '220,206,182'},${R.range(0.03, 0.12).toFixed(2)})`; g.fillRect(R.range(0, W), R.range(0, H), R.range(1, 4), R.range(1, 4)); }
+}
+// herringbone brick: strands of a horizontal and an upright brick, stepping one brick-width up each time (4 x 4 repeat)
+function ws_herringboneTex() {
+  return wsTex('herring', () => {
+    const S = 512, s = 32, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(1313);
+    g.fillStyle = '#5a4a3c'; g.fillRect(0, 0, S, S);
+    const brick = (x, y, w, h) => { const t = R.range(-1, 1); g.fillStyle = rgb(150 + t * 22, 82 + t * 14, 58 + t * 10); for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) g.fillRect(x + ox + 2, y + oy + 2, w - 4, h - 4); };
+    for (let m = -2; m < 6; m++) for (let n = -2; n < 18; n++) { brick((n + 4 * m) * s, n * s, 2 * s, s); brick((n + 4 * m) * s, (n + 1) * s, s, 2 * s); }
+    ws_grime(g, S, S, R, 1400); jitter(g, S, S, 16, 13);
+    return texOf(c);
+  });
+}
+// running-bond brick for the vault
+function ws_bondTex() {
+  return wsTex('bond', () => {
+    const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(1414);
+    g.fillStyle = '#6a5a4a'; g.fillRect(0, 0, S, S);
+    for (let r = 0; r < 8; r++) for (let k = -1; k < 5; k++) { const x = k * 64 + (r % 2) * 32, t = R.range(-1, 1); g.fillStyle = rgb(140 + t * 20, 86 + t * 12, 62 + t * 10); g.fillRect(x + 2, r * 32 + 2, 60, 28); }
+    ws_grime(g, S, S, R, 700); jitter(g, S, S, 14, 14);
+    return texOf(c);
+  });
+}
+// flat-topped hexagons of fired clay, each its own shade
+function ws_hexTex() {
+  return wsTex('hex', () => {
+    const r = 32, W = 15 * r, H = Math.round(9 * Math.sqrt(3) * r), c = makeCanvas(W, H), g = c.getContext('2d'), R = new Rng(2020), h = Math.sqrt(3) * r;
+    g.fillStyle = '#4a3a2e'; g.fillRect(0, 0, W, H);
+    for (let i = -1; i < 11; i++) for (let j = -1; j < 11; j++) {
+      const cx = i * 1.5 * r, cy = j * h + (i % 2 ? h / 2 : 0), t = R.range(-1, 1), tone = R.chance(0.15) ? 0.75 : 1;
+      g.fillStyle = rgb((168 + t * 20) * tone, (104 + t * 12) * tone, (70 + t * 10) * tone);
+      for (const ox of [-W, 0, W]) for (const oy of [-H, 0, H]) { g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3, x = cx + ox + Math.cos(a) * (r - 3), y = cy + oy + Math.sin(a) * (r - 3); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); g.fill(); }
+    }
+    ws_grime(g, W, H, R, 1500); jitter(g, W, H, 14, 20);
+    return texOf(c);
+  });
+}
+// crazy paving: flags of every shape, the joints where two stones are equally near
+function ws_flagsTex() {
+  return wsTex('flags', () => {
+    const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(4242), pts = [];
+    for (let i = 0; i < 26; i++) pts.push([R.range(0, S), R.range(0, S), R.range(-1, 1), R.chance(0.3)]);
+    const img = g.createImageData(S, S), d = img.data;
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      let d1 = 1e9, d2 = 1e9, best = 0;
+      for (let k = 0; k < pts.length; k++) { let dx = Math.abs(x - pts[k][0]), dy = Math.abs(y - pts[k][1]); dx = Math.min(dx, S - dx); dy = Math.min(dy, S - dy); const dd = Math.sqrt(dx * dx + dy * dy); if (dd < d1) { d2 = d1; d1 = dd; best = k; } else if (dd < d2) d2 = dd; }
+      const p = pts[best], t = p[2], warm = p[3] ? 1 : 0, e = (y * S + x) * 4, edge = d2 - d1 < 2.6;
+      if (edge) { d[e] = 52; d[e + 1] = 46; d[e + 2] = 40; }
+      else { const k = 1 - Math.max(0, 3.5 - (d2 - d1)) * 0.06; d[e] = (132 + t * 18 + warm * 14) * k; d[e + 1] = (124 + t * 16 + warm * 4) * k; d[e + 2] = (112 + t * 14 - warm * 8) * k; }
+      d[e + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    ws_grime(g, S, S, R, 500); jitter(g, S, S, 18, 42);
+    return texOf(c);
+  });
+}
+// a chequer of dark slate and pale limestone, worn at the corners
+function ws_chequerTex() {
+  return wsTex('chequer', () => {
+    const S = 256, q = 64, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(5757);
+    g.fillStyle = '#3a342e'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      const dark = (i + j) % 2 === 0, t = R.range(-1, 1);
+      g.fillStyle = dark ? rgb(58 + t * 8, 60 + t * 8, 64 + t * 8) : rgb(196 + t * 12, 186 + t * 12, 164 + t * 10);
+      g.beginPath(); const x = i * q + 2, y = j * q + 2, w = q - 4, rr = R.range(2, 7); g.moveTo(x + rr, y); g.lineTo(x + w - rr, y); g.quadraticCurveTo(x + w, y, x + w, y + rr); g.lineTo(x + w, y + w - rr); g.quadraticCurveTo(x + w, y + w, x + w - rr, y + w); g.lineTo(x + rr, y + w); g.quadraticCurveTo(x, y + w, x, y + w - rr); g.lineTo(x, y + rr); g.quadraticCurveTo(x, y, x + rr, y); g.fill();
+    }
+    ws_grime(g, S, S, R, 900); jitter(g, S, S, 12, 57);
+    return texOf(c);
+  });
+}
+// fish-scale tiles: rows of rounded tiles, each row lapping the one above
+function ws_scaleTex() {
+  return wsTex('scale', () => {
+    const S = 256, r = 32, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(10010);
+    g.fillStyle = '#4a3226'; g.fillRect(0, 0, S, S);
+    for (let row = -2; row < 10; row++) for (let k = -1; k < 6; k++) {
+      const cx = k * 2 * r + (row % 2 ? r : 0), cy = row * r, t = R.range(-1, 1);
+      for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
+        g.fillStyle = rgb(176 + t * 22, 96 + t * 14, 58 + t * 10); g.beginPath(); g.arc(cx + ox, cy + oy, r - 2, 0, Math.PI); g.lineTo(cx + ox - r + 2, cy + oy - r); g.lineTo(cx + ox + r - 2, cy + oy - r); g.closePath(); g.fill();
+        g.strokeStyle = 'rgba(40,24,16,0.7)'; g.lineWidth = 3; g.beginPath(); g.arc(cx + ox, cy + oy, r - 2, 0.05, Math.PI - 0.05); g.stroke();
+      }
+    }
+    ws_grime(g, S, S, R, 900); jitter(g, S, S, 14, 100);
+    return texOf(c);
+  });
+}
+// wattle: withies woven over and under upright stakes, daubed here and there with clay
+function ws_wattleTex() {
+  return wsTex('wattle', () => {
+    const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(5858);
+    g.fillStyle = '#1e1610'; g.fillRect(0, 0, S, S);
+    for (let j = 0; j < 16; j++) {
+      const y0 = j * 16 + 8;
+      g.strokeStyle = rgb(120 + R.range(-15, 15), 92 + R.range(-10, 10), 58); g.lineWidth = 11; g.beginPath();
+      for (let x = -4; x <= S + 4; x += 4) { const y = y0 + Math.sin(x / 32 * Math.PI + j * Math.PI) * 3; x > -4 ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.stroke();
+    }
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 16; j++) if ((i + j) % 2) { g.fillStyle = rgb(100, 78, 50); g.fillRect(i * 32 + 12, j * 16, 8, 16); }
+    for (let i = 0; i < 18; i++) { const x = R.range(0, S), y = R.range(0, S), rr = R.range(10, 34); for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { g.fillStyle = `rgba(120,102,80,${R.range(0.35, 0.6).toFixed(2)})`; g.beginPath(); g.ellipse(x + ox, y + oy, rr, rr * R.range(0.5, 0.9), R.range(0, 3), 0, TAU); g.fill(); } }
+    ws_grime(g, S, S, R, 600); jitter(g, S, S, 14, 58);
+    return texOf(c);
+  });
+}
+// one coffer: a sunk panel with bevelled sides and a faded rosette in the middle
+function ws_cofferTex() {
+  return wsTex('coffer', () => {
+    const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(2121), b = 46;
+    g.fillStyle = '#4a3624'; g.fillRect(0, 0, S, S);
+    g.fillStyle = '#6a5038'; g.beginPath(); g.moveTo(0, 0); g.lineTo(S, 0); g.lineTo(S - b, b); g.lineTo(b, b); g.lineTo(b, S - b); g.lineTo(0, S); g.fill();
+    g.fillStyle = '#2e2218'; g.beginPath(); g.moveTo(S, S); g.lineTo(0, S); g.lineTo(b, S - b); g.lineTo(S - b, S - b); g.lineTo(S - b, b); g.lineTo(S, 0); g.fill();
+    g.fillStyle = '#3a2a1c'; g.fillRect(b, b, S - 2 * b, S - 2 * b);
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; g.fillStyle = 'rgba(160,96,52,0.75)'; g.beginPath(); g.ellipse(S / 2 + Math.cos(a) * 20, S / 2 + Math.sin(a) * 20, 18, 8, a, 0, TAU); g.fill(); }
+    g.fillStyle = 'rgba(200,170,100,0.8)'; g.beginPath(); g.arc(S / 2, S / 2, 9, 0, TAU); g.fill();
+    ws_grime(g, S, S, R, 900); jitter(g, S, S, 14, 21);
+    return texOf(c);
+  });
+}
+const _wsm = {
+  herring: () => cachedMat('ws-herring', () => lam(ws_herringboneTex(), { bumpScale: 1.4 })),
+  bond: () => cachedMat('ws-bond', () => lam(ws_bondTex(), { bumpScale: 1.4 })),
+  hex: () => cachedMat('ws-hex', () => lam(ws_hexTex(), { bumpScale: 1.2 })),
+  flags: () => cachedMat('ws-flags', () => lam(ws_flagsTex(), { bumpScale: 1.6 })),
+  chequer: () => cachedMat('ws-chequer', () => lam(ws_chequerTex(), { bumpScale: 0.8 })),
+  scale: () => cachedMat('ws-scale', () => lam(ws_scaleTex(), { bumpScale: 1.2 })),
+  wattle: () => cachedMat('ws-wattle', () => lam(ws_wattleTex(), { bumpScale: 2.0 })),
+  coffer: () => cachedMat('ws-coffer', () => lam(ws_cofferTex(), { bumpScale: 0.8 })),
+  rough: () => cachedMat('ws-rough', () => lam(T.stone, { color: 0xd6cab6, bumpScale: 2.4 })),
+  sand: () => cachedMat('ws-sand', () => lam(T.earth, { color: 0xc4ac84, bumpScale: 0.9 })),
+};
+
+/* ---------- the shell: walls, a door, no floor or ceiling (each room brings its own) ---------- */
+function ws_wideWalls(ctx, room, D, W, H, wallM) {
+  const B = ctx.B, hw = W / 2, lvl = room.lvl;
+  for (const s of [-1, 1]) { B.box(wallM, D / 2, H / 2, s * (hw + 0.1), D + 0.2, H, 0.2, 0, 0, 0, 0.6); ctx.solid(D / 2, s * (hw + 0.15), D + 0.6, 0.3, 0, lvl); }
+  B.box(wallM, D + 0.1, H / 2, 0, 0.2, H, W + 0.4, 0, 0, 0, 0.6); ctx.solid(D + 0.15, 0, 0.3, W + 0.6, 0, lvl);
+  for (const s of [-1, 1]) { B.box(wallM, 0.06, H / 2, s * (0.72 + (hw - 0.72) / 2), 0.12, H, hw - 0.72, 0, 0, 0, 0.6); ctx.solid(0.06, s * (0.72 + (hw - 0.72) / 2), 0.2, hw - 0.72, 0, lvl); }
+  B.box(wallM, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 1.44);
+  for (const s of [-1, 1]) B.box(M.wood, 0.1, DOOR / 2, s * 0.78, 0.2, DOOR, 0.12);
+  B.box(M.wood, 0.1, DOOR + 0.07, 0, 0.22, 0.14, 1.8);
+  ctx.setBounds(room, 0.3, D - 0.3, -hw + 0.3, hw - 0.3);
+  room.D = D; room.W = W; room.H = H;
+}
+function ws_tileFloor(B, mat, D, W, tu, tv = tu) {
+  const g = new THREE.PlaneGeometry(D, W); scaleUV(g, D / tu, W / tv);
+  B.add(mat, g, mtx(D / 2, 0.003, 0, -Math.PI / 2, 0, 0), true);
+  B.box(M.earth, D / 2, -0.06, 0, D + 0.2, 0.12, W + 0.2);
+}
+// the find kept for the first pass: a biscuit or a flask of oil, set down in its place
+function ws_storeFind(ctx, u, y, v) {
+  const tok = STORE_FIND[ctx.L], key = 'ws' + ctx.L + ':' + tok;
+  if (ctx.lap !== 0 || !tok || ctx.st.tk.includes(key)) return;
+  spawnItem(ctx, tok, key, ctx.W(u, y, v), { floorY: ctx.frame.y0 + y });
+}
+let _standAmphG = null;
+function standAmphoraGeo() {
+  if (_standAmphG) return _standAmphG;
+  const pts = [[0.001, 0], [0.025, 0.02], [0.03, 0.08], [0.1, 0.22], [0.16, 0.4], [0.17, 0.52], [0.13, 0.66], [0.06, 0.74], [0.05, 0.86], [0.065, 0.9], [0.06, 0.92]].map(([x, y]) => new THREE.Vector2(x, y));
+  _standAmphG = new THREE.LatheGeometry(pts, 10); scaleUV(_standAmphG, 1.4, 1);
+  return _standAmphG;
+}
+// a thing that rests at an angle: put down along the matrix of a lean (rx about u, rz about v) with its foot at (u, y, v)
+function ws_leaned(B, mat, geo, u, y, v, rx, ry, rz, s = 1) { B.add(mat, geo, mtx(u, y, v, rx, ry, rz, s, s, s)); }
+
+Object.assign(MORE_BUILD, {
+  /* ---------- 13: under a brick barrel vault ---------- */
+  *ws_vault(ctx, room, R) {
+    const B = ctx.B, D = 5.8, W = 10.4, hw = W / 2, H = 2.5, rise = 1.7, Q = new Rng(room.r.seed ^ 0x1313), bond = _wsm.bond(), plaster = _sm.plaster();
+    ws_wideWalls(ctx, room, D, W, H, plaster);
+    ws_tileFloor(B, _wsm.herring(), D, W, 1.92);
+    // the vault: a flattened half-round springing from the front and back walls, running the length of the room
+    { const N = 24, pos = [], uv = [], idx = []; let s = 0, prev = null;
+      for (let i = 0; i <= N; i++) {
+        const a = i / N * Math.PI, u = D / 2 - D / 2 * Math.cos(a), y = H + rise * Math.sin(a);
+        if (prev) s += Math.hypot(u - prev[0], y - prev[1]); prev = [u, y];
+        for (const v of [-hw, hw]) { pos.push(u, y, v); uv.push(s, v); }
+      }
+      for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      B.add(bond, turnFacesTo(g, D / 2, H, 0), new THREE.Matrix4(), true); }
+    // the half-moons of wall at either end under it
+    { const sh = new THREE.Shape(); sh.moveTo(0, 0); for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI; sh.lineTo(D / 2 - D / 2 * Math.cos(a), rise * Math.sin(a)); } sh.lineTo(0, 0);
+      const g = new THREE.ShapeGeometry(sh); scaleUV(g, 1, 1);
+      B.add(plaster, g, mtx(0, H, -hw + 0.004), false); B.add(plaster, g, mtx(D, H, hw - 0.004, 0, Math.PI, 0), false); }
+    // brick ribs across it, a ledge along each side where it springs
+    for (const v of [-hw + 0.25, -hw / 3, hw / 3, hw - 0.25]) for (let k = 0; k < 16; k++) {
+      const a = (k + 0.5) / 16 * Math.PI, du = D / 2 * Math.sin(a), dy = rise * Math.cos(a), l = Math.hypot(du, dy), tx = du / l, ty = dy / l;
+      const u = D / 2 - D / 2 * Math.cos(a) + ty * 0.09, y = H + rise * Math.sin(a) - tx * 0.09;
+      B.box(bond, u, y, v, Math.PI / 16 * Math.hypot(D / 2, rise) * 0.95, 0.18, 0.36, 0, 0, Math.atan2(dy, du), 0.8);
+    }
+    for (const u of [0.14, D - 0.14]) B.box(bond, u, H - 0.06, 0, 0.28, 0.12, W, 0, 0, 0, 0.8);
+    yield;
+    // the niches along the back: brick piers and slabs, three rows deep in jars
+    const nu = D - 0.62, cols = 13, cw = (W - 0.6) / cols, rows = [0.1, 0.8, 1.5, 2.2];
+    for (let k = 0; k <= cols; k++) B.box(bond, D - 0.31, 1.15, -hw + 0.3 + k * cw, 0.62, 2.3, 0.14, 0, 0, 0, 0.8);
+    for (const y of rows) B.box(bond, D - 0.31, y, 0, 0.62, 0.08, W - 0.5, 0, 0, 0, 0.8);
+    B.box(bond, D - 0.31, 1.15, -hw + 0.2, 0.62, 2.3, 0.4, 0, 0, 0, 0.8); B.box(bond, D - 0.31, 1.15, hw - 0.2, 0.62, 2.3, 0.4, 0, 0, 0, 0.8);
+    const findCol = Q.int(2, cols - 3);
+    for (let k = 0; k < cols; k++) for (let j = 0; j < 3; j++) {
+      const vm = -hw + 0.3 + (k + 0.5) * cw, y = rows[j] + 0.04;
+      if (k === findCol && j === 1) { ws_storeFind(ctx, D - 0.42, y, vm); continue; }
+      const n = Q.pickW([0, 1, 2], [1, 2, 2]);
+      for (let i = 0; i < n; i++) { const s = Q.range(1.1, 1.6), tip = Q.chance(0.1); B.add(_pm.pot(), potGeo(), mtx(D - 0.36 + Q.range(-0.08, 0.06), y + (tip ? 0.13 * s : 0), vm + (n === 2 ? (i ? 0.13 : -0.13) : 0), tip ? Math.PI / 2 : 0, Q.range(0, TAU), 0, s, s, s)); }
+      if (!n && Q.chance(0.5)) ctx.surface(room, D - 0.4, y, vm);
+      if (overBudget()) yield;
+    }
+    ctx.solid(D - 0.31, 0, 0.66, W);
+    yield;
+    // two banks of sand down the room with amphorae stood in them, every one leaning out at the same angle
+    const sand = _wsm.sand();
+    for (const bu of [2.15, 3.75]) for (const [v0, v1] of [[-hw + 0.9, -0.75], [0.75, hw - 0.9]]) {
+      const len = v1 - v0, vm = (v0 + v1) / 2;
+      B.add(sand, new THREE.SphereGeometry(1, 16, 6, 0, TAU, 0, Math.PI / 2), mtx(bu, -0.02, vm, 0, 0, 0, 0.42, 0.22, len / 2 + 0.15), true);
+      for (let v = v0 + 0.15; v < v1 - 0.1; v += 0.4) for (const s of [-1, 1]) {
+        if (Q.chance(0.08)) { for (let k = 0; k < 4; k++) sherd(B, Q, _pm.pot(), bu + s * Q.range(0.3, 0.6), v + Q.range(-0.2, 0.2), Q.range(0.08, 0.16)); continue; }
+        ws_leaned(B, _pm.pot(), standAmphoraGeo(), bu + s * 0.2, 0.02, v + Q.range(-0.03, 0.03), 0, Q.range(0, TAU), -s * 0.32 + Q.range(-0.03, 0.03), Q.range(0.95, 1.05));
+      }
+      ctx.solid(bu, vm, 1.25, len + 0.3);
+      if (overBudget()) yield;
+    }
+    // one lies where it fell, by the way in; a chest and a box against the end walls
+    ws_leaned(B, _pm.pot(), standAmphoraGeo(), 1.3, 0.17, -2.4, 0, 0.5, Math.PI / 2 - 0.12, 1.0); ctx.circle(1.6, -2.3, 0.3);
+    ctx.addSmash('chest', 1.6, 0, hw - 0.5, Math.PI, { room });
+    ctx.addSmash(Q.chance(0.5) ? 'crate' : 'box', 3.0, 0, -hw + 0.45, Q.range(-0.3, 0.3), { room });
+    ctx.addSmash('barrel', 0.8, 0, -hw + 0.45, Q.range(0, 3), { room });
+    ctx.web(V3(D - 0.66, H + 0.4, hw - 0.04), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), Q.range(0.5, 0.9), Q.int(0, 3));
+  },
+
+  /* ---------- 20: a coffered ceiling, and walls of little drawers ---------- */
+  *ws_drawers(ctx, room, R) {
+    const B = ctx.B, cell = 0.9, D = 6 * cell, W = 11 * cell, hw = W / 2, H = 3.0, CH = 0.32, Q = new Rng(room.r.seed ^ 0x2020);
+    ws_wideWalls(ctx, room, D, W, H + CH, M.board);
+    ws_tileFloor(B, _wsm.hex(), D, W, 2.4, 2.49);
+    // the coffers: a sunk panel in every square of a grid of deep ribs
+    { const g = new THREE.PlaneGeometry(D, W); scaleUV(g, D / cell, W / cell); B.add(_wsm.coffer(), g, mtx(D / 2, H + CH, 0, Math.PI / 2, 0, 0), true); }
+    for (let k = 0; k <= 11; k++) B.box(M.woodDark, D / 2, H + CH / 2, -hw + k * cell, D, CH, 0.12);
+    for (let k = 0; k <= 6; k++) B.box(M.woodDark, k * cell, H + CH / 2, 0, 0.12, CH, W);
+    for (let k = 0; k <= 11; k++) for (let j = 0; j <= 6; j++) B.box(_pm.ochre(), j * cell, H + 0.005, -hw + k * cell, 0.1, 0.012, 0.1);
+    yield;
+    // the cabinets: along the back and both sides, little drawers from the floor to above your head
+    const dw = 0.27, dh = 0.2, dep = 0.44, ch = 2.3, nrow = Math.floor((ch - 0.12) / dh), brass = M.bronze;
+    let findSpot = null;
+    const cabinet = (along, a, b, c, inw) => {
+      const len = b - a, mid = (a + b) / 2, ncol = Math.floor(len / dw), cw = len / ncol;
+      if (along === 'v') { B.box(M.woodDark, c + inw * dep / 2, ch / 2, mid, dep, ch, len + 0.06); ctx.solid(c + inw * dep / 2, mid, dep + 0.06, len); }
+      else { B.box(M.woodDark, mid, ch / 2, c + inw * dep / 2, len + 0.06, ch, dep); ctx.solid(mid, c + inw * dep / 2, len, dep + 0.06); }
+      const face = c + inw * (dep + 0.012);
+      for (let i = 0; i < ncol; i++) for (let j = 0; j < nrow; j++) {
+        const t = a + (i + 0.5) * cw, y = 0.08 + (j + 0.5) * dh, roll = Q.next();
+        const out = roll < 0.06 ? Q.range(0.08, 0.3) : 0, gone = roll > 0.97;
+        const P = (k, yy, w2, h2, d2) => along === 'v' ? B.box(gone ? M.socket : M.board, face + inw * k, yy, t, d2, h2, w2, 0, 0, 0, 0.6) : B.box(gone ? M.socket : M.board, t, yy, face + inw * k, w2, h2, d2, 0, 0, 0, 0.6);
+        P(out, y, cw - 0.025, dh - 0.025, 0.025);
+        if (gone) continue;
+        if (out) { // the drawer's sides, out with it
+          for (const e of [-1, 1]) along === 'v' ? B.box(M.board, face + inw * out / 2, y - 0.02, t + e * (cw / 2 - 0.03), out, dh - 0.07, 0.012) : B.box(M.board, t + e * (cw / 2 - 0.03), y - 0.02, face + inw * out / 2, 0.012, dh - 0.07, out);
+        }
+        const kp = along === 'v' ? [face + inw * (out + 0.022), y, t] : [t, y, face + inw * (out + 0.022)];
+        B.box(brass, kp[0], kp[1], kp[2], 0.022, 0.022, 0.022);
+        if (Q.chance(0.12)) { const m = along === 'v' ? [face + inw * (out + 0.014), y + 0.05, t + 0.06] : [t + 0.06, y + 0.05, face + inw * (out + 0.014)]; B.box(_pm.cream(), m[0], m[1], m[2], 0.012, 0.035, 0.035, 0, 0, Q.range(-0.5, 0.5)); }
+      }
+    };
+    cabinet('v', -hw + 0.05, hw - 0.05, D, -1); yield;
+    for (const s of [-1, 1]) { cabinet('u', 1.0, D - dep - 0.05, s * hw, -s); yield; }
+    // a long counter down the middle, a balance on it, small pots; drawers taken out and left on the floor
+    const cu = 2.6, cv0 = -3.0, cv1 = 3.0;
+    B.box(M.wood, cu, 0.95, 0, 0.72, 0.07, cv1 - cv0, 0, 0, 0, 0.8);
+    B.box(M.woodDark, cu, 0.46, 0, 0.62, 0.9, cv1 - cv0 - 0.1, 0, 0, 0, 0.8);
+    ctx.solid(cu, 0, 0.8, cv1 - cv0 + 0.05);
+    { const bv = -1.2; B.box(M.wood, cu, 1.0, bv, 0.18, 0.04, 0.18); B.log(M.bronze, cu, 1.22, bv, 0.012, 0.42, 'y', 6); B.box(M.bronze, cu, 1.43, bv, 0.02, 0.02, 0.58, 0, 0, 0.0); for (const e of [-1, 1]) { B.add(M.bronze, new THREE.CylinderGeometry(0.1, 0.07, 0.025, 12, 1, true), mtx(cu, 1.14, bv + e * 0.28), true); for (let k = 0; k < 3; k++) pole(B, M.rope, V3(cu + Math.cos(k * 2.1) * 0.08, 1.15, bv + e * 0.28 + Math.sin(k * 2.1) * 0.08), V3(cu, 1.42, bv + e * 0.28), 0.003); } }
+    for (let k = 0; k < 6; k++) B.add(_pm.pot(), potGeo(), mtx(cu + Q.range(-0.2, 0.2), 0.985, Q.range(0.2, 2.6), 0, Q.range(0, 3), 0, 0.7, 0.7, 0.7));
+    for (const v of [-2.4, 0.4, 1.8]) ctx.surface(room, cu, 0.99, v);
+    const drawerBox = (u, v, ry) => { const m = (x, y, z, sx, sy, sz) => { const c = Math.cos(ry), s = Math.sin(ry); B.box(M.board, u + x * c + z * s, y, v - x * s + z * c, sx, sy, sz, 0, ry, 0, 0.6); }; m(0, 0.01, 0, 0.26, 0.02, 0.42); m(-0.12, 0.08, 0, 0.02, 0.15, 0.42); m(0.12, 0.08, 0, 0.02, 0.15, 0.42); m(0, 0.08, -0.2, 0.26, 0.15, 0.02); m(0, 0.09, 0.2, 0.26, 0.17, 0.025); };
+    for (let k = 0; k < 4; k++) drawerBox(Q.range(1.2, 4.2), (Q.chance(0.5) ? 1 : -1) * Q.range(3.4, 4.3), Q.range(0, TAU));
+    findSpot = [1.45, -3.7]; drawerBox(findSpot[0], findSpot[1], 0.4); ws_storeFind(ctx, findSpot[0], 0.03, findSpot[1]);
+    // a ladder against the drawers, a stool at the counter, a chest and a box by the door
+    pole(B, M.wood, V3(D - dep - 0.75, 0, 1.7), V3(D - dep - 0.06, 2.25, 1.75), 0.03); pole(B, M.wood, V3(D - dep - 0.75, 0, 2.15), V3(D - dep - 0.06, 2.25, 2.2), 0.03);
+    for (let k = 1; k < 7; k++) { const t = k / 7; B.log(M.wood, D - dep - 0.75 + t * 0.69, t * 2.25, 1.95, 0.016, 0.46, 'z', 5); }
+    ctx.circle(D - dep - 0.6, 1.95, 0.3);
+    seat(ctx, room, 'stool', cu - 0.65, 0.6, Math.PI / 2, Q, {});
+    ctx.addSmash('chest', 0.9, 0, -hw + 0.55, 0, { room });
+    ctx.addSmash('box', 0.8, 0, hw - 0.45, 0.2, { room });
+  },
+
+  /* ---------- 42: a corbelled stone ceiling, and bins ---------- */
+  *ws_corbel(ctx, room, R) {
+    const B = ctx.B, D = 6.0, W = 9.6, hw = W / 2, H = 2.55, Q = new Rng(room.r.seed ^ 0x4242), rough = _wsm.rough();
+    ws_wideWalls(ctx, room, D, W, H, rough);
+    ws_tileFloor(B, _wsm.flags(), D, W, 2.6);
+    // the ceiling: each course of stone stepping in over the one below, to a few slabs across the top
+    let iu0 = 0, iu1 = 0, iv0 = 0, iv1 = 0, y = H;
+    for (let k = 0; k < 7; k++) {
+      const st = 0.3, ch = Q.range(0.26, 0.32);
+      iu0 += st + Q.range(-0.04, 0.04); iu1 += st + Q.range(-0.04, 0.04); iv0 += st + Q.range(-0.04, 0.04); iv1 += st + Q.range(-0.04, 0.04);
+      const yc = y + ch / 2;
+      B.box(rough, iu0 / 2, yc, 0, iu0 + 0.2, ch, W + 0.4, 0, 0, 0, 0.7);
+      B.box(rough, D - iu1 / 2, yc, 0, iu1 + 0.2, ch, W + 0.4, 0, 0, 0, 0.7);
+      B.box(rough, D / 2, yc, -hw + iv0 / 2, D, ch, iv0 + 0.2, 0, 0, 0, 0.7);
+      B.box(rough, D / 2, yc, hw - iv1 / 2, D, ch, iv1 + 0.2, 0, 0, 0, 0.7);
+      y += ch;
+    }
+    { const o0 = iu0, o1 = D - iu1, n = 4, vs = (W - iv0 - iv1) / n; for (let k = 0; k < n; k++) B.box(rough, (o0 + o1) / 2, y + 0.12, -hw + iv0 + (k + 0.5) * vs, o1 - o0 + 0.5, 0.24, vs - 0.02, Q.range(-0.02, 0.02), 0, Q.range(-0.02, 0.02), 0.7); }
+    yield;
+    // the bins along the back: slabs set on edge, each heaped with something different
+    const fills = [0xb09660, 0x3a2620, 0x8a4a30, 0x7a7a58, 0xc8b890, 0x5a3a28], nb = 6, bw = (W - 0.4) / nb, bu0 = D - 1.15;
+    const findBin = Q.int(1, nb - 2);
+    for (let k = 0; k <= nb; k++) B.box(rough, (bu0 + D) / 2, 0.38, -hw + 0.2 + k * bw, D - bu0, 0.76, 0.08, 0, 0, 0, 0.5);
+    B.box(rough, bu0, 0.38, 0, 0.08, 0.76, W - 0.4, 0, 0, 0, 0.5);
+    for (let k = 0; k < nb; k++) {
+      const vm = -hw + 0.2 + (k + 0.5) * bw, mat = cachedMat('ws-fill' + k, () => lam(T.earth, { color: fills[k], bumpScale: 2.2 })), top = Q.range(0.5, 0.68);
+      B.box(mat, (bu0 + D) / 2, top / 2, vm, D - bu0 - 0.06, top, bw - 0.08);
+      B.add(mat, new THREE.SphereGeometry(1, 12, 6, 0, TAU, 0, Math.PI / 2), mtx((bu0 + D) / 2, top - 0.02, vm, 0, 0, 0, (D - bu0) * 0.42, Q.range(0.08, 0.2), bw * 0.42), true);
+      if (k === findBin) ws_storeFind(ctx, bu0 + 0.4, top + 0.06, vm - 0.15);
+      else if (Q.chance(0.5)) { const sv = vm + Q.range(-0.2, 0.2); pole(B, M.wood, V3(bu0 + 0.25, top + 0.1, sv), V3(bu0 - 0.15, top + 0.32, sv + 0.2), 0.015); B.add(M.wood, new THREE.SphereGeometry(0.07, 8, 4, 0, TAU, 0, Math.PI / 2), mtx(bu0 + 0.3, top + 0.06, sv - 0.03, Math.PI, 0, 0), true); }
+    }
+    ctx.solid((bu0 + D) / 2, 0, D - bu0 + 0.1, W);
+    yield;
+    // along the sides: little boxes all alike, stacked in exact columns, one column fallen
+    for (const s of [-1, 1]) {
+      for (let u = 1.0; u < bu0 - 0.4; u += 0.36) {
+        const n = Q.int(4, 7), fallen = Q.chance(0.06);
+        for (let j = 0; j < n; j++) {
+          if (fallen) { B.box(M.board, u + Q.range(-0.3, 0.6), 0.15, s * (hw - 0.35 - j * 0.32 * Q.next()), 0.3, 0.3, 0.3, 0, Q.range(0, 3), Q.chance(0.5) ? Math.PI / 2 : 0, 0.6); continue; }
+          B.box(M.board, u, 0.15 + j * 0.31, s * (hw - 0.22), 0.3, 0.3, 0.3, 0, Q.range(-0.03, 0.03), 0, 0.6);
+          B.box(M.woodDark, u, 0.15 + j * 0.31, s * (hw - 0.22) - s * 0.152, 0.22, 0.03, 0.008);
+        }
+      }
+      ctx.solid((1.0 + bu0 - 0.4) / 2, s * (hw - 0.25), bu0 - 1.3, 0.5);
+      yield;
+    }
+    // in the middle a low stone table with stones laid out on it in rows, as if someone were counting
+    const tu = 2.7; B.box(rough, tu, 0.17, 0, 1.0, 0.34, 2.6, 0, 0, 0, 0.5); ctx.solid(tu, 0, 1.1, 2.7);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 12; j++) if (Q.chance(0.8)) stoneLump(B, Q, Q.pick([M.stone, M.stoneB, M.stoneC]), tu - 0.33 + i * 0.22, 0.37, -1.12 + j * 0.2, 0.035, 0.6);
+    ctx.addSmash('chest', 0.95, 0, -2.6, 0, { room });
+    ctx.addSmash('box', 0.75, 0, 2.5, 0.3, { room });
+    ctx.bones(4.2, -1.8, Q);
+  },
+
+  /* ---------- 57: wattle sagging between beams, and everything hung ---------- */
+  *ws_hang(ctx, room, R) {
+    const B = ctx.B, D = 5.6, W = 10.4, hw = W / 2, H = 3.4, Q = new Rng(room.r.seed ^ 0x5757), nb = 8, bs = W / nb;
+    ws_wideWalls(ctx, room, D, W, H + 0.15, M.earth);
+    ws_tileFloor(B, _wsm.chequer(), D, W, 2.0);
+    // the beams, heavy logs across the room; between them the wattle, sagging
+    const beams = [];
+    for (let k = 1; k < nb; k++) { const v = -hw + k * bs + Q.range(-0.05, 0.05); beams.push(v); B.log(M.log, D / 2, H, v, Q.range(0.13, 0.16), D + 0.2, 'x', 8); }
+    const edges = [-hw, ...beams, hw];
+    for (let k = 0; k < edges.length - 1; k++) {
+      const v0 = edges[k], v1 = edges[k + 1], N = 6, pos = [], uv = [], idx = [], sag = Q.range(0.1, 0.24);
+      for (let i = 0; i <= N; i++) for (const u of [0, D]) { const t = i / N, v = lerp(v0, v1, t); pos.push(u, H + 0.14 - sag * Math.sin(Math.PI * t) + (u ? Q.range(-0.02, 0.02) : 0), v); uv.push(u / 0.8, v / 0.8); }
+      for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      B.add(_wsm.wattle(), turnFacesTo(g, D / 2, 0, (v0 + v1) / 2), new THREE.Matrix4(), true);
+    }
+    yield;
+    // hung from every beam: pots on cords, baskets, bundles of dry stalks, gourds in nets; the low ones near the walls
+    const herb = cachedMat('ws-herb', () => lam(T.cloth, { color: 0x6a5a38, bumpScale: 1.6 })), gourd = cachedMat('ws-gourd', () => lam(T.earth, { color: 0xb08a48, bumpScale: 0.6 }));
+    for (const v of beams) for (let u = 0.6; u < D - 0.3; u += Q.range(0.45, 0.7)) {
+      const nearWall = u < 1.0 || u > D - 1.0, mid = Math.abs(u - D / 2) < 0.45;
+      const bottom = mid ? 2.05 : nearWall && Q.chance(0.5) ? Q.range(1.35, 1.75) : Q.range(1.95, 2.5), what = mid ? 'pot' : Q.pickW(['pot', 'basket', 'herb', 'gourd', 'none'], [3, 1.4, 1.6, 1, 0.8]);
+      if (what === 'none') continue;
+      const vv = v + Q.range(-0.06, 0.06), top = H - 0.14;
+      if (what === 'pot') { const s = mid ? 1.5 : Q.range(1.2, 1.8); B.add(_pm.pot(), potGeo(), mtx(u, bottom, vv, 0, Q.range(0, 3), 0, s, s, s)); pole(B, M.rope, V3(u, bottom + 0.28 * s, vv), V3(u, top, vv), 0.007); }
+      else if (what === 'basket') { B.add(M.rope, new THREE.CylinderGeometry(0.2, 0.15, 0.24, 12, 1, true), mtx(u, bottom + 0.12, vv), true); B.add(M.rope, new THREE.CircleGeometry(0.15, 10), mtx(u, bottom + 0.002, vv, -Math.PI / 2, 0, 0), true); for (let k = 0; k < 3; k++) pole(B, M.rope, V3(u + Math.cos(k * 2.1) * 0.19, bottom + 0.24, vv + Math.sin(k * 2.1) * 0.19), V3(u, top, vv), 0.006); }
+      else if (what === 'herb') { B.add(herb, new THREE.ConeGeometry(0.11, 0.55, 8), mtx(u, bottom + 0.28, vv, Math.PI, 0, 0), true); pole(B, M.rope, V3(u, bottom + 0.55, vv), V3(u, top, vv), 0.006); }
+      else { for (let k = 0; k < 3; k++) B.add(gourd, new THREE.SphereGeometry(0.1, 10, 7), mtx(u + Q.range(-0.06, 0.06), bottom + 0.1 + k * 0.15, vv + Q.range(-0.06, 0.06), 0, 0, 0, 1, 1.3, 1), true); pole(B, M.rope, V3(u, bottom + 0.4, vv), V3(u, top, vv), 0.007); }
+      if (bottom < 1.9) ctx.circle(u, vv, 0.22);
+      if (overBudget()) yield;
+    }
+    // pegs along the back wall with rope coiled on them; a tray hung low, by the far end, with something on it
+    for (let v = -hw + 0.6; v < hw - 0.4; v += 0.8) { B.box(M.wood, D - 0.12, 1.75, v, 0.24, 0.04, 0.04); for (let k = 0; k < 3; k++) B.add(M.rope, new THREE.TorusGeometry(0.16 - k * 0.012, 0.014, 4, 14), mtx(D - 0.07 - k * 0.025, 1.6, v, 0, Math.PI / 2, 0, 1, 1.25, 1), true); }
+    { const tu = D - 1.3, tv = (beams[nb - 3] + beams[nb - 2]) / 2, ty = 1.12;
+      B.box(M.board, tu, ty, tv, 0.6, 0.03, 0.6, 0, 0.2, 0, 0.7);
+      for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) pole(B, M.rope, V3(tu + a * 0.27, ty, tv + b * 0.27), V3(tu + a * 0.05, H - 0.14, tv + b * 0.05), 0.006);
+      ws_storeFind(ctx, tu, ty + 0.02, tv);
+      ctx.circle(tu, tv, 0.36); }
+    ctx.addSmash('chest', 1.0, 0, -hw + 0.55, 0, { room });
+    stack(ctx, room, D - 0.6, -hw + 0.6, Q);
+    ctx.addSmash('barrel', 1.0, 0, hw - 0.5, Q.range(0, 3), { room });
+    ctx.web(V3(0.13, H - 0.05, hw - 0.04), V3(0.7071, 0, -0.7071), V3(0, -1, 0), Q.range(0.5, 0.9), Q.int(0, 3));
+  },
+
+  /* ---------- 100: a row of shallow domes on piers, pigeonholes and tablets ---------- */
+  *ws_domes(ctx, room, R) {
+    const B = ctx.B, a = 1.35, D = 4 * a, W = 8 * a, hw = W / 2, H = 2.6, k = 0.45, Rs = a * Math.SQRT2, Q = new Rng(room.r.seed ^ 0x1000), plaster = _sm.plaster();
+    ws_wideWalls(ctx, room, D, W, H, plaster);
+    ws_tileFloor(B, _wsm.scale(), D, W, 0.8);
+    // a red band round the walls where the domes spring
+    for (const s of [-1, 1]) B.box(_pm.ochre(), D / 2, H - 0.06, s * (hw - 0.02), D, 0.12, 0.05, 0, 0, 0, 1);
+    for (const u of [0.14, D - 0.02]) B.box(_pm.ochre(), u, H - 0.06, 0, 0.05, 0.12, W, 0, 0, 0, 1);
+    // the domes: a sail vault over every bay, two rows of four
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 4; j++) {
+      const cu = a + i * 2 * a, cv = -hw + a + j * 2 * a, N = 12, pos = [], uv = [], idx = [];
+      for (let p = 0; p <= N; p++) for (let q = 0; q <= N; q++) { const x = -a + 2 * a * p / N, z = -a + 2 * a * q / N; pos.push(cu + x, H + k * Math.sqrt(Math.max(0, Rs * Rs - x * x - z * z)), cv + z); uv.push(x / 1.3, z / 1.3); }
+      for (let p = 0; p < N; p++) for (let q = 0; q < N; q++) { const A = p * (N + 1) + q, Bq = A + 1, C2 = A + N + 1, D2 = C2 + 1; idx.push(A, C2, Bq, Bq, C2, D2); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      B.add(plaster, turnFacesTo(g, cu, 0, cv), new THREE.Matrix4(), true);
+      B.add(_pm.ochre(), new THREE.CircleGeometry(0.22, 16), mtx(cu, H + k * Rs - 0.01, cv, Math.PI / 2, 0, 0), true);
+    }
+    // the half-moons of wall under the domes, all round the outside
+    { const sh = new THREE.Shape(); sh.moveTo(-a, 0); for (let p = 0; p <= 20; p++) { const t = -a + 2 * a * p / 20; sh.lineTo(t, k * Math.sqrt(Math.max(0, Rs * Rs - a * a - t * t)) + 0.02); } sh.lineTo(a, 0); sh.lineTo(-a, 0);
+      const g = new THREE.ShapeGeometry(sh);
+      for (let j = 0; j < 4; j++) { const cv = -hw + a + j * 2 * a; B.add(plaster, g, mtx(D - 0.004, H, cv, 0, -Math.PI / 2, 0)); B.add(plaster, g, mtx(0.004, H, cv, 0, Math.PI / 2, 0)); }
+      for (let i = 0; i < 2; i++) { const cu = a + i * 2 * a; B.add(plaster, g, mtx(cu, H, -hw + 0.004, 0, 0, 0)); B.add(plaster, g, mtx(cu, H, hw - 0.004, 0, Math.PI, 0)); } }
+    // the ribs under the edges of the bays, and the piers that carry them in the middle
+    const rib = (fixed, along, c0) => { for (let s = 0; s < 14; s++) { const t0 = -a + 2 * a * s / 14, t1 = t0 + 2 * a / 14, tm = (t0 + t1) / 2, y0 = H + k * Math.sqrt(Math.max(0, Rs * Rs - a * a - t0 * t0)), y1 = H + k * Math.sqrt(Math.max(0, Rs * Rs - a * a - t1 * t1)), ym = (y0 + y1) / 2 - 0.07, ang = Math.atan2(y1 - y0, t1 - t0), l = Math.hypot(t1 - t0, y1 - y0) + 0.02;
+      if (along === 'v') B.box(_pm.cream(), fixed, ym, c0 + tm, 0.22, 0.14, l, -ang, 0, 0); else B.box(_pm.cream(), c0 + tm, ym, fixed, l, 0.14, 0.22, 0, 0, ang); } };
+    for (let j = 0; j < 4; j++) rib(2 * a, 'v', -hw + a + j * 2 * a);
+    for (let jj = 1; jj < 4; jj++) for (let i = 0; i < 2; i++) rib(-hw + jj * 2 * a, 'u', a + i * 2 * a);
+    for (let jj = 1; jj < 4; jj++) { const v = -hw + jj * 2 * a; B.box(plaster, 2 * a, H / 2, v, 0.42, H, 0.42, 0, 0, 0, 0.6); B.box(_pm.ochre(), 2 * a, H - 0.06, v, 0.5, 0.12, 0.5); ctx.solid(2 * a, v, 0.5, 0.5); }
+    yield;
+    // pigeonholes down the back wall, each with rolled hides in it, sealed with a lump of clay
+    const pu = D - 0.24, cols = 26, cw = (W - 0.5) / cols, rows = [0.3, 0.62, 0.94, 1.26, 1.58, 1.9, 2.22];
+    for (const y of rows) B.box(M.wood, pu, y, 0, 0.46, 0.03, W - 0.5, 0, 0, 0, 0.7);
+    for (let c = 0; c <= cols; c++) B.box(M.wood, pu, 1.26, -hw + 0.25 + c * cw, 0.46, 1.92, 0.025, 0, 0, 0, 0.7);
+    ctx.solid(pu, 0, 0.5, W - 0.4);
+    const hide = cachedMat('ws-hide', () => lam(T.leather, { color: 0xc0a080, bumpScale: 0.8 })), seal = cachedMat('ws-seal', () => lam(T.earth, { color: 0x5a3a2a, bumpScale: 0.5 }));
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows.length - 1; r++) {
+      const vm = -hw + 0.25 + (c + 0.5) * cw, n = Q.pickW([0, 1, 2, 3], [0.6, 1, 2, 1.4]);
+      for (let i = 0; i < n; i++) { const y = rows[r] + 0.05 + (i === 2 ? 0.08 : 0), v = vm + (n === 1 ? 0 : (i === 2 ? 0 : i ? 0.045 : -0.045)); B.log(hide, pu - 0.02, y, v, 0.035, 0.42, 'x', 6); if (Q.chance(0.5)) B.add(seal, UNIT_SPH, mtx(pu - 0.24, y, v, 0, 0, 0, 0.018, 0.022, 0.022)); }
+      if (overBudget()) yield;
+    }
+    // tablet shelves along the side walls, the clay tablets stacked in piles
+    let findDone = false;
+    for (const s of [-1, 1]) {
+      const vs = s * (hw - 0.22), levels = [0.45, 0.95, 1.45, 1.95];
+      for (const y of levels) B.box(M.plank, (0.9 + D - 0.6) / 2, y, vs, D - 1.5, 0.04, 0.4, 0, 0, 0, 0.8);
+      for (const u of [0.92, (0.9 + D - 0.6) / 2, D - 0.62]) B.box(M.wood, u, 1.0, vs, 0.06, 2.0, 0.38);
+      ctx.solid((0.9 + D - 0.6) / 2, vs, D - 1.4, 0.48);
+      for (const y of levels) for (let u = 1.05; u < D - 0.7; u += Q.range(0.2, 0.3)) {
+        if (!findDone && s > 0 && y === 0.95 && u > 2.4) { ws_storeFind(ctx, u + 0.05, y + 0.02, vs); findDone = true; u += 0.25; continue; }
+        if (Q.chance(0.15)) { if (Q.chance(0.3)) ctx.surface(room, u, y + 0.02, vs); continue; }
+        for (let i = 0, n = Q.int(2, 7); i < n; i++) B.box(seal, u + Q.range(-0.01, 0.01), y + 0.03 + i * 0.026, vs + Q.range(-0.02, 0.02), 0.11, 0.024, 0.16, 0, Q.range(-0.08, 0.08), 0);
+      }
+      yield;
+    }
+    // jars along the line of the piers, and the usual chest and box
+    for (const v of [-hw + a, -hw + 3 * a, hw - 3 * a, hw - a]) pithos(ctx, Q, 2 * a, v + Q.range(-0.2, 0.2), Q.range(0.85, 1.0));
+    ctx.addSmash('chest', 1.0, 0, -hw + 1.2, 0, { room });
+    ctx.addSmash('box', 3.9, 0, 0.0, 0.3, { room });
+  },
+});
+
+/* ---- 38f_climbs.js ---- */
+/* ============================================================
+   v20.7: rooms reached by straight stairs going UP (walked on foot, no spirals), and rooms with three rooms behind.
+     15  glass        a room of old glass: vessels on a stand, a heap of broken glass; broken jars, a carved beam,
+                      a faint fragment of the wall's own sign painted on a patch of plaster
+     38  beads        strands of beads hung from a frame, bowls of them, beads spilled; a cold hearth, a carved beam
+     59  hay          old hay heaped high, sheaves, a fork left in it; broken jars, the back cut from bare stone
+     73  boxes        shelves on every wall crammed and overflowing with boxes, a tottering pile; jars, bare stone
+     94  rope         rope everywhere: a great tangle, coils, cut pieces, ropes hanging; a cold hearth, bare stone,
+                      a carved beam
+     30  a long straight flight of stone steps up to a small room under a roof of tiles, loose tiles on the floor
+     74  a short wide flight of stone steps up into a very large hall of jars
+     19, 55, 85  a room with three rooms behind it, one of them with an oil or a biscuit in it (first pass)
+   Each upper room has its own shape and size, drawn from its seed: a plain room, an L, an oval, a T, a room with an
+   apse. The walls are worked out from the plan, so every shape is closed and every opening is where it should be.
+   ============================================================ */
+const CLIMB_SHAPES = ['rect', 'L', 'oval', 'T', 'apse'];
+const CLIMB_FEATURE = { 15: 'glass', 38: 'beads', 59: 'hay', 73: 'boxes', 94: 'rope' };
+const SUITE_FIND = { 19: 'O', 55: 'B', 85: 'O' };
+const _ufm = {
+  glassG: () => cachedMat('cl-glassG', () => new THREE.MeshPhongMaterial({ color: 0x8fb39a, specular: 0xe8fff0, shininess: 90, emissive: 0x08100a, transparent: true, opacity: 0.4, depthWrite: false })),
+  glassB: () => cachedMat('cl-glassB', () => new THREE.MeshPhongMaterial({ color: 0x3a5aa8, specular: 0xd8e4ff, shininess: 90, emissive: 0x060a18, transparent: true, opacity: 0.5, depthWrite: false })),
+  glassA: () => cachedMat('cl-glassA', () => new THREE.MeshPhongMaterial({ color: 0xa8742a, specular: 0xfff0d8, shininess: 80, emissive: 0x100804, transparent: true, opacity: 0.48, depthWrite: false })),
+  bead: (c) => cachedMat('cl-bead' + c, () => new THREE.MeshPhongMaterial({ color: c, specular: 0x6a6460, shininess: 40 })),
+  oldhay: () => cachedMat('cl-oldhay', () => lam(strawTex(1), { color: 0xb0a890, bumpScale: 1.2 })),
+  ropeD: () => cachedMat('cl-ropeD', () => lam(T.cloth, { color: 0x6e5c40, bumpScale: 1.2 })),
+  tile: () => cachedMat('cl-tile', () => lam(T.earth, { color: 0xa0583a, bumpScale: 0.8 })),
+  tileD: () => cachedMat('cl-tileD', () => lam(T.earth, { color: 0x7a4430, bumpScale: 0.8 })),
+  step: () => cachedMat('cl-step', () => lam(T.stone, { color: 0xc8bca8, bumpScale: 2.0 })),
+  frag: () => cachedMat('cl-frag', () => { const m = lam(fragmentTex(), { bump: false }); m.transparent = true; m.alphaTest = 0.04; m.depthWrite = false; return m; }),
+};
+const BEAD_COLS = [0xb8701c, 0x2a4a8a, 0x9a2a1a, 0xd8ccb0, 0x1a1814, 0x3a6a4a, 0xc8a83a];
+const _beadG = new THREE.SphereGeometry(1, 6, 4);
+
+/* ---------- the faint fragment: a patch of old plaster with part of the serpent-and-timbers ring, a hare's ears ---------- */
+let _fragTex = null;
+function fragmentTex() {
+  if (_fragTex) return _fragTex;
+  const S = 256, c = makeCanvas(S, S), g = c.getContext('2d'), R = new Rng(3131);
+  g.clearRect(0, 0, S, S);
+  // the patch: an uneven shape of plaster, its edge crumbled
+  g.beginPath();
+  for (let k = 0; k <= 40; k++) { const a = k / 40 * TAU, r = 96 + (vnoise(Math.cos(a) * 2 + 3, Math.sin(a) * 2, 31) - 0.5) * 60 + R.range(-6, 6); const x = 128 + Math.cos(a) * r * 1.1, y = 128 + Math.sin(a) * r * 0.9; k ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.closePath(); g.fillStyle = 'rgba(206,194,170,0.92)'; g.fill();
+  g.save(); g.clip();
+  for (let i = 0; i < 300; i++) { g.fillStyle = `rgba(${R.chance(0.5) ? '120,104,84' : '232,222,200'},${R.range(0.05, 0.16).toFixed(2)})`; g.fillRect(R.range(0, S), R.range(0, S), R.range(1, 5), R.range(1, 4)); }
+  // part of the ring: timbers laid end to end round an arc, interlocking, faded almost away
+  const cx = 150, cy = 150, rr = 92;
+  for (let k = 0; k < 7; k++) {
+    const a0 = Math.PI * 0.95 + k * 0.2, a1 = a0 + 0.17;
+    g.strokeStyle = `rgba(92,58,34,${(0.32 - k * 0.025).toFixed(2)})`; g.lineWidth = 13; g.lineCap = 'butt';
+    g.beginPath(); g.arc(cx, cy, rr + (k % 2 ? 4 : -4), a0, a1); g.stroke();
+    g.strokeStyle = 'rgba(60,36,22,0.18)'; g.lineWidth = 2; g.beginPath(); g.moveTo(cx + Math.cos(a1) * (rr - 9), cy + Math.sin(a1) * (rr - 9)); g.lineTo(cx + Math.cos(a1) * (rr + 9), cy + Math.sin(a1) * (rr + 9)); g.stroke();
+  }
+  // the serpent's head where the ring begins, jaw open on the last timber
+  { const a = Math.PI * 0.95, hx = cx + Math.cos(a) * rr, hy = cy + Math.sin(a) * rr; g.fillStyle = 'rgba(70,52,30,0.3)'; g.beginPath(); g.ellipse(hx - 4, hy + 10, 12, 8, 0.9, 0, TAU); g.fill(); g.fillStyle = 'rgba(30,20,12,0.35)'; g.beginPath(); g.arc(hx - 6, hy + 6, 2.2, 0, TAU); g.fill(); }
+  // and inside the ring, the tips of a hare's long ears, the rest flaked away
+  g.strokeStyle = 'rgba(96,70,44,0.28)'; g.lineWidth = 6;
+  for (const dx of [0, 14]) { g.beginPath(); g.moveTo(120 + dx, 150); g.quadraticCurveTo(112 + dx, 120, 118 + dx * 1.3, 98); g.stroke(); }
+  // flakes where the paint has gone
+  for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(214,204,182,0.85)'; g.beginPath(); g.ellipse(R.range(40, 220), R.range(40, 220), R.range(3, 12), R.range(2, 7), R.range(0, 3), 0, TAU); g.fill(); }
+  g.restore();
+  _fragTex = texOf(c);
+  return _fragTex;
+}
+
+/* ---------- plans: the shape of an upper room, its walls worked out from it ---------- */
+function upFlightPlan(shape, Q, u3, sh, maxHW) {
+  const P = { rects: [], ell: null, H: Q.range(2.9, 3.5), gaps: [], center: null };
+  P.gaps.push({ axis: 'v', c: u3, lo: -sh, hi: sh, h: 2.75 });
+  if (shape === 'rect') { const D = Q.range(4.4, 6.6), W = Math.min(2 * maxHW, Q.range(4.4, 7.0)); P.rects.push([u3, u3 + D, -W / 2, W / 2]); P.center = [u3 + D / 2, 0]; }
+  else if (shape === 'L') {
+    const D = Q.range(4.2, 5.6), W = Q.range(3.6, 4.4), s = Q.chance(0.5) ? 1 : -1, ww = Math.min(maxHW - W / 2, Q.range(2.2, 3.0)), wd = Q.range(2.6, 3.2);
+    P.rects.push([u3, u3 + D, -W / 2, W / 2]);
+    P.rects.push(s > 0 ? [u3 + D - wd, u3 + D, W / 2, W / 2 + ww] : [u3 + D - wd, u3 + D, -W / 2 - ww, -W / 2]);
+    P.center = [u3 + D / 2, 0];
+  } else if (shape === 'oval') {
+    const a = Q.range(3.0, 3.8), b = Math.min(maxHW - 0.1, Q.range(2.7, 3.6));
+    P.ell = { cu: u3 + a, cv: 0, a, b, th0: 0, th1: TAU, gapAt: Math.PI, gapHW: sh };
+    P.center = [u3 + a, 0];
+  } else if (shape === 'T') {
+    const Wn = Q.range(2.6, 3.4), Dn = Q.range(2.6, 3.8), Wc = Math.min(2 * maxHW, Q.range(6.0, 7.4)), Dc = Q.range(2.6, 3.4);
+    P.rects.push([u3, u3 + Dn, -Wn / 2, Wn / 2]); P.rects.push([u3 + Dn, u3 + Dn + Dc, -Wc / 2, Wc / 2]);
+    P.center = [u3 + Dn + Dc / 2, 0];
+  } else {   // apse
+    const D = Q.range(3.6, 5.0), W = Math.min(2 * maxHW, Q.range(4.6, 6.4)), a = Q.range(1.8, 2.6);
+    P.rects.push([u3, u3 + D, -W / 2, W / 2]);
+    P.ell = { cu: u3 + D, cv: 0, a, b: W / 2, th0: -Math.PI / 2, th1: Math.PI / 2 };
+    P.gaps.push({ axis: 'v', c: u3 + D, lo: -W / 2, hi: W / 2, h: 99 });
+    P.center = [u3 + D * 0.55 + a * 0.2, 0];
+  }
+  return P;
+}
+// the outside edges of a union of rectangles, each as a run along one line with the side the outside lies on
+function planEdges(rects) {
+  const eps = 1e-3, out = [];
+  const minus = (iv, cuts) => { let segs = [iv]; for (const [a, b] of cuts) { const nx = []; for (const [x0, x1] of segs) { if (b <= x0 + eps || a >= x1 - eps) { nx.push([x0, x1]); continue; } if (a > x0 + eps) nx.push([x0, a]); if (b < x1 - eps) nx.push([b, x1]); } segs = nx; } return segs.filter(([a, b]) => b - a > 0.05); };
+  rects.forEach((r, i) => {
+    const [u0, u1, v0, v1] = r;
+    for (const e of [{ axis: 'v', c: u0, a: v0, b: v1, out: -1 }, { axis: 'v', c: u1, a: v0, b: v1, out: 1 }, { axis: 'u', c: v0, a: u0, b: u1, out: -1 }, { axis: 'u', c: v1, a: u0, b: u1, out: 1 }]) {
+      const cuts = [];
+      rects.forEach((q, j) => {
+        if (j === i) return;
+        const p = e.c + e.out * 0.01;
+        if (e.axis === 'v' && p > q[0] && p < q[1]) cuts.push([q[2], q[3]]);
+        if (e.axis === 'u' && p > q[2] && p < q[3]) cuts.push([q[0], q[1]]);
+      });
+      for (const [a, b] of minus([e.a, e.b], cuts)) out.push(Object.assign({}, e, { a, b }));
+    }
+  });
+  return out;
+}
+// an elliptical ring of wall from th0 to th1 (th as polar(): u = cu + a cos, v = cv + b sin)
+function ellRingGeo(cu, cv, a, b, y0, y1, th0, th1, seed) {
+  const cols = Math.max(2, Math.ceil((th1 - th0) * Math.max(a, b) / 0.22)), rows = Math.max(1, Math.ceil((y1 - y0) / 0.4)), pos = [], uv = [], idx = [];
+  for (let j = 0; j <= rows; j++) for (let i = 0; i <= cols; i++) {
+    const th = th0 + (th1 - th0) * i / cols, y = y0 + (y1 - y0) * j / rows, k = _rk(th, y, seed);
+    pos.push(cu + a * k * Math.cos(th), y, cv + b * k * Math.sin(th)); uv.push(th * (a + b) / 2 / 1.3, y / 1.3);
+  }
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const p = j * (cols + 1) + i, q = p + 1, r = p + cols + 1, s = r + 1; idx.push(p, r, q, q, r, s); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+  return turnFacesTo(g, cu, (y0 + y1) / 2, cv);
+}
+// build the room a plan describes: floor, walls (with their openings), posts, ceiling; return where things can stand
+function buildPlan(ctx, P, o) {
+  const B = ctx.B, H = P.H, key = o.key, rock = _pm.rockF(), wallM = o.wallM, anchors = [];
+  const maxU = Math.max(...P.rects.map(r => r[1]), P.ell ? P.ell.cu + P.ell.a : -1e9);
+  for (const r of P.rects) {
+    const [u0, u1, v0, v1] = r;
+    B.box(o.floor || M.plank, (u0 + u1) / 2, -0.05, (v0 + v1) / 2, u1 - u0, 0.1, v1 - v0, 0, 0, 0, 0.55);
+    if (P.noCeil) continue;
+    B.box(M.board, (u0 + u1) / 2, H + 0.06, (v0 + v1) / 2, u1 - u0 + 0.02, 0.12, v1 - v0 + 0.02, 0, 0, 0, 0.6);
+    for (let u = u0 + 0.8; u < u1 - 0.3; u += 1.5) B.box(M.wood, u, H - 0.11, (v0 + v1) / 2, 0.2, 0.22, v1 - v0);
+  }
+  for (const e of planEdges(P.rects)) {
+    const back = o.rockBack && e.axis === 'v' && e.out > 0 && Math.abs(e.c - maxU) < 0.05;
+    const mat = back ? rock : wallM;
+    const gaps = P.gaps.filter(g => g.axis === e.axis && Math.abs(g.c - e.c) < 0.01).map(g => [Math.max(e.a, g.lo), Math.min(e.b, g.hi), g.h]).filter(g => g[1] - g[0] > 0.05).sort((x, y) => x[0] - y[0]);
+    const piece = (a, b, y0, y1) => { if (b - a < 0.02 || y1 - y0 < 0.02) return; e.axis === 'v' ? B.box(mat, e.c + e.out * 0.1, (y0 + y1) / 2, (a + b) / 2, 0.2, y1 - y0, b - a, 0, 0, 0, back ? 0.5 : 0.7) : B.box(mat, (a + b) / 2, (y0 + y1) / 2, e.c + e.out * 0.1, b - a, y1 - y0, 0.2, 0, 0, 0, back ? 0.5 : 0.7); };
+    let t = e.a;
+    for (const [lo, hi, h] of gaps) { piece(t, lo, 0, H); if (h < H) piece(lo, hi, h, H); t = hi; }
+    piece(t, e.b, 0, H);
+    if (!back) for (const t of [e.a, e.b]) { const [u, v] = e.axis === 'v' ? [e.c + e.out * 0.08, t] : [t, e.c + e.out * 0.08]; B.box(M.wood, u, H / 2, v, 0.22, H, 0.22); }
+    else for (let s = e.a + 0.2; s < e.b; s += 0.45) { const [u, v] = e.axis === 'v' ? [e.c - 0.08, s] : [s, e.c - 0.08]; stoneLump(B, o.Q, rock, u, 0.1, v, o.Q.range(0.14, 0.26), 0.7); }
+    if (back) B.box(rock, e.c - 0.75, 0.006, (e.a + e.b) / 2, 1.5, 0.012, e.b - e.a, 0, 0, 0, 0.5);
+    // places against this wall to set things
+    const len = e.b - e.a;
+    for (let s = e.a + 0.7; s < e.b - 0.6; s += 1.15) {
+      const [u, v] = e.axis === 'v' ? [e.c - e.out * 0.45, s] : [s, e.c - e.out * 0.45];
+      if (u < o.u3 + 1.0 && Math.abs(v) < o.sh + 0.7) continue;
+      const ry = e.axis === 'v' ? (e.out > 0 ? -Math.PI / 2 : Math.PI / 2) : (e.out > 0 ? Math.PI : 0);
+      anchors.push({ u, v, ry, e, s, back });
+    }
+  }
+  if (P.ell) {
+    const E = P.ell;
+    // its floor and ceiling (the half of an apse beyond its room; the whole of an oval)
+    const half = E.th1 - E.th0 < TAU - 0.01, fg = new THREE.CircleGeometry(1, 30, half ? -Math.PI / 2 : 0, half ? Math.PI : TAU);
+    fg.rotateX(-Math.PI / 2); scaleUV(fg, E.a, E.b);
+    B.add(o.floor || M.plank, fg, mtx(E.cu, 0.0, E.cv, 0, 0, 0, E.a + 0.1, 1, E.b + 0.1), true);
+    const cg = new THREE.CircleGeometry(1, 30, half ? -Math.PI / 2 : 0, half ? Math.PI : TAU); cg.rotateX(Math.PI / 2); scaleUV(cg, E.a, E.b);
+    B.add(M.board, cg, mtx(E.cu, H + 0.002, E.cv, 0, 0, 0, E.a + 0.15, 1, E.b + 0.15), true);
+    for (let k = 0; k < 8; k++) { const t = E.th0 + (E.th1 - E.th0) * (k + 0.5) / 8; if (half && Math.cos(t) < 0) continue; B.beam(M.wood, V3(E.cu, H - 0.1, E.cv), V3(E.cu + Math.cos(t) * E.a, H - 0.1, E.cv + Math.sin(t) * E.b), 0.14, 0.16); }
+    // the ring of wall, open at the way in; bare rock round the far side if the back is cut from stone
+    const gap = E.gapAt != null ? Math.asin(Math.min(0.95, (E.gapHW + 0.05) / E.b)) : 0;
+    const arcs = E.gapAt != null ? [[E.gapAt + gap, E.gapAt + TAU - gap]] : [[E.th0, E.th1]];
+    for (const [a0, a1] of arcs) {
+      if (o.rockBack) {
+        // the near part in the room's own walling, the far part (facing out from the way in) in rock
+        const segs = [];
+        const inRock = t => Math.cos(t) > 0.25;
+        let t0 = a0, cur = inRock(a0);
+        for (let i = 1; i <= 48; i++) { const t = a0 + (a1 - a0) * i / 48, r = inRock(t); if (r !== cur || i === 48) { segs.push([t0, t, cur]); t0 = t; cur = r; } }
+        for (const [s0, s1, r] of segs) B.add(r ? rock : wallM, ellRingGeo(E.cu, E.cv, E.a, E.b, 0, H, s0, s1, 77), new THREE.Matrix4(), true);
+        for (let t = a0; t < a1; t += 0.3) if (inRock(t)) stoneLump(B, o.Q, rock, E.cu + Math.cos(t) * (E.a - 0.08), 0.1, E.cv + Math.sin(t) * (E.b - 0.08), o.Q.range(0.14, 0.26), 0.7);
+      } else B.add(wallM, ellRingGeo(E.cu, E.cv, E.a, E.b, 0, H, a0, a1, 77), new THREE.Matrix4(), true);
+    }
+    if (E.gapAt != null) {
+      // the short cheeks either side of the way in, from the stair to the ring
+      const endU = E.cu - E.a * Math.cos(gap) * 0.98;
+      for (const s of [-1, 1]) B.box(wallM, (E.cu - E.a + endU) / 2, H / 2, s * (E.gapHW + 0.1), Math.max(0.1, endU - (E.cu - E.a)) + 0.25, H, 0.2);
+      B.box(wallM, E.cu - E.a + 0.1, (2.75 + H) / 2, 0, 0.22, H - 2.75, 2 * E.gapHW + 0.3);
+    }
+    for (let t = E.th0 + 0.35; t < E.th1 - 0.2; t += 0.5) {
+      if (E.gapAt != null && angOff(t, E.gapAt) < 0.7) continue;
+      if (half && Math.cos(t) < 0.05) continue;
+      const u = E.cu + Math.cos(t) * (E.a - 0.45), v = E.cv + Math.sin(t) * (E.b - 0.45);
+      anchors.push({ u, v, ry: Math.atan2(-Math.cos(t), -Math.sin(t)) + Math.PI, curved: true, back: o.rockBack && Math.cos(t) > 0.25 });
+    }
+  }
+  const regions = P.rects.map(r => zoneRect(ctx, r[0], r[1], r[2], r[3]));
+  if (P.ell) regions.push(zoneEll(ctx, P.ell.cu, P.ell.cv, P.ell.a - 0.12, P.ell.b - 0.12));
+  return { anchors, regions, maxU };
+}
+
+/* ---------- the walked stair up, and the room at its head ---------- */
+function* upFlightGen(ctx, room, R, o) {
+  const B = ctx.B, side = room.side, zc = room.zc, key = 'w' + room.i, Q = new Rng(room.r.seed ^ 0x7e7e);
+  const n1 = o.n1, n2 = o.n2 || 0, rs = o.rise, tr = o.tread, sw = o.sw, sh = sw / 2, vh = Math.max(0.85, sh), stone = !!o.stone;
+  const us0 = 1.25, u1 = us0 + n1 * tr, LL = n2 ? o.landing : 0, u2 = u1 + LL, u3 = u2 + n2 * tr, h1 = n1 * rs, Hu = (n1 + n2) * rs, CH = 2.8;
+  room.lvl = key; room.floorY = Hu;
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+  const wallM = o.wallM, stepM = stone ? _ufm.step() : M.plank;
+  // the way in: a little lobby at the corridor's level, its door, its walls and low ceiling
+  B.box(stone ? _ufm.step() : M.plank, us0 / 2, -0.05, 0, us0 + 0.1, 0.1, 2 * vh, 0, 0, 0, 0.6);
+  B.box(M.board, us0 / 2, CH + 0.06, 0, us0 + 0.2, 0.12, 2 * vh + 0.3);
+  for (const s of [-1, 1]) { B.box(wallM, us0 / 2, CH / 2, s * (vh + 0.1), us0 + 0.2, CH, 0.2, 0, 0, 0, 0.7); for (const lv of [key, 'up']) ctx.solid(us0 / 2, s * (vh + 0.15), us0 + 0.4, 0.3, 0, lv); }
+  for (const s of [-1, 1]) { B.box(wallM, 0.06, CH / 2, s * (0.72 + (vh - 0.72) / 2), 0.12, CH, vh - 0.72, 0, 0, 0, 0.7); for (const lv of [key, 'up']) ctx.solid(0.06, s * (0.72 + (vh - 0.72) / 2), 0.2, vh - 0.72 + 0.1, 0, lv); }
+  B.box(wallM, 0.06, (DOOR + CH) / 2, 0, 0.12, CH - DOOR, 1.44);
+  if (vh > sh + 0.02) for (const s of [-1, 1]) B.box(wallM, us0 + 0.05, (CH + Hu) / 2, s * (sh + (vh - sh) / 2 + 0.1), 0.1, CH + Hu, vh - sh + 0.2);
+  // the flights
+  const flight = (fromU, n, y0) => {
+    for (let i = 0; i < n; i++) {
+      const ua = fromU + i * tr, y = y0 + (i + 1) * rs;
+      if (stone) {
+        B.box(stepM, ua + tr / 2, (y + y0 + i * rs - 0.25) / 2, 0, tr + 0.02, y - (y0 + i * rs - 0.25), sw - 0.02, Q.range(-0.01, 0.01), Q.range(-0.012, 0.012), Q.range(-0.01, 0.01), 0.7);
+        B.box(M.socket, ua + 0.02, y - 0.004, 0, 0.04, 0.008, sw - 0.1);      // the worn front edge, darker
+      } else {
+        B.box(M.plank, ua + tr / 2, y - 0.03, 0, tr + 0.03, 0.06, sw - 0.04, Q.range(-0.012, 0.012), 0, 0, 1);
+        B.box(M.board, ua, y - rs / 2, 0, 0.035, rs, sw - 0.04);
+      }
+    }
+    if (stone) B.box(stepM, fromU + n * tr / 2, y0 - 0.4, 0, n * tr, 0.3, sw - 0.02, 0, 0, 0, 0.7);
+  };
+  flight(us0, n1, 0);
+  if (n2) { B.box(stepM, (u1 + u2) / 2, h1 - 0.1, 0, LL, 0.2, sw, 0, 0, 0, 0.6); flight(u2, n2, h1); }
+  // its walls and a ceiling that climbs with it
+  const top = Hu + CH + 0.2;
+  for (const s of [-1, 1]) B.box(wallM, (us0 + u3) / 2, top / 2, s * (sh + 0.1), u3 - us0 + 0.1, top, 0.2, 0, 0, 0, 0.7);
+  const slope = (ua, ub, ya, yb) => { const L = Math.hypot(ub - ua, yb - ya); B.box(M.board, (ua + ub) / 2, (ya + yb) / 2 + CH + 0.06, 0, L + 0.06, 0.12, sw + 0.3, 0, 0, Math.atan2(yb - ya, ub - ua), 0.6); };
+  slope(us0, u1, 0, h1);
+  if (n2) { B.box(M.board, (u1 + u2) / 2, h1 + CH + 0.06, 0, LL + 0.1, 0.12, sw + 0.3); slope(u2, u3, h1, Hu); }
+  B.box(M.board, us0 + 0.06, CH + (h1 > 0 ? 0.3 : 0), 0, 0.12, 0.6, sw + 0.3);
+  for (let u = us0 + 0.9; u < u3 - 0.3; u += 1.3) { const y = u < u1 ? (u - us0) / (u1 - us0) * h1 : u < u2 ? h1 : h1 + (u - u2) / (u3 - u2) * (Hu - h1); B.box(M.wood, u, y + CH - 0.08, 0, 0.16, 0.16, sw, 0, 0, Math.atan2(u < u1 ? h1 : u < u2 ? 0 : Hu - h1, u < u1 ? u1 - us0 : u < u2 ? 1 : u3 - u2)); }
+  if (!stone) for (const s of [-1, 1]) B.beam(M.wood, V3(us0 + 0.2, 0.92, s * (sh - 0.06)), V3(u3, Hu + 0.92, s * (sh - 0.06)), 0.05, 0.06);
+  if (o.onStair) o.onStair({ us0, u1, u2, u3, h1, Hu, sw, sh, Q });
+  yield;
+  // the room at the head
+  ctx.setFrame(side, C.WALL_OUT, zc, Hu);
+  const P = o.plan(Q, u3, sh);
+  const built = buildPlan(ctx, P, { key, wallM: o.upWall || wallM, floor: o.upFloor, rockBack: o.rockBack, Q, sh, u3 });
+  const regions = [zoneRect(ctx, -0.45, us0 + 0.3, -0.72, 0.72), zoneRect(ctx, 0.12, us0 + 0.1, -vh, vh), zoneRect(ctx, us0 - 0.1, u3 + 0.45, -sh, sh), ...built.regions];
+  const rr = P.rects[0] || [u3, u3 + 2 * P.ell.a, -P.ell.b, P.ell.b];
+  ctx.setBounds(room, rr[0] + 0.4, rr[1] - 0.4, rr[2] + 0.4, rr[3] - 0.4);
+  yield;
+  if (o.fill) yield* o.fill({ ctx, B, room, key, Q, P, anchors: built.anchors, u3, sh, H: P.H });
+  ctx.setFrame(side, C.WALL_OUT, zc, 0);
+  const floor = (x, zl) => {
+    const u = side * x - C.WALL_OUT;
+    if (u <= us0) return 0;
+    if (u < u1) return (u - us0) / (u1 - us0) * h1;
+    if (u < u2) return h1;
+    if (u < u3) return h1 + (u - u2) / (u3 - u2) * (Hu - h1);
+    return Hu;
+  };
+  (ctx.deeps ||= {})[key] = { y: Hu, regions, floor, walk: { u: x => side * x - C.WALL_OUT, exitU: 0.1, levels: [0, h1, Hu] } };
+  const tc = ctx.W(0.62, 0, 0), ret = ctx.W(-0.45, 0, 0);
+  ctx.triggers.push({ type: 'walk', key, room, cx: tc.x, cz: tc.z, hx: 0.32, hz: 0.6, ret: { x: ret.x, z: ret.z }, retYaw: side > 0 ? Math.PI / 2 : -Math.PI / 2 });
+}
+
+/* ---------- what fills them ---------- */
+// take anchors off the list in turn, nearest the given test first
+function takeAnchor(X, test = () => true) { const i = X.anchors.findIndex(test); return i < 0 ? null : X.anchors.splice(i, 1)[0]; }
+function brokenJars(X, u, v) {
+  const { B, Q } = X;
+  for (let k = 0; k < 7; k++) sherd(B, Q, _pm.pot(), u + Q.range(-0.45, 0.45), v + Q.range(-0.45, 0.45), Q.range(0.08, 0.2));
+  B.add(_pm.pot(), potGeo(), mtx(u + 0.15, 0.12, v - 0.1, Math.PI / 2 - 0.15, Q.range(0, 3), 0, 1.6, 0.9, 1.6));
+  B.add(_pm.pot(), pithosGeo(), mtx(u - 0.2, 0, v + 0.15, 0, Q.range(0, 3), 0, 0.55, 0.32, 0.55));
+}
+function carvedBeam(X) {
+  // a heavy tie-beam across the room, a band of chevrons cut along its face, pegged at each end, braced down to posts
+  const { B, Q, P, H } = X, r = P.rects.length ? P.rects[P.rects.length > 1 ? 1 : 0] : null;
+  if (!r) { const E = P.ell; B.box(M.woodDark, E.cu, H - 0.3, E.cv, 0.3, 0.32, 2 * E.b - 0.1); return; }
+  const u = (r[0] + r[1]) / 2 + Q.range(-0.4, 0.4), y = H - 0.32, len = r[3] - r[2];
+  B.box(M.woodDark, u, y, (r[2] + r[3]) / 2, 0.3, 0.32, len);
+  for (let v = r[2] + 0.3; v < r[3] - 0.3; v += 0.22) for (const s of [-1, 1]) B.box(M.socket, u + s * 0.152, y + 0.04, v, 0.008, 0.11, 0.03, 0, 0, s * 0.7);
+  for (const v of [r[2] + 0.12, r[3] - 0.12]) { B.log(M.wood, u, y + 0.06, v, 0.03, 0.4, 'x', 6); B.beam(M.woodDark, V3(u, y - 0.12, v + (v < 0 ? 0.05 : -0.05)), V3(u, y - 1.0, v + (v < 0 ? 0.0 : 0.0)), 0.14, 0.14); B.beam(M.wood, V3(u, y - 0.16, v + (v < 0 ? 0.7 : -0.7)), V3(u, y - 0.85, v), 0.1, 0.1); }
+}
+function oldHearth(X, u, v) {
+  const { B, Q, ctx, key } = X;
+  for (let k = 0; k < 12; k++) { const a = k / 12 * TAU + Q.range(-0.1, 0.1), s = Q.range(0.12, 0.19); stoneLump(B, Q, Q.pick([M.stone, M.stoneB]), u + Math.cos(a) * 0.55, s * 0.4, v + Math.sin(a) * 0.55, s, 0.7); }
+  B.add(M.ash, new THREE.CircleGeometry(0.46, 14), mtx(u, 0.006, v, -Math.PI / 2), true);
+  for (let k = 0; k < 3; k++) B.log(M.woodDark, u + Q.range(-0.2, 0.2), 0.03, v + Q.range(-0.2, 0.2), 0.03, Q.range(0.2, 0.35), 'x', 5);
+  // an iron tripod over it, a pot still hung from it on a short chain
+  for (let k = 0; k < 3; k++) { const a = k * TAU / 3 + 0.4; B.beam(M.iron, V3(u + Math.cos(a) * 0.62, 0, v + Math.sin(a) * 0.62), V3(u, 1.25, v), 0.025, 0.025); }
+  pole(B, M.iron, V3(u, 1.25, v), V3(u, 0.72, v), 0.008);
+  B.add(M.iron, new THREE.SphereGeometry(0.16, 12, 6, 0, TAU, Math.PI * 0.4, Math.PI * 0.6), mtx(u, 0.6, v), true);
+  ctx.circle(u, v, 0.72, key);
+}
+function faintFragment(X, a) {
+  const { B } = X;
+  B.add(_ufm.frag(), new THREE.PlaneGeometry(0.95, 0.95), mtx(a.u + Math.sin(a.ry) * 0.43, 1.55, a.v + Math.cos(a.ry) * 0.43, 0, a.ry, 0), true);
+}
+function glassVessel(B, Q, u, y, v, s = 1) {
+  const prof = Q.pick([[[0, 0], [0.05, 0], [0.06, 0.02], [0.065, 0.1], [0.05, 0.16], [0.018, 0.2], [0.016, 0.27], [0.022, 0.28]], [[0, 0], [0.03, 0], [0.07, 0.04], [0.08, 0.09], [0.06, 0.14], [0.02, 0.17], [0.017, 0.25], [0.025, 0.26]], [[0, 0], [0.035, 0], [0.04, 0.01], [0.05, 0.13], [0.055, 0.14]], [[0, 0], [0.05, 0], [0.09, 0.03], [0.11, 0.07], [0.115, 0.075]]]);
+  const g = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(x + 0.001, y)), 12);
+  const tip = Q.chance(0.12);
+  B.add(Q.pickW([_ufm.glassG(), _ufm.glassB(), _ufm.glassA()], [4, 1.5, 1.5]), g, mtx(u, y + (tip ? 0.05 * s : 0), v, tip ? Math.PI / 2 : 0, Q.range(0, TAU), 0, s, s, s), true);
+}
+const CLIMB_FILL = {
+  *glass(X) {
+    const { ctx, B, room, key, Q, P } = X, [cu, cv] = P.center;
+    // a stand of two broad shelves in the middle, crowded with vessels; a heap of broken glass on a hide beside it
+    B.box(M.wood, cu, 0.55, cv, 1.1, 0.05, 1.9); B.box(M.wood, cu, 1.0, cv, 0.8, 0.05, 1.6);
+    for (const [du, dv] of [[-0.5, -0.9], [0.5, -0.9], [-0.5, 0.9], [0.5, 0.9]]) B.box(M.wood, cu + du, 0.5, cv + dv, 0.07, 1.0, 0.07);
+    for (let k = 0; k < 18; k++) glassVessel(B, Q, cu + Q.range(-0.48, 0.48), 0.575, cv + Q.range(-0.88, 0.88), Q.range(0.8, 1.4));
+    for (let k = 0; k < 12; k++) glassVessel(B, Q, cu + Q.range(-0.34, 0.34), 1.025, cv + Q.range(-0.74, 0.74), Q.range(0.8, 1.3));
+    ctx.solid(cu, cv, 1.2, 2.0, 0, key);
+    ctx.surface(room, cu + 0.3, 0.58, cv + 0.5); ctx.surface(room, cu - 0.2, 1.03, cv - 0.4);
+    const hu = cu + 0.2, hv = cv + (Q.chance(0.5) ? 1.6 : -1.6);
+    B.add(M.leather, new THREE.CircleGeometry(0.6, 12), mtx(hu, 0.006, hv, -Math.PI / 2, 0, Q.range(0, 3), 1, 0.75, 1), true);
+    for (let k = 0; k < 70; k++) { const g = new THREE.IcosahedronGeometry(1, 0), a = Q.range(0, TAU), r = Math.sqrt(Q.next()) * 0.5; B.add(Q.pickW([_ufm.glassG(), _ufm.glassB(), _ufm.glassA()], [5, 1, 1.5]), g, mtx(hu + Math.cos(a) * r, 0.02 + (0.5 - r) * 0.18 * Q.next(), hv + Math.sin(a) * r * 0.75, Q.range(0, 3), Q.range(0, 3), Q.range(0, 3), Q.range(0.02, 0.06), 0.008, Q.range(0.02, 0.05)), true); }
+    ctx.circle(hu, hv, 0.45, key);
+    yield;
+    // against the walls: shelves with more glass on them, the broken jars, the fragment of the sign, a chest
+    const a1 = takeAnchor(X, a => !a.curved && !a.back);
+    if (a1) { const e = a1.e; e.axis === 'v' ? shelves(ctx, room, 'v', a1.s - 0.7, a1.s + 0.7, e.c - e.out * 0.22, 0.38, [0.5, 1.1, 1.7], Q) : shelves(ctx, room, 'u', a1.s - 0.7, a1.s + 0.7, e.c - e.out * 0.22, 0.38, [0.5, 1.1, 1.7], Q); for (let k = 0; k < 8; k++) { const t = a1.s + Q.range(-0.6, 0.6), y = Q.pick([0.5, 1.1, 1.7]) + 0.03; e.axis === 'v' ? glassVessel(B, Q, e.c - e.out * 0.22, y, t, 1) : glassVessel(B, Q, t, y, e.c - e.out * 0.22, 1); } }
+    const a2 = takeAnchor(X); if (a2) brokenJars(X, a2.u, a2.v);
+    const a3 = takeAnchor(X, a => !a.back); if (a3) faintFragment(X, a3);
+    const a4 = takeAnchor(X); if (a4) ctx.addSmash('chest', a4.u, 0, a4.v, a4.ry, { room, lvl: key });
+    const a5 = takeAnchor(X); if (a5) ctx.addSmash('box', a5.u, 0, a5.v, a5.ry + 0.3, { room, lvl: key });
+    carvedBeam(X);
+  },
+  *beads(X) {
+    const { ctx, B, room, key, Q, P } = X, [cu, cv] = P.center;
+    // a frame like a loom's, its pole hung with strands of beads of every kind, some broken off short
+    const fw = 2.2, fy = 2.05;
+    for (const s of [-1, 1]) { B.box(M.wood, cu, fy / 2, cv + s * fw / 2, 0.12, fy, 0.12); B.box(M.wood, cu, 0.04, cv + s * fw / 2, 0.6, 0.08, 0.14); }
+    pole(B, M.wood, V3(cu, fy, cv - fw / 2 - 0.1), V3(cu, fy, cv + fw / 2 + 0.1), 0.04);
+    for (let k = 0; k < 34; k++) {
+      const v = cv - fw / 2 + 0.12 + k * (fw - 0.24) / 33, len = Q.chance(0.15) ? Q.range(0.2, 0.5) : Q.range(0.7, 1.45), pat = [Q.pick(BEAD_COLS), Q.pick(BEAD_COLS), Q.pick(BEAD_COLS)], du = Q.range(-0.03, 0.03);
+      for (let y = fy - 0.05, j = 0; y > fy - len; y -= 0.024, j++) { const c = pat[j % 3 === 2 ? 1 : (j % 7 === 0 ? 2 : 0)], s = Q.range(0.007, 0.012); B.add(_ufm.bead(c), _beadG, mtx(cu + du * (fy - y), y, v + Math.sin(j * 0.3 + k) * 0.004, 0, 0, 0, s, s * 0.85, s)); }
+      if (overBudget()) yield;
+    }
+    ctx.solid(cu, cv, 0.6, fw + 0.2, 0, key);
+    // a low table with bowls of them, and beads run all over the floor
+    const tu = cu + 1.35, tv = cv + Q.range(-0.4, 0.4);
+    table(ctx, room, tu, tv, Math.PI / 2);
+    for (let k = 0; k < 3; k++) { const bu = tu + Q.range(-0.15, 0.15), bv = tv - 0.4 + k * 0.4; B.add(_pm.pot(), new THREE.LatheGeometry([[0.001, 0], [0.05, 0], [0.09, 0.03], [0.11, 0.07], [0.115, 0.075]].map(([x, y]) => new THREE.Vector2(x, y)), 10), mtx(bu, 0.8, bv), true); const c = Q.pick(BEAD_COLS); for (let j = 0; j < 22; j++) { const a = Q.range(0, TAU), r = Math.sqrt(Q.next()) * 0.08; B.add(_ufm.bead(c), _beadG, mtx(bu + Math.cos(a) * r, 0.83 + Q.range(0, 0.03), bv + Math.sin(a) * r, 0, 0, 0, 0.01, 0.009, 0.01)); } }
+    for (let k = 0; k < 110; k++) { const a = Q.range(0, TAU), r = Math.pow(Q.next(), 0.7) * 1.8; B.add(_ufm.bead(Q.pick(BEAD_COLS)), _beadG, mtx(cu + 0.4 + Math.cos(a) * r, 0.008, cv + Math.sin(a) * r * 1.2, 0, 0, 0, 0.009, 0.008, 0.009)); }
+    yield;
+    const a1 = takeAnchor(X, a => !a.back); if (a1) oldHearth(X, a1.u + Math.sin(a1.ry) * 0.5, a1.v + Math.cos(a1.ry) * 0.5);
+    const a2 = takeAnchor(X); if (a2) brokenJars(X, a2.u, a2.v);
+    const a3 = takeAnchor(X); if (a3) ctx.addSmash('chest', a3.u, 0, a3.v, a3.ry, { room, lvl: key });
+    const a4 = takeAnchor(X); if (a4) seat(ctx, room, 'stool', a4.u, a4.v, a4.ry, Q, { tipped: Q.chance(0.4) });
+    const a5 = takeAnchor(X); if (a5) ctx.addSmash('box', a5.u, 0, a5.v, a5.ry, { room, lvl: key });
+    carvedBeam(X);
+  },
+  *hay(X) {
+    const { ctx, B, room, key, Q, P } = X, [cu, cv] = P.center, hay = _ufm.oldhay();
+    // a great heap of old hay, grey with age, a fork left standing in it; sheaves tied and leant together
+    const rx = Q.range(1.3, 1.7), rz = Q.range(1.1, 1.5), ry = Q.range(1.1, 1.5);
+    B.add(hay, hayMound(rx, ry, rz, Q.range(0, 6)), mtx(cu, -0.02, cv, 0, Q.range(0, 3), 0), true);
+    B.add(hay, hayMound(rx * 0.6, ry * 0.6, rz * 0.6, Q.range(0, 6)), mtx(cu + rx * 0.7, -0.02, cv + rz * 0.5), true);
+    ctx.circle(cu, cv, Math.max(rx, rz) * 0.9, key); ctx.circle(cu + rx * 0.7, cv + rz * 0.5, rx * 0.5, key);
+    pole(B, M.wood, V3(cu - 0.3, ry * 0.55, cv - 0.2), V3(cu - 0.75, ry + 1.0, cv - 0.55), 0.022);
+    for (let k = 0; k < 3; k++) B.box(M.wood, cu - 0.3 + Math.sin(k) * 0.02, ry * 0.45, cv - 0.2 + (k - 1) * 0.05, 0.015, 0.3, 0.015, 0.4, 0, 0.5);
+    for (let k = 0; k < 160; k++) { const a = Q.range(0, TAU), r = Q.range(Math.min(rx, rz), 2.6); B.box(hay, cu + Math.cos(a) * r, 0.004 + Q.range(0, 0.01), cv + Math.sin(a) * r * 0.9, Q.range(0.12, 0.35), 0.004, 0.012, 0, Q.range(0, TAU), 0, 0.4); }
+    yield;
+    const a1 = takeAnchor(X, a => !a.back); if (a1) { for (let k = 0; k < 4; k++) { const g = new THREE.CylinderGeometry(0.1, 0.16, 1.1, 8, 1, true); B.add(hay, g, mtx(a1.u + Q.range(-0.25, 0.25), 0.52, a1.v + Q.range(-0.25, 0.25), Q.range(-0.25, 0.25), 0, Q.range(-0.25, 0.25)), true); } B.add(M.rope, _tieG, mtx(a1.u, 0.7, a1.v, Math.PI / 2, 0, 0, 1.5, 1.5, 1.5)); ctx.circle(a1.u, a1.v, 0.4, key); }
+    const a2 = takeAnchor(X, a => !a.curved && !a.back);
+    if (a2) { const e = a2.e; // a hay rack on the wall: a ladder of rails leaning out, hay caught in it
+      for (const d of [-0.7, 0.7]) { const p0 = e.axis === 'v' ? V3(e.c - e.out * 0.06, 1.0, a2.s + d) : V3(a2.s + d, 1.0, e.c - e.out * 0.06), p1 = e.axis === 'v' ? V3(e.c - e.out * 0.5, 1.9, a2.s + d) : V3(a2.s + d, 1.9, e.c - e.out * 0.5); pole(B, M.wood, p0, p1, 0.03); }
+      for (let k = 0; k < 8; k++) { const t = a2.s - 0.6 + k * 0.17; e.axis === 'v' ? pole(B, M.wood, V3(e.c - e.out * 0.06, 1.0, t), V3(e.c - e.out * 0.5, 1.9, t), 0.012) : pole(B, M.wood, V3(t, 1.0, e.c - e.out * 0.06), V3(t, 1.9, e.c - e.out * 0.5), 0.012); }
+      B.add(hay, hayMound(0.35, 0.3, 0.6, 2), mtx(e.axis === 'v' ? e.c - e.out * 0.3 : a2.s, 1.3, e.axis === 'v' ? a2.s : e.c - e.out * 0.3, 0, e.axis === 'v' ? 0 : Math.PI / 2, 0), true); }
+    const a3 = takeAnchor(X); if (a3) brokenJars(X, a3.u, a3.v);
+    const a4 = takeAnchor(X); if (a4) ctx.addSmash('crate', a4.u, 0, a4.v, a4.ry, { room, lvl: key });
+    const a5 = takeAnchor(X); if (a5) ctx.addSmash('barrel', a5.u, 0, a5.v, 0, { room, lvl: key });
+    ctx.surface(room, cu + rx * 0.2, ry * 0.9, cv);
+  },
+  *boxes(X) {
+    const { ctx, B, room, key, Q, P } = X, [cu, cv] = P.center;
+    const box = (u, y, v, s, ry) => { const w = s * Q.range(0.8, 1.3), h = s * Q.range(0.6, 1.0), d = s * Q.range(0.8, 1.2), m = Q.pick([M.board, M.wood, M.woodDark, M.plank]); B.box(m, u, y + h / 2, v, w, h, d, 0, ry, 0, 0.6); B.box(M.woodDark, u, y + h - 0.012, v, w + 0.01, 0.02, d + 0.01, 0, ry, 0, 0.6); return h; };
+    // every wall shelved and crammed, boxes stood on boxes to the ceiling and spilling forward off the shelves
+    for (const a of X.anchors.splice(0)) {
+      if (a.curved) { let y = 0; for (let k = 0; k < Q.int(3, 6); k++) y += box(a.u + Q.range(-0.08, 0.08), y, a.v + Q.range(-0.08, 0.08), Q.range(0.28, 0.45), a.ry + Q.range(-0.2, 0.2)); ctx.circle(a.u, a.v, 0.32, key); continue; }
+      const e = a.e, c = e.c - e.out * 0.22, levels = [0.5, 1.05, 1.6, 2.15];
+      e.axis === 'v' ? B.box(M.wood, c, 1.2, a.s, 0.36, 2.4, 0.05) : B.box(M.wood, a.s, 1.2, c, 0.05, 2.4, 0.36);
+      for (const ly of [0.02, ...levels]) {
+        if (ly) e.axis === 'v' ? B.box(M.plank, c, ly, a.s, 0.4, 0.035, 1.12, 0, 0, 0, 0.8) : B.box(M.plank, a.s, ly, c, 1.12, 0.035, 0.4, 0, 0, 0, 0.8);
+        for (let t = a.s - 0.48; t < a.s + 0.48; t += Q.range(0.2, 0.34)) { const s = Q.range(0.18, 0.3), out = Q.chance(0.2) ? Q.range(0.05, 0.15) : 0; let y = ly + 0.02; for (let j = 0, n = ly > 2 ? Q.int(1, 3) : 1; j < n; j++) y += box(e.axis === 'v' ? c - e.out * out : t, y, e.axis === 'v' ? t : c - e.out * out, s, Q.range(-0.15, 0.15)); }
+      }
+      // what has come off the shelves: a heap in front of them
+      for (let k = 0; k < Q.int(2, 5); k++) { const off = Q.range(0.45, 0.85), t = a.s + Q.range(-0.5, 0.5); const [u, v] = e.axis === 'v' ? [e.c - e.out * off, t] : [t, e.c - e.out * off]; box(u, 0, v, Q.range(0.2, 0.34), Q.range(0, 3)); }
+      e.axis === 'v' ? ctx.solid(e.c - e.out * 0.5, a.s, 0.95, 1.2, 0, key) : ctx.solid(a.s, e.c - e.out * 0.5, 1.2, 0.95, 0, key);
+      if (overBudget()) yield;
+    }
+    // and in the middle a pile that has gone over, smashed open boxes among the whole
+    let y = 0;
+    for (let k = 0; k < 6; k++) y += box(cu + Q.range(-0.1, 0.1) + k * 0.03, y, cv + Q.range(-0.1, 0.1), Q.range(0.35, 0.5), Q.range(-0.3, 0.3));
+    for (let k = 0; k < 9; k++) { const a = Q.range(0, TAU), r = Q.range(0.6, 1.4); B.box(Q.pick([M.board, M.wood]), cu + Math.cos(a) * r, Q.range(0.15, 0.25), cv + Math.sin(a) * r, Q.range(0.3, 0.45), Q.range(0.25, 0.4), Q.range(0.3, 0.45), Q.range(-0.6, 0.6), Q.range(0, 3), Q.range(-0.6, 0.6), 0.6); }
+    ctx.circle(cu, cv, 1.2, key);
+    for (const [du, dv] of [[1.6, 0.9], [-1.3, -1.0], [1.4, -1.3]]) ctx.addSmash(Q.chance(0.5) ? 'box' : 'crate', cu + du, 0, cv + dv, Q.range(0, 3), { room, lvl: key });
+    brokenJars(X, cu - 1.4, cv + 1.2);
+    ctx.surface(room, cu, y + 0.01, cv);
+  },
+  *rope(X) {
+    const { ctx, B, room, key, Q, P } = X, [cu, cv] = P.center;
+    const rope = (pts, r, mat) => { if (pts.length < 2) return; const c = new THREE.CatmullRomCurve3(pts); B.add(mat || Q.pickW([M.rope, _ufm.ropeD()], [2, 1]), new THREE.TubeGeometry(c, Math.max(8, Math.round(c.getLength() / 0.06)), r, 5, false), new THREE.Matrix4(), true); };
+    // a great tangle on the floor in the middle, ropes of every thickness, ends cut and frayed
+    for (let k = 0; k < 26; k++) {
+      const pts = [], n = Q.int(6, 12), r = Q.range(0.012, 0.028); let a = Q.range(0, TAU), rr = Q.range(0, 0.6);
+      for (let i = 0; i < n; i++) { a += Q.range(-1.3, 1.3); rr = clamp(rr + Q.range(-0.25, 0.25), 0, 0.95); pts.push(V3(cu + Math.cos(a) * rr * 1.2, r + 0.02 + Q.range(0, 0.3) * (1 - rr), cv + Math.sin(a) * rr)); }
+      rope(pts, r);
+      if (overBudget()) yield;
+    }
+    ctx.circle(cu, cv, 1.0, key);
+    // coils, flat and stood on edge; short cut pieces thrown down all over the floor
+    for (let k = 0; k < 5; k++) { const a = Q.range(0, TAU), r = Q.range(1.3, 2.1), u = cu + Math.cos(a) * r, v = cv + Math.sin(a) * r, cr = Q.range(0.16, 0.3), m = Q.pick([M.rope, _ufm.ropeD()]); for (let j = 0; j < Q.int(3, 7); j++) B.add(m, new THREE.TorusGeometry(cr - j * 0.01, Q.range(0.014, 0.022), 5, 18), mtx(u + Q.range(-0.02, 0.02), 0.018 + j * 0.032, v, Math.PI / 2, 0, 0), true); ctx.circle(u, v, cr + 0.1, key); }
+    for (let k = 0; k < 18; k++) { const a = Q.range(0, TAU), r = Q.range(1.0, 2.6), u = cu + Math.cos(a) * r, v = cv + Math.sin(a) * r, d = Q.range(0, TAU), L = Q.range(0.3, 1.0), pts = []; for (let i = 0; i < 5; i++) pts.push(V3(u + Math.cos(d) * L * i / 4 + Q.range(-0.06, 0.06), 0.014, v + Math.sin(d) * L * i / 4 + Q.range(-0.06, 0.06))); rope(pts, Q.range(0.01, 0.018)); }
+    yield;
+    // ropes hung from a beam, down to the floor and over; frayed ends
+    const hb = X.P.rects[0] || null, hu = hb ? hb[0] + 1.2 : cu - 1.6;
+    B.box(M.woodDark, hu, X.H - 0.25, cv, 0.22, 0.24, hb ? hb[3] - hb[2] : 2.4);
+    for (let k = 0; k < 7; k++) { const v = cv + Q.range(-1.0, 1.0), len = Q.range(1.2, X.H - 0.25), pts = []; for (let i = 0; i <= 5; i++) { const t = i / 5; pts.push(V3(hu + Q.range(-0.03, 0.03) + (t > 0.9 && len > X.H - 0.5 ? 0.2 : 0), X.H - 0.38 - t * len, v)); } rope(pts, Q.range(0.012, 0.02)); }
+    const a1 = takeAnchor(X, a => !a.back); if (a1) oldHearth(X, a1.u + Math.sin(a1.ry) * 0.5, a1.v + Math.cos(a1.ry) * 0.5);
+    const a2 = takeAnchor(X); if (a2) ctx.addSmash('chest', a2.u, 0, a2.v, a2.ry, { room, lvl: key });
+    const a3 = takeAnchor(X); if (a3) ctx.addSmash('barrel', a3.u, 0, a3.v, 0, { room, lvl: key });
+    const a4 = takeAnchor(X); if (a4) { for (let k = 0; k < 4; k++) { const g = new THREE.TorusGeometry(0.22 - k * 0.012, 0.02, 5, 18); B.add(M.rope, g, mtx(a4.u, 0.9 + k * 0.02, a4.v, 0, a4.ry + Math.PI / 2, 0, 1, 1.4, 1), true); } }
+    carvedBeam(X);
+  },
+};
+
+Object.assign(MORE_BUILD, {
+  /* ---------- five rooms up straight flights, each round its own thing ---------- */
+  *climb(ctx, room, R) {
+    const feat = CLIMB_FEATURE[ctx.L] || 'boxes', order = new Rng(hash32(1066, 777)).shuffle(CLIMB_SHAPES.slice()), shape = order[Object.keys(CLIMB_FEATURE).indexOf(String(ctx.L))] || 'rect';
+    const Q0 = new Rng(room.r.seed ^ 0x5151), twoF = Q0.chance(0.6), n = Q0.int(18, 22);
+    const rockBack = feat === 'hay' || feat === 'boxes' || feat === 'rope';
+    yield* upFlightGen(ctx, room, R, { n1: twoF ? Math.ceil(n / 2) : n, n2: twoF ? Math.floor(n / 2) : 0, landing: Q0.range(0.9, 1.3), rise: 0.205, tread: 0.28, sw: Q0.range(1.25, 1.55),
+      wallM: Q0.pick([M.board, M.log]), upWall: Q0.pick([M.board, M.log, _sm.plaster(), M.earth]), upFloor: Q0.pick([M.plank, M.plank, M.earth]), rockBack,
+      plan: (Q, u3, sh) => upFlightPlan(shape, Q, u3, sh, 3.9), fill: CLIMB_FILL[feat] });
+  },
+
+  /* ---------- 30: a long straight flight of stone steps, to a room under tiles ---------- */
+  *longsteps(ctx, room, R) {
+    const tiles = [];
+    yield* upFlightGen(ctx, room, R, { n1: 24, n2: 0, rise: 0.185, tread: 0.3, sw: 1.35, stone: true, wallM: _wsm.rough(), upWall: _wsm.rough(), upFloor: _ufm.step(),
+      onStair: (S) => { for (let k = 0; k < 2; k++) tiles.push([S.u1 - 0.3 - k * 0.6, S.Hu - 0.185 * (1 + k * 2), (k ? -1 : 1) * 0.3]); },
+      plan: (Q, u3, sh) => { const D = 4.0, W = 3.8; return { rects: [[u3, u3 + D, -W / 2, W / 2]], ell: null, H: 2.5, noCeil: true, gaps: [{ axis: 'v', c: u3, lo: -sh, hi: sh, h: 2.45 }], center: [u3 + D / 2, 0] }; },
+      *fill(X) {
+        const { ctx, B, room, key, Q, P, H } = X, [u0, u1, v0, v1] = P.rects[0], um = (u0 + u1) / 2;
+        // the roof: rafters up to a ridge, battens across them, tiles on the battens; some fallen, the gaps black
+        const rise = 1.5;
+        for (let u = u0 + 0.2; u < u1; u += 0.55) for (const s of [-1, 1]) B.beam(M.wood, V3(u, H, s * (v1 + 0.05)), V3(u, H + rise, 0), 0.1, 0.12);
+        B.box(M.woodDark, um, H + rise, 0, u1 - u0, 0.14, 0.14);
+        for (const s of [-1, 1]) B.box(M.wood, um, H - 0.06, s * (v1 + 0.05), u1 - u0, 0.14, 0.18);
+        const tan = rise / v1, ang = Math.atan(tan), hyp = Math.hypot(v1, rise);
+        for (const s of [-1, 1]) for (let t = 0.15; t < hyp - 0.1; t += 0.38) {
+          const v = s * (v1 - t * Math.cos(ang)), y = H + t * Math.sin(ang);
+          B.box(M.wood, um, y + 0.03, v, u1 - u0, 0.03, 0.05, s * ang, 0, 0);
+          for (let u = u0 + 0.22; u < u1; u += 0.46) {
+            if (Q.chance(0.13)) continue;   // gone: through the gap only black
+            B.box(_ufm.tile(), u, y + 0.08, v, 0.42, 0.025, 0.46, s * ang, 0, 0, 0.6);
+          }
+        }
+        B.box(M.socket, um, H + rise * 0.5 + 0.2, 0, u1 - u0, 0.02, 2 * v1, 0, 0, 0);
+        for (const s of [-1, 1]) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([u0, H, s * v1, u0, H, 0, u0, H + rise, 0, u1, H, s * v1, u1, H, 0, u1, H + rise, 0], 3)); g.setIndex([0, 1, 2, 3, 5, 4]); B.add(_wsm.rough(), turnFacesTo(g, um, H, 0), new THREE.Matrix4(), true); }
+        for (const s of [-1, 1]) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([u0, H, 0, u0, H, s * v1, u0, H + rise, 0, u1, H, 0, u1, H, s * v1, u1, H + rise, 0], 3)); g.setIndex([0, 1, 2, 3, 5, 4]); B.add(_wsm.rough(), turnFacesTo(g, um, H, 0), new THREE.Matrix4(), true); }
+        yield;
+        // the loose tiles: flat ones and the half-round ones that cover their joints, on the floor and on the top steps
+        const tegula = (u, y, v, ry, broken) => { const L = broken ? 0.24 : 0.46; B.box(_ufm.tile(), u, y + 0.014, v, 0.42, 0.025, L, Q.range(-0.04, 0.04), ry, Q.range(-0.04, 0.04), 0.6); for (const e of [-1, 1]) B.box(_ufm.tileD(), u + Math.cos(ry) * e * 0.2, y + 0.04, v - Math.sin(ry) * e * 0.2, 0.03, 0.05, L, 0, ry, 0, 0.6); };
+        const imbrex = (u, y, v, ry) => B.add(_ufm.tile(), new THREE.CylinderGeometry(0.07, 0.085, 0.42, 8, 1, true, 0, Math.PI), mtx(u, y + 0.005, v, Math.PI / 2, ry, 0), true);
+        for (let k = 0; k < 9; k++) { const u = Q.range(u0 + 0.5, u1 - 0.4), v = Q.range(v0 + 0.4, v1 - 0.4), ry = Q.range(0, TAU); Q.chance(0.65) ? tegula(u, 0, v, ry, Q.chance(0.3)) : imbrex(u, 0, v, ry); if (Q.chance(0.3)) for (let j = 0; j < 3; j++) sherd(B, Q, _ufm.tile(), u + Q.range(-0.3, 0.3), v + Q.range(-0.3, 0.3), Q.range(0.06, 0.12)); }
+        tegula(u0 + 0.5, 0.05, v1 - 0.6, 0.3, false);   // one fallen across another
+        ctx.setFrame(room.side, C.WALL_OUT, room.zc, 0);
+        for (const [u, y, v] of tiles) Q.chance(0.5) ? tegula(u, y, v, Q.range(-0.4, 0.4), true) : imbrex(u, y, v, Q.range(-0.4, 0.4));
+        ctx.setFrame(room.side, C.WALL_OUT, room.zc, room.floorY);
+        ctx.addSmash('box', u1 - 0.45, 0, v0 + 0.45, 0.3, { room, lvl: key });
+        seat(ctx, room, 'stool', u1 - 0.5, v1 - 0.6, Math.PI, Q, { tipped: true });
+        ctx.web(V3(u1 - 0.04, H - 0.02, v1 - 0.04), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), Q.range(0.5, 0.8), Q.int(0, 3));
+      } });
+  },
+
+  /* ---------- 74: a short wide flight of stone steps up into a hall of jars ---------- */
+  *jarhall(ctx, room, R) {
+    yield* upFlightGen(ctx, room, R, { n1: 8, n2: 0, rise: 0.18, tread: 0.34, sw: 2.2, stone: true, wallM: _wsm.rough(), upWall: _sm.plaster(), upFloor: _ufm.step(),
+      plan: (Q, u3, sh) => { const D = 12.0, W = 12.6; return { rects: [[u3, u3 + D, -W / 2, W / 2]], ell: null, H: 4.4, gaps: [{ axis: 'v', c: u3, lo: -sh, hi: sh, h: 2.75 }], center: [u3 + D / 2, 0] }; },
+      *fill(X) {
+        const { ctx, B, room, key, Q, P, H } = X, [u0, u1, v0, v1] = P.rects[0];
+        // four stone piers carrying great beams across, the span too wide for one
+        for (const u of [u0 + 4.0, u0 + 8.0]) {
+          for (const v of [-3.2, 3.2]) { B.box(_wsm.rough(), u, H / 2, v, 0.6, H, 0.6, 0, 0, 0, 0.5); ctx.solid(u, v, 0.7, 0.7, 0, key); }
+          B.box(M.woodDark, u, H - 0.2, 0, 0.4, 0.4, v1 - v0);
+        }
+        // jars: great storage jars in ranks down the hall, two deep along each side, a few broken
+        let n = 0;
+        for (const v of [-4.9, -4.0, -1.6, -0.7, 0.7, 1.6, 4.0, 4.9]) for (let u = u0 + 1.6; u < u1 - 0.8; u += 0.88) {
+          if (Math.abs(v) < 1 && u < u0 + 2.6) continue;
+          if (Math.abs(u - (u0 + 4.0)) < 0.5 && Math.abs(Math.abs(v) - 3.2) < 1) continue;
+          if (Math.abs(u - (u0 + 8.0)) < 0.5 && Math.abs(Math.abs(v) - 3.2) < 1) continue;
+          if (Q.chance(0.06)) { for (let k = 0; k < 6; k++) sherd(B, Q, _pm.pot(), u + Q.range(-0.35, 0.35), v + Q.range(-0.35, 0.35), Q.range(0.1, 0.22)); B.add(_pm.pot(), pithosGeo(), mtx(u, 0, v, 0, Q.range(0, 3), 0, 0.9, 0.35, 0.9)); ctx.circle(u, v, 0.3, key); continue; }
+          pithos(ctx, Q, u + Q.range(-0.05, 0.05), v + Q.range(-0.05, 0.05), Q.range(0.8, 1.0), key); n++;
+          if (overBudget()) yield;
+        }
+        // racks of amphorae lying on their sides along the back wall, three high
+        for (let r = 0; r < 3; r++) {
+          const y = 0.35 + r * 0.5;
+          B.box(M.wood, u1 - 0.55, y - 0.18, 0, 0.08, 0.06, v1 - v0 - 0.6); B.box(M.wood, u1 - 0.15, y - 0.18, 0, 0.08, 0.06, v1 - v0 - 0.6);
+          for (let v = v0 + 0.5; v < v1 - 0.4; v += 0.36) if (!Q.chance(0.1)) B.add(_pm.pot(), standAmphoraGeo(), mtx(u1 - 0.82, y, v, 0, 0, -Math.PI / 2, 1, 1, 1));
+        }
+        for (let v = v0 + 0.4; v < v1 - 0.3; v += 1.6) for (const u of [u1 - 0.55, u1 - 0.15]) B.box(M.wood, u, 0.6, v, 0.07, 1.2, 0.07);
+        ctx.solid(u1 - 0.5, 0, 1.0, v1 - v0);
+        yield;
+        // shelves of small jars along the front wall either side of the stair head
+        for (const s of [-1, 1]) {
+          const a = s > 0 ? 1.8 : v0 + 0.4, b = s > 0 ? v1 - 0.4 : -1.8;
+          shelves(ctx, room, 'v', a, b, u0 + 0.24, 0.4, [0.45, 1.0, 1.55, 2.1], Q);
+          for (let v = a + 0.15; v < b - 0.1; v += Q.range(0.18, 0.3)) for (const y of [0.45, 1.0, 1.55, 2.1]) if (Q.chance(0.7)) { const sc = Q.range(0.9, 1.4); B.add(_pm.pot(), potGeo(), mtx(u0 + 0.24 + Q.range(-0.06, 0.06), y + 0.03, v, 0, Q.range(0, 3), 0, sc, sc, sc)); }
+        }
+        ctx.addSmash('chest', u0 + 2.2, 0, v1 - 0.55, Math.PI, { room, lvl: key });
+        ctx.addSmash('box', u0 + 6.0, 0, 0.0, 0.4, { room, lvl: key });
+        ctx.web(V3(u1 - 0.04, H - 0.03, v0 + 0.04), V3(-0.7071, 0, 0.7071), V3(0, -1, 0), Q.range(0.7, 1.1), Q.int(0, 3));
+      } });
+  },
+});
+
+/* ---------- 19, 55, 85: a room with three rooms behind it ---------- */
+// a wall along one line with doorways in it: axis 'v' runs along v at u = c; 'u' along u at v = c
+function wallRun(ctx, mat, axis, c, a, b, H, gaps = [], lvl = 'up') {
+  const B = ctx.B;
+  const piece = (s0, s1, y0, y1) => { if (s1 - s0 < 0.02 || y1 - y0 < 0.02) return; axis === 'v' ? B.box(mat, c, (y0 + y1) / 2, (s0 + s1) / 2, 0.2, y1 - y0, s1 - s0, 0, 0, 0, 0.7) : B.box(mat, (s0 + s1) / 2, (y0 + y1) / 2, c, s1 - s0, y1 - y0, 0.2, 0, 0, 0, 0.7); };
+  const solid = (s0, s1) => { if (s1 - s0 < 0.02) return; axis === 'v' ? ctx.solid(c, (s0 + s1) / 2, 0.3, s1 - s0, 0, lvl) : ctx.solid((s0 + s1) / 2, c, s1 - s0, 0.3, 0, lvl); };
+  let t = a;
+  for (const [lo, hi, h] of gaps.slice().sort((x, y) => x[0] - y[0])) {
+    piece(t, lo, 0, H); solid(t, lo); piece(lo, hi, h, H);
+    for (const s of [lo + 0.06, hi - 0.06]) axis === 'v' ? B.box(M.wood, c, h / 2, s, 0.24, h, 0.12) : B.box(M.wood, s, h / 2, c, 0.12, h, 0.24);
+    axis === 'v' ? B.box(M.wood, c, h + 0.07, (lo + hi) / 2, 0.24, 0.14, hi - lo + 0.3) : B.box(M.wood, (lo + hi) / 2, h + 0.07, c, hi - lo + 0.3, 0.14, 0.24);
+    t = hi;
+  }
+  piece(t, b, 0, H); solid(t, b);
+}
+const SUITE_LOOK = [
+  { wall: () => M.log, floor: () => M.plank, back: () => M.board },
+  { wall: () => M.board, floor: () => M.earth, back: () => M.earth },
+  { wall: () => M.earth, floor: () => M.plank, back: () => _sm.plaster() },
+];
+Object.assign(MORE_BUILD, {
+  *suite(ctx, room, R) {
+    const B = ctx.B, Q = new Rng(room.r.seed ^ 0x3333), look = SUITE_LOOK[[19, 55, 85].indexOf(ctx.L) % 3] || SUITE_LOOK[0];
+    const D = Q.range(4.4, 5.4), W = Q.range(6.8, 7.6), hw = W / 2, H = Q.range(3.0, 3.4), wallM = look.wall();
+    // the front room
+    B.box(look.floor(), D / 2, -0.05, 0, D + 0.1, 0.1, W + 0.1, 0, 0, 0, 0.55);
+    B.box(M.board, D / 2, H + 0.06, 0, D + 0.4, 0.12, W + 0.4, 0, 0, 0, 0.6);
+    for (let u = 0.8; u < D - 0.3; u += 1.5) B.box(M.wood, u, H - 0.11, 0, 0.2, 0.22, W);
+    for (const s of [-1, 1]) wallRun(ctx, wallM, 'u', s * (hw + 0.1), 0, D, H);
+    wallRun(ctx, wallM, 'v', 0.06, -hw - 0.2, hw + 0.2, H, [[-0.72, 0.72, DOOR]]);
+    // the three behind: their widths shared out unevenly, each its own depth and height, a doorway to each
+    const f = [Q.range(0.8, 1.2), Q.range(0.8, 1.2), Q.range(0.8, 1.2)], fs = f[0] + f[1] + f[2], ws = f.map(x => x / fs * W);
+    const edges = [-hw, -hw + ws[0], -hw + ws[0] + ws[1], hw], backs = [], doors = [];
+    for (let k = 0; k < 3; k++) {
+      const v0 = edges[k], v1 = edges[k + 1], vm = (v0 + v1) / 2, d = Q.range(2.6, 4.6), h = Q.range(2.6, Math.min(3.3, H)), dw = Q.range(0.42, 0.55), dh = Q.range(2.05, 2.3), dv = clamp(vm + Q.range(-0.3, 0.3), v0 + dw + 0.25, v1 - dw - 0.25);
+      doors.push([dv - dw, dv + dw, dh]);
+      const u0 = D + 0.2, u1 = u0 + d, bm = look.back();
+      B.box(look.floor(), (u0 + u1) / 2, -0.05, vm, d + 0.1, 0.1, v1 - v0, 0, 0, 0, 0.55);
+      B.box(M.board, (u0 + u1) / 2, h + 0.06, vm, d + 0.3, 0.12, v1 - v0 + 0.2, 0, 0, 0, 0.6);
+      B.box(M.wood, (u0 + u1) / 2, h - 0.1, vm, d, 0.2, 0.18);
+      wallRun(ctx, bm, 'v', u1 + 0.1, v0 - 0.1, v1 + 0.1, h);
+      if (k === 0) wallRun(ctx, bm, 'u', v0 - 0.1, u0 - 0.1, u1 + 0.2, h);
+      wallRun(ctx, bm, 'u', v1 + (k === 2 ? 0.1 : 0), u0 - 0.1, u1 + 0.2, h);
+      if (h < H) B.box(wallM, D + 0.1, (h + H) / 2, vm, 0.2, H - h, v1 - v0);
+      backs.push({ u0, u1, v0: v0 + (k === 0 ? 0 : 0.1), v1: v1 - (k === 2 ? 0 : 0.1), vm, d, h, dv });
+    }
+    wallRun(ctx, wallM, 'v', D + 0.1, -hw - 0.2, hw + 0.2, H, doors);
+    for (const [u, v] of [[0.14, hw - 0.12], [0.14, -hw + 0.12], [D - 0.02, hw - 0.12], [D - 0.02, -hw + 0.12]]) B.box(M.wood, u, H / 2, v, 0.22, H, 0.22);
+    yield;
+    // each back room its own: a store of shelves and jars, a sleeping cell, a lumber closet; in an order of the seed
+    const kinds = Q.shuffle(['store', 'cell', 'closet']), findIn = Q.int(0, 2), tok = SUITE_FIND[ctx.L], fkey = 'st' + ctx.L + ':' + tok;
+    backs.forEach((b, k) => {
+      const kind = kinds[k], far = b.u1 - 0.25;
+      if (kind === 'store') {
+        shelves(ctx, room, 'v', b.v0 + 0.25, b.v1 - 0.25, b.u1 - 0.22, 0.38, [0.5, 1.1, 1.7], Q);
+        for (let k2 = 0; k2 < 3; k2++) if (Q.chance(0.7)) pithos(ctx, Q, b.u0 + 0.5 + k2 * 0.7, (Q.chance(0.5) ? b.v0 + 0.4 : b.v1 - 0.4), Q.range(0.7, 0.9));
+        if (Q.chance(0.5)) brokenJars({ B, Q }, (b.u0 + b.u1) / 2, b.vm + Q.range(-0.3, 0.3));
+      } else if (kind === 'cell') {
+        // a straw pallet with a blanket rumpled on it, a stool, a pot by the bed
+        const pv = b.v0 + 0.55 > b.dv - 0.6 ? b.v1 - 0.55 : b.v0 + 0.55;
+        B.box(_lfm.straw(), b.u0 + 1.1, 0.09, pv, 1.9, 0.18, 0.8, 0, 0, 0, 0.8);
+        B.add(M.cloth, hayMound(0.7, 0.08, 0.35, Q.range(0, 6)), mtx(b.u0 + 1.3, 0.17, pv, 0, Q.range(-0.2, 0.2), 0), true);
+        ctx.solid(b.u0 + 1.1, pv, 2.0, 0.9);
+        if (Q.chance(0.5)) ctx.skeleton('lie', b.u0 + 1.1, pv, Math.PI / 2, 0.18);
+        seat(ctx, room, 'stool', far - 0.3, b.vm + Q.range(-0.3, 0.3), Q.range(0, 3), Q, { tipped: Q.chance(0.3) });
+        B.add(_pm.pot(), potGeo(), mtx(b.u0 + 0.3, 0, pv + (pv < b.vm ? 0.55 : -0.55), 0, 0, 0, 1.3, 1.3, 1.3));
+      } else {
+        stack(ctx, room, far - 0.25, b.v0 + 0.5, Q);
+        ctx.addSmash('barrel', far - 0.3, 0, b.v1 - 0.45, Q.range(0, 3), { room });
+        for (let k2 = 0; k2 < 6; k2++) B.box(M.board, (b.u0 + b.u1) / 2 + Q.range(-0.5, 0.5), 0.03 + k2 * 0.03, b.vm + Q.range(-0.3, 0.3), Q.range(0.8, 1.6), 0.03, Q.range(0.15, 0.25), Q.range(-0.1, 0.1), Q.range(-0.5, 0.5), 0);
+        ctx.solid((b.u0 + b.u1) / 2, b.vm, 1.4, 0.7);
+      }
+      ctx.web(V3(b.u1 - 0.03, b.h - 0.03, b.v1 - 0.03), V3(-0.7071, 0, -0.7071), V3(0, -1, 0), Q.range(0.4, 0.7), Q.int(0, 3));
+      // the find, set in the far corner of one of them, first pass only
+      if (k === findIn && tok && ctx.lap === 0 && !ctx.st.tk.includes(fkey)) {
+        const cv = b.dv > b.vm ? b.v0 + 0.3 : b.v1 - 0.3;
+        spawnItem(ctx, tok, fkey, ctx.W(far - 0.05, 0, cv), { floorY: 0 });
+      }
+    });
+    yield;
+    // the front room, stocked as any room is, its four doorways kept clear
+    yield* furnishGen(ctx, room, room.r, { tag: 'su', rect: { u0: 0, u1: D, v0: -hw, v1: hw, h: H }, entry: [0.75, 0], wall: wallM === M.log ? 'log' : wallM === M.earth ? 'earth' : 'board',
+      cuts: [{ axis: 'v', c: 0, lo: -0.72, hi: 0.72 }, ...doors.map(([lo, hi]) => ({ axis: 'v', c: D, lo, hi }))],
+      reserves: [[0, 1.5, -1.0, 1.0, 2], ...doors.map(([lo, hi]) => [D - 1.3, D, lo - 0.2, hi + 0.2, 2])],
+      themes: [['store', 2], ['empty', 1], ['toppled', 1], ['bunks', 0.6], ['cache', 0.8], ['pigeon', 0.6]] });
+    ctx.setBounds(room, 0.3, D - 0.3, -hw + 0.3, hw - 0.3);
+    room.D = D; room.W = W; room.H = H;
+  },
+});
 
 /* ---- 39_catalogue.js ---- */
 /* ============================================================
@@ -11887,7 +13732,8 @@ function nearestBiscuit() {
     // the biscuits kept apart from the deal: the two in the cellar at 51 and the two in each of the oval hall and the
     // crescent, all on the first pass only; the one in the deep at 99 on the passes it is stocked
     const extra = [[CELLAR_L, lp === 0, ['sub:B1', 'sub:B2'], 'twostair', 34], [35, lp === 0, ['oval:B0', 'oval:B2'], 'oval', 26],
-      [89, lp === 0, ['crescent:B0', 'crescent:B2'], 'crescent', 26], [DEEP_L, DEEP_STOCK.includes(lp), ['deep:B'], 'deep', 45]];
+      [89, lp === 0, ['crescent:B0', 'crescent:B2'], 'crescent', 26], [DEEP_L, DEEP_STOCK.includes(lp), ['deep:B'], 'deep', 45], [45, lp === 0, ['sack:B'], 'sackrounds', 10],
+      [20, lp === 0, ['ws20:B'], 'ws_drawers', 6], [57, lp === 0, ['ws57:B'], 'ws_hang', 6], [55, lp === 0, ['st55:B'], 'suite', 8]];
     for (const [L, on, keys, design, deep] of extra) {
       if (!on) continue;
       const A = lp * C.LENGTHS + L, st = S.lens[A], r = layoutFor(L, lp).rooms.find(q => q.design === design);
