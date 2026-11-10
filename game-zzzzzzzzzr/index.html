@@ -10267,7 +10267,7 @@ function updateSwing(dt) {
   if (P.swingT < 0) return;
   P.swingT += dt;
   if (!P.swingHit && P.swingT >= 0.17) { P.swingHit = true; S.inField ? field.swingAt() : doHit(); }
-  if (P.swingT > 0.5) P.swingT = -1;
+  if (P.swingT > 0.52) P.swingT = -1;
 }
 function doHit() {
   eyeRay();
@@ -10301,19 +10301,105 @@ function hitContainer(s) {
   s.hits--;
   const len = loaded.get(s.A);
   const wp = s.obj.position.clone(); wp.z += len.group.position.z;
-  if (s.hits > 0) { s.wob = 0.3; P.kick = 0.6; AU.thud(s.spec.sound, wp); return; }
+  if (s.hits > 0) {
+    P.kick = 0.6; AU.thud(s.spec.sound, wp);
+    // it rocks away from the blow and comes back not quite square: a little askew and sunk, splinters started from it
+    const dx = s.obj.position.x - P.pos.x, dz = s.obj.position.z + len.group.position.z - P.pos.z, dl = Math.hypot(dx, dz) || 1;
+    if (!s.q0) s.q0 = s.obj.quaternion.clone();
+    s.wob = { t: 0, axis: new THREE.Vector3(dz / dl, 0, -dx / dl), lean: rnd(0.025, 0.05) * (s.hits === 1 ? 1 : 0.6) };
+    s.obj.scale.y = 0.985;
+    const sp = s.obj.position.clone(); sp.y += s.spec.h * 0.55; sp.x -= dx / dl * s.spec.r * 0.7; sp.z -= dz / dl * s.spec.r * 0.7; sp.floor = s.groundY ?? s.floorY;
+    spawnDebris(len, sp, s.spec.debris || M.board, 3, true);
+    return;
+  }
   breakContainer(s, len);
 }
-const SHARD_GEO = [new THREE.BoxGeometry(0.34, 0.025, 0.08), new THREE.BoxGeometry(0.18, 0.03, 0.06), new THREE.BoxGeometry(0.1, 0.03, 0.1)];
-const CLAY_SHARD = new THREE.BoxGeometry(0.06, 0.008, 0.05);
+// Pieces of a broken thing. Each is a thin slab (its thin side along its own y), thrown, tumbling, knocking on the
+// floor a time or two, then sliding to a stop and settling flat on its broad face: nothing snaps into place
+const _pieceGeo = new Map(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _UP = new THREE.Vector3(0, 1, 0), _mb = new THREE.Matrix4();
+function pieceGeo(w, t, l) {
+  const k = Math.round(w * 400) + ',' + Math.round(t * 400) + ',' + Math.round(l * 400);
+  let g = _pieceGeo.get(k);
+  if (!g) { g = new THREE.BoxGeometry(Math.max(0.008, w), Math.max(0.004, t), Math.max(0.008, l)); _pieceGeo.set(k, g); }
+  return g;
+}
+function addPiece(len, geo, mat, pos, quat, v, w, floor) {
+  const m = new THREE.Mesh(geo, mat); m.position.copy(pos); m.quaternion.copy(quat); len.group.add(m);
+  if (!geo.boundingBox) geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  dyn.debris.push({ m, v: v.clone(), w: w.clone(), floor, h: [(bb.max.x - bb.min.x) / 2, (bb.max.y - bb.min.y) / 2, (bb.max.z - bb.min.z) / 2], len, settle: null, bounces: 0 });
+  return m;
+}
+const rnd = (a, b) => a + Math.random() * (b - a);
+// a slab standing on a face of something, its broad side facing out along n (horizontal), upright
+function faceQuat(n) { const t = _va.copy(n).cross(_UP).normalize(); _mb.makeBasis(t, n, _UP); return new THREE.Quaternion().setFromRotationMatrix(_mb); }
 function spawnDebris(len, pos, mat, n, small = false) {
   for (let i = 0; i < n; i++) {
-    const m = new THREE.Mesh(small ? CLAY_SHARD : SHARD_GEO[i % 3], mat);
-    m.position.set(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.2 + Math.random() * 0.4, pos.z + (Math.random() - 0.5) * 0.4);
-    m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    len.group.add(m);
-    dyn.debris.push({ m, vx: (Math.random() - 0.5) * 2.6, vy: Math.random() * 2.4 + 0.6, vz: (Math.random() - 0.5) * 2.6, floor: len === null ? 0 : pos.floor, spin: (Math.random() - 0.5) * 9, len });
+    const a = Math.random() * TAU, out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+    const geo = small ? pieceGeo(rnd(0.03, 0.07), 0.008, rnd(0.03, 0.06)) : pieceGeo(...[[0.34, 0.025, 0.08], [0.18, 0.03, 0.06], [0.1, 0.03, 0.1]][i % 3]);
+    const p = new THREE.Vector3(pos.x + out.x * rnd(0.02, 0.14), pos.y + rnd(0.12, small ? 0.3 : 0.5), pos.z + out.z * rnd(0.02, 0.14));
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(0, 3), rnd(0, 3), rnd(0, 3)));
+    const sp = rnd(0.5, small ? 1.6 : 1.9);
+    addPiece(len, geo, mat, p, q, new THREE.Vector3(out.x * sp, rnd(0.8, 2.4), out.z * sp), new THREE.Vector3(rnd(-8, 8), rnd(-4, 4), rnd(-8, 8)), pos.floor);
   }
+}
+// a container breaking apart, by its own make: a crate's sides fall away board by board and its lid jumps; a
+// barrel's staves splay outward and fall, its hoops drop and its head flips; a chest bursts at its joints. The bottom
+// stays where it stood. A few splinters fly
+function spawnBreak(s, len) {
+  const p = s.obj.position, yaw = s.obj.rotation.y, floor = s.groundY ?? s.floorY, base = p.y;
+  const dims = { crate: [0.34, 0.34, 0.68], bigcrate: [0.48, 0.48, 0.96], tallbox: [0.3, 0.3, 1.3], box: [0.24, 0.19, 0.34], chest: [0.46, 0.26, 0.6] }[s.type];
+  const P3 = (x, y, z) => { const c = Math.cos(yaw), sn = Math.sin(yaw); return new THREE.Vector3(p.x + x * c + z * sn, y, p.z - x * sn + z * c); };
+  const rot = (x, z) => { const c = Math.cos(yaw), sn = Math.sin(yaw); return new THREE.Vector3(x * c + z * sn, 0, -x * sn + z * c); };
+  const splinters = (k, mat) => { for (let i = 0; i < k; i++) { const a = Math.random() * TAU, n = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), sp = rnd(1.2, 2.6); addPiece(len, pieceGeo(rnd(0.012, 0.025), 0.008, rnd(0.08, 0.2)), mat, new THREE.Vector3(p.x + n.x * 0.15, base + rnd(0.2, 0.5), p.z + n.z * 0.15), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(0, 3), rnd(0, 3), rnd(0, 3))), new THREE.Vector3(n.x * sp, rnd(1, 2.6), n.z * sp), new THREE.Vector3(rnd(-14, 14), rnd(-8, 8), rnd(-14, 14)), floor); } };
+  // the side falls outward: it turns about its own bottom edge, so it tips over rather than flying off whole
+  const tip = (n, k) => _va.copy(n).cross(_UP).normalize().multiplyScalar(-k);
+  if (s.type === 'barrel') {
+    const N = 9, R = 0.28, h = 0.9;
+    for (let i = 0; i < N; i++) {
+      if (Math.random() < 0.12) continue;                                    // one or two stay sprung together, unseen
+      const a = (i + Math.random() * 0.3) / N * TAU + yaw, n = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const L = h * rnd(0.55, 0.95), c = new THREE.Vector3(p.x + n.x * R, base + L / 2 + rnd(0, h - L), p.z + n.z * R);
+      const out = rnd(0.25, 0.8);
+      addPiece(len, pieceGeo(2 * Math.PI * R / N * 0.92, 0.022, L), M.board, c, faceQuat(n), new THREE.Vector3(n.x * out, rnd(0.2, 0.9), n.z * out), tip(n, rnd(2.2, 5)).add(_vb.set(rnd(-1, 1), rnd(-1.5, 1.5), rnd(-1, 1))), floor);
+    }
+    for (const y of [0.3, 0.62]) {                                          // two hoops drop, a little skewed
+      const g = _pieceGeo.get('hoop' + y) || (() => { const t = new THREE.TorusGeometry(0.3, 0.012, 4, 18); t.rotateX(Math.PI / 2); _pieceGeo.set('hoop' + y, t); return t; })();
+      addPiece(len, g, M.iron, new THREE.Vector3(p.x, base + y, p.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(-0.2, 0.2), 0, rnd(-0.2, 0.2))), new THREE.Vector3(rnd(-0.4, 0.4), rnd(0, 0.5), rnd(-0.4, 0.4)), new THREE.Vector3(rnd(-1.5, 1.5), 0, rnd(-1.5, 1.5)), floor);
+    }
+    const head = _pieceGeo.get('head') || (() => { const t = new THREE.CylinderGeometry(0.25, 0.25, 0.025, 14); _pieceGeo.set('head', t); return t; })();
+    addPiece(len, head, M.wood, new THREE.Vector3(p.x, base + h, p.z), new THREE.Quaternion(), new THREE.Vector3(rnd(-0.6, 0.6), rnd(1.4, 2.2), rnd(-0.6, 0.6)), new THREE.Vector3(rnd(-9, 9), 0, rnd(-9, 9)), floor);
+    addPiece(len, head, M.wood, new THREE.Vector3(p.x, base + 0.013, p.z), new THREE.Quaternion(), new THREE.Vector3(), new THREE.Vector3(), floor);
+    splinters(4, M.board);
+    return;
+  }
+  if (!dims) { spawnDebris(len, Object.assign(p.clone(), { floor }), s.spec.debris || (s.type === 'table' ? M.wood : M.board), s.type === 'stool' ? 6 : 10, !!s.spec.debris); return; }
+  const [hx, hz, h] = dims, nb = Math.max(1, Math.round(h / 0.24));
+  for (const [fx, fz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const n = rot(fx, fz), half = fx ? hz : hx, dist = fx ? hx : hz;
+    for (let b = 0; b < nb; b++) {
+      if (Math.random() < 0.15) continue;
+      const bh = h / nb, c = P3(fx * dist, 0, fz * dist); c.y = base + bh * (b + 0.5);
+      const out = rnd(0.3, 1.1) * (s.type === 'chest' ? 1.3 : 1);
+      // the boards go one after another a fraction apart, the top ones first and furthest
+      const k = (b + 1) / nb;
+      addPiece(len, pieceGeo(half * 2 * rnd(0.85, 1), 0.024, bh * 0.94), M.board, c, faceQuat(n), new THREE.Vector3(n.x * out * (0.6 + k * 0.6), rnd(0.2, 0.6) + k * 0.8, n.z * out * (0.6 + k * 0.6)), tip(n, rnd(1.5, 4) * (0.7 + k * 0.5)).add(_vb.set(rnd(-1.2, 1.2), rnd(-2, 2), rnd(-1.2, 1.2))), floor);
+    }
+  }
+  // the lid: in two halves, jumping
+  for (const side of [-1, 1]) {
+    const c = P3(side * hx / 2, 0, 0); c.y = base + h;
+    addPiece(len, pieceGeo(hx, 0.03, hz * 2), M.wood, c, new THREE.Quaternion().setFromAxisAngle(_UP, yaw), new THREE.Vector3(rot(side, 0).x * rnd(0.3, 0.9), rnd(1.3, 2.4), rot(side, 0).z * rnd(0.3, 0.9)), new THREE.Vector3(rnd(-7, 7), rnd(-3, 3), rnd(-7, 7)), floor);
+  }
+  // a corner post or two
+  for (let i = 0; i < 2; i++) {
+    const sx = i ? 1 : -1, sz = Math.random() < 0.5 ? 1 : -1, c = P3(sx * hx * 0.92, 0, sz * hz * 0.92); c.y = base + h / 2;
+    const n = rot(sx, sz).normalize();
+    addPiece(len, pieceGeo(0.06, 0.06, h * rnd(0.6, 0.95)), M.wood, c, faceQuat(n), new THREE.Vector3(n.x * rnd(0.2, 0.6), rnd(0.1, 0.4), n.z * rnd(0.2, 0.6)), tip(n, rnd(1.5, 3)), floor);
+  }
+  // the bottom stays
+  { const c = P3(0, 0, 0); c.y = base + 0.012; addPiece(len, pieceGeo(hx * 1.9, 0.024, hz * 1.9), M.board, c, new THREE.Quaternion().setFromAxisAngle(_UP, yaw), new THREE.Vector3(), new THREE.Vector3(), floor); }
+  splinters(s.type === 'box' ? 3 : 5, M.board);
 }
 // a thing is spent once it has been seen: when its box is broken open, or when it is looked at in light
 function markSeen(tok, A) { if (typeof tok === 'number' && !S.found.has(tok)) S.found.set(tok, Math.floor(A / C.LENGTHS)); }
@@ -10357,8 +10443,7 @@ function breakContainer(s, len) {
   const p = s.obj.position.clone();
   const wp = p.clone(); wp.z += len.group.position.z;
   AU.smash(s.spec.sound, wp); countSmash(s.A, wp);
-  const dp = p.clone(); dp.floor = s.groundY ?? s.floorY;
-  spawnDebris(len, dp, s.spec.debris || (s.type === 'chest' || s.type === 'table' ? M.wood : M.board), s.type === 'box' || s.type === 'stool' ? 6 : 10, !!s.spec.debris);
+  spawnBreak(s, len);
   for (const c of s.contents) {
     const q = p.clone(); q.y += s.spec.h * 0.45; q.x += (Math.random() - 0.5) * 0.3; q.z += (Math.random() - 0.5) * 0.3;
     const it = spawnItem(len, c.tok, c.key, q, { falling: true, floorY: s.floorY });
@@ -10410,19 +10495,81 @@ function countSmash(A, wp) {
   const n = S.smashN, k = (n % 4 === 0 ? 1 : 0) + (n % 10 === 0 ? 1 : 0);
   if (k) AU.overtone(((A % C.LENGTHS) + C.LENGTHS) % C.LENGTHS, k, wp);
 }
-function updateDynamics(dt) {
-  for (let i = dyn.debris.length - 1; i >= 0; i--) {
-    const d = dyn.debris[i];
-    if (!d.m.parent) { dyn.debris.splice(i, 1); continue; }
-    d.vy -= 9.8 * dt;
-    d.m.position.x += d.vx * dt; d.m.position.y += d.vy * dt; d.m.position.z += d.vz * dt;
-    d.m.rotation.x += d.spin * dt; d.m.rotation.z += d.spin * 0.6 * dt;
-    if (d.m.position.y <= d.floor + 0.015) {
-      d.m.position.y = d.floor + 0.015;
-      if (Math.abs(d.vy) > 1.2) { d.vy = -d.vy * 0.25; d.vx *= 0.5; d.vz *= 0.5; d.spin *= 0.4; }
-      else { d.m.rotation.x = Math.round(d.m.rotation.x / Math.PI) * Math.PI; d.m.rotation.z = 0; dyn.debris.splice(i, 1); }
+// Pieces that have come to rest are folded into one mesh per length and material, so a room full of smashed boxes
+// costs no more to draw than a few
+let rubbleT = 0;
+function restPiece(d) {
+  const len = d.len, m = d.m;
+  if (!len || m.parent !== len.group) return;
+  m.updateMatrix();
+  len.rubble ||= new Map();
+  let r = len.rubble.get(m.material);
+  if (!r) { r = { geos: [], wait: [], mesh: null }; len.rubble.set(m.material, r); }
+  r.geos.push(m.geometry.clone().applyMatrix4(m.matrix)); r.wait.push(m);
+}
+function flushRubble() {
+  for (const len of loaded.values()) {
+    if (!len.rubble) continue;
+    for (const [mat, r] of len.rubble) {
+      if (!r.wait.length) continue;
+      const g = mergeGeometries(r.geos, false);
+      if (!g) { r.wait.length = 0; continue; }
+      if (r.mesh) { r.mesh.geometry.dispose(); r.mesh.geometry = g; }
+      else { r.mesh = new THREE.Mesh(g, mat); r.mesh.userData.disposable = true; r.mesh.matrixAutoUpdate = false; len.group.add(r.mesh); }
+      for (const m of r.wait) len.group.remove(m);
+      r.wait.length = 0;
     }
   }
+}
+// how far below its centre a slab reaches, as it is turned now
+function pieceLow(d) {
+  d.m.updateMatrix(); const e = d.m.matrix.elements;
+  return Math.abs(e[1]) * d.h[0] + Math.abs(e[5]) * d.h[1] + Math.abs(e[9]) * d.h[2];
+}
+function stepPiece(d, dt) {
+  const m = d.m;
+  if (!d.settle) {
+    d.v.y -= 9.8 * dt;
+    m.position.addScaledVector(d.v, dt);
+    const wl = d.w.length();
+    if (wl > 1e-4) { _qa.setFromAxisAngle(_va.copy(d.w).divideScalar(wl), wl * dt); m.quaternion.premultiply(_qa); }
+    const low = pieceLow(d);
+    if (m.position.y - low <= d.floor) {
+      m.position.y = d.floor + low;
+      if (d.v.y < -0.9 && d.bounces < 3) {
+        // a knock on the floor: up a little, slower along, the turning checked and given a new twist
+        d.bounces++; d.v.y = -d.v.y * 0.28; d.v.x *= 0.55; d.v.z *= 0.55;
+        d.w.multiplyScalar(0.45).add(_vb.set(rnd(-2, 2), rnd(-1, 1), rnd(-2, 2)).multiplyScalar(Math.min(1, -d.v.y)));
+      } else {
+        // down to stay: from here it slides to a stop and lays itself flat on its broad face
+        const yAxis = _va.set(0, 1, 0).applyQuaternion(m.quaternion);
+        _qb.setFromUnitVectors(yAxis, _vb.set(0, yAxis.y >= 0 ? 1 : -1, 0));
+        d.settle = _qb.clone().multiply(m.quaternion);
+        d.v.y = 0;
+      }
+    }
+    return false;
+  }
+  const f = 1 - Math.exp(-7 * dt);
+  d.v.x -= d.v.x * f; d.v.z -= d.v.z * f;
+  m.position.x += d.v.x * dt; m.position.z += d.v.z * dt;
+  m.quaternion.slerp(d.settle, 1 - Math.exp(-9 * dt));
+  m.position.y = d.floor + pieceLow(d);
+  if (Math.hypot(d.v.x, d.v.z) < 0.01 && m.quaternion.angleTo(d.settle) < 0.004) { m.quaternion.copy(d.settle); m.position.y = d.floor + pieceLow(d); m.updateMatrix(); return true; }
+  return false;
+}
+function updateDynamics(dt) {
+  // the pieces, stepped in small even slices however long the frame, so a slow frame never jolts them
+  const nSub = Math.min(4, Math.ceil(dt / 0.009)), hdt = dt / nSub;
+  for (let i = dyn.debris.length - 1; i >= 0; i--) {
+    const d = dyn.debris[i], m = d.m;
+    if (!m.parent) { dyn.debris.splice(i, 1); continue; }
+    let done = false;
+    for (let k = 0; k < nSub && !done; k++) done = stepPiece(d, hdt);
+    if (done) { dyn.debris.splice(i, 1); restPiece(d); }
+  }
+  rubbleT += dt;
+  if (rubbleT > 0.35) { rubbleT = 0; flushRubble(); }
   for (let i = dyn.falling.length - 1; i >= 0; i--) {
     const it = dyn.falling[i];
     if (it.fall) { // a crate whose support was smashed
@@ -10441,7 +10588,13 @@ function updateDynamics(dt) {
   }
   // crates struck but not broken wobble
   updateBells(dt);
-  for (const len of activeLens()) for (const s of len.smash) if (s.wob > 0 && s.alive) { s.wob -= dt; s.obj.rotation.z = Math.sin(s.wob * 60) * s.wob * 0.25; if (s.wob <= 0) s.obj.rotation.z = 0; }
+  for (const len of activeLens()) for (const s of len.smash) if (s.wob && s.alive) {
+    const w = s.wob; w.t += dt;
+    // a damped rock, about its foot: hard away from the blow, back past upright, smaller each time, coming to rest leaning
+    const ang = w.lean * smooth(0, 0.12, w.t) + 0.14 * Math.exp(-w.t * 7) * Math.sin(w.t * 26);
+    _qa.setFromAxisAngle(w.axis, ang); s.obj.quaternion.copy(_qa).multiply(s.q0);
+    if (w.t > 1.2) { _qa.setFromAxisAngle(w.axis, w.lean); s.obj.quaternion.copy(_qa).multiply(s.q0); s.wob = null; }
+  }
   for (const len of activeLens()) for (const d of len.droplets) {
     d.t += dt;
     const ph = (d.t % d.period) / d.period;
@@ -10721,26 +10874,47 @@ function lanternCage(o = {}) {
   vm.traverse(o => { if (o.isMesh && order.has(o.material)) o.renderOrder = order.get(o.material); });
   vmLant.userData.glow.renderOrder = 4;
 })();
-const _swingKeys = [ // t, rx, ry, rz, px, py, pz
-  [0.00, 0, 0, 0, 0, 0, 0], [0.1, 0.12, -0.08, -0.2, 0.04, 0.04, 0.02], [0.24, -0.38, 0.3, 0.85, -0.3, 0.24, -0.06], [0.5, 0, 0, 0, 0, 0, 0],
+// The swing: a short draw back, then the cut, fast through the moment it lands (0.17 s), on to the full reach of the
+// follow-through, and back to rest. One smooth curve through these poses (t, rx, ry, rz, px, py, pz); it slows to a
+// stop only where the arm truly turns about (the top of the draw, the end of the follow-through) and at rest
+const _swingKeys = [
+  [0.00, 0, 0, 0, 0, 0, 0, 0],
+  [0.11, 0.15, -0.1, -0.24, 0.05, 0.05, 0.03, 0],
+  [0.18, -0.08, 0.08, 0.26, -0.09, 0.11, -0.03, 1],
+  [0.27, -0.42, 0.32, 0.92, -0.33, 0.25, -0.07, 0],
+  [0.37, -0.15, 0.11, 0.33, -0.12, 0.09, -0.025, 1],
+  [0.52, 0, 0, 0, 0, 0, 0, 0],
 ];
+// the slope at each pose: none where the arm turns about, else through its neighbours
+const _swingTan = _swingKeys.map((k, i) => k.slice(1, 7).map((v, j) => {
+  if (!k[7] || i === 0 || i === _swingKeys.length - 1) return 0;
+  const a = _swingKeys[i - 1], b = _swingKeys[i + 1];
+  return (b[j + 1] - a[j + 1]) / (b[0] - a[0]);
+}));
+function swingPose(t, out) {
+  const K = _swingKeys;
+  for (let j = 0; j < 6; j++) out[j] = 0;
+  if (t <= 0 || t >= K[K.length - 1][0]) return out;
+  let i = 0; while (t > K[i + 1][0]) i++;
+  const a = K[i], b = K[i + 1], h = b[0] - a[0], u = (t - a[0]) / h, u2 = u * u, u3 = u2 * u;
+  const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+  for (let j = 0; j < 6; j++) out[j] = h00 * a[j + 1] + h10 * h * _swingTan[i][j] + h01 * b[j + 1] + h11 * h * _swingTan[i + 1][j];
+  return out;
+}
+const _swingK = [0, 0, 0, 0, 0, 0];
 function updateViewmodel(dt, lf, flick) {
   const sp = Math.min(1, P.vel.length() / C.WALK);
   const sb = Math.sin(P.bob), bobY = -sb * sb * 0.018 * sp, bobX = Math.sin(P.bob * 0.5) * 0.011 * sp;
   vm.position.set(bobX, bobY, 0);
-  let k = [0, 0, 0, 0, 0, 0];
-  if (P.swingT >= 0) {
-    const t = P.swingT;
-    for (let i = 0; i < _swingKeys.length - 1; i++) {
-      const a = _swingKeys[i], b = _swingKeys[i + 1];
-      if (t >= a[0] && t <= b[0]) { const u = smooth(a[0], b[0], t); for (let j = 0; j < 6; j++) k[j] = lerp(a[j + 1], b[j + 1], u); break; }
-    }
-  }
+  const k = swingPose(P.swingT >= 0 ? P.swingT : -1, _swingK);
   vmArm.rotation.set(k[0], k[1], k[2]);
+  // the other hand answers the cut a little: the lantern dips and is carried back a touch, and swings on its ring
+  const e = k[2] / 0.92;
+  vmLant.position.set(-0.27 + 0.014 * e, -0.06 - 0.016 * Math.abs(e), -0.62 + 0.01 * e);
   HAND_BOUNCE.value = S.inField ? 0.04 : 0.3 * lf * flick;
   vmArm.position.set(0.42 + k[3], -0.5 + k[4], -0.1 + k[5]);
   const body = vmLant.userData.body;
-  body.rotation.z = Math.sin(P.bob * 0.5) * 0.08 * sp + P.vel.x * 0.0;
+  body.rotation.z = Math.sin(P.bob * 0.5) * 0.08 * sp - 0.06 * e;
   body.rotation.x = Math.sin(P.bob * 0.5 + 1) * 0.05 * sp;
   const fl = vmLant.userData.flame, gl = vmLant.userData.glow;
   fl.visible = lf > 0.001; gl.visible = lf > 0.001 && !S.inField;
@@ -11709,6 +11883,19 @@ function nearestBiscuit() {
         const d = Math.abs(A * C.LEN_M + r.d - here) + (r.lower ? 22 : 8);
         if (d < best) best = d;
       });
+    }
+    // the biscuits kept apart from the deal: the two in the cellar at 51 and the two in each of the oval hall and the
+    // crescent, all on the first pass only; the one in the deep at 99 on the passes it is stocked
+    const extra = [[CELLAR_L, lp === 0, ['sub:B1', 'sub:B2'], 'twostair', 34], [35, lp === 0, ['oval:B0', 'oval:B2'], 'oval', 26],
+      [89, lp === 0, ['crescent:B0', 'crescent:B2'], 'crescent', 26], [DEEP_L, DEEP_STOCK.includes(lp), ['deep:B'], 'deep', 45]];
+    for (const [L, on, keys, design, deep] of extra) {
+      if (!on) continue;
+      const A = lp * C.LENGTHS + L, st = S.lens[A], r = layoutFor(L, lp).rooms.find(q => q.design === design);
+      for (const key of keys) {
+        if (st && st.tk.includes(key)) continue;
+        const d = Math.abs(A * C.LEN_M + (r ? r.d : 50) - here) + deep;
+        if (d < best) best = d;
+      }
     }
   }
   return best;
@@ -13690,7 +13877,7 @@ function devKey(code) {
   if (code === 'KeyU') { for (const id of [35, 78, 121, 30, 32, 37, 79, 122, 182, 216, 10001, 10002, 10003, 10004, HARP_ID, BELLS_ID]) if (S.inv.length < C.INV_SLOTS && ((id !== HARP_ID && id !== BELLS_ID) || !S.inv.includes(id))) S.inv.push(id); if (S.inv.includes(HARP_ID)) S.harp = 'taken'; if (S.inv.includes(BELLS_ID)) S.bells = 'taken'; toast('Goods for trading.'); }
   if (code === 'KeyN') { mouse.run = null; maybeMouse(true); }
 }
-window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, stepOne: () => stepBuild(), rep, paceFrame: (now) => frame(now, 'pace'), scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, snapPng: (now) => { draw(now, 0.016); return renderer.domElement.toDataURL('image/png'); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, stage: () => buildStage, mosaicBuild, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera, T, planRoom, THEMES, COMPOSED, extOf, skyLight, lanternLight, vmLant, vmArm, THREE, Builder, mtx, V3, Rng, pace,
+window.__rampart = { eternalLight, queueChime, maybeMouse, itemDef, poolSize, caveAt, pumpBuilds, finishAllBuilds, stepOne: () => stepBuild(), rep, paceFrame: (now) => frame(now, 'pace'), scanSeen, mouse, buildLengthGen, pickTarget, markSeen, itemModel, motifTexture, buildLength, placeTokens, LengthCtx, snap: () => { draw(performance.now(), 0.016); return renderer.domElement.toDataURL('image/jpeg', 0.88); }, snapPng: (now) => { draw(now, 0.016); return renderer.domElement.toDataURL('image/png'); }, sim: (secs, step = 0.05) => { for (let t = 0; t < secs; t += step) update(step); }, keys, renderer, vmScene, vmCamera, thumbR, S: () => S, P, C, teleport, enterField, beginField, loaded, layoutFor, lapAssign, origin: () => originA, startGame, update, AU, lanternFactor, openInv, closeInv, field: () => field, die, take, riders, parley, goldenRule, goStep, vcur, makeHorse, makeRider, makeTortoise, makeDeer, buildFieldGen, saveGame, loadSaved, stage: () => buildStage, mosaicBuild, FIELD_WS, ending: () => ending, spawnRiders, riderValue, tradeForHorse, renderLedger, strike, mirrorRt, scene, camera, T, planRoom, THEMES, COMPOSED, extOf, skyLight, lanternLight, vmLant, vmArm, THREE, dyn, swingPose, Builder, mtx, V3, Rng, pace,
   details: { candleAt, droppingsAt, rustNail, ringChain, frayRope, ragOnHook, bucketAt, malletAt, wedgesAt, pulleyAt, handprint, turnshoe, tallyMat, tallyRooms, plane: (w, h) => new THREE.PlaneGeometry(w, h), box: (a, b, c) => boxGeo(a, b, c), boardMat: M.board },
   planFix: (r, L) => { const p = planRoom(r); if (!p.fx) { const g = planFixturesGen(p, r, L); let x = g.next(); while (!x.done) x = g.next(); p.fx = x.value; } return p; } };
 
