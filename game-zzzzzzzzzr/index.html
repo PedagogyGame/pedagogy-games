@@ -10189,8 +10189,11 @@ const vmArm = new THREE.Group(), vmLant = new THREE.Group();
 vm.add(vmArm, vmLant);
 const STEEL = new THREE.MeshPhongMaterial({ color: 0xaaa69e, specular: 0xfff4e0, shininess: 85 });
 const VM_MAIL = lam(T.mail, { color: 0xd8d2c8, bumpScale: 0.6 }), VM_LEATHER = lam(T.leather, { color: 0xc8a888, bumpScale: 0.5 });
-const FLAME = new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.95, fog: false });
-const HORN_PANE = new THREE.MeshPhongMaterial({ color: 0xd8a050, emissive: 0x3a1a04, transparent: true, opacity: 0.55, side: THREE.DoubleSide, shininess: 30 });
+const FLAME = new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.95, fog: false, depthWrite: false });
+// the horn panes, drawn as two layers with the flame between them, always in that order: the far side of the horn, the
+// flame, the near side. (Left to the renderer's sorting, the order flipped as the lantern swung and the flame blinked out)
+const HORN_PANE = new THREE.MeshPhongMaterial({ color: 0xd8a050, emissive: 0x3a1a04, transparent: true, opacity: 0.55, side: THREE.BackSide, shininess: 30, depthWrite: false });
+const HORN_FRONT = HORN_PANE.clone(); HORN_FRONT.side = THREE.FrontSide; HORN_FRONT.emissive = HORN_PANE.emissive;
 (function buildViewmodel() {
   const piece = (parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); parent.add(m); return m; };
   const between = (parent, geo, mat, a, b, r) => {
@@ -10239,6 +10242,7 @@ const HORN_PANE = new THREE.MeshPhongMaterial({ color: 0xd8a050, emissive: 0x3a1
   piece(cage, new THREE.ConeGeometry(0.08, 0.065, 14, 1, true), M.iron, 0, 0.115, 0);
   piece(cage, new THREE.CylinderGeometry(0.012, 0.012, 0.03, 6), M.iron, 0, 0.16, 0);
   piece(cage, new THREE.CylinderGeometry(0.062, 0.066, 0.17, 16, 1, true), HORN_PANE, 0, 0.0, 0);
+  piece(cage, new THREE.CylinderGeometry(0.062, 0.066, 0.17, 16, 1, true), HORN_FRONT, 0, 0.0, 0);
   for (let i = 0; i < 5; i++) { const a = i / 5 * TAU + 0.3; piece(cage, new THREE.CylinderGeometry(0.0045, 0.0045, 0.19, 4), M.iron, Math.cos(a) * 0.066, 0, Math.sin(a) * 0.066); }
   for (const y of [-0.05, 0.05]) piece(cage, new THREE.TorusGeometry(0.066, 0.004, 4, 18), M.iron, 0, y, 0, Math.PI / 2);
   piece(cage, new THREE.CylinderGeometry(0.014, 0.02, 0.03, 8), M.iron, 0, -0.07, 0);
@@ -10266,6 +10270,9 @@ const HORN_PANE = new THREE.MeshPhongMaterial({ color: 0xd8a050, emissive: 0x3a1
       o.add(new THREE.Mesh(g, mat));
     }
   }
+  const order = new Map([[HORN_PANE, 1], [FLAME, 2], [HORN_FRONT, 3]]);
+  vm.traverse(o => { if (o.isMesh && order.has(o.material)) o.renderOrder = order.get(o.material); });
+  vmLant.userData.glow.renderOrder = 4;
 })();
 const _swingKeys = [ // t, rx, ry, rz, px, py, pz
   [0.00, 0, 0, 0, 0, 0, 0], [0.1, 0.12, -0.08, -0.2, 0.04, 0.04, 0.02], [0.24, -0.38, 0.3, 0.85, -0.3, 0.24, -0.06], [0.5, 0, 0, 0, 0, 0, 0],
