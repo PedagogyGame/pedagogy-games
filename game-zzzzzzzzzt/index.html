@@ -624,7 +624,7 @@ const START_MIN = 9*60, END_MIN = 21*60;
 const WORLD_SEED = 1986;
 const SAVE_KEY = 'pkgcar-save-v5', OPT_KEY = 'pkgcar-opts-v1';
 
-const VERSION='v14.20';   /* shown on the title card and the pause menu, so it is plain which build a browser is running */
+const VERSION='v14.21';   /* shown on the title card and the pause menu, so it is plain which build a browser is running */
 /* ===================== helpers ===================== */
 const $ = s => document.querySelector(s);
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
@@ -4977,7 +4977,7 @@ function genHill(){
       for(const f of [0,0.5]){ const x=lerp(a.x,b.x,f), y=lerp(a.y,b.y,f), w=lerp(a.w,b.w,f)+8; CHR.obs.push({t:'c',x:x+N[0]*w*a.railO,y:y+N[1]*w*a.railO,r:1.6,rail:true}); } } }
   // the overlook: a paved shelf off the south side of the loop, looking back over town
   { let best=null; for(const q of loop.pts){ const th=chTh(q.x,q.y)*180/Math.PI; if(th<55||th>125) continue; const far=Math.min(...CHR.roads.filter(r=>!r.loop).map(r=>Math.hypot(r.pts[r.pts.length-1].x-q.x,r.pts[r.pts.length-1].y-q.y))); const sc=far-Math.abs(th-90)*3; if(!best||sc>best.sc) best={q,sc}; }
-    const q=best.q, [gx,gy]=grad(q.x,q.y), m=Math.hypot(gx,gy)||1, ox=-gx/m, oy=-gy/m; CHR.overlook={x:q.x+ox*52,y:q.y+oy*52,nx:ox,ny:oy,h:CHR.loopH};
+    const q=best.q, [gx,gy]=grad(q.x,q.y), m=Math.hypot(gx,gy)||1, ox=-gx/m, oy=-gy/m; CHR.overlook={x:q.x+ox*(52+CRH.lhw-15),y:q.y+oy*(52+CRH.lhw-15),nx:ox,ny:oy,h:CHR.loopH};
     CHR.pads.push({x:CHR.overlook.x,y:CHR.overlook.y,r:48,h:CHR.loopH,paved:true}); }
   // Crestwood Manor: the big stone house on the crown of the hill, facing town, the one everyone can point to
   { const cx=CRH.sx+40, cy=CRH.sy-CRH.ry*0.155, tx=1, ty=0, dx=0, dy=-1;
@@ -4992,7 +4992,7 @@ function genHill(){
   // the houses: big ones, set back on their lots, both sides of both climbs
   const STY=['tudor','colonial','craftsman','modern','spanish','tudor','colonial','craftsman'];
   for(const r of CHR.roads){ const P=r.pts; let acc=rr(70,130);
-    for(let i=2;i<P.length-2;i++){ const a=P[i-1], b=P[i], c=P[i+1]; acc-=Math.hypot(b.x-a.x,b.y-a.y); if(acc>0||b.y>-40||b.arc||c.arc||a.arc) continue; acc=r.loop?rr(110,140):rr(96,140);
+    for(let i=2;i<P.length-2;i++){ const a=P[i-1], b=P[i], c=P[i+1]; acc-=Math.hypot(b.x-a.x,b.y-a.y); if(acc>0||b.y>-40||b.arc||c.arc||a.arc||a.railO||b.railO||c.railO) continue; acc=r.loop?rr(110,140):rr(96,140);
       const tx0=c.x-a.x, ty0=c.y-a.y, tl=Math.hypot(tx0,ty0)||1, tx=tx0/tl, ty=ty0/tl;
       for(const side of (r.loop?[0]:RR()<0.7?[1,-1]:[RR()<0.5?1:-1])){ let sd=side; if(r.loop){ const t1=chE(b.x+(-ty)*30,b.y+tx*30); sd=t1>chE(b.x,b.y)?1:-1; } const dx=-ty*sd, dy=tx*sd, hl=rr(30,42), hd=rr(19,26), set=rr(26,42);
         const bw=b.w||r.hw, cx=b.x+dx*(bw+set+hd), cy=b.y+dy*(bw+set+hd); if(chE(cx,cy)<CRH.loopE+(r.loop?0.035:0.06)||cy>-60) continue;
@@ -5000,6 +5000,7 @@ function genHill(){
         let ok=CHR.houses.every(h=>Math.hypot(h.x-cx,h.y-cy)>h.r+Math.hypot(hl,hd)+8)&&CHR.pads.every(p=>Math.hypot(p.x-cx,p.y-cy)>p.r+Math.hypot(hl,hd)+(p.paved?40:6));
         if(ok) for(const [u,v] of [[0,0],[-hl,-hd],[hl,-hd],[hl,hd],[-hl,hd],[0,hd+14],[-hl-8,0],[hl+8,0]]){ const px=cx+tx*u+dx*v, py=cy+ty*u+dy*v, n=chNear(px,py); if(n&&n.e<(n.road===r?set-6:14)){ ok=false; break; } if(px<CRH.x0+30||px>CRH.x1-30||py<CRH.y0+30) { ok=false; break; } }
         if(!ok) continue;
+        { const hh=clamp(Math.max(b.h+0.5,dH(cx,cy)-3),b.h-13.5,b.h+26.5), R=Math.hypot(hl,hd)+4; for(let k=0;k<12&&ok;k++){ const n=chNear(cx+Math.cos(k*0.5236)*R,cy+Math.sin(k*0.5236)*R); if(n&&n.road!==r&&n.e<12+Math.min(60,0.9*Math.abs(hh-n.h))) ok=false; } if(!ok) continue; }   /* a leveled lot must not meet another road's bench as a cliff */
         const base=b.h+0.5; const H={x:cx,y:cy,tx,ty,dx,dy,hl,hd,set,road:r,rp:{x:b.x,y:b.y,h:b.h,w:bw},r:Math.hypot(hl,hd),style:STY[Math.floor(RR()*STY.length)],h:Math.max(base,dH(cx,cy)-3),wall:RR(),roof:RR(),seed:RR()};
         H.h=clamp(H.h,base-14,base+26); CHR.houses.push(H); CHR.pads.push({x:cx,y:cy,r:Math.hypot(hl,hd)+4,h:H.h});
         // circles along the long axis keep the truck out of the living room
@@ -5025,8 +5026,21 @@ function genHill(){
   CHR.trees=CHR.trees.filter(t=>!CHR.rocks.some(o=>Math.hypot(o.x-t.x,o.y-t.y)<o.r+6));
   for(const t of CHR.trees) CHR.obs.push({t:'c',x:t.x,y:t.y,r:5});
   // the overlook's stone wall
-  if(CHR.overlook){ const o=CHR.overlook, a0=Math.atan2(o.ny,o.nx); for(let k=-9;k<=9;k++){ const a=a0+k*0.085; CHR.obs.push({t:'c',x:o.x+Math.cos(a)*46,y:o.y+Math.sin(a)*46,r:3.2}); } }
+  if(CHR.overlook){ const o=CHR.overlook, a0=Math.atan2(o.ny,o.nx); for(let k=-9;k<=9;k++){ const a=a0+k*0.085; CHR.obs.push({t:'c',x:o.x+Math.cos(a)*46,y:o.y+Math.sin(a)*46,r:3.2}); }
+    const lat=[-o.ny,o.nx], at=(r,l)=>({t:'c',x:o.x+o.nx*r+lat[0]*l,y:o.y+o.ny*r+lat[1]*l});   /* the flagpole, and the hang-glide sign and windsock (the launch is 30 out from the center): solid, so the truck stops at them */
+    CHR.obs.push({...at(-30,-30),r:1.4}); for(const l of [-20,-14,-8]) CHR.obs.push({...at(28,l),r:1.8}); CHR.obs.push({...at(46,52),r:1.4}); }
 }
+// where a climb meets the loop, its ribbon stops where both its corners are still 3 clear of the loop, and a cap carries it on to the loop's curved outer edge and no further,
+// so the loop's asphalt alone paves the mouth (the two lay in one plane there and flickered under the headlights)
+function chMouth(r){ const L=CHR.roads.find(q=>q.loop).pts, P=r.pts, n=P.length, foot=(x,y)=>{ let o=null; for(let i=0;i<L.length-1;i++){ const a=L[i], c=L[i+1], dx=c.x-a.x, dy=c.y-a.y, l2=dx*dx+dy*dy||1; let t=((x-a.x)*dx+(y-a.y)*dy)/l2; t=t<0?0:t>1?1:t; const fx=a.x+dx*t, fy=a.y+dy*t, d=Math.hypot(x-fx,y-fy); if(!o||d<o.d) o={d,fx,fy}; } return o; };
+  const ends=i=>{ const a=P[i-1], b=P[i], tx=b.x-a.x, ty=b.y-a.y, l=Math.hypot(tx,ty)||1, w=b.w||r.hw; return {ux:tx/l,uy:ty/l,L:[b.x-ty/l*w,b.y+tx/l*w],R:[b.x+ty/l*w,b.y-tx/l*w]}; };
+  let m=n-1; while(m>2){ const e=ends(m); if(foot(...e.L).d>=CRH.lhw+3&&foot(...e.R).d>=CRH.lhw+3) break; m--; }
+  const e=ends(m), hit=q=>{ let s=0; while(s<80&&foot(q[0]+e.ux*s,q[1]+e.uy*s).d>CRH.lhw) s+=2; let lo=Math.max(0,s-2), hi=s; for(let k=0;k<16;k++){ const md=(lo+hi)/2; if(foot(q[0]+e.ux*md,q[1]+e.uy*md).d>CRH.lhw) lo=md; else hi=md; } return [q[0]+e.ux*hi,q[1]+e.uy*hi]; };
+  const XL=hit(e.L), XR=hit(e.R), E=[]; for(let k=1;k<8;k++){ const x=XL[0]+(XR[0]-XL[0])*k/8, y=XL[1]+(XR[1]-XL[1])*k/8, f=foot(x,y), sc=CRH.lhw/(f.d||1); E.push([f.fx+(x-f.fx)*sc,f.fy+(y-f.fy)*sc]); }
+  const y0=P[m].h+0.6, y1=CHR.loopH+0.6; return {P:P.slice(0,m+1),cap:[[...e.L,y0],[...XL,y1],...E.map(q=>[...q,y1]),[...XR,y1],[...e.R,y0]]}; }
+// the height of the hill's 12-unit terrain mesh itself, between its vertices (what you see, not the smooth function under it)
+function chMeshH(x,z){ const Q=CHP, nx=Math.ceil((Q.x1-Q.x0)/12)+1, nz=Math.ceil((Q.z1-Q.z0)/12)+1, dx=(Q.x1-Q.x0)/(nx-1), dz=(Q.z1-Q.z0)/(nz-1), fi=(x-Q.x0)/dx, fj=(z-Q.z0)/dz, i=Math.floor(fi), j=Math.floor(fj); if(i<0||j<0||i>=nx-1||j>=nz-1) return terrainH(x,z);
+  const u=fi-i, v=fj-j, X=k=>Q.x0+dx*k, Z=k=>Q.z0+dz*k, a=terrainH(X(i),Z(j)), b=terrainH(X(i+1),Z(j)), c=terrainH(X(i),Z(j+1)), d=terrainH(X(i+1),Z(j+1)); return u+v<=1?a+u*(b-a)+v*(c-a):d+(1-u)*(c-d)+(1-v)*(b-d); }
 function chBlocksTree(x,y,m){ if(!CHR||y>340||x<CRH.x0-60||x>CRH.x1+60) return false; const n=chNear(x,y); return !!(n&&n.d-16<m); }   /* measured from the old 32-wide road on purpose: this feeds the town's seeded tree scatter (stream R), which the wider road must not reshuffle */
 
 // Crestwood Manor: limestone, a slate roof, two round towers, a porte-cochère and a parterre garden; lit up at night like a lantern
@@ -5054,7 +5068,8 @@ function buildManor3D(M,g,glow,OB,OHip,win,face,sideFace){ const C=cc, {x:cx,y:c
   // the forecourt, the parterre, a long lawn and the drive back to the loop
   { const fc=P(0,-hd-30); g.disc(fc[0],fc[1],24,24,y0+0.5,C('#cfc6b4'),0.3,28); g.disc(fc[0],fc[1],8,8,y0+0.6,C('#6f9a4a'),0.6,16); g.prism(fc[0],fc[1],2,y0+0.6,y0+5,C('#c8bca4'),null,10); g.prism(fc[0],fc[1],4,y0+5,y0+6,C('#c8bca4'),null,12);
     for(const sg of [-1,1]) for(let k=0;k<3;k++){ const q=P(sg*(28+k*12),-hd-30); g.box(q[0]-5,q[1]-9,q[0]+5,q[1]+9,y0+0.4,y0+3.2,C('#2f5a2a')); g.box(q[0]-3,q[1]-6,q[0]+3,q[1]+6,y0+0.5,y0+1.2,C(['#e8504a','#f2c14e','#f08aa8'][k])); }
-    const rp=M.rp, s0=[fc[0]+20,fc[1]]; { const ex=rp.x-s0[0], ez=rp.y-s0[1], l=Math.hypot(ex,ez)||1, nx=-ez/l*8, nz=ex/l*8; g.quad([s0[0]+nx,y0+0.45,s0[1]+nz],[s0[0]-nx,y0+0.45,s0[1]-nz],[rp.x-nx,rp.h+0.55,rp.y-nz],[rp.x+nx,rp.h+0.55,rp.y+nz],[0,1,0],C('#cfc6b4'),0.2); }
+    const rp=M.rp, s0=[fc[0]+20,fc[1]]; { const ex=rp.x-s0[0], ez=rp.y-s0[1], l=Math.hypot(ex,ez)||1, nx=-ez/l*8, nz=ex/l*8; let lo=0, hi=0; while(hi<l-4){ const n=chNear(rp.x-ex/l*hi,rp.y-ez/l*hi); if(!n||n.e>0) break; lo=hi; hi+=1; } for(let s=0;s<8;s++){ const m=(lo+hi)/2, n=chNear(rp.x-ex/l*m,rp.y-ez/l*m); if(!n||n.e>0) hi=m; else lo=m; } const qx=rp.x-ex/l*hi, qz=rp.y-ez/l*hi;   /* stop at the loop's inner edge, not on its asphalt */
+      g.quad([s0[0]+nx,y0+0.45,s0[1]+nz],[s0[0]-nx,y0+0.45,s0[1]-nz],[qx-nx,rp.h+0.5,qz-nz],[qx+nx,rp.h+0.5,qz+nz],[0,1,0],C('#cfc6b4'),0.2); }
     const sp=P(36,-hd-48); const sgn=txtCell('MANOR','CRESTWOOD MANOR · 1914',{w:512,h:64,bg:'#3d4a3a',fg:'#efe9dc',fam:F_DISP,weight:900}); (G.chSigns||(G.chSigns=[])).push([sp[0],y0+7,sp[1],-dx,-dz,30,4,sgn]); g.box(sp[0]-16,sp[1]-1,sp[0]+16,sp[1]+1,y0,y0+5,LS2); }
   // and the lights that make it a landmark from town after dark
   for(const sg of [-1,1]){ const q=P(sg*30,-hd-14); glow.box(q[0]-1.5,q[1]-1.5,q[0]+1.5,q[1]+1.5,y0,y0+3,new THREE.Color(1,0.9,0.7)); }
@@ -5080,7 +5095,9 @@ function buildCrestHill3D(){
   const sideFace=(cx,cz,tx,tz,dx,dz,hl,sg,v0,v1,y0,y1)=>{ const o=hl+0.3, P=(v,y)=>[cx+tx*o*sg+dx*v,y,cz+tz*o*sg+dz*v]; return [P(v0,y0),P(v1,y0),P(v1,y1),P(v0,y1),[tx*sg,0,tz*sg]]; };
 
   // ---------- roads ----------
-  for(const r of CHR.roads){ const P=r.pts, n=P.length; const N=P.map((p,i)=>{ const a=P[Math.max(0,i-1)], b=P[Math.min(n-1,i+1)]; const tx=b.x-a.x, ty=b.y-a.y, l=Math.hypot(tx,ty)||1; return [-ty/l,tx/l]; });
+  for(const r of CHR.roads){ const MO=r.J?chMouth(r):null, P=MO?MO.P:r.pts, n=P.length;
+    if(MO){ const c=MO.cap.map(q=>[q[0],q[2],q[1]]), A=c[0], B=c[c.length-1], F=c.slice(1,-1), h=F.length>>1; for(let j=0;j<F.length-1;j++) g.tri(j<h?A:B,F[j],F[j+1],[0,1,0],ASPH,0.2); g.tri(A,F[h],B,[0,1,0],ASPH,0.2); }   /* straight ramps from the ribbon's end up to the loop's edge, no fold */
+    const N=P.map((p,i)=>{ const a=P[Math.max(0,i-1)], b=P[Math.min(n-1,i+1)]; const tx=b.x-a.x, ty=b.y-a.y, l=Math.hypot(tx,ty)||1; return [-ty/l,tx/l]; });
     let dash=0, acc=0; const Js=CHR.roads.filter(q=>q.J).map(q=>q.J);
     for(let i=0;i<n-1;i++){ let a=P[i]; const b=P[i+1], yE=ys[0]-RW/2; if(a.y>yE&&b.y>yE) continue; if(a.y>yE){ const f=(a.y-yE)/(a.y-b.y); a={...a,x:a.x+(b.x-a.x)*f,y:yE,h:a.h+(b.h-a.h)*f}; }   /* start at Ridge Rd's edge: the 8 units laid on its asphalt were coplanar with it */
       const na=N[i], nb=N[i+1], hw=a.w||r.hw, hwb=b.w||r.hw, ya=a.h+0.6, yb=b.h+0.6; if(Math.hypot(b.x-a.x,b.y-a.y)<0.3) continue;
@@ -5089,14 +5106,14 @@ function buildCrestHill3D(){
       if(r.J?Math.hypot(b.x-r.J.x,b.y-r.J.y)<CRH.lhw+7:Js.some(J=>Math.hypot(a.x-J.x,a.y-J.y)<CRH.hw+10||Math.hypot(b.x-J.x,b.y-J.y)<CRH.hw+10)) continue;
       if(a.y<300&&(dash++%2===0)) g.quad([a.x+na[0]*0.7,ya+0.14,a.y+na[1]*0.7],[b.x+nb[0]*0.7,yb+0.14,b.y+nb[1]*0.7],[b.x-nb[0]*0.7,yb+0.14,b.y-nb[1]*0.7],[a.x-na[0]*0.7,ya+0.14,a.y-na[1]*0.7],[0,1,0],YEL);
       for(const sg of [1,-1]) g.quad([a.x+na[0]*(hw-1.6)*sg,ya+0.14,a.y+na[1]*(hw-1.6)*sg],[b.x+nb[0]*(hwb-1.6)*sg,yb+0.14,b.y+nb[1]*(hwb-1.6)*sg],[b.x+nb[0]*(hwb-2.4)*sg,yb+0.14,b.y+nb[1]*(hwb-2.4)*sg],[a.x+na[0]*(hw-2.4)*sg,ya+0.14,a.y+na[1]*(hw-2.4)*sg],[0,1,0],WHT);
-      if(a.y>-20) continue;
+      if(a.y>-20||(r.J&&Math.hypot(a.x-r.J.x,a.y-r.J.y)<CRH.lhw+10)) continue;
       // which side falls away? a guard rail there, a stone wall where the cut is tall
-      const tl=chTerrain(a.x+na[0]*(hw+16),a.y+na[1]*(hw+16)), tr=chTerrain(a.x-na[0]*(hw+16),a.y-na[1]*(hw+16)), down=tl<tr?1:-1, drop=a.h-Math.min(tl,tr), rise=Math.max(tl,tr)-a.h;
+      const tl=chTerrain(a.x+na[0]*(hw+22),a.y+na[1]*(hw+22)), tr=chTerrain(a.x-na[0]*(hw+22),a.y-na[1]*(hw+22)), down=tl<tr?1:-1, drop=a.h-Math.min(tl,tr), rise=Math.max(tl,tr)-a.h;
       if(a.railO&&b.railO){ const k=a.railO, e0=[a.x+na[0]*(hw+3)*k,a.y+na[1]*(hw+3)*k], e1=[b.x+nb[0]*(hwb+3)*k,b.y+nb[1]*(hwb+3)*k];
         beam(g,[e0[0],ya+2.6,e0[1]],[e1[0],yb+2.6,e1[1]],0.6,RAILC); beam(g,[e0[0],ya+1.4,e0[1]],[e1[0],yb+1.4,e1[1]],0.35,RAILC); g.box(e0[0]-0.45,e0[1]-0.45,e0[0]+0.45,e0[1]+0.45,ya-2,ya+3.1,POLE);
         if(i%2===0) g.box(e0[0]-0.55,e0[1]-0.55,e0[0]+0.55,e0[1]+0.55,ya+2.2,ya+3.0,C('#f0c020')); }
       else if(drop>5&&!r.loop){ const e0=[a.x+na[0]*(hw+1)*down,a.y+na[1]*(hw+1)*down], e1=[b.x+nb[0]*(hwb+1)*down,b.y+nb[1]*(hwb+1)*down]; beam(g,[e0[0],ya+2.6,e0[1]],[e1[0],yb+2.6,e1[1]],0.55,RAILC); acc+=Math.hypot(b.x-a.x,b.y-a.y); if(acc>12){ acc=0; g.box(e0[0]-0.4,e0[1]-0.4,e0[0]+0.4,e0[1]+0.4,ya-1.5,ya+3,POLE); } }
-      if(rise>10&&i%2===0){ const k=-down, wy=Math.min(rise-3,14); const w0=[a.x+na[0]*(hw+4)*k,a.y+na[1]*(hw+4)*k], w1=[b.x+nb[0]*(hwb+4)*k,b.y+nb[1]*(hwb+4)*k];
+      if(rise>10&&i%2===0){ const k=-down, wy=Math.min(rise-3,14); const w0=[a.x+na[0]*(hw+10)*k,a.y+na[1]*(hw+10)*k], w1=[b.x+nb[0]*(hwb+10)*k,b.y+nb[1]*(hwb+10)*k];
         g.quad([w0[0],ya-1,w0[1]],[w1[0],yb-1,w1[1]],[w1[0],yb+wy,w1[1]],[w0[0],ya+wy,w0[1]],[-na[0]*k,0,-na[1]*k],STONE); g.quad([w0[0],ya+wy,w0[1]],[w1[0],yb+wy,w1[1]],[w1[0]+na[0]*k*1.6,yb+wy,w1[1]+na[1]*k*1.6],[w0[0]+na[0]*k*1.6,ya+wy,w0[1]+na[1]*k*1.6],[0,1,0],STONE2); } } }
   for(const L of CHR.lamps){ const y=gH(L.x,L.y)-0.6; if(L.park){ beam(g,[L.x,y,L.y],[L.x,y+13,L.y],0.6,C('#2f3a30')); glow.prism(L.x,L.y,1.5,y+13,y+16,lit,lit,8); continue; }
     beam(g,[L.x,y,L.y],[L.x,y+19,L.y],0.7,POLE); beam(g,[L.x,y+19,L.y],[L.x+L.nx*5,y+19.4,L.y+L.ny*5],0.45,POLE); glow.box(L.x+L.nx*5-1.2,L.y+L.ny*5-1.2,L.x+L.nx*5+1.2,L.y+L.ny*5+1.2,y+18.2,y+19.2,lit); }
@@ -5130,7 +5147,7 @@ function buildCrestHill3D(){
     // driveway down to the road, a lamp at the curb, a hedge
     { const rp2=H.rp, ex=cx-dx*hd+tx*hl*0.55, ez=cz-dz*hd+tz*hl*0.55, sx=rp2.x+dx*(rp2.w||H.road.hw)+tx*hl*0.55, sz=rp2.y+dz*(rp2.w||H.road.hw)+tz*hl*0.55; const ye=y0+0.3, ys2=rp2.h+0.5;
       g.quad([ex+tx*6,ye,ez+tz*6],[ex-tx*6,ye,ez-tz*6],[sx-tx*6,ys2,sz-tz*6],[sx+tx*6,ys2,sz+tz*6],[0,1,0],C('#8e8a80'),0.2);
-      for(let k=0;k<5;k++){ const u=-hl*0.9+k*hl*0.32, px=cx+tx*u-dx*(hd+H.set*0.55), pz=cz+tz*u-dz*(hd+H.set*0.55); if(Math.abs(u-hl*0.55)<9) continue; const gy=chTerrain(px,pz); g.box(px-3.2,pz-3.2,px+3.2,pz+3.2,gy-1,gy+5,C('#2f4a2a')); }
+      for(let k=0;k<5;k++){ const u=-hl*0.9+k*hl*0.32, px=cx+tx*u-dx*(hd+H.set*0.55), pz=cz+tz*u-dz*(hd+H.set*0.55); if(Math.abs(u-hl*0.55)<9) continue; const hs=[[-3.2,-3.2],[3.2,-3.2],[3.2,3.2],[-3.2,3.2],[0,0]].map(([ox,oz])=>chMeshH(px+ox,pz+oz)), gy=Math.min(...hs); if(Math.max(...hs)-gy>2.5) continue; g.box(px-3.2,pz-3.2,px+3.2,pz+3.2,gy-1,gy+5,C('#2f4a2a')); }
       // stone gate piers with lamps where the drive meets the road
       for(const sg of [-1,1]){ const px=sx+tx*sg*9-dx*-6, pz=sz+tz*sg*9-dz*-6, gy=Math.max(ys2,chTerrain(px,pz)); g.box(px-2.2,pz-2.2,px+2.2,pz+2.2,gy-1,gy+9,STONE2); g.box(px-2.8,pz-2.8,px+2.8,pz+2.8,gy+9,gy+10,STONE); glow.box(px-1.2,pz-1.2,px+1.2,pz+1.2,gy+10,gy+12.6,lit); } }
     // a lower wing off one end, and a stone terrace on the garden side with a balustrade
@@ -5161,13 +5178,15 @@ function buildCrestHill3D(){
       else { OB(px,pz,-sa,ca,ca,sa,5,1.3,py+2.6,py+3.3,C('#7a5a3a')); OB(px+ca*1.4,pz+sa*1.4,-sa,ca,ca,sa,5,0.3,py+3.3,py+6,C('#7a5a3a')); } }
     // the overlook: a curved stone wall, benches facing town, coin binoculars, a flagpole
     const o=CHR.overlook; if(o){ const a0=Math.atan2(o.ny,o.nx); let prev=null;
-      for(let k=-10;k<=10;k++){ const a=a0+k*0.08, px=o.x+Math.cos(a)*46, pz=o.y+Math.sin(a)*46, q=[px,pz]; if(prev){ OB((prev[0]+q[0])/2,(prev[1]+q[1])/2,(q[0]-prev[0])/Math.hypot(q[0]-prev[0],q[1]-prev[1]),(q[1]-prev[1])/Math.hypot(q[0]-prev[0],q[1]-prev[1]),Math.cos(a),Math.sin(a),Math.hypot(q[0]-prev[0],q[1]-prev[1])/2+0.4,1.8,o.h-8,o.h+3.4,STONE,STONE2); } prev=q; }
-      for(const k of [-6,-2,2,6]){ const a=a0+k*0.08, px=o.x+Math.cos(a)*38, pz=o.y+Math.sin(a)*38, ca=Math.cos(a), sa=Math.sin(a); OB(px,pz,-sa,ca,ca,sa,5,1.3,o.h+2.6,o.h+3.3,C('#7a5a3a')); OB(px-ca*1.4,pz-sa*1.4,-sa,ca,ca,sa,5,0.3,o.h+3.3,o.h+6,C('#7a5a3a')); }
-      { const a=a0, px=o.x+Math.cos(a)*42, pz=o.y+Math.sin(a)*42; beam(g,[px,o.h,pz],[px,o.h+7,pz],0.8,C('#3a3a3c')); g.box(px-1.6,pz-1.2,px+1.6,pz+1.2,o.h+7,o.h+9.5,C('#2f5a3a')); }
+      for(let k=-10;k<=10;k++){ const a=a0+k*0.08, px=o.x+Math.cos(a)*46, pz=o.y+Math.sin(a)*46, q=[px,pz]; if(prev&&(k<-1||k>2)){ OB((prev[0]+q[0])/2,(prev[1]+q[1])/2,(q[0]-prev[0])/Math.hypot(q[0]-prev[0],q[1]-prev[1]),(q[1]-prev[1])/Math.hypot(q[0]-prev[0],q[1]-prev[1]),Math.cos(a),Math.sin(a),Math.hypot(q[0]-prev[0],q[1]-prev[1])/2+0.4,1.8,o.h-8,o.h+3.4,STONE,STONE2); } prev=q; }
+      for(const k of [-2,2]){ const a=a0+k*0.08, px=o.x+Math.cos(a)*46, pz=o.y+Math.sin(a)*46; OB(px,pz,-Math.sin(a),Math.cos(a),Math.cos(a),Math.sin(a),2.6,2.6,o.h-8,o.h+6,STONE,STONE2); glow.box(px-1,pz-1,px+1,pz+1,o.h+6,o.h+8,lit); }   // the gap for the hang-glider ramp, between two piers
+      for(const k of [-8,-4,4,8]){ const a=a0+k*0.08, px=o.x+Math.cos(a)*38, pz=o.y+Math.sin(a)*38, ca=Math.cos(a), sa=Math.sin(a); OB(px,pz,-sa,ca,ca,sa,5,1.3,o.h+2.6,o.h+3.3,C('#7a5a3a')); OB(px-ca*1.4,pz-sa*1.4,-sa,ca,ca,sa,5,0.3,o.h+3.3,o.h+6,C('#7a5a3a')); }
+      { const a=a0+0.3, px=o.x+Math.cos(a)*42, pz=o.y+Math.sin(a)*42; beam(g,[px,o.h,pz],[px,o.h+7,pz],0.8,C('#3a3a3c')); g.box(px-1.6,pz-1.2,px+1.6,pz+1.2,o.h+7,o.h+9.5,C('#2f5a3a')); }
       { const px=o.x-o.nx*30+o.ny*30, pz=o.y-o.ny*30-o.nx*30; beam(g,[px,o.h,pz],[px,o.h+48,pz],0.6,C('#d8d8d8')); g.quad([px,o.h+46,pz],[px,o.h+38,pz],[px+o.ny*14,o.h+38,pz-o.nx*14],[px+o.ny*14,o.h+46,pz-o.nx*14],[o.nx,0,o.ny],C('#c84a3a')); g.quad([px,o.h+46,pz],[px,o.h+38,pz],[px+o.ny*14,o.h+38,pz-o.nx*14],[px+o.ny*14,o.h+46,pz-o.nx*14],[-o.nx,0,-o.ny],C('#c84a3a')); }
       // parking stalls painted on the shelf
       for(let k=-3;k<=3;k++){ const a=a0+Math.PI/2, u=k*12, bx=o.x-o.nx*8+Math.cos(a)*u, bz=o.y-o.ny*8+Math.sin(a)*u; g.quad([bx-o.nx*12+Math.cos(a)*0.5,o.h+0.66,bz-o.ny*12+Math.sin(a)*0.5],[bx+o.nx*12+Math.cos(a)*0.5,o.h+0.66,bz+o.ny*12+Math.sin(a)*0.5],[bx+o.nx*12-Math.cos(a)*0.5,o.h+0.66,bz+o.ny*12-Math.sin(a)*0.5],[bx-o.nx*12-Math.cos(a)*0.5,o.h+0.66,bz-o.ny*12-Math.sin(a)*0.5],[0,1,0],WHT); }
-      g.disc(o.x,o.y,48,48,o.h+0.6,ASPH,0.2,32); }
+      { const M=32, rim=[], out=(x,y)=>{ const n=chNear(x,y); return !n||!n.road.loop||n.e>=0; }; for(let k=0;k<M;k++){ const a=k/M*Math.PI*2, ca=Math.cos(a), sa=Math.sin(a); let hi=48; if(!out(o.x+ca*hi,o.y+sa*hi)){ let lo=0; for(let s=0;s<14;s++){ const m=(lo+hi)/2; if(out(o.x+ca*m,o.y+sa*m)) lo=m; else hi=m; } hi=lo; } rim.push([o.x+ca*hi,o.y+sa*hi]); }   /* the shelf stops at the loop's outer edge instead of lying under its asphalt */
+        for(let k=0;k<M;k++){ const a=rim[k], b=rim[(k+1)%M]; g.tri([o.x,o.h+0.6,o.y],[b[0],o.h+0.6,b[1]],[a[0],o.h+0.6,a[1]],[0,1,0],ASPH,0.2); } } }
     /* the old Crest Park sign's two posts stood here, left inside Vista Ave when the sign moved beside the road; gone since v14.20 */ }
 
   // ---------- trees ----------
@@ -5256,7 +5275,7 @@ function buildVolcanoes3D(){
       g.quad(a.slice(0,3),b.slice(0,3),c.slice(0,3),d.slice(0,3),nn[1]<0?nn.map(v=>-v):nn,col); }
     hazeMesh(g,(px,py)=>opt.haze+(1-opt.haze)*(1-smooth(0,H*0.3,py)),-0.7); };
   mk(WW+30000,ys[3]-4000,4900,8200,{top:60,round:0.15,haze:0.30,pw:1.9,rid:0.12,ra:0.5,snow:0.4,rings:30,N:96});   // the big one, east: white and high, like Hood, with a rounded crown
-  mk(WW+8000,-25000,2600,9000,{crater:true,top:2100,haze:0.42});              // north: a blown-out top, like St. Helens
+  // (the flat-topped one to the north, a blown-out top like St. Helens, came out in v14.21: Ben didn't want it)
   mk(WW+25000,-20000,3500,9400,{top:300,round:0.18,haze:0.40,rings:24});      // northeast: broad and white, like Adams
 }
 function updatePeaks(haze,dark,wxK){ if(!G.peaks) return; const vis=wxK!=='fog'&&wxK!=='snow'&&wxK!=='rain'; const k=clamp(dark*1.2,0,1);
@@ -9728,13 +9747,16 @@ RIGS.fishAerial=(tx,ty,fx,fy,gb)=>{ const a=FS.aim+FS.cyaw, d=FS.cdist*clamp(G.z
 const GL={on:false,st:'',t:0,x:0,y:0,alt:0,hdg:0,bank:0,pit:0,v:0,vs:0,agl:0,site:null,wx:0,wy:0,flare:0,tum:0,scan:0,hudT:0,varT:0,landed:null,air:0,peak:0,dist:0,sx:0,sy:0};
 let GSITES=null;
 function glideSites(){ if(GSITES) return GSITES; const o=CHR.overlook, Q=PGQ.pads.find(p=>p.name==='quarry'), S=[];
-  if(o){ const lx=o.x-o.ny*82+o.nx*2, ly=o.y+o.nx*82+o.ny*2; S.push({id:'crest',name:'Crest Park overlook',x:lx,y:ly,hx:o.nx,hy:o.ny,fx:o.x+o.nx*575,fy:o.y+o.ny*575}); }   /* on the grass beside the stone wall, not over it */
+  if(o){ const R={x:o.x+o.nx*44,y:o.y+o.ny*44,len:26,flat:7,w:4,h0:o.h+1.4,dh:0};   /* from the overlook itself: through the gap in the stone wall and down a wooden ramp toward town */
+    for(const dh of [-5,-4,-3,-2,-1,0]){ let ok=true; for(let u=R.flat;u<=R.len;u+=2){ if(R.h0+dh*(u-R.flat)/(R.len-R.flat)-0.6<chTerrain(R.x+o.nx*u,R.y+o.ny*u)+1.2){ ok=false; break; } } if(ok){ R.dh=dh; break; } }
+    S.push({id:'crest',name:'Crest Park overlook',x:o.x+o.nx*30,y:o.y+o.ny*30,r:34,hx:o.nx,hy:o.ny,fx:o.x+o.nx*575,fy:o.y+o.ny*575,ramp:R}); }
   S.push({id:'sunset',name:'Sunset Point',x:WRSP.x-13,y:WRSP.z+4,hx:-1,hy:0,fx:-3705,fy:-4452,w:15,zone:[-3850,-3560,-4592,-4330]});
   if(Q) S.push({id:'quarry',name:'Quarry Hill',x:Q.x,y:Q.z+188,hx:0,hy:-1,fx:Q.x-10,fy:Q.z-770,w:14,zone:[Q.x-17,Q.x+17,Q.z+16,Q.z+204]});   /* a footpath up the slope behind the old quarry to the launch */
   /* each landing field wants open grass: nothing to clip within seventy units, and not somebody's driveway */
   const clear=(x,y,R)=>{ if(isPaved(x,y)||!ppFree(x,y)||Math.abs(gH(x+30,y)-gH(x-30,y))+Math.abs(gH(x,y+30)-gH(x,y-30))>10) return false; for(let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ const a=obsGrid.get((Math.floor(x/GC)+i)+','+(Math.floor(y/GC)+j)); if(a) for(const o of a){ if(o.t==='r'){ if(x>o.x-R&&x<o.x+o.w+R&&y>o.y-R&&y<o.y+o.h+R) return false; } else if(Math.hypot(x-o.x,y-o.y)<R+o.r) return false; } } return true; };
   for(const s of S){ s.a=Math.atan2(s.hy,s.hx); s.h=gH(s.x,s.y); if(!s.zone||s.id==='quarry'){ let done=clear(s.fx,s.fy,70); for(let r=30;r<=330&&!done;r+=30) for(let k=0;k<12&&!done;k++){ const a=k*Math.PI/6+r*0.07, x=s.fx+Math.cos(a)*r, y=s.fy+Math.sin(a)*r; if(clear(x,y,70)){ s.fx=x; s.fy=y; done=true; } } } s.fh=gH(s.fx,s.fy); } GSITES=S; return S; }
 function glideZones(){ for(const s of glideSites()) if(s.zone) wzRect(s.zone[0],s.zone[1],s.zone[2],s.zone[3],(x,z)=>terrainH(x,z)+0.2); }   /* the landing field out on the plateau: walkable ground */
+function glideRampH(s,x,y){ const R=s&&s.ramp; if(!R) return -1e9; const u=(x-R.x)*s.hx+(y-R.y)*s.hy, v=(y-R.y)*s.hx-(x-R.x)*s.hy; if(u<-1||u>R.len||Math.abs(v)>R.w+1) return -1e9; return R.h0+(u<=R.flat?0:R.dh*(u-R.flat)/(R.len-R.flat)); }   /* the deck of a launch ramp, for the run */
 function glideGround(x,y){ const g=gH(x,y); if(y>2&&!walkZone(x,y)&&terrainH(x,y)<WL+1) return {h:WL,water:true}; return {h:g,water:false}; }
 function glideInPlay(x,y){ if(walkZone(x,y)) return true; const c=worldClamp(x,y); return Math.abs(c.x-x)+Math.abs(c.y-y)<1; }
 function glideThermal(x,y,agl){ if(agl<18||agl>460||nightAmount()>0.3) return 0; const S=520, ci=Math.floor(x/S), cj=Math.floor(y/S); let up=0;
@@ -9742,7 +9764,7 @@ function glideThermal(x,y,agl){ if(agl<18||agl>460||nightAmount()>0.3) return 0;
   return up*({clear:1,cloudy:0.8,fog:0.5,rain:0.35,snow:0.3}[wx.k]||1); }
 function glideScan(dt){ GL.scan-=dt; if(GL.scan>0) return; GL.scan=0.3; if(GL.on) return;
   if(!walker.active||!walker.free||walker.goal!=null||walker.busy||PP.chase||PP.job||FS.on||CC.on||LC.on||mode!=='drive'){ promptHide('glide'); return; }
-  let near=null; for(const s of glideSites()) if(Math.hypot(walker.x-s.x,walker.y-s.y)<24) near=s;
+  let near=null; for(const s of glideSites()) if(Math.hypot(walker.x-s.x,walker.y-s.y)<(s.r||24)) near=s;
   if(!near){ promptHide('glide'); return; } GL.site=near; promptShow({id:'glide',pri:1,key:'h',cls:'glide',title:'HANG GLIDE',sub:`Run off ${near.name}. Lean with A and D, W for speed, S to slow and flare.`,yes:glideStart,hint:'<kbd>H</kbd> hang glide off the hill'}); }
 function glideStart(){ const s=GL.site; if(!s||GL.on||!walker.active) return; AU.init(); promptHide('glide'); promptHide('fish'); promptHide('land');
   Object.assign(GL,{on:true,st:'run',t:0,x:s.x,y:s.y,alt:gH(s.x,s.y),hdg:s.a,bank:0,pit:0,v:26,vs:0,agl:0,wx:-s.hx,wy:-s.hy,flare:0,tum:0,landed:null,air:0,peak:0,dist:0,sx:s.x,sy:s.y,outT:0,why:''});
@@ -9755,7 +9777,7 @@ function glideLand(hard,water){ const c0={x:GL.x,y:GL.y}; let p=ppSnap(GL.x,GL.y
   else { AU.noise(0.18,0.05,1200); for(const f of [523,659,784]) AU.tone(f,0.12,'triangle',0.04,[523,659,784].indexOf(f)*0.08); } }
 const glAnchor={get x(){ return walker.x; },get y(){ return walker.y; },get h(){ return gH(walker.x,walker.y)+24; },get hidden(){ return !walker.active; }};
 function glideUpdate(dt){ glideScan(dt); if(!GL.on) return; if(!walker.active||mode!=='drive'){ glideEnd(); return; } GL.t+=dt; const s=GL.site;
-  if(GL.st==='run'){ GL.v=Math.min(58,GL.v+dt*48); GL.x+=Math.cos(GL.hdg)*GL.v*dt; GL.y+=Math.sin(GL.hdg)*GL.v*dt; GL.alt=Math.max(gH(GL.x,GL.y),GL.alt-dt*14); walker.anim+=dt*14; walker.x=GL.x; walker.y=GL.y; walker.dir=GL.hdg;
+  if(GL.st==='run'){ GL.v=Math.min(58,GL.v+dt*48); GL.x+=Math.cos(GL.hdg)*GL.v*dt; GL.y+=Math.sin(GL.hdg)*GL.v*dt; GL.alt=Math.max(gH(GL.x,GL.y),glideRampH(s,GL.x,GL.y),GL.alt-dt*14); walker.anim+=dt*14; walker.x=GL.x; walker.y=GL.y; walker.dir=GL.hdg;
     if(GL.t>0.85){ GL.st='fly'; GL.t=0; GL.alt+=2.5; GL.vs=1; GL.v=58; AU.noise(0.6,0.07,1800); } return; }
   if(GL.st==='fly'){ const lr=(kRight()?1:0)-(kLeft()?1:0), ud=(kGas()?1:0)-(kBrake()?1:0); GL.air+=dt;
     GL.bank+=(lr*0.85-GL.bank)*Math.min(1,dt*3.0); GL.pit+=(ud-GL.pit)*Math.min(1,dt*2.4);
@@ -9808,8 +9830,13 @@ function glideBuild(){ const Q={}, S=glideSites(), col=(h)=>new THREE.Color(h);
     c.fillStyle='#f4f1e8'; c.textAlign='center'; c.textBaseline='middle'; c.font=`900 38px ${F_DISP}`; c.fillText(l1,128,46,226); c.font=`600 22px ${F_COND}`; c.fillText(l2,128,92,226);
     const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,8,16),[0,1,2,3,4,5].map(i=>i===0?new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(cv)}):MC('#4a3a2a'))); b.position.set(x,h+10.5,y); b.rotation.y=-fa; G.scene.add(b); };
   for(const s of S){ const q=slopeQ(s.x+s.hx*16,s.y+s.hy*16), ry=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),-s.a), mx=s.x+s.hx*16, my=s.y+s.hy*16;
-    P(new THREE.BoxGeometry(44,0.5,20),new THREE.Matrix4().compose(V(mx,gH(mx,my)+1.15,my),q.clone().multiply(ry),one),'#3f7a4a'); P(new THREE.BoxGeometry(3,0.5,20),new THREE.Matrix4().compose(V(mx+s.hx*23.6,gH(mx+s.hx*23.6,my+s.hy*23.6)+1.15,my+s.hy*23.6),slopeQ(mx+s.hx*23.6,my+s.hy*23.6).multiply(ry),one),'#f4f1e8');
-    { const sd=1; s.sock=sock(s.x-s.hy*30*sd+s.hx*18,s.y+s.hx*30*sd+s.hy*18); sign(s.x-s.hy*27*sd-s.hx*12,s.y+s.hx*27*sd-s.hy*12,s.a+Math.PI,'HANG GLIDER LAUNCH','ON FOOT · PRESS H'); }   /* both on the side away from the overlook's pavement */
+    if(s.ramp){ const R=s.ramp, H=u=>R.h0+(u<=R.flat?0:R.dh*(u-R.flat)/(R.len-R.flat)), at=u=>[R.x+s.hx*u,R.y+s.hy*u], lat=[-s.hy,s.hx];   /* the wooden ramp: a level landing through the wall, then the slope, on posts */
+      for(const [u0,u1] of [[0,R.flat],[R.flat,R.len]]){ const c=at((u0+u1)/2), L=Math.hypot(u1-u0,H(u1)-H(u0)), pit=new THREE.Quaternion().setFromAxisAngle(V(0,0,1),Math.atan2(H(u1)-H(u0),u1-u0)); P(new THREE.BoxGeometry(L+0.05,0.6,R.w*2),new THREE.Matrix4().compose(V(c[0],(H(u0)+H(u1))/2-0.3,c[1]),ry.clone().multiply(pit),one),'#8a6a48'); }
+      for(const u of [R.flat,(R.flat+R.len)/2,R.len-0.6]) for(const sg of [-1,1]){ const x=at(u)[0]+lat[0]*sg*(R.w-0.5), y=at(u)[1]+lat[1]*sg*(R.w-0.5), top=H(u)-0.6, bot=Math.min(top-0.3,chTerrain(x,y)-1.5); P(new THREE.BoxGeometry(0.8,top-bot,0.8),new THREE.Matrix4().compose(V(x,(top+bot)/2,y),ry,one),'#5a4430'); }
+      { const c=at(R.len-0.45); P(new THREE.BoxGeometry(0.9,0.12,R.w*2-0.4),new THREE.Matrix4().compose(V(c[0],H(R.len-0.45)+0.06,c[1]),ry.clone().multiply(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),Math.atan2(R.dh,R.len-R.flat))),one),'#f4f1e8'); }   /* a white lip at the end */
+      s.sock=sock(s.x+s.hx*16+lat[0]*52,s.y+s.hy*16+lat[1]*52); sign(s.x-s.hx*2-lat[0]*14,s.y-s.hy*2-lat[1]*14,s.a+Math.PI,'HANG GLIDER LAUNCH','ON FOOT · PRESS H'); }   /* the sock out past the wing tips, the sign on the shelf beside the run */
+    else { P(new THREE.BoxGeometry(44,0.5,20),new THREE.Matrix4().compose(V(mx,gH(mx,my)+1.15,my),q.clone().multiply(ry),one),'#3f7a4a'); P(new THREE.BoxGeometry(3,0.5,20),new THREE.Matrix4().compose(V(mx+s.hx*23.6,gH(mx+s.hx*23.6,my+s.hy*23.6)+1.15,my+s.hy*23.6),slopeQ(mx+s.hx*23.6,my+s.hy*23.6).multiply(ry),one),'#f4f1e8');
+      { const sd=1; s.sock=sock(s.x-s.hy*30*sd+s.hx*18,s.y+s.hx*30*sd+s.hy*18); sign(s.x-s.hy*27*sd-s.hx*12,s.y+s.hx*27*sd-s.hy*12,s.a+Math.PI,'HANG GLIDER LAUNCH','ON FOOT · PRESS H'); } }   /* both on the side away from the overlook's pavement */
     /* the landing field: an orange X you can see from the air, lifted clear of the grass, and its own windsock */
     const fh=gH(s.fx,s.fy)+0.95, d1=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),Math.PI/4), d2=new THREE.Quaternion().setFromAxisAngle(V(0,1,0),-Math.PI/4), fq=slopeQ(s.fx,s.fy);
     P(new THREE.BoxGeometry(64,0.4,8),new THREE.Matrix4().compose(V(s.fx,fh,s.fy),fq.clone().multiply(d1),one),'#f08a2a');
