@@ -2440,9 +2440,8 @@ function stairAlcove(ctx, room, below = 3.4 * HS) {
   B.box(M.log, 0.06, (DOOR + H) / 2, 0, 0.12, H - DOOR, 2.1);
   // the shaft, timber-lined, down to the ceiling of the room below
   const sh = -C.LOWER_Y - below;
-  B.box(M.log, 0.18, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7);
-  for (const s of [-1, 1]) B.box(M.log, 1.5, -sh / 2, s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
-  for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
+  shaftLining(ctx, new Rng(hash32(Math.round(room.zc * 100), room.side + 2, 5151)), 0.24, 2.76, -1.26, 1.26, -sh, -0.03);
+  ropeHelix(B, STAIR.cu, 0, C.LOWER_Y + 0.9, 0.9, 4.0);
   // rail around the back and sides of the opening
   B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
   for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
@@ -6207,9 +6206,8 @@ function stairWell(ctx, room, H, below, doorHalf, doorTop) {
   for (const s of [-1, 1]) B.box(M.log, 0.06, H / 2, s * (doorHalf + (1.7 - doorHalf) / 2), 0.12, H, 1.7 - doorHalf);
   B.box(M.log, 0.06, (doorTop + H) / 2, 0, 0.12, H - doorTop, 2 * doorHalf);
   const sh = -C.LOWER_Y - below;
-  B.box(M.log, 0.18, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7); B.box(M.log, 2.82, -sh / 2, 0, 0.12, sh, 2.6, 0, 0, 0, 0.7);
-  for (const s of [-1, 1]) B.box(M.log, 1.5, -sh / 2, s * 1.32, 2.76, sh, 0.12, 0, 0, 0, 0.7);
-  for (const y of [-1.2, -2.6, -4.0]) if (y > -sh + 0.3) for (const s of [-1, 1]) B.box(M.wood, 1.5, y, s * 1.2, 2.5, 0.16, 0.12);
+  shaftLining(ctx, new Rng(hash32(Math.round(room.zc * 100), room.side + 2, 5151)), 0.24, 2.76, -1.26, 1.26, -sh, -0.03);
+  ropeHelix(B, STAIR.cu, 0, C.LOWER_Y + 0.9, 0.9, 4.0);
   B.box(M.wood, 2.78, 0.95, 0, 0.08, 0.08, 2.5);
   for (const s of [-1, 1]) B.box(M.wood, 1.6, 0.95, s * 1.22, 2.3, 0.08, 0.08);
   for (const [u, v] of [[2.78, 1.22], [2.78, -1.22], [0.45, 1.22], [0.45, -1.22]]) B.box(M.wood, u, 0.5, v, 0.1, 1.0, 0.1);
@@ -9880,6 +9878,87 @@ Object.assign(MORE_BUILD, {
   },
 });
 
+/* ---- 38h_shaft.js ---- */
+/* ============================================================
+   v20.9: the shaft of the main spiral, as you see it going down.
+   No longer four flat walls of log texture: a lining of horizontal planks, course on course, each its own width and
+   thickness and tone, the odd one split or gone (the earth behind shows black through the gap), four hewn corner
+   posts, frames of timber pegged round at every storey, a brace or two, iron cramps, a rope handrail winding down
+   with the stair, a peg with a coil on it, webs in the corners.
+   Every timber laid on the planking sits a hand's breadth into it, never flush, so no two faces ever lie in one plane
+   (that flicker on the old trim was a timber flush against a wall).
+   ============================================================ */
+const _shm = {
+  back: () => cachedMat('sh-back', () => lam(T.earth, { color: 0x2a2018, bumpScale: 1.2 })),
+  boardA: () => cachedMat('sh-boardA', () => lam(T.log, { color: 0xc8b49a, bumpScale: 1.4 })),
+  boardB: () => cachedMat('sh-boardB', () => lam(T.log, { color: 0x9a8268, bumpScale: 1.4 })),
+  boardC: () => cachedMat('sh-boardC', () => lam(T.log, { color: 0x6e5a46, bumpScale: 1.4 })),
+};
+function shaftLining(ctx, R, u0, u1, v0, v1, yb, yt) {
+  const B = ctx.B, H = yt - yb, back = _shm.back();
+  const walls = [
+    { axis: 'v', c: u0, a: v0, b: v1, n: 1 },    // the near wall, under the corridor's side: faces +u
+    { axis: 'v', c: u1, a: v0, b: v1, n: -1 },   // the far wall
+    { axis: 'u', c: v0, a: u0, b: u1, n: 1 },    // the two side walls
+    { axis: 'u', c: v1, a: u0, b: u1, n: -1 },
+  ];
+  // a box laid against a wall: t along the wall from a to b, y from y0 to y1, standing out from the wall's face by
+  // out0..out1 (positive into the shaft)
+  const lay = (w, mat, a, b, y0, y1, out0, out1, rz = 0, ts = 0.9) => {
+    const mid = (a + b) / 2, d = (out0 + out1) / 2, th = out1 - out0;
+    if (w.axis === 'v') B.box(mat, w.c + w.n * d, (y0 + y1) / 2, mid, th, y1 - y0, b - a, rz, 0, 0, ts);
+    else B.box(mat, mid, (y0 + y1) / 2, w.c + w.n * d, b - a, y1 - y0, th, 0, 0, rz, ts);
+  };
+  for (const w of walls) {
+    // the earth behind it, dark, where a missing board lets it show
+    lay(w, back, w.a - 0.1, w.b + 0.1, yb, yt, -0.16, -0.06, 0, 0.6);
+    // the boards, course on course from the bottom up
+    for (let y = yb; y < yt - 0.02;) {
+      const hgt = Math.min(yt - y, R.range(0.17, 0.31)), joints = [w.a];
+      if (R.chance(0.55)) joints.push(lerp(w.a, w.b, R.range(0.25, 0.75)));
+      joints.push(w.b);
+      for (let k = 0; k < joints.length - 1; k++) {
+        const a = joints[k], b = joints[k + 1], roll = R.next();
+        if (roll < 0.05 && y > yb + 0.4 && y < yt - 0.6) continue;    // gone: the dark behind
+        const mat = R.pickW([_shm.boardA(), _shm.boardB(), _shm.boardC(), M.log], [3, 3, 1.4, 2]), th = R.range(0.04, 0.058), off = R.range(-0.008, 0.008), tilt = R.range(-0.006, 0.006);
+        if (roll > 0.94) {
+          // split along the grain: two strips, one a little proud of the other
+          const m = y + hgt * R.range(0.4, 0.6);
+          lay(w, mat, a + 0.005, b - 0.005, y + 0.006, m - 0.008, -th + off, off, tilt);
+          lay(w, mat, a + 0.005, b - 0.005, m + 0.004, y + hgt - 0.006, -th + off + 0.012, off + 0.012, -tilt);
+        } else lay(w, mat, a + 0.004, b - 0.004, y + 0.006, y + hgt - 0.006, -th + off, off, tilt);
+      }
+      y += hgt;
+    }
+  }
+  // the corner posts, hewn, full height, standing in the corners
+  for (const [u, v] of [[u0, v0], [u0, v1], [u1, v0], [u1, v1]]) {
+    const du = u === u0 ? 1 : -1, dv = v === v0 ? 1 : -1;
+    B.box(M.wood, u + du * 0.075, (yb + yt) / 2, v + dv * 0.075, 0.2, H, 0.2, R.range(-0.006, 0.006), 0, R.range(-0.006, 0.006), 0.8);
+  }
+  // the frames round at every storey: a timber on each wall, its back set into the boards, pegged at the ends
+  const frames = [];
+  for (let y = yt - R.range(1.1, 1.4); y > yb + 0.5; y -= R.range(1.3, 1.6)) frames.push(y);
+  for (const y of frames) for (const w of walls) {
+    const yy = y + R.range(-0.03, 0.03);
+    lay(w, M.wood, w.a + 0.17, w.b - 0.17, yy - 0.08, yy + 0.08, -0.03, 0.085, R.range(-0.008, 0.008), 0.8);
+    for (const t of [w.a + 0.28, w.b - 0.28]) { const [u, v] = w.axis === 'v' ? [w.c + w.n * 0.09, t] : [t, w.c + w.n * 0.09]; B.log(M.woodDark, u, yy, v, 0.018, 0.03, w.axis === 'v' ? 'x' : 'z', 6); }
+    if (R.chance(0.3)) { const t = lerp(w.a, w.b, R.range(0.3, 0.7)); const [u, v] = w.axis === 'v' ? [w.c + w.n * 0.088, t] : [t, w.c + w.n * 0.088]; w.axis === 'v' ? B.box(M.iron, u, yy, v, 0.012, 0.2, 0.035) : B.box(M.iron, u, yy, v, 0.035, 0.2, 0.012); }
+  }
+  // a brace or two, corner post to frame, its back in the boards too
+  for (let k = 0, n = R.int(1, 3); k < n && frames.length; k++) {
+    const w = R.pick(walls), y = R.pick(frames), drop = R.range(0.9, 1.25), fromA = R.chance(0.5), t0 = fromA ? w.a + 0.2 : w.b - 0.2, t1 = lerp(w.a, w.b, 0.5);
+    const P = (t, yy) => w.axis === 'v' ? V3(w.c + w.n * 0.035, yy, t) : V3(t, yy, w.c + w.n * 0.035);
+    if (y - drop - 0.1 < yb) continue;
+    B.beam(M.wood, P(t0, y - drop), P(t1, y - 0.1), 0.12, 0.1);
+  }
+  // a peg in the boards with a coil of rope hung on it; webs high and low in the corners
+  { const w = R.pick(walls), t = lerp(w.a, w.b, R.range(0.25, 0.75)), y = lerp(yb, yt, R.range(0.35, 0.7)), [u, v] = w.axis === 'v' ? [w.c + w.n * 0.06, t] : [t, w.c + w.n * 0.06];
+    B.log(M.woodDark, u, y, v, 0.02, 0.14, w.axis === 'v' ? 'x' : 'z', 6);
+    for (let k = 0; k < 3; k++) B.add(M.rope, new THREE.TorusGeometry(0.15 - k * 0.012, 0.014, 4, 14), mtx(w.axis === 'v' ? u + w.n * (0.03 + k * 0.02) : u, y - 0.14, w.axis === 'v' ? v : v + w.n * (0.03 + k * 0.02), 0, w.axis === 'v' ? Math.PI / 2 : 0, 0, 1, 1.25, 1), true); }
+  for (const [u, v, y] of [[u0 + 0.16, v1 - 0.16, yt - 0.25], [u1 - 0.16, v0 + 0.16, yb + 1.6]]) if (R.chance(0.7)) ctx.web(V3(u, y, v), V3(u < (u0 + u1) / 2 ? 0.7071 : -0.7071, 0, v < 0 ? 0.7071 : -0.7071), V3(0, -1, 0), R.range(0.35, 0.6), R.int(0, 3));
+}
+
 /* ---- 39_catalogue.js ---- */
 /* ============================================================
    The written catalogue: every useless thing on the wall, by hand, for the first ten passes.
@@ -12637,6 +12716,37 @@ function pieceLow(d) {
   d.m.updateMatrix(); const e = d.m.matrix.elements;
   return Math.abs(e[1]) * d.h[0] + Math.abs(e[5]) * d.h[1] + Math.abs(e[9]) * d.h[2];
 }
+// the footprint a settled piece will cover, flat, where its slide will end: an oblong on the floor
+function pieceFoot(d, q, px, pz) {
+  const ax = [_va.set(1, 0, 0).applyQuaternion(q).clone(), _va.set(0, 1, 0).applyQuaternion(q).clone(), _va.set(0, 0, 1).applyQuaternion(q).clone()];
+  let up = 0; for (let k = 1; k < 3; k++) if (Math.abs(ax[k].y) > Math.abs(ax[up].y)) up = k;
+  const o = [0, 1, 2].filter(k => k !== up), a = ax[o[0]], b = ax[o[1]], la = Math.hypot(a.x, a.z) || 1, lb = Math.hypot(b.x, b.z) || 1;
+  return { x: px, z: pz, ax: a.x / la, az: a.z / la, bx: b.x / lb, bz: b.z / lb, ha: d.h[o[0]], hb: d.h[o[1]], hv: d.h[up] };
+}
+// do two oblongs on the floor overlap (separating axes)
+function footsMeet(p, q) {
+  for (const [nx, nz] of [[p.ax, p.az], [p.bx, p.bz], [q.ax, q.az], [q.bx, q.bz]]) {
+    const dc = Math.abs((q.x - p.x) * nx + (q.z - p.z) * nz);
+    const rp = p.ha * Math.abs(p.ax * nx + p.az * nz) + p.hb * Math.abs(p.bx * nx + p.bz * nz);
+    const rq = q.ha * Math.abs(q.ax * nx + q.az * nz) + q.hb * Math.abs(q.bx * nx + q.bz * nz);
+    if (dc > rp + rq - 0.004) return false;
+  }
+  return true;
+}
+function restBase(d) {
+  const len = d.len, k = 7, f = pieceFoot(d, d.settle, d.m.position.x + d.v.x / k, d.m.position.z + d.v.z / k);
+  let base = d.floor + 0.0012 * ((len && len._restN || 0) % 4);
+  if (len && len.rests) for (const r of len.rests) if (Math.abs(r.floor - d.floor) < 0.3 && r.top > base && footsMeet(f, r)) base = r.top + 0.0015;
+  d.foot = f;
+  return base;
+}
+function restFoot(d) {
+  const len = d.len; if (!len) return;
+  const f = pieceFoot(d, d.m.quaternion, d.m.position.x, d.m.position.z);
+  f.top = d.base + 2 * f.hv; f.floor = d.floor;
+  (len.rests ||= []).push(f); len._restN = (len._restN || 0) + 1;
+  if (len.rests.length > 600) len.rests.splice(0, 100);
+}
 function stepPiece(d, dt) {
   const m = d.m;
   if (!d.settle) {
@@ -12657,6 +12767,9 @@ function stepPiece(d, dt) {
         _qb.setFromUnitVectors(yAxis, _vb.set(0, yAxis.y >= 0 ? 1 : -1, 0));
         d.settle = _qb.clone().multiply(m.quaternion);
         d.v.y = 0;
+        // where it will lie: on the floor, or on whatever pieces already lie under it, never in the same plane as
+        // them (two boards flush in one plane flicker as the eye moves)
+        d.base = restBase(d);
       }
     }
     return false;
@@ -12665,8 +12778,8 @@ function stepPiece(d, dt) {
   d.v.x -= d.v.x * f; d.v.z -= d.v.z * f;
   m.position.x += d.v.x * dt; m.position.z += d.v.z * dt;
   m.quaternion.slerp(d.settle, 1 - Math.exp(-9 * dt));
-  m.position.y = d.floor + pieceLow(d);
-  if (Math.hypot(d.v.x, d.v.z) < 0.01 && m.quaternion.angleTo(d.settle) < 0.004) { m.quaternion.copy(d.settle); m.position.y = d.floor + pieceLow(d); m.updateMatrix(); return true; }
+  { const ty = d.base + pieceLow(d); m.position.y += (ty - m.position.y) * (1 - Math.exp(-14 * dt)); if (m.position.y < d.floor + pieceLow(d)) m.position.y = d.floor + pieceLow(d); }
+  if (Math.hypot(d.v.x, d.v.z) < 0.01 && m.quaternion.angleTo(d.settle) < 0.004 && Math.abs(m.position.y - d.base - pieceLow(d)) < 0.002) { m.quaternion.copy(d.settle); m.position.y = d.base + pieceLow(d); m.updateMatrix(); restFoot(d); return true; }
   return false;
 }
 function updateDynamics(dt) {
