@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic39";
+import { TIMBER, GUTTER } from "../data/loftNet.js?v=logic40";
 
 /**
  * logic18: east-cavity TIMBER FRAMING (studs, joists, braces, beams, batting, wiring) +

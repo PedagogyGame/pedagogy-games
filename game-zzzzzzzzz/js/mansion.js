@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { ROOMS } from "./data/rooms.js?v=logic39";
-import { OBJECTS } from "./data/objects.js?v=logic39";
-import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic39";
-import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic39";
-import { TRACK_PATHS } from "./data/tracks.js?v=logic39";
-import { buildLabGarage } from "./labGarage.js?v=logic39";
+import { ROOMS } from "./data/rooms.js?v=logic40";
+import { OBJECTS } from "./data/objects.js?v=logic40";
+import { buildLayerShells, buildPedestal } from "./meshes.js?v=logic40";
+import { isMuseumObject, museumPlaceholderDef, hydrateMuseumObject } from "./museumGlb.js?v=logic40";
+import { LOFT_AUTO_PORTALS, CHANDELIER, CONVEYOR, ROOF_LIFT, FOUNTAIN } from "./data/loftNet.js?v=logic40";
+import { TRACK_PATHS } from "./data/tracks.js?v=logic40";
+import { buildLabGarage } from "./labGarage.js?v=logic40";
 
 // logic6: attic_up stairwell (landing ceiling + attic floor). Stair footprint x -3.05..-1.75.
 const ATTIC_STAIRWELL = { minX: -3.10, maxX: -1.70, minZ: 1.70, maxZ: 4.70 };
@@ -13,6 +14,7 @@ export class Mansion {
   constructor(scene) {
     this.scene = scene;
     this.interactives = [];
+    this._museumQueue = []; // logic40: lazy GLB hydrations, Explore-only
     this.colliders = [];
     this.floorRegions = [];
     this.rugRegions = []; // logic9: rugs / floor frame lips are drivable surfaces (car sits ON them)
@@ -2900,7 +2902,13 @@ export class Mansion {
       }
       // rug / floor: no extra prop
 
-      const obj = buildLayerShells(def);
+      const obj = buildLayerShells(isMuseumObject(def.id) ? museumPlaceholderDef(def) : def);
+      if (isMuseumObject(def.id)) {
+        obj.userData.def = def; // real GLB layer list (placeholder used a matching builder count)
+        obj.userData.museumPending = true;
+        obj.userData.surface = surface;
+        obj.userData.floorY = cy;
+      }
       let yOff = 1.02; // pedestal top ~0.97
       if (def.monument) yOff = 0.5;
       else if (surface === "rug" || surface === "floor") yOff = 0.42;
@@ -2909,16 +2917,11 @@ export class Mansion {
       else if (surface === "pedestal") yOff = 1.02;
       else if (surface === "table" || surface === "bench" || surface === "desk" || surface === "planter" || surface === "shelf" || surface === "stand") yOff = 1.08;
       obj.position.set(px, cy + yOff, pz);
-      if (def.monument) obj.scale.multiplyScalar(1.1);
+      if (def.monument && !isMuseumObject(def.id)) obj.scale.multiplyScalar(1.1);
       // logic26 audit: one fixed yOff per surface left small curios hovering up to 28 cm and big ones sunk up to 31 cm
       // into their pedestal / bench / crate / pot. Sit every curio's lowest point exactly on its support's top.
-      {
-        const SUP = { pedestal: 0.97, crate: 0.5, stump: 0.55, rock: 0.6, table: 0.9, bench: 0.9, desk: 0.9, planter: 0.9, shelf: 0.995, stand: 0.995, garden: 0.39, rug: 0.05, floor: 0.0 };
-        obj.updateMatrixWorld(true);
-        const bb = new THREE.Box3().setFromObject(obj);
-        if (Number.isFinite(bb.min.y)) { obj.position.y += cy + (def.monument ? 0 : (SUP[surface] ?? 0.97)) + 0.004 - bb.min.y; yOff = obj.position.y - cy; }
-        obj.userData.supportY = cy + (def.monument ? 0 : (SUP[surface] ?? 0.97));
-      }
+      this._sitOnSupport(obj, cy, surface, def.monument);
+      if (isMuseumObject(def.id)) this._museumQueue.push(obj);
       obj.userData.interactable = true;
       obj.userData.objectId = def.id;
       obj.visible = true;
@@ -2964,6 +2967,41 @@ export class Mansion {
       group.add(hit);
       this.interactives.push(hit);
     }
+  }
+
+
+  _sitOnSupport(obj, cy, surface, monument) {
+    const SUP = { pedestal: 0.97, crate: 0.5, stump: 0.55, rock: 0.6, table: 0.9, bench: 0.9, desk: 0.9, planter: 0.9, shelf: 0.995, stand: 0.995, garden: 0.39, rug: 0.05, floor: 0.0 };
+    obj.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(obj);
+    if (Number.isFinite(bb.min.y)) obj.position.y += cy + (monument ? 0 : (SUP[surface] ?? 0.97)) + 0.004 - bb.min.y;
+    obj.userData.supportY = cy + (monument ? 0 : (SUP[surface] ?? 0.97));
+    if (obj.userData.hitProxy) obj.userData.hitProxy.position.copy(obj.position);
+  }
+
+  /** logic40: swap the procedural placeholder for the museum GLB, then re-sit on the furniture. */
+  async hydrateMuseumObject(obj) {
+    if (!obj || obj.userData.museumReady) return obj;
+    const def = obj.userData.def;
+    if (!def || !isMuseumObject(def.id)) return obj;
+    await hydrateMuseumObject(obj, def, obj.userData.surface);
+    const cy = obj.userData.floorY ?? (obj.userData.supportY || obj.position.y);
+    this._sitOnSupport(obj, cy, obj.userData.surface, def.monument);
+    return obj;
+  }
+
+  /** logic40: start at most one nearby GLB load per call so Drive/Explore frames stay light. */
+  hydrateMuseumNearby(pos, radius = 12) {
+    if (!pos || this._museumHydrating) return;
+    const pending = (this._museumQueue || []).filter((o) => o.userData.museumPending);
+    if (!pending.length) return;
+    let best = null, bestD = radius;
+    for (const o of pending) {
+      const d = o.position.distanceTo(pos);
+      if (d < bestD) { best = o; bestD = d; }
+    }
+    if (!best) return;
+    this._museumHydrating = this.hydrateMuseumObject(best).finally(() => { this._museumHydrating = null; });
   }
 
   _addWindows(group, wall, p, floorY, h) {

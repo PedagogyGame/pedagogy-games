@@ -1,18 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic39";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic39";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic39";
-import { ROOMS } from "../data/rooms.js?v=logic39";
+import { loftSolids } from "./loftNet.js?v=logic40";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic40";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic40";
+import { ROOMS } from "../data/rooms.js?v=logic40";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic39";
-import { TrackSystem } from "./tracks.js?v=logic39";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic39";
-import { EngineAudio } from "./engineAudio.js?v=logic39";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic39";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic39";
-import { TOWER, towerSolids } from "../data/tower.js?v=logic39";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic39";
-import { TreeCritters } from "./treehouse.js?v=logic39";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic39";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic40";
+import { TrackSystem } from "./tracks.js?v=logic40";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic40";
+import { EngineAudio } from "./engineAudio.js?v=logic40";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic40";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic40";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic40";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic40";
+import { TreeCritters } from "./treehouse.js?v=logic40";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic40";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.

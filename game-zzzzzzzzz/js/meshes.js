@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { isMuseumObject, museumPlaceholderDef } from "./museumGlb.js?v=logic40";
 
 /** Shared vertical cut plane — enabled only while inspecting (see slice.js). */
 export const SHARED_CLIP_PLANE = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0.02);
@@ -10,6 +11,7 @@ export const EXPLODE_SHAPES = new Set([
 
 export function isConcentricDef(def) {
   if (!def) return true;
+  if (def.museumGlb) return false; // logic40: Ben's assembly GLBs peel layer-by-layer
   const shape = (def.shape || "").toLowerCase();
   if (EXPLODE_SHAPES.has(shape)) return false;
   if (["piano", "violin", "venus_flytrap"].includes(def.id)) return false;
@@ -2293,8 +2295,16 @@ thunderegg: build_thunderegg,
 };
 
 export function buildLayerShells(def) {
-  const fn = BUILDERS[def.id] || buildGeneric;
-  return fn(def);
+  // logic40: procedural builders still expect their original layer counts.
+  const museum = def && isMuseumObject(def.id);
+  const buildDef = museum ? museumPlaceholderDef(def) : def;
+  const fn = BUILDERS[buildDef.id] || buildGeneric;
+  const root = fn(buildDef);
+  if (museum) {
+    root.userData.def = def;
+    root.userData.museumPending = true;
+  }
+  return root;
 }
 
 export function buildPedestal(color = 0x5d4037) {

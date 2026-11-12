@@ -1,15 +1,15 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic39";
-import { Player } from "./player.js?v=logic39";
-import { Mansion } from "./mansion.js?v=logic39";
-import { InspectMode } from "./inspect.js?v=logic39";
-import { SliceSystem } from "./slice.js?v=logic39";
-import { DriveMode } from "./drive/driveMode.js?v=logic39";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic39";
-import { OBJECTS } from "./data/objects.js?v=logic39";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic39";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic39";
-import { Skyline33 } from "./skyline33.js?v=logic39";
+import { batchStatic } from "./batch.js?v=logic40";
+import { Player } from "./player.js?v=logic40";
+import { Mansion } from "./mansion.js?v=logic40";
+import { InspectMode } from "./inspect.js?v=logic40";
+import { SliceSystem } from "./slice.js?v=logic40";
+import { DriveMode } from "./drive/driveMode.js?v=logic40";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic40";
+import { OBJECTS } from "./data/objects.js?v=logic40";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic40";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic40";
+import { Skyline33 } from "./skyline33.js?v=logic40";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;
@@ -623,7 +623,7 @@ canvas.addEventListener("contextmenu", (e) => { if (mode === "inspect") { e.prev
   });
 }
 window.__MOTU_EXIT_INSPECT__ = () => exitInspect(false);
-window.__MOTU_INSPECT__ = (id) => { const t = mansion && mansion.getInteractives().find((o) => o.userData.objectId === id && o.userData.layers); if (t) enterInspect(t); return mode; }; // logic26 test hook
+window.__MOTU_INSPECT__ = (id) => { const t = mansion && mansion.getInteractives().find((o) => o.userData.objectId === id && o.userData.layers); if (t) return enterInspect(t); return mode; }; // logic26 test hook; logic40 may return a Promise while a museum GLB loads
 window.__MOTU_MODE__ = () => mode;
 window.__MOTU_CAM__ = () => camera.position.toArray().map((v) => +v.toFixed(3));
 
@@ -692,13 +692,16 @@ function colorCss(hex) {
   return "#" + (hex >>> 0).toString(16).padStart(6, "0");
 }
 
-function enterInspect(target) {
+async function enterInspect(target) {
   if (playMode !== "explore" || !mansion || !inspect || !slice) return;
   const id = target.userData.objectId;
   const obj = target.userData.target || target;
   const def = OBJECTS[id];
   if (!def) return;
   if (!obj.userData.def) obj.userData.def = def;
+  if (obj.userData.museumPending && mansion.hydrateMuseumObject) {
+    try { await mansion.hydrateMuseumObject(obj); } catch (err) { console.warn("[museum] hydrate failed", id, err); return; }
+  }
   if (!obj.userData.layers) {
     const real = mansion.getInteractives().find((o) => o.userData.layers && o.userData.objectId === id);
     if (!real) return;
@@ -1017,6 +1020,7 @@ function tick() {
       mansion.updateFireflies(t);
     } else if (mode === "roam") {
       player.update(dt, mansion.getWalkColliders ? mansion.getWalkColliders() : mansion.getColliders());
+      if (playMode === "explore" && mansion.hydrateMuseumNearby) mansion.hydrateMuseumNearby(player.position);
       updateHover();
       updateRoomBadge(player.position, { whisper: true });
       updateCuriosityGlints(player.position, t);
