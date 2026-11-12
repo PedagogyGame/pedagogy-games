@@ -1,11 +1,11 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic37";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic37";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic38";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic38";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic37";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic37";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic37";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic37";
-import { towerDeckAt } from "../data/tower.js?v=logic37";
+import { ROOMS } from "../data/rooms.js?v=logic38";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic38";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic38";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic38";
+import { towerDeckAt } from "../data/tower.js?v=logic38";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.

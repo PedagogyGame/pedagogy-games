@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LAB, LAB_PATH_DEFS, inLab } from "./data/labGarage.js?v=logic37";
+import { LAB, LAB_PATH_DEFS, inLab } from "./data/labGarage.js?v=logic38";
 
 /**
  * logic19 BACKYARD LAB GARAGE — shell (walls / garage door / side window / roof), luxury

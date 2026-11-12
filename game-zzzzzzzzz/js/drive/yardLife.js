@@ -13,7 +13,7 @@
  *         lab window road. 120 s without seeing the car → it gives up, walks home, lies down (cooldown).
  */
 import * as THREE from "three";
-import { LIFT_APRONS } from "./world.js?v=logic37";
+import { LIFT_APRONS } from "./world.js?v=logic38";
 
 export const DOG_T = {
   house: { x: 45.4, z: 15.2, yaw: -Math.PI / 2 }, // door faces west (toward the garage / yard)
@@ -52,28 +52,70 @@ function buildYardProps(root, solids) {
   const g = new THREE.Group(); g.name = "dog_yard"; root.add(g);
   const add = (geo, m, x, y, z, ry = 0, rx = 0, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
   const solid = (x0, y0, z0, x1, y1, z1, tag, dogOnly = false) => { const b = new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)); b.driveKind = "pillar"; b.yard = tag; b.dogOnly = dogOnly; solids.push(b); return b; };
-  const slate = mat(0x3a3430, 0.82), roofM = mat(0x1f2633, 0.55, 0.35), trim = neon(0x2ee6ff, 1.2), dark = mat(0x121418, 0.9);
-  // DOGHOUSE (1.0 × 0.9 × 0.95, pitched roof, arched dark door, cyan eave line, brass name plate "BRUNO")
+  const plank = mat(0x7a766e, 0.86), plank2 = mat(0x6e6a63, 0.86), roofM = new THREE.MeshStandardMaterial({ color: 0x8fa0ae, roughness: 0.35, metalness: 0.72, side: THREE.DoubleSide }); /* pale steel-blue standing-seam */
+  const trim = neon(0x2ee6ff, 0.7), dark = mat(0x121418, 0.9), brass = mat(0x8a7344, 0.35, 0.8), seamM = mat(0xb8c4ce, 0.28, 0.85);
+  /* DOGHOUSE (1.0 × 0.9 × 0.95) — grey horizontal-plank siding, standing-seam roof, arched brass door, "BRUNO" plate */
   const hx = H.x, hz = H.z, W = 0.9, D = 1.0, WH = 0.62;
-  add(new THREE.BoxGeometry(D, 0.06, W), mat(0x2a2522, 0.9), hx, 0.03, hz);
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(D, WH, 0.05), slate, hx, 0.06 + WH / 2, hz + s * (W / 2 - 0.025));
-  add(new THREE.BoxGeometry(0.05, WH, W), slate, hx + D / 2 - 0.025, 0.06 + WH / 2, hz); // back (east)
-  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.05, WH, 0.24), slate, hx - D / 2 + 0.025, 0.06 + WH / 2, hz + s * 0.33); // front jambs
-  add(new THREE.BoxGeometry(0.05, 0.14, 0.42), slate, hx - D / 2 + 0.025, 0.06 + WH - 0.07, hz);
-  add(new THREE.BoxGeometry(0.02, 0.46, 0.4), dark, hx - D / 2 + 0.03, 0.29, hz); // dark doorway
+  add(new THREE.BoxGeometry(D, 0.06, W), mat(0x4a4742, 0.9), hx, 0.03, hz);
+  const nPlank = 8, ph = WH / nPlank;
+  for (const s of [-1, 1]) { /* N/S side walls, horizontal planks */
+    for (let i = 0; i < nPlank; i++) add(new THREE.BoxGeometry(D, ph - 0.006, 0.05), i % 2 ? plank : plank2, hx, 0.06 + ph * (i + 0.5), hz + s * (W / 2 - 0.025));
+  }
+  for (let i = 0; i < nPlank; i++) add(new THREE.BoxGeometry(0.05, ph - 0.006, W), i % 2 ? plank : plank2, hx + D / 2 - 0.025, 0.06 + ph * (i + 0.5), hz); /* back (east) */
+  /* front (west): arched doorway */
+  const doorW = 0.42, doorH = 0.50, archR = doorW / 2, archY = 0.06 + doorH - archR;
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < nPlank; i++) add(new THREE.BoxGeometry(0.05, ph - 0.006, (W - doorW) / 2 - 0.01), i % 2 ? plank : plank2, hx - D / 2 + 0.025, 0.06 + ph * (i + 0.5), hz + s * ((W + doorW) / 4 + 0.005));
+  }
+  add(new THREE.BoxGeometry(0.05, 0.12, doorW), plank, hx - D / 2 + 0.025, 0.06 + WH - 0.06, hz); /* lintel over arch */
+  add(new THREE.BoxGeometry(0.02, 0.48, 0.40), dark, hx - D / 2 + 0.03, 0.30, hz); /* dark interior */
+  /* brass arch trim */
+  for (const s of [-1, 1]) add(new THREE.BoxGeometry(0.02, doorH - archR, 0.016), brass, hx - D / 2 - 0.002, 0.06 + (doorH - archR) / 2, hz + s * archR);
+  {
+    const curve = new THREE.EllipseCurve(0, archY, archR, archR, 0, Math.PI, false, 0);
+    const pts = curve.getPoints(14).map((p) => new THREE.Vector3(hx - D / 2 - 0.002, p.y, hz + p.x));
+    const path = new THREE.CatmullRomCurve3(pts);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(path, 14, 0.01, 5, false), brass);
+    tube.castShadow = tube.receiveShadow = true; g.add(tube);
+  }
   const roofLen = D + 0.16, half = W / 2 + 0.1, pitch = 0.62;
   for (const s of [-1, 1]) {
-    const r = add(new THREE.BoxGeometry(roofLen, 0.04, half / Math.cos(pitch) + 0.02), roofM, hx, 0.06 + WH + Math.tan(pitch) * half / 2, hz + s * half / 2, 0, s * pitch);
-    void r;
-    add(new THREE.BoxGeometry(roofLen, 0.012, 0.012), trim, hx, 0.06 + WH + 0.005, hz + s * (half + 0.0)); // eave neon
+    add(new THREE.BoxGeometry(roofLen, 0.035, half / Math.cos(pitch) + 0.02), roofM, hx, 0.06 + WH + Math.tan(pitch) * half / 2, hz + s * half / 2, 0, s * pitch);
+    /* standing seams (ridge-to-eave ribs) */
+    for (let k = -3; k <= 3; k++) {
+      add(new THREE.BoxGeometry(0.014, 0.02, half / Math.cos(pitch) + 0.01), seamM, hx + k * (roofLen - 0.08) / 6, 0.06 + WH + Math.tan(pitch) * half / 2 + 0.016, hz + s * half / 2, 0, s * pitch);
+    }
+    add(new THREE.BoxGeometry(roofLen, 0.010, 0.010), trim, hx, 0.06 + WH + 0.005, hz + s * half); /* faint eave line */
   }
-  // gable fronts
+  add(new THREE.BoxGeometry(roofLen, 0.02, 0.02), seamM, hx, 0.06 + WH + Math.tan(pitch) * half + 0.01, hz); /* ridge cap */
   const gab = new THREE.Shape(); gab.moveTo(-W / 2, 0); gab.lineTo(W / 2, 0); gab.lineTo(0, Math.tan(pitch) * W / 2); gab.closePath();
-  for (const s of [-1, 1]) add(new THREE.ShapeGeometry(gab), new THREE.MeshStandardMaterial({ color: 0x3a3430, roughness: 0.85, side: THREE.DoubleSide }), hx + s * (D / 2 - 0.02), 0.06 + WH, hz, Math.PI / 2);
-  add(new THREE.BoxGeometry(0.01, 0.05, 0.2), mat(0x8a7344, 0.4, 0.7), hx - D / 2 - 0.004, 0.06 + WH - 0.03, hz); // name plate
-  add(new THREE.CylinderGeometry(0.11, 0.09, 0.05, 18), mat(0x2b3038, 0.35, 0.7), hx - D / 2 - 0.35, 0.025, hz + 0.32); // steel bowl
-  add(new THREE.CylinderGeometry(0.095, 0.095, 0.01, 18), mat(0x1a2a33, 0.1, 0.2), hx - D / 2 - 0.35, 0.045, hz + 0.32);
-  add(new THREE.CylinderGeometry(0.06, 0.07, 0.03, 10), mat(0x5a4a3a, 0.9), hx - D / 2 - 0.55, 0.015, hz - 0.35, 0, 0, Math.PI / 2.6); // chew bone-ish
+  for (const s of [-1, 1]) add(new THREE.ShapeGeometry(gab), new THREE.MeshStandardMaterial({ color: 0x7a766e, roughness: 0.86, side: THREE.DoubleSide }), hx + s * (D / 2 - 0.02), 0.06 + WH, hz, Math.PI / 2);
+  /* brass "BRUNO" plate */
+  {
+    let plateMat = brass;
+    if (typeof document !== "undefined" && document.createElement) {
+      const c = document.createElement("canvas"); c.width = 256; c.height = 64; const x = c.getContext("2d");
+      if (x) {
+        x.fillStyle = "#8a7344"; x.fillRect(0, 0, 256, 64);
+        x.strokeStyle = "#c4a86a"; x.lineWidth = 6; x.strokeRect(4, 4, 248, 56);
+        x.fillStyle = "#2a2214"; x.font = "bold 36px ui-sans-serif, system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+        x.fillText("BRUNO", 128, 34);
+        const tex = new THREE.CanvasTexture(c); if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+        plateMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.4, metalness: 0.7 });
+      }
+    }
+    const plate = add(new THREE.BoxGeometry(0.012, 0.07, 0.22), plateMat, hx - D / 2 - 0.006, 0.06 + WH - 0.02, hz);
+    void plate;
+  }
+  /* steel food bowl and a bone beside it (same offsets as before) */
+  add(new THREE.CylinderGeometry(0.11, 0.085, 0.05, 18), mat(0x8a9298, 0.28, 0.85), hx - D / 2 - 0.35, 0.025, hz + 0.32);
+  add(new THREE.CylinderGeometry(0.07, 0.07, 0.02, 16), mat(0x2a3036, 0.4, 0.4), hx - D / 2 - 0.35, 0.04, hz + 0.32);
+  const boneM = mat(0xd8d0c4, 0.7, 0.05);
+  add(new THREE.CylinderGeometry(0.018, 0.018, 0.14, 8), boneM, hx - D / 2 - 0.55, 0.018, hz - 0.35, 0, 0, Math.PI / 2.6);
+  add(new THREE.SphereGeometry(0.028, 8, 6), boneM, hx - D / 2 - 0.55 + 0.06, 0.022, hz - 0.35 - 0.03);
+  add(new THREE.SphereGeometry(0.028, 8, 6), boneM, hx - D / 2 - 0.55 + 0.07, 0.022, hz - 0.35 + 0.02);
+  add(new THREE.SphereGeometry(0.028, 8, 6), boneM, hx - D / 2 - 0.55 - 0.06, 0.022, hz - 0.35 + 0.03);
+  add(new THREE.SphereGeometry(0.028, 8, 6), boneM, hx - D / 2 - 0.55 - 0.07, 0.022, hz - 0.35 - 0.02);
   solid(hx - D / 2, 0, hz - W / 2 - 0.06, hx + D / 2, 1.05, hz + W / 2 + 0.06, "doghouse");
   solid(hx - D / 2 - 0.46, 0, hz + 0.21, hx - D / 2 - 0.24, 0.05, hz + 0.43, "bowl");
 
@@ -177,72 +219,89 @@ function buildYardProps(root, solids) {
 
 /* ───────────────────────────── dog ───────────────────────────── */
 function buildDog() {
+  /* logic38: slim grey-brown dog, long legs, floppy ears, raised tail, dark joints.
+   * Joint origins (body/neck/head/jaw/ears/hips/knees/paws/tail) stay exactly as logic37 so the existing poses work. */
   const root = new THREE.Group(); root.name = "yard_dog";
-  const fur = mat(0x2b2724, 0.92), fur2 = mat(0x3a332d, 0.92), muzzleM = mat(0x4a423b, 0.9), nose = mat(0x0b0b0c, 0.3, 0.1);
-  const eyeM = new THREE.MeshStandardMaterial({ color: 0x1a1208, emissive: 0xffa040, emissiveIntensity: 0.35, roughness: 0.2 });
-  const collarM = mat(0x2a3038, 0.4, 0.7), led = neon(0x2ee6ff, 1.6);
-  const body = new THREE.Group(); root.add(body); // body pivot at hip/shoulder line
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.52, 6, 12), fur); torso.rotation.z = Math.PI / 2; torso.scale.set(1, 1, 0.82); body.add(torso);
-  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), fur2); chest.position.set(0.26, -0.02, 0); chest.scale.set(1, 1.05, 0.85); body.add(chest);
+  const fur = mat(0x4e4a44, 0.92), fur2 = mat(0x45423c, 0.92), muzzleM = mat(0x3a3733, 0.9), nose = mat(0x0b0b0c, 0.3, 0.1);
+  const joint = mat(0x2c2926, 0.7, 0.15);
+  const eyeM = new THREE.MeshStandardMaterial({ color: 0x1a1208, emissive: 0xffa040, emissiveIntensity: 0.28, roughness: 0.2 });
+  const collarM = mat(0x2a3038, 0.4, 0.7), led = neon(0x2ee6ff, 1.2);
+  const body = new THREE.Group(); root.add(body);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.56, 6, 12), fur); torso.rotation.z = Math.PI / 2; torso.scale.set(1, 1, 0.72); body.add(torso);
+  const chest = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 10), fur2); chest.position.set(0.26, -0.02, 0); chest.scale.set(1.05, 1.0, 0.72); body.add(chest);
+  const rump = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), fur); rump.position.set(-0.26, -0.01, 0); rump.scale.set(1.0, 0.95, 0.7); body.add(rump);
   const neck = new THREE.Group(); neck.position.set(0.36, 0.08, 0); body.add(neck);
-  const neckM = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.26, 10), fur); neckM.rotation.z = -0.9; neckM.position.set(0.07, 0.07, 0); neck.add(neckM);
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.018, 6, 16), collarM); collar.rotation.y = Math.PI / 2; collar.rotation.x = 0.6; collar.position.set(0.05, 0.05, 0); neck.add(collar);
-  const ledM = new THREE.Mesh(new THREE.TorusGeometry(0.106, 0.004, 4, 16, Math.PI * 0.7), led); ledM.rotation.copy(collar.rotation); ledM.position.copy(collar.position); neck.add(ledM);
+  const neckM = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.10, 0.28, 10), fur); neckM.rotation.z = -0.9; neckM.position.set(0.07, 0.07, 0); neck.add(neckM);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.016, 6, 16), collarM); collar.rotation.y = Math.PI / 2; collar.rotation.x = 0.6; collar.position.set(0.05, 0.05, 0); neck.add(collar);
+  const ledM = new THREE.Mesh(new THREE.TorusGeometry(0.096, 0.004, 4, 16, Math.PI * 0.7), led); ledM.rotation.copy(collar.rotation); ledM.position.copy(collar.position); neck.add(ledM);
   const head = new THREE.Group(); head.position.set(0.17, 0.18, 0); neck.add(head);
-  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 10), fur); skull.scale.set(1.15, 0.95, 0.95); head.add(skull);
-  const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.085, 0.1), muzzleM); muzzle.position.set(0.14, -0.035, 0); head.add(muzzle);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.10, 14, 10), fur); skull.scale.set(1.20, 0.92, 0.85); head.add(skull);
+  const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.055, 0.16, 10), muzzleM); muzzle.rotation.z = -Math.PI / 2; muzzle.position.set(0.14, -0.02, 0); head.add(muzzle);
   const jaw = new THREE.Group(); jaw.position.set(0.07, -0.075, 0); head.add(jaw);
-  const jawM = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.025, 0.085), muzzleM); jawM.position.set(0.07, 0, 0); jaw.add(jawM);
+  const jawM = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.022, 0.07), muzzleM); jawM.position.set(0.07, 0, 0); jaw.add(jawM);
   const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.008, 0.045), mat(0x6a3a40, 0.6)); tongue.position.set(0.1, 0.004, 0); jaw.add(tongue);
-  const noseM = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), nose); noseM.position.set(0.225, -0.005, 0); head.add(noseM);
-  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), eyeM); e.position.set(0.09, 0.035, s * 0.06); head.add(e); }
+  const noseM = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), nose); noseM.position.set(0.23, -0.01, 0); head.add(noseM);
+  for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 6), eyeM); e.position.set(0.08, 0.032, s * 0.052); head.add(e); }
   const ears = [];
   for (const s of [-1, 1]) {
     const ep = new THREE.Group(); ep.position.set(-0.02, 0.07, s * 0.07); head.add(ep);
-    const ear = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.07), fur2); ear.position.set(0, -0.05, 0); ep.add(ear);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 6), fur2); ear.scale.set(0.45, 1.55, 0.7); ear.position.set(0.01, -0.07, 0); ep.add(ear);
     ep.userData.s = s; ears.push(ep);
   }
   const legs = [];
   for (const [lx, s, front] of [[0.25, -1, 1], [0.25, 1, 1], [-0.27, -1, 0], [-0.27, 1, 0]]) {
     const hip = new THREE.Group(); hip.position.set(lx, -0.06, s * 0.1); body.add(hip);
-    const up = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 4, 8), front ? fur2 : fur); up.position.y = -0.1; hip.add(up);
+    const hj = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), joint); hip.add(hj);
+    const up = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.18, 4, 8), front ? fur2 : fur); up.position.y = -0.1; hip.add(up);
     const knee = new THREE.Group(); knee.position.y = -0.2; hip.add(knee);
-    const lo = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.15, 4, 8), fur2); lo.position.y = -0.09; knee.add(lo);
-    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 6), muzzleM); paw.scale.set(1.4, 0.6, 1); paw.position.set(0.02, -0.19, 0); knee.add(paw);
+    const kj = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), joint); knee.add(kj);
+    const lo = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.16, 4, 8), fur2); lo.position.y = -0.09; knee.add(lo);
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 6), muzzleM); paw.scale.set(1.35, 0.55, 0.95); paw.position.set(0.02, -0.19, 0); knee.add(paw);
     legs.push({ hip, knee, s, front, phase: front ? 0 : Math.PI });
   }
   const tail = new THREE.Group(); tail.position.set(-0.42, 0.06, 0); body.add(tail);
-  const tailM = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.035, 0.3, 8), fur); tailM.position.y = 0.15; tail.add(tailM);
+  const t1 = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.032, 0.18, 8), fur); t1.position.y = 0.09; tail.add(t1);
+  const t2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.022, 0.16, 8), fur); t2.position.set(-0.02, 0.22, 0); t2.rotation.z = 0.35; tail.add(t2);
   root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.raycast = () => {}; } });
   return { root, body, neck, head, jaw, ears, legs, tail, tongue };
 }
 
 /* ───────────────────────────── mouse ───────────────────────────── */
 function buildMouse() {
+  /* logic38: grey rat-like body, pink ears, long articulated pink-grey tail, whiskers. Same rig hooks as logic37. */
   const root = new THREE.Group(); root.name = "house_mouse";
-  const fur = mat(0x4a423c, 0.95), belly = mat(0x6a5f55, 0.95), earM = mat(0x6e5656, 0.7), tailM = mat(0x5d4b46, 0.7);
-  const eyeM = new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0x2ee6ff, emissiveIntensity: 0.12, roughness: 0.1, metalness: 0.3 });
-  const body = new THREE.Group(); body.position.y = 0.024; root.add(body);
-  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), fur); torso.scale.set(1.65, 0.85, 1.0); body.add(torso);
-  const bel = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8), belly); bel.scale.set(1.5, 0.6, 0.9); bel.position.y = -0.01; body.add(bel);
-  const head = new THREE.Group(); head.position.set(0.045, 0.004, 0); body.add(head);
-  const skull = new THREE.Mesh(new THREE.ConeGeometry(0.019, 0.045, 10), fur); skull.rotation.z = -Math.PI / 2; skull.position.x = 0.012; head.add(skull);
-  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.0045, 6, 5), mat(0x2a1a1c, 0.4)); nose.position.x = 0.036; head.add(nose);
+  const fur = mat(0x6e6a66, 0.95), belly = mat(0x8a847c, 0.95), earM = mat(0xe8a8a0, 0.65), earOut = mat(0xc9b0aa, 0.7);
+  const tailM = mat(0xc4a8a0, 0.65, 0.05), pink = mat(0xe0a098, 0.55);
+  const eyeM = new THREE.MeshStandardMaterial({ color: 0x050505, emissive: 0x2ee6ff, emissiveIntensity: 0.10, roughness: 0.1, metalness: 0.3 });
+  const body = new THREE.Group(); body.position.y = 0.010; root.add(body);
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.030, 12, 10), fur); torso.scale.set(1.85, 0.72, 1.0); body.add(torso);
+  const bel = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 8), belly); bel.scale.set(1.65, 0.50, 0.9); bel.position.y = -0.008; body.add(bel);
+  const head = new THREE.Group(); head.position.set(0.048, 0.006, 0); body.add(head);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), fur); skull.scale.set(1.15, 0.95, 0.95); head.add(skull);
+  const snout = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.032, 10), fur); snout.rotation.z = -Math.PI / 2; snout.position.x = 0.018; head.add(snout);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.0048, 6, 5), pink); nose.position.x = 0.036; head.add(nose);
   for (const s of [-1, 1]) {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 6, 5), eyeM); e.position.set(0.012, 0.008, s * 0.011); head.add(e);
-    const ear = new THREE.Mesh(new THREE.CircleGeometry(0.012, 12), new THREE.MeshStandardMaterial({ color: 0x6e5656, roughness: 0.7, side: THREE.DoubleSide })); ear.position.set(-0.002, 0.017, s * 0.012); ear.rotation.y = s * 0.9 + Math.PI / 2; head.add(ear);
-    for (const k of [-1, 1]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.0004, 0.0004, 0.03, 3), mat(0x9a9088, 0.5)); w.rotation.set(Math.PI / 2, 0, k * 0.25 * s); w.position.set(0.03, 0.0, s * 0.012); head.add(w); }
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.0040, 6, 5), eyeM); e.position.set(0.010, 0.008, s * 0.012); head.add(e);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 6), earOut); ear.scale.set(0.35, 1, 0.9); ear.position.set(-0.002, 0.016, s * 0.013); ear.rotation.z = 0.15; ear.rotation.y = s * 0.25; head.add(ear);
+    const inner = new THREE.Mesh(new THREE.CircleGeometry(0.007, 10), new THREE.MeshStandardMaterial({ color: 0xe8a8a0, roughness: 0.65, side: THREE.DoubleSide }));
+    inner.position.set(-0.0005, 0.016, s * 0.0145); inner.rotation.y = s * 0.9 + Math.PI / 2; head.add(inner);
+    for (const k of [-1, 0, 1]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.00035, 0.00035, 0.034, 3), mat(0xd8d0c8, 0.45));
+      w.rotation.set(Math.PI / 2, 0, k * 0.22 * s); w.position.set(0.030, 0.002 * k, s * 0.013); head.add(w);
+    }
   }
   void earM;
   const legs = [];
   for (const [lx, s] of [[0.026, -1], [0.026, 1], [-0.02, -1], [-0.02, 1]]) {
-    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.003, 0.018, 5), belly); l.position.set(lx, -0.017, s * 0.016); body.add(l); legs.push({ l, lx, s });
+    const l = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0028, 0.022, 5), fur); l.position.set(lx, -0.020, s * 0.016); body.add(l);
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.0042, 6, 5), pink); paw.position.set(lx + 0.003, -0.032, s * 0.016); body.add(paw);
+    legs.push({ l, lx, s });
   }
   const tail = [];
-  let parent = body, px = -0.05;
+  let parent = body, px = -0.055;
   for (let i = 0; i < 6; i++) {
     const seg = new THREE.Group(); seg.position.set(i === 0 ? px : -0.016, i === 0 ? -0.004 : 0, 0); parent.add(seg);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0022 - i * 0.0002, 0.0026 - i * 0.0002, 0.017, 5), tailM); m.rotation.z = Math.PI / 2; m.position.x = -0.008; seg.add(m);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.0020 - i * 0.00022, 0.0025 - i * 0.00022, 0.017, 6), tailM); m.rotation.z = Math.PI / 2; m.position.x = -0.008; seg.add(m);
     tail.push(seg); parent = seg;
   }
   root.traverse((o) => { if (o.isMesh) o.raycast = () => {}; });
@@ -585,10 +644,10 @@ export class YardLife {
     m.fade = Math.max(0, Math.min(1, m.fade + (m.on ? dt * 3 : -dt * 3)));
     M.root.visible = m.fade > 0.01 && this.root.visible;
     if (!M.root.visible) return;
-    M.root.position.set(m.x, m.y + 0.004, m.z); M.root.rotation.y = m.yaw - Math.PI / 2; M.root.scale.setScalar(0.5 + 0.5 * m.fade);
+    M.root.position.set(m.x, m.y, m.z); M.root.rotation.y = m.yaw - Math.PI / 2; M.root.scale.setScalar(0.5 + 0.5 * m.fade);
     const moving = m.v > 0.02; m.gait += dt * (moving ? 18 + m.v * 14 : 0);
     for (const l of M.legs) l.l.rotation.z = moving ? Math.sin(m.gait + (l.lx > 0 ? 0 : Math.PI) + (l.s > 0 ? 1.4 : 0)) * 0.9 : 0;
-    M.body.position.y = 0.024 + (moving ? Math.abs(Math.sin(m.gait)) * 0.004 : 0);
+    M.body.position.y = 0.010 + (moving ? Math.abs(Math.sin(m.gait)) * 0.004 : 0);
     const sniff = m.mode === "sniff" || m.mode === "idle";
     M.head.rotation.z = sniff ? Math.sin(T * 13) * 0.08 - 0.05 : m.mode === "wait" ? 0.15 : 0;
     M.head.rotation.y = sniff ? Math.sin(T * 1.7) * 0.5 : 0;

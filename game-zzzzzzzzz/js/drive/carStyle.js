@@ -1,8 +1,7 @@
-/** logic29 (Ben 6:36 PM "make the cars overall nicer"): 2100s RC vehicles — bevelled/rounded panels, tinted
- *  reflective glass, clear-coat metallic deep paints, real wheels (tyre, sidewall, rim dish, 5 spokes, hub, cyan
- *  centre cap) on steer pivots, glowing head/tail lights, cyan neon sill trim + underglow, panel seams.
- *  Model units: the car root is scaled by CAR_SCALE; nose toward −Z inside bodyPivot (rotated π).
- *  Every visual stays inside the old box footprint (|x| ≤ 0.165, |z| ≤ 0.235) — well inside the collider. */
+/** logic38: rebuild procedural Drive meshes to match the MINIATURE DRIVE Blender sheet.
+ *  Same footprints, wheel hubs/radii, and contact shadow as logic37. Metallic Standard/Physical
+ *  paints, bevel-ish boxes/cylinders, black multi-spoke rims. Model units: root scaled by CAR_SCALE;
+ *  nose toward −Z inside bodyPivot (rotated π). Visuals stay inside |x| ≤ 0.165, |z| ≤ 0.235. */
 import * as THREE from "three";
 
 export const PAINTS = {
@@ -25,10 +24,10 @@ export function rbox(w, h, d, r, seg = 3, opt = {}) {
     c.set(THREE.MathUtils.clamp(v.x, -hx, hx), THREE.MathUtils.clamp(v.y, -hy, hy), THREE.MathUtils.clamp(v.z, -hz, hz));
     dl.subVectors(v, c);
     if (dl.lengthSq() > 1e-14) { dl.normalize(); v.copy(c).addScaledVector(dl, r); n.setXYZ(i, dl.x, dl.y, dl.z); }
-    const t = (v.y + h / 2) / h; // 0 bottom → 1 top
-    if (taper) v.x *= 1 - taper * t;                          // tumblehome: narrower at the top
-    if (drop) v.y -= drop * t * Math.max(0, -v.z / (d / 2)) ** 2; // nose slopes down
-    if (rake) v.z += rake * (t - 0.5) * Math.sign(v.z || 1) * -1; // raked glass: top shorter than the base
+    const t = (v.y + h / 2) / h; /* 0 bottom → 1 top */
+    if (taper) v.x *= 1 - taper * t;
+    if (drop) v.y -= drop * t * Math.max(0, -v.z / (d / 2)) ** 2;
+    if (rake) v.z += rake * (t - 0.5) * Math.sign(v.z || 1) * -1;
     p.setXYZ(i, v.x, v.y, v.z);
   }
   g.computeBoundingBox(); g.computeBoundingSphere();
@@ -38,130 +37,195 @@ export function rbox(w, h, d, r, seg = 3, opt = {}) {
 export function vehicleMats(preset) {
   const paint = PAINTS[preset.id] || PAINTS.car;
   const P = THREE.MeshPhysicalMaterial || THREE.MeshStandardMaterial;
-  const candy = new P({ color: paint.body, metalness: 0.45, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08 });
-  const accent = new P({ color: 0x1b1f26, metalness: 0.6, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2 }); // satin black trim
-  const glass = new P({ color: 0x0c1a24, metalness: 0.35, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.03,
-    emissive: 0x0b3c4a, emissiveIntensity: 0.35, transparent: true, opacity: 0.82 });
+  /* slightly more metallic than logic37 so the candy paint reads like the Blender sheet */
+  const candy = new P({ color: paint.body, metalness: 0.62, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.06 });
+  const accent = new P({ color: 0x14161a, metalness: 0.7, roughness: 0.32, clearcoat: 0.4, clearcoatRoughness: 0.25 });
+  const glass = new P({ color: 0x0a141c, metalness: 0.45, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.03,
+    emissive: 0x081820, emissiveIntensity: 0.22, transparent: true, opacity: 0.78 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x101216, roughness: 0.7, metalness: 0.25 });
   const seam = new THREE.MeshStandardMaterial({ color: 0x06070a, roughness: 0.9, metalness: 0.1 });
   const chrome = new THREE.MeshStandardMaterial({ color: 0xb8c4cf, roughness: 0.18, metalness: 0.95 });
   const gun = new THREE.MeshStandardMaterial({ color: 0x5b6470, roughness: 0.28, metalness: 0.9 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x131315, roughness: 0.93, metalness: 0.02 });
-  const side = new THREE.MeshStandardMaterial({ color: 0x1f2024, roughness: 0.85, metalness: 0.05 });
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xeaf6ff, emissive: 0xcfeeff, emissiveIntensity: 0.85, roughness: 0.15, metalness: 0.2 });
-  const tailMat = new THREE.MeshStandardMaterial({ color: 0x6a0010, emissive: 0xff1f3d, emissiveIntensity: 0.55, roughness: 0.3 });
+  const side = new THREE.MeshStandardMaterial({ color: 0x1a1b1e, roughness: 0.88, metalness: 0.04 });
+  const rim = new THREE.MeshStandardMaterial({ color: 0x1a1b1e, roughness: 0.32, metalness: 0.75 }); /* black multi-spoke */
+  const silver = new THREE.MeshStandardMaterial({ color: 0xc5ced6, roughness: 0.22, metalness: 0.92 });
+  const seat = new THREE.MeshStandardMaterial({ color: 0x8a8d90, roughness: 0.55, metalness: 0.08 });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xeaf6ff, emissive: 0xcfeeff, emissiveIntensity: 0.7, roughness: 0.15, metalness: 0.2 });
+  const tailMat = new THREE.MeshStandardMaterial({ color: 0x6a0010, emissive: 0xff1f3d, emissiveIntensity: 0.5, roughness: 0.3 });
   const neon = new THREE.MeshBasicMaterial({ color: 0x3fe0f0 });
-  const headGlow = new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false });
-  const tailGlow = new THREE.MeshBasicMaterial({ color: 0xff2a48, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
-  const underglow = new THREE.MeshStandardMaterial({ color: 0x3fe0f0, emissive: 0x3fe0f0, emissiveIntensity: 0.28, transparent: true, opacity: 0.3, roughness: 0.6, depthWrite: false });
-  return { candy, accent, glass, dark, seam, chrome, gun, rubber, side, headMat, tailMat, neon, headGlow, tailGlow, underglow, cream: accent, hubMat: gun };
+  const headGlow = new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false });
+  const tailGlow = new THREE.MeshBasicMaterial({ color: 0xff2a48, transparent: true, opacity: 0.24, blending: THREE.AdditiveBlending, depthWrite: false });
+  const underglow = new THREE.MeshStandardMaterial({ color: 0x3fe0f0, emissive: 0x3fe0f0, emissiveIntensity: 0.16, transparent: true, opacity: 0.18, roughness: 0.6, depthWrite: false });
+  return { candy, accent, glass, dark, seam, chrome, gun, rubber, side, rim, silver, seat, headMat, tailMat, neon, headGlow, tailGlow, underglow, cream: accent, hubMat: rim };
 }
 
 const M = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = false; return m; };
 
-/** wheels: steer pivot (front, +Z in root) → spinner (rotation.x) → tyre/sidewall/rim/spokes/hub */
+/** wheels: steer pivot (front, +Z in root) → spinner (rotation.x) → chunky tyre + black 8-spoke rim.
+ *  Hub positions and (tireR, tireW) MUST stay exactly as GLB-SPECS / logic37. */
 export function addWheels(car, m, layout, tireR, tireW) {
-  const tyre = new THREE.CylinderGeometry(tireR, tireR, tireW, 22);
-  const wall = new THREE.CylinderGeometry(tireR * 0.86, tireR * 0.86, tireW + 0.004, 22);
-  const dish = new THREE.CylinderGeometry(tireR * 0.66, tireR * 0.6, tireW + 0.006, 18);
-  const hub = new THREE.CylinderGeometry(tireR * 0.2, tireR * 0.2, tireW + 0.008, 10);
-  const cap = new THREE.CylinderGeometry(tireR * 0.09, tireR * 0.09, tireW + 0.01, 8);
-  const spoke = new THREE.BoxGeometry(tireW + 0.009, tireR * 0.5, tireR * 0.12);
+  const tyre = new THREE.CylinderGeometry(tireR, tireR, tireW, 24);
+  const wall = new THREE.CylinderGeometry(tireR * 0.88, tireR * 0.88, tireW + 0.005, 24);
+  const lip = new THREE.CylinderGeometry(tireR * 0.72, tireR * 0.70, tireW + 0.004, 20);
+  const dish = new THREE.CylinderGeometry(tireR * 0.58, tireR * 0.22, tireW * 0.42, 18);
+  const hub = new THREE.CylinderGeometry(tireR * 0.16, tireR * 0.16, tireW + 0.005, 12);
+  const cap = new THREE.CylinderGeometry(tireR * 0.07, tireR * 0.07, tireW + 0.006, 10);
+  const spoke = new THREE.BoxGeometry(tireW * 0.28, tireR * 0.50, tireR * 0.065);
+  const rimMat = m.rim || m.accent;
   car._steerWheels = []; car._wheelRoots = car._wheelRoots || [];
   for (const [x, z] of layout) {
     const steer = new THREE.Group(); steer.position.set(x, tireR, z);
     const spin = new THREE.Group(); steer.add(spin);
-    for (const [g, mat] of [[tyre, m.rubber], [wall, m.side], [dish, m.gun], [hub, m.chrome], [cap, m.neon]]) { const k = M(g, mat); k.rotation.z = Math.PI / 2; spin.add(k); }
-    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2, s = M(spoke, m.chrome, 0, Math.cos(a) * tireR * 0.38, Math.sin(a) * tireR * 0.38); s.rotation.x = a; spin.add(s); }
+    for (const [g, mat] of [[tyre, m.rubber], [wall, m.side], [lip, rimMat], [hub, rimMat], [cap, m.gun]]) {
+      const k = M(g, mat); k.rotation.z = Math.PI / 2; spin.add(k);
+    }
+    const dishM = M(dish, rimMat); dishM.rotation.z = Math.PI / 2; dishM.position.x = Math.sign(x || 1) * (tireW * 0.18); spin.add(dishM);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const s = M(spoke, rimMat, 0, Math.cos(a) * tireR * 0.32, Math.sin(a) * tireR * 0.32);
+      s.rotation.x = a; spin.add(s);
+    }
     car.root.add(steer); car._wheelRoots.push(steer); car.wheels.push(spin);
     if (z > 0) car._steerWheels.push(steer);
   }
   car._wheelRadiusModel = tireR;
 }
 
-/** shared: lights, sill neon, underglow, seams. Body extents: half-width hw, nose z −hl, tail z +hl, light height ly */
-function dress(b, m, { hw, hl, ly, sillY, seamZ = [], seamH = 0.035, seamY = 0.075, wide = 1 }) {
+function lights(b, m, { hw, hl, ly, tailW = null }) {
   for (const sx of [-1, 1]) {
-    b.add(M(rbox(0.05 * wide, 0.016, 0.012, 0.005, 2), m.headMat, sx * hw * 0.62, ly, -hl - 0.002));
-    const hg = M(new THREE.CircleGeometry(0.017, 14), m.headGlow, sx * hw * 0.62, ly, -hl - 0.009); hg.rotation.y = Math.PI; b.add(hg);
-    b.add(M(new THREE.BoxGeometry(0.004, 0.004, hl * 1.6), m.neon, sx * (hw + 0.002), sillY, 0)); // sill neon line
-    for (const z of seamZ) b.add(M(new THREE.BoxGeometry(0.002, seamH, 0.0025), m.seam, sx * (hw + 0.0012), seamY, z)); // door seams
+    b.add(M(rbox(0.036, 0.014, 0.012, 0.003, 2), m.headMat, sx * hw * 0.62, ly, -hl - 0.002));
+    const hg = M(new THREE.CircleGeometry(0.014, 12), m.headGlow, sx * hw * 0.62, ly, -hl - 0.008); hg.rotation.y = Math.PI; b.add(hg);
   }
-  b.add(M(rbox(hw * 1.5, 0.012, 0.01, 0.004, 2), m.tailMat, 0, ly + 0.004, hl + 0.002)); // full-width light bar
-  b.add(M(new THREE.PlaneGeometry(hw * 1.7, 0.03), m.tailGlow, 0, ly + 0.004, hl + 0.009));
-  const glow = M(new THREE.PlaneGeometry(hw * 1.4, hl * 1.5), m.underglow, 0, 0.016, 0); glow.rotation.x = -Math.PI / 2; b.add(glow);
+  b.add(M(rbox((tailW || hw) * 1.35, 0.01, 0.009, 0.003, 2), m.tailMat, 0, ly + 0.002, hl + 0.002));
 }
 
+/** CRIMSON COUPE — low wedge, dark glass cabin, big rear wing on struts, side skirts, silver lower trim. */
 export function buildCar(car, m) {
   const b = car.bodyPivot;
-  b.add(M(rbox(0.235, 0.026, 0.43, 0.01), m.dark, 0, 0.04, 0));                                    // floor pan
-  b.add(M(rbox(0.25, 0.052, 0.452, 0.022, 4, { taper: 0.06, drop: 0.014 }), m.candy, 0, 0.074, 0)); // wedge body
-  b.add(M(rbox(0.19, 0.056, 0.2, 0.026, 4, { taper: 0.28, rake: 0.05 }), m.glass, 0, 0.123, 0.025)); // canopy
-  b.add(M(rbox(0.14, 0.01, 0.1, 0.005, 2), m.candy, 0, 0.152, 0.03));                               // roof skin
-  b.add(M(new THREE.BoxGeometry(0.2, 0.002, 0.0025), m.seam, 0, 0.1012, -0.1));                     // hood seam
+  b.add(M(rbox(0.232, 0.02, 0.44, 0.008), m.dark, 0, 0.038, 0)); /* floor pan */
+  b.add(M(rbox(0.248, 0.048, 0.45, 0.016, 4, { taper: 0.04, drop: 0.012 }), m.candy, 0, 0.072, 0.004)); /* wedge body */
+  b.add(M(rbox(0.22, 0.018, 0.16, 0.006, 3, { drop: 0.006 }), m.candy, 0, 0.098, -0.12)); /* hood */
+  /* dark tinted cabin */
+  b.add(M(rbox(0.20, 0.058, 0.20, 0.014, 4, { taper: 0.18, rake: 0.04 }), m.glass, 0, 0.126, 0.028));
+  b.add(M(rbox(0.15, 0.008, 0.11, 0.003, 2), m.candy, 0, 0.156, 0.034)); /* roof skin */
   for (const sx of [-1, 1]) {
-    b.add(M(rbox(0.04, 0.03, 0.1, 0.012, 2), m.accent, sx * 0.118, 0.06, -0.135));                   // front arch flare
-    b.add(M(rbox(0.04, 0.03, 0.1, 0.012, 2), m.accent, sx * 0.118, 0.06, 0.135));                    // rear arch flare
-    b.add(M(new THREE.BoxGeometry(0.012, 0.03, 0.012), m.accent, sx * 0.07, 0.115, 0.205));            // wing post
+    b.add(M(rbox(0.036, 0.028, 0.10, 0.01, 2), m.accent, sx * 0.118, 0.058, -0.135)); /* front flare */
+    b.add(M(rbox(0.036, 0.028, 0.10, 0.01, 2), m.accent, sx * 0.118, 0.058, 0.135));
+    b.add(M(new THREE.BoxGeometry(0.018, 0.016, 0.26), m.accent, sx * 0.128, 0.046, 0)); /* side skirt */
+    b.add(M(new THREE.BoxGeometry(0.010, 0.006, 0.26), m.silver, sx * 0.134, 0.037, 0)); /* silver skirt lip */
   }
-  b.add(M(rbox(0.21, 0.008, 0.04, 0.004, 2), m.accent, 0, 0.133, 0.205));                           // wing
-  b.add(M(new THREE.BoxGeometry(0.19, 0.003, 0.004), m.neon, 0, 0.138, 0.226));                      // wing neon edge
-  dress(b, m, { hw: 0.125, hl: 0.226, ly: 0.078, sillY: 0.05, seamZ: [-0.055, 0.075] });
+  b.add(M(new THREE.BoxGeometry(0.22, 0.008, 0.022), m.silver, 0, 0.032, -0.226)); /* front splitter */
+  b.add(M(new THREE.BoxGeometry(0.20, 0.002, 0.0025), m.seam, 0, 0.100, -0.10));
+  /* big rear wing on two struts */
+  for (const sx of [-1, 1]) {
+    b.add(M(new THREE.BoxGeometry(0.010, 0.055, 0.012), m.accent, sx * 0.07, 0.128, 0.208));
+    b.add(M(rbox(0.018, 0.012, 0.05, 0.003, 2), m.candy, sx * 0.108, 0.168, 0.210)); /* endplate */
+  }
+  b.add(M(rbox(0.22, 0.008, 0.048, 0.003, 2), m.candy, 0, 0.168, 0.210));
+  b.add(M(new THREE.BoxGeometry(0.20, 0.003, 0.006), m.accent, 0, 0.173, 0.232)); /* wing lip */
+  lights(b, m, { hw: 0.125, hl: 0.226, ly: 0.074 });
   addWheels(car, m, [[-0.128, -0.135], [0.128, -0.135], [-0.128, 0.135], [0.128, 0.135]], 0.05, 0.04);
 }
 
+/** MIDNIGHT SUV — boxy metallic body, tall dark greenhouse, silver roof frame, black wheels. */
 export function buildSuv(car, m) {
   const b = car.bodyPivot;
-  b.add(M(rbox(0.25, 0.03, 0.45, 0.012), m.dark, 0, 0.05, 0));
-  b.add(M(rbox(0.262, 0.065, 0.462, 0.024, 4, { taper: 0.04, drop: 0.012 }), m.candy, 0, 0.09, 0));
-  b.add(M(rbox(0.25, 0.06, 0.36, 0.026, 4, { taper: 0.12 }), m.candy, 0, 0.148, 0.04));
-  b.add(M(rbox(0.232, 0.052, 0.31, 0.022, 4, { taper: 0.14, rake: 0.03 }), m.glass, 0, 0.198, 0.045));
-  b.add(M(rbox(0.205, 0.014, 0.29, 0.007, 2), m.accent, 0, 0.229, 0.045));
+  b.add(M(rbox(0.25, 0.028, 0.45, 0.01), m.dark, 0, 0.048, 0));
+  b.add(M(rbox(0.262, 0.062, 0.458, 0.016, 4, { taper: 0.02, drop: 0.008 }), m.candy, 0, 0.088, 0));
+  b.add(M(rbox(0.252, 0.055, 0.34, 0.014, 3, { taper: 0.04 }), m.candy, 0, 0.142, 0.04)); /* upper body, short hood */
+  /* tall, almost-upright greenhouse */
+  b.add(M(rbox(0.236, 0.062, 0.30, 0.012, 4, { taper: 0.06, rake: 0.02 }), m.glass, 0, 0.196, 0.048));
+  b.add(M(rbox(0.20, 0.008, 0.27, 0.003, 2), m.accent, 0, 0.230, 0.048)); /* roof panel */
+  /* silver roof frame / rails */
   for (const sx of [-1, 1]) {
-    { const r = M(new THREE.CylinderGeometry(0.004, 0.004, 0.26, 6), m.chrome, sx * 0.085, 0.241, 0.045); r.rotation.x = Math.PI / 2; b.add(r); } // roof rail
-    b.add(M(rbox(0.035, 0.032, 0.11, 0.012, 2), m.accent, sx * 0.124, 0.072, -0.14));
-    b.add(M(rbox(0.035, 0.032, 0.11, 0.012, 2), m.accent, sx * 0.124, 0.072, 0.14));
+    const rail = M(new THREE.CylinderGeometry(0.0045, 0.0045, 0.27, 8), m.silver, sx * 0.078, 0.240, 0.048);
+    rail.rotation.x = Math.PI / 2; b.add(rail);
+    b.add(M(new THREE.BoxGeometry(0.01, 0.012, 0.01), m.silver, sx * 0.078, 0.235, 0.048 - 0.12));
+    b.add(M(new THREE.BoxGeometry(0.01, 0.012, 0.01), m.silver, sx * 0.078, 0.235, 0.048 + 0.12));
+    b.add(M(rbox(0.032, 0.030, 0.11, 0.01, 2), m.accent, sx * 0.126, 0.070, -0.14));
+    b.add(M(rbox(0.032, 0.030, 0.11, 0.01, 2), m.accent, sx * 0.126, 0.070, 0.14));
+    b.add(M(new THREE.BoxGeometry(0.008, 0.055, 0.008), m.silver, sx * 0.118, 0.196, -0.08)); /* A-pillar trim */
+    b.add(M(new THREE.BoxGeometry(0.008, 0.055, 0.008), m.silver, sx * 0.118, 0.196, 0.16));
   }
-  b.add(M(new THREE.BoxGeometry(0.2, 0.003, 0.004), m.neon, 0, 0.12, -0.231));                       // grille neon
-  dress(b, m, { hw: 0.131, hl: 0.231, ly: 0.098, sillY: 0.062, seamZ: [-0.04, 0.08], seamH: 0.05, seamY: 0.115 });
+  const cross = M(new THREE.CylinderGeometry(0.0035, 0.0035, 0.156, 8), m.silver, 0, 0.240, 0.048);
+  cross.rotation.z = Math.PI / 2; b.add(cross);
+  b.add(M(new THREE.BoxGeometry(0.16, 0.018, 0.008), m.accent, 0, 0.092, -0.230)); /* grille bar */
+  for (let i = -2; i <= 2; i++) b.add(M(new THREE.BoxGeometry(0.006, 0.016, 0.004), m.silver, i * 0.028, 0.092, -0.235));
+  lights(b, m, { hw: 0.131, hl: 0.231, ly: 0.096 });
   addWheels(car, m, [[-0.13, -0.14], [0.13, -0.14], [-0.13, 0.14], [0.13, 0.14]], 0.055, 0.045);
 }
 
+/** GUNMETAL JEEP — open body, dark-steel roll cage, slotted grille, flared fenders, spare that does not spin. */
 export function buildJeep(car, m) {
   const b = car.bodyPivot;
-  b.add(M(rbox(0.25, 0.03, 0.38, 0.012), m.dark, 0, 0.062, 0));
-  b.add(M(rbox(0.27, 0.075, 0.39, 0.018, 3, { taper: 0.03 }), m.candy, 0, 0.11, 0.01));
-  b.add(M(rbox(0.25, 0.03, 0.13, 0.012, 3, { drop: 0.006 }), m.candy, 0, 0.158, -0.125));
-  const ws = M(rbox(0.23, 0.065, 0.01, 0.004, 2), m.glass, 0, 0.2, -0.055); ws.rotation.x = 0.22; b.add(ws);
-  const wf = M(rbox(0.24, 0.008, 0.014, 0.003, 2), m.gun, 0, 0.235, -0.063); b.add(wf);
-  const tube = (x, y, z, L, rx, rz) => { const t = M(new THREE.CylinderGeometry(0.007, 0.007, L, 8), m.gun, x, y, z); t.rotation.set(rx || 0, 0, rz || 0); b.add(t); };
-  for (const sx of [-1, 1]) { tube(sx * 0.105, 0.2, 0.06, 0.12); tube(sx * 0.105, 0.26, 0.0, 0.12, Math.PI / 2); tube(sx * 0.105, 0.2, -0.055, 0.12); }
-  tube(0, 0.26, 0.06, 0.21, 0, Math.PI / 2);
+  const cage = m.gun;
+  b.add(M(rbox(0.25, 0.028, 0.38, 0.01), m.dark, 0, 0.060, 0));
+  b.add(M(rbox(0.255, 0.070, 0.38, 0.014, 3, { taper: 0.02 }), m.candy, 0, 0.108, 0.01)); /* open tub */
+  b.add(M(rbox(0.24, 0.028, 0.13, 0.01, 3, { drop: 0.005 }), m.candy, 0, 0.152, -0.125)); /* hood */
+  /* cabin cut / seats so the open body reads */
+  b.add(M(rbox(0.09, 0.03, 0.07, 0.01, 2), m.seat, -0.04, 0.148, 0.02));
+  b.add(M(rbox(0.09, 0.03, 0.07, 0.01, 2), m.seat, 0.04, 0.148, 0.02));
+  b.add(M(rbox(0.08, 0.05, 0.02, 0.006, 2), m.seat, -0.04, 0.175, 0.05));
+  b.add(M(rbox(0.08, 0.05, 0.02, 0.006, 2), m.seat, 0.04, 0.175, 0.05));
+  /* almost-vertical windshield + frame */
+  const ws = M(rbox(0.22, 0.07, 0.008, 0.002, 2), m.glass, 0, 0.205, -0.058); ws.rotation.x = 0.12; b.add(ws);
+  b.add(M(new THREE.BoxGeometry(0.22, 0.006, 0.008), cage, 0, 0.242, -0.066));
+  for (const sx of [-1, 1]) b.add(M(new THREE.BoxGeometry(0.008, 0.07, 0.008), cage, sx * 0.108, 0.205, -0.060));
+  /* dark-steel tubular roll cage (box hoop + side bars + rear cross) */
+  const tube = (x, y, z, L, rx, rz) => { const t = M(new THREE.CylinderGeometry(0.007, 0.007, L, 8), cage, x, y, z); t.rotation.set(rx || 0, 0, rz || 0); b.add(t); };
   for (const sx of [-1, 1]) {
-    b.add(M(rbox(0.045, 0.028, 0.12, 0.012, 2), m.accent, sx * 0.13, 0.085, -0.12));
-    b.add(M(rbox(0.045, 0.028, 0.12, 0.012, 2), m.accent, sx * 0.13, 0.085, 0.12));
+    tube(sx * 0.108, 0.205, -0.055, 0.14); /* A-pillar-ish */
+    tube(sx * 0.108, 0.26, 0.02, 0.16, Math.PI / 2); /* roof side */
+    tube(sx * 0.108, 0.205, 0.10, 0.14); /* rear down */
+    tube(sx * 0.108, 0.16, 0.10, 0.08); /* short rear post into tub */
   }
-  const spare = M(new THREE.TorusGeometry(0.038, 0.015, 8, 18), m.rubber, 0, 0.13, 0.215); b.add(spare);
-  { const h = M(new THREE.CylinderGeometry(0.022, 0.022, 0.012, 12), m.gun, 0, 0.13, 0.215); h.rotation.x = Math.PI / 2; b.add(h); }
-  for (let i = -2; i <= 2; i++) b.add(M(new THREE.BoxGeometry(0.008, 0.04, 0.004), m.seam, i * 0.03, 0.115, -0.197)); // grille slots
-  dress(b, m, { hw: 0.135, hl: 0.196, ly: 0.12, sillY: 0.075, seamZ: [0.0], seamH: 0.05, seamY: 0.12 });
+  tube(0, 0.26, -0.055, 0.216, 0, Math.PI / 2); /* front roof bar */
+  tube(0, 0.26, 0.10, 0.216, 0, Math.PI / 2); /* rear roof bar */
+  tube(0, 0.205, 0.10, 0.216, 0, Math.PI / 2); /* rear hoop cross */
+  /* steering wheel (static, on body — does not spin) */
+  { const wh = M(new THREE.TorusGeometry(0.028, 0.004, 6, 14), m.accent, -0.04, 0.185, -0.02); wh.rotation.x = 1.15; b.add(wh); }
+
+  for (const sx of [-1, 1]) {
+    /* rounder flared fenders */
+    b.add(M(rbox(0.055, 0.032, 0.13, 0.014, 3), m.candy, sx * 0.132, 0.088, -0.12));
+    b.add(M(rbox(0.055, 0.032, 0.13, 0.014, 3), m.candy, sx * 0.132, 0.088, 0.12));
+  }
+  /* slotted front grille */
+  b.add(M(new THREE.BoxGeometry(0.16, 0.048, 0.01), m.accent, 0, 0.118, -0.195));
+  for (let i = -2; i <= 2; i++) b.add(M(new THREE.BoxGeometry(0.14, 0.005, 0.006), m.gun, 0, 0.102 + i * 0.009, -0.201));
+  /* spare on the tail — part of body, must not go into car.wheels */
+  const spare = M(new THREE.TorusGeometry(0.040, 0.016, 8, 18), m.rubber, 0, 0.135, 0.215); b.add(spare);
+  { const h = M(new THREE.CylinderGeometry(0.018, 0.018, 0.014, 12), m.rim, 0, 0.135, 0.215); h.rotation.x = Math.PI / 2; b.add(h); }
+  b.add(M(new THREE.BoxGeometry(0.03, 0.03, 0.02), m.gun, 0, 0.135, 0.198)); /* spare mount */
+  lights(b, m, { hw: 0.135, hl: 0.196, ly: 0.118 });
   addWheels(car, m, [[-0.14, -0.12], [0.14, -0.12], [-0.14, 0.12], [0.14, 0.12]], 0.058, 0.05);
 }
 
+/** COPPER CONVERTIBLE — low open-top, grey bucket seats, windscreen frame, rear deck, black rims. */
 export function buildConvertible(car, m) {
   const b = car.bodyPivot;
-  b.add(M(rbox(0.22, 0.026, 0.44, 0.01), m.dark, 0, 0.04, 0));
-  b.add(M(rbox(0.235, 0.05, 0.458, 0.022, 4, { taper: 0.08, drop: 0.016 }), m.candy, 0, 0.068, 0));
-  b.add(M(rbox(0.17, 0.02, 0.15, 0.008, 2), m.dark, 0, 0.092, 0.02));                                 // cockpit tub
-  for (const sx of [-1, 1]) b.add(M(rbox(0.06, 0.04, 0.045, 0.012, 2), m.accent, sx * 0.042, 0.11, 0.05)); // seats
-  b.add(M(rbox(0.19, 0.03, 0.09, 0.014, 3), m.candy, 0, 0.1, 0.15));                                 // rear deck hump
-  const ws = M(rbox(0.17, 0.045, 0.008, 0.004, 2), m.glass, 0, 0.12, -0.065); ws.rotation.x = -0.45; b.add(ws);
-  b.add(M(new THREE.BoxGeometry(0.17, 0.003, 0.004), m.neon, 0, 0.143, -0.076));
+  b.add(M(rbox(0.22, 0.024, 0.44, 0.01), m.dark, 0, 0.038, 0));
+  b.add(M(rbox(0.235, 0.048, 0.456, 0.018, 4, { taper: 0.06, drop: 0.014 }), m.candy, 0, 0.066, 0));
+  b.add(M(rbox(0.20, 0.016, 0.16, 0.006, 3, { drop: 0.006 }), m.candy, 0, 0.092, -0.12)); /* hood */
+  b.add(M(rbox(0.17, 0.016, 0.15, 0.006, 2), m.dark, 0, 0.090, 0.02)); /* cockpit tub */
+  /* grey bucket seats */
   for (const sx of [-1, 1]) {
-    b.add(M(rbox(0.04, 0.026, 0.1, 0.012, 2), m.accent, sx * 0.108, 0.055, -0.135));
-    b.add(M(rbox(0.04, 0.026, 0.1, 0.012, 2), m.accent, sx * 0.108, 0.055, 0.13));
+    b.add(M(rbox(0.062, 0.022, 0.055, 0.01, 2), m.seat, sx * 0.042, 0.108, 0.04)); /* cushion */
+    b.add(M(rbox(0.060, 0.048, 0.016, 0.008, 2), m.seat, sx * 0.042, 0.132, 0.068)); /* backrest */
+    b.add(M(rbox(0.008, 0.018, 0.045, 0.003, 2), m.seat, sx * 0.068, 0.116, 0.04)); /* bolster */
+    b.add(M(rbox(0.036, 0.024, 0.10, 0.01, 2), m.accent, sx * 0.110, 0.054, -0.135));
+    b.add(M(rbox(0.036, 0.024, 0.10, 0.01, 2), m.accent, sx * 0.110, 0.054, 0.13));
   }
-  dress(b, m, { hw: 0.117, hl: 0.229, ly: 0.07, sillY: 0.046, seamZ: [-0.04], seamH: 0.03, seamY: 0.068 });
+  b.add(M(rbox(0.20, 0.028, 0.10, 0.012, 3), m.candy, 0, 0.098, 0.155)); /* rear deck */
+  /* windscreen + metal frame */
+  const ws = M(rbox(0.168, 0.048, 0.006, 0.002, 2), m.glass, 0, 0.122, -0.062); ws.rotation.x = -0.42; b.add(ws);
+  const ff = M(new THREE.BoxGeometry(0.172, 0.004, 0.007), m.silver, 0, 0.146, -0.074); ff.rotation.x = -0.42; b.add(ff);
+  for (const sx of [-1, 1]) {
+    const st = M(new THREE.BoxGeometry(0.007, 0.05, 0.007), m.silver, sx * 0.084, 0.122, -0.062);
+    st.rotation.x = -0.42; b.add(st);
+  }
+  lights(b, m, { hw: 0.117, hl: 0.229, ly: 0.068 });
   addWheels(car, m, [[-0.12, -0.135], [0.12, -0.135], [-0.12, 0.13], [0.12, 0.13]], 0.045, 0.036);
 }
 
