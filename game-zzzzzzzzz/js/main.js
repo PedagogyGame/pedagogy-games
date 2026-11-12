@@ -1,15 +1,15 @@
 import * as THREE from "three";
-import { batchStatic } from "./batch.js?v=logic38";
-import { Player } from "./player.js?v=logic38";
-import { Mansion } from "./mansion.js?v=logic38";
-import { InspectMode } from "./inspect.js?v=logic38";
-import { SliceSystem } from "./slice.js?v=logic38";
-import { DriveMode } from "./drive/driveMode.js?v=logic38";
-import { VEHICLE_PRESETS } from "./drive/car.js?v=logic38";
-import { OBJECTS } from "./data/objects.js?v=logic38";
-import { ROOM_PURPOSES } from "./data/rooms.js?v=logic38";
-import { SpeedTrace } from "./drive/speedTrace.js?v=logic38";
-import { Skyline33 } from "./skyline33.js?v=logic38";
+import { batchStatic } from "./batch.js?v=logic39";
+import { Player } from "./player.js?v=logic39";
+import { Mansion } from "./mansion.js?v=logic39";
+import { InspectMode } from "./inspect.js?v=logic39";
+import { SliceSystem } from "./slice.js?v=logic39";
+import { DriveMode } from "./drive/driveMode.js?v=logic39";
+import { VEHICLE_PRESETS } from "./drive/car.js?v=logic39";
+import { OBJECTS } from "./data/objects.js?v=logic39";
+import { ROOM_PURPOSES } from "./data/rooms.js?v=logic39";
+import { SpeedTrace } from "./drive/speedTrace.js?v=logic39";
+import { Skyline33 } from "./skyline33.js?v=logic39";
 
 const canvas = document.getElementById("c");
 if (canvas && (canvas.tabIndex < 0 || !canvas.hasAttribute("tabindex"))) canvas.tabIndex = 0;

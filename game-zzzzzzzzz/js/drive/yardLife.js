@@ -13,7 +13,7 @@
  *         lab window road. 120 s without seeing the car → it gives up, walks home, lies down (cooldown).
  */
 import * as THREE from "three";
-import { LIFT_APRONS } from "./world.js?v=logic38";
+import { LIFT_APRONS } from "./world.js?v=logic39";
 
 export const DOG_T = {
   house: { x: 45.4, z: 15.2, yaw: -Math.PI / 2 }, // door faces west (toward the garage / yard)

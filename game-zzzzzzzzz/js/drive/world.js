@@ -1,11 +1,11 @@
-import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic38";
-import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic38";
+import { FOUNTAIN, CONVEYOR, conveyorFrame } from "../data/loftNet.js?v=logic39";
+import { KICKERS, kickerBox, kickerY } from "../data/kickers.js?v=logic39";
 import * as THREE from "three";
-import { ROOMS } from "../data/rooms.js?v=logic38";
-import { ASPHALT_RIDE } from "./tracks.js?v=logic38";
-import { mouseWorldLayout } from "./mouseWorld.js?v=logic38";
-import { LOFT_PATHS } from "../data/loftNet.js?v=logic38";
-import { towerDeckAt } from "../data/tower.js?v=logic38";
+import { ROOMS } from "../data/rooms.js?v=logic39";
+import { ASPHALT_RIDE } from "./tracks.js?v=logic39";
+import { mouseWorldLayout } from "./mouseWorld.js?v=logic39";
+import { LOFT_PATHS } from "../data/loftNet.js?v=logic39";
+import { towerDeckAt } from "../data/tower.js?v=logic39";
 
 /**
  * logic8 DriveWorld — the house as a drivable place, not a racetrack.
@@ -443,10 +443,13 @@ export class DriveWorld {
     return conveyorFrame(K.v * t + (i * L) / K.n);
   }
   /** index of the carrying flap the car stands on (within 2 cm), else -1 */
-  flapUnder(x, z, y) {
+  flapUnder(x, z, y, riding = false) {
     const P = CONVEYOR.phys, K = CONVEYOR;
     if (x < P.minX || x > P.maxX || z < P.minZ || z > P.maxZ) return -1;
-    for (let i = 0; i < K.n; i++) { const f = this.flapAt(i); if (f.carrying && f.y > y - 0.004 && f.y < y + 0.02) return i; /* actually holding the car up */ }
+    // logic39: first contact stays tight so we don't drop 5 cm onto a flap still rising into the cage;
+    // once riding, a wider window absorbs a one-frame clock lag.
+    const lo = riding ? 0.03 : 0.008, hi = riding ? 0.05 : 0.02;
+    for (let i = 0; i < K.n; i++) { const f = this.flapAt(i); if (f.carrying && f.y > y - lo && f.y < y + hi) return i; }
     return -1;
   }
 
@@ -455,11 +458,16 @@ export class DriveWorld {
    * highest surface with top ≤ yRef + step. null → nothing below (void).
    */
   groundAt(x, z, yRef, step = STEP_UP) {
-    let best = null;
+    let best = null, flap = null;
     for (const s of this.surfacesAt(x, z)) {
       if (s.y > yRef + step) continue;
+      if (s.rug === "flap" && Math.abs(s.y - yRef) < 0.012) flap = s;
       if (!best || s.y > best.y || (s.y === best.y && s.kind === "road")) best = s;
     }
+    // logic39: a flap at the car's height wins over a nearby static floor/apron so the belt
+    // doesn't lose the rider mid-shaft — but never snap DOWN onto a flap still rising into the cage.
+    // Drive-off is unchanged: once the car leaves the flap footprint, surfacesAt drops the flap.
+    if (flap && best && best.rug !== "flap" && flap.y >= best.y - 0.006 && Math.abs(best.y - flap.y) < 0.04) return flap;
     return best;
   }
 

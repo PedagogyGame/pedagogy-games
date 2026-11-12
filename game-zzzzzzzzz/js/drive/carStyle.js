@@ -245,17 +245,9 @@ function shadowTex37(wheels) {
 export function addContactShadow35(car) {
   if (car._shadow35) { car.root.remove(car._shadow35); car._shadow35.geometry.dispose(); if (car._shadow35.material) car._shadow35.material.dispose(); car._shadow35 = null; }
   car._env35 = false;
-  const roots = car._wheelRoots || []; if (!roots.length || typeof document === "undefined") return;
-  let mx = 0, mz = 0; for (const w of roots) { mx = Math.max(mx, Math.abs(w.position.x)); mz = Math.max(mz, Math.abs(w.position.z)); }
-  const W = mx * 2 + 0.09, L = mz * 2 + 0.16;
-  const wheels = roots.map((w) => [64 + (w.position.x / W) * 128, 128 + (w.position.z / L) * 256]);
-  if (!_shadowTex37) _shadowTex37 = shadowTex37(wheels);
-  /* opacity 0.46 ≈ −38.7 % vs logic36's 0.75; depthWrite off + stronger polygonOffset + lift in car.js stop the flicker */
-  const mat = new THREE.MeshBasicMaterial({ map: _shadowTex37, color: 0xffffff, transparent: true, opacity: 0.46, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8, toneMapped: false, fog: true });
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(W, L), mat); m.name = "car_contact_shadow"; m.rotation.x = -Math.PI / 2; m.position.y = 0.02; m.renderOrder = 10; m.castShadow = false; m.receiveShadow = false;
-  m.userData.halfL = L * 0.5; m.userData.baseOp = 0.46;
-  car.root.add(m); car._shadow35 = m;
-  if (!globalThis.__CAR_ENV35) try {
+  // logic39: contact/blob shadow and tyre-contact darkening removed entirely (Ben: "the car still has some shadow which looks annoying").
+  // Shadow-map casts on the car were already off (renderer.shadowMap + mesh.castShadow). Keep the mansion-tone env map for lacquer/chrome.
+  if (!globalThis.__CAR_ENV35 && typeof document !== "undefined") try {
     const c = document.createElement("canvas"); c.width = 256; c.height = 128; const x = c.getContext("2d");
     const g = x.createLinearGradient(0, 0, 0, 128); g.addColorStop(0, "#2a2f44"); g.addColorStop(0.42, "#6b5a46"); g.addColorStop(0.5, "#3a2a20"); g.addColorStop(1, "#140e0a");
     x.fillStyle = g; x.fillRect(0, 0, 256, 128);

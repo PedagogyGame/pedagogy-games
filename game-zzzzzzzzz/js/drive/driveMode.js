@@ -1,18 +1,18 @@
-import { loftSolids } from "./loftNet.js?v=logic38";
-import { KICKERS, kickerBox } from "../data/kickers.js?v=logic38";
-import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic38";
-import { ROOMS } from "../data/rooms.js?v=logic38";
+import { loftSolids } from "./loftNet.js?v=logic39";
+import { KICKERS, kickerBox } from "../data/kickers.js?v=logic39";
+import { YardLife, buildRoofDeck } from "./yardLife.js?v=logic39";
+import { ROOMS } from "../data/rooms.js?v=logic39";
 import * as THREE from "three";
-import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic38";
-import { TrackSystem } from "./tracks.js?v=logic38";
-import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic38";
-import { EngineAudio } from "./engineAudio.js?v=logic38";
-import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic38";
-import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic38";
-import { TOWER, towerSolids } from "../data/tower.js?v=logic38";
-import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic38";
-import { TreeCritters } from "./treehouse.js?v=logic38";
-import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic38";
+import { RCCar, VEHICLE_PRESETS, CAR_K, CAR_SCALE } from "./car.js?v=logic39";
+import { TrackSystem } from "./tracks.js?v=logic39";
+import { DriveWorld, railHit, LIFT_APRONS, LIFT_STOPS, LIFT_STOP_HOLD } from "./world.js?v=logic39";
+import { EngineAudio } from "./engineAudio.js?v=logic39";
+import { CAR_SPAWN, SHORTCUT_TOAST_RE, RAMP_MOUNT_FEET } from "../data/tracks.js?v=logic39";
+import { LIFTS, CONVEYOR } from "../data/loftNet.js?v=logic39";
+import { TOWER, towerSolids } from "../data/tower.js?v=logic39";
+import { GhostBooks, makeFlames } from "./ghostBooks.js?v=logic39";
+import { TreeCritters } from "./treehouse.js?v=logic39";
+import { BOOKS_FOR_TURBO, BOOKS_FOR_SUPER } from "../data/ghostBooks.js?v=logic39";
 
 /**
  * Drive-mode orchestrator: TRUE MANUAL RC + chase cam + crash/restart.
@@ -818,6 +818,7 @@ export class DriveMode {
       document.removeEventListener("keyup", this._onKey, true);
     }
     this.parkForExplore();
+    this._restoreCamOcclusion(true);
     if (this.onHud) this.onHud({ mode: "off" });
   }
 
@@ -1550,12 +1551,17 @@ export class DriveMode {
     if (!w || !w.conveyor) return null;
     const car = this.car, p = car.position, K = CONVEYOR;
     // logic29 (Ben 7:24 PM): the belt PAUSES with the rider's flap flush at every level it passes; drive off any open side.
+    // logic39: ease in/out near stops (the old belt started/stopped at a hard 0.5 m/s) and velocity-match
+    // the car to the flap so the platform never leaves the wheels for a frame (the bounce was squash + lag).
     { const i0 = this._onFlap ?? -1, f0 = i0 >= 0 ? w.flapAt(i0) : null;
       if (!f0 || !f0.carrying) { this._liftHold = null; if (i0 < 0) this._liftStopDone = null; }
+      const yBefore = (f0 && f0.carrying) ? f0.y : null;
       let H = this._liftHold;
       if (!H && f0 && f0.carrying) for (const S of LIFT_STOPS) {
-        if (this._liftStopDone === S.y || f0.y > S.y + 1e-4 || f0.y + K.v * dt < S.y) continue;
-        w.conveyor.t += (S.y - f0.y) / K.v; this._liftStopDone = S.y; // land the flap exactly on the floor line
+        if (this._liftStopDone === S.y || f0.y > S.y + 1e-4) continue;
+        const vNow = this._convSpeed39(f0.y, 0);
+        if (f0.y + Math.max(vNow, 0.08 * K.v) * dt < S.y) continue;
+        w.conveyor.t += (S.y - f0.y) / K.v; this._liftStopDone = S.y; this._convRampT = null; // land the flap exactly on the floor line
         H = this._liftHold = { S, T: LIFT_STOP_HOLD, hintT: 0, hint: `${S.name}: ${S.west ? "← Drive off (W)   ·   " : ""}Drive off → (S / reverse)` };
         break;
       }
@@ -1566,8 +1572,13 @@ export class DriveMode {
       if (H && (H.hintT -= dt) <= 0) { H.hintT = 0.6; if (this.onHud) this.onHud({ mode: "toast", text: H.hint }); }
       // logic30: a dedicated on-screen lift hint (logic29's toast went to the no-op onHud → never showed)
       { const want = this._liftHold ? this._liftHold.hint : (this._towerHint || null); if (want !== this._liftHintShown) { this._liftHintShown = want; if (this.onLiftHint) this.onLiftHint(want); } }
-      if (H) { H.T -= dt; if (H.T <= 0) this._liftHold = null; }
-      if (!this._liftHold) w.conveyor.t += dt; }
+      if (H) { H.T -= dt; if (H.T <= 0) { this._liftHold = null; this._convRampT = 0; } }
+      if (!this._liftHold) w.conveyor.t += dt * (this._convSpeed39(yBefore, dt) / K.v);
+      if (yBefore != null && i0 >= 0) {
+        const f1 = w.flapAt(i0);
+        if (f1 && f1.carrying) { p.y += f1.y - yBefore; car.vy = 0; car.airborne = false; this._stuckTimer = 0; }
+      }
+    }
     let S = this._convSlide;
     if (!S) {
       const i = this._onFlap ?? -1;
@@ -1656,7 +1667,8 @@ export class DriveMode {
     this._lastFlags = flags;
     this._tickBooks(dt); // logic15
     // logic14: standing on a carrying conveyor flap?
-    this._onFlap = (this.world && !this._convSlide && !this.car.airborne && this.world.flapUnder) ? this.world.flapUnder(pos.x, pos.z, pos.y) : -1;
+    this._onFlap = (this.world && !this._convSlide && this.world.flapUnder) ? this.world.flapUnder(pos.x, pos.z, pos.y, this._onFlap >= 0) : -1;
+    if (this._onFlap >= 0) { this.car.airborne = false; this.car.vy = 0; this._stuckTimer = 0; }
     if (this._onFlap < 0 && !this._convSlide) this._convToast = false;
     if (this._onFlap >= 0) { // logic16: belt guide — riders ease to the middle of the flaps (no grinding the cage at the lip)
       const P = CONVEYOR.phys, zc = (P.minZ + P.maxZ) / 2;
@@ -1801,6 +1813,9 @@ export class DriveMode {
         hX *= pc; hZ *= pc; camY += h * Math.sin(ml.pitch);
       }
     }
+    // logic39: remember the unpulled chase point so occlusion fade still sees walls the solid-guard later sits in front of
+    this._camNom = this._camNom || { x: 0, y: 0, z: 0 };
+    this._camNom.x = pp.x + hX; this._camNom.y = camY; this._camNom.z = pp.z + hZ;
     // logic8: off-road the car can run under/beside furniture. Never let the chase cam sit
     // inside a solid or behind one: pull it in along the car→camera ray to just before the
     // first solid (never closer than 0.12u), and keep it above the car's roof.
@@ -1901,6 +1916,7 @@ export class DriveMode {
       } else this._camPitchS = e; }
     this.camera.lookAt(this._camLookSmooth);
     this._sanitizeCamera();
+    this._updateCamOcclusion(dt); // logic39: fade walls/ceilings between the chase cam and the car
 
     const inDark = !!this._inMouseRun; // logic9: inside the hollow-wall mouse run
     this._tunnelDark = THREE.MathUtils.lerp(this._tunnelDark, inDark ? 1 : 0, 1 - Math.exp(-3.5 * dt));
@@ -2451,6 +2467,188 @@ export class DriveMode {
         finish(false, `CLIMB AUTO TIMEOUT maxY=${ad.maxY.toFixed(2)} on=${onOk ? 1 : 0} path=${pathId} ${visTag} block=${ad.visLastBlock || "-"} (need maxY≥4.15 + on=1 + no crash + car in frame + asphalt under car)`);
       }
     }
+  }
+
+
+  /** logic39: conveyor speed with cosine ease-out in the last 0.25 m before a stop, and ease-in after a hold. */
+  _convSpeed39(fY, dt) {
+    const K = CONVEYOR;
+    let mul = 1;
+    if (fY != null) for (const S of LIFT_STOPS) {
+      if (this._liftStopDone === S.y) continue;
+      const d = S.y - fY;
+      if (d > 0 && d < 0.25) {
+        const u = d / 0.25;
+        mul = Math.min(mul, 0.08 + 0.92 * (0.5 - 0.5 * Math.cos(Math.PI * u)));
+      }
+    }
+    if (this._convRampT != null) {
+      if (dt > 0) this._convRampT += dt;
+      const u = Math.min(1, this._convRampT / 0.55);
+      mul *= 0.5 - 0.5 * Math.cos(Math.PI * u);
+      if (u >= 1) this._convRampT = null;
+    }
+    return K.v * mul;
+  }
+
+  /** logic39 camera occlusion: walls / ceilings / large props between the chase cam and the car
+   *  fade to ~20% opacity and restore when the sight line is clear. A few throttled rays; materials
+   *  are cloned (shared batches stay intact); depthWrite is off while faded so there is no z-fight. */
+  _updateCamOcclusion(dt = 1 / 60) {
+    if (!this.scene || !this.camera || !this.car) return;
+    const want = this._occRefreshHits(dt);
+    this._occApply(want, dt);
+  }
+
+  _occCollectMeshes() {
+    const list = [];
+    const root = this.car && this.car.root;
+    const skipRe = /shadow|sparkle|glow|fx|flame|light|sky|particle|contact_shadow/i;
+    this.scene.traverse((o) => {
+      if (!o.isMesh || !o.visible || o.isInstancedMesh || o.isSkinnedMesh || o.isSprite || o.isPoints || o.isLine) return;
+      if (Array.isArray(o.material) || !o.material || !o.geometry) return;
+      if (o.userData && (o.userData.creature || o.userData.mouseWorld || o.userData.noFade)) return;
+      if (o.name && skipRe.test(o.name)) return;
+      for (let p = o; p; p = p.parent) if (p === root) return;
+      const g = o.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const r = g.boundingSphere ? g.boundingSphere.radius * (Math.abs((o.scale && o.scale.x) || 1)) : 0;
+      if (r < 0.12 || r > 8) return;
+      if (o.userData.batched && r > 5) return;
+      o.updateWorldMatrix(true, false);
+      const sp = g.boundingSphere, e = o.matrixWorld.elements;
+      const c = o.userData._occC || (o.userData._occC = { x: 0, y: 0, z: 0, r: 0 });
+      c.x = e[12] + sp.center.x * e[0] + sp.center.y * e[4] + sp.center.z * e[8];
+      c.y = e[13] + sp.center.x * e[1] + sp.center.y * e[5] + sp.center.z * e[9];
+      c.z = e[14] + sp.center.x * e[2] + sp.center.y * e[6] + sp.center.z * e[10];
+      const sx = Math.hypot(e[0], e[1], e[2]), sy = Math.hypot(e[4], e[5], e[6]), sz = Math.hypot(e[8], e[9], e[10]);
+      c.r = sp.radius * Math.max(sx, sy, sz);
+      list.push(o);
+    });
+    this._occMeshes = list;
+    this._occMeshesAt = this._time || 0;
+    this._occMeshesAtX = this.car.position.x;
+    this._occMeshesAtZ = this.car.position.z;
+  }
+
+  _occRefreshHits(dt) {
+    this._occTick = (this._occTick || 0) + 1;
+    if (this._occWant && (this._occTick % 2) !== 0) return this._occWant;
+    const car = this.car.position, camP = this.camera.position;
+    if ((this._occMeshes == null) || (this._time - (this._occMeshesAt || 0) > 2)
+      || Math.hypot(car.x - (this._occMeshesAtX || 0), car.z - (this._occMeshesAtZ || 0)) > 4) this._occCollectMeshes();
+    const all = this._occMeshes || [];
+    // only test meshes whose world sphere is near the cam–car segment (avoids thousands of ray tests)
+    const mx = (camP.x + car.x) * 0.5, my = (camP.y + car.y) * 0.5, mz = (camP.z + car.z) * 0.5;
+    const reach = Math.hypot(camP.x - car.x, camP.y - car.y, camP.z - car.z) * 0.5 + 1.5;
+    const meshes = [];
+    for (const o of all) {
+      const c = o.userData && o.userData._occC;
+      if (c && Math.hypot(c.x - mx, c.y - my, c.z - mz) - (c.r || 0) > reach) continue;
+      meshes.push(o);
+    }
+    const rc = this._occRay || (this._occRay = new THREE.Raycaster());
+    const dir = this._occDir || (this._occDir = new THREE.Vector3());
+    const targets = this._occTargets || (this._occTargets = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]);
+    targets[0].set(car.x, car.y + 0.045, car.z);
+    targets[1].set(car.x, car.y + 0.10, car.z);
+    const sy = Math.sin(this.car.yaw || 0), cy = Math.cos(this.car.yaw || 0);
+    targets[2].set(car.x + cy * 0.05, car.y + 0.05, car.z - sy * 0.05);
+    targets[3].set(car.x - cy * 0.05, car.y + 0.05, car.z + sy * 0.05);
+    const hits = new Set();
+    const origins = [camP];
+    const nom = this._camNom;
+    if (nom && Math.hypot(nom.x - camP.x, nom.y - camP.y, nom.z - camP.z) > 0.08) {
+      origins.push({ x: nom.x, y: nom.y, z: nom.z });
+    }
+    for (const O of origins) {
+      for (let i = 0; i < targets.length; i++) {
+        const T = targets[i];
+        dir.set(T.x - O.x, T.y - O.y, T.z - O.z);
+        const dist = dir.length();
+        if (dist < 0.08) continue;
+        dir.multiplyScalar(1 / dist);
+        rc.set(O, dir);
+        rc.near = 0.06;
+        rc.far = Math.max(0.07, dist - 0.05);
+        const found = rc.intersectObjects(meshes, false);
+        for (const h of found) {
+          if (!h.object || h.distance < 0.06) continue;
+          hits.add(h.object);
+          if (hits.size >= 16) break;
+        }
+        if (hits.size >= 16) break;
+      }
+      if (hits.size >= 16) break;
+    }
+    this._occWant = hits;
+    return hits;
+  }
+
+  _occEnsure(mesh) {
+    let u = mesh.userData._occ39;
+    if (u) return u;
+    const orig = mesh.material;
+    if (!orig || Array.isArray(orig)) return null;
+    const clone = orig.clone();
+    u = mesh.userData._occ39 = {
+      orig, clone,
+      op: orig.opacity ?? 1,
+      base: orig.opacity ?? 1,
+      trans: !!orig.transparent,
+      dw: orig.depthWrite !== false,
+      ro: mesh.renderOrder || 0,
+    };
+    mesh.material = clone;
+    return u;
+  }
+
+  _occApply(want, dt) {
+    const k = Math.min(1, 8 * dt);
+    const fading = this._occFading || (this._occFading = new Set());
+    if (want) for (const m of want) fading.add(m);
+    const GOAL = 0.20;
+    const done = [];
+    for (const mesh of fading) {
+      if (!mesh || !mesh.material) { done.push(mesh); continue; }
+      const toward = !!(want && want.has(mesh));
+      const u = this._occEnsure(mesh);
+      if (!u) { done.push(mesh); continue; }
+      const goal = toward ? Math.min(GOAL, u.base) : u.base;
+      u.op += (goal - u.op) * k;
+      if (!toward && Math.abs(u.op - u.base) < 0.012) {
+        mesh.material = u.orig;
+        mesh.renderOrder = u.ro;
+        delete mesh.userData._occ39;
+        done.push(mesh);
+        continue;
+      }
+      const cl = u.clone;
+      cl.opacity = u.op;
+      cl.transparent = true;
+      cl.depthWrite = false;
+      cl.needsUpdate = true;
+      mesh.material = cl;
+      mesh.renderOrder = u.ro + 4;
+    }
+    for (const m of done) fading.delete(m);
+  }
+
+  _restoreCamOcclusion(immediate = false) {
+    const fading = this._occFading;
+    if (!fading) return;
+    if (immediate) {
+      for (const mesh of fading) {
+        const u = mesh && mesh.userData && mesh.userData._occ39;
+        if (!u) continue;
+        mesh.material = u.orig;
+        mesh.renderOrder = u.ro;
+        delete mesh.userData._occ39;
+      }
+      fading.clear();
+      this._occWant = null;
+      this._occMeshes = null;
+    } else this._occApply(new Set(), 1);
   }
 
 }

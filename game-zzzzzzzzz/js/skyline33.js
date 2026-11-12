@@ -13,7 +13,7 @@
  * Pure visuals: no colliders here (the tower's Drive colliders live in data/tower.js → towerSolids()).
  */
 import * as THREE from "three";
-import { TOWER } from "./data/tower.js?v=logic38";
+import { TOWER } from "./data/tower.js?v=logic39";
 
 const CYAN = 0x22e6ff, AMBER = 0xffb347;
 const rand = (() => { let s = 1337; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();

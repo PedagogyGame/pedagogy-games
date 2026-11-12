@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic38"; // logic29 nicer cars
+import { vehicleMats, buildCar, buildSuv, buildJeep, buildConvertible, addContactShadow35 } from "./carStyle.js?v=logic39"; // logic29 nicer cars
 
 /**
  * Premium miniature RC vehicles — toy/mouse scale (~0.10–0.11 m long).
@@ -853,7 +853,7 @@ export class RCCar {
     const aLong = dt > 1e-4 ? (this.speed - (this._prevSpeed35 ?? this.speed)) / dt : 0; this._prevSpeed35 = this.speed;
     this._aLong35 = THREE.MathUtils.lerp(this._aLong35 || 0, THREE.MathUtils.clamp(aLong, -12, 12), Math.min(1, 6 * dt));
     const weightPitch = THREE.MathUtils.clamp(-this._aLong35 * 0.006, -0.05, 0.05); // +accel → nose up (−x in parent frame)
-    { const dyS = p.y - (this._lastGroundY35 ?? p.y) - grade * stepD * Math.sign(this.speed || 0); /* logic36: a step OFF the slope line (not the slope itself) */ if (this._lastGroundY35 != null && !this.airborne && !this._stairS36 && Math.abs(dyS) > 0.0025 && Math.abs(dyS) < 0.05) this._squash = Math.max(this._squash, 0.28); }
+    { const dyS = p.y - (this._lastGroundY35 ?? p.y) - grade * stepD * Math.sign(this.speed || 0); /* logic36: a step OFF the slope line (not the slope itself) */ if (this._lastGroundY35 != null && !this.airborne && !this._stairS36 && !(gN && gN.rug === "flap") && Math.abs(dyS) > 0.0025 && Math.abs(dyS) < 0.05) this._squash = Math.max(this._squash, 0.28); } /* logic39: a rising conveyor flap is not a kerb — squash every frame was the ride bounce */
     this._lastGroundY35 = p.y;
     if (!this.airborne) this._shadowGroundY37 = p.y;
     this.bodyPivot.rotation.x = THREE.MathUtils.lerp(this.bodyPivot.rotation.x,
