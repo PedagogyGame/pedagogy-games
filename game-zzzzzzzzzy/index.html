@@ -880,6 +880,216 @@ const start=document.createElement('button');start.className='fd-start';start.id
 window.landscapeTimeTest={data:LANDSCAPE_TIME_DATA,framesFor,exactFrame,choose,refresh};
 })();
 
+/* Shared BCE chronology index. It derives views without editing recovered records. */
+(function(factory){
+  const api=factory();
+  if(typeof module==='object'&&module.exports)module.exports=api;
+  else window.AncientWorldsTimeline=api;
+})(function(){
+  'use strict';
+  const sectors=['dynasties','ecology','kingdoms','cities'];
+  const valid=d=>!!d&&d.known===true&&Number.isFinite(d.startBce)&&Number.isFinite(d.endBce)&&d.startBce>=d.endBce&&d.endBce>0;
+  const includes=(d,y)=>valid(d)&&d.startBce>=y&&y>=d.endBce;
+  const unique=items=>[...new Set(items.filter(Boolean))];
+  function periodKind(kind){
+    if(kind==='P'||['state','dynasty','external imperial phase','imperial administration','imperial presence'].includes(kind))return 'Political context';
+    if(kind==='A'||['archaeological culture','archaeological phase'].includes(kind))return 'Archaeological phase';
+    if(kind==='M'||['archaeological / political horizon','archaeological culture / state','state / archaeological phase'].includes(kind))return 'Mixed regional context';
+    if(kind==='U'||['knowledge gap','research gap'].includes(kind))return 'Research gap';
+    return 'Regional context';
+  }
+  function build(data,ecology,living){
+    const entries=[],problems=[];
+    const sourceIds=new Set([...data.sources,...(living.sources||[])].map(s=>s.id));
+    const people=new Map(data.people.map(p=>[p.id,p]));
+    function add(entry){
+      entry.sourceIds=unique(entry.sourceIds||[]);
+      entry.regionIds=unique((entry.regionIds||[]).filter(Boolean).flatMap(r=>r.split(' '))); 
+      entry.ranges=entry.ranges||[];
+      for(const r of entry.ranges){
+        if(r.known&&!valid(r))problems.push({type:'invalid-range',id:entry.id,range:r});
+      }
+      for(const id of entry.sourceIds)if(!sourceIds.has(id))problems.push({type:'missing-source',id:entry.id,sourceId:id});
+      entries.push(entry);
+    }
+    const range=(d,regionId,roleLabel)=>({...d,regionId:regionId||'',label:d?.label||'',roleLabel:roleLabel||''});
+    for(const p of data.people){
+      const ranges=[];
+      if(!p.regionalDatesRequired)ranges.push(range(p.dates,p.region,p.role));
+      if(p.regionalDatesRequired||!valid(p.dates))for(const r of p.rolePhases||[])ranges.push(range(r.dates,r.region||p.region,r.label));
+      for(const r of p.regionalRoles||[])ranges.push(range(r.dates,r.region,r.label));
+      add({id:'person/'+p.id,sector:'dynasties',kind:'Registry entry',label:p.name,detail:p.group,note:[p.status,p.chronology,p.note].filter(Boolean).join(' · '),refType:'person',refId:p.id,regionIds:[p.region,...(p.regionalRoles||[]).map(r=>r.region)],ranges,sourceIds:[...(p.sourceIds||[]),...(p.regionalRoles||[]).flatMap(r=>r.sourceIds||[]),...(p.rolePhases||[]).flatMap(r=>r.sourceIds||[])]});
+    }
+    for(const r of data.relationships){
+      const a=people.get(r.fromId),b=people.get(r.toId);
+      add({id:'relationship/'+r.id,sector:'dynasties',kind:({parent_child:'Parent and child',succession:'Succession',marriage:'Marriage',co_rule:'Shared rule'}[r.type]||r.type.replace(/_/g,' ')),label:(a?.name||r.fromId)+' → '+(b?.name||r.toId),detail:r.label,note:r.note,refType:'relationship',refId:r.id,regionIds:[a?.region,b?.region],ranges:[range(r.dates,'',r.type)],sourceIds:r.sourceIds});
+    }
+    for(const p of data.periods)add({id:'period/'+p.id,sector:'kingdoms',kind:periodKind(p.kind),label:p.label,detail:p.chronology||'',periodKind:p.kind,note:p.note,refType:'period',refId:p.id,regionIds:[p.region],ranges:[range(p.dates,p.region)],sourceIds:p.sourceIds,territoryGeometry:false});
+    for(const e of data.events)add({id:'event/'+e.id,sector:'kingdoms',kind:e.kind||'Event',label:e.title,detail:e.description,note:e.caution,refType:'event',refId:e.id,regionIds:e.regions,ranges:[range(e.dates,'')],sourceIds:e.sourceIds});
+    for(const t of data.trade)add({id:'trade/'+t.id,sector:'cities',kind:'Exchange connection',label:t.title,detail:t.goods,note:[t.mechanism,t.caution,'A connection is not a surveyed road alignment.'].filter(Boolean).join(' '),refType:'trade',refId:t.id,regionIds:[],ranges:[range(t.dates,'')],sourceIds:t.sourceIds});
+    for(const p of data.places)add({id:'place/'+p.id,sector:'cities',kind:'Place evidence',label:p.name,detail:p.coordinateSemantics,note:[p.activityNote,p.note].filter(Boolean).join(' '),refType:'place',refId:p.id,regionIds:[p.region],ranges:(p.evidence||[]).map(e=>range(e.dates,p.region,e.label)),sourceIds:unique([...(p.sourceIds||[]),...(p.evidence||[]).flatMap(e=>e.sourceIds||[])])});
+    for(const profile of ecology.profiles)for(const [i,s] of profile.stages.entries())add({id:'ecology/'+profile.id+'/'+i,sector:'ecology',kind:s.hasDates?'Ecological evidence window':'Sequence / contextual evidence',label:s.label,detail:profile.name,note:[s.text,s.basis,'A matching date can be a sampling or dating-uncertainty window; it does not establish a continuously measured condition.'].filter(Boolean).join(' '),refType:'ecology',refId:profile.id,regionIds:[],ranges:[range({known:s.hasDates,startBce:s.startBce,endBce:s.endBce},'',s.label)],sourceIds:[profile.sourceId],pages:profile.pages});
+    for(const s of living.scenes){
+      const place=data.places.find(p=>p.id===s.placeId);
+      add({id:'landscape/'+s.id,sector:'cities',kind:'Explicit landscape reference',label:s.name+' · c. '+s.referenceYearBce+' BCE',detail:s.phaseLabel||s.summary,note:'An interpreted reference frame at this date; no intervening reconstruction is implied.',refType:'landscape',refId:s.id,regionIds:[place?.region],ranges:[range({known:true,startBce:s.referenceYearBce,endBce:s.referenceYearBce},place?.region)],sourceIds:s.sourceIds||[]});
+    }
+    return {entries,problems,sectors,sourceIds:[...sourceIds]};
+  }
+  function atYear(index,year,regionId=''){
+    if(!Number.isInteger(year)||year<500||year>3200)throw new RangeError('Atlas year must be an integer from 3200 to 500 BCE.');
+    const dated=[],undated=[];
+    for(const e of index.entries){
+      if(regionId&&!e.regionIds.includes(regionId))continue;
+      const known=e.ranges.filter(valid);
+      const matching=known.filter(r=>includes(r,year)&&(!regionId||!r.regionId||r.regionId.split(' ').includes(regionId)));
+      if(matching.length)dated.push({...e,matchingRanges:matching});
+      else if(!known.length)undated.push(e);
+    }
+    return {year,regionId,dated,undated,counts:Object.fromEntries(sectors.map(s=>[s,dated.filter(e=>e.sector===s).length])),unresolvedCounts:Object.fromEntries(sectors.map(s=>[s,undated.filter(e=>e.sector===s).length]))};
+  }
+  return {build,atYear,includes,valid,sectors};
+});
+
+/* A shared-date evidence view across the restored atlas. */
+const TIMELINE_RESEARCH={
+  "version": 1,
+  "policy": "Existing records are preserved; research alternatives require explicit reconciliation before adoption.",
+  "issues": [
+    {
+      "id": "ur-iii-conventions",
+      "title": "Keep chronology conventions visible",
+      "sectors": [
+        "Dynasties",
+        "Kingdoms",
+        "Timeline"
+      ],
+      "finding": "The current Ur III schedule and the schedule in ARCANE III differ. That study distinguishes relative succession from disputed absolute placement. A single silent shift would hide the source disagreement.",
+      "decision": "Retain the current dates and store the alternative schedule separately. No reigns, event dates or landscape frames are changed by this comparison.",
+      "comparisons": [
+        {
+          "personId": "K027",
+          "current": [
+            2112,
+            2095
+          ],
+          "alternative": [
+            2110,
+            2093
+          ]
+        },
+        {
+          "personId": "K028",
+          "current": [
+            2094,
+            2047
+          ],
+          "alternative": [
+            2092,
+            2045
+          ]
+        },
+        {
+          "personId": "K029",
+          "current": [
+            2046,
+            2038
+          ],
+          "alternative": [
+            2044,
+            2036
+          ]
+        },
+        {
+          "personId": "K030",
+          "current": [
+            2037,
+            2029
+          ],
+          "alternative": [
+            2035,
+            2027
+          ]
+        },
+        {
+          "personId": "K031",
+          "current": [
+            2028,
+            2004
+          ],
+          "alternative": [
+            2026,
+            2003
+          ]
+        }
+      ],
+      "sources": [
+        {
+          "title": "Sallaberger & Schrakamp, ARCANE III (2015)",
+          "locator": "pp. 5–9 and 131–132; linked PDF opens at p.131",
+          "url": "https://www.assyriologie.uni-muenchen.de/personen/professoren/sallaberger/publ_sallaberger/wasa_schrakamp_2015_arcane1.pdf#page=147"
+        }
+      ]
+    },
+    {
+      "id": "local-hydraulic-sequences",
+      "title": "Connect cities, water and routes through local evidence",
+      "sectors": [
+        "Ecology",
+        "Cities & connections",
+        "Kingdoms",
+        "Timeline"
+      ],
+      "finding": "QADIS fieldwork distinguishes early local watercourse manipulation from later canal and harbour systems. The dated sequences at Tell Rumah, Tell Drehem and Adab concern specific sites; they do not supply an exact river or road map for every Mesopotamian city.",
+      "decision": "Use these findings to prioritize local, dated infrastructure studies. Keep the existing Uruk and Eridu geometry unchanged until site-specific spatial evidence supports a revision.",
+      "sources": [
+        {
+          "title": "Mantellini et al., Geoarchaeology (2024)",
+          "locator": "sections 6.1–6.2 and 7; DOI 10.1002/gea.21992",
+          "url": "https://doi.org/10.1002/gea.21992"
+        }
+      ]
+    }
+  ]
+}
+;
+(function(){
+'use strict';
+const core=window.AncientWorldsTimeline,index=core.build(D,ECOLOGY_DATA,LIVING_DATA);
+for(const s of LIVING_DATA.sources||[])if(!sources.has(s.id))sources.set(s.id,s);
+const names={dynasties:'Dynasties & relationships',ecology:'Ecology',kingdoms:'Kingdoms & periods',cities:'Cities & connections',research:'Date research'};
+const notices={dynasties:'Date ranges describe the entered office, role or relationship. They are not life spans. Succession and kinship remain separate.',ecology:'These are dated evidence windows. A window may describe a sample, an approximate phase or uncertainty around an event; it is not automatically a continuous condition.',kingdoms:'Political context, archaeological phases and events remain distinct. A regional period is not a territory polygon or proof of control over every settlement.',cities:'Dated site evidence, exchange connections and explicit landscape reference years remain distinct. Undated locator points do not prove occupation at the selected year.'};
+const css=el('style');css.textContent=`
+.ti-panel{position:fixed;inset:2vh 3vw;z-index:110;background:#142123;color:#e9dfc8;border:1px solid #7e8a73;border-radius:8px;display:flex;flex-direction:column;box-shadow:0 20px 90px #000c;overflow:hidden}.ti-panel.hidden{display:none}.ti-head{padding:17px 22px;background:linear-gradient(110deg,#203a32,#17282d);display:flex;align-items:center;gap:18px;border-bottom:1px solid #4c645b}.ti-head h2{font:27px Georgia,serif;margin:4px 0}.ti-head button{margin-left:auto}.ti-controls{padding:12px 22px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #3e534c}.ti-controls input{width:90px}.ti-counts{font-size:11px;color:#aec3b4}.ti-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:12px 22px 0}.ti-tabs button.active{border-color:#c7b886;background:#354335;color:#f1dfac}.ti-body{padding:16px 22px;overflow:auto;flex:1;min-height:0}.ti-note{font-size:12px;line-height:1.6;color:#becbbb;margin:0 0 13px}.ti-card{padding:14px 16px;margin:10px 0;background:#1c2e2d;border-left:2px solid #899c76;border-radius:3px}.ti-card h3{font:19px Georgia,serif;margin:3px 0 7px}.ti-card p{font-size:12px;line-height:1.65;margin:6px 0}.ti-card small{font-size:10px;color:#b4c7b8}.ti-card .source{display:block;margin:6px 0}.ti-card table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}.ti-card td,.ti-card th{border-bottom:1px solid #4b6258;text-align:left;padding:7px}.ti-foot{padding:10px 22px;font-size:10px;color:#b6c3ad;border-top:1px solid #445d50}.ti-toggle{display:flex;gap:8px;align-items:center;font-size:12px}.ti-toggle input{width:auto}.ti-empty{padding:20px;background:#1b2b2a;border:1px dashed #5c7060;font-size:13px;line-height:1.7}@media(max-width:720px){.ti-panel{inset:0;border-radius:0}.ti-head{padding:12px}.ti-head h2{font-size:23px}.ti-controls,.ti-tabs,.ti-body{padding-left:12px;padding-right:12px}.ti-card{padding:12px}.ti-card table{font-size:10px}}
+`;document.head.append(css);
+const panel=el('section','ti-panel hidden');panel.id='sharedTimeline';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Shared historical timeline');
+const head=el('div','ti-head'),title=el('div');title.append(el('div','eyebrow','ONE DATE · CONNECTED EVIDENCE'),el('h2','','The world through time'));head.append(title);btn(head,'Return to atlas',close);panel.append(head);
+const controls=el('div','ti-controls'),label=el('label','','Atlas year');label.htmlFor='tiYear';const input=el('input');input.id='tiYear';input.type='number';input.min=500;input.max=3200;input.step=1;input.setAttribute('aria-label','Shared atlas year in BCE');controls.append(label,input,document.createTextNode('BCE'));btn(controls,'Set date',()=>commitYear());btn(controls,'Earlier evidence',()=>step(1));btn(controls,'Later evidence',()=>step(-1));const counts=el('span','ti-counts');counts.id='tiCounts';controls.append(counts);panel.append(controls);
+const tabs=el('nav','ti-tabs');tabs.setAttribute('aria-label','Timeline sectors');panel.append(tabs);const body=el('div','ti-body');body.id='tiBody';panel.append(body);panel.append(el('div','ti-foot','Original records are preserved. Dates filter entered evidence; missing years do not generate conquests, roads or landscapes.'));document.body.append(panel);
+let sector='dynasties',unresolved=false,savedFocus=null;
+function open(){savedFocus=document.activeElement;panel.classList.remove('hidden');render();input.focus()}
+function close(){panel.classList.add('hidden');mode(false);savedFocus?.focus?.()}
+function step(direction){const boundaries=[...new Set(index.entries.flatMap(e=>e.ranges.filter(core.valid).flatMap(r=>[r.startBce,r.endBce,r.endBce-1])))].filter(y=>y>=500&&y<=3200);const choices=boundaries.filter(y=>direction>0?y>year:y<year).sort((a,b)=>direction>0?a-b:b-a);if(choices.length)setYear(choices[0])}
+function commitYear(){setYear(Number(input.value));input.focus()}
+input.onchange=commitYear;input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitYear()}});
+function detail(entry){close();switch(entry.refType){case'person':selectPerson(people.get(entry.refId));break;case'place':openPlace(D.places.find(p=>p.id===entry.refId));break;case'event':openEvent(D.events.find(p=>p.id===entry.refId));break;case'trade':openTrade(D.trade.find(p=>p.id===entry.refId));break;case'ecology':ecologyTest.open(entry.refId);break;case'landscape':livingTest.open(entry.refId);break;default:{const box=modal(entry.label);p(box,entry.detail);p(box,entry.note);for(const r of entry.ranges.filter(core.valid))p(box,span(r));cite(box,entry.sourceIds)}}}
+function renderResearch(){
+ body.append(el('p','ti-note','Research alternatives are preserved alongside the current convention. They do not silently shift the map or rewrite the original registry. This is the first reconciliation pass, not a completed audit of the whole era.'));
+ for(const issue of TIMELINE_RESEARCH.issues){const card=el('article','ti-card');card.append(el('small','',issue.sectors.join(' · ')),el('h3','',issue.title));p(card,issue.finding);p(card,issue.decision,'note');if(issue.comparisons){const table=el('table');const tr=el('tr');for(const label of ['Figure','Current atlas BCE','ARCANE III BCE'])tr.append(el('th','',label));table.append(tr);for(const r of issue.comparisons){const row=el('tr');for(const value of [people.get(r.personId)?.name||r.personId,r.current.join('–'),r.alternative.join('–')])row.append(el('td','',value));table.append(row)}card.append(table)}for(const s of issue.sources){const a=el('a','source',s.title+' · '+s.locator);a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';card.append(a)}body.append(card)}
+ const audit=el('article','ti-card');audit.append(el('h3','','Shared evidence index'));p(audit,index.entries.length+' linked entries across four content sectors; '+index.problems.length+' unresolved structural/source-reference issues in this index.','ti-note');p(audit,'The fifth track reconciles the conventions and dependencies shared by the other four. Primary research is added as explicit evidence and qualified alternatives, before any new geometry is generated.');body.append(audit);
+}
+function render(){
+ input.value=year;const view=core.atYear(index,year);counts.textContent=year+' BCE · all regions';tabs.replaceChildren();for(const [key,name] of Object.entries(names)){const b=btn(tabs,name+(key==='research'?'':(' · '+view.counts[key])),()=>{sector=key;render();body.scrollTop=0});b.classList.toggle('active',key===sector)}body.replaceChildren();if(sector==='research'){renderResearch();return}
+ body.append(el('p','ti-note',notices[sector]));const toggle=el('label','ti-toggle'),check=el('input');check.type='checkbox';check.checked=unresolved;check.onchange=()=>{unresolved=check.checked;render();body.scrollTop=0};toggle.append(check,document.createTextNode('Show undated / sequence-only entries ('+view.unresolvedCounts[sector]+')'));body.append(toggle);
+ const list=(unresolved?view.undated:view.dated).filter(e=>e.sector===sector);const summary=el('p','ti-note',(unresolved?'Undated evidence; presence here does not date it to '+year+' BCE.':list.length+' entries whose entered date ranges include '+year+' BCE. Counts describe this registry, not the ancient population or complete political coverage.'));body.append(summary);
+ if(!list.length)body.append(el('p','ti-empty','No matching entered evidence in this view. That is a research gap, not proof of absence. Undated records remain available above.'));
+ for(const e of list){const card=el('article','ti-card');card.append(el('small','',e.kind),el('h3','',e.label));p(card,e.detail||'');if(e.matchingRanges)p(card,e.matchingRanges.map(r=>span(r)+(r.regionId?' · '+(regions.get(r.regionId)?.name||r.regionId):'')).join(' / '),'date');p(card,e.note||'','small muted');if(e.pages?.length)p(card,'Supplied synthesis pages '+e.pages.join(', '),'small muted');btn(card,'Open linked record',()=>detail(e));for(const id of e.sourceIds){const s=sources.get(id);btn(card,'↗ '+(s?.title||id),()=>{close();source(id)},'source')}body.append(card)}
+}
+const oldYear=setYear;setYear=function(y){oldYear(y);if(!panel.classList.contains('hidden'))render()};atlasTest.setYear=setYear;
+const navButton=btn(document.querySelector('header .nav'),'Shared timeline',open);navButton.id='timelineIntegrator';
+panel.addEventListener('keydown',e=>{if(e.key==='Escape'){close();e.preventDefault();e.stopPropagation()}else if(e.key==='Tab'){const f=[...panel.querySelectorAll('button,input,a[href]')].filter(x=>x.offsetParent!==null);if(e.shiftKey&&document.activeElement===f[0]){f.at(-1)?.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===f.at(-1)){f[0]?.focus();e.preventDefault()}}});
+window.timelineIntegrator={index,open,close,get year(){return year}};
+})();
+
 
 const restoredResearchLibrary={"documents": [{"title": "Ancient landscapes, farming records, cities, palaces, and roads", "fileName": "Ancient landscapes, farming records, cities, palaces, and roads, 3200–500 BC.pdf", "scope": "Supplied research synthesis, 3200–500 BC. Retained with page references and embedded source links; not independently re-audited or automatically converted into surveyed scene geometry.", "pageCount": 18, "topics": [{"title": "Evidence categories and chronology", "pages": "1–2", "note": "The supplied synthesis distinguishes administrative records, descriptive texts, images, excavated features and modern reconstructions."}, {"title": "Road and transport evidence", "pages": "2–6", "note": "It separates excavated surfaces, named journeys, rebuilding episodes and hypothetical route alignments."}, {"title": "Weather, farming and orchards", "pages": "7–12", "note": "Local observations, institutional accounts, agricultural advice and vegetation proxies retain their different evidential limits."}, {"title": "Uruk, cities and palaces", "pages": "12–15", "note": "Includes Uruk architectural decoration and evidence for Ebla, Mari, Nippur, Khorsabad, Nineveh and Babylon; page references identify the supplied synthesis, not a new primary-source audit."}]}, {"title": "Landscapes, forests, and rivers", "fileName": "Landscapes, forests, and rivers from Egypt to Central Asia and Kashmir, 3500–300 BCE.pdf", "scope": "Original supplied ecology synthesis used by the existing regional notebook.", "pageCount": 15, "topics": []}, {"title": "Ancient Eurasian Landscape and Ecology", "fileName": "Ancient Eurasian Landscape and Ecology - Google Docs.pdf", "scope": "A one-page screenshot from the start of a document; the complete manuscript is not supplied here.", "pageCount": 1, "topics": []}, {"title": "Ancient Near Eastern Dynasties Monograph", "fileName": "Ancient Near Eastern Dynasties Monograph.pdf", "scope": "Recovered original research document. Its claims have not been newly reconciled in this layer.", "pageCount": 21, "topics": []}, {"title": "Original historical chronology", "fileName": "Ancient_Western_Asia_3200-500_BCE.html", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}, {"title": "Original chronology workbook", "fileName": "Ancient_Western_Asia_3200-500_BCE.xlsx", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}, {"title": "Original research edition", "fileName": "Ancient_Worlds_Research_Edition.html", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}]};
 const previousResearchNotes=about;about=function(){previousResearchNotes();const box=$('modal');box.append(el('h2','','Supplied research and recovered originals'));for(const doc of restoredResearchLibrary.documents){const a=el('a','source',doc.title);a.href='StreamingAssets/Research/'+encodeURIComponent(doc.fileName);a.target='_blank';a.rel='noopener noreferrer';box.append(a)}};$('about').onclick=about;
