@@ -185,6 +185,7 @@ return {create,createMap};
 (function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsCurvatureMesh=api})(function(){
 'use strict';
 const finite=Number.isFinite;
+const planCache=new WeakMap();let planBuilds=0,planHits=0;
 function dimensions(image){const width=image?.naturalWidth||image?.width,height=image?.naturalHeight||image?.height;if(!finite(width)||!finite(height)||width<=0||height<=0)throw new RangeError('Raster dimensions must be positive and finite.');return [width,height]}
 function affine(s,d){
  const sx1=s[1][0]-s[0][0],sy1=s[1][1]-s[0][1],sx2=s[2][0]-s[0][0],sy2=s[2][1]-s[0][1],den=sx1*sy2-sx2*sy1;
@@ -202,18 +203,78 @@ function drawRaster(ctx,image,rect,warp,{cellSize=32,maxColumns=64,maxRows=48,se
  if(warp.strength===0){ctx.drawImage(image,rect.x,rect.y,rect.width,rect.height);return {flatBypass:true,triangles:0,columns:0,rows:0}}
  const bounds=warp.flatBounds(3),x=Math.max(rect.x,bounds.x),y=Math.max(rect.y,bounds.y),right=Math.min(rect.x+rect.width,bounds.x+bounds.width),bottom=Math.min(rect.y+rect.height,bounds.y+bounds.height);
  if(right<=x||bottom<=y)return {flatBypass:false,triangles:0,columns:0,rows:0};
- const cols=Math.min(maxColumns,Math.max(1,Math.ceil((right-x)/cellSize))),rows=Math.min(maxRows,Math.max(1,Math.ceil((bottom-y)/cellSize))),vertices=[];
- for(let row=0;row<=rows;row++){const line=[];for(let col=0;col<=cols;col++){const fx=x+(right-x)*col/cols,fy=y+(bottom-y)*row/rows;line.push({source:[(fx-rect.x)/rect.width*iw,(fy-rect.y)/rect.height*ih],dest:warp.forward(fx,fy)})}vertices.push(line)}
+ const key=[rect.x,rect.y,rect.width,rect.height,iw,ih,cellSize,maxColumns,maxRows,seamOverlap].join('|');let cache=planCache.get(warp);if(!cache){cache=new Map();planCache.set(warp,cache)}let plan=cache.get(key);
+ if(!plan){
+  const cols=Math.min(maxColumns,Math.max(1,Math.ceil((right-x)/cellSize))),rows=Math.min(maxRows,Math.max(1,Math.ceil((bottom-y)/cellSize))),vertices=[],commands=[];
+  for(let row=0;row<=rows;row++){const line=[];for(let col=0;col<=cols;col++){const fx=x+(right-x)*col/cols,fy=y+(bottom-y)*row/rows;line.push({source:[(fx-rect.x)/rect.width*iw,(fy-rect.y)/rect.height*ih],dest:warp.forward(fx,fy)})}vertices.push(line)}
+  const triangle=vs=>{const source=vs.map(v=>v.source),dest=vs.map(v=>v.dest),matrix=affine(source,dest);if(!matrix)return;const polygon=expanded(dest,seamOverlap),sx=Math.max(0,Math.min(...source.map(p=>p[0]))-2),sy=Math.max(0,Math.min(...source.map(p=>p[1]))-2),sw=Math.min(iw,Math.max(...source.map(p=>p[0]))+2)-sx,sh=Math.min(ih,Math.max(...source.map(p=>p[1]))+2)-sy;commands.push({polygon,matrix,sx,sy,sw,sh})};
+  for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){const a=vertices[row][col],b=vertices[row][col+1],c=vertices[row+1][col],d=vertices[row+1][col+1];triangle([a,b,d]);triangle([a,d,c])}
+  plan={cols,rows,commands};cache.set(key,plan);if(cache.size>4)cache.delete(cache.keys().next().value);planBuilds++;
+ }else planHits++;
  let triangles=0;
- function triangle(vs){
-  const source=vs.map(v=>v.source),dest=vs.map(v=>v.dest),matrix=affine(source,dest);if(!matrix)return;
-  const polygon=expanded(dest,seamOverlap),sx=Math.max(0,Math.min(...source.map(p=>p[0]))-2),sy=Math.max(0,Math.min(...source.map(p=>p[1]))-2),sw=Math.min(iw,Math.max(...source.map(p=>p[0]))+2)-sx,sh=Math.min(ih,Math.max(...source.map(p=>p[1]))+2)-sy;
-  ctx.save();try{ctx.beginPath();ctx.moveTo(...polygon[0]);ctx.lineTo(...polygon[1]);ctx.lineTo(...polygon[2]);ctx.closePath();ctx.clip();ctx.transform(...matrix);ctx.drawImage(image,sx,sy,sw,sh,sx,sy,sw,sh);triangles++}finally{ctx.restore()}
- }
- ctx.save();try{for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){const a=vertices[row][col],b=vertices[row][col+1],c=vertices[row+1][col],d=vertices[row+1][col+1];triangle([a,b,d]);triangle([a,d,c])}}finally{ctx.restore()}
+ ctx.save();try{for(const {polygon,matrix,sx,sy,sw,sh} of plan.commands){ctx.save();try{ctx.beginPath();ctx.moveTo(...polygon[0]);ctx.lineTo(...polygon[1]);ctx.lineTo(...polygon[2]);ctx.closePath();ctx.clip();ctx.transform(...matrix);ctx.drawImage(image,sx,sy,sw,sh,sx,sy,sw,sh);triangles++}finally{ctx.restore()}}}finally{ctx.restore()}
+ const {cols,rows}=plan;
  return {flatBypass:false,triangles,columns:cols,rows,flatRect:{x,y,width:right-x,height:bottom-y}};
 }
-return {drawRaster,affine};
+return {drawRaster,affine,get stats(){return {geometryBuilds:planBuilds,geometryCacheHits:planHits}}};
+});
+
+/* Native raster warp: one indexed draw, with the same grid as the Canvas fallback. */
+(function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsCurvatureAccelerator=api})(function(){
+'use strict';
+const finite=Number.isFinite;
+function geometry(rect,warp,{cellSize=32,maxColumns=64,maxRows=48}={}){
+ if(!rect||![rect.x,rect.y,rect.width,rect.height].every(finite)||rect.width<=0||rect.height<=0||!warp||!finite(warp.width)||!finite(warp.height)||warp.width<=1||warp.height<=1||typeof warp.forward!=='function'||typeof warp.flatBounds!=='function')throw new RangeError('A measured viewport and finite raster rectangle are required.');
+ if(!finite(cellSize)||cellSize<=0||!Number.isInteger(maxColumns)||maxColumns<1||maxColumns>256||!Number.isInteger(maxRows)||maxRows<1||maxRows>256)throw new RangeError('Invalid raster mesh quality.');
+ const b=warp.flatBounds(3),x=Math.max(rect.x,b.x),y=Math.max(rect.y,b.y),right=Math.min(rect.x+rect.width,b.x+b.width),bottom=Math.min(rect.y+rect.height,b.y+b.height);
+ if(right<=x||bottom<=y)return {vertices:new Float32Array(0),indices:new Uint16Array(0),columns:0,rows:0,triangles:0,flatRect:{x,y,width:0,height:0}};
+ const columns=Math.min(maxColumns,Math.max(1,Math.ceil((right-x)/cellSize))),rows=Math.min(maxRows,Math.max(1,Math.ceil((bottom-y)/cellSize)));
+ if((columns+1)*(rows+1)>65535)throw new RangeError('The mesh exceeds the portable index limit.');
+ const vertices=new Float32Array((columns+1)*(rows+1)*4),indices=new Uint16Array(columns*rows*6);let vertex=0,index=0;
+ for(let row=0;row<=rows;row++)for(let col=0;col<=columns;col++){
+  const fx=x+(right-x)*col/columns,fy=y+(bottom-y)*row/rows,p=warp.forward(fx,fy);
+  vertices[vertex++]=p[0]/warp.width*2-1;vertices[vertex++]=1-p[1]/warp.height*2;
+  vertices[vertex++]=(fx-rect.x)/rect.width;vertices[vertex++]=(fy-rect.y)/rect.height;
+ }
+ for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){const a=row*(columns+1)+col,b=a+1,c=a+columns+1,d=c+1;for(const n of [a,b,d,a,d,c])indices[index++]=n}
+ return {vertices,indices,columns,rows,triangles:columns*rows*2,flatRect:{x,y,width:right-x,height:bottom-y}};
+}
+const vertexSource='attribute vec2 a_position;attribute vec2 a_uv;varying highp vec2 v_uv;void main(){gl_Position=vec4(a_position,0.0,1.0);v_uv=a_uv;}';
+const fragmentSource='precision highp float;uniform sampler2D u_image;varying highp vec2 v_uv;void main(){gl_FragColor=vec4(texture2D(u_image,v_uv).rgb,1.0);}';
+function create(canvas,{onChange=()=>{}}={}){
+ let gl,program,position,uv,sampler,vertexBuffer,indexBuffer,texture,mesh=null,meshKey='',textureWidth=0,textureHeight=0,lost=false,disposed=false,available=false,fallbackReason='WebGL unavailable';
+ const stats={geometryBuilds:0,textureUploads:0,drawCalls:0,triangles:0};
+ try{gl=canvas?.getContext('webgl',{alpha:false,antialias:false,premultipliedAlpha:false,preserveDrawingBuffer:true,depth:false,stencil:false})}catch(e){gl=null}
+ function init(){
+  if(!gl||typeof gl.createShader!=='function')return false;
+  const shader=(type,text)=>{const s=gl.createShader(type);gl.shaderSource(s,text);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){gl.deleteShader(s);throw new Error('Raster shader unavailable.')}return s};
+  let vs,fs;
+  try{
+   vs=shader(gl.VERTEX_SHADER,vertexSource);fs=shader(gl.FRAGMENT_SHADER,fragmentSource);program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Raster program unavailable.');
+   position=gl.getAttribLocation(program,'a_position');uv=gl.getAttribLocation(program,'a_uv');sampler=gl.getUniformLocation(program,'u_image');vertexBuffer=gl.createBuffer();indexBuffer=gl.createBuffer();texture=gl.createTexture();meshKey='';mesh=null;textureWidth=textureHeight=0;available=true;fallbackReason='';return true;
+  }catch(e){available=false;fallbackReason=e.message;return false}finally{if(vs)gl.deleteShader(vs);if(fs)gl.deleteShader(fs)}
+ }
+ init();
+ const contextLost=e=>{e.preventDefault?.();lost=true;available=false;fallbackReason='Graphics context unavailable';onChange()};
+ const contextRestored=()=>{if(disposed)return;lost=false;init();onChange()};
+ canvas?.addEventListener?.('webglcontextlost',contextLost);canvas?.addEventListener?.('webglcontextrestored',contextRestored);
+ function render(image,rect,warp,{width=warp.width,height=warp.height,dpr=1}={}){
+  if(disposed||lost||!available||warp.strength===0||gl.isContextLost?.())return null;
+  const iw=image?.naturalWidth||image?.width,ih=image?.naturalHeight||image?.height,bw=Math.round(width*dpr),bh=Math.round(height*dpr),limit=gl.getParameter(gl.MAX_TEXTURE_SIZE),viewport=gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  if(![iw,ih,bw,bh].every(n=>finite(n)&&n>0)||iw>limit||ih>limit||bw>viewport[0]||bh>viewport[1]){fallbackReason='Raster dimensions exceed graphics limits';return null}
+  try{
+   if(canvas.width!==bw)canvas.width=bw;if(canvas.height!==bh)canvas.height=bh;
+   const key=[rect.x,rect.y,rect.width,rect.height,warp.width,warp.height,warp.strength].join('|');
+   if(key!==meshKey){mesh=geometry(rect,warp);gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer);gl.bufferData(gl.ARRAY_BUFFER,mesh.vertices,gl.STATIC_DRAW);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,mesh.indices,gl.STATIC_DRAW);meshKey=key;stats.geometryBuilds++}
+   gl.viewport(0,0,bw,bh);gl.disable(gl.BLEND);gl.disable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.disable(gl.SCISSOR_TEST);gl.clearColor(9/255,19/255,25/255,1);gl.clear(gl.COLOR_BUFFER_BIT);
+   gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer);gl.enableVertexAttribArray(position);gl.vertexAttribPointer(position,2,gl.FLOAT,false,16,0);gl.enableVertexAttribArray(uv);gl.vertexAttribPointer(uv,2,gl.FLOAT,false,16,8);
+   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,texture);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);if(iw!==textureWidth||ih!==textureHeight){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,image);textureWidth=iw;textureHeight=ih}else gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,gl.RGBA,gl.UNSIGNED_BYTE,image);stats.textureUploads++;gl.uniform1i(sampler,0);gl.drawElements(gl.TRIANGLES,mesh.indices.length,gl.UNSIGNED_SHORT,0);stats.drawCalls++;stats.triangles=mesh.triangles;fallbackReason='';return {canvas,triangles:mesh.triangles,columns:mesh.columns,rows:mesh.rows};
+  }catch(e){available=false;fallbackReason='Graphics raster path unavailable';return null}
+ }
+ function dispose(){disposed=true;available=false;canvas?.removeEventListener?.('webglcontextlost',contextLost);canvas?.removeEventListener?.('webglcontextrestored',contextRestored);if(gl&&!lost){if(texture)gl.deleteTexture(texture);if(vertexBuffer)gl.deleteBuffer(vertexBuffer);if(indexBuffer)gl.deleteBuffer(indexBuffer);if(program)gl.deleteProgram(program)}}
+ return {render,dispose,get available(){return available&&!lost&&!disposed},get stats(){return {...stats}},get fallbackReason(){return fallbackReason}};
+}
+return {geometry,create};
 });
 
 // Original equirectangular geography, with an invertible display curve.
@@ -227,6 +288,11 @@ Promise.all([coreImage,worldImage].map(im=>typeof im.decode==='function'?im.deco
 let curvatureStrength=.04,mapProjection=null,mapDpr=1;
 const curvatureArt=document.createElement('canvas'),curvatureBitmap=document.createElement('canvas');
 let curvaturePaintKey='',curvaturePaintCount=0;
+let curvatureBackend='canvas',rasterDrawCalls=0,rasterTriangleCount=0;
+const rasterQuery=typeof URLSearchParams==='function'?new URLSearchParams(window.location?.search||''):null;
+const requestRasterGpu=rasterQuery?.get('raster')==='webgl';
+const curvatureAccelerator=requestRasterGpu&&typeof AncientWorldsCurvatureAccelerator!=='undefined'?AncientWorldsCurvatureAccelerator.create(document.createElement('canvas'),{onChange:()=>{curvaturePaintKey='';invalidate()}}):null;
+Object.defineProperty(window,'awRasterDiagnostics',{configurable:true,get(){const fast=curvatureAccelerator?.stats||{};return {mode:curvatureBackend,cachePaints:curvaturePaintCount,geometryBuilds:(fast.geometryBuilds||0)+(AncientWorldsCurvatureMesh.stats?.geometryBuilds||0),textureUploads:fast.textureUploads||0,drawCalls:rasterDrawCalls,triangles:rasterTriangleCount,fallbackReason:requestRasterGpu?(curvatureAccelerator?.fallbackReason||''):''}}});
 function effectiveCurvature(){return window.worldController?.enabled===false?0:curvatureStrength}
 function mapSurface(){const strength=effectiveCurvature();if(!mapProjection||mapProjection.width!==cw||mapProjection.height!==ch||mapProjection.strength!==strength)mapProjection=AncientWorldsCurvature.createMap({width:cw,height:ch,strength});return mapProjection}
 function flatProject(lon,lat){return mapSurface().flat(lon,lat,current)}
@@ -258,15 +324,17 @@ function drawMapReference(){
  const surface=mapSurface();window.curvatureController?.sync();
  ctx.clearRect(0,0,cw,ch);ctx.fillStyle='#091319';ctx.fillRect(0,0,cw,ch);
  // This branch preserves the original flat raster commands and ordering exactly.
- if(surface.strength===0){raster(worldImage,G.contextBounds);raster(coreImage,G.coreBounds);terrainLayer.render(ctx);drawMapGrid();if(window.awLandscapePass)window.awLandscapePass();return}
+ if(surface.strength===0){curvatureBackend='canvas';raster(worldImage,G.contextBounds);raster(coreImage,G.coreBounds);terrainLayer.render(ctx);drawMapGrid();if(window.awLandscapePass)window.awLandscapePass();return}
  const key=[cw,ch,canvas.width,canvas.height,mapDpr,surface.strength,current.lon,current.lat,current.span,year,window.worldController?.enabled!==false,window.landscapeController?.revision||0,terrainLayer.enabled,terrainLayer.paintRevision,terrainLayer.opacity,terrainLayer.contours,terrainLayer.lastZoom,rasterLoadRevision,coreImage.complete,worldImage.complete,coreImage.naturalWidth,worldImage.naturalWidth].join('|');
  if(key!==curvaturePaintKey){
-  const b=surface.flatBounds(3);curvatureArt.width=Math.ceil(b.width*mapDpr);curvatureArt.height=Math.ceil(b.height*mapDpr);
+  const b=surface.flatBounds(3),aw=Math.ceil(b.width*mapDpr),ah=Math.ceil(b.height*mapDpr);if(curvatureArt.width!==aw)curvatureArt.width=aw;if(curvatureArt.height!==ah)curvatureArt.height=ah;
   const rect={x:b.x,y:b.y,width:curvatureArt.width/mapDpr,height:curvatureArt.height/mapDpr},art=curvatureArt.getContext('2d');
   art.setTransform(mapDpr,0,0,mapDpr,-rect.x*mapDpr,-rect.y*mapDpr);art.fillStyle='#091319';art.fillRect(rect.x,rect.y,rect.width,rect.height);
   drawReferenceArt(art,flatProject,rect);
-  curvatureBitmap.width=canvas.width;curvatureBitmap.height=canvas.height;const warped=curvatureBitmap.getContext('2d');warped.setTransform(mapDpr,0,0,mapDpr,0,0);
-  AncientWorldsCurvatureMesh.drawRaster(warped,curvatureArt,rect,surface);
+  if(curvatureBitmap.width!==canvas.width)curvatureBitmap.width=canvas.width;if(curvatureBitmap.height!==canvas.height)curvatureBitmap.height=canvas.height;const warped=curvatureBitmap.getContext('2d');warped.setTransform(mapDpr,0,0,mapDpr,0,0);warped.clearRect(0,0,cw,ch);
+  const fast=curvatureAccelerator?.render(curvatureArt,rect,surface,{width:cw,height:ch,dpr:mapDpr});
+  if(fast){warped.drawImage(fast.canvas,0,0,cw,ch);curvatureBackend='webgl';rasterDrawCalls++;rasterTriangleCount=fast.triangles}
+  else {const result=AncientWorldsCurvatureMesh.drawRaster(warped,curvatureArt,rect,surface);curvatureBackend='canvas';rasterDrawCalls+=result.triangles;rasterTriangleCount=result.triangles}
   curvaturePaintKey=key;curvaturePaintCount++;
  }
  ctx.drawImage(curvatureBitmap,0,0,cw,ch);drawMapGrid();
@@ -283,7 +351,7 @@ function drawMap(){if(cw<=1||ch<=1)return;drawMapReference();
  for(const place of all){const [x,y]=project(place.lon,place.lat);if(x<0||x>cw||y<0||y>ch-24)continue;const w=ctx.measureText(place.name).width;let show=named&&(!window.awWorldPlaceLabel||window.awWorldPlaceLabel(place));const rect={x:Math.min(x+9,cw-w-18),y:y-10,w:w+12,h:20};if(place.id!==selectedPlace&&boxes.some(b=>rect.x<b.x+b.w&&rect.x+rect.w>b.x&&rect.y<b.y+b.h&&rect.y+rect.h>b.y))show=false;if(show)boxes.push(rect);const isSelected=place.id===selectedPlace;ctx.fillStyle=isSelected?'#f0d598':'#102129df';ctx.beginPath();ctx.arc(x,y,isSelected?5:3.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle=dateOnly(place)?'#dfc58d':'#d2e0dc';ctx.lineWidth=dateOnly(place)?2:1;ctx.stroke();if(dateOnly(place)){ctx.fillStyle='#dfc58d';ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill()}if(show){ctx.fillStyle=isSelected?'#e0c88b':'#102129df';ctx.fillRect(rect.x,rect.y,rect.w,rect.h);ctx.fillStyle=isSelected?'#142228':'#e1dfd1';ctx.fillText(place.name,rect.x+6,y+4)}hits.push({x,y,p:place,rect:show?rect:null})}
  const vignette=ctx.createRadialGradient(cw*.48,ch*.42,ch*.22,cw*.5,ch*.5,Math.max(cw,ch)*.75);vignette.addColorStop(0,'#00000000');vignette.addColorStop(1,'#0712186b');ctx.fillStyle=vignette;ctx.fillRect(0,0,cw,ch);if(window.awWorldPass)window.awWorldPass('foreground',boxes);drawMapScale();terrainLayer.update(current,cw,ch);
 }
-new ResizeObserver(()=>{const r=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);cw=Math.max(1,r.width);ch=Math.max(1,r.height);mapDpr=dpr;curvaturePaintKey='';canvas.width=Math.round(cw*dpr);canvas.height=Math.round(ch*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);invalidate()}).observe(canvas);
+new ResizeObserver(()=>{const r=canvas.getBoundingClientRect(),checkQuery=new URLSearchParams(window.location.search),testDpr=checkQuery.get('rendercheck')==='1'&&checkQuery.get('testdpr')==='2',dpr=testDpr?2:Math.min(window.devicePixelRatio||1,2);cw=Math.max(1,r.width);ch=Math.max(1,r.height);mapDpr=dpr;curvaturePaintKey='';canvas.width=Math.round(cw*dpr);canvas.height=Math.round(ch*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);invalidate()}).observe(canvas);
 canvas.onpointerdown=e=>{canvas.setPointerCapture(e.pointerId);drag={x:e.offsetX,y:e.offsetY,view:{...current},moved:false};canvas.style.cursor='grabbing'};
 canvas.onpointermove=e=>{if(drag){const dx=e.offsetX-drag.x,dy=e.offsetY-drag.y;drag.moved ||= dx*dx+dy*dy>20;target=mapSurface().pan(drag.view,[drag.x,drag.y],[e.offsetX,e.offsetY]);clamp();invalidate()}const [lon,lat]=unproject(e.offsetX,e.offsetY);$('coords').textContent=lat.toFixed(1)+'° N · '+lon.toFixed(1)+'° E · physical reference, not ancient boundaries'};
 canvas.onpointerup=e=>{if(drag&&!drag.moved){const x=e.offsetX,y=e.offsetY,h=hits.find(h=>Math.hypot(x-h.x,y-h.y)<10||(h.rect&&x>=h.rect.x&&x<=h.rect.x+h.rect.w&&y>=h.rect.y&&y<=h.rect.y+h.rect.h));if(h)openPlace(h.p)}drag=null;canvas.style.cursor='grab';if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);invalidate()};
@@ -7131,7 +7199,7 @@ function animateAllowed(){return enabled&&layers.connections&&model.connections.
 function tick(t){motionFrame=0;if(!animateAllowed())return;if(t-lastMotion>=45){lastMotion=t;invalidate()}motionFrame=requestAnimationFrame(tick)}
 function motion(){if(animateAllowed()){if(!motionFrame)motionFrame=requestAnimationFrame(tick)}else if(motionFrame){cancelAnimationFrame(motionFrame);motionFrame=0}}
 window.awWorldPlaceLabel=place=>!enabled||!quietNames||place.id===selectedPlace||model.cities.some(c=>c.placeId===place.id)||model.connections.some(c=>c.points.some(p=>p.placeId===place.id));
-window.awWorldPass=function(pass,boxes){if(!enabled){worldHits=[];return}const reserved=[...(boxes||[])];const tools=$('stage').querySelector('.maptools');if(tools)reserved.push({x:0,y:0,w:cw,h:Math.max(95,tools.offsetHeight+25)});const hud=$('stage').querySelector('.detail-hud');if(hud)reserved.push({x:hud.offsetLeft-5,y:hud.offsetTop-5,w:hud.offsetWidth+10,h:hud.offsetHeight+10});const badge=$('medallion');if(badge&&!badge.classList.contains('hidden'))reserved.push({x:badge.offsetLeft-badge.offsetWidth*.18-7,y:badge.offsetTop-7,w:badge.offsetWidth+14,h:badge.offsetHeight+14});reserved.push({x:0,y:ch-46,w:cw,h:46});const found=AncientWorldsWorldRenderer.draw(ctx,{pass,width:cw,height:ch,project,span:current.span,time:performance.now(),model:{...model,contexts:model.contexts.map(c=>({...c,priority:(c.priority||0)+((selected?.region||'').split(' ').includes(c.regionId)?30:0)}))},layers,reducedMotion:$('reduce').checked||matchMedia('(prefers-reduced-motion: reduce)').matches,existingLabelBoxes:reserved,maxContextLabels:Math.max(2,Math.min(5,Math.floor(cw/160))),maxCityLabels:Math.max(2,Math.floor(cw/130)),maxEcologyLabels:1});if(pass==='underlay')worldHits=found;else worldHits.push(...found)};
+window.awWorldPass=function(pass,boxes){if(!enabled){worldHits=[];return}const reserved=[...(boxes||[])];const tools=$('stage').querySelector('.maptools');if(tools)reserved.push({x:0,y:0,w:cw,h:Math.max(95,tools.offsetHeight+25)});const hud=$('stage').querySelector('.detail-hud');if(hud)reserved.push({x:hud.offsetLeft-5,y:hud.offsetTop-5,w:hud.offsetWidth+10,h:hud.offsetHeight+10});const legend=$('stage').querySelector('.corner');if(legend&&legend.offsetWidth&&legend.offsetHeight)reserved.push({x:legend.offsetLeft-6,y:legend.offsetTop-6,w:legend.offsetWidth+12,h:legend.offsetHeight+12});const badge=$('medallion');if(badge&&!badge.classList.contains('hidden'))reserved.push({x:badge.offsetLeft-badge.offsetWidth*.18-7,y:badge.offsetTop-7,w:badge.offsetWidth+14,h:badge.offsetHeight+14});reserved.push({x:0,y:ch-46,w:cw,h:46});const found=AncientWorldsWorldRenderer.draw(ctx,{pass,width:cw,height:ch,project,span:current.span,time:performance.now(),model:{...model,contexts:model.contexts.map(c=>({...c,priority:(c.priority||0)+((selected?.region||'').split(' ').includes(c.regionId)?30:0)}))},layers,reducedMotion:$('reduce').checked||matchMedia('(prefers-reduced-motion: reduce)').matches,existingLabelBoxes:reserved,maxContextLabels:Math.max(2,Math.min(5,Math.floor(cw/160))),maxCityLabels:Math.max(2,Math.floor(cw/130)),maxEcologyLabels:1});if(pass==='underlay')worldHits=found;else worldHits.push(...found)};
 const previousUp=canvas.onpointerup;canvas.onpointerup=e=>{if(enabled&&drag&&!drag.moved){const hit=[...worldHits].reverse().find(h=>Math.hypot(e.offsetX-h.x,e.offsetY-h.y)<h.radius||(h.rect&&e.offsetX>=h.rect.x&&e.offsetX<=h.rect.x+h.rect.w&&e.offsetY>=h.rect.y&&e.offsetY<=h.rect.y+h.rect.h));if(hit){drag=null;canvas.style.cursor='grab';if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);openHit(hit);invalidate();return}}previousUp(e)};
 const priorYear=setYear;setYear=function(y){if(journey&&!journeyAdvancing)stopJourney();priorYear(y);model=engine.atYear(year);if(enabled&&followRulers&&!full&&drawerRecord?.kind!=='person'&&selected&&(window.dynastyData?!window.dynastyData.atYear(selected.id,year).length:!contains(selected.dates,year))){const candidates=engine.regions.has(selected.region)?AncientWorldsTimeline.atYear(timelineIntegrator.index,year,selected.region).dated.filter(e=>e.refType==='person'):[];if(candidates.length===1){selected=people.get(candidates[0].refId);medallion()}}renderPanel();invalidate();motion()};atlasTest.setYear=setYear;
 $('reduce').addEventListener('change',motion);$('play').addEventListener('click',stopJourney);document.addEventListener('visibilitychange',motion);new MutationObserver(motion).observe($('modalShade'),{attributes:true,attributeFilter:['class']});window.addEventListener('aw-landscape-open',()=>{stopJourney();motion()});window.addEventListener('pagehide',()=>{if(motionFrame)cancelAnimationFrame(motionFrame);if(journey)clearInterval(journey)});
@@ -7557,36 +7625,88 @@ return {create,validate,interpolate};
 (function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsLandscapeRenderer=api})(function(){
 'use strict';
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const smooth=(a,b,n)=>{const t=clamp((n-a)/(b-a),0,1);return t*t*(3-2*t)};
+const grainCache=new Map(),MAX_CACHED_PATCHES=64;
 function random(key){let h=2166136261;for(const c of String(key)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return (h>>>0)/4294967296}
 function shade(hex,factor){return '#'+hex.slice(1).match(/../g).map(s=>Math.round(clamp(parseInt(s,16)*factor,0,255)).toString(16).padStart(2,'0')).join('')}
-function drawTexture(ctx,p,x,y,rx,ry){
- // Stable brush grains suggest land texture, not counted trees or surveyed fields.
- // Geographic placement is unchanged between dates; strength controls density.
- const amount=clamp(p.value,0,1),lod=clamp(Math.PI*rx*ry/5000,.04,1),density=amount*lod;
- if(!density||p.opacity<=0)return;
- const size=clamp(Math.sqrt(rx*ry)/36,.65,1.5),dark=shade(p.color,.66),light=shade(p.color,1.18);
- ctx.save();ctx.globalCompositeOperation='source-over';ctx.translate(x,y);ctx.rotate(-(p.rotationDegrees||0)*Math.PI/180);
+function grains(id){
+ const key=String(id||'');if(grainCache.has(key))return grainCache.get(key);
+ const marks=[];
  for(let row=0;row<12;row++)for(let col=0;col<12;col++){
-  const key=p.id+':'+row+':'+col,nx=((col+.16+random(key+':x')*.68)/12*2-1)*.84,ny=((row+.16+random(key+':y')*.68)/12*2-1)*.84;
-  const radius=Math.hypot(nx,ny);if(radius>.78||random(key+':density')>density)continue;
-  const fade=clamp((.84-radius)/.32,0,1);ctx.globalAlpha=Math.min(.48,p.opacity*(1.5+.5*amount))*fade;
-  ctx.fillStyle=random(key+':tone')>.86?light:dark;
-  const px=nx*rx,py=ny*ry,w=size*(.8+random(key+':width')*.75),h=size*(.55+random(key+':height')*.5);
-  ctx.fillRect(px,py,w,h);
-  if(random(key+':pair')>.64)ctx.fillRect(px+w*.45,py-size*.55,size*.55,size*.65);
+  const k=key+':'+row+':'+col,nx=((col+.16+random(k+':x')*.68)/12*2-1)*.84,ny=((row+.16+random(k+':y')*.68)/12*2-1)*.84,radius=Math.hypot(nx,ny);
+  if(radius>.78)continue;
+  marks.push({nx,ny,fade:1-smooth(.38,.82,radius),onset:random(k+':density')*.84,light:random(k+':tone')>.86,width:.8+random(k+':width')*.75,height:.55+random(k+':height')*.5,pair:random(k+':pair')>.64});
  }
- ctx.restore();
+ if(grainCache.size>=MAX_CACHED_PATCHES)grainCache.delete(grainCache.keys().next().value);
+ grainCache.set(key,marks);return marks;
+}
+function viewport(ctx){
+ // The curved view renders into a translated, high-DPI reference canvas.
+ // Invert that caller transform rather than treating its pixel bounds as map coordinates.
+ if(!ctx.canvas||typeof ctx.getTransform!=='function')return null;
+ const w=ctx.canvas.width,h=ctx.canvas.height;if(![w,h].every(Number.isFinite)||w<=0||h<=0)return null;
+ const m=ctx.getTransform();if(!m||![m.a,m.b,m.c,m.d,m.e,m.f].every(Number.isFinite))return null;
+ const det=m.a*m.d-m.b*m.c;if(!Number.isFinite(det)||Math.abs(det)<1e-16)return null;
+ const corners=[[0,0],[w,0],[w,h],[0,h]].map(([x,y])=>[(m.d*(x-m.e)-m.c*(y-m.f))/det,(-m.b*(x-m.e)+m.a*(y-m.f))/det]);
+ if(!corners.flat().every(Number.isFinite))return null;
+ return {left:Math.min(...corners.map(p=>p[0])),right:Math.max(...corners.map(p=>p[0])),top:Math.min(...corners.map(p=>p[1])),bottom:Math.max(...corners.map(p=>p[1]))};
+}
+function visible(view,x,y,hx,hy){return !view||!(x+hx<view.left||x-hx>view.right||y+hy<view.top||y-hy>view.bottom)}
+function drawTexture(ctx,p,x,y,rx,ry,angle,view){
+ // Fixed geographic grains are illustrative brushwork, not trees or measured fields.
+ // Both date strength and zoom fade their opacity continuously; a new grain starts at zero.
+ const amount=clamp(p.value,0,1),lod=smooth(2,48,Math.sqrt(rx*ry));
+ if(!amount||!lod||p.opacity<=0)return;
+ const size=clamp(Math.sqrt(rx*ry)/36,.65,1.5),dark=shade(p.color,.73),light=shade(p.color,1.12),c=Math.cos(angle),s=Math.sin(angle);
+ ctx.save();
+ try{
+  ctx.globalCompositeOperation='source-over';ctx.translate(x,y);ctx.rotate(angle);
+  const rect=(px,py,w,h)=>{
+   const cx=x+c*(px+w/2)-s*(py+h/2),cy=y+s*(px+w/2)+c*(py+h/2);
+   if(visible(view,cx,cy,Math.abs(c)*w/2+Math.abs(s)*h/2+1,Math.abs(s)*w/2+Math.abs(c)*h/2+1))ctx.fillRect(px,py,w,h);
+  };
+  for(const mark of grains(p.id)){
+   const strength=smooth(mark.onset,mark.onset+.24,amount);
+   if(!strength)continue;
+   ctx.globalAlpha=Math.min(.48,p.opacity*(1.35+.35*amount))*mark.fade*strength*lod;
+   ctx.fillStyle=mark.light?light:dark;
+   const px=mark.nx*rx,py=mark.ny*ry,w=size*mark.width,h=size*mark.height;
+   rect(px,py,w,h);
+   if(mark.pair)rect(px+w*.45,py-size*.55,size*.55,size*.65);
+  }
+ }finally{ctx.restore()}
+}
+function drawWash(ctx,p,x,y,rx,ry,angle){
+ ctx.save();
+ try{
+  ctx.globalCompositeOperation='source-over';ctx.globalAlpha=p.opacity;ctx.translate(x,y);ctx.rotate(angle);ctx.scale(rx,ry);
+  // A narrow soft shoulder keeps broad ellipse edges from reading as bright coastal halos.
+  const gradient=ctx.createRadialGradient(0,0,0,0,0,1);
+  gradient.addColorStop(0,p.color);gradient.addColorStop(.25,p.color+'ac');gradient.addColorStop(.62,p.color+'30');gradient.addColorStop(1,p.color+'00');
+  ctx.fillStyle=gradient;ctx.beginPath();ctx.arc(0,0,1,0,Math.PI*2);ctx.fill();
+  // Small overlapping washes break the single smooth disc without changing its footprint.
+  ctx.globalAlpha=p.opacity*.12;
+  for(let i=0;i<4;i++){
+   const key=p.id+':wash:'+i,a=random(key+':angle')*Math.PI*2,r=.16+random(key+':radius')*.25,cx=Math.cos(a)*r,cy=Math.sin(a)*r,radius=.22+random(key+':size')*.12;
+   const wash=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);wash.addColorStop(0,shade(p.color,.88));wash.addColorStop(1,p.color+'00');
+   ctx.fillStyle=wash;ctx.beginPath();ctx.arc(cx,cy,radius,0,Math.PI*2);ctx.fill();
+  }
+ }finally{ctx.restore()}
 }
 function drawGreenness(ctx,sample,project){
  if(!ctx||!sample?.enabled||!Array.isArray(sample.greenness)||typeof project!=='function')return;
- for(const p of sample.greenness){
-  const center=project(p.centerLon,p.centerLat),east=project(p.centerLon+p.radiusLonDegrees,p.centerLat),north=project(p.centerLon,p.centerLat+p.radiusLatDegrees);
+ const view=viewport(ctx);
+ for(const raw of sample.greenness){
+  if(!raw||!Number.isFinite(raw.opacity)||!Number.isFinite(raw.value)||raw.opacity<=0||raw.value<=0||!/^#[0-9a-f]{6}$/i.test(raw.color))continue;
+  const center=project(raw.centerLon,raw.centerLat),east=project(raw.centerLon+raw.radiusLonDegrees,raw.centerLat),north=project(raw.centerLon,raw.centerLat+raw.radiusLatDegrees);
   if(!Array.isArray(center)||!Array.isArray(east)||!Array.isArray(north))continue;
-  const [x,y]=center,rx=Math.abs(east[0]-x),ry=Math.abs(north[1]-y);
-  if(![x,y,rx,ry].every(Number.isFinite)||!rx||!ry||p.opacity<=0)continue;
-  ctx.save();ctx.globalCompositeOperation='source-over';ctx.globalAlpha=p.opacity;ctx.translate(x,y);ctx.rotate(-(p.rotationDegrees||0)*Math.PI/180);ctx.scale(rx,ry);
-  const gradient=ctx.createRadialGradient(0,0,0,0,0,1);gradient.addColorStop(0,p.color);gradient.addColorStop(.45,p.color+'c0');gradient.addColorStop(1,p.color+'00');ctx.fillStyle=gradient;ctx.beginPath();ctx.arc(0,0,1,0,Math.PI*2);ctx.fill();ctx.restore();
-  drawTexture(ctx,p,x,y,rx,ry);
+  const [x,y]=center,rx=Math.abs(east[0]-x),ry=Math.abs(north[1]-y),angle=-(raw.rotationDegrees||0)*Math.PI/180;
+  if(![x,y,rx,ry,angle].every(Number.isFinite)||!rx||!ry)continue;
+  const hx=Math.hypot(rx*Math.cos(angle),ry*Math.sin(angle)),hy=Math.hypot(rx*Math.sin(angle),ry*Math.cos(angle));
+  if(![hx,hy].every(Number.isFinite)||!visible(view,x,y,hx+2,hy+2))continue;
+  const p={...raw,opacity:clamp(raw.opacity,0,.55)};
+  drawWash(ctx,p,x,y,rx,ry,angle);
+  drawTexture(ctx,p,x,y,rx,ry,angle,view);
  }
 }
 function riverPoints(sample,baseIndex,originalPoints){return sample?.enabled&&Array.isArray(sample.riverOverrides)?(sample.riverOverrides.find(r=>r.baseIndex===baseIndex)?.points||originalPoints):originalPoints}
@@ -8187,45 +8307,52 @@ const LANDSCAPE_DEFAULTS={
 'use strict';
 const storageKey='ancient-worlds.landscape.v1',clone=x=>JSON.parse(JSON.stringify(x));
 const normalize=next=>({...clone(next),globalDefaults:{enabled:true,greennessScale:1,riverShiftScale:1,...(next.globalDefaults||{})}});
-let config=clone(LANDSCAPE_DEFAULTS),engine,cache=null,savedFocus=null,selectedId=config.greennessPatches[0].id;
+let config=normalize(LANDSCAPE_DEFAULTS),engine,cache=null,savedFocus=null,selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;
 let paintRevision=0;
 let initialNote='Bundled landscape sketch.';
 try{const saved=localStorage.getItem(storageKey);if(saved){const parsed=JSON.parse(saved);AncientWorldsLandscape.create(parsed,{rivers:D.rivers,ecology:ECOLOGY_DATA});config=normalize(parsed);initialNote='Saved landscape settings loaded.'}}catch(e){initialNote='The saved preset could not be loaded. Bundled settings are in use.'}
 if(![...config.greennessPatches,...config.riverPilots].some(p=>p.id===selectedId))selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;
 engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});
 const css=el('style');css.textContent=`
-aside{position:relative}aside.aw-landscape-editor-open>:not(#landscapeEditor){visibility:hidden}.aw-landscape-editor{position:absolute;inset:0;z-index:8;background:linear-gradient(155deg,#1a3026,#10252b);padding:14px 13px;overflow:auto;color:#e3dfc8}.aw-landscape-editor.hidden{display:none}.aw-landscape-editor h2{font:23px Georgia,serif;margin:7px 0 12px;color:#e6d3a5}.aw-landscape-editor h3{font:17px Georgia,serif;margin:16px 0 8px}.aw-landscape-editor p{font-size:11px;line-height:1.65;color:#bdd0b9}.aw-landscape-editor button{font-size:11px;padding:7px 9px;margin:4px 4px 0 0}.aw-landscape-editor .close{float:right;padding:3px 8px;margin:0}.aw-landscape-editor label{display:block;font-size:11px;color:#c4d0b9;margin:10px 0 5px}.aw-landscape-editor input[type=number],.aw-landscape-editor select{width:100%;padding:6px;font-size:11px}.aw-landscape-editor input[type=range]{width:100%;padding:0}.aw-landscape-editor .aw-landscape-date{font:23px Georgia,serif;color:#e2c990;margin:9px 0}.aw-landscape-editor .aw-landscape-split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.aw-landscape-editor .aw-landscape-years{display:flex;gap:4px;flex-wrap:wrap}.aw-landscape-editor .aw-landscape-years button{padding:4px 7px;font-size:10px}.aw-landscape-editor .aw-landscape-status{border-top:1px solid #4f6a55;padding-top:10px;margin-top:14px;color:#d5c795}.aw-landscape-editor details{font-size:11px;line-height:1.7;color:#b9cbb9;margin:13px 0}.aw-landscape-editor summary{cursor:pointer;color:#d7cda8}.aw-landscape-editor .aw-landscape-toggle{display:flex;align-items:center;gap:6px}.aw-landscape-tag{color:#b8d2ad;font-size:9px;margin-top:4px;max-width:235px}.aw-landscape-open.active{border-color:#b1b887;color:#e2d8ac}
+aside{position:relative}aside.aw-landscape-editor-open>:not(#landscapeEditor){visibility:hidden}.aw-landscape-editor{position:absolute;inset:0;z-index:8;background:linear-gradient(155deg,#1a3026,#10252b);padding:14px 13px;overflow:auto;color:#e3dfc8}.aw-landscape-editor.hidden{display:none}.aw-landscape-editor h2{font:23px Georgia,serif;margin:7px 0 12px;color:#e6d3a5}.aw-landscape-editor h3{font:17px Georgia,serif;margin:16px 0 8px}.aw-landscape-editor p{font-size:11px;line-height:1.65;color:#bdd0b9}.aw-landscape-editor button{font-size:11px;padding:7px 9px;margin:4px 4px 0 0}.aw-landscape-editor .aw-landscape-global{display:grid;grid-template-columns:1fr auto;gap:7px 10px;margin:13px 0}.aw-landscape-global input{grid-column:1 / -1;grid-row:2}.aw-landscape-global output{grid-column:2;grid-row:1;color:#e2cd99;font-variant-numeric:tabular-nums}.aw-landscape-editor .close{float:right;padding:3px 8px;margin:0}.aw-landscape-editor label{display:block;font-size:11px;color:#c4d0b9;margin:10px 0 5px}.aw-landscape-editor input[type=number],.aw-landscape-editor select{width:100%;padding:6px;font-size:11px}.aw-landscape-editor input[type=range]{width:100%;padding:0;accent-color:#b6c58f}.aw-landscape-editor .aw-landscape-date{font:23px Georgia,serif;color:#e2c990;margin:9px 0}.aw-landscape-editor .aw-landscape-split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.aw-landscape-editor .aw-landscape-years{display:flex;gap:4px;flex-wrap:wrap}.aw-landscape-editor .aw-landscape-years button{padding:4px 7px;font-size:10px}.aw-landscape-editor .aw-landscape-status{border-top:1px solid #4f6a55;padding-top:10px;margin-top:14px;color:#d5c795}.aw-landscape-editor details{font-size:11px;line-height:1.7;color:#b9cbb9;margin:13px 0}.aw-landscape-editor summary{cursor:pointer;color:#d7cda8}.aw-landscape-editor .aw-landscape-toggle{display:flex;align-items:center;gap:6px}.aw-landscape-tag{color:#b8d2ad;font-size:9px;margin-top:4px;max-width:235px}.aw-landscape-open.active{border-color:#b1b887;color:#e2d8ac}
 `;document.head.append(css);
 const panel=el('section','aw-landscape-editor hidden');panel.id='landscapeEditor';panel.setAttribute('role','region');panel.setAttribute('aria-label','Landscape editor');document.querySelector('main aside').append(panel);
 const opener=btn($('stage').querySelector('.maptools'),'Landscape edits',()=>open(),'aw-landscape-open');opener.id='landscapeEdit';
 const tag=el('div','aw-landscape-tag');$('stage').querySelector('.detail-hud').append(tag);
 function active(){return config.globalDefaults.enabled!==false&&worldController.enabled}
 function frame(){if(!cache||cache.yearBce!==year)cache=engine.sample(year);return active()?cache:{yearBce:year,enabled:false,greenness:[],riverOverrides:[]}}
-function refresh(message){paintRevision++;engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});cache=null;if(message)initialNote=message;syncTag();render();invalidate()}
+function note(message){initialNote=message;const status=panel.querySelector('.aw-landscape-status');if(status)status.textContent=message}
 function syncTag(){const text=active()?'Illustrative landscape · '+year+' BCE':'';if(tag.textContent!==text)tag.textContent=text;opener.classList.toggle('active',!panel.classList.contains('hidden'));const label=$('rivers').parentElement;for(const node of label.childNodes)if(node.nodeType===3){const text=active()?' Rivers':' Modern rivers';if(node.textContent!==text)node.textContent=text}}
 function close(){document.querySelector('main aside').classList.remove('aw-landscape-editor-open');panel.classList.add('hidden');opener.classList.remove('active');(savedFocus?.offsetParent?savedFocus:opener).focus()}
-function open(){savedFocus=document.activeElement;worldController.pauseJourney();if(playTimer){clearInterval(playTimer);playTimer=null;$('play').textContent='Play changes'}worldController.setEnabled(true);document.querySelector('main aside').classList.add('aw-landscape-editor-open');panel.classList.remove('hidden');render();syncTag();panel.querySelector('select')?.focus()}
+function open(){savedFocus=document.activeElement;worldController.pauseJourney();if(playTimer){clearInterval(playTimer);playTimer=null;$('play').textContent='Play changes'}worldController.setEnabled(true);document.querySelector('main aside').classList.add('aw-landscape-editor-open');panel.classList.remove('hidden');render();syncTag();panel.scrollTop=0;panel.querySelector('button')?.focus({preventScroll:true})}
 function layer(id){return [...config.greennessPatches.map(p=>({...p,layerType:'green'})),...config.riverPilots.map(p=>({...p,layerType:'river'}))].find(p=>p.id===id)}
-function setConfig(next,message){const model=AncientWorldsLandscape.create(next,{rivers:D.rivers,ecology:ECOLOGY_DATA});config=normalize(next);paintRevision++;engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});cache=null;if(!layer(selectedId))selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;initialNote=message;syncTag();render();invalidate()}
+function setConfig(next,message,redrawEditor=true){const model=AncientWorldsLandscape.create(next,{rivers:D.rivers,ecology:ECOLOGY_DATA}),normalized=normalize(next);config=normalized;paintRevision++;engine=model;cache=null;if(!layer(selectedId))selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;note(message);syncTag();if(redrawEditor)render();invalidate()}
 function download(){const blob=new Blob([JSON.stringify(config,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Ancient_Worlds_Landscape_Settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);initialNote='Landscape settings exported as JSON.';render()}
 const upload=el('input');upload.type='file';upload.accept='application/json,.json';upload.setAttribute('aria-label','Import landscape JSON');upload.style.display='none';document.body.append(upload);
 upload.onchange=async()=>{try{const file=upload.files[0];if(!file)return;setConfig(JSON.parse(await file.text()),'Imported preview. Save on this device or export to keep it.')}catch(e){initialNote='Import was not applied: '+e.message;render()}finally{upload.value=''}};
 function label(text,input,parent=panel){const l=el('label','',text);l.append(input);parent.append(l);return l}
+function numeric(input){const text=String(input.value).trim();return text===''?NaN:Number(text)}
+function globalStrength(name,key,available){
+ const input=el('input'),value=el('output');input.type='range';input.min=0;input.max=2;input.step=.05;input.value=config.globalDefaults[key];input.disabled=!available;input.setAttribute('aria-label',name);value.id='landscape-'+key+'-value';input.setAttribute('aria-describedby',value.id);const update=()=>{value.textContent=Math.round(config.globalDefaults[key]*100)+'%';input.setAttribute('aria-valuetext',value.textContent+' of the stored sketch strength')};update();
+ input.oninput=()=>{const strength=numeric(input);if(!Number.isFinite(strength)||strength<0||strength>2){note('Enter a drawing strength from 0% to 200%.');input.value=config.globalDefaults[key];return}const next=clone(config);next.globalDefaults[key]=strength;try{setConfig(next,'Overall strengths preview immediately. Save or export to keep them.',false);update()}catch(e){note('Strength was not applied: '+e.message);input.value=config.globalDefaults[key]}};
+ const row=label(name,input);row.classList.add('aw-landscape-global');row.append(value);return input;
+}
 function render(){
- if(panel.classList.contains('hidden'))return;panel.replaceChildren();const closeButton=btn(panel,'×',close,'close');closeButton.setAttribute('aria-label','Close landscape editor');panel.append(el('div','eyebrow','EDITABLE LANDSCAPE SKETCH'),el('h2','','Land through time'));p(panel,'A rough first pass: gradual greenness and small river shifts. Adjust it here, then export the settings for later refinement.');
- const toggle=el('input');toggle.type='checkbox';toggle.checked=config.globalDefaults.enabled!==false;toggle.setAttribute('aria-label','Illustrative landscape enabled');toggle.onchange=()=>{config.globalDefaults.enabled=toggle.checked;refresh('Landscape visibility changed in this preview.')};const toggleLabel=label('Illustrative landscape',toggle);toggleLabel.className='aw-landscape-toggle';
+ if(panel.classList.contains('hidden'))return;panel.replaceChildren();const closeButton=btn(panel,'×',close,'close');closeButton.setAttribute('aria-label','Close landscape editor');panel.append(el('div','eyebrow','EDITABLE LANDSCAPE SKETCH'),el('h2','','Land through time'));p(panel,'Gradual greenness and small river shifts. Preview the overall strengths, or adjust a dated sketch below.');
+ const toggle=el('input');toggle.type='checkbox';toggle.checked=config.globalDefaults.enabled!==false;toggle.setAttribute('aria-label','Illustrative landscape enabled');toggle.onchange=()=>{const next=clone(config);next.globalDefaults.enabled=toggle.checked;setConfig(next,'Landscape visibility changed in this preview.')};const toggleLabel=label('Illustrative landscape',toggle);toggleLabel.className='aw-landscape-toggle';
+ panel.append(el('h3','','Overall appearance'));globalStrength('Overall greenness','greennessScale',config.greennessPatches.length>0);globalStrength('River movement','riverShiftScale',config.riverPilots.length>0);p(panel,'100% uses the stored sketch; 0% removes that effect. River shifts stay capped. These are appearance settings, not measured land cover.');
  panel.append(el('div','aw-landscape-date',year+' BCE'));const years=el('div','aw-landscape-years');for(const y of [3200,2050,1370,800,500])btn(years,String(y),()=>setYear(y));panel.append(years);
  const select=el('select');select.setAttribute('aria-label','Landscape layer');for(const p0 of config.greennessPatches){const o=el('option','',p0.label);o.value=p0.id;select.append(o)}for(const r of config.riverPilots){const o=el('option','','River · '+r.label);o.value=r.id;select.append(o)}select.value=selectedId;select.onchange=()=>{selectedId=select.value;render()};label('Area or river to edit',select);
- const item=layer(selectedId),sample=engine.sample(year,{enabled:true}),controls=el('div');panel.append(controls);let amount,east,north;
+ const item=layer(selectedId),sample=engine.sample(year,{enabled:true,greennessScale:1,riverShiftScale:1}),controls=el('div');panel.append(controls);let amount,east,north;
  if(item.layerType==='green'){
-  const current=sample.greenness.find(p=>p.id===item.id);amount=el('input');amount.type='range';amount.min=0;amount.max=100;amount.step=1;amount.value=Math.round(current.value*100);amount.setAttribute('aria-label','Greenness drawing strength');const value=el('output','',amount.value+' / 100');amount.oninput=()=>value.textContent=amount.value+' / 100';label('Greenness strength',amount,controls);controls.append(value);p(controls,'Drawing strength, rather than a measured land-cover percentage.');
+  const current=sample.greenness.find(p=>p.id===item.id);amount=el('input');amount.type='range';amount.min=0;amount.max=100;amount.step=1;amount.value=Math.round(current.value*100);amount.setAttribute('aria-label','Greenness drawing strength');const value=el('output','',amount.value+' / 100');amount.oninput=()=>value.textContent=amount.value+' / 100';label('Stored greenness at this date',amount,controls);controls.append(value);p(controls,'Apply below to change this area’s dated sketch. Overall greenness is applied separately.');
  }else{
   const vector=AncientWorldsLandscape.interpolate(item.keyframes,year,['eastKm','northKm']);const row=el('div','aw-landscape-split');for(const [direction,key] of [['East / west km','eastKm'],['North / south km','northKm']]){const input=el('input');input.type='number';input.min=-40;input.max=40;input.step=.5;input.value=Math.round(vector[key]*10)/10;input.setAttribute('aria-label',direction);label(direction,input,row);if(key==='eastKm')east=input;else north=input}controls.append(row);p(controls,'Positive values move east or north. This pilot caps displacement at '+item.maxShiftKm+' km and keeps its ends connected.');
  }
  btn(controls,'Apply at this date',()=>{
-  let values;if(item.layerType==='green')values={greenness:Number(amount.value)/100};else values={eastKm:Number(east.value),northKm:Number(north.value)};
-  if(Object.values(values).some(v=>!Number.isFinite(v)||Math.abs(v)>40)){initialNote='Enter finite river offsets between −40 and 40 km.';render();return}
-  const collection=item.layerType==='green'?config.greennessPatches:config.riverPilots,target=collection.find(p=>p.id===item.id),existing=target.keyframes.find(k=>k.yearBce===year);if(existing)Object.assign(existing,values);else target.keyframes.push({yearBce:year,...values});target.keyframes.sort((a,b)=>b.yearBce-a.yearBce);refresh('Keyframe applied at '+year+' BCE. Other dates blend toward their neighboring keyframes.');
+  let values;if(item.layerType==='green')values={greenness:numeric(amount)/100};else values={eastKm:numeric(east),northKm:numeric(north)};
+  if(Object.values(values).some(v=>!Number.isFinite(v)||(item.layerType==='green'?(v<0||v>1):Math.abs(v)>40))){note(item.layerType==='green'?'Enter a greenness drawing strength from 0 to 100.':'Enter finite river offsets between −40 and 40 km.');return}
+  const next=clone(config),collection=item.layerType==='green'?next.greennessPatches:next.riverPilots,target=collection.find(p=>p.id===item.id),existing=target.keyframes.find(k=>k.yearBce===year);if(existing)Object.assign(existing,values);else target.keyframes.push({yearBce:year,...values});target.keyframes.sort((a,b)=>b.yearBce-a.yearBce);try{setConfig(next,'Keyframe applied at '+year+' BCE. Other dates blend toward their neighboring keyframes.')}catch(e){note('Keyframe was not applied: '+e.message)}
  });
  const keyframes=el('details');keyframes.append(el('summary','','Stored drawing dates'));const dateButtons=el('div','aw-landscape-years');for(const f of [...item.keyframes].sort((a,b)=>b.yearBce-a.yearBce))btn(dateButtons,String(f.yearBce),()=>setYear(f.yearBce));keyframes.append(dateButtons);panel.append(keyframes);
  btn(panel,'Focus this area',()=>{if(item.layerType==='green'){target={lon:item.geometry.centerLon,lat:item.geometry.centerLat,span:Math.max(12,item.geometry.radiusLonDegrees*5)}}else if(item.editorFocus&&[item.editorFocus.lon,item.editorFocus.lat,item.editorFocus.span].every(Number.isFinite)){target={...item.editorFocus}}else {const points=sample.riverOverrides.find(r=>r.id===item.id).points,middle=points[Math.floor(points.length/2)];target={lon:middle.lon,lat:middle.lat,span:18}}clamp();invalidate()});
@@ -8263,4 +8390,32 @@ window.landscapeController={open,close,get revision(){return paintRevision},get 
 
 const restoredResearchLibrary={"documents": [{"title": "Ancient landscapes, farming records, cities, palaces, and roads", "fileName": "Ancient landscapes, farming records, cities, palaces, and roads, 3200–500 BC.pdf", "scope": "Supplied research synthesis, 3200–500 BC. Retained with page references and embedded source links; not independently re-audited or automatically converted into surveyed scene geometry.", "pageCount": 18, "topics": [{"title": "Evidence categories and chronology", "pages": "1–2", "note": "The supplied synthesis distinguishes administrative records, descriptive texts, images, excavated features and modern reconstructions."}, {"title": "Road and transport evidence", "pages": "2–6", "note": "It separates excavated surfaces, named journeys, rebuilding episodes and hypothetical route alignments."}, {"title": "Weather, farming and orchards", "pages": "7–12", "note": "Local observations, institutional accounts, agricultural advice and vegetation proxies retain their different evidential limits."}, {"title": "Uruk, cities and palaces", "pages": "12–15", "note": "Includes Uruk architectural decoration and evidence for Ebla, Mari, Nippur, Khorsabad, Nineveh and Babylon; page references identify the supplied synthesis, not a new primary-source audit."}]}, {"title": "Landscapes, forests, and rivers", "fileName": "Landscapes, forests, and rivers from Egypt to Central Asia and Kashmir, 3500–300 BCE.pdf", "scope": "Original supplied ecology synthesis used by the existing regional notebook.", "pageCount": 15, "topics": []}, {"title": "Ancient Eurasian Landscape and Ecology", "fileName": "Ancient Eurasian Landscape and Ecology - Google Docs.pdf", "scope": "A one-page screenshot from the start of a document; the complete manuscript is not supplied here.", "pageCount": 1, "topics": []}, {"title": "Ancient Near Eastern Dynasties Monograph", "fileName": "Ancient Near Eastern Dynasties Monograph.pdf", "scope": "Recovered original research document. Its claims have not been newly reconciled in this layer.", "pageCount": 21, "topics": []}, {"title": "Original historical chronology", "fileName": "Ancient_Western_Asia_3200-500_BCE.html", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}, {"title": "Original chronology workbook", "fileName": "Ancient_Western_Asia_3200-500_BCE.xlsx", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}, {"title": "Original research edition", "fileName": "Ancient_Worlds_Research_Edition.html", "scope": "Recovered original, preserved unchanged from the supplied recovery collection.", "pageCount": 0, "topics": []}]};
 const previousResearchNotes=about;about=function(){previousResearchNotes();const box=$('modal');box.append(el('h2','','Supplied research and recovered originals'));for(const doc of restoredResearchLibrary.documents){const a=el('a','source',doc.title);a.href='StreamingAssets/Research/'+encodeURIComponent(doc.fileName);a.target='_blank';a.rel='noopener noreferrer';box.append(a)}};$('about').onclick=about;
+/* Optional local development check. Absent from the normal player interface. */
+(function(){
+'use strict';
+if(new URLSearchParams(location.search).get('rendercheck')!=='1')return;
+const host=el('section'),heading=el('h3','','Rendering check'),result=el('pre','','Ready. Tests restore the selected date and view.');
+host.id='renderCheck';host.setAttribute('aria-label','Rendering check');host.style.cssText='position:fixed;right:12px;bottom:130px;z-index:40;width:290px;max-width:90vw;padding:12px;background:#102027f5;color:#e4dfcb;border:1px solid #a1ac84;border-radius:7px;font:11px/1.5 system-ui;box-shadow:0 5px 25px #0008';result.style.cssText='white-space:pre-wrap;font:11px/1.5 system-ui;margin-bottom:0';host.append(heading);let active=null;
+const quantile=(values,q)=>values.length?[...values].sort((a,b)=>a-b)[Math.min(values.length-1,Math.floor(q*(values.length-1)))]:0;
+const n=x=>Math.round(x*100)/100;
+const beforeDraw=drawMap;
+drawMap=function(){const start=performance.now();try{return beforeDraw()}finally{if(active)active.paints.push(performance.now()-start)}};
+function restore(run){target={...run.view};current={...run.view};setYear(run.year);selected=run.selected;selectedPlace=run.selectedPlace;renderResults();medallion();invalidate()}
+function finish(reason='Complete'){
+ const run=active;if(!run)return;active=null;cancelAnimationFrame(run.raf);clearTimeout(run.timer);const end=window.awRasterDiagnostics||{mode:'canvas',cachePaints:curvaturePaintCount};restore(run);for(const b of controls)b.disabled=false;
+ const elapsed=performance.now()-run.start;
+ result.textContent=JSON.stringify({status:reason,test:run.mode,viewportCss:[Math.round(cw),Math.round(ch)],devicePixelRatio:mapDpr,curve:curvatureStrength,renderer:end.mode,steps:run.steps,observedPaints:run.paints.length,elapsedMs:n(elapsed),paintMedianMs:n(quantile(run.paints,.5)),paintP95Ms:n(quantile(run.paints,.95)),paintMaxMs:n(Math.max(0,...run.paints)),stepP95Ms:n(quantile(run.costs,.95)),artCacheBuilds:(end.cachePaints||0)-(run.begin.cachePaints||0),rasterDrawCalls:(end.drawCalls||0)-(run.begin.drawCalls||0),geometryBuilds:(end.geometryBuilds||0)-(run.begin.geometryBuilds||0),fallbackReason:end.fallbackReason||'',scope:'Main-thread scene drawing, not a universal FPS guarantee.'},null,2);result.setAttribute('role','status');
+}
+function start(mode){
+ if(active)return;const run=active={mode,start:performance.now(),steps:0,paints:[],costs:[],view:{...current},year,selected,selectedPlace,begin:window.awRasterDiagnostics||{cachePaints:curvaturePaintCount}};for(const b of controls)b.disabled=true;result.textContent='Running '+mode+'…';run.timer=setTimeout(()=>finish('Time limit reached'),6500);
+ function step(){if(active!==run)return;const k=run.steps/89,t=performance.now();
+  if(mode==='Pan and zoom'){current={...run.view,lon:run.view.lon+Math.sin(k*Math.PI*2)*3,lat:run.view.lat+Math.sin(k*Math.PI)*1.2,span:run.view.span*(1-.2*Math.sin(k*Math.PI))};target={...current}}
+  if(mode==='Century sweep')setYear(Math.round(3200-2700*k));
+  drawMap();run.costs.push(performance.now()-t);run.steps++;if(run.steps>=90)finish();else run.raf=requestAnimationFrame(step);
+ }
+ run.raf=requestAnimationFrame(step);
+}
+const controls=['Idle scene','Pan and zoom','Century sweep'].map(label=>{const b=btn(host,label,()=>start(label));b.style.cssText='font-size:10px;padding:5px;margin:2px';return b});const stop=btn(host,'Stop check',()=>finish('Stopped'));stop.style.cssText='font-size:10px;padding:5px;margin:2px';host.append(result);document.body.append(host);window.addEventListener('pagehide',()=>{if(active){cancelAnimationFrame(active.raf);clearTimeout(active.timer);active=null}});
+})();
+
 </script></body></html>
