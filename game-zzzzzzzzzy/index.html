@@ -120,7 +120,8 @@ function invalidate(){dirty=true;if(!raf)raf=requestAnimationFrame(frame)}
 function frame(){raf=0;const reduce=$('reduce').checked,t=reduce?1:.22;let moving=false;for(const k of ['lon','lat','span']){if(Math.abs(target[k]-current[k])>.0005)moving=true;current[k]+=(target[k]-current[k])*t}if(dirty||moving)drawMap();dirty=false;if(moving)raf=requestAnimationFrame(frame)}
 function raster(im,b){if(!im.complete||!im.naturalWidth)return;const a=project(b[0],b[3]),z=project(b[2],b[1]);ctx.drawImage(im,a[0],a[1],z[0]-a[0],z[1]-a[1])}
 function drawMap(){ctx.clearRect(0,0,cw,ch);ctx.fillStyle='#091319';ctx.fillRect(0,0,cw,ch);raster(worldImage,G.contextBounds);raster(coreImage,G.coreBounds);terrainLayer.render(ctx);ctx.strokeStyle='#dbe8d315';ctx.lineWidth=.7;for(let lon=-10;lon<=140;lon+=10){const a=project(lon,0),b=project(lon,72);ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}for(let lat=0;lat<=70;lat+=10){const a=project(-15,lat),b=project(140,lat);ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}
- if($('rivers').checked&&current.span>=2){ctx.strokeStyle='#83bdcc9c';ctx.lineWidth=.9;for(const river of D.rivers){ctx.beginPath();river.points.forEach((p,i)=>{const v=project(p.lon,p.lat);i?ctx.lineTo(...v):ctx.moveTo(...v)});ctx.stroke()}}
+ if(window.awLandscapePass)window.awLandscapePass();
+ if($('rivers').checked&&current.span>=2){ctx.strokeStyle='#83bdcc9c';ctx.lineWidth=.9;for(const [riverIndex,river] of D.rivers.entries()){ctx.beginPath();const points=window.awLandscapeRiver?window.awLandscapeRiver(riverIndex,river.points):river.points;points.forEach((p,i)=>{const v=project(p.lon,p.lat);i?ctx.lineTo(...v):ctx.moveTo(...v)});ctx.stroke()}}
  if(window.awWorldPass)window.awWorldPass('underlay');
  const named=$('labels').checked,dated=$('datedSites').checked;hits=[];const boxes=[];ctx.font='11px system-ui';const all=D.places.filter(p=>p.located&&(!dated||dateOnly(p))).sort((a,b)=>(b.id===selectedPlace)-(a.id===selectedPlace)||Number(dateOnly(b))-Number(dateOnly(a)));
  for(const place of all){const [x,y]=project(place.lon,place.lat);if(x<0||x>cw||y<0||y>ch-24)continue;const w=ctx.measureText(place.name).width;let show=named&&(!window.awWorldPlaceLabel||window.awWorldPlaceLabel(place));const rect={x:Math.min(x+9,cw-w-18),y:y-10,w:w+12,h:20};if(place.id!==selectedPlace&&boxes.some(b=>rect.x<b.x+b.w&&rect.x+rect.w>b.x&&rect.y<b.y+b.h&&rect.y+rect.h>b.y))show=false;if(show)boxes.push(rect);const isSelected=place.id===selectedPlace;ctx.fillStyle=isSelected?'#f0d598':'#102129df';ctx.beginPath();ctx.arc(x,y,isSelected?5:3.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle=dateOnly(place)?'#dfc58d':'#d2e0dc';ctx.lineWidth=dateOnly(place)?2:1;ctx.stroke();if(dateOnly(place)){ctx.fillStyle='#dfc58d';ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill()}if(show){ctx.fillStyle=isSelected?'#e0c88b':'#102129df';ctx.fillRect(rect.x,rect.y,rect.w,rect.h);ctx.fillStyle=isSelected?'#142228':'#e1dfd1';ctx.fillText(place.name,rect.x+6,y+4)}hits.push({x,y,p:place,rect:show?rect:null})}
@@ -7279,6 +7280,805 @@ $('dynastyMode').onclick=()=>open();
 panel.addEventListener('keydown',e=>{if(e.key==='Escape'){close();e.preventDefault();e.stopPropagation()}else if(e.key==='Tab'){const focusable=[...panel.querySelectorAll('button,input,select,a[href],summary')].filter(x=>x.offsetParent!==null);if(e.shiftKey&&document.activeElement===focusable[0]){focusable.at(-1)?.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===focusable.at(-1)){focusable[0]?.focus();e.preventDefault()}}});
 window.dynastyReconciler={open,close,engine,describe,matches:(p,y=year,r='')=>engine.atYear(typeof p==='string'?p:p.id,y,r).length>0,get isOpen(){return !panel.classList.contains('hidden')}};
 renderResults();medallion();
+})();
+
+/* Editable art-direction model. It does not estimate ancient canopy or surveyed channels. */
+(function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsLandscape=api})(function(){
+'use strict';
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+const finite=n=>typeof n==='number'&&Number.isFinite(n);
+const copy=x=>JSON.parse(JSON.stringify(x));
+const smooth=u=>u*u*(3-2*u);
+const validPoint=p=>p&&finite(p.lon)&&finite(p.lat)&&Math.abs(p.lon)<=180&&Math.abs(p.lat)<=90;
+const record=x=>!!x&&typeof x==='object'&&!Array.isArray(x);
+const owns=(x,k)=>Object.prototype.hasOwnProperty.call(x,k);
+function validate(config,rivers,ecology){
+ const errors=[],ids=new Set(),riverIndexes=new Set();
+ if(!record(config))return ['Landscape settings must be a JSON object.'];
+ if(!Array.isArray(rivers))return ['Original river reference must be an array.'];
+ if(config.version!==1)errors.push('Landscape settings version must be 1.');
+ if(!Array.isArray(config.yearBoundsBce)||config.yearBoundsBce.length!==2||config.yearBoundsBce[0]!==3200||config.yearBoundsBce[1]!==500)errors.push('yearBoundsBce must be [3200,500].');
+ if(typeof config.displayLabel!=='string'||!config.displayLabel.trim()||config.displayLabel.length>160)errors.push('A displayLabel of 1–160 characters is required.');
+ for(const key of ['policy','interpolation','title'])if(owns(config,key)&&typeof config[key]!=='string')errors.push(key+' must be text.');
+ if(owns(config,'globalDefaults')){
+  const d=config.globalDefaults;
+  if(!record(d))errors.push('globalDefaults must be an object.');
+  else{if(owns(d,'enabled')&&typeof d.enabled!=='boolean')errors.push('globalDefaults.enabled must be true or false.');for(const k of ['greennessScale','riverShiftScale'])if(owns(d,k)&&(!finite(d[k])||d[k]<0||d[k]>2))errors.push('globalDefaults.'+k+' must be a number from 0 to 2.');}
+ }
+ const collections={};for(const [key,max] of [['greennessPatches',100],['riverPilots',30]]){const v=config[key];if(!Array.isArray(v)){errors.push(key+' must be an array.');collections[key]=[]}else{collections[key]=v;if(v.length>max)errors.push(key+' exceeds '+max+' editable items.')}}
+ if(!collections.greennessPatches.length&&!collections.riverPilots.length)errors.push('Add at least one greenness patch or river pilot.');
+ const profileMap=new Map(Array.isArray(ecology?.profiles)?ecology.profiles.map(p=>[p.id,p]):[]);
+ function common(item,type){
+  if(!record(item)){errors.push(type+' items must be objects.');return false}
+  if(typeof item.id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/.test(item.id)||ids.has(item.id))errors.push('Missing, invalid or duplicate id: '+String(item.id));
+  ids.add(item.id);
+  if(typeof item.label!=='string'||!item.label.trim()||item.label.length>160)errors.push(String(item.id)+': label must contain 1–160 characters.');
+  for(const k of ['frameMeaning','basis','meaning'])if(owns(item,k)&&typeof item[k]!=='string')errors.push(String(item.id)+': '+k+' must be text.');
+  if(owns(item,'ecologyProfileId')&&(typeof item.ecologyProfileId!=='string'||!item.ecologyProfileId.trim()||(ecology&& !profileMap.has(item.ecologyProfileId))))errors.push(String(item.id)+': ecology profile does not resolve.');
+  if(owns(item,'ecologyStageRefs')){
+   if(!Array.isArray(item.ecologyStageRefs)||item.ecologyStageRefs.length>100)errors.push(String(item.id)+': ecologyStageRefs must be an array of at most 100 references.');
+   else for(const ref of item.ecologyStageRefs){const m=typeof ref==='string'&&/^ecology\/([^/]+)\/(\d+)$/.exec(ref);if(!m||(ecology&&!profileMap.get(m[1])?.stages?.[Number(m[2])]))errors.push(String(item.id)+': ecology stage does not resolve: '+String(ref));}
+  }
+  return true;
+ }
+ function frames(item,fields){
+  if(!Array.isArray(item.keyframes)||item.keyframes.length<1||item.keyframes.length>256){errors.push(item.id+': 1–256 keyframes required.');return []}
+  const years=new Set();for(const frame of item.keyframes){if(!record(frame)){errors.push(item.id+': keyframes must be objects.');continue}if(!finite(frame.yearBce)||frame.yearBce<500||frame.yearBce>3200||years.has(frame.yearBce))errors.push(item.id+': invalid or duplicate keyframe year');years.add(frame.yearBce);for(const f of fields)if(!finite(frame[f]))errors.push(item.id+': finite '+f+' required')}
+  return item.keyframes.filter(record);
+ }
+ for(const p of collections.greennessPatches){
+  if(!common(p,'Greenness patch'))continue;
+  const fs=frames(p,['greenness']),g=p.geometry;
+  if(!record(g)||g.shape!=='soft-ellipse'||!validPoint({lon:g.centerLon,lat:g.centerLat})||!finite(g.radiusLonDegrees)||!finite(g.radiusLatDegrees)||g.radiusLonDegrees<=0||g.radiusLonDegrees>25||g.radiusLatDegrees<=0||g.radiusLatDegrees>15||!finite(g.rotationDegrees)||Math.abs(g.rotationDegrees)>360)errors.push(p.id+': valid soft ellipse with finite dimensions and rotation required.');
+  if(typeof p.color!=='string'||!/^#[0-9a-f]{6}$/i.test(p.color))errors.push(p.id+': use a six-digit hex color');
+  if(!finite(p.maxOpacity)||p.maxOpacity<0||p.maxOpacity>.55)errors.push(p.id+': maxOpacity must be 0–0.55');
+  for(const f of fs)if(f.greenness<0||f.greenness>1)errors.push(p.id+': greenness must be 0–1');
+ }
+ for(const r of collections.riverPilots){
+  if(!common(r,'River pilot'))continue;
+  const fs=frames(r,['eastKm','northKm']);for(const f of fs)if(Math.abs(f.eastKm)>200||Math.abs(f.northKm)>200)errors.push(r.id+': keyframe offsets must stay within 200 km before clamping.');
+  const s=r.baseRiverSelector;
+  if(!record(s)||typeof s.name!=='string'||!s.name.trim()||!Number.isInteger(s.occurrence)||s.occurrence<0||!Number.isInteger(s.expectedPointCount)||s.expectedPointCount<2||s.expectedPointCount>5000||!validPoint(s.expectedFirst)||!validPoint(s.expectedLast))errors.push(r.id+': valid river name, occurrence and expected geometry binding required.');
+  else{
+   const matches=rivers.map((v,i)=>({v,i})).filter(x=>record(x.v)&&x.v.name===s.name),match=matches[s.occurrence];
+   if(!match)errors.push(r.id+': river selector does not resolve');
+   else{
+    if(riverIndexes.has(match.i))errors.push(r.id+': another pilot already edits this river segment.');riverIndexes.add(match.i);
+    const points=match.v.points;
+    if(!Array.isArray(points)||points.length<2||points.some(p=>!validPoint(p)||Math.abs(p.lat)>85))errors.push(r.id+': original river contains invalid points.');
+    else if(points.length!==s.expectedPointCount||points[0].lon!==s.expectedFirst.lon||points[0].lat!==s.expectedFirst.lat||points.at(-1).lon!==s.expectedLast.lon||points.at(-1).lat!==s.expectedLast.lat)errors.push(r.id+': original river binding differs');
+   }
+  }
+  if(!finite(r.maxShiftKm)||r.maxShiftKm<0||r.maxShiftKm>40)errors.push(r.id+': maxShiftKm must be 0–40');
+  if(!Array.isArray(r.controlKnots)||r.controlKnots.length<2||r.controlKnots.length>64){errors.push(r.id+': 2–64 control knots required.');continue}
+  const valid=r.controlKnots.filter(k=>record(k)&&finite(k.at)&&k.at>=0&&k.at<=1&&finite(k.eastWeight)&&finite(k.northWeight)&&Math.abs(k.eastWeight)<=2&&Math.abs(k.northWeight)<=2);
+  if(valid.length!==r.controlKnots.length)errors.push(r.id+': invalid control knot');
+  const knots=[...valid].sort((a,b)=>a.at-b.at),positions=new Set();
+  for(const k of knots){if(positions.has(k.at))errors.push(r.id+': duplicate control knot position.');positions.add(k.at)}
+  if(knots.length<2||knots[0].at!==0||knots.at(-1).at!==1)errors.push(r.id+': control knots must run 0–1');
+  for(const k of [knots[0],knots.at(-1)])if(k&&(k.eastWeight!==0||k.northWeight!==0))errors.push(r.id+': endpoint weights must be zero');
+ }
+ return errors;
+}
+function interpolate(frames,year,fields){
+ const sorted=[...frames].sort((a,b)=>b.yearBce-a.yearBce);
+ if(year>=sorted[0].yearBce)return Object.fromEntries(fields.map(f=>[f,sorted[0][f]]));
+ if(year<=sorted.at(-1).yearBce)return Object.fromEntries(fields.map(f=>[f,sorted.at(-1)[f]]));
+ for(let i=1;i<sorted.length;i++){const a=sorted[i-1],b=sorted[i];if(a.yearBce>=year&&year>=b.yearBce){const u=smooth((a.yearBce-year)/(a.yearBce-b.yearBce));return Object.fromEntries(fields.map(f=>[f,a[f]+(b[f]-a[f])*u]))}}
+}
+function pathDistances(points){
+ const d=[0];for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],mean=(a.lat+b.lat)*Math.PI/360;d.push(d.at(-1)+Math.hypot((b.lon-a.lon)*111.32*Math.cos(mean),(b.lat-a.lat)*110.57))}const total=d.at(-1);return d.map(v=>total?v/total:0);
+}
+function controlAt(knots,t){
+ if(t<=0||t>=1)return {eastWeight:0,northWeight:0};
+ for(let i=1;i<knots.length;i++){const a=knots[i-1],b=knots[i];if(a.at<=t&&t<=b.at){const u=smooth((t-a.at)/(b.at-a.at));return {eastWeight:a.eastWeight+(b.eastWeight-a.eastWeight)*u,northWeight:a.northWeight+(b.northWeight-a.northWeight)*u}}}
+ return {eastWeight:0,northWeight:0};
+}
+function create(config,{rivers,ecology}={}){
+ if(!config||!Array.isArray(rivers))throw new TypeError('Landscape config and original rivers are required.');
+ const problems=validate(config,rivers,ecology);if(problems.length)throw new Error(problems.join('\n'));
+ const settings=copy(config),profiles=new Map((ecology?.profiles||[]).map(p=>[p.id,p]));
+ const pilots=settings.riverPilots.map(r=>{const list=rivers.map((v,i)=>({v,i})).filter(x=>x.v.name===r.baseRiverSelector.name),match=list[r.baseRiverSelector.occurrence],base=copy(match.v.points);return {...r,baseIndex:match.i,base,distances:pathDistances(base),controlKnots:r.controlKnots.sort((a,b)=>a.at-b.at)}});
+ function sample(yearBce,options={}){
+  if(!finite(yearBce)||yearBce<500||yearBce>3200)throw new RangeError('Landscape year must be3200–500BCE.');
+  const enabled=options.enabled??settings.globalDefaults?.enabled??true;
+  const scale=clamp(finite(options.greennessScale)?options.greennessScale:settings.globalDefaults?.greennessScale??1,0,2);
+  const shiftScale=clamp(finite(options.riverShiftScale)?options.riverShiftScale:settings.globalDefaults?.riverShiftScale??1,0,2);
+  if(!enabled)return {yearBce,enabled:false,greenness:[],riverOverrides:[],label:settings.displayLabel};
+  const greenness=settings.greennessPatches.map(p=>{const g=interpolate(p.keyframes,yearBce,['greenness']).greenness;return {id:p.id,label:p.label,...copy(p.geometry),color:p.color,value:g,opacity:clamp(g*p.maxOpacity*scale,0,.55),ecologyProfileId:p.ecologyProfileId,ecologyStageRefs:[...(p.ecologyStageRefs||[])],meaning:p.frameMeaning||settings.policy||'Illustrative landscape',basis:p.basis||'Editorial drawing values.'}});
+  const riverOverrides=pilots.map(p=>{const vector=interpolate(p.keyframes,yearBce,['eastKm','northKm']);let actualMax=0;const points=p.base.map((point,i)=>{if(i===0||i===p.base.length-1)return {...point};const w=controlAt(p.controlKnots,p.distances[i]);let east=vector.eastKm*w.eastWeight*shiftScale,north=vector.northKm*w.northWeight*shiftScale;const length=Math.hypot(east,north);if(length>p.maxShiftKm){east*=p.maxShiftKm/length;north*=p.maxShiftKm/length}actualMax=Math.max(actualMax,Math.hypot(east,north));return {lon:point.lon+east/(111.32*Math.cos(point.lat*Math.PI/180)),lat:point.lat+north/110.57}});return {id:p.id,label:p.label,name:p.baseRiverSelector.name,baseIndex:p.baseIndex,points,maxOffsetKm:actualMax,maxAllowedShiftKm:p.maxShiftKm,ecologyStageRefs:[...(p.ecologyStageRefs||[])],meaning:p.meaning||settings.policy||'Illustrative river study'}});
+  return {yearBce,enabled:true,label:settings.displayLabel,greenness,riverOverrides,summary:{patches:greenness.length,riverPilots:riverOverrides.length,meaning:'Editable visual interpretation; not measured canopy or surveyed ancient channels.'}};
+ }
+ function notesFor(id){const item=[...settings.greennessPatches,...settings.riverPilots].find(i=>i.id===id);if(!item)return null;return {...copy(item),profile:item.ecologyProfileId?copy(profiles.get(item.ecologyProfileId)||null):null}}
+ return {sample,notesFor,config:()=>copy(settings)};
+}
+return {create,validate,interpolate};
+});
+
+/* Soft atmosphere layer: draw after the original relief and before rivers, places or labels. */
+(function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsLandscapeRenderer=api})(function(){
+'use strict';
+const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
+function random(key){let h=2166136261;for(const c of String(key)){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}return (h>>>0)/4294967296}
+function shade(hex,factor){return '#'+hex.slice(1).match(/../g).map(s=>Math.round(clamp(parseInt(s,16)*factor,0,255)).toString(16).padStart(2,'0')).join('')}
+function drawTexture(ctx,p,x,y,rx,ry){
+ // Stable brush grains suggest land texture, not counted trees or surveyed fields.
+ // Geographic placement is unchanged between dates; strength controls density.
+ const amount=clamp(p.value,0,1),lod=clamp(Math.PI*rx*ry/5000,.04,1),density=amount*lod;
+ if(!density||p.opacity<=0)return;
+ const size=clamp(Math.sqrt(rx*ry)/36,.65,1.5),dark=shade(p.color,.66),light=shade(p.color,1.18);
+ ctx.save();ctx.globalCompositeOperation='source-over';ctx.translate(x,y);ctx.rotate(-(p.rotationDegrees||0)*Math.PI/180);
+ for(let row=0;row<12;row++)for(let col=0;col<12;col++){
+  const key=p.id+':'+row+':'+col,nx=((col+.16+random(key+':x')*.68)/12*2-1)*.84,ny=((row+.16+random(key+':y')*.68)/12*2-1)*.84;
+  const radius=Math.hypot(nx,ny);if(radius>.78||random(key+':density')>density)continue;
+  const fade=clamp((.84-radius)/.32,0,1);ctx.globalAlpha=Math.min(.48,p.opacity*(1.5+.5*amount))*fade;
+  ctx.fillStyle=random(key+':tone')>.86?light:dark;
+  const px=nx*rx,py=ny*ry,w=size*(.8+random(key+':width')*.75),h=size*(.55+random(key+':height')*.5);
+  ctx.fillRect(px,py,w,h);
+  if(random(key+':pair')>.64)ctx.fillRect(px+w*.45,py-size*.55,size*.55,size*.65);
+ }
+ ctx.restore();
+}
+function drawGreenness(ctx,sample,project){
+ if(!ctx||!sample?.enabled||!Array.isArray(sample.greenness)||typeof project!=='function')return;
+ for(const p of sample.greenness){
+  const center=project(p.centerLon,p.centerLat),east=project(p.centerLon+p.radiusLonDegrees,p.centerLat),north=project(p.centerLon,p.centerLat+p.radiusLatDegrees);
+  if(!Array.isArray(center)||!Array.isArray(east)||!Array.isArray(north))continue;
+  const [x,y]=center,rx=Math.abs(east[0]-x),ry=Math.abs(north[1]-y);
+  if(![x,y,rx,ry].every(Number.isFinite)||!rx||!ry||p.opacity<=0)continue;
+  ctx.save();ctx.globalCompositeOperation='source-over';ctx.globalAlpha=p.opacity;ctx.translate(x,y);ctx.rotate(-(p.rotationDegrees||0)*Math.PI/180);ctx.scale(rx,ry);
+  const gradient=ctx.createRadialGradient(0,0,0,0,0,1);gradient.addColorStop(0,p.color);gradient.addColorStop(.45,p.color+'c0');gradient.addColorStop(1,p.color+'00');ctx.fillStyle=gradient;ctx.beginPath();ctx.arc(0,0,1,0,Math.PI*2);ctx.fill();ctx.restore();
+  drawTexture(ctx,p,x,y,rx,ry);
+ }
+}
+function riverPoints(sample,baseIndex,originalPoints){return sample?.enabled&&Array.isArray(sample.riverOverrides)?(sample.riverOverrides.find(r=>r.baseIndex===baseIndex)?.points||originalPoints):originalPoints}
+return {drawGreenness,riverPoints};
+});
+
+/* Editable, deliberately approximate landscape sketches over the preserved map. */
+const LANDSCAPE_DEFAULTS={
+  "version": 1,
+  "title": "Editable illustrative landscapes: first regional pass",
+  "yearBoundsBce": [
+    3200,
+    500
+  ],
+  "interpolation": "smoothstep between drawing keyframes; bounded, with no overshoot",
+  "displayLabel": "Illustrative landscape",
+  "globalDefaults": {
+    "enabled": true,
+    "greennessScale": 1,
+    "riverShiftScale": 1
+  },
+  "policy": "The original map and original modern-reference rivers remain untouched and recoverable. This optional layer is a rough editable visual interpretation. Greenness numbers are artistic strengths rather than percentages; river offsets are not measured ancient courses. Source notes orient the subject, not the chosen drawing values.",
+  "greennessPatches": [
+    {
+      "id": "nile-cultivated-corridor",
+      "label": "Nile valley cultivation",
+      "ecologyProfileId": "egypt",
+      "geometry": {
+        "shape": "soft-ellipse",
+        "centerLon": 31.7,
+        "centerLat": 27.1,
+        "radiusLonDegrees": 0.72,
+        "radiusLatDegrees": 3.4,
+        "rotationDegrees": -12
+      },
+      "color": "#4b8548",
+      "maxOpacity": 0.5,
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "greenness": 0.57
+        },
+        {
+          "yearBce": 2500,
+          "greenness": 0.6
+        },
+        {
+          "yearBce": 2200,
+          "greenness": 0.49
+        },
+        {
+          "yearBce": 1800,
+          "greenness": 0.55
+        },
+        {
+          "yearBce": 1400,
+          "greenness": 0.53
+        },
+        {
+          "yearBce": 1000,
+          "greenness": 0.54
+        },
+        {
+          "yearBce": 500,
+          "greenness": 0.56
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/egypt/0",
+        "ecology/egypt/2",
+        "ecology/egypt/3"
+      ],
+      "frameMeaning": "Editable artistic greenness setting, not measured canopy or crop coverage. Dates are drawing keyframes, not reconstructed annual observations.",
+      "basis": "A thin artistic valley corridor. Local branch evidence is context, not a Nile-wide greenness reconstruction; all drawing values are editorial."
+    },
+    {
+      "id": "levant-upland-mosaic",
+      "label": "Levant woodland and cultivation",
+      "ecologyProfileId": "levant",
+      "geometry": {
+        "shape": "soft-ellipse",
+        "centerLon": 35.3,
+        "centerLat": 32.2,
+        "radiusLonDegrees": 1.12,
+        "radiusLatDegrees": 2.55,
+        "rotationDegrees": -8
+      },
+      "color": "#477e43",
+      "maxOpacity": 0.5,
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "greenness": 0.73
+        },
+        {
+          "yearBce": 2500,
+          "greenness": 0.61
+        },
+        {
+          "yearBce": 2100,
+          "greenness": 0.44
+        },
+        {
+          "yearBce": 1800,
+          "greenness": 0.42
+        },
+        {
+          "yearBce": 1650,
+          "greenness": 0.63
+        },
+        {
+          "yearBce": 1250,
+          "greenness": 0.31
+        },
+        {
+          "yearBce": 1150,
+          "greenness": 0.34
+        },
+        {
+          "yearBce": 950,
+          "greenness": 0.52
+        },
+        {
+          "yearBce": 500,
+          "greenness": 0.49
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/levant/0",
+        "ecology/levant/1",
+        "ecology/levant/2",
+        "ecology/levant/3",
+        "ecology/levant/4",
+        "ecology/levant/5"
+      ],
+      "frameMeaning": "Editable artistic greenness setting, not measured canopy or crop coverage. Dates are drawing keyframes, not reconstructed annual observations.",
+      "basis": "Broad wet/dry and pollen sequence provides qualitative orientation. Pollen and rainfall do not determine the opacity numbers or exact woodland extent."
+    },
+    {
+      "id": "anatolian-parkland",
+      "label": "Anatolian parkland and managed land",
+      "ecologyProfileId": "anatolia",
+      "geometry": {
+        "shape": "soft-ellipse",
+        "centerLon": 32.6,
+        "centerLat": 38.3,
+        "radiusLonDegrees": 4.5,
+        "radiusLatDegrees": 1.75,
+        "rotationDegrees": -5
+      },
+      "color": "#63834a",
+      "maxOpacity": 0.5,
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "greenness": 0.59
+        },
+        {
+          "yearBce": 2400,
+          "greenness": 0.55
+        },
+        {
+          "yearBce": 1800,
+          "greenness": 0.49
+        },
+        {
+          "yearBce": 1300,
+          "greenness": 0.43
+        },
+        {
+          "yearBce": 800,
+          "greenness": 0.46
+        },
+        {
+          "yearBce": 500,
+          "greenness": 0.5
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/anatolia/0",
+        "ecology/anatolia/1",
+        "ecology/anatolia/2"
+      ],
+      "frameMeaning": "Editable artistic greenness setting, not measured canopy or crop coverage. Dates are drawing keyframes, not reconstructed annual observations.",
+      "basis": "Editorial transition from woodland/parkland to a mixed managed landscape. Existing undated notes do not supply these numeric dates or a synchronous clearance boundary."
+    },
+    {
+      "id": "zagros-managed-mosaic",
+      "label": "Zagros and plateau mosaic",
+      "ecologyProfileId": "iran",
+      "geometry": {
+        "shape": "soft-ellipse",
+        "centerLon": 49.5,
+        "centerLat": 33.2,
+        "radiusLonDegrees": 3.2,
+        "radiusLatDegrees": 1.28,
+        "rotationDegrees": 35
+      },
+      "color": "#718549",
+      "maxOpacity": 0.5,
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "greenness": 0.46
+        },
+        {
+          "yearBce": 2400,
+          "greenness": 0.43
+        },
+        {
+          "yearBce": 1800,
+          "greenness": 0.4
+        },
+        {
+          "yearBce": 1300,
+          "greenness": 0.37
+        },
+        {
+          "yearBce": 850,
+          "greenness": 0.35
+        },
+        {
+          "yearBce": 500,
+          "greenness": 0.39
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/iran/0",
+        "ecology/iran/1"
+      ],
+      "frameMeaning": "Editable artistic greenness setting, not measured canopy or crop coverage. Dates are drawing keyframes, not reconstructed annual observations.",
+      "basis": "A conservative artistic mosaic; low woody pollen is not assigned a measured deforestation rate, and managed trees are not automatically natural forest recovery."
+    },
+    {
+      "id": "southern-mesopotamian-lowland",
+      "label": "Southern lowland cultivation and marsh",
+      "ecologyProfileId": "mesopotamia",
+      "geometry": {
+        "shape": "soft-ellipse",
+        "centerLon": 46.1,
+        "centerLat": 31.7,
+        "radiusLonDegrees": 2.1,
+        "radiusLatDegrees": 1.05,
+        "rotationDegrees": 20
+      },
+      "color": "#4f8863",
+      "maxOpacity": 0.5,
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "greenness": 0.68
+        },
+        {
+          "yearBce": 2600,
+          "greenness": 0.65
+        },
+        {
+          "yearBce": 2100,
+          "greenness": 0.58
+        },
+        {
+          "yearBce": 1700,
+          "greenness": 0.54
+        },
+        {
+          "yearBce": 1300,
+          "greenness": 0.57
+        },
+        {
+          "yearBce": 900,
+          "greenness": 0.5
+        },
+        {
+          "yearBce": 500,
+          "greenness": 0.53
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/mesopotamia/1"
+      ],
+      "frameMeaning": "Editable artistic greenness setting, not measured canopy or crop coverage. Dates are drawing keyframes, not reconstructed annual observations.",
+      "basis": "Artistic lowland texture informed by general irrigation and marsh processes, not a surveyed shoreline, measured crop cover or dated local watercourse sequence."
+    }
+  ],
+  "riverPilots": [
+    {
+      "id": "nile-middle-valley",
+      "label": "Middle Egyptian Nile study",
+      "baseRiverSelector": {
+        "name": "Nile",
+        "occurrence": 1,
+        "expectedPointCount": 72,
+        "expectedFirst": {
+          "lon": 32.8795,
+          "lat": 23.9877
+        },
+        "expectedLast": {
+          "lon": 31.2376,
+          "lat": 30.1207
+        }
+      },
+      "maxShiftKm": 12,
+      "controlKnots": [
+        {
+          "at": 0,
+          "eastWeight": 0,
+          "northWeight": 0
+        },
+        {
+          "at": 0.2,
+          "eastWeight": 0.4,
+          "northWeight": 0.15
+        },
+        {
+          "at": 0.45,
+          "eastWeight": -0.65,
+          "northWeight": 0.3
+        },
+        {
+          "at": 0.72,
+          "eastWeight": 0.8,
+          "northWeight": -0.2
+        },
+        {
+          "at": 1,
+          "eastWeight": 0,
+          "northWeight": 0
+        }
+      ],
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "eastKm": -7,
+          "northKm": 2
+        },
+        {
+          "yearBce": 2500,
+          "eastKm": -4,
+          "northKm": 1
+        },
+        {
+          "yearBce": 2000,
+          "eastKm": 3,
+          "northKm": -1
+        },
+        {
+          "yearBce": 1400,
+          "eastKm": 6,
+          "northKm": 0
+        },
+        {
+          "yearBce": 900,
+          "eastKm": -1,
+          "northKm": 1
+        },
+        {
+          "yearBce": 500,
+          "eastKm": 2,
+          "northKm": 0
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/egypt/1",
+        "ecology/egypt/4"
+      ],
+      "meaning": "Illustrative offset from the preserved generalized modern reference. This is an editable visual scenario, not a proposed surveyed ancient course. Endpoints remain fixed.",
+      "provenance": {
+        "originalRiverIndex": 51,
+        "source": "Existing atlas river geometry, retained unchanged",
+        "coordinatesAreHistoricalReconstruction": false
+      },
+      "editorFocus": {
+        "lon": 31.8,
+        "lat": 27.0,
+        "span": 14
+      }
+    },
+    {
+      "id": "euphrates-lower-pilot",
+      "label": "Lower Euphrates study",
+      "baseRiverSelector": {
+        "name": "Euphrates",
+        "occurrence": 1,
+        "expectedPointCount": 81,
+        "expectedFirst": {
+          "lon": 40.9926,
+          "lat": 34.4285
+        },
+        "expectedLast": {
+          "lon": 45.4669,
+          "lat": 31.3052
+        }
+      },
+      "maxShiftKm": 24,
+      "controlKnots": [
+        {
+          "at": 0,
+          "eastWeight": 0,
+          "northWeight": 0
+        },
+        {
+          "at": 0.3,
+          "eastWeight": 0,
+          "northWeight": 0
+        },
+        {
+          "at": 0.55,
+          "eastWeight": 0.35,
+          "northWeight": 0.2
+        },
+        {
+          "at": 0.78,
+          "eastWeight": 1,
+          "northWeight": -0.3
+        },
+        {
+          "at": 0.91,
+          "eastWeight": 0.55,
+          "northWeight": -0.15
+        },
+        {
+          "at": 1,
+          "eastWeight": 0,
+          "northWeight": 0
+        }
+      ],
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "eastKm": -19,
+          "northKm": 4
+        },
+        {
+          "yearBce": 2600,
+          "eastKm": -14,
+          "northKm": 3
+        },
+        {
+          "yearBce": 2100,
+          "eastKm": -8,
+          "northKm": 2
+        },
+        {
+          "yearBce": 1700,
+          "eastKm": 2,
+          "northKm": 1
+        },
+        {
+          "yearBce": 1300,
+          "eastKm": 13,
+          "northKm": -2
+        },
+        {
+          "yearBce": 900,
+          "eastKm": 5,
+          "northKm": -1
+        },
+        {
+          "yearBce": 500,
+          "eastKm": 0,
+          "northKm": 0
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/mesopotamia/1"
+      ],
+      "meaning": "Illustrative offset from the preserved generalized modern reference. This is an editable visual scenario, not a proposed surveyed ancient course. Endpoints remain fixed.",
+      "provenance": {
+        "originalRiverIndex": 30,
+        "source": "Existing atlas river geometry, retained unchanged",
+        "coordinatesAreHistoricalReconstruction": false
+      },
+      "editorFocus": {
+        "lon": 45.1,
+        "lat": 32.3,
+        "span": 14
+      }
+    },
+    {
+      "id": "tigris-lower-pilot",
+      "label": "Lower Tigris study",
+      "baseRiverSelector": {
+        "name": "Tigris",
+        "occurrence": 0,
+        "expectedPointCount": 100,
+        "expectedFirst": {
+          "lon": 42.3766,
+          "lat": 37.0625
+        },
+        "expectedLast": {
+          "lon": 47.4413,
+          "lat": 30.9991
+        }
+      },
+      "maxShiftKm": 18,
+      "controlKnots": [
+        {
+          "at": 0,
+          "eastWeight": 0,
+          "northWeight": 0
+        },
+        {
+          "at": 0.4,
+          "eastWeight": 0,
+          "northWeight": 0
+        },
+        {
+          "at": 0.62,
+          "eastWeight": -0.35,
+          "northWeight": 0.15
+        },
+        {
+          "at": 0.82,
+          "eastWeight": -0.9,
+          "northWeight": 0.25
+        },
+        {
+          "at": 0.94,
+          "eastWeight": -0.45,
+          "northWeight": 0.1
+        },
+        {
+          "at": 1,
+          "eastWeight": 0,
+          "northWeight": 0
+        }
+      ],
+      "keyframes": [
+        {
+          "yearBce": 3200,
+          "eastKm": 10,
+          "northKm": -2
+        },
+        {
+          "yearBce": 2600,
+          "eastKm": 6,
+          "northKm": -1
+        },
+        {
+          "yearBce": 2100,
+          "eastKm": -2,
+          "northKm": 1
+        },
+        {
+          "yearBce": 1700,
+          "eastKm": -7,
+          "northKm": 2
+        },
+        {
+          "yearBce": 1300,
+          "eastKm": -4,
+          "northKm": 1
+        },
+        {
+          "yearBce": 900,
+          "eastKm": 4,
+          "northKm": 0
+        },
+        {
+          "yearBce": 500,
+          "eastKm": 0,
+          "northKm": 0
+        }
+      ],
+      "ecologyStageRefs": [
+        "ecology/mesopotamia/1"
+      ],
+      "meaning": "Illustrative offset from the preserved generalized modern reference. This is an editable visual scenario, not a proposed surveyed ancient course. Endpoints remain fixed.",
+      "provenance": {
+        "originalRiverIndex": 62,
+        "source": "Existing atlas river geometry, retained unchanged",
+        "coordinatesAreHistoricalReconstruction": false
+      },
+      "editorFocus": {
+        "lon": 44.8,
+        "lat": 33.3,
+        "span": 14
+      }
+    }
+  ],
+  "sourceContext": {
+    "ecologyFile": "Assets/AncientWorlds/Resources/AncientWorlds/ecology.json",
+    "ecologySha256": "bd473b35cc99e17789cc60aec16999570ab3b89dddd812911fc7161b0e522ee7",
+    "atlasSha256": "108e219d845b77bd882d19aae929e7425026bdca8c3f9ccec600e5d7c93cea1a",
+    "keyframeValuesFromMeasurements": false,
+    "newHistoricalGeographicClaims": false
+  },
+  "editingHints": [
+    "Change greenness from0to1 to adjust relative strength, not canopy percent.",
+    "Use greennessScale for overall visibility and riverShiftScale for the subtlety of all course shifts.",
+    "Edit or add keyframes in descending BCE order; endpoints can share a value for a static region.",
+    "Keep river endpoints at zero weights to preserve joins. maxShiftKm clamps all resulting offsets.",
+    "Original map should bypass this optional layer completely."
+  ]
+}
+;
+(function(){
+'use strict';
+const storageKey='ancient-worlds.landscape.v1',clone=x=>JSON.parse(JSON.stringify(x));
+const normalize=next=>({...clone(next),globalDefaults:{enabled:true,greennessScale:1,riverShiftScale:1,...(next.globalDefaults||{})}});
+let config=clone(LANDSCAPE_DEFAULTS),engine,cache=null,savedFocus=null,selectedId=config.greennessPatches[0].id;
+let initialNote='Bundled landscape sketch.';
+try{const saved=localStorage.getItem(storageKey);if(saved){const parsed=JSON.parse(saved);AncientWorldsLandscape.create(parsed,{rivers:D.rivers,ecology:ECOLOGY_DATA});config=normalize(parsed);initialNote='Saved landscape settings loaded.'}}catch(e){initialNote='The saved preset could not be loaded. Bundled settings are in use.'}
+if(![...config.greennessPatches,...config.riverPilots].some(p=>p.id===selectedId))selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;
+engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});
+const css=el('style');css.textContent=`
+aside{position:relative}aside.aw-landscape-editor-open>:not(#landscapeEditor){visibility:hidden}.aw-landscape-editor{position:absolute;inset:0;z-index:8;background:linear-gradient(155deg,#1a3026,#10252b);padding:14px 13px;overflow:auto;color:#e3dfc8}.aw-landscape-editor.hidden{display:none}.aw-landscape-editor h2{font:23px Georgia,serif;margin:7px 0 12px;color:#e6d3a5}.aw-landscape-editor h3{font:17px Georgia,serif;margin:16px 0 8px}.aw-landscape-editor p{font-size:11px;line-height:1.65;color:#bdd0b9}.aw-landscape-editor button{font-size:11px;padding:7px 9px;margin:4px 4px 0 0}.aw-landscape-editor .close{float:right;padding:3px 8px;margin:0}.aw-landscape-editor label{display:block;font-size:11px;color:#c4d0b9;margin:10px 0 5px}.aw-landscape-editor input[type=number],.aw-landscape-editor select{width:100%;padding:6px;font-size:11px}.aw-landscape-editor input[type=range]{width:100%;padding:0}.aw-landscape-editor .aw-landscape-date{font:23px Georgia,serif;color:#e2c990;margin:9px 0}.aw-landscape-editor .aw-landscape-split{display:grid;grid-template-columns:1fr 1fr;gap:8px}.aw-landscape-editor .aw-landscape-years{display:flex;gap:4px;flex-wrap:wrap}.aw-landscape-editor .aw-landscape-years button{padding:4px 7px;font-size:10px}.aw-landscape-editor .aw-landscape-status{border-top:1px solid #4f6a55;padding-top:10px;margin-top:14px;color:#d5c795}.aw-landscape-editor details{font-size:11px;line-height:1.7;color:#b9cbb9;margin:13px 0}.aw-landscape-editor summary{cursor:pointer;color:#d7cda8}.aw-landscape-editor .aw-landscape-toggle{display:flex;align-items:center;gap:6px}.aw-landscape-tag{color:#b8d2ad;font-size:9px;margin-top:4px;max-width:235px}.aw-landscape-open.active{border-color:#b1b887;color:#e2d8ac}
+`;document.head.append(css);
+const panel=el('section','aw-landscape-editor hidden');panel.id='landscapeEditor';panel.setAttribute('role','region');panel.setAttribute('aria-label','Landscape editor');document.querySelector('main aside').append(panel);
+const opener=btn($('stage').querySelector('.maptools'),'Landscape edits',()=>open(),'aw-landscape-open');opener.id='landscapeEdit';
+const tag=el('div','aw-landscape-tag');$('stage').querySelector('.detail-hud').append(tag);
+function active(){return config.globalDefaults.enabled!==false&&worldController.enabled}
+function frame(){if(!cache||cache.yearBce!==year)cache=engine.sample(year);return active()?cache:{yearBce:year,enabled:false,greenness:[],riverOverrides:[]}}
+function refresh(message){engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});cache=null;if(message)initialNote=message;syncTag();render();invalidate()}
+function syncTag(){const text=active()?'Illustrative landscape · '+year+' BCE':'';if(tag.textContent!==text)tag.textContent=text;opener.classList.toggle('active',!panel.classList.contains('hidden'));const label=$('rivers').parentElement;for(const node of label.childNodes)if(node.nodeType===3){const text=active()?' Rivers':' Modern rivers';if(node.textContent!==text)node.textContent=text}}
+function close(){document.querySelector('main aside').classList.remove('aw-landscape-editor-open');panel.classList.add('hidden');opener.classList.remove('active');(savedFocus?.offsetParent?savedFocus:opener).focus()}
+function open(){savedFocus=document.activeElement;worldController.pauseJourney();if(playTimer){clearInterval(playTimer);playTimer=null;$('play').textContent='Play changes'}worldController.setEnabled(true);document.querySelector('main aside').classList.add('aw-landscape-editor-open');panel.classList.remove('hidden');render();syncTag();panel.querySelector('select')?.focus()}
+function layer(id){return [...config.greennessPatches.map(p=>({...p,layerType:'green'})),...config.riverPilots.map(p=>({...p,layerType:'river'}))].find(p=>p.id===id)}
+function setConfig(next,message){const model=AncientWorldsLandscape.create(next,{rivers:D.rivers,ecology:ECOLOGY_DATA});config=normalize(next);engine=AncientWorldsLandscape.create(config,{rivers:D.rivers,ecology:ECOLOGY_DATA});cache=null;if(!layer(selectedId))selectedId=config.greennessPatches[0]?.id||config.riverPilots[0]?.id;initialNote=message;syncTag();render();invalidate()}
+function download(){const blob=new Blob([JSON.stringify(config,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Ancient_Worlds_Landscape_Settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);initialNote='Landscape settings exported as JSON.';render()}
+const upload=el('input');upload.type='file';upload.accept='application/json,.json';upload.setAttribute('aria-label','Import landscape JSON');upload.style.display='none';document.body.append(upload);
+upload.onchange=async()=>{try{const file=upload.files[0];if(!file)return;setConfig(JSON.parse(await file.text()),'Imported preview. Save on this device or export to keep it.')}catch(e){initialNote='Import was not applied: '+e.message;render()}finally{upload.value=''}};
+function label(text,input,parent=panel){const l=el('label','',text);l.append(input);parent.append(l);return l}
+function render(){
+ if(panel.classList.contains('hidden'))return;panel.replaceChildren();const closeButton=btn(panel,'×',close,'close');closeButton.setAttribute('aria-label','Close landscape editor');panel.append(el('div','eyebrow','EDITABLE LANDSCAPE SKETCH'),el('h2','','Land through time'));p(panel,'A rough first pass: gradual greenness and small river shifts. Adjust it here, then export the settings for later refinement.');
+ const toggle=el('input');toggle.type='checkbox';toggle.checked=config.globalDefaults.enabled!==false;toggle.setAttribute('aria-label','Illustrative landscape enabled');toggle.onchange=()=>{config.globalDefaults.enabled=toggle.checked;refresh('Landscape visibility changed in this preview.')};const toggleLabel=label('Illustrative landscape',toggle);toggleLabel.className='aw-landscape-toggle';
+ panel.append(el('div','aw-landscape-date',year+' BCE'));const years=el('div','aw-landscape-years');for(const y of [3200,2050,1370,800,500])btn(years,String(y),()=>setYear(y));panel.append(years);
+ const select=el('select');select.setAttribute('aria-label','Landscape layer');for(const p0 of config.greennessPatches){const o=el('option','',p0.label);o.value=p0.id;select.append(o)}for(const r of config.riverPilots){const o=el('option','','River · '+r.label);o.value=r.id;select.append(o)}select.value=selectedId;select.onchange=()=>{selectedId=select.value;render()};label('Area or river to edit',select);
+ const item=layer(selectedId),sample=engine.sample(year,{enabled:true}),controls=el('div');panel.append(controls);let amount,east,north;
+ if(item.layerType==='green'){
+  const current=sample.greenness.find(p=>p.id===item.id);amount=el('input');amount.type='range';amount.min=0;amount.max=100;amount.step=1;amount.value=Math.round(current.value*100);amount.setAttribute('aria-label','Greenness drawing strength');const value=el('output','',amount.value+' / 100');amount.oninput=()=>value.textContent=amount.value+' / 100';label('Greenness strength',amount,controls);controls.append(value);p(controls,'Drawing strength, rather than a measured land-cover percentage.');
+ }else{
+  const vector=AncientWorldsLandscape.interpolate(item.keyframes,year,['eastKm','northKm']);const row=el('div','aw-landscape-split');for(const [direction,key] of [['East / west km','eastKm'],['North / south km','northKm']]){const input=el('input');input.type='number';input.min=-40;input.max=40;input.step=.5;input.value=Math.round(vector[key]*10)/10;input.setAttribute('aria-label',direction);label(direction,input,row);if(key==='eastKm')east=input;else north=input}controls.append(row);p(controls,'Positive values move east or north. This pilot caps displacement at '+item.maxShiftKm+' km and keeps its ends connected.');
+ }
+ btn(controls,'Apply at this date',()=>{
+  let values;if(item.layerType==='green')values={greenness:Number(amount.value)/100};else values={eastKm:Number(east.value),northKm:Number(north.value)};
+  if(Object.values(values).some(v=>!Number.isFinite(v)||Math.abs(v)>40)){initialNote='Enter finite river offsets between −40 and 40 km.';render();return}
+  const collection=item.layerType==='green'?config.greennessPatches:config.riverPilots,target=collection.find(p=>p.id===item.id),existing=target.keyframes.find(k=>k.yearBce===year);if(existing)Object.assign(existing,values);else target.keyframes.push({yearBce:year,...values});target.keyframes.sort((a,b)=>b.yearBce-a.yearBce);refresh('Keyframe applied at '+year+' BCE. Other dates blend toward their neighboring keyframes.');
+ });
+ const keyframes=el('details');keyframes.append(el('summary','','Stored drawing dates'));const dateButtons=el('div','aw-landscape-years');for(const f of [...item.keyframes].sort((a,b)=>b.yearBce-a.yearBce))btn(dateButtons,String(f.yearBce),()=>setYear(f.yearBce));keyframes.append(dateButtons);panel.append(keyframes);
+ btn(panel,'Focus this area',()=>{if(item.layerType==='green'){target={lon:item.geometry.centerLon,lat:item.geometry.centerLat,span:Math.max(12,item.geometry.radiusLonDegrees*5)}}else if(item.editorFocus&&[item.editorFocus.lon,item.editorFocus.lat,item.editorFocus.span].every(Number.isFinite)){target={...item.editorFocus}}else {const points=sample.riverOverrides.find(r=>r.id===item.id).points,middle=points[Math.floor(points.length/2)];target={lon:middle.lon,lat:middle.lat,span:18}}clamp();invalidate()});
+ panel.append(el('h3','','Keep and share'));btn(panel,'Save on this device',()=>{try{localStorage.setItem(storageKey,JSON.stringify(config));initialNote='Saved on this device. These settings will load next time.'}catch(e){initialNote='Device save was unavailable. Export JSON to keep the settings.'}render()});btn(panel,'Export JSON',download);btn(panel,'Import JSON',()=>upload.click());btn(panel,'Reset preview',()=>setConfig(clone(LANDSCAPE_DEFAULTS),'Bundled defaults restored in this preview. Saved settings remain unchanged until you save.'));
+ const context=el('details');context.append(el('summary','','Drawing basis'));p(context,item.basis||item.meaning);p(context,'These editable shapes suggest broad change. They are not surveyed ancient channels or measured vegetation coverage.');panel.append(context);const status=el('p','aw-landscape-status',initialNote);status.setAttribute('role','status');panel.append(status);
+}
+window.awLandscapePass=()=>{syncTag();AncientWorldsLandscapeRenderer.drawGreenness(ctx,frame(),project)};
+window.awLandscapeRiver=(index,points)=>AncientWorldsLandscapeRenderer.riverPoints(frame(),index,points);
+const previousYear=setYear;setYear=function(y){previousYear(y);cache=null;syncTag();render();invalidate()};atlasTest.setYear=setYear;
+new MutationObserver(()=>{cache=null;syncTag();invalidate()}).observe(document.body,{attributes:true,attributeFilter:['class']});
+panel.addEventListener('keydown',e=>{if(e.key==='Escape'){close();e.stopPropagation();e.preventDefault()}});
+window.landscapeController={open,close,get config(){return clone(config)},get frame(){return frame()},get isOpen(){return !panel.classList.contains('hidden')}};syncTag();invalidate();
 })();
 
 
