@@ -1042,12 +1042,15 @@ window.timelineIntegrator={index,open,close,showHubResearch,get year(){return ye
 const valid=d=>!!d&&d.known===true&&Number.isFinite(d.startBce)&&Number.isFinite(d.endBce)&&d.startBce>=d.endBce&&d.endBce>0;
 const within=(d,y)=>valid(d)&&d.startBce>=y&&y>=d.endBce;
 const unique=a=>[...new Set(a.filter(Boolean))];
-function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot}){
+function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot,styles={}}){
  const places=new Map(atlas.places.map(p=>[p.id,p])),regions=new Map(atlas.regions.map(r=>[r.id,r]));
  const sources=new Map([...atlas.sources,...living.sources,...(cityResearch.sources||[]),...(pilot.sources||[])].map(s=>[s.id,s]));
  const regionalAnchors=new Map((links.regionalLabelAnchors||[]).map(a=>[a.regionId,a]));
  const stageAnchors=new Map((links.ecologyStageAnchors||[]).map(a=>[a.entryId,a]));
  const phaseById=new Map((cityResearch.phases||[]).map(p=>[p.id,p]));
+ const ecologyStyles=new Map((styles.ecologyStages||[]).map(s=>[s.entryId,s]));
+ const exchangeStyles=new Map((styles.exchangeConnectors||[]).map(s=>[s.connectorId,s]));
+ const periodStyles=new Map((styles.periodLabels||[]).map(s=>[s.periodId,s]));
  const navigationPoint=a=>a&&Number.isFinite(a.lon)&&Number.isFinite(a.lat)?{lon:a.lon,lat:a.lat}:null;
  function atYear(year){
   if(!Number.isInteger(year)||year<500||year>3200)throw new RangeError('Atlas year must be 3200–500 BCE.');
@@ -1072,7 +1075,8 @@ function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot}){
    const endpoints=drawing.endpoints||[];
    const points=endpoints.map(e=>places.get(typeof e==='string'?e:e.placeId)).filter(p=>p?.located).map(p=>({lon:p.lon,lat:p.lat,placeId:p.id,name:p.name}));
    if(points.length<2)continue;
-   connections.push({id:drawing.id,recordId:record.id,label:drawing.displayLabel||drawing.label||record.title,mode:drawing.mode||(/maritime|shipping|Gulf/i.test(record.mechanism)?'maritime':'exchange'),status:'contextual',points,dates:record.dates,sourceIds:record.sourceIds,record,drawing,limits:drawing.limits||drawing.semanticLimits||'An editable schematic connection, not a surveyed road or dated journey.'});
+   const style=exchangeStyles.get(drawing.id);
+   connections.push({id:drawing.id,recordId:record.id,label:drawing.displayLabel||drawing.label||record.title,caption:style?.caption||'',mode:style?.mode||drawing.mode||(/maritime|shipping|Gulf/i.test(record.mechanism)?'maritime':'exchange'),status:'contextual',points,dates:record.dates,sourceIds:record.sourceIds,record,drawing,style,limits:drawing.limits||drawing.semanticLimits||'An editable schematic connection, not a surveyed road or dated journey.'});
   }
   for(const r of atlas.regions){
    const record=regionalAnchors.get(r.id),anchor=navigationPoint(record?.anchor);if(!anchor)continue;
@@ -1081,7 +1085,7 @@ function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot}){
    const weight={'Political context':4,'Mixed regional context':3,'Archaeological phase':2,'Regional context':1,'Research gap':0};
    periods.sort((a,b)=>(weight[b.kind]??1)-(weight[a.kind]??1));
    const first=periods[0],people=dated.filter(e=>e.refType==='person');
-   contexts.push({id:r.id,regionId:r.id,...anchor,label:first.label.split(';')[0].trim(),fullLabel:first.label,priority:people.length===1?10:people.length>1?5:0,subLabel:people.length===1?people[0].label:people.length>1?people.length+' dated registry entries':r.name,kind:first.kind==='Political context'?'political':first.kind==='Archaeological phase'?'archaeological':first.kind==='Mixed regional context'?'mixed':first.kind==='Research gap'?'research-gap':'regional',periods,people,sourceIds:unique(periods.flatMap(p=>p.sourceIds)),anchorBasis:record.basis||'',status:'contextual'});
+   contexts.push({id:r.id,regionId:r.id,...anchor,label:periodStyles.get(first.refId)?.caption||first.label.split(';')[0].trim(),fullLabel:first.label,priority:people.length===1?10:people.length>1?5:0,subLabel:people.length===1?people[0].label:people.length>1?people.length+' dated registry entries':r.name,kind:first.kind==='Political context'?'political':first.kind==='Archaeological phase'?'archaeological':first.kind==='Mixed regional context'?'mixed':first.kind==='Research gap'?'research-gap':'regional',periods,people,sourceIds:unique(periods.flatMap(p=>p.sourceIds)),anchorBasis:record.basis||'',status:'contextual'});
   }
   for(const e of view.dated.filter(e=>e.refType==='ecology')){
    const record=stageAnchors.get(e.id);if(!record)continue;
@@ -1089,7 +1093,8 @@ function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot}){
     const anchor=navigationPoint(a);if(!anchor)continue;
     const profile=ecology.profiles.find(p=>p.id===e.refId);
     const text=(e.label+' '+e.note).toLowerCase();const kind=/water|river|lake|channel|delta|hydro|drought|drying|wetland/.test(text)?'water':'vegetation';
-    notes.push({id:e.id+'/'+i,entryId:e.id,profileId:e.refId,...anchor,label:e.label,kind,status:'window',sourceIds:e.sourceIds,evidence:e,profile,anchorBasis:a.basis||record.basis||'',limits:record.limits||'A research/navigation anchor, not an ecological boundary.'});
+    const style=ecologyStyles.get(e.id);
+    notes.push({id:e.id+'/'+i,entryId:e.id,profileId:e.refId,...anchor,label:style?.caption||e.label,fullLabel:e.label,kind:style?.kind||kind,trend:style?.trend||'neutral',style,status:'window',sourceIds:e.sourceIds,evidence:e,profile,anchorBasis:a.basis||record.basis||'',limits:record.limits||'A research/navigation anchor, not an ecological boundary.'});
    }
   }
   return {year,cities:[...cityMap.values()],connections,contexts,ecology:notes,counts:{cities:cityMap.size,connections:connections.length,contexts:contexts.length,ecology:notes.length}};
@@ -1115,7 +1120,7 @@ return {create,within,valid};
 })(typeof globalThis!=='undefined'?globalThis:typeof window!=='undefined'?window:this,function(){
   'use strict';
   const TAU=Math.PI*2;
-  const palette=Object.freeze({gold:'#d8bd87',ivory:'#e4ddc9',teal:'#8eafb1',sage:'#a9bb98',ink:'#132328',shadow:'#081419'});
+  const palette=Object.freeze({gold:'#ddbf83',ivory:'#eee4cd',teal:'#99c3c6',sage:'#aec59b',ink:'#14262a',shadow:'#081419'});
   const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
   const finite=n=>typeof n==='number'&&Number.isFinite(n);
   const labelOf=item=>String(item.label||item.name||'');
@@ -1209,7 +1214,7 @@ return {create,within,valid};
   }
   function connectionStyle(item){
     const water=/sea|maritime|water|sail|river|coast|ship/i.test(String(item.mode||''));
-    return {color:water?palette.teal:palette.gold,dash:water?[2,6]:[4,6.5]};
+    return {water,color:water?palette.teal:palette.gold,dash:water?[1,5.6]:[5.5,5.8]};
   }
   function makeHit(type,item,p,radius,rect){
     const hit={type,id:item.id,x:p.x,y:p.y,radius,label:labelOf(item)};
@@ -1232,10 +1237,11 @@ return {create,within,valid};
     const segments=visibleSegments(g,width,height);if(!segments.length)return;
     const style=connectionStyle(item),seed=hashString(item.id);
     c.save();c.lineCap='round';c.lineJoin='round';c.setLineDash([]);
-    line(c,g.points);c.strokeStyle=palette.shadow;c.globalAlpha=.58;c.lineWidth=3.8;c.stroke();
-    c.strokeStyle=style.color;c.globalAlpha=.09;c.lineWidth=5.5;c.stroke();
+    line(c,g.points);c.strokeStyle=palette.shadow;c.globalAlpha=.68;c.lineWidth=4.2;c.stroke();
+    c.strokeStyle=style.color;c.globalAlpha=.09;c.lineWidth=6.6;c.stroke();
+    c.globalAlpha=.18;c.lineWidth=.65;c.stroke();
     c.setLineDash(style.dash);c.lineDashOffset=reduced?0:-(clock*.003+seed*20);
-    c.globalAlpha=.72;c.lineWidth=1.2;c.stroke();c.setLineDash([]);
+    c.globalAlpha=.87;c.lineWidth=style.water?1.65:1.35;c.stroke();c.setLineDash([]);
     // Opposing slow glints convey activity without asserting a trade direction.
     // Their phase is deterministic, so paused/reduced-motion frames stay fixed.
     const phase=(clock*.008+seed*g.length)%g.length;
@@ -1244,7 +1250,8 @@ return {create,within,valid};
       if(!inView(p,width,height,10))continue;
       const tail=pointAtDistance(g,clamp(d+(i?9:-9),0,g.length));
       c.beginPath();c.moveTo(tail.x,tail.y);c.lineTo(p.x,p.y);c.strokeStyle=style.color;c.globalAlpha=.38;c.lineWidth=1.9;c.stroke();
-      c.beginPath();c.arc(p.x,p.y,1.25,0,TAU);c.fillStyle=palette.ivory;c.globalAlpha=.64;c.fill();
+      c.beginPath();c.arc(p.x,p.y,1.35,0,TAU);c.fillStyle=palette.ivory;c.globalAlpha=.72;c.fill();
+      if(style.water){c.globalAlpha=.23;c.lineWidth=.7;c.beginPath();c.arc(p.x,p.y,3.6,p.angle+.8,p.angle+2.4);c.strokeStyle=style.color;c.stroke()}
     }
     c.restore();routeHits(item,segments,hits);
   }
@@ -1252,15 +1259,25 @@ return {create,within,valid};
     c.strokeStyle=ink;c.fillStyle=ink;c.lineWidth=.85;c.lineJoin='round';c.lineCap='round';
     const s=r/9;c.save();c.scale(s,s);
     if(/port|harbo[u]?r|coast|maritime/i.test(String(kind||''))){
-      c.beginPath();c.moveTo(-5.2,2);c.quadraticCurveTo(-3.4,5.1,0,4.3);c.quadraticCurveTo(3.7,4.9,5.2,2);c.closePath();c.fill();
-      c.beginPath();c.moveTo(0,1);c.lineTo(0,-5.3);c.moveTo(.6,-4.8);c.lineTo(4,.3);c.lineTo(.6,.3);c.stroke();
-      c.globalAlpha=.6;c.beginPath();c.moveTo(-5.5,5.8);c.quadraticCurveTo(-3,4.9,-1,5.8);c.quadraticCurveTo(2,6.7,5.2,5.7);c.stroke();
+      // A vessel emblem denotes a port-related evidence note, not a vessel count
+      // or a reconstructed ancient harbour plan.
+      c.beginPath();c.moveTo(-5.5,1.7);c.lineTo(-3.8,4.2);c.quadraticCurveTo(.2,5.5,4.1,3.5);c.lineTo(5.5,1.7);c.closePath();c.fill();
+      c.beginPath();c.moveTo(-.6,1.6);c.lineTo(-.6,-5.5);c.stroke();
+      c.beginPath();c.moveTo(.4,-4.9);c.quadraticCurveTo(2.8,-3.2,4.2,.4);c.lineTo(.4,.4);c.closePath();c.fill();
+      c.globalAlpha=.65;c.beginPath();c.moveTo(-5.2,6.1);c.quadraticCurveTo(-2.5,5.1,0,6.1);c.quadraticCurveTo(2.4,7,5.2,6);c.stroke();
+    }else if(/royal|capital|court/i.test(String(kind||''))){
+      // Stepped civic architecture and a diamond are symbolic royal-context
+      // marks. No architectural plan or precise capital extent is implied.
+      c.fillRect(-5.7,1.2,11.4,3.6);c.fillRect(-3.9,-1.1,7.8,2.6);c.fillRect(-2.1,-3.3,4.2,2.7);
+      c.beginPath();c.moveTo(0,-7);c.lineTo(1.4,-5.3);c.lineTo(0,-3.9);c.lineTo(-1.4,-5.3);c.closePath();c.fill();
+      c.fillStyle=palette.ink;c.fillRect(-.75,2.1,1.5,2.7);
+      c.strokeStyle=ink;c.beginPath();c.moveTo(-6.1,5.8);c.lineTo(6.1,5.8);c.stroke();
     }else{
-      // A generic civic emblem, not a reconstructed building or capital symbol.
-      c.fillRect(-5,0,3,4.5);c.fillRect(-1.6,-3.8,3.2,8.3);c.fillRect(2.3,-1.5,2.7,6);
-      c.beginPath();c.moveTo(-2.4,-4);c.lineTo(0,-5.3);c.lineTo(2.4,-4);c.stroke();
-      c.fillStyle=palette.ink;c.fillRect(-.65,2.1,1.3,2.4);
-      c.strokeStyle=ink;c.beginPath();c.moveTo(-5.6,5.3);c.lineTo(5.7,5.3);c.stroke();
+      // A clustered civic emblem, rather than a recovered skyline or footprint.
+      c.fillRect(-5.8,-.8,3.2,5.5);c.fillRect(-1.9,-4,3.8,8.7);c.fillRect(2.6,-2,3.2,6.7);
+      c.beginPath();c.moveTo(-6.2,-1.4);c.lineTo(-2.2,-1.4);c.moveTo(-2.3,-4.6);c.lineTo(2.3,-4.6);c.moveTo(2.2,-2.6);c.lineTo(6.2,-2.6);c.stroke();
+      c.fillStyle=palette.ink;c.fillRect(-.75,2,1.5,2.7);c.fillRect(-4.9,.6,1,1.1);c.fillRect(3.6,-.5,1,1.1);
+      c.strokeStyle=ink;c.beginPath();c.moveTo(-6.3,5.6);c.lineTo(6.3,5.6);c.stroke();
     }
     c.restore();
   }
@@ -1273,10 +1290,10 @@ return {create,within,valid};
       c.restore();return;
     }
     c.beginPath();c.ellipse(1,r*.68,r*.95,r*.37,0,0,TAU);c.fillStyle='rgba(4,13,17,.23)';c.fill();
-    c.beginPath();c.arc(0,0,r+2.4,0,TAU);c.strokeStyle=status==='dated'?'rgba(216,189,135,.15)':'rgba(142,175,177,.12)';c.lineWidth=.8;c.stroke();
+    c.beginPath();c.arc(0,0,r+2.5,0,TAU);c.strokeStyle=status==='dated'?'rgba(233,207,155,.25)':'rgba(142,175,177,.17)';c.lineWidth=.7;c.stroke();
     c.beginPath();c.arc(0,0,r,0,TAU);
-    c.fillStyle=status==='dated'?'rgba(211,184,130,.92)':'rgba(16,34,40,.87)';c.fill();
-    c.strokeStyle=status==='dated'?'#f0dcad':palette.teal;c.lineWidth=status==='dated'?.85:1;
+    c.fillStyle=status==='dated'?'rgba(218,189,132,.96)':'rgba(16,34,40,.91)';c.fill();
+    c.strokeStyle=status==='dated'?'#f5e1af':palette.teal;c.lineWidth=status==='dated'?.9:1;
     if(status!=='dated')c.setLineDash(status==='window'?[1.3,2.8]:[3.3,2.3]);c.stroke();c.setLineDash([]);
     drawCityGlyph(c,item.kind,r,status==='dated'?'#203034':'#c1d1c8');
     c.restore();
@@ -1284,7 +1301,7 @@ return {create,within,valid};
   function ecologyKind(kind){
     const s=String(kind||'');
     if(/wet|reed|marsh|water|hydro|lake|river/i.test(s))return 'water';
-    if(/field|crop|farm|agric|grain/i.test(s))return 'field';
+    if(/field|crop|farm|agric|grain|land-use/i.test(s))return 'field';
     if(/animal|fauna|herd/i.test(s))return 'fauna';
     return 'leaf';
   }
@@ -1295,9 +1312,9 @@ return {create,within,valid};
     c.strokeStyle=status==='dated'?'#cfce9c':palette.sage;c.setLineDash(status==='dated'?[]:[1.25,2.6]);c.stroke();c.setLineDash([]);
     c.strokeStyle='#bfcca7';c.fillStyle='#b8c69f';
     if(kind==='water'){
-      c.beginPath();c.moveTo(-3.4,3.7);c.lineTo(-2.6,-3.6);c.moveTo(.3,3.7);c.lineTo(.6,-5);c.moveTo(3.3,3.7);c.lineTo(2.6,-2.6);c.stroke();
-      c.lineWidth=1.5;c.beginPath();c.moveTo(-2.6,-4.1);c.lineTo(-2.4,-1.8);c.moveTo(.6,-5);c.lineTo(.6,-2.6);c.stroke();
-      c.lineWidth=.7;c.beginPath();c.moveTo(-5,5);c.quadraticCurveTo(-2.5,4,0,5);c.quadraticCurveTo(2.5,6,5,5);c.stroke();
+      c.strokeStyle='#add1cf';c.fillStyle='rgba(153,195,198,.2)';
+      c.beginPath();c.moveTo(0,-5.4);c.bezierCurveTo(-1.2,-3.3,-4.3,-.1,-3.9,2);c.bezierCurveTo(-3.6,5.4,3.8,5.4,3.9,2);c.bezierCurveTo(4.1,-.1,1.2,-3.3,0,-5.4);c.closePath();c.fill();c.stroke();
+      c.globalAlpha=.72;c.beginPath();c.moveTo(-5.4,6.1);c.quadraticCurveTo(-2.6,5.1,0,6);c.quadraticCurveTo(2.6,6.9,5.4,6);c.stroke();
     }else if(kind==='field'){
       c.beginPath();c.moveTo(0,5);c.lineTo(0,-5);c.stroke();
       for(let i=0;i<3;i++){const y=-3+i*2;c.beginPath();c.moveTo(0,y+1);c.quadraticCurveTo(-4,y,-2.5,y-1.5);c.moveTo(0,y+1);c.quadraticCurveTo(4,y,2.5,y-1.5);c.stroke()}
@@ -1306,7 +1323,17 @@ return {create,within,valid};
       c.beginPath();c.moveTo(-2,1);c.lineTo(-2.5,4);c.moveTo(2,1);c.lineTo(2.5,4);c.stroke();
     }else{
       c.beginPath();c.moveTo(-3.6,3.6);c.quadraticCurveTo(-5,-3,4.3,-5);c.quadraticCurveTo(5,3.7,-3.6,3.6);c.stroke();
-      c.beginPath();c.moveTo(-4.6,5);c.lineTo(2,-2.8);c.moveTo(-.9,.9);c.lineTo(1.9,1.1);c.stroke();
+      c.beginPath();c.moveTo(-4.6,5);c.lineTo(2,-2.8);c.moveTo(-.9,.9);c.lineTo(1.9,1.1);c.moveTo(-1,1);c.lineTo(-2,-1.8);c.moveTo(.5,-.8);c.lineTo(2.6,-.6);c.stroke();
+    }
+    // The small static cue classifies the note; it does not show an amount,
+    // geographic coverage or animated environmental change.
+    const trend=String(item.trend||'');
+    if(trend==='dry'){
+      c.strokeStyle='#d9c19a';c.globalAlpha=.88;c.lineWidth=1.1;c.beginPath();c.moveTo(-3.5,4.4);c.lineTo(3.6,-3.5);c.stroke();
+    }else if(trend==='pollen-increase'||trend==='pollen-decrease'){
+      c.strokeStyle='#d8dfbf';c.lineWidth=.9;c.globalAlpha=.92;c.beginPath();c.moveTo(r-1,-r+2);c.lineTo(r+3,-r+2);if(trend==='pollen-increase'){c.moveTo(r+1,-r);c.lineTo(r+1,-r+4)}c.stroke();
+    }else if(trend==='channel-change'){
+      c.strokeStyle='#add1cf';c.lineWidth=.9;c.beginPath();c.moveTo(-r-1,2);c.quadraticCurveTo(-r-4,-1,-r-1,-3);c.stroke();
     }
     c.restore();
   }
@@ -1349,34 +1376,52 @@ return {create,within,valid};
     const priority=item=>finite(item.priority)?item.priority:0;
     return sorted(items).sort((a,b)=>priority(b)-priority(a)||rank(a.kind||'')-rank(b.kind||'')||hashString(a.id)-hashString(b.id));
   }
+  function wrapWords(c,text,maxWidth,maxLines=2){
+    const words=String(text||'').trim().split(/\s+/).filter(Boolean),lines=[];
+    let current='';
+    for(const word of words){
+      const candidate=current?current+' '+word:word;
+      if(c.measureText(candidate).width<=maxWidth){current=candidate;continue}
+      if(current)lines.push(current);
+      if(c.measureText(word).width>maxWidth||lines.length>=maxLines)return [];
+      current=word;
+    }
+    if(current)lines.push(current);
+    return lines.length<=maxLines?lines:[];
+  }
   function drawContext(c,item,p,occupied,width,height,span){
     const fontSize=span>90?12:span<30?15:13.5;
     const font='italic '+fontSize+'px Georgia, serif';c.font=font;
-    const title=fitText(c,labelOf(item),Math.min(230,width*.32));if(!title)return null;
+    const maxWidth=Math.min(230,Math.max(145,width*.35));
+    let titles=wrapWords(c,labelOf(item),maxWidth,2);
+    // Keeping a caption unplaced is preferable to displaying a chopped name.
+    // Full names remain available in the accessible world journal.
+    if(!titles.length)return null;
+    const titleWidth=Math.max(...titles.map(t=>c.measureText(t).width));
     const sub=item.subLabel?String(item.subLabel):'';
-    const titleWidth=c.measureText(title).width;
-    c.font='9px system-ui, sans-serif';const subtitle=fitText(c,sub,Math.min(210,width*.3));
-    const w=Math.ceil(Math.max(titleWidth,c.measureText(subtitle).width))+22;
-    // Prefer the supplied anchor. Small alternate placements are screen layout
-    // only; there is no implied extent around a historical region.
+    c.font='9px system-ui, sans-serif';const subtitle=fitText(c,sub,Math.min(210,maxWidth));
+    const w=Math.ceil(Math.max(titleWidth,c.measureText(subtitle).width))+20;
+    const lineHeight=Math.ceil(fontSize+1),titleHeight=titles.length*lineHeight;
+    // Alternate placements are screen layout only, without historical extent.
     const offsets=[[0,-13],[0,-37],[0,12],[-22,-13],[22,-13],[-36,-37],[36,-37],[-36,12],[36,12],[0,-60],[0,36],[-55,-13],[55,-13]];
     const alternatives=offsets.map(([dx,dy])=>({x:p.x-w/2+dx,y:p.y+dy}));
     let rect=null,showSub=false;
     for(const full of subtitle?[true,false]:[false]){
-      const h=full?35:23;
+      const h=titleHeight+9+(full?13:0);
       rect=alternatives.map(a=>({...a,w,h})).find(a=>available(a,occupied,width,height,7));
       if(rect){showSub=full;break}
     }
     if(!rect)return null;occupied.push(rect);
-    const x=rect.x+rect.w/2,y=rect.y+12;
+    const x=rect.x+rect.w/2,y=rect.y+6+lineHeight/2;
     c.save();
-    roundRect(c,rect.x+5,rect.y+1,rect.w-10,rect.h-2,4);c.fillStyle='rgba(10,24,29,.32)';c.fill();
-    c.textAlign='center';c.textBaseline='middle';c.font=font;c.lineJoin='round';c.lineWidth=3.5;c.strokeStyle='rgba(9,20,24,.88)';
-    c.strokeText(title,x,y);c.fillStyle=/research|gap/i.test(item.kind||'')?'#a3aaa0':'#e0cda1';c.fillText(title,x,y);
-    // Tiny end marks frame a caption, not a territory or a seat of government.
-    c.strokeStyle='rgba(202,184,136,.48)';c.lineWidth=.7;
-    c.beginPath();c.moveTo(rect.x+1,y);c.lineTo(rect.x+5,y);c.moveTo(rect.x+rect.w-5,y);c.lineTo(rect.x+rect.w-1,y);c.stroke();
-    if(showSub){c.font='9px system-ui, sans-serif';c.lineWidth=2.6;c.strokeStyle='rgba(9,20,24,.88)';c.strokeText(subtitle,x,y+14);c.fillStyle='#bac7be';c.fillText(subtitle,x,y+14)}
+    roundRect(c,rect.x+3,rect.y+1,rect.w-6,rect.h-2,4);c.fillStyle='rgba(10,24,29,.39)';c.fill();
+    c.textAlign='center';c.textBaseline='middle';c.font=font;c.lineJoin='round';c.lineWidth=3.4;c.strokeStyle='rgba(9,20,24,.91)';
+    c.fillStyle=/research|gap/i.test(item.kind||'')?'#a3aaa0':'#e7d4aa';
+    for(let i=0;i<titles.length;i++){c.strokeText(titles[i],x,y+i*lineHeight);c.fillText(titles[i],x,y+i*lineHeight)}
+    // Restrained end marks frame text, never a territorial boundary.
+    c.strokeStyle='rgba(202,184,136,.5)';c.lineWidth=.7;
+    c.beginPath();c.moveTo(rect.x-1,y);c.lineTo(rect.x+3,y);c.moveTo(rect.x+rect.w-3,y);c.lineTo(rect.x+rect.w+1,y);c.stroke();
+    if(showSub){const sy=rect.y+titleHeight+10;c.font='9px system-ui, sans-serif';c.lineWidth=2.6;c.strokeStyle='rgba(9,20,24,.88)';c.strokeText(subtitle,x,sy);c.fillStyle='#c3cec3';c.fillText(subtitle,x,sy)}
     c.restore();return rect;
   }
   function drawRouteLabel(c,item,geometries,occupied,width,height){
@@ -1404,7 +1449,7 @@ return {create,within,valid};
         return hits;
       }
       const originals=(Array.isArray(o.existingLabelBoxes)?o.existingLabelBoxes:[]).map(normalizeBox).filter(Boolean),occupied=originals.slice();
-      const radius=clamp(10.4-span*.028,6.8,10.8);
+      const radius=clamp(11.7-span*.028,7.5,12.3);
       const cities=layers.cities===false?[]:pointEntries(model.cities,project,width,height,radius);
       const ecology=layers.ecology===false?[]:pointEntries(model.ecology,project,width,height,7.8);
       const previous=[];
@@ -4525,9 +4570,2276 @@ const WORLD_LINKS={
   }
 }
 ;
+const WORLD_SIGNAL_STYLES={
+  "version": 1,
+  "title": "Living Atlas 04 — evidence display styles",
+  "policy": "Editorial display metadata derived only from existing entered fields. These aliases, glyph categories and transport styles are not additional historical research and add no dates, coordinates, geometry, coverage or causes. Original source records and the stage/connection temporal semantics remain authoritative.",
+  "ecologyKinds": [
+    "water",
+    "vegetation",
+    "land-use"
+  ],
+  "ecologyTrends": [
+    "wet",
+    "dry",
+    "pollen-increase",
+    "pollen-decrease",
+    "taxon-increase",
+    "taxon-decrease",
+    "managed",
+    "channel-change",
+    "low-water",
+    "water-decline",
+    "water-rise",
+    "mixed",
+    "neutral"
+  ],
+  "exchangeModes": [
+    "maritime",
+    "caravan",
+    "exchange"
+  ],
+  "ecologyStages": [
+    {
+      "entryId": "ecology/egypt/0",
+      "profileId": "egypt",
+      "stageIndex": 0,
+      "caption": "Delta channel reorganization",
+      "kind": "water",
+      "trend": "channel-change",
+      "evidenceSemantics": "Approximate broad process interval; no historical channel course is supplied.",
+      "fieldBasis": {
+        "label": "Delta reorganization",
+        "text": "Interconnected channels and extensive marshes increasingly gave way to more discrete meandering branches. Not today’s two-branch delta."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/egypt/1",
+      "profileId": "egypt",
+      "stageIndex": 1,
+      "caption": "Luxor river-regime transition",
+      "kind": "water",
+      "trend": "channel-change",
+      "evidenceSemantics": "Undated approximate transition; do not display as a numeric phase or map a new river.",
+      "fieldBasis": {
+        "label": "Luxor river-regime transition",
+        "text": "Wandering/braided before approximately 4,000 years ago; straight/anabranching and aggradation thereafter. This is an approximate transition, not a precisely dated border."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/egypt/2",
+      "profileId": "egypt",
+      "stageIndex": 2,
+      "caption": "Khufu branch low-water signal",
+      "kind": "water",
+      "trend": "low-water",
+      "evidenceSemantics": "Dating uncertainty around a local low-water signal; not a sustained Nile-wide drought.",
+      "fieldBasis": {
+        "label": "Khufu branch low",
+        "text": "A low centered on approximately 2225 ± 80 BCE; local branch behavior, not a Nile-wide drought map."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/egypt/3",
+      "profileId": "egypt",
+      "stageIndex": 3,
+      "caption": "Khufu branch decline onset",
+      "kind": "water",
+      "trend": "water-decline",
+      "evidenceSemantics": "Dating uncertainty around onset; the interval is not the duration of decline.",
+      "fieldBasis": {
+        "label": "Khufu branch decline onset",
+        "text": "Decline after about 1350 ± 80 BCE. The interval represents dating uncertainty around onset, not duration of the decline."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/egypt/4",
+      "profileId": "egypt",
+      "stageIndex": 4,
+      "caption": "Middle Egypt river forms",
+      "kind": "water",
+      "trend": "neutral",
+      "evidenceSemantics": "A local example horizon, not a continuous dated channel map.",
+      "fieldBasis": {
+        "label": "Middle Egypt example",
+        "text": "Meanders, levees, bars, islands, oxbows and low wet depressions near 1000 BCE; not a continuous channel map."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/0",
+      "profileId": "levant",
+      "stageIndex": 0,
+      "caption": "Early Bronze wet phase",
+      "kind": "water",
+      "trend": "wet",
+      "evidenceSemantics": "Broad relative wetness in the cited records; not a measured rainfall surface.",
+      "fieldBasis": {
+        "label": "Relatively wet Early Bronze I",
+        "text": "Wettest Bronze/Iron Age phase in the cited records."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/1",
+      "profileId": "levant",
+      "stageIndex": 1,
+      "caption": "Humid; reduced tree pollen",
+      "kind": "water",
+      "trend": "wet",
+      "evidenceSemantics": "Humidity and reduced tree pollen coexist in this entry; pollen is not canopy area.",
+      "fieldBasis": {
+        "label": "Still relatively humid",
+        "text": "Reduced tree pollen but relatively humid conditions in much of this interval."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/2",
+      "profileId": "levant",
+      "stageIndex": 2,
+      "caption": "Regional drying signal",
+      "kind": "water",
+      "trend": "dry",
+      "evidenceSemantics": "Regional synthesis signal; climate, woodland and orchard changes remain distinct.",
+      "fieldBasis": {
+        "label": "Drying phase",
+        "text": "Regional drying signal; causes of woodland/orchard change are not interchangeable."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/3",
+      "profileId": "levant",
+      "stageIndex": 3,
+      "caption": "Wetter pollen-synthesis phase",
+      "kind": "water",
+      "trend": "wet",
+      "evidenceSemantics": "Broad relative wetter phase in the cited synthesis; not a catchment-wide reconstruction.",
+      "fieldBasis": {
+        "label": "Wetter phase",
+        "text": "Wetter phase in the regional pollen synthesis. Megiddo’s 1650 BCE study falls within this broad interval."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/4",
+      "profileId": "levant",
+      "stageIndex": 4,
+      "caption": "Severe drying interval",
+      "kind": "water",
+      "trend": "dry",
+      "evidenceSemantics": "Approximate interval with a rounded editorial younger bound, not a synchronous map-wide event.",
+      "fieldBasis": {
+        "label": "Severe drying",
+        "text": "Approximately 1250 through the late twelfth century BCE; the rounded younger bound is an editorial display convention."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/levant/5",
+      "profileId": "levant",
+      "stageIndex": 5,
+      "caption": "Tree pollen increases",
+      "kind": "vegetation",
+      "trend": "pollen-increase",
+      "evidenceSemantics": "An increased pollen signal; neither measured forest recovery nor canopy extent follows.",
+      "fieldBasis": {
+        "label": "Increased tree pollen",
+        "text": "Does not by itself establish measured forest recovery or canopy area."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/lebanon/0",
+      "profileId": "lebanon",
+      "stageIndex": 0,
+      "caption": "Contrasting Beqaa records",
+      "kind": "land-use",
+      "trend": "mixed",
+      "evidenceSemantics": "Two local records have different disturbance histories; no uniform regional trend is assigned.",
+      "fieldBasis": {
+        "label": "Different Beqaa trajectories",
+        "text": "The cited 3500–2000 cal BP interval extends beyond this report: the display clips to 300 BCE. Aammiq and Chamsine/Anjar do not show identical disturbance histories."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/lebanon/1",
+      "profileId": "lebanon",
+      "stageIndex": 1,
+      "caption": "Qatna clearance sequence",
+      "kind": "land-use",
+      "trend": "mixed",
+      "evidenceSemantics": "Archaeological sequence labels remain undated; do not invent numeric boundaries or continuous clearance.",
+      "fieldBasis": {
+        "label": "Qatna local opening",
+        "text": "Clearance by early EB IV, shrub/juniper in MB, and open land with scattered deciduous oak at the MB–LB transition. Sequence labels retained without invented exact boundaries."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/anatolia/0",
+      "profileId": "anatolia",
+      "stageIndex": 0,
+      "caption": "Iznik cultivation and recovery",
+      "kind": "land-use",
+      "trend": "mixed",
+      "evidenceSemantics": "Alternating use and recovery, with no continuous rate or numeric stage interval entered.",
+      "fieldBasis": {
+        "label": "Cultivation and clearance at Iznik",
+        "text": "Clear evidence from approximately 4.8 ka cal BP, followed by alternating land use and recovery. No continuous rate is supplied."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/anatolia/1",
+      "profileId": "anatolia",
+      "stageIndex": 1,
+      "caption": "Oak parkland and later land use",
+      "kind": "land-use",
+      "trend": "mixed",
+      "evidenceSemantics": "Approximate sequence transition; later pasture and cultivated trees are not one synchronous event.",
+      "fieldBasis": {
+        "label": "Oak parkland transition",
+        "text": "Central Anatolian oak parkland persisted until about 4,000 cal BP in the regional synthesis; later pasture and cultivated-tree landscapes become more prominent."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/anatolia/2",
+      "profileId": "anatolia",
+      "stageIndex": 2,
+      "caption": "Managed-landscape intensification",
+      "kind": "land-use",
+      "trend": "managed",
+      "evidenceSemantics": "Onset varies by basin; an undated display note must not become a uniform clearance date.",
+      "fieldBasis": {
+        "label": "Managed landscapes intensify",
+        "text": "Beyşehir Occupation Phase onset varies by basin; the later second millennium BCE is not one synchronous clearance date."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/hyrcanian/0",
+      "profileId": "hyrcanian",
+      "stageIndex": 0,
+      "caption": "Wingnut signal increases",
+      "kind": "vegetation",
+      "trend": "taxon-increase",
+      "evidenceSemantics": "An entered taxon-increase interval clipped to report scope; not a measured forest-area change.",
+      "fieldBasis": {
+        "label": "Wingnut increase, clipped to report",
+        "text": "The reported 3400–1100 cal BP interval continues far beyond the report; only its pre-300 BCE portion is retained here."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/hyrcanian/1",
+      "profileId": "hyrcanian",
+      "stageIndex": 1,
+      "caption": "Caspian highstand begins",
+      "kind": "water",
+      "trend": "water-rise",
+      "evidenceSemantics": "Approximate onset orientation only; the later culmination must not be projected backward.",
+      "fieldBasis": {
+        "label": "Highstand begins, approximate",
+        "text": "Approximately 2600 cal BP; the eventual culmination lies after the report endpoint."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/murghab/0",
+      "profileId": "murghab",
+      "stageIndex": 0,
+      "caption": "Anau early environmental context",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "Early contextual evidence is undated in this registry and does not apply to every later century.",
+      "fieldBasis": {
+        "label": "Anau early environmental context",
+        "text": "Fifth/fourth-millennium evidence partly overlaps the beginning of the report; not assigned to every later century."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/murghab/1",
+      "profileId": "murghab",
+      "stageIndex": 1,
+      "caption": "Contrasting fan localities",
+      "kind": "water",
+      "trend": "mixed",
+      "evidenceSemantics": "Studied channels and farming strategies differ between localities; no fan-wide trend is assigned.",
+      "fieldBasis": {
+        "label": "Studied Bronze Age localities",
+        "text": "Stable channels and diverse crops around Togolok contrasted with greater instability and lower-investment farming at Ojakly."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/tajikistan/0",
+      "profileId": "tajikistan",
+      "stageIndex": 0,
+      "caption": "Sarazm sampled wood evidence",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "Sampled wood horizon in rounded millennium containers; charcoal is not a tree census.",
+      "fieldBasis": {
+        "label": "Sarazm sampled settlement horizon",
+        "text": "Fourth- and third-millennium BCE wood evidence; bounds are rounded millennium containers, not exact occupation dates."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/tajikistan/1",
+      "profileId": "tajikistan",
+      "stageIndex": 1,
+      "caption": "Karakul open steppe context",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "A broad clipped vegetation phase; open vegetation does not demonstrate former deforestation.",
+      "fieldBasis": {
+        "label": "Karakul open/steppe phase, clipped",
+        "text": "Broad phase from about 5.4 to 1.0 cal kyr BP; the later part falls beyond this report. Open vegetation is not proof of former deforestation."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/kashmir/0",
+      "profileId": "kashmir",
+      "stageIndex": 0,
+      "caption": "Tosa Maidan disturbance signal",
+      "kind": "land-use",
+      "trend": "mixed",
+      "evidenceSemantics": "Summer herding and burning are cautious local interpretations, not measured regional clearance.",
+      "fieldBasis": {
+        "label": "Tosa Maidan low-intensity disturbance",
+        "text": "Reported approximately 3700–3000 BP; rounding/conversion retained as orientation. Low-intensity summer herding and burning are cautious interpretations."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/kashmir/1",
+      "profileId": "kashmir",
+      "stageIndex": 1,
+      "caption": "Local grazing and clearance",
+      "kind": "land-use",
+      "trend": "managed",
+      "evidenceSemantics": "Stronger local signal; different upland records need not change together.",
+      "fieldBasis": {
+        "label": "Stronger local grazing/clearance",
+        "text": "Approximately 2700–2500 BP. Different upland records need not change together."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/kashmir/2",
+      "profileId": "kashmir",
+      "stageIndex": 2,
+      "caption": "Pari Has opening signal",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "Near-report-end clipped local phase; this lies beyond the main atlas endpoint.",
+      "fieldBasis": {
+        "label": "Pari Has opening near report end",
+        "text": "Approximately 2300–2100 BP begins near the report endpoint and mostly continues afterward; clipped here."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/iran/0",
+      "profileId": "iran",
+      "stageIndex": 0,
+      "caption": "Low natural woody-taxa signal",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "Low values are not by themselves a decrease; timber, grazing and climate remain alternative contributors.",
+      "fieldBasis": {
+        "label": "Low natural woody taxa, clipped",
+        "text": "Reported 2800–1600 cal BP extends beyond the report; timber, grazing and climate are possible contributors, not a single demonstrated cause."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/iran/1",
+      "profileId": "iran",
+      "stageIndex": 1,
+      "caption": "Fars managed-tree diversity",
+      "kind": "land-use",
+      "trend": "managed",
+      "evidenceSemantics": "Cultivation indicator; it does not establish natural forest recovery.",
+      "fieldBasis": {
+        "label": "Managed-tree diversity in Fars",
+        "text": "Achaemenid interval: cultivation indicators, not necessarily natural forest recovery. Much of this lies after the atlas endpoint of 500 BCE."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/iran/2",
+      "profileId": "iran",
+      "stageIndex": 2,
+      "caption": "Hamun larger-lake context",
+      "kind": "water",
+      "trend": "neutral",
+      "evidenceSemantics": "Broad sparsely dated lake interval; no exact shoreline, channel course or water rise is supplied.",
+      "fieldBasis": {
+        "label": "Hamun larger-lake broad interval",
+        "text": "Approximately 6–3.8 kyr BP, with sparse dating. Do not treat these rounded bounds as a surveyed shoreline chronology."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/mesopotamia/0",
+      "profileId": "mesopotamia",
+      "stageIndex": 0,
+      "caption": "Middle Euphrates woody loss",
+      "kind": "vegetation",
+      "trend": "taxon-decrease",
+      "evidenceSemantics": "Probably lost by the Late Bronze Age; undated here and cause is not resolved between climate and clearance.",
+      "fieldBasis": {
+        "label": "Middle Euphrates woodland-steppe loss",
+        "text": "Near Emar, woodland-steppe probably disappeared by the Late Bronze Age. Climate and clearance cannot be separated decisively from this evidence."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/mesopotamia/1",
+      "profileId": "mesopotamia",
+      "stageIndex": 1,
+      "caption": "Southern lowland processes",
+      "kind": "water",
+      "trend": "neutral",
+      "evidenceSemantics": "Undated process context, not a numerical sequence of channels around particular cities.",
+      "fieldBasis": {
+        "label": "Southern lowland processes",
+        "text": "Regional process evidence, not a numerical dated sequence of channels around Ur, Uruk or Babylon."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/arabia/0",
+      "profileId": "arabia",
+      "stageIndex": 0,
+      "caption": "Tayma and Qurayyah oasis walls",
+      "kind": "land-use",
+      "trend": "managed",
+      "evidenceSemantics": "Broad enclosure context includes crops, water and livestock; not measured rainfall or canopy.",
+      "fieldBasis": {
+        "label": "Tayma & Qurayyah walled oases",
+        "text": "First half of the third millennium BCE, as reported; enclosure includes settlement, crops, water and livestock."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/arabia/1",
+      "profileId": "arabia",
+      "stageIndex": 1,
+      "caption": "Khaybar enclosure dating",
+      "kind": "land-use",
+      "trend": "neutral",
+      "evidenceSemantics": "A construction dating interval; it is not a three-century duration of building work.",
+      "fieldBasis": {
+        "label": "Khaybar enclosure dating",
+        "text": "Approximate dating interval, not a claim that all construction lasted three centuries."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/arabia/2",
+      "profileId": "arabia",
+      "stageIndex": 2,
+      "caption": "Southeast lake and dune change",
+      "kind": "water",
+      "trend": "mixed",
+      "evidenceSemantics": "Local lake/dune changes; continued occupation elsewhere prevents a universal abandonment inference.",
+      "fieldBasis": {
+        "label": "Southeastern lake/dune change",
+        "text": "Approximately 4.1–3.9 ka; continued occupation at Tayma cautions against a universal abandonment story."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/oman/0",
+      "profileId": "oman",
+      "stageIndex": 0,
+      "caption": "Al-Khashbah woody resources",
+      "kind": "vegetation",
+      "trend": "neutral",
+      "evidenceSemantics": "Charcoal includes alternative possible identifications; not every named taxon is simultaneously proven.",
+      "fieldBasis": {
+        "label": "Al-Khashbah woody resources",
+        "text": "Late-third-millennium charcoal includes Moringa, Ziziphus or fabaceous wood; some identifications are alternative possibilities, not simultaneous proven taxa."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/oman/1",
+      "profileId": "oman",
+      "stageIndex": 1,
+      "caption": "Local falaj use",
+      "kind": "water",
+      "trend": "managed",
+      "evidenceSemantics": "Local engineered-water evidence has no exact uniform onset entered in the registry.",
+      "fieldBasis": {
+        "label": "Local falaj use",
+        "text": "Demonstrated by the later first millennium BCE before 300 BCE; no exact uniform onset is assigned."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/yemen/0",
+      "profileId": "yemen",
+      "stageIndex": 0,
+      "caption": "Saada highland lake phase",
+      "kind": "water",
+      "trend": "neutral",
+      "evidenceSemantics": "Local lake phase, not a peninsula-wide wet interval or mapped water coverage.",
+      "fieldBasis": {
+        "label": "Saada highland lake phase",
+        "text": "Reported 5263–4838 cal BP, converted against 1950; lake phase, not a peninsula-wide wet interval."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    },
+    {
+      "entryId": "ecology/yemen/1",
+      "profileId": "yemen",
+      "stageIndex": 1,
+      "caption": "Managed oasis farming",
+      "kind": "land-use",
+      "trend": "managed",
+      "evidenceSemantics": "Irrigation does not demonstrate increased rainfall; this contextual phase has no entered numeric interval.",
+      "fieldBasis": {
+        "label": "Managed piedmont/oasis farming",
+        "text": "From about 5000 cal BP in the wider southern/southeastern Arabian record; irrigation does not prove increased rainfall."
+      },
+      "sourceIds": [
+        "ECO-SUPPLIED-2026"
+      ],
+      "limits": "Display style only. Existing evidence dates, stage anchors and notebook limits remain authoritative; no environmental coverage, rate or cause is generated."
+    }
+  ],
+  "exchangeConnectors": [
+    {
+      "connectorId": "X-T01-01",
+      "recordId": "T01",
+      "mode": "exchange",
+      "caption": "Exchange corridor context",
+      "fieldBasis": {
+        "title": "Southern Mesopotamia ↔ upper Euphrates / Iran",
+        "mechanism": "Interconnected settlements and exchange corridors"
+      },
+      "sourceIds": [
+        "S02",
+        "S08",
+        "S11",
+        "S87"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T03-01",
+      "recordId": "T03",
+      "mode": "maritime",
+      "caption": "Gulf maritime exchange context",
+      "fieldBasis": {
+        "title": "Mesopotamia ↔ Dilmun ↔ Magan ↔ Indus",
+        "mechanism": "Maritime trade and Gulf intermediaries; Meluhha usually associated with Indus lands"
+      },
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S28",
+        "S87"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T03-02",
+      "recordId": "T03",
+      "mode": "maritime",
+      "caption": "Gulf maritime exchange context",
+      "fieldBasis": {
+        "title": "Mesopotamia ↔ Dilmun ↔ Magan ↔ Indus",
+        "mechanism": "Maritime trade and Gulf intermediaries; Meluhha usually associated with Indus lands"
+      },
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S28",
+        "S87"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T03-03",
+      "recordId": "T03",
+      "mode": "maritime",
+      "caption": "Gulf maritime exchange context",
+      "fieldBasis": {
+        "title": "Mesopotamia ↔ Dilmun ↔ Magan ↔ Indus",
+        "mechanism": "Maritime trade and Gulf intermediaries; Meluhha usually associated with Indus lands"
+      },
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S28",
+        "S87"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T04-01",
+      "recordId": "T04",
+      "mode": "exchange",
+      "caption": "Palace and commercial exchange context",
+      "fieldBasis": {
+        "title": "Ebla / Mari ↔ Mesopotamia, Anatolia and coast",
+        "mechanism": "Palace-managed exchanges and wider commerce"
+      },
+      "sourceIds": [
+        "S55",
+        "S56",
+        "S77"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T06-01",
+      "recordId": "T06",
+      "mode": "caravan",
+      "caption": "Donkey-caravan merchant context",
+      "fieldBasis": {
+        "title": "Ashur ↔ Kanesh and Anatolian towns",
+        "mechanism": "Family firms, credit, donkey caravans and local trading quarters"
+      },
+      "sourceIds": [
+        "S64"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T08-01",
+      "recordId": "T08",
+      "mode": "maritime",
+      "caption": "Merchant shipping and court gifts",
+      "fieldBasis": {
+        "title": "Levant ↔ Cyprus, Aegean, Egypt and Anatolia",
+        "mechanism": "Merchant shipping, court gifts and redistribution"
+      },
+      "sourceIds": [
+        "S06",
+        "S09",
+        "S72"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    },
+    {
+      "connectorId": "X-T11-01",
+      "recordId": "T11",
+      "mode": "caravan",
+      "caption": "Oasis and caravan exchange context",
+      "fieldBasis": {
+        "title": "South Arabia ↔ north Arabian oases ↔ Levant",
+        "mechanism": "Oasis agriculture, caravan transport, tolls and diplomacy"
+      },
+      "sourceIds": [
+        "S16",
+        "S49",
+        "S50",
+        "S70",
+        "S71"
+      ],
+      "limits": "Transport styling describes the source record’s network context only. This connector remains an editorial relation between existing locators, not a surveyed alignment, direct itinerary or dated journey. Exchange mode is deliberately neutral where the original mechanism does not specify transport."
+    }
+  ],
+  "periodLabels": [
+    {
+      "periodId": "SM06",
+      "caption": "Ur III · Third Dynasty of Ur",
+      "originalLabel": "Third Dynasty of Ur (Ur III)",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S21",
+        "S22",
+        "S23",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SM11",
+      "caption": "Kassite Babylonia",
+      "originalLabel": "Kassite Babylonia / Karduniash",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S21",
+        "S22",
+        "S23",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SM13",
+      "caption": "Babylonian and local polities",
+      "originalLabel": "Babylonian dynasties; Aramean/Chaldean polities",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S21",
+        "S22",
+        "S23",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NM01",
+      "caption": "Local centers · Uruk contacts",
+      "originalLabel": "Local centers and late Uruk connections",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S23",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NM05",
+      "caption": "Post-Akkadian local powers",
+      "originalLabel": "Post-Akkadian local powers",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S23",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NM09",
+      "caption": "Mitanni, Hurrian powers and Assur",
+      "originalLabel": "Hurrian/Mitanni predominance; Assur",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S23",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NM12",
+      "caption": "Neo-Assyrian kingdom and empire",
+      "originalLabel": "Neo-Assyrian kingdom and empire",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S23",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NM13",
+      "caption": "Post-Assyrian frontier",
+      "originalLabel": "Post-Assyrian / Babylonian-Median frontier",
+      "sourceIds": [
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S23",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SY01",
+      "caption": "Early Syrian urban communities",
+      "originalLabel": "Early urban communities; Euphrates contacts",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S23",
+        "S55",
+        "S56",
+        "S44"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SY04",
+      "caption": "Akkadian and later city change",
+      "originalLabel": "Rebuilt cities; Akkadian/post-Akkadian change",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S23",
+        "S55",
+        "S56",
+        "S44"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SY07",
+      "caption": "Mitanni-linked local kingdoms",
+      "originalLabel": "Hurrian/Mitanni influence; local kingdoms",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S23",
+        "S55",
+        "S56",
+        "S44"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SY10",
+      "caption": "Aramean kingdoms · Assyrian pressure",
+      "originalLabel": "Aramean kingdoms under Assyrian pressure",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S23",
+        "S55",
+        "S56",
+        "S44"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SY13",
+      "caption": "Babylonian domination · local variation",
+      "originalLabel": "Babylonian domination; local variation",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S23",
+        "S55",
+        "S56",
+        "S44"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC01",
+      "caption": "Early Bronze coastal towns",
+      "originalLabel": "Early Bronze coastal towns; Byblos trade",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC03",
+      "caption": "Ugarit, Amurru and linked ports",
+      "originalLabel": "Ugarit, Amurru and Egyptian-linked ports",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC04",
+      "caption": "Hittite and Egyptian-linked ports",
+      "originalLabel": "Hittite Ugarit; Egyptian-linked southern ports",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC05",
+      "caption": "Phoenician city contexts",
+      "originalLabel": "Phoenician cities; Ugarit abandoned",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC06",
+      "caption": "Phoenician cities · Assyrian pressure",
+      "originalLabel": "Phoenician cities and Assyrian pressure",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "LC07",
+      "caption": "Phoenician dynasts · Babylonian pressure",
+      "originalLabel": "Phoenician dynasts; Babylonian intervention",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S24"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SL01",
+      "caption": "Early Bronze towns and rural change",
+      "originalLabel": "Early Bronze towns and later rural reorganization",
+      "sourceIds": [
+        "S09",
+        "S10",
+        "S23",
+        "S44",
+        "S47",
+        "S53"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SL03",
+      "caption": "Canaan under Egyptian hegemony",
+      "originalLabel": "Canaanite rulers under Egyptian hegemony",
+      "sourceIds": [
+        "S09",
+        "S10",
+        "S23",
+        "S44",
+        "S47",
+        "S53"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SL05",
+      "caption": "Israel, Judah and Philistine cities",
+      "originalLabel": "Israel, Judah and Philistine city-states",
+      "sourceIds": [
+        "S09",
+        "S10",
+        "S23",
+        "S44",
+        "S47",
+        "S53"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SL09",
+      "caption": "Babylonian-era communities",
+      "originalLabel": "Babylonian provinces; exile and surviving communities",
+      "sourceIds": [
+        "S09",
+        "S10",
+        "S23",
+        "S44",
+        "S47",
+        "S53"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TJ01",
+      "caption": "Early Bronze settlements and pastoralism",
+      "originalLabel": "Early Bronze settlements and pastoral zones",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TJ02",
+      "caption": "Bronze Age polities and pastoralism",
+      "originalLabel": "Bronze Age local polities and pastoral networks",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TJ04",
+      "caption": "Ammon, Moab, Edom and Arabah",
+      "originalLabel": "Ammon, Moab and Edom / Arabah networks",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TJ06",
+      "caption": "Local polities · Babylonian intervention",
+      "originalLabel": "Local polities; Babylonian interventions",
+      "sourceIds": [
+        "S08",
+        "S09",
+        "S10",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "WA01",
+      "caption": "Early Bronze centers · Troy I–V",
+      "originalLabel": "Early Bronze centers; Troy I–V broadly",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S25",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "WA03",
+      "caption": "Arzawa and western kingdoms",
+      "originalLabel": "Arzawa and western Anatolian kingdoms",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S25",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "WA05",
+      "caption": "Post-palatial coast and settlements",
+      "originalLabel": "Post-palatial communities; Greek coastal settlement",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S25",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "WA06",
+      "caption": "Early Lydia and Greek coastal cities",
+      "originalLabel": "Early Lydia; coastal Greek city-states",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S25",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "WA07",
+      "caption": "Lydia and neighboring states",
+      "originalLabel": "Mermnad Lydia; Greek cities; Caria and Lycia",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S25",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CA01",
+      "caption": "Early Bronze towns and chiefdoms",
+      "originalLabel": "Early Bronze chiefdoms and towns",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CA06",
+      "caption": "Hittite Empire · Kaska outside core",
+      "originalLabel": "Hittite Empire; northern Kaska outside core",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CA08",
+      "caption": "Phrygia and neighboring states",
+      "originalLabel": "Phrygian kingdom and neighboring states",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CA09",
+      "caption": "Post-Phrygian states · Lydian influence",
+      "originalLabel": "Phrygian successors; expanding Lydian influence",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SE01",
+      "caption": "Early Bronze Euphrates networks",
+      "originalLabel": "Early Bronze towns; upper Euphrates networks",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S23",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SE04",
+      "caption": "Hittite regions and vassals",
+      "originalLabel": "Hittite imperial regions and vassals",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S23",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SE06",
+      "caption": "Local states · Assyrian annexations",
+      "originalLabel": "Local states; progressive Assyrian annexations",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S23",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "SE08",
+      "caption": "Cilician kings and frontier states",
+      "originalLabel": "Cilician/local kings; Median-Lydian frontiers",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S23",
+        "S39"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EA01",
+      "caption": "Kura-Araxes cultural horizon",
+      "originalLabel": "Kura-Araxes cultural horizon",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S35",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EA02",
+      "caption": "Middle Bronze highland cultures",
+      "originalLabel": "Middle Bronze highland regional cultures",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S35",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EA03",
+      "caption": "Isuwa, Hayasa-Azzi and highland states",
+      "originalLabel": "Isuwa, Hayasa-Azzi and highland polities",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S35",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EA05",
+      "caption": "Urartu and neighboring states",
+      "originalLabel": "Urartu / Biainili and neighboring states",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S35",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EA06",
+      "caption": "Post-Urartian transition · debated",
+      "originalLabel": "Post-Urartian transition; Median influence debated",
+      "sourceIds": [
+        "S05",
+        "S06",
+        "S07",
+        "S35",
+        "S36"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NZ01",
+      "caption": "Zagros communities and exchange",
+      "originalLabel": "Zagros communities and lowland exchange",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S34",
+        "S35",
+        "S36",
+        "S60"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NZ02",
+      "caption": "Lullubi, Gutian and highland powers",
+      "originalLabel": "Lullubi, Gutian and other highland polities",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S34",
+        "S35",
+        "S36",
+        "S60"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NZ04",
+      "caption": "Highland polities · border campaigns",
+      "originalLabel": "Highland polities; Assyrian border campaigns",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S34",
+        "S35",
+        "S36",
+        "S60"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NZ05",
+      "caption": "Zamua, Mannea and regional rivalries",
+      "originalLabel": "Zamua, Mannea, Urartian/Assyrian rivalries",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S34",
+        "S35",
+        "S36",
+        "S60"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NZ06",
+      "caption": "Late Mannea and Median expansion",
+      "originalLabel": "Late Mannea and Median expansion",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S34",
+        "S35",
+        "S36",
+        "S60"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CZ01",
+      "caption": "Highland settlements and exchange",
+      "originalLabel": "Highland settlements; Godin and plateau exchange",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S36",
+        "S37",
+        "S38"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CZ02",
+      "caption": "Local polities · Elamite interactions",
+      "originalLabel": "Regional polities; Gutian/Elamite interactions",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S36",
+        "S37",
+        "S38"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CZ03",
+      "caption": "Luristan and Zagros societies",
+      "originalLabel": "Luristan and central Zagros regional societies",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S36",
+        "S37",
+        "S38"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CZ04",
+      "caption": "Median rulers, Ellipi and incursions",
+      "originalLabel": "Median local rulers; Ellipi; Assyrian incursions",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S36",
+        "S37",
+        "S38"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "CZ05",
+      "caption": "Median power · Cyaxares and Astyages",
+      "originalLabel": "Median power under Cyaxares and Astyages",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S36",
+        "S37",
+        "S38"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EL01",
+      "caption": "Proto-Elamite administrative horizon",
+      "originalLabel": "Proto-Elamite administrative horizon",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S26"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EL04",
+      "caption": "Shimashki and overlapping powers",
+      "originalLabel": "Shimashki and Ur III/early Epartid overlap",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S26"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EL09",
+      "caption": "Post-Shutrukid sequence · unclear",
+      "originalLabel": "Post-Shutrukid / early Neo-Elamite obscurity",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S26"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EL10",
+      "caption": "Neo-Elamite kingdoms and rivalry",
+      "originalLabel": "Neo-Elamite kingdoms; Assyrian rivalry",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S26"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EL11",
+      "caption": "Elamite rulers and Persian expansion",
+      "originalLabel": "Post-sack Elamite rulers and Persian expansion",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S26"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "FA01",
+      "caption": "Banesh / Proto-Elamite Anshan",
+      "originalLabel": "Banesh / Proto-Elamite Anshan",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S25",
+        "S26",
+        "S27"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "FA03",
+      "caption": "Kaftari and Elamite-linked Anshan",
+      "originalLabel": "Kaftari horizon; Anshan in Elamite networks",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S25",
+        "S26",
+        "S27"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "FA04",
+      "caption": "Anshan in Middle Elamite networks",
+      "originalLabel": "Anshan within Middle Elamite political sphere",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S25",
+        "S26",
+        "S27"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "FA05",
+      "caption": "Local transition · dates unclear",
+      "originalLabel": "Local transitions; Persian emergence not closely dated",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S25",
+        "S26",
+        "S27"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "FA06",
+      "caption": "Early Persian kings of Anshan",
+      "originalLabel": "Early Persian kings of Anshan",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S25",
+        "S26",
+        "S27"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EI01",
+      "caption": "Plateau centers · Proto-Elamite links",
+      "originalLabel": "Proto-Elamite-linked and local plateau centers",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S28",
+        "S32"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EI02",
+      "caption": "Shahdad, Halil Rud and plateau networks",
+      "originalLabel": "Shahdad, Halil Rud, Yahya and Bampur networks",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S28",
+        "S32"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EI04",
+      "caption": "Iron Age societies · limited texts",
+      "originalLabel": "Iron Age regional societies; limited political texts",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S28",
+        "S32"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EI05",
+      "caption": "Local Eastern Iranian communities",
+      "originalLabel": "Eastern Iranian communities and local powers",
+      "sourceIds": [
+        "S11",
+        "S12",
+        "S13",
+        "S27",
+        "S28",
+        "S32"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "HE01",
+      "caption": "Helmand urban and regional centers",
+      "originalLabel": "Helmand civilization: Mundigak and Shahr-i Sokhta",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S32",
+        "S33",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "HE03",
+      "caption": "Iron Age settlements · rulers unclear",
+      "originalLabel": "Iron Age settlements; rulers poorly documented",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S32",
+        "S33",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "HE04",
+      "caption": "Arachosian and Drangian communities",
+      "originalLabel": "Arachosian/Drangian regional communities",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S32",
+        "S33",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "BA01",
+      "caption": "Farming communities and lapis networks",
+      "originalLabel": "Regional farming societies and lapis networks",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S30",
+        "S31",
+        "S67",
+        "S69"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "BA02",
+      "caption": "Bactrian Oxus oasis centers",
+      "originalLabel": "Bactrian BMAC / Oxus oasis centers",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S30",
+        "S31",
+        "S67",
+        "S69"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "BA04",
+      "caption": "Iron Age oasis societies",
+      "originalLabel": "Iron Age oasis societies; Yaz-related horizons",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S30",
+        "S31",
+        "S67",
+        "S69"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "BA05",
+      "caption": "Bactrian local powers · rulers unclear",
+      "originalLabel": "Bactrian local powers; no secure king list",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S30",
+        "S31",
+        "S67",
+        "S69"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TM04",
+      "caption": "Namazga and Margian oasis centers",
+      "originalLabel": "Namazga V/VI and Margian BMAC oasis centers",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S31",
+        "S51",
+        "S67"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TM06",
+      "caption": "Yaz-related Iron Age oasis societies",
+      "originalLabel": "Yaz-related Iron Age oasis societies",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S31",
+        "S51",
+        "S67"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TM07",
+      "caption": "Margian local powers · rulers unclear",
+      "originalLabel": "Margian local powers; poorly known rulers",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S29",
+        "S31",
+        "S51",
+        "S67"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AN01",
+      "caption": "Oases, pastoralists and exchange",
+      "originalLabel": "Oases, pastoralists and exchange networks",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S48",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AN03",
+      "caption": "Late Bronze / Iron Age oasis networks",
+      "originalLabel": "Late Bronze/Iron Age oases; Qurayyah connections",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S48",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AN04",
+      "caption": "Tayma, Dadan and caravan polities",
+      "originalLabel": "Tayma, Dadan and north-Arabian caravan polities",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S48",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AC01",
+      "caption": "Pastoral and oasis societies",
+      "originalLabel": "Pastoral and oasis societies; no royal sequence",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AC03",
+      "caption": "Arab rulers in Assyrian records",
+      "originalLabel": "Arab rulers and queens in Assyrian records",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AC04",
+      "caption": "Qedar and groups in regional wars",
+      "originalLabel": "Qedar and other groups; Assyrian/Babylonian wars",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AD01",
+      "caption": "Eastern Arabia · early Dilmun context",
+      "originalLabel": "Eastern Arabian communities; early Dilmun references",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AD02",
+      "caption": "Developing Dilmun and Gulf centers",
+      "originalLabel": "Developing Dilmun and Gulf exchange centers",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AD05",
+      "caption": "Middle Dilmun · Kassite links",
+      "originalLabel": "Middle Dilmun; Kassite-linked administration",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AD06",
+      "caption": "Late Bronze / Iron Age Dilmun",
+      "originalLabel": "Late Bronze/Iron Age Dilmun communities",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AD07",
+      "caption": "Late Dilmun and regional contacts",
+      "originalLabel": "Late Dilmun; Assyrian/Babylonian contacts",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AM01",
+      "caption": "Hafit and Early Bronze copper societies",
+      "originalLabel": "Hafit / early Bronze copper societies",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AM02",
+      "caption": "Umm an-Nar and Magan exchange",
+      "originalLabel": "Umm an-Nar; Magan copper and maritime trade",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AM04",
+      "caption": "Late Bronze settlements",
+      "originalLabel": "Late Bronze regional settlements",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AM05",
+      "caption": "Iron Age oasis societies",
+      "originalLabel": "Iron Age southeast Arabian oasis societies",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S28"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AS01",
+      "caption": "Bronze Age farming and highlands",
+      "originalLabel": "Bronze Age agricultural and highland communities",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49",
+        "S50"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AS02",
+      "caption": "Farming polities and irrigation",
+      "originalLabel": "Regional farming polities; irrigation development",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49",
+        "S50"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AS04",
+      "caption": "Saba and neighboring polities",
+      "originalLabel": "Saba and neighboring South Arabian polities",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49",
+        "S50"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AS05",
+      "caption": "South Arabian kingdoms",
+      "originalLabel": "Saba, Awsan, Qataban, Hadramawt and Jawf states",
+      "sourceIds": [
+        "S14",
+        "S15",
+        "S16",
+        "S49",
+        "S50"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AF01",
+      "caption": "Highland and valley communities",
+      "originalLabel": "Local highland/valley communities; exchange routes",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AF03",
+      "caption": "Late Bronze / Iron Age societies",
+      "originalLabel": "Late Bronze/Iron Age regional societies",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "AF04",
+      "caption": "Local powers · succession unclear",
+      "originalLabel": "Local powers; no securely dated royal succession",
+      "sourceIds": [
+        "S27",
+        "S30",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TW01",
+      "caption": "Caspian and desert-margin communities",
+      "originalLabel": "Caspian/desert-margin regional communities",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TW02",
+      "caption": "Bronze Age pastoral networks",
+      "originalLabel": "Bronze Age regional and pastoral networks",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TW03",
+      "caption": "Dehistan and lower Amu cultures",
+      "originalLabel": "Dehistan and lower Amu Darya Iron Age cultures",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "TW04",
+      "caption": "Local oasis and desert societies",
+      "originalLabel": "Local oasis/desert societies",
+      "sourceIds": [
+        "S17",
+        "S18",
+        "S19",
+        "S31",
+        "S25"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EGP018",
+      "caption": "Theban Dynasty 11 · divided Egypt",
+      "originalLabel": "Dynasty 11: Theban authority in divided Egypt",
+      "sourceIds": [
+        "ES02"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EGP019",
+      "caption": "Reunited Egypt · Dynasty 11",
+      "originalLabel": "Dynasty 11: reunited Egypt",
+      "sourceIds": [
+        "ES02"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "EGP029",
+      "caption": "Tanite and Theban authorities",
+      "originalLabel": "Dynasty 21: Tanite kings and Theban authorities",
+      "sourceIds": [
+        "ES02"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NUP005",
+      "caption": "Kerma cultural and political development",
+      "originalLabel": "Kerma cultural and political development",
+      "sourceIds": [
+        "ES10"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NUP008",
+      "caption": "Intermittent Egyptian domination",
+      "originalLabel": "Middle Kingdom Egyptian domination at intervals",
+      "sourceIds": [
+        "ES05"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NUP010",
+      "caption": "New Kingdom Egyptian administration",
+      "originalLabel": "New Kingdom Egyptian imperial administration",
+      "sourceIds": [
+        "ES05"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    },
+    {
+      "periodId": "NUP011",
+      "caption": "Post-New Kingdom / early Napatan",
+      "originalLabel": "Post-New Kingdom / early Napatan horizon",
+      "sourceIds": [
+        "ES06"
+      ],
+      "note": "Compact editorial map caption. The full original label, chronology, kind, notes and sources remain the historical record; this alias adds no date, territorial geometry or claim of uniform control."
+    }
+  ]
+}
+;
 (function(){
 'use strict';
-const engine=AncientWorldsWorld.create({atlas:D,ecology:ECOLOGY_DATA,living:LIVING_DATA,index:timelineIntegrator.index,timeline:AncientWorldsTimeline,links:WORLD_LINKS,cityResearch:TIMELINE_CITY_PHASES,pilot:TIMELINE_HUB_PILOT});
+const engine=AncientWorldsWorld.create({atlas:D,ecology:ECOLOGY_DATA,living:LIVING_DATA,index:timelineIntegrator.index,timeline:AncientWorldsTimeline,links:WORLD_LINKS,cityResearch:TIMELINE_CITY_PHASES,pilot:TIMELINE_HUB_PILOT,styles:WORLD_SIGNAL_STYLES});
 let enabled=true,quietNames=true,followRulers=true,model=engine.atYear(year),worldHits=[],motionFrame=0,lastMotion=0,journey=null,journeyAdvancing=false;
 const layers={cities:true,connections:true,kingdoms:true,ecology:true};
 const css=el('style');css.textContent=`
@@ -4546,6 +6858,7 @@ function renderPanel(){
  if(panel.classList.contains('hidden'))return;
  panel.replaceChildren();const close=btn(panel,'×',()=>switchPanel(false),'close');close.setAttribute('aria-label','Close world layers');panel.append(el('div','eyebrow','THE REGIONAL WORLD'),el('h2','','Layers through time'));
  const modes=el('div','aw-buttons');btn(modes,enabled?'Original map':'Living world',()=>setEnabled(!enabled));btn(modes,'Explore this date',()=>{switchPanel(false);openJournal()});panel.append(modes);
+ btn(modes,'World chronicle',()=>{switchPanel(false);worldChronicle.open()});
  for(const [key,label] of [['cities','Dated cities & local studies'],['connections','Roads & exchange connections'],['kingdoms','Kingdoms & regional phases'],['ecology','Ecology evidence signals']]){const row=el('label'),input=el('input');input.type='checkbox';input.checked=layers[key];input.setAttribute('aria-label',label);input.onchange=()=>{layers[key]=input.checked;enabled=true;invalidate();renderPanel();motion()};row.append(input,document.createTextNode(label));panel.append(row)}
  const rulerRow=el('label'),rulerInput=el('input');rulerInput.type='checkbox';rulerInput.checked=followRulers;rulerInput.setAttribute('aria-label','Follow a dated regional ruler');rulerInput.onchange=()=>{followRulers=rulerInput.checked};rulerRow.append(rulerInput,document.createTextNode('Follow a dated regional ruler'));panel.append(rulerRow);
  const names=el('label'),namesInput=el('input');namesInput.type='checkbox';namesInput.checked=!quietNames;namesInput.setAttribute('aria-label','All reference place names');namesInput.onchange=()=>{quietNames=!namesInput.checked;invalidate()};names.append(namesInput,document.createTextNode('All reference place names'));panel.append(names);
@@ -4566,19 +6879,197 @@ function openEcology(id){const e=model.ecology.find(e=>e.id===id);if(!e)return;s
 function openHit(hit){if(hit.type==='city')openCity(hit.id);else if(hit.type==='connection')openConnection(hit.id);else if(hit.type==='context')openContext(hit.id);else if(hit.type==='ecology')openEcology(hit.id)}
 function openJournal(){stopJourney();const box=modal('The regional world · '+year+' BCE');p(box,'Follow cities, connections, regional histories and environmental evidence at one shared date.');const summary=el('div','aw-world-facts');for(const [name,count] of [['City signals',model.counts.cities],['Connections',model.counts.connections],['Regional histories',model.counts.contexts],['Ecology signals',model.counts.ecology]])summary.append(el('span','',count+' '+name));box.append(summary);
  box.append(el('h3','','Cities & local studies'));for(const c of model.cities)btn(box,c.name+' · '+c.evidence[0].label,()=>openCity(c.id),'fullbutton');box.append(el('h3','','Connections'));for(const c of model.connections)btn(box,c.label,()=>openConnection(c.id),'fullbutton');box.append(el('h3','','Regional histories & dynasties'));for(const c of model.contexts)btn(box,(engine.regions.get(c.regionId)?.name||c.regionId)+' · '+c.label,()=>openContext(c.id),'fullbutton');box.append(el('h3','','Ecology'));for(const e of model.ecology)btn(box,e.label,()=>openEcology(e.id),'fullbutton');btn(box,'Open shared timeline',()=>{$('modalShade').classList.add('hidden');timelineIntegrator.open()},'fullbutton')}
-function animateAllowed(){return enabled&&layers.connections&&model.connections.length&&!$('reduce').checked&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden&&!full&&!livingTest.isOpen&&!ecologyTest.isOpen&&$('sharedTimeline').classList.contains('hidden')&&$('modalShade').classList.contains('hidden')}
+function animateAllowed(){return enabled&&layers.connections&&model.connections.length&&!$('reduce').checked&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.hidden&&!full&&!livingTest.isOpen&&!ecologyTest.isOpen&&(!$('worldChronicle')||$('worldChronicle').classList.contains('hidden'))&&$('sharedTimeline').classList.contains('hidden')&&$('modalShade').classList.contains('hidden')}
 function tick(t){motionFrame=0;if(!animateAllowed())return;if(t-lastMotion>=45){lastMotion=t;invalidate()}motionFrame=requestAnimationFrame(tick)}
 function motion(){if(animateAllowed()){if(!motionFrame)motionFrame=requestAnimationFrame(tick)}else if(motionFrame){cancelAnimationFrame(motionFrame);motionFrame=0}}
 window.awWorldPlaceLabel=place=>!enabled||!quietNames||place.id===selectedPlace||model.cities.some(c=>c.placeId===place.id)||model.connections.some(c=>c.points.some(p=>p.placeId===place.id));
-window.awWorldPass=function(pass,boxes){if(!enabled){worldHits=[];return}const reserved=[...(boxes||[])];const tools=$('stage').querySelector('.maptools');if(tools)reserved.push({x:0,y:0,w:cw,h:Math.max(95,tools.offsetHeight+25)});reserved.push({x:cw*.1,y:ch-125,w:cw*.65,h:125});const found=AncientWorldsWorldRenderer.draw(ctx,{pass,width:cw,height:ch,project,span:current.span,time:performance.now(),model:{...model,contexts:model.contexts.map(c=>({...c,priority:(c.priority||0)+((selected?.region||'').split(' ').includes(c.regionId)?30:0)}))},layers,reducedMotion:$('reduce').checked||matchMedia('(prefers-reduced-motion: reduce)').matches,existingLabelBoxes:reserved,maxContextLabels:Math.max(2,Math.min(5,Math.floor(cw/160))),maxCityLabels:Math.max(2,Math.floor(cw/130)),maxEcologyLabels:1});if(pass==='underlay')worldHits=found;else worldHits.push(...found)};
+window.awWorldPass=function(pass,boxes){if(!enabled){worldHits=[];return}const reserved=[...(boxes||[])];const tools=$('stage').querySelector('.maptools');if(tools)reserved.push({x:0,y:0,w:cw,h:Math.max(95,tools.offsetHeight+25)});const badge=$('medallion');if(badge&&!badge.classList.contains('hidden'))reserved.push({x:badge.offsetLeft-badge.offsetWidth*.18-7,y:badge.offsetTop-7,w:badge.offsetWidth+14,h:badge.offsetHeight+14});reserved.push({x:0,y:ch-46,w:cw,h:46});const found=AncientWorldsWorldRenderer.draw(ctx,{pass,width:cw,height:ch,project,span:current.span,time:performance.now(),model:{...model,contexts:model.contexts.map(c=>({...c,priority:(c.priority||0)+((selected?.region||'').split(' ').includes(c.regionId)?30:0)}))},layers,reducedMotion:$('reduce').checked||matchMedia('(prefers-reduced-motion: reduce)').matches,existingLabelBoxes:reserved,maxContextLabels:Math.max(2,Math.min(5,Math.floor(cw/160))),maxCityLabels:Math.max(2,Math.floor(cw/130)),maxEcologyLabels:1});if(pass==='underlay')worldHits=found;else worldHits.push(...found)};
 const previousUp=canvas.onpointerup;canvas.onpointerup=e=>{if(enabled&&drag&&!drag.moved){const hit=[...worldHits].reverse().find(h=>Math.hypot(e.offsetX-h.x,e.offsetY-h.y)<h.radius||(h.rect&&e.offsetX>=h.rect.x&&e.offsetX<=h.rect.x+h.rect.w&&e.offsetY>=h.rect.y&&e.offsetY<=h.rect.y+h.rect.h));if(hit){drag=null;canvas.style.cursor='grab';if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);openHit(hit);invalidate();return}}previousUp(e)};
 const priorYear=setYear;setYear=function(y){if(journey&&!journeyAdvancing)stopJourney();priorYear(y);model=engine.atYear(year);if(enabled&&followRulers&&!full&&drawerRecord?.kind!=='person'&&selected&&!contains(selected.dates,year)){const candidates=engine.regions.has(selected.region)?AncientWorldsTimeline.atYear(timelineIntegrator.index,year,selected.region).dated.filter(e=>e.refType==='person'):[];if(candidates.length===1){selected=people.get(candidates[0].refId);medallion()}}renderPanel();invalidate();motion()};atlasTest.setYear=setYear;
 $('reduce').addEventListener('change',motion);$('play').addEventListener('click',stopJourney);document.addEventListener('visibilitychange',motion);new MutationObserver(motion).observe($('modalShade'),{attributes:true,attributeFilter:['class']});window.addEventListener('aw-landscape-open',()=>{stopJourney();motion()});window.addEventListener('pagehide',()=>{if(motionFrame)cancelAnimationFrame(motionFrame);if(journey)clearInterval(journey)});
 for(const id of ['ecologyPanel','sharedTimeline'])new MutationObserver(()=>{if(!$(id).classList.contains('hidden')&&journey)stopJourney();motion()}).observe($(id),{attributes:true,attributeFilter:['class']});
 const oldMode=mode;mode=function(value){oldMode(value);motion()};atlasTest.mode=mode;
 for(const s of TIMELINE_CITY_PHASES.sources||[])if(!sources.has(s.id))sources.set(s.id,s);
-window.worldController={engine,get model(){return model},get enabled(){return enabled},get layers(){return {...layers}},setEnabled,openCity,openConnection,openContext,openEcology,openJournal,openCityByPhase:id=>{const phase=engine.phaseById.get(id);if(phase)openCity(phase.placeId)},refresh:()=>{model=engine.atYear(year);renderPanel();invalidate();motion()}};
+window.worldController={engine,get model(){return model},get enabled(){return enabled},get layers(){return {...layers}},setEnabled,openCity,openConnection,openContext,openEcology,openJournal,pauseJourney:stopJourney,openCityByPhase:id=>{const phase=engine.phaseById.get(id);if(phase)openCity(phase.placeId)},refresh:()=>{model=engine.atYear(year);renderPanel();invalidate();motion()}};
 changes.splice(0,changes.length,...engine.changeYears);renderPanel();invalidate();motion();
+})();
+
+/* Compare entered historical evidence without inventing intervening events. */
+(function(factory){
+ const api=factory();
+ if(typeof module==='object'&&module.exports)module.exports=api;
+ else window.AncientWorldsHistory=api;
+})(function(){
+ 'use strict';
+ const copy=value=>value==null?value:JSON.parse(JSON.stringify(value));
+ const unique=items=>[...new Set(items.filter(Boolean))];
+ const semantics={
+  comparison:'These are differences between entered evidence at two dates. They are not simulated historical events. A missing signal does not establish abandonment, a road closure, loss of control or ecological disappearance.',
+  dynasties:'Entered reigns, offices, role phases and dated relationships. Relationship context ranges are not birth, marriage or kinship-onset dates.',
+  kingdoms:'Entered political, archaeological and mixed regional contexts; these are not territorial boundaries.',
+  cities:'Dated site evidence and exact-year interpreted study references. A study leaving the selected date is not abandonment.',
+  connections:'Schematic exchange relations within entered date windows; these are not surveyed roads or direct journeys.',
+  ecology:'Dated research and uncertainty windows, including notes without defensible map anchors. Matching a window is not a continuous measured condition.'
+ };
+ function create({atlas,index,timeline,world}){
+  if(!atlas||!index||!timeline||!world?.atYear)throw new TypeError('Historical index and world engine are required.');
+  const sources=new Set(index.sourceIds),peopleById=new Map(atlas.people.map(p=>[p.id,p]));
+  const relationById=new Map(atlas.relationships.map(r=>[r.id,r]));
+  const regionNames=new Map(atlas.regions.map(r=>[r.id,r.name]));
+  const entriesById=new Map(index.entries.map(e=>[e.id,e]));
+  const matches=(ids,regionId)=>!regionId||(regionId===timeline.UNASSIGNED?!ids.length:ids.includes(regionId));
+  function validateRegion(regionId){if(regionId&&regionId!==timeline.UNASSIGNED&&!regionNames.has(regionId))throw new RangeError('Unknown atlas region.');}
+  function compact(entry){
+   const out={id:entry.id,label:entry.label,kind:entry.kind,refType:entry.refType,refId:entry.refId,regionIds:[...entry.regionIds],sourceIds:[...entry.sourceIds],detail:entry.detail||'',note:entry.note||'',ranges:copy(entry.matchingRanges||[]),sourceResolved:entry.sourceIds.length>0&&entry.sourceIds.every(id=>sources.has(id))};
+   out.matchingRanges=copy(out.ranges);
+   if(entry.refType==='ecology'){out.profileId=entry.refId;out.entryId=entry.id;}
+   if(entry.refType==='person'){
+    const person=peopleById.get(entry.refId);
+    out.roleLabels=unique(out.ranges.map(r=>r.roleLabel));
+    out.primaryRegionId=person?.region||'';
+    out.status=person?.status||'';
+    out.chronology=person?.chronology||'';
+   }
+   if(entry.refType==='relationship'){
+    const relation=relationById.get(entry.refId);
+    out.relationshipType=relation.type;out.fromId=relation.fromId;out.toId=relation.toId;
+    out.fromName=peopleById.get(relation.fromId)?.name||relation.fromId;
+    out.toName=peopleById.get(relation.toId)?.name||relation.toId;
+    out.certainty=relation.certainty||'';
+    out.dateBasis=relation.dates?.basis||'';
+   }
+   if(entry.refType==='period'){out.periodKind=entry.periodKind;out.territoryGeometry=false;}
+   return out;
+  }
+  function sourcedRelationship(e){const r=relationById.get(e.refId);return r&&peopleById.has(r.fromId)&&peopleById.has(r.toId)&&e.sourceIds.length>0&&e.sourceIds.every(id=>sources.has(id));}
+  function regionAt(year,regionId=''){
+   validateRegion(regionId);
+   const selected=timeline.atYear(index,year,regionId),model=world.atYear(year);
+   const relations=selected.dated.filter(e=>e.refType==='relationship');
+   const ecology=selected.dated.filter(e=>e.refType==='ecology').map(e=>({...compact(e),mappedSignals:model.ecology.filter(n=>n.entryId===e.id).map(n=>({id:n.id,lon:n.lon,lat:n.lat,kind:n.kind,anchorBasis:n.anchorBasis,limits:n.limits})),semantics:semantics.ecology}));
+   const cities=model.cities.filter(c=>matches((c.regionId||'').split(' ').filter(Boolean),regionId)).map(c=>({id:'city/'+c.id,label:c.name,kind:c.kind,refType:'world-city',refId:c.placeId,placeId:c.placeId,name:c.name,regionIds:(c.regionId||'').split(' ').filter(Boolean),sourceIds:[...c.sourceIds],status:c.status,evidence:copy(c.evidence),studyIds:[...c.studyIds],ranges:copy(c.evidence.map(e=>e.dates)),matchingRanges:copy(c.evidence.map(e=>e.dates)),semantics:semantics.cities}));
+   const connections=model.connections.filter(c=>matches(entriesById.get('trade/'+c.recordId)?.regionIds||[],regionId)).map(c=>({id:'connection/'+c.id,label:c.label,kind:c.mode,refType:'world-connection',refId:c.id,recordId:c.recordId,regionIds:[...(entriesById.get('trade/'+c.recordId)?.regionIds||[])],sourceIds:[...c.sourceIds],ranges:[copy(c.dates)],matchingRanges:[copy(c.dates)],pointIds:c.points.map(p=>p.placeId),detail:c.record.goods,note:c.limits,semantics:semantics.connections}));
+   const result={year,regionId,regionName:regionNames.get(regionId)||(regionId===timeline.UNASSIGNED?'Without a regional link':'All regions'),
+    people:selected.dated.filter(e=>e.refType==='person').map(compact),
+    relationships:relations.filter(sourcedRelationship).map(compact),
+    undatedRelationships:selected.undated.filter(e=>e.refType==='relationship'&&sourcedRelationship(e)).map(e=>({...compact(e),dateStatus:'No numeric relationship date entered'})),
+    periods:selected.dated.filter(e=>e.refType==='period').map(compact),
+    events:selected.dated.filter(e=>e.refType==='event').map(compact),
+    cities,connections,ecology,
+    omittedUnresolvedRelationships:relations.filter(e=>!sourcedRelationship(e)).length,
+    unresolvedCounts:{...selected.unresolvedCounts},semantics:{...semantics}};
+   result.counts={people:result.people.length,relationships:result.relationships.length,undatedRelationships:result.undatedRelationships.length,periods:result.periods.length,events:result.events.length,cities:cities.length,connections:connections.length,ecology:ecology.length,mappedEcology:ecology.reduce((sum,e)=>sum+e.mappedSignals.length,0)};
+   return result;
+  }
+  function signature(item){
+   return JSON.stringify({kind:item.kind,ranges:item.ranges,roles:item.roleLabels,evidence:item.evidence?.map(e=>({id:e.id,label:e.label,dates:e.dates,status:e.status})),status:item.status});
+  }
+  function difference(before,after,key){
+   const from=new Map(before.map(item=>[item.id,item])),to=new Map(after.map(item=>[item.id,item]));
+   const entered=after.filter(item=>!from.has(item.id));
+   const left=before.filter(item=>!to.has(item.id));
+   const changed=after.filter(item=>from.has(item.id)&&signature(from.get(item.id))!==signature(item)).map(item=>({id:item.id,label:item.label,before:from.get(item.id),after:item,reason:item.refType==='person'?'Matching entered role ranges differ':item.refType==='world-city'?'Matching site evidence or study reference differs':'Matching entered evidence differs'}));
+   const retained=after.filter(item=>from.has(item.id)&&signature(from.get(item.id))===signature(item));
+   return {key,entered,left,changed,retained,counts:{before:before.length,after:after.length,entered:entered.length,left:left.length,changed:changed.length,retained:retained.length},labels:{entered:'In the second date’s evidence',left:'Only in the first date’s evidence',changed:'Entered evidence changes',retained:'Present in both evidence views'},semantics:semantics[key]};
+  }
+  function changeYears(regionId=''){validateRegion(regionId);return unique(timeline.boundaries(index,regionId)).sort((a,b)=>b-a);}
+  function neighbors(year,regionId=''){
+   timeline.atYear(index,year,regionId);const years=changeYears(regionId);
+   return {earlierBce:years.filter(y=>y>year).sort((a,b)=>a-b)[0]??null,laterBce:years.find(y=>y<year)??null};
+  }
+  function compare(fromBce,toBce,regionId=''){
+   const before=regionAt(fromBce,regionId),after=regionAt(toBce,regionId);
+   const tracks={
+    dynasties:difference([...before.people,...before.relationships],[...after.people,...after.relationships],'dynasties'),
+    kingdoms:difference([...before.periods,...before.events],[...after.periods,...after.events],'kingdoms'),
+    cities:difference(before.cities,after.cities,'cities'),
+    connections:difference(before.connections,after.connections,'connections'),
+    ecology:difference(before.ecology,after.ecology,'ecology')
+   };
+   const boundaries=changeYears(regionId).filter(y=>y>=Math.min(fromBce,toBce)&&y<=Math.max(fromBce,toBce));
+   return {fromYear:fromBce,toYear:toBce,regionId,regionName:after.regionName,direction:toBce<fromBce?'forward':toBce>fromBce?'backward':'same',before,after,tracks,
+    timeline:{boundaries,boundaryCount:boundaries.length,fromNeighbors:neighbors(fromBce,regionId),toNeighbors:neighbors(toBce,regionId),semantics:'Entered date boundaries within this interval. Two snapshots do not model the sequence or causes of everything between them.'},
+    counts:{entered:Object.values(tracks).reduce((s,t)=>s+t.counts.entered,0),left:Object.values(tracks).reduce((s,t)=>s+t.counts.left,0),changed:Object.values(tracks).reduce((s,t)=>s+t.counts.changed,0)},semantics:semantics.comparison};
+  }
+  return {regionAt,compare,changeYears,neighbors,semantics:{...semantics}};
+ }
+ return {create,semantics:{...semantics}};
+});
+
+/* Regional reading and comparison UI. All historical content comes from entered records. */
+(function(){
+'use strict';
+const history=AncientWorldsHistory.create({atlas:D,index:timelineIntegrator.index,timeline:AncientWorldsTimeline,world:worldController.engine});
+let regionId='',fromYear=2050,active='overview',savedFocus=null,applying=false;
+const names={overview:'Regional world',dynasties:'Rulers & relationships',cities:'Cities & connections',ecology:'Land & water',changes:'Compare dates'};
+const colors={dynasties:'#d8bf82',kingdoms:'#b9c7ac',cities:'#dfc48e',connections:'#9cc9d0',ecology:'#9fbd91'};
+const css=el('style');css.textContent=`
+.aw-chronicle-launch{position:absolute;left:16px;bottom:14px;z-index:3;font:12px Georgia,serif;padding:7px 10px;background:#1b3031eb;border-color:#718a7c}.aw-living-map .coords{bottom:48px}.aw-chronicle-launch.hidden{display:none}.aw-chronicle{position:fixed;inset:2vh 3vw;z-index:115;background:#102024;border:1px solid #829377;border-radius:10px;box-shadow:0 24px 90px #000c;display:flex;flex-direction:column;overflow:hidden;color:#e8e2cd}.aw-chronicle.hidden{display:none}.aw-ch-head{padding:17px 22px;background:linear-gradient(120deg,#2b4235,#152a30);display:flex;gap:16px;align-items:center;border-bottom:1px solid #4c6557}.aw-ch-head h2{font:28px Georgia,serif;margin:4px 0}.aw-ch-head button{margin-left:auto;flex-shrink:0}.aw-ch-controls{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:12px 22px;border-bottom:1px solid #3b544d}.aw-ch-controls label{font-size:11px;color:#bdcbb9}.aw-ch-controls input{width:80px;padding:6px}.aw-ch-controls select{max-width:220px;padding:6px}.aw-ch-controls button{padding:6px 9px;font-size:11px}.aw-ch-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:12px 22px 0}.aw-ch-tabs button{font-size:11px;padding:7px 10px}.aw-ch-tabs .active{background:#354b38;border-color:#b4ae80;color:#f3dfad}.aw-ch-body{flex:1;min-height:0;overflow:auto;padding:18px 22px 24px}.aw-ch-intro{max-width:720px;color:#b8ccbd;font-size:12px;line-height:1.7;margin:0 0 15px}.aw-ch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:13px}.aw-ch-card{background:linear-gradient(130deg,#22372f,#192f31);border:1px solid #425e51;border-radius:7px;padding:15px 17px;min-width:0}.aw-ch-card h3{font:20px/1.3 Georgia,serif;color:#ead7aa;margin:3px 0 11px}.aw-ch-card h4{font-size:12px;color:#c7d4bc;margin:15px 0 7px}.aw-ch-card p{font-size:12px;line-height:1.7;margin:8px 0;color:#c0cdbd}.aw-ch-card .aw-ch-row{border-top:1px solid #42605266;padding:9px 0;font-size:11px}.aw-ch-card .aw-ch-row:first-of-type{border-top:0}.aw-ch-card button{font-size:11px;padding:6px 9px;margin:4px 5px 2px 0}.aw-ch-card small{display:block;color:#a7beae;font-size:10px;line-height:1.7}.aw-ch-card .aw-ch-name{font:16px Georgia,serif;display:block;color:#f1dec0}.aw-ch-card details{font-size:11px;line-height:1.7;color:#becdbb;margin-top:10px}.aw-ch-source{display:block;font-size:10px;margin-top:6px}.aw-ch-hero{display:flex;gap:20px;align-items:center;margin:0 0 18px;padding:16px 18px;border:1px solid #71806588;border-radius:7px;background:linear-gradient(120deg,#34452c99,#163039)}.aw-ch-hero strong{font:34px Georgia,serif;color:#e7cd94;white-space:nowrap}.aw-ch-hero p{font:14px/1.6 Georgia,serif;color:#c1d1bd;margin:0}.aw-ch-foot{padding:9px 22px;border-top:1px solid #40594d;font-size:10px;color:#a7bbaa}.aw-ch-counts{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 18px}.aw-ch-counts span{font-size:10px;background:#253e34;border:1px solid #55705b;border-radius:20px;padding:5px 9px}.aw-ch-diff{display:grid;grid-template-columns:1fr 1fr;gap:12px}.aw-ch-diff h4{margin-top:8px}.aw-ch-link{background:transparent;text-align:left;border-color:#587362;color:#e6d8b7;width:100%}.aw-ch-link small{color:#b7c9b8}.aw-ch-bar{height:5px;border-radius:4px;background:#3a5147;margin:8px 0;position:relative;overflow:hidden}.aw-ch-bar i{height:100%;display:block;border-radius:4px;background:#c1ae75;position:absolute}.aw-ch-error{color:#f0c295;font-size:11px}.aw-ch-section{font:21px Georgia,serif;color:#e1d1ad;margin:22px 0 12px}@media(max-width:720px){.aw-chronicle{inset:0;border-radius:0}.aw-ch-head{padding:12px}.aw-ch-head h2{font-size:23px}.aw-ch-controls,.aw-ch-body{padding:12px}.aw-ch-tabs{padding:10px 12px 0}.aw-ch-hero{padding:13px;gap:13px}.aw-ch-hero strong{font-size:27px}.aw-ch-hero p{font-size:12px}.aw-ch-diff{grid-template-columns:1fr}.aw-ch-grid{grid-template-columns:1fr}.aw-chronicle-launch{left:12px;bottom:8px;font-size:11px}}
+`;document.head.append(css);
+const panel=el('section','aw-chronicle hidden');panel.id='worldChronicle';panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');panel.setAttribute('aria-label','Regional world chronicle');document.body.append(panel);
+const launch=btn($('stage'),'World chronicle',()=>open(),'aw-chronicle-launch');launch.id='worldChronicleLaunch';
+const head=el('div','aw-ch-head'),heading=el('div');heading.append(el('div','eyebrow','PLACES · PEOPLE · LANDSCAPES'),el('h2','','A world changing through time'));head.append(heading);btn(head,'Return to map',close);panel.append(head);
+const controls=el('div','aw-ch-controls');panel.append(controls);
+const select=el('select');select.setAttribute('aria-label','Chronicle region');for(const [value,name] of [['','All regions'],...D.regions.map(r=>[r.id,r.name])]){const o=el('option','',name);o.value=value;select.append(o)}
+const from=el('input'),to=el('input');for(const [input,name] of [[from,'Compare from BCE'],[to,'Read at BCE']]){input.type='number';input.min=500;input.max=3200;input.step=1;input.setAttribute('aria-label',name)}
+function field(text,input){const label=el('label','',text);label.append(input);controls.append(label)}
+field('Region ',select);field('Compare from ',from);field('Read at ',to);controls.append(document.createTextNode('BCE'));btn(controls,'Apply dates',apply);btn(controls,'Earlier change',()=>step(1));btn(controls,'Later change',()=>step(-1));
+const error=el('span','aw-ch-error');error.setAttribute('role','status');controls.append(error);
+select.onchange=()=>{regionId=select.value;render()};for(const input of [from,to])input.onkeydown=e=>{if(e.key==='Enter')apply()};
+const tabs=el('nav','aw-ch-tabs');tabs.setAttribute('aria-label','Chronicle chapters');panel.append(tabs);const body=el('div','aw-ch-body');panel.append(body);panel.append(el('div','aw-ch-foot','Entered dates and source conventions guide this view. Missing signals do not establish abandonment; schematic connections do not trace surveyed roads.'));
+function open(options={}){savedFocus=document.activeElement;worldController.pauseJourney();regionId=options.regionId??$('region').value??'';if(!D.regions.some(r=>r.id===regionId))regionId='';if(names[options.chapter])active=options.chapter;panel.classList.remove('hidden');render();select.focus()}
+function close(){panel.classList.add('hidden');(savedFocus?.offsetParent?savedFocus:launch).focus()}
+function apply(){const a=Number(from.value),b=Number(to.value);if(![a,b].every(y=>Number.isInteger(y)&&y>=500&&y<=3200)){error.textContent='Enter whole years from 3200 to 500 BCE.';return}error.textContent='';fromYear=a;applying=true;setYear(b);applying=false;render()}
+function step(direction){const n=history.neighbors(year,regionId);const y=direction>0?n.earlierBce:n.laterBce;if(y){fromYear=year;setYear(y)}}
+function refs(parent,ids){for(const id of [...new Set(ids||[])]){const s=sources.get(id);if(!s)continue;const a=el('a','aw-ch-source',s.title);a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';parent.append(a)}}
+function details(parent,item){const d=el('details');d.append(el('summary','','Evidence and sources'));p(d,item.detail||item.note||'Consult the linked record for the entered evidence.');if(item.detail&&item.note)p(d,item.note);refs(d,item.sourceIds);parent.append(d)}
+function dateLabel(item){return (item.matchingRanges||item.ranges||[]).filter(AncientWorldsTimeline.valid).map(r=>span(r)+(r.roleLabel?' · '+r.roleLabel:'')).join(' / ')}
+function visit(item,at=year){close();setYear(at);if(item.refType==='person')selectPerson(people.get(item.refId));else if(item.refType==='relationship')relationModal(D.relationships.find(r=>r.id===item.refId));else if(item.refType==='world-city')worldController.openCity(item.refId);else if(item.refType==='world-connection')worldController.openConnection(item.refId);else if(item.refType==='ecology')ecologyTest.open(item.refId,at,'World chronicle evidence');else if(item.refType==='event')openEvent(D.events.find(e=>e.id===item.refId));else {const box=modal(item.label);p(box,item.detail);p(box,dateLabel(item),'date');p(box,item.note,'small muted');refs(box,item.sourceIds)}}
+function card(parent,title,subtitle){const c=el('article','aw-ch-card');c.append(el('div','eyebrow',subtitle||''),el('h3','',title));parent.append(c);return c}
+function itemRow(parent,item,at=year){const row=el('div','aw-ch-row');const b=btn(row,item.label,()=>visit(item,at),'aw-ch-link');const date=dateLabel(item);if(date)b.append(el('small','',date));parent.append(row);return row}
+function empty(parent,message){p(parent,message||'No dated entries in this view. The wider record and undated evidence remain in the shared timeline.','muted')}
+function more(parent,sector){btn(parent,'Explore the shared timeline',()=>{close();timelineIntegrator.open({regionId,sector})})}
+function render(){
+ from.value=fromYear;to.value=year;select.value=regionId;tabs.replaceChildren();for(const [id,name] of Object.entries(names)){const b=btn(tabs,name,()=>{active=id;render();body.scrollTop=0});b.classList.toggle('active',id===active)}body.replaceChildren();
+ const view=history.regionAt(year,regionId),regionName=regions.get(regionId)?.name||'The regional world';
+ const hero=el('div','aw-ch-hero');hero.append(el('strong','',year+' BCE'));const words=el('div');words.append(el('p','',regionName),el('small','muted',active==='changes'?'Compare the entered evidence at '+fromYear+' and '+year+' BCE.':'Read cities, rulers, connections and environmental evidence together.'));hero.append(words);body.append(hero);
+ if(active==='changes'){renderChanges(history.compare(fromYear,year,regionId));return}
+ const counts=el('div','aw-ch-counts');for(const [name,n] of [['Dated people',view.people.length],['City signals',view.cities.length],['Connections',view.connections.length],['Ecology notes',view.ecology.length]])counts.append(el('span','',n+' '+name));body.append(counts);
+ if(active==='overview')renderOverview(view);else if(active==='dynasties')renderDynasties(view);else if(active==='cities')renderCities(view);else if(active==='ecology')renderEcology(view);
+}
+function renderOverview(view){
+ const grid=el('div','aw-ch-grid');body.append(grid);const c=card(grid,'Kingdoms & regional worlds','HISTORICAL CONTEXT');for(const p0 of view.periods.slice(0,8)){const row=itemRow(c,p0);p(row,p0.kind,'small muted')}if(!view.periods.length)empty(c);more(c,'kingdoms');
+ const peopleCard=card(grid,'People at this date','DATED ROLES');for(const person of view.people.slice(0,5)){itemRow(peopleCard,person)}if(!view.people.length)empty(peopleCard,'No numerically dated person is indexed here. Sequence-only people remain accessible.');btn(peopleCard,'Rulers & relationships',()=>{active='dynasties';render()});
+ const cityCard=card(grid,'Centers & connections','SETTLEMENT AND EXCHANGE');for(const city of view.cities.slice(0,5))itemRow(cityCard,city);for(const c0 of view.connections.slice(0,2))itemRow(cityCard,c0);if(!view.cities.length&&!view.connections.length)empty(cityCard);btn(cityCard,'Cities & connections',()=>{active='cities';render()});
+ const ecologyCard=card(grid,'Land, water & woodland','DATED RESEARCH');for(const note of view.ecology.slice(0,4))itemRow(ecologyCard,note);if(!view.ecology.length)empty(ecologyCard);btn(ecologyCard,'Land & water',()=>{active='ecology';render()});
+ const compareCard=card(grid,'Follow the changes','TIMELINE INTEGRATOR');p(compareCard,'Compare two dates across all five tracks. Role phases and research windows remain separate, and changes in the index are distinguished from changes on the ground.');for(const pair of [[3200,2050],[2050,1370],[1370,800]])btn(compareCard,pair[0]+' → '+pair[1]+' BCE',()=>{fromYear=pair[0];active='changes';setYear(pair[1])});
+}
+function renderDynasties(view){
+ p(body,'Bars show the entered reign or role within 3200–500 BCE. Family and political links keep their original sources; succession never becomes parenthood.','aw-ch-intro');const grid=el('div','aw-ch-grid');body.append(grid);
+ for(const person of view.people){const c=card(grid,person.label,'DATED PERSON');p(c,dateLabel(person),'date');for(const r of (person.matchingRanges||person.ranges||[]).filter(AncientWorldsTimeline.valid)){const bar=el('div','aw-ch-bar'),ink=el('i');ink.style.left=(3200-r.startBce)/27+'%';ink.style.width=Math.max(.3,(r.startBce-r.endBce)/27)+'%';bar.append(ink);bar.title=span(r);c.append(bar)}p(c,person.roleLabels?.join(' / ')||person.detail);btn(c,'Open person',()=>visit(person));const related=[...view.relationships,...(view.undatedRelationships||[])].filter(r=>r.fromId===person.refId||r.toId===person.refId);if(related.length){c.append(el('h4','','Sourced connections'));for(const r of related.slice(0,5)){itemRow(c,r);if(!(r.ranges||[]).some(AncientWorldsTimeline.valid))p(c,'Sequence-only / undated relationship','small muted')}}details(c,person)}if(!view.people.length)empty(body);more(body,'dynasties');
+}
+function renderCities(view){
+ p(body,'Symbols identify entered city evidence and dated studies. The connections are schematic. A phase ending in the index does not establish a city’s abandonment or a road’s closure.','aw-ch-intro');const grid=el('div','aw-ch-grid');body.append(grid);
+ for(const city of view.cities){const c=card(grid,city.label,'CITY EVIDENCE');for(const e of city.evidence||[]){p(c,e.label);p(c,span(e.dates),'small muted')}btn(c,'Explore city',()=>visit(city));btn(c,'Follow city phases',()=>openCityPhases(city.refId));details(c,city)}
+ for(const link of view.connections){const c=card(grid,link.label,'SCHEMATIC EXCHANGE');p(c,link.detail);p(c,dateLabel(link),'date');btn(c,'Read connection',()=>visit(link));details(c,link)}if(!view.cities.length&&!view.connections.length)empty(body);more(body,'cities');
+}
+function renderEcology(view){
+ p(body,'Water, vegetation and cultivation symbols distinguish the subject of each note. These are dated evidence windows, including uncertain or local observations—not annual habitat maps. Unmapped notes are retained here.','aw-ch-intro');const grid=el('div','aw-ch-grid');body.append(grid);
+ for(const note of view.ecology){const c=card(grid,note.label,'ENVIRONMENTAL EVIDENCE');p(c,note.detail);p(c,dateLabel(note),'date');const style=WORLD_SIGNAL_STYLES.ecologyStages.find(s=>s.entryId===note.id);if(style)p(c,style.evidenceSemantics);p(c,note.mappedSignals?.length?'An explicit reading anchor is available on the map.':'This note has no explicit map anchor.','small muted');btn(c,'Open ecology notebook',()=>visit(note));details(c,note)}if(!view.ecology.length)empty(body);more(body,'ecology');
+}
+function renderChanges(report){
+ p(body,'This compares the evidence selected at two dates. “Only at” means a date falls within an entered window; it does not mean a city, dynasty, route or habitat began or vanished then.','aw-ch-intro');const grid=el('div','aw-ch-grid');body.append(grid);
+ for(const [key,title] of [['dynasties','Rulers & roles'],['kingdoms','Kingdoms & periods'],['cities','Cities & studies'],['connections','Exchange connections'],['ecology','Ecology evidence']]){const track=report.tracks[key],c=card(grid,title,'TWO DATED VIEWS');c.style.borderTop='2px solid '+colors[key];const columns=el('div','aw-ch-diff');for(const [items,date] of [[track.left,fromYear],[track.entered,year]]){const col=el('div');col.append(el('h4','','Only at '+date+' BCE'));for(const item of items.slice(0,6))itemRow(col,item,date);if(!items.length)p(col,'No exclusive entries.','small muted');if(items.length>6)p(col,'+'+(items.length-6)+' more in the shared timeline.','small muted');columns.append(col)}c.append(columns);if(track.changed.length){c.append(el('h4','','Different roles or evidence'));for(const change of track.changed.slice(0,5)){const row=el('div','aw-ch-row');row.append(el('span','aw-ch-name',change.label));p(row,change.reason||'The matching evidence differs between these dates.');if(change.before.roleLabels?.length||change.after.roleLabels?.length){p(row,fromYear+' BCE · '+change.before.roleLabels.join(' / '),'small muted');p(row,year+' BCE · '+change.after.roleLabels.join(' / '),'small muted')}btn(row,'Read '+fromYear+' BCE',()=>visit(change.before,fromYear));btn(row,'Read '+year+' BCE',()=>visit(change.after,year));c.append(row)}}p(c,track.retained.length+' '+(track.retained.length===1?'entry':'entries')+' retained in both dated views.','small muted')}
+}
+function openCityPhases(placeId){
+ const place=worldController.engine.places.get(placeId);if(!place)return;close();const box=modal(place.name+' · dated phases');p(box,'A sequence of entered evidence and reference studies, not a continuous occupation or construction history.');const entries=timelineIntegrator.index.entries.filter(e=>e.placeId===placeId||(e.refType==='place'&&e.refId===placeId)||(e.refType==='landscape'&&LIVING_DATA.scenes.some(s=>s.id===e.refId&&s.placeId===placeId)));
+ for(const e of entries){const c=card(box,e.label,e.kind);p(c,e.detail);for(const r of e.ranges.filter(AncientWorldsTimeline.valid)){p(c,span(r),'date');const y=Math.min(3200,Math.max(500,r.startBce));btn(c,'Read at '+y+' BCE',()=>{$('modalShade').classList.add('hidden');setYear(y);open({regionId:place.region,chapter:'cities'})})}p(c,e.note);details(c,e)}if(!entries.length)empty(box);btn(box,'Open original place record',()=>{$('modalShade').classList.add('hidden');openPlace(place)},'fullbutton');
+}
+const previousSetYear=setYear;setYear=function(y){previousSetYear(y);if(!applying&&!panel.classList.contains('hidden'))render()};atlasTest.setYear=setYear;
+new MutationObserver(()=>{if(!panel.classList.contains('hidden')&&playTimer){clearInterval(playTimer);playTimer=null;$('play').textContent='Play changes'}worldController.refresh()}).observe(panel,{attributes:true,attributeFilter:['class']});
+new MutationObserver(()=>launch.classList.toggle('hidden',!document.body.classList.contains('aw-living-map'))).observe(document.body,{attributes:true,attributeFilter:['class']});
+panel.addEventListener('keydown',e=>{if(e.key==='Escape'){close();e.preventDefault();e.stopPropagation()}else if(e.key==='Tab'){const f=[...panel.querySelectorAll('button,input,select,a[href],summary')].filter(x=>x.offsetParent!==null);if(e.shiftKey&&document.activeElement===f[0]){f.at(-1)?.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===f.at(-1)){f[0]?.focus();e.preventDefault()}}});
+window.worldChronicle={open,close,history,openCityPhases,get isOpen(){return !panel.classList.contains('hidden')}};
 })();
 
 
