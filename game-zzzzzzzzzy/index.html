@@ -11118,9 +11118,14 @@ new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilte
 if(new URLSearchParams(location.search).get('labelcheck')!=='1')return;
 const panel=el('section');panel.id='labelZoomCheck';panel.setAttribute('aria-label','Zoom label check');panel.style.cssText='position:fixed;right:12px;bottom:12px;z-index:150;background:#10262bf5;color:#e3d9be;border:1px solid #8b987c;border-radius:8px;padding:12px;width:330px;max-width:90vw;max-height:44vh;overflow:auto;font:12px system-ui';
 const run=btn(panel,'Run zoom label sweep',sweep),hide=btn(panel,'Hide zoom check',()=>panel.classList.add('hidden')),out=el('pre','','Ready.');out.style.cssText='white-space:pre-wrap;font:11px/1.5 system-ui';panel.append(out);document.body.append(panel);
-let collecting=false,closed=false,records=new Map(),frameSamples=0;
+let collecting=false,closed=false,records=new Map(),frameSamples=0,generation=0,activeRun=null,resumeState=null;
 const original=window.awWorldPass;window.awWorldPass=function(pass,boxes){const result=original(pass,boxes);if(collecting&&pass==='foreground')capture();return result};
-const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const current=job=>!closed&&activeRun===job&&job.generation===generation;
+function pause(job,ms){return new Promise(resolve=>{let done=false;const finish=()=>{if(done)return;done=true;if(job.wait?.finish===finish)job.wait=null;resolve()};const timer=setTimeout(finish,ms);job.wait={timer,finish}})}
+function cancelWait(job){if(!job?.wait)return;const wait=job.wait;job.wait=null;clearTimeout(wait.timer);wait.finish()}
+function restore(saved){if(!saved)return;if($('labels').checked!==saved.names)$('labels').click();worldController.setEnabled(saved.enabled);setYear(saved.year);mapView.set(saved.view)}
+function controlsReady(){run.disabled=false;hide.disabled=false}
+
 function capture(){
  frameSamples++;const now=performance.now(),stats=AncientWorldsWorldRenderer.layoutStats(ctx);
  for(const p of stats.placements.filter(p=>p.visible)){
@@ -11129,23 +11134,24 @@ function capture(){
 }
 function summary(){let changes=0,rapidReversals=0;for(const h of records.values()){changes+=Math.max(0,h.length-1);for(let i=2;i<h.length;i++)if(h[i].placementId===h[i-2].placementId&&h[i].placementId!==h[i-1].placementId&&h[i].atMs-h[i-2].atMs<350)rapidReversals++}return {observedLabelIds:records.size,frameSamples,placementChanges:changes,rapidReversals,cacheEntries:AncientWorldsWorldRenderer.layoutStats(ctx).size,labels:[...records].map(([id,h])=>({id,placements:h.map(x=>x.placementId)}))}}
 async function sweep(){
- if(collecting)return;run.disabled=true;hide.disabled=true;out.textContent='Running zoom transitions…';const saved={view:mapView.current,year,names:$('labels').checked,enabled:worldController.enabled};const cases=[];
+ if(closed||activeRun)return;const saved={view:{...mapView.current},year,names:$('labels').checked,enabled:worldController.enabled},job={generation:++generation,saved,wait:null};activeRun=job;run.disabled=true;hide.disabled=true;out.textContent='Running zoom transitions…';const cases=[];
  try{
   worldController.setEnabled(true);
   for(const c of [{name:'Levant city cluster',year:1300,view:{lon:36.2,lat:34.7,span:17}},{name:'Hammurabi southern core',year:1760,view:{lon:44.8,lat:32.3,span:15}},{name:'Wide caption thresholds',year:1370,view:{lon:43,lat:32,span:92}}]){
-   if(closed)return;setYear(c.year);mapView.set(c.view);await pause(1200);records=new Map();frameSamples=0;collecting=true;
-   for(let i=0;i<12;i++){if(closed)return;$(i%2===0?'zoomIn':'zoomOut').click();await pause(180)}
+   if(!current(job))return;setYear(c.year);mapView.set(c.view);await pause(job,1200);if(!current(job))return;records=new Map();frameSamples=0;collecting=true;
+   for(let i=0;i<12;i++){if(!current(job))return;$(i%2===0?'zoomIn':'zoomOut').click();await pause(job,180);if(!current(job))return}
    collecting=false;cases.push({name:c.name,...summary()});
   }
-  if(closed)return;if($('labels').checked)$('labels').click();invalidate();await pause(220);if(closed)return;
+  if(!current(job))return;if($('labels').checked)$('labels').click();invalidate();await pause(job,220);if(!current(job))return;
   const namesOffVisible=AncientWorldsWorldRenderer.layoutStats(ctx).placements.filter(p=>p.visible).length;
   const result={status:'Complete',passed:cases.every(c=>c.rapidReversals===0&&c.cacheEntries<=512&&c.observedLabelIds>0)&&namesOffVisible===0,cases,namesOffVisible,scope:'Actual animated map zoom-button path,12 alternating steps in each of3 views. Rapid reversals mean an A/B/A placement sequence in350ms; legitimate relocation at an edge or changing large-scale layout remains possible. Native rendering check on this browser/device, supplemented by fine-jitter regressions.'};
   out.textContent=JSON.stringify(result,null,2);
- }catch(error){out.textContent=JSON.stringify({status:'Failed',message:error.message},null,2)}finally{
-  collecting=false;if(!closed){if($('labels').checked!==saved.names)$('labels').click();worldController.setEnabled(saved.enabled);setYear(saved.year);mapView.set(saved.view);run.disabled=false;hide.disabled=false}
+ }catch(error){if(current(job))out.textContent=JSON.stringify({status:'Failed',message:error.message},null,2)}finally{
+  cancelWait(job);if(activeRun===job){collecting=false;activeRun=null;if(!closed){try{restore(saved)}finally{controlsReady()}}}
  }
 }
-window.addEventListener('pagehide',()=>{closed=true;collecting=false},{once:true});
+window.addEventListener('pagehide',event=>{closed=true;generation++;collecting=false;const job=activeRun;activeRun=null;resumeState=event.persisted&&job?job.saved:null;cancelWait(job);controlsReady()});
+window.addEventListener('pageshow',event=>{if(!event.persisted)return;closed=false;const saved=resumeState;resumeState=null;try{restore(saved);out.textContent=saved?'Ready. Interrupted check stopped; saved atlas view restored.':'Ready.'}finally{controlsReady()}});
 })();
 
 /* Optional local development check. Absent from the normal player interface. */
