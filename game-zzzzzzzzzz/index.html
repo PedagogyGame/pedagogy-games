@@ -1,0 +1,3113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spartan-Mouse 117: Halo Ring Coffee War (60-Story Megastructure)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #030712;
+            color: #e2e8f0;
+            font-family: 'Rajdhani', sans-serif;
+            user-select: none;
+        }
+        .font-orbitron { font-family: 'Orbitron', sans-serif; }
+        .hud-glass {
+            background: rgba(8, 15, 32, 0.78);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(0, 243, 255, 0.28);
+            box-shadow: 0 0 24px rgba(0, 243, 255, 0.12), inset 0 0 14px rgba(0, 243, 255, 0.06);
+        }
+        @keyframes floatUpFade {
+            0% { opacity: 1; transform: translate(-50%, 0) scale(0.92); }
+            25% { opacity: 1; transform: translate(-50%, -12px) scale(1.06); }
+            100% { opacity: 0; transform: translate(-50%, -38px) scale(0.95); }
+        }
+        .floating-dmg {
+            position: absolute;
+            pointer-events: none;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 12px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.95);
+            animation: floatUpFade 0.85s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            white-space: nowrap;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #0284c7; border-radius: 3px; }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+    <!-- Main 3D WebGL Canvas -->
+    <canvas id="game-canvas" class="block w-full h-full"></canvas>
+
+    <!-- Damage / Shield-Break Screen Vignette -->
+    <div id="damage-vignette" class="pointer-events-none fixed inset-0 transition-opacity duration-200 opacity-0 z-10"
+         style="background: radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.55) 100%);"></div>
+
+    <!-- Floating 3D-to-2D Combat Damage Numbers Overlay -->
+    <div id="floating-dmg-container" class="pointer-events-none fixed inset-0 overflow-hidden z-20"></div>
+
+    <!-- Dynamic 3D-to-2D Nearest Harvester Navpoint Marker -->
+    <div id="harvester-navpoint" class="hidden pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+        <div class="w-5 h-5 rotate-45 border-2 border-amber-400 bg-amber-500/20 flex items-center justify-center shadow-[0_0_12px_#f59e0b]">
+            <span class="-rotate-45 text-[9px] font-bold text-amber-200">☕</span>
+        </div>
+        <span id="harvester-navpoint-dist" class="mt-1 px-1.5 py-0.5 rounded bg-slate-950/90 border border-amber-500/40 text-[9px] font-orbitron text-amber-300 whitespace-nowrap">24m</span>
+    </div>
+
+    <!-- ==================== TOP HUD BAR ==================== -->
+    <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <!-- Left: MJOLNIR Energy Shield & Hull Integrity -->
+        <div class="hud-glass rounded-xl px-3.5 py-2 min-w-[250px] pointer-events-auto">
+            <div class="flex items-center justify-between text-[11px] font-orbitron font-bold tracking-wider mb-1">
+                <span class="text-cyan-300 flex items-center gap-1.5">
+                    <span>🛡️ MJOLNIR SHIELD</span>
+                    <span id="shield-gate-badge" class="hidden px-1.5 py-0.2 rounded bg-cyan-400/30 border border-cyan-300 text-[9px] text-white animate-pulse">GATE</span>
+                </span>
+                <span id="hud-shield-text" class="text-cyan-200">100 / 100</span>
+            </div>
+            <div class="w-full h-2.5 bg-slate-950/90 rounded-full overflow-hidden border border-cyan-500/40 mb-1.5">
+                <div id="hud-shield-bar" class="h-full bg-gradient-to-r from-cyan-500 to-sky-300 transition-all duration-100" style="width: 100%;"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] font-orbitron text-rose-300 mb-0.5">
+                <span>❤️ SPARTAN HULL</span>
+                <span id="hud-hp-text">100%</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-950/90 rounded-full overflow-hidden border border-rose-500/40">
+                <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-rose-600 to-amber-400 transition-all duration-150" style="width: 100%;"></div>
+            </div>
+        </div>
+
+        <!-- Center: Weapon Telemetry, Ordnance & Score -->
+        <div class="hud-glass rounded-xl px-4 py-2 flex items-center gap-4 pointer-events-auto">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span id="hud-weapon-tier" class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-200 font-orbitron text-[10px] font-bold">MA5C MK-I PULSE</span>
+                    <span id="hud-reload-badge" class="hidden text-[10px] font-orbitron text-amber-400 animate-pulse font-bold">RELOADING...</span>
+                </div>
+                <div class="flex items-baseline gap-2 mt-0.5">
+                    <span id="hud-ammo" class="font-orbitron text-xl font-black text-white">36</span>
+                    <span class="text-slate-400 font-orbitron text-xs">/ <span id="hud-reserve">288</span></span>
+                </div>
+            </div>
+
+            <div class="h-8 w-px bg-cyan-500/25"></div>
+
+            <div class="flex flex-col gap-1 text-[11px] font-orbitron">
+                <div class="flex items-center gap-2">
+                    <span class="text-sky-300">💣 GRENADES [G]:</span>
+                    <span id="hud-grenades" class="text-white font-bold">3</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-amber-300">🚀 SEEKERS [Q/E]:</span>
+                    <span id="hud-missiles" class="text-white font-bold">4</span>
+                </div>
+            </div>
+
+            <div class="h-8 w-px bg-cyan-500/25"></div>
+
+            <div class="text-right">
+                <div class="text-[10px] font-orbitron text-slate-400">SCORE / HARVESTERS</div>
+                <div class="font-orbitron text-base font-black text-amber-300">
+                    <span id="hud-score">0</span> <span class="text-xs text-cyan-300">(<span id="hud-brewers">0/10</span> ☕)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Studio & Camera Action Buttons -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="btn-open-glb-studio" class="hud-glass hover:bg-cyan-500/25 text-cyan-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-cyan-400/50 transition">
+                📦 57 .GLB STUDIO [B]
+            </button>
+            <button id="btn-open-shots" class="hud-glass hover:bg-purple-500/25 text-purple-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-purple-400/50 transition">
+                🖼️ 2 SHOTS [P]
+            </button>
+            <button id="btn-toggle-cam" class="hud-glass hover:bg-amber-500/25 text-amber-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-amber-400/50 transition">
+                🎥 1P / 3P [T]
+            </button>
+        </div>
+    </header>
+
+    <!-- ==================== FLOOR 60 PENTHOUSE BOSS & CORE TELEMETRY BAR ==================== -->
+    <div id="boss-hud-panel" class="hidden pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-20 w-[92vw] max-w-xl hud-glass rounded-xl p-2.5 border border-rose-500/50 shadow-2xl">
+        <div class="flex items-center justify-between text-[10px] font-orbitron font-bold tracking-wider mb-1">
+            <span class="text-rose-400">👑 SUPREME BARISTA OVERLORD (FL 60)</span>
+            <span id="boss-tether-badge" class="px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400 text-rose-200 text-[9px]">🛡️ CORE TETHER: 50% DMG RESIST</span>
+        </div>
+        <div class="w-full h-2.5 bg-slate-900/90 rounded-full overflow-hidden border border-rose-500/40 mb-2">
+            <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-rose-600 via-amber-500 to-yellow-400 transition-all duration-150" style="width: 100%"></div>
+        </div>
+        <div class="flex items-center justify-between text-[9px] font-orbitron text-amber-300 mb-0.5">
+            <span>☕ SUPREME PENTHOUSE ESPRESSO CORE</span>
+            <span id="boss-core-hp-text">1200 / 1200 HP</span>
+        </div>
+        <div class="w-full h-1.5 bg-slate-900/90 rounded-full overflow-hidden border border-amber-500/40">
+            <div id="boss-core-hp-bar" class="h-full bg-gradient-to-r from-amber-500 to-cyan-400 transition-all duration-150" style="width: 100%"></div>
+        </div>
+    </div>
+
+    <!-- ==================== RIGHT ALTIMETER & SIDE-WING PERK TELEMETRY ==================== -->
+    <aside class="fixed right-3 top-1/2 -translate-y-1/2 z-20 hud-glass rounded-xl p-2.5 w-48 flex flex-col gap-1.5 pointer-events-auto">
+        <div class="flex items-center justify-between border-b border-cyan-500/30 pb-1">
+            <span class="text-[10px] font-orbitron text-slate-400">TOWER DECK</span>
+            <span id="hud-floor-badge" class="font-orbitron text-sm font-black text-cyan-300">FL 01 / 60</span>
+        </div>
+        <div id="hud-biome-name" class="text-[10px] font-orbitron font-bold text-amber-300 truncate">HYDRO-SLUDGE LOBBY</div>
+
+        <div class="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-cyan-500/30">
+            <div id="hud-climb-bar" class="h-full bg-gradient-to-r from-cyan-400 via-purple-400 to-rose-500" style="width: 2%;"></div>
+        </div>
+
+        <!-- Milestone Side-Wing Harvester Pips -->
+        <div class="text-[9px] font-orbitron text-slate-300 mt-0.5">SIDE-WING HARVESTERS:</div>
+        <div class="grid grid-cols-2 gap-1 text-[9px] font-orbitron">
+            <div class="bg-slate-950/80 border border-slate-700 rounded px-1.5 py-0.5 flex justify-between">
+                <span>FL 01W</span><span id="pip-fl1">☕</span>
+            </div>
+            <div class="bg-slate-950/80 border border-slate-700 rounded px-1.5 py-0.5 flex justify-between">
+                <span>FL 15W</span><span id="pip-fl15">☕</span>
+            </div>
+            <div class="bg-slate-950/80 border border-slate-700 rounded px-1.5 py-0.5 flex justify-between">
+                <span>FL 30E</span><span id="pip-fl30">☕</span>
+            </div>
+            <div class="bg-slate-950/80 border border-slate-700 rounded px-1.5 py-0.5 flex justify-between">
+                <span>FL 45W</span><span id="pip-fl45">☕</span>
+            </div>
+        </div>
+
+        <!-- Permanent Side-Wing Perks -->
+        <div class="text-[9px] font-orbitron text-slate-300 mt-0.5">ACTIVE WING PERKS:</div>
+        <div class="grid grid-cols-2 gap-1 text-[9px] font-orbitron">
+            <span id="perk-shield" class="px-1.5 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-slate-500 text-center">⚡SHIELD</span>
+            <span id="perk-cryo" class="px-1.5 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-slate-500 text-center">❄️CRYO</span>
+            <span id="perk-thrust" class="px-1.5 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-slate-500 text-center">💨THRUST</span>
+            <span id="perk-magma" class="px-1.5 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-slate-500 text-center">🔥MAGMA</span>
+        </div>
+
+        <!-- Ability Cooldowns & Combat Overdrive -->
+        <div class="flex items-center justify-between text-[9px] font-orbitron bg-slate-950/85 border border-cyan-500/30 rounded px-1.5 py-0.5 mt-0.5">
+            <span class="text-cyan-300">💨 THRUSTER [SHIFT]</span>
+            <span id="hud-thruster-status" class="text-emerald-400 font-bold">READY</span>
+        </div>
+        <div class="flex items-center justify-between text-[9px] font-orbitron bg-slate-950/85 border border-purple-500/30 rounded px-1.5 py-0.5">
+            <span class="text-purple-300">🤜 CLAW MELEE [V]</span>
+            <span id="hud-melee-status" class="text-emerald-400 font-bold">READY</span>
+        </div>
+        <div class="flex items-center justify-between text-[9px] font-orbitron bg-slate-950/85 border border-amber-500/30 rounded px-1.5 py-0.5">
+            <span class="text-amber-300">🔥 OVERDRIVE</span>
+            <span id="hud-combo-status" class="text-amber-400 font-bold">1.0x</span>
+        </div>
+
+        <!-- Quick-Warp Hotkeys for Testing & Instant Side-Wing Access -->
+        <div class="text-[9px] font-orbitron text-slate-400 text-center mt-0.5">QUICK-WARP DECKS:</div>
+        <div class="grid grid-cols-2 gap-1 text-[9px] font-orbitron">
+            <button onclick="warpToFloor(15, true)" class="bg-emerald-950/70 hover:bg-emerald-800/80 border border-emerald-500/40 text-emerald-200 rounded py-0.5">[4] FL 15W</button>
+            <button onclick="warpToFloor(30, true)" class="bg-purple-950/70 hover:bg-purple-800/80 border border-purple-500/40 text-purple-200 rounded py-0.5">[5] FL 30E</button>
+            <button onclick="warpToFloor(45, true)" class="bg-amber-950/70 hover:bg-amber-800/80 border border-amber-500/40 text-amber-200 rounded py-0.5">[6] FL 45W</button>
+            <button onclick="warpToFloor(60, false)" class="bg-rose-950/70 hover:bg-rose-800/80 border border-rose-500/40 text-rose-200 rounded py-0.5">[7] FL 60👑</button>
+        </div>
+    </aside>
+
+    <!-- ==================== CENTER SMART-LINK CROSSHAIR & MEDAL FEED ==================== -->
+    <div id="crosshair-wrap" class="pointer-events-none fixed inset-0 flex items-center justify-center z-20">
+        <div id="reticle-ring" class="w-8 h-8 rounded-full border-2 border-cyan-400/80 flex items-center justify-center transition-transform duration-75 shadow-[0_0_10px_rgba(0,243,255,0.4)]">
+            <div class="w-1.5 h-1.5 rounded-full bg-cyan-300"></div>
+        </div>
+        <div id="hitmarker" class="hidden absolute w-6 h-6 rotate-45 border-2 border-rose-400"></div>
+    </div>
+
+    <!-- Medal Callout Feed -->
+    <div id="medal-feed" class="pointer-events-none fixed top-36 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1"></div>
+
+    <!-- ==================== BOTTOM-LEFT MOTION TRACKER RADAR & CONTROLS ==================== -->
+    <div class="fixed bottom-3 left-3 z-20 flex items-end gap-3 pointer-events-none">
+        <div class="hud-glass rounded-2xl p-2 flex flex-col items-center">
+            <canvas id="radar-canvas" width="116" height="116" class="rounded-full border border-cyan-500/40 bg-slate-950/90"></canvas>
+            <span class="text-[9px] font-orbitron text-cyan-300 mt-1">15M MOTION TRACKER</span>
+        </div>
+        <div class="hud-glass rounded-xl px-3 py-2 text-[11px] text-slate-300 hidden sm:block">
+            <div class="font-orbitron text-[10px] text-cyan-300 font-bold mb-0.5">SPARTAN-117 TACTICAL CONTROLS</div>
+            <div><b class="text-white">WASD</b> Move • <b class="text-white">SPACE</b> Jump / Mantle • <b class="text-white">SHIFT</b> Thruster Dodge • <b class="text-white">C</b> Slide / Air Ground-Pound</div>
+            <div><b class="text-white">LMB</b> Fire • <b class="text-white">V</b> Claw Melee • <b class="text-white">G</b> Sticky Grenade • <b class="text-white">Q/E</b> Homing Seeker • <b class="text-white">R</b> Reload • <b class="text-white">F</b> Light</div>
+        </div>
+    </div>
+
+    <!-- ==================== START / MISSION BRIEFING MODAL ==================== -->
+    <div id="start-modal" class="fixed inset-0 z-40 bg-slate-950/88 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="hud-glass rounded-2xl max-w-2xl w-full p-6 border border-cyan-400/50 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-cyan-500/30 pb-3 mb-4">
+                <div>
+                    <span class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-orbitron text-[10px] font-bold">UNSC HIGHCOM // OPERATION ROAST BREAKER</span>
+                    <h1 class="font-orbitron text-2xl sm:text-3xl font-black text-white mt-1">SPARTAN-MOUSE 117: COFFEE WAR</h1>
+                </div>
+                <span class="text-3xl">🐭🪖☕</span>
+            </div>
+
+            <p class="text-sm text-slate-200 leading-relaxed mb-4">
+                Infiltrate the <b>60-Story Dark-Void Alien Megastructure</b>. Ascend floor-by-floor via switchback ramps, corner anti-grav sky-lifts, and high-G geyser pads. Clear the <b>4 Cantilevered Void Side-Wings (FL 01, 15, 30, 45)</b> to unlock permanent MJOLNIR combat perks, shoot the <b>Floor 3x Conical Tesla Column</b> crystals to arc chain-lightning into the penguin horde, and sever the <b>Floor 60 Supreme Barista Overlord's</b> Espresso Core Tether!
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-slate-900/80 p-3.5 rounded-xl border border-cyan-500/25 mb-5">
+                <div>⚡ <b>4 Featured Floor Mechanics:</b> Conveyor Belts, Cryo Ice Patches, Lateral Warp Portals (FL 5x/7x), & Interactive Conical Tesla Columns (FL 3x).</div>
+                <div>🏛️ <b>4 Side-Wing Perks + B1 Cache:</b> Clear FL 01W, 15W, 30E & 45W Harvesters for permanent Shield, Cryo, Thruster & Magma perks!</div>
+                <div>🤜 <b>Claw Melee [V] & Air Slam [C]:</b> Lunge-strike enemies to siphon shields, or press <b>[C] in mid-air</b> for a Kinetic Ground-Pound!</div>
+                <div>📦 <b>57 .GLB Studio [B] & 2 Shots [P]:</b> Inspect all 57 3D assets, hot-swap custom <code>.glb</code>/<code>.zip</code> models, or capture AI reference shots.</div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <button onclick="openGlbStudio()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-400/40 font-orbitron text-xs font-bold text-cyan-200 transition">
+                    📦 INSPECT 57 .GLB STUDIO [B]
+                </button>
+                <button id="btn-start-mission" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-orbitron text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(0,243,255,0.5)] transition">
+                    🚀 DEPLOY SPARTAN-117 (CLICK TO LOCK MOUSE)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 57-ASSET .GLB STUDIO MODAL [B] ==================== -->
+    <div id="glb-studio-modal" class="hidden fixed inset-0 z-50 bg-slate-950/92 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="hud-glass rounded-2xl max-w-6xl w-full h-[88vh] flex flex-col p-5 border border-cyan-400/50">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/30 pb-3 mb-3">
+                <div>
+                    <h2 class="font-orbitron text-lg font-black text-white">📦 57-SLOT .GLB 3D ASSET STUDIO & HOT-SWAP LOADER</h2>
+                    <p class="text-xs text-slate-300">Synced with <code>glb_asset_manifest_30.md</code> (Part 1: 4 Featured • Part 2: 16 Traversal & Side-Wings • Part 3: 37 Core Assets)</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="cursor-pointer px-3 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400 text-purple-200 font-orbitron text-[11px] font-bold">
+                        🗜️ LOAD .ZIP / .GLB BATCH
+                        <input id="glb-batch-input" type="file" accept=".glb,.zip" multiple class="hidden" />
+                    </label>
+                    <button onclick="closeGlbStudio()" class="px-3 py-1.5 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 border border-rose-400 text-rose-200 font-orbitron text-xs font-bold">✕ CLOSE [ESC]</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
+                <!-- Left 2 Columns: Filterable 57-Item Grid -->
+                <div class="lg:col-span-2 flex flex-col min-h-0">
+                    <div class="flex flex-wrap items-center gap-2 mb-2">
+                        <button onclick="filterGlbStudio('ALL')" class="px-2.5 py-1 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-200 font-orbitron text-[10px] font-bold">ALL 57</button>
+                        <button onclick="filterGlbStudio('PART1')" class="px-2.5 py-1 rounded bg-amber-500/20 border border-amber-400 text-amber-200 font-orbitron text-[10px] font-bold">PART 1: 4 FEATURED</button>
+                        <button onclick="filterGlbStudio('PART2')" class="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200 font-orbitron text-[10px] font-bold">PART 2: 16 EXPANSION</button>
+                        <button onclick="filterGlbStudio('PART3')" class="px-2.5 py-1 rounded bg-purple-500/20 border border-purple-400 text-purple-200 font-orbitron text-[10px] font-bold">PART 3: 37 CORE</button>
+                        <input id="glb-search-input" oninput="renderGlbStudioList()" type="text" placeholder="Search filename or role..." class="ml-auto px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400" />
+                    </div>
+                    <div id="glb-studio-list" class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 pr-1"></div>
+                </div>
+
+                <!-- Right Column: Live 3D Turntable Inspector -->
+                <div class="bg-slate-950/90 rounded-xl border border-cyan-500/30 p-3 flex flex-col items-center justify-between">
+                    <div class="w-full flex items-center justify-between text-xs font-orbitron text-cyan-300">
+                        <span id="glb-preview-title" class="truncate">motorized_conveyor_belt_segment.glb</span>
+                        <span id="glb-preview-status" class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-[9px]">PROCEDURAL</span>
+                    </div>
+                    <canvas id="glb-preview-canvas" width="300" height="260" class="w-full rounded-lg bg-slate-900/90 border border-slate-800 my-2"></canvas>
+                    <div id="glb-preview-dims" class="text-[11px] text-slate-300 text-center mb-2">4.4m W × 0.25m H × 24.0m D • Origin: bottom-center</div>
+                    <label class="w-full text-center cursor-pointer py-2 rounded-lg bg-cyan-500/25 hover:bg-cyan-500/40 border border-cyan-400 font-orbitron text-xs font-bold text-cyan-200 transition">
+                        📂 UPLOAD .GLB FOR THIS SLOT
+                        <input id="glb-single-input" type="file" accept=".glb" class="hidden" />
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 2-SCREENSHOT AI HANDOFF MODAL [P] ==================== -->
+    <div id="shots-modal" class="hidden fixed inset-0 z-50 bg-slate-950/92 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="hud-glass rounded-2xl max-w-5xl w-full p-5 border border-purple-400/50">
+            <div class="flex items-center justify-between border-b border-purple-500/30 pb-3 mb-4">
+                <div>
+                    <h2 class="font-orbitron text-lg font-black text-white">🖼️ 2-SCREENSHOT AI HANDOFF GENERATOR [P]</h2>
+                    <p class="text-xs text-slate-300">Right-click either image to Copy or click Download PNG to attach to your 3D AI generator.</p>
+                </div>
+                <button onclick="closeShotsModal()" class="px-3 py-1.5 rounded-lg bg-rose-600/30 border border-rose-400 text-rose-200 font-orbitron text-xs font-bold">✕ CLOSE</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-slate-900/90 p-3 rounded-xl border border-cyan-500/30 flex flex-col gap-2">
+                    <div class="flex items-center justify-between text-xs font-orbitron text-cyan-300">
+                        <span>1. INSIDE: LAB COUNTER, TROUGH SINK & DECK</span>
+                        <a id="dl-shot-1" download="screenshot_1_inside_lab.png" class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-[10px]">⬇️ PNG</a>
+                    </div>
+                    <img id="img-shot-1" class="w-full rounded-lg border border-slate-700 aspect-video object-cover" alt="Inside Screenshot" />
+                </div>
+                <div class="bg-slate-900/90 p-3 rounded-xl border border-purple-500/30 flex flex-col gap-2">
+                    <div class="flex items-center justify-between text-xs font-orbitron text-purple-300">
+                        <span>2. OUTSIDE: DARK VOID ALIEN WORLD VIEW</span>
+                        <a id="dl-shot-2" download="screenshot_2_outside_void.png" class="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-400 text-[10px]">⬇️ PNG</a>
+                    </div>
+                    <img id="img-shot-2" class="w-full rounded-lg border border-slate-700 aspect-video object-cover" alt="Outside Screenshot" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== VICTORY / GAME OVER MODAL ==================== -->
+    <div id="end-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="hud-glass rounded-2xl max-w-lg w-full p-6 text-center border border-amber-400/50">
+            <div id="end-icon" class="text-5xl mb-2">🏆</div>
+            <h2 id="end-title" class="font-orbitron text-2xl font-black text-white mb-2">OPERATION ROAST BREAKER COMPLETE!</h2>
+            <p id="end-desc" class="text-sm text-slate-300 mb-5">You purged the 60-Story Penthouse and defeated the Supreme Barista Overlord!</p>
+            <button onclick="resetAndStartMission()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 font-orbitron text-sm font-black text-slate-950">
+                🔄 REDEPLOY SPARTAN-117
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== COMPLETE 3D GAME ENGINE SCRIPT ==================== -->
+    <script>
+        // ============================================================================
+        // 1. WEB AUDIO API PROCEDURAL SOUND SYNTHESIZER
+        // ============================================================================
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) this.ctx = new AudioCtx();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            }
+            playLaser(tier = 1) {
+                if (!this.enabled || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = tier >= 3 ? 'sawtooth' : 'triangle';
+                osc.frequency.setValueAtTime(520 + tier * 95, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.09);
+                gain.gain.setValueAtTime(0.11, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.095);
+            }
+            playExplosion() {
+                if (!this.enabled || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(135, now);
+                osc.frequency.exponentialRampToValueAtTime(28, now + 0.32);
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            }
+            playGravityLift() {
+                if (!this.enabled || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(240, now);
+                osc.frequency.exponentialRampToValueAtTime(780, now + 0.22);
+                gain.gain.setValueAtTime(0.14, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+            playPortalWarp() {
+                if (!this.enabled || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(980, now + 0.18);
+                gain.gain.setValueAtTime(0.16, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.19);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+        }
+        const sfx = new SoundFX();
+
+        // ============================================================================
+        // 2. COMPLETE 57-ASSET .GLB MANIFEST & HOT-SWAP REGISTRY
+        // ============================================================================
+        const GLB_STUDIO_ITEMS = [
+            // PART 1: 4 Featured Floor Mechanics
+            { id: 'motorized_conveyor_belt_segment.glb', part: 'PART1', role: 'Directional Conveyor Belt', dims: '4.4m W × 0.25m H × 24.0m D' },
+            { id: 'cryo_slippery_ice_patch.glb', part: 'PART1', role: 'Sub-Zero Slippery Ice Hazard', dims: '18.0m W × 0.45m H × 12.0m D' },
+            { id: 'lateral_endwall_warp_portal.glb', part: 'PART1', role: 'FL 5x/7x Lateral End-Wall Portal', dims: '5.2m W × 5.6m H × 1.8m D' },
+            { id: 'conical_magical_electric_scifi_column.glb', part: 'PART1', role: 'FL 3x Conical Tesla Column', dims: '3.8m W × 11.2m H × 3.8m D' },
+            // PART 2: 16 Traversal, Cantilevered Side-Wings & Bulkheads
+            { id: 'kinetic_geyser_jump_pad.glb', part: 'PART2', role: 'Mid-Deck High-G Jump Pad', dims: '5.2m W × 0.45m H × 5.2m D' },
+            { id: 'spartan_thruster_pickup_module.glb', part: 'PART2', role: 'MJOLNIR Thruster Pack Module', dims: '0.90m W × 0.75m H × 0.65m D' },
+            { id: 'ceiling_moisture_drip_condenser.glb', part: 'PART2', role: 'Overhead Pipe Drip Condenser', dims: '1.80m W × 0.95m H × 1.80m D' },
+            { id: 'corrugated_bio_conduit_hose_kit.glb', part: 'PART2', role: 'Ribbed Bio-Fluid Conduit Hose', dims: '0.60m W × 0.35m H × 6.00m D' },
+            { id: 'side_wing_breach_gateway_arch.glb', part: 'PART2', role: 'Side-Wing Bulkhead Gateway Arch', dims: '2.4m W × 8.8m H × 21.6m D' },
+            { id: 'cryo_biodome_crystal_flora_tree.glb', part: 'PART2', role: 'FL 15W Cryo Crystal Flora Tree', dims: '4.5m W × 7.8m H × 4.5m D' },
+            { id: 'cryo_biodome_geodesic_canopy.glb', part: 'PART2', role: 'FL 15W Geodesic Biodome Canopy', dims: '58.0m W × 18.0m H × 62.0m D' },
+            { id: 'void_observatory_celestial_orrery.glb', part: 'PART2', role: 'FL 30E Holographic Celestial Orrery', dims: '19.5m W × 12.0m H × 19.5m D' },
+            { id: 'void_observatory_glass_bridge_deck.glb', part: 'PART2', role: 'FL 30E Transparent Void Glass Deck', dims: '12.0m W × 0.85m H × 12.0m D' },
+            { id: 'magma_foundry_roast_turbine.glb', part: 'PART2', role: 'FL 45W Thermal Roast Turbine', dims: '9.5m W × 8.4m H × 9.5m D' },
+            { id: 'magma_foundry_molten_crucible_trench.glb', part: 'PART2', role: 'FL 45W Molten Espresso Trench', dims: '46.0m W × 0.80m H × 3.2m D' },
+            { id: 'cantilevered_void_support_strut.glb', part: 'PART2', role: 'Exterior Side-Wing Support Strut', dims: '62.0m W × 6.5m H × 2.4m D' },
+            { id: 'smart_wall_crouch_bunker_module.glb', part: 'PART2', role: 'Crouch-Tunnel Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D' },
+            { id: 'smart_wall_firing_window_module.glb', part: 'PART2', role: 'Firing-Port Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D' },
+            { id: 'stairwell_safety_railing_kit.glb', part: 'PART2', role: 'Switchback Ramp Safety Railing', dims: '0.80m W × 1.60m H × 48.0m D' },
+            { id: 'holo_floor_sector_signboard.glb', part: 'PART2', role: 'Suspended Neon Floor Signboard', dims: '7.20m W × 3.40m H × 0.25m D' },
+            // PART 3: 37 Core Exterior, Player, Weapons, Enemies & Lab Props
+            { id: 'exterior_alien_void_monolith.glb', part: 'PART3', role: 'Floating Obsidian Void Monolith', dims: '18m W × 85m H × 18m D' },
+            { id: 'exterior_eclipsed_alien_moon.glb', part: 'PART3', role: 'Cratered Eclipsed Alien Moon', dims: '120m Diameter' },
+            { id: 'exterior_alien_horizon_spire_cluster.glb', part: 'PART3', role: 'Basalt Void Horizon Spires', dims: '65m W × 110m H × 45m D' },
+            { id: 'exterior_orbital_void_ring_segment.glb', part: 'PART3', role: 'Orbital Containment Ring Segment', dims: '90m W × 6m H × 4m D' },
+            { id: 'interior_deck_floor_tile_4x4m.glb', part: 'PART3', role: 'Gridded Metallic Deck Tile', dims: '4.0m W × 0.4m H × 4.0m D' },
+            { id: 'interior_bulkhead_wall_panel.glb', part: 'PART3', role: 'Ribbed Titanium Bulkhead Panel', dims: '6.0m W × 8.4m H × 1.2m D' },
+            { id: 'interior_perimeter_window_parapet.glb', part: 'PART3', role: 'Waist-High Void Perimeter Parapet', dims: '8.0m W × 8.4m H × 1.6m D' },
+            { id: 'spartan_mouse_117.glb', part: 'PART3', role: 'Playable Spartan-Mouse 117 Rig', dims: '1.15m W × 3.10m H × 1.15m D' },
+            { id: 'first_person_ma5c_seeker_rig.glb', part: 'PART3', role: '1P MA5C Rifle & Seeker Pod', dims: '0.90m W × 0.52m H × 0.85m D' },
+            { id: 'heat_seeking_plasma_missile.glb', part: 'PART3', role: 'Homing Anti-Air Plasma Missile', dims: '0.35m W × 0.35m H × 0.85m D' },
+            { id: 'sticky_plasma_grenade.glb', part: 'PART3', role: 'Cobalt Sticky Plasma Grenade', dims: '0.45m W × 0.45m H × 0.45m D' },
+            { id: 'laser_tier_upgrade_core.glb', part: 'PART3', role: 'MK-Laser Optical Upgrade Crystal', dims: '0.95m W × 1.25m H × 0.95m D' },
+            { id: 'hippie_zombie_penguin.glb', part: 'PART3', role: 'FL 01–14 Hippie-Zombie Penguin', dims: '1.35m W × 2.50m H × 1.35m D' },
+            { id: 'cold_brew_enforcer_penguin.glb', part: 'PART3', role: 'FL 15–29 Cold-Brew Enforcer Penguin', dims: '1.55m W × 2.65m H × 1.50m D' },
+            { id: 'nitro_shot_commando_penguin.glb', part: 'PART3', role: 'FL 30–44 Nitro-Shot Commando Penguin', dims: '1.50m W × 2.75m H × 1.60m D' },
+            { id: 'penthouse_royal_guard_penguin.glb', part: 'PART3', role: 'FL 45–60 Penthouse Royal Guard', dims: '1.75m W × 2.95m H × 1.75m D' },
+            { id: 'sentinel_robo_bat.glb', part: 'PART3', role: 'FL 01–29 Flying Sentinel Robo-Bat', dims: '2.80m W × 1.30m H × 1.40m D' },
+            { id: 'royal_gunship_robo_bat.glb', part: 'PART3', role: 'FL 30–60 Royal Gunship Robo-Bat', dims: '3.60m W × 1.65m H × 1.85m D' },
+            { id: 'cryo_shock_vat.glb', part: 'PART3', role: 'Breakable AOE Freeze Cryo Vat', dims: '1.10m W × 1.50m H × 1.10m D' },
+            { id: 'shield_capacitor_pylon.glb', part: 'PART3', role: 'Breakable +35 Shield Pylon', dims: '1.15m W × 1.85m H × 1.15m D' },
+            { id: 'unsc_ordnance_crate.glb', part: 'PART3', role: 'Breakable UNSC Ammo/Cheese Crate', dims: '1.25m W × 0.90m H × 1.05m D' },
+            { id: 'mutagenic_distillation_rig.glb', part: 'PART3', role: 'Countertop Boiling Lab Rig', dims: '0.85m W × 0.95m H × 0.55m D' },
+            { id: 'volatile_spore_belljar.glb', part: 'PART3', role: 'Countertop Volatile Spore Bell-Jar', dims: '0.75m W × 0.90m H × 0.75m D' },
+            { id: 'destructible_hardlight_barrier.glb', part: 'PART3', role: 'Waist-High Hard-Light Cover Wall', dims: '7.50m W × 2.45m H × 1.50m D' },
+            { id: 'espresso_harvester_tower.glb', part: 'PART3', role: 'Caffeine Harvester Boiler Tower', dims: '3.80m W × 5.80m H × 3.80m D' },
+            { id: 'supreme_penthouse_espresso_core.glb', part: 'PART3', role: 'FL 60 Supreme Reactor Core', dims: '5.50m W × 8.40m H × 5.50m D' },
+            { id: 'alien_trough_sink_counter.glb', part: 'PART3', role: 'Pass-Through Counter & Trough Sink', dims: '5.40m W × 2.35m H × 1.85m D' },
+            { id: 'quantum_centrifuge.glb', part: 'PART3', role: 'Mid-Room Gyro Quantum Centrifuge', dims: '2.40m W × 4.80m H × 2.40m D' },
+            { id: 'waveform_oscilloscope_console.glb', part: 'PART3', role: 'Countertop CRT Oscilloscope', dims: '0.85m W × 0.55m H × 0.60m D' },
+            { id: 'wall_cake_shrine.glb', part: 'PART3', role: 'Alcove Cherry Cake Ammo Shrine', dims: '1.20m W × 1.20m H × 1.20m D' },
+            { id: 'cyber_cheese_wedge.glb', part: 'PART3', role: 'Golden Cyber-Cheese Shield Wedge', dims: '0.80m W × 0.65m H × 0.80m D' },
+            { id: 'antigrav_skylift_pad.glb', part: 'PART3', role: 'Corner 60-Story Sky-Lift Emitter', dims: '6.20m W × 0.80m H × 6.20m D' },
+            { id: 'switchback_ramp_module.glb', part: 'PART3', role: 'Inter-Floor Switchback Ramp', dims: '8.50m W × 12.00m H × 48.00m D' },
+            { id: 'subbasement_sludge_sump_gate.glb', part: 'PART3', role: 'Level B1 Sump Drainage Gate', dims: '4.20m W × 4.50m H × 1.20m D' },
+            { id: 'recessed_telemetry_wall_monitor.glb', part: 'PART3', role: 'Flush Wall Telemetry Monitor', dims: '2.80m W × 1.45m H × 0.12m D' },
+            { id: 'penthouse_gold_marble_column.glb', part: 'PART3', role: 'FL 60 Gold/Marble Luxury Pillar', dims: '3.20m W × 14.00m H × 3.20m D' },
+            { id: 'supreme_barista_overlord_boss.glb', part: 'PART3', role: 'FL 60 Quad-Walker Emperor Boss', dims: '3.80m W × 5.40m H × 3.80m D' }
+        ];
+
+        const customGlbRegistry = {};
+        const gltfLoader = new THREE.GLTFLoader();
+        let currentStudioFilter = 'ALL';
+        let selectedStudioSlot = GLB_STUDIO_ITEMS[0];
+
+        function cloneOrBuildAsset(slotId, proceduralBuilderFn) {
+            if (customGlbRegistry[slotId]) {
+                return customGlbRegistry[slotId].clone(true);
+            }
+            return proceduralBuilderFn();
+        }
+
+        // ============================================================================
+        // 3. THREE.JS SCENE, CAMERA, LIGHTING & EXTERIOR ALIEN VOID WORLD
+        // ============================================================================
+        const canvas = document.getElementById('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030712);
+        scene.fog = new THREE.FogExp2(0x040917, 0.0032);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 950);
+
+        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.72);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0x38bdf8, 0.85);
+        dirLight.position.set(140, 420, 180);
+        scene.add(dirLight);
+
+        // Flashlight attached to player view
+        const flashLight = new THREE.SpotLight(0xe0f2fe, 1.4, 58, Math.PI / 4.5, 0.45, 1.2);
+        flashLight.visible = true;
+        scene.add(flashLight);
+        scene.add(flashLight.target);
+
+        // Build Dark Void Alien World Exterior (Moon, Floating Obsidian Monoliths, Orbital Rings, Stars)
+        const exteriorGroup = new THREE.Group();
+        scene.add(exteriorGroup);
+
+        function buildExteriorAlienVoidWorld() {
+            // Starfield
+            const starGeo = new THREE.BufferGeometry();
+            const starCount = 1600;
+            const posArr = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount; i++) {
+                const r = 340 + Math.random() * 420;
+                const theta = Math.random() * Math.PI * 2;
+                const y = -120 + Math.random() * 980;
+                posArr[i * 3] = Math.cos(theta) * r;
+                posArr[i * 3 + 1] = y;
+                posArr[i * 3 + 2] = Math.sin(theta) * r;
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 1.6 }));
+            exteriorGroup.add(stars);
+
+            // Eclipsed Alien Moon
+            const moonGroup = new THREE.Group();
+            const moonMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(58, 24, 24),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.3, emissive: 0x3b0764, emissiveIntensity: 0.35 })
+            );
+            moonGroup.add(moonMesh);
+            const moonRing = new THREE.Mesh(
+                new THREE.RingGeometry(74, 88, 40),
+                new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
+            );
+            moonRing.rotation.x = Math.PI * 0.38;
+            moonGroup.add(moonRing);
+            moonGroup.position.set(-280, 460, -340);
+            exteriorGroup.add(moonGroup);
+
+            // Floating Brutalist Obsidian Monoliths around the tower
+            for (let i = 0; i < 14; i++) {
+                const angle = (i / 14) * Math.PI * 2;
+                const dist = 195 + (i % 3) * 55;
+                const mono = new THREE.Group();
+                const body = new THREE.Mesh(
+                    new THREE.CylinderGeometry(3.5, 8.5, 76, 6),
+                    new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.25, metalness: 0.85 })
+                );
+                mono.add(body);
+                const seam = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.2, 68, 17.5),
+                    new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x00f3ff : 0x10b981 })
+                );
+                mono.add(seam);
+                mono.position.set(Math.cos(angle) * dist, i * 54 + 20, Math.sin(angle) * dist);
+                exteriorGroup.add(mono);
+            }
+        }
+        buildExteriorAlienVoidWorld();
+
+        // ============================================================================
+        // 4. PROCEDURAL 3D ASSET BUILDERS (PLAYER, WEAPONS, 4 FEATURED MECHANICS, PROPS)
+        // ============================================================================
+        function buildSpartanMouseRig() {
+            const g = new THREE.Group();
+            const armorMat = new THREE.MeshStandardMaterial({ color: 0x4d5d2b, roughness: 0.38, metalness: 0.65 });
+            const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.75 });
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.12, metalness: 0.95, emissive: 0xd97706, emissiveIntensity: 0.35 });
+
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.62), armorMat);
+            torso.position.y = 1.45;
+            g.add(torso);
+
+            const helm = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.68, 0.76), armorMat);
+            helm.position.y = 2.42;
+            g.add(helm);
+
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.32, 0.12), visorMat);
+            visor.position.set(0, 2.44, -0.36);
+            g.add(visor);
+
+            // Armored Mouse Ears
+            const earGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.12, 16);
+            const earL = new THREE.Mesh(earGeo, armorMat);
+            earL.rotation.x = Math.PI / 2;
+            earL.position.set(-0.38, 2.82, -0.05);
+            const earR = earL.clone();
+            earR.position.x = 0.38;
+            g.add(earL, earR);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.34, 0.85, 0.38);
+            const legL = new THREE.Mesh(legGeo, darkMat);
+            legL.position.set(-0.24, 0.45, 0);
+            const legR = legL.clone();
+            legR.position.x = 0.24;
+            g.add(legL, legR);
+            return g;
+        }
+
+        function buildFirstPersonWeaponRig() {
+            const g = new THREE.Group();
+            const gunMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.32, metalness: 0.82 });
+            const glowMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+
+            // Right-hand MA5C Assault Rifle
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.72), gunMat);
+            body.position.set(0.28, -0.24, -0.48);
+            g.add(body);
+
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.52), glowMat);
+            strip.position.set(0.28, -0.15, -0.48);
+            g.add(strip);
+
+            // Left-shoulder Heat-Seeking Missile Pod
+            const pod = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.42), gunMat);
+            pod.position.set(-0.34, -0.18, -0.42);
+            g.add(pod);
+            return g;
+        }
+
+        // Featured Mechanic 1: Motorized Conveyor Belt Segment
+        function buildConveyorBeltMesh() {
+            const g = new THREE.Group();
+            const railMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.85 });
+            const trackMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.25 });
+            const chevMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+
+            const base = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 24.0), trackMat);
+            base.position.y = 0.125;
+            g.add(base);
+
+            const railL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 24.0), railMat);
+            railL.position.set(-2.05, 0.17, 0);
+            const railR = railL.clone();
+            railR.position.x = 2.05;
+            g.add(railL, railR);
+
+            const stripL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 24.0), cyanMat);
+            stripL.position.set(-1.88, 0.34, 0);
+            const stripR = stripL.clone();
+            stripR.position.x = 1.88;
+            g.add(stripL, stripR);
+
+            const chevrons = [];
+            for (let z = -10; z <= 10; z += 4) {
+                const c = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.6, 3), chevMat);
+                c.rotation.x = -Math.PI / 2;
+                c.scale.z = 0.12;
+                c.position.set(0, 0.27, z);
+                g.add(c);
+                chevrons.push(c);
+            }
+            g.userData.chevrons = chevrons;
+            return g;
+        }
+
+        // Featured Mechanic 2: Cryo Slippery Ice Patch
+        function buildCryoIcePatchMesh() {
+            const g = new THREE.Group();
+            const iceMat = new THREE.MeshStandardMaterial({
+                color: 0x38bdf8,
+                emissive: 0x0284c7,
+                emissiveIntensity: 0.35,
+                roughness: 0.06,
+                metalness: 0.88,
+                transparent: true,
+                opacity: 0.76
+            });
+            const sheet = new THREE.Mesh(new THREE.BoxGeometry(18.0, 0.18, 12.0), iceMat);
+            sheet.position.y = 0.09;
+            g.add(sheet);
+
+            const spikeGeo = new THREE.ConeGeometry(0.38, 1.35, 5);
+            for (let i = 0; i < 12; i++) {
+                const sp = new THREE.Mesh(spikeGeo, iceMat);
+                const side = i % 2 === 0 ? -1 : 1;
+                sp.position.set(side * 8.4, 0.65, -5.0 + (i % 6) * 2.0);
+                sp.rotation.z = side * -0.22;
+                g.add(sp);
+            }
+            return g;
+        }
+
+        // Featured Mechanic 3: Lateral End-Wall Warp Portal (Every 5th & 7th Floor)
+        function buildLateralWarpPortalMesh() {
+            const g = new THREE.Group();
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.85 });
+            const magMat = new THREE.MeshBasicMaterial({ color: 0xec4899 });
+            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.72 });
+
+            const torus = new THREE.Mesh(new THREE.TorusGeometry(2.35, 0.28, 12, 32), frameMat);
+            torus.rotation.y = Math.PI / 2;
+            g.add(torus);
+
+            const innerRing = new THREE.Mesh(new THREE.TorusGeometry(2.02, 0.09, 10, 28), magMat);
+            innerRing.rotation.y = Math.PI / 2;
+            g.add(innerRing);
+
+            const vortex = new THREE.Mesh(new THREE.CircleGeometry(1.95, 28), cyanMat);
+            vortex.rotation.y = Math.PI / 2;
+            g.add(vortex);
+            g.userData.vortex = vortex;
+            return g;
+        }
+
+        // Featured Mechanic 4: Conical Magical-Electric Sci-Fi Column (Every 3rd Floor)
+        function buildConicalTeslaColumnMesh() {
+            const g = new THREE.Group();
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.82 });
+            const shaftMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a,
+                roughness: 0.28,
+                metalness: 0.88,
+                emissive: 0x3b0764,
+                emissiveIntensity: 0.45
+            });
+            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+            const magMat = new THREE.MeshBasicMaterial({ color: 0xc084fc });
+
+            // Stepped octagonal base plinth
+            const plinth = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.25, 0.9, 8), baseMat);
+            plinth.position.y = 0.45;
+            g.add(plinth);
+
+            // Conical shaft: wider at bottom (1.82m), narrower at top (0.88m)
+            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 1.82, 9.2, 12), shaftMat);
+            shaft.position.y = 5.05;
+            g.add(shaft);
+
+            // 3 Counter-rotating horizontal Tesla rings scaling narrower toward the top
+            const rings = [];
+            const heights = [2.6, 5.2, 7.8];
+            const radii = [1.95, 1.55, 1.18];
+            for (let i = 0; i < 3; i++) {
+                const rMesh = new THREE.Mesh(
+                    new THREE.TorusGeometry(radii[i], 0.08, 8, 24),
+                    i % 2 === 0 ? cyanMat : magMat
+                );
+                rMesh.rotation.x = Math.PI / 2;
+                rMesh.position.y = heights[i];
+                g.add(rMesh);
+                rings.push(rMesh);
+            }
+
+            // Floating diamond energy crystal crown at top (interactive shootable target)
+            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.72, 0), cyanMat);
+            crystal.position.y = 10.35;
+            g.add(crystal);
+
+            g.userData.rings = rings;
+            g.userData.crystal = crystal;
+            return g;
+        }
+
+        // Pass-Through Lab Counter with Recessed 4-Walled Trough Sink & Dual Brass Faucets
+        function buildTroughSinkCounterMesh() {
+            const g = new THREE.Group();
+            const slateMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.65 });
+            const steelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.25, metalness: 0.9 });
+            const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
+            const sludgeMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+
+            // Left & Right solid counter wings
+            const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.05, 1.8), slateMat);
+            wingL.position.set(-1.95, 0.525, 0);
+            const wingR = wingL.clone();
+            wingR.position.x = 1.95;
+            g.add(wingL, wingR);
+
+            // Recessed 4-walled stainless trough basin in center
+            const troughBase = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.55, 1.8), steelMat);
+            troughBase.position.set(0, 0.275, 0);
+            g.add(troughBase);
+
+            const wallFront = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.48, 0.16), steelMat);
+            wallFront.position.set(0, 0.78, 0.82);
+            const wallBack = wallFront.clone();
+            wallBack.position.z = -0.82;
+            g.add(wallFront, wallBack);
+
+            const bioPool = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 1.45), sludgeMat);
+            bioPool.position.set(0, 0.68, 0);
+            g.add(bioPool);
+
+            // Dual brass gooseneck faucets
+            for (const fx of [-0.55, 0.55]) {
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.65, 8), brassMat);
+                stem.position.set(fx, 1.32, -0.72);
+                const spout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.38), brassMat);
+                spout.position.set(fx, 1.62, -0.56);
+                g.add(stem, spout);
+            }
+            return g;
+        }
+
+        // ============================================================================
+        // 5. CORE PLAYER STATE, PERKS & LEVEL STREAMING CONFIGURATION
+        // ============================================================================
+        const FLOOR_HEIGHT = 12.0;
+        const TOTAL_FLOORS = 60;
+
+        const player = {
+            pos: new THREE.Vector3(0, 0.2, 42),
+            vel: new THREE.Vector3(0, 0, 0),
+            yaw: 0,
+            pitch: 0,
+            radius: 0.65,
+            height: 2.85,
+            crouchHeight: 1.45,
+            speed: 14.2,
+            sprintSpeed: 20.5,
+            crouchSpeed: 8.5,
+            jumpImpulse: 16.2,
+            onGround: false,
+            onIce: false,
+            onConveyor: false,
+            sliding: false,
+            slideTimer: 0,
+            coyoteTimer: 0,
+            jumpBufferTimer: 0,
+            mantleCooldown: 0,
+            thrusterCooldown: 0,
+            meleeCooldown: 0,
+            portalCooldown: 0,
+            dodgeTimer: 0,
+            shieldGateTimer: 0,
+            groundPoundActive: false,
+            thirdPerson: false,
+            visorShake: 0,
+            cameraLandDip: 0,
+            shield: 100,
+            maxShield: 100,
+            shieldRegenDelay: 0,
+            hp: 100,
+            maxHp: 100,
+            weaponTier: 1,
+            ammo: 36,
+            maxAmmo: 36,
+            reserveAmmo: 288,
+            reloading: false,
+            reloadTimer: 0,
+            fireCooldown: 0,
+            grenades: 3,
+            missiles: 4,
+            maxMissiles: 4,
+            score: 0,
+            comboMultiplier: 1.0,
+            comboTimer: 0,
+            b1CacheClaimed: false,
+            perks: {
+                auxShieldRegen: false,
+                cryoRounds: false,
+                zeroGThruster: false,
+                magmaRounds: false
+            }
+        };
+
+        const playerRig3D = buildSpartanMouseRig();
+        scene.add(playerRig3D);
+
+        const weaponRig1P = buildFirstPersonWeaponRig();
+        camera.add(weaponRig1P);
+        scene.add(camera);
+
+        const gameState = {
+            running: false,
+            activeFloors: new Map(),
+            colliders: [],
+            walkableDecks: [],
+            ramps: [],
+            gravityLifts: [],
+            geyserPads: [],
+            conveyorBelts: [],
+            icePatches: [],
+            warpPortals: [],
+            wingReturnPads: [],
+            teslaColumns: [],
+            brewers: [],
+            breakableProps: [],
+            cheeses: [],
+            cakes: [],
+            upgradeCores: [],
+            enemies: [],
+            projectiles: [],
+            grenadeObjs: [],
+            homingMissiles: [],
+            particles: [],
+            shockwaveRings: [],
+            clearedSideWings: new Set(),
+            clearedFloors: new Set(),
+            penthouseCleared: false
+        };
+
+        function getFloorFromY(y) {
+            if (y < -4.0) return 0; // Level B1 Sub-Basement
+            return Math.max(1, Math.min(TOTAL_FLOORS, Math.floor(y / FLOOR_HEIGHT) + 1));
+        }
+        function getFloorBaseY(floorNum) {
+            if (floorNum <= 0) return -12.0;
+            return (floorNum - 1) * FLOOR_HEIGHT;
+        }
+        function getBiomeInfo(floorNum) {
+            if (floorNum <= 0) return { name: 'B1 BIO-SLUDGE SUMP', accent: 0x10b981 };
+            if (floorNum <= 14) return { name: 'SECTOR 1: HYDRO-SLUDGE LABS', accent: 0x00f3ff };
+            if (floorNum <= 29) return { name: 'SECTOR 2: CRYO-BREW BIODOME', accent: 0x38bdf8 };
+            if (floorNum <= 44) return { name: 'SECTOR 3: ASTRO-VOID OBSERVATORY', accent: 0xc084fc };
+            if (floorNum < 60) return { name: 'SECTOR 4: MAGMA ROAST FOUNDRY', accent: 0xf59e0b };
+            return { name: 'FL 60: SUPREME EXECUTIVE PENTHOUSE', accent: 0xf43f5e };
+        }
+
+        // ============================================================================
+        // 6. INTERACTIVE ENTITIES: HARVESTERS, BREAKABLE PROPS, PICKUPS & ENEMIES
+        // ============================================================================
+        class EspressoHarvester3D {
+            constructor(x, y, z, deck, wingArchetype = null, isPenthouseCore = false) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.deck = deck;
+                this.wingArchetype = wingArchetype;
+                this.isPenthouseCore = isPenthouseCore;
+                this.maxHp = isPenthouseCore ? 1200 : 320;
+                this.hp = this.maxHp;
+                this.dead = false;
+
+                this.group = new THREE.Group();
+                this.group.position.copy(this.pos);
+
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.85 });
+                const coreMat = new THREE.MeshBasicMaterial({ color: isPenthouseCore ? 0xf43f5e : 0xf59e0b });
+
+                const scale = isPenthouseCore ? 1.45 : 1.0;
+                const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7 * scale, 1.95 * scale, 1.2 * scale, 10), bodyMat);
+                base.position.y = 0.6 * scale;
+                this.group.add(base);
+
+                this.boiler = new THREE.Mesh(new THREE.CylinderGeometry(1.35 * scale, 1.35 * scale, 3.6 * scale, 12), coreMat);
+                this.boiler.position.y = 3.0 * scale;
+                this.group.add(this.boiler);
+
+                const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.1 * scale, 1.65 * scale, 1.0 * scale, 10), bodyMat);
+                cap.position.y = 5.2 * scale;
+                this.group.add(cap);
+
+                scene.add(this.group);
+            }
+            takeDamage(dmg) {
+                if (this.dead) return;
+                this.hp -= dmg;
+                spawnFloatingDamageText(this.pos.clone().add(new THREE.Vector3(0, 3.8, 0)), dmg, this.isPenthouseCore ? '👑CORE' : '☕BOILER', '#f59e0b');
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    this.group.visible = false;
+                    sfx.playExplosion();
+                    spawnExplosionParticles(this.pos.clone().add(new THREE.Vector3(0, 2.8, 0)), 0xf59e0b, 32);
+                    spawnLandingShockwaveRing(this.pos.clone().add(new THREE.Vector3(0, 0.2, 0)), 0xf59e0b, 10.5);
+                    bumpCombatOverdrive(0.5);
+                    player.score += Math.round((this.isPenthouseCore ? 1500 : 500) * player.comboMultiplier);
+
+                    if (this.wingArchetype) {
+                        unlockSideWingPerk(this.wingArchetype, this.deck);
+                    } else if (this.isPenthouseCore) {
+                        addMedalCallout('⚡ SUPREME ESPRESSO CORE SHATTERED! BOSS TETHER SEVERED!');
+                        // Stun Boss briefly when tether breaks
+                        const boss = gameState.enemies.find(e => e.isPenthouseBoss && !e.dead);
+                        if (boss) boss.slowTimer = 3.5;
+                    } else {
+                        addMedalCallout(`☕ FLOOR ${String(this.deck).padStart(2, '0')} HARVESTER DESTROYED! +500 PTS`);
+                        checkFloorClearBonus(this.deck);
+                    }
+                    updateHUD();
+                    checkPenthouseVictoryCondition();
+                }
+            }
+        }
+
+        class BreakableProp3D {
+            constructor(x, y, z, type, floorNum) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.type = type; // 'cryo_vat', 'shield_pylon', 'ammo_crate', 'lab_rig', 'spore_jar'
+                this.floorNum = floorNum;
+                this.hp = 65;
+                this.dead = false;
+                this.group = new THREE.Group();
+                this.group.position.copy(this.pos);
+
+                const colorMap = {
+                    cryo_vat: 0x00f3ff,
+                    shield_pylon: 0xa855f7,
+                    ammo_crate: 0xf59e0b,
+                    lab_rig: 0x10b981,
+                    spore_jar: 0xec4899
+                };
+                const mat = new THREE.MeshStandardMaterial({
+                    color: colorMap[type] || 0x38bdf8,
+                    emissive: colorMap[type] || 0x38bdf8,
+                    emissiveIntensity: 0.45,
+                    roughness: 0.25,
+                    metalness: 0.7
+                });
+                const mesh = type === 'shield_pylon'
+                    ? new THREE.Mesh(new THREE.OctahedronGeometry(0.68, 0), mat)
+                    : new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.58, 1.35, 10), mat);
+                mesh.position.y = 0.75;
+                this.group.add(mesh);
+                scene.add(this.group);
+            }
+            takeDamage(dmg) {
+                if (this.dead) return;
+                this.hp -= dmg;
+                const tagMap = {
+                    cryo_vat: '❄️VAT',
+                    shield_pylon: '⚡PYLON',
+                    ammo_crate: '📦CRATE',
+                    lab_rig: '🧪RIG',
+                    spore_jar: '☣️SPORE'
+                };
+                spawnFloatingDamageText(this.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), dmg, tagMap[this.type] || '💥PROP', '#38bdf8');
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    this.group.visible = false;
+                    sfx.playExplosion();
+                    bumpCombatOverdrive(0.15);
+
+                    const colorMap = {
+                        cryo_vat: 0x00f3ff,
+                        shield_pylon: 0xa855f7,
+                        ammo_crate: 0xf59e0b,
+                        lab_rig: 0x10b981,
+                        spore_jar: 0xec4899
+                    };
+                    const cHex = colorMap[this.type] || 0x38bdf8;
+                    spawnExplosionParticles(this.pos.clone().add(new THREE.Vector3(0, 0.8, 0)), cHex, 24);
+                    spawnLandingShockwaveRing(this.pos.clone().add(new THREE.Vector3(0, 0.15, 0)), cHex, 7.5);
+
+                    if (this.type === 'shield_pylon') {
+                        player.shield = Math.min(player.maxShield, player.shield + 35);
+                        addMedalCallout('⚡ SHIELD CAPACITOR OVERCHARGE! +35 SHIELD');
+                    } else if (this.type === 'ammo_crate') {
+                        player.reserveAmmo = Math.min(480, player.reserveAmmo + 64);
+                        player.grenades = Math.min(4, player.grenades + 1);
+                        gameState.cheeses.push(new CheeseWedge3D(this.pos.x, this.pos.y, this.pos.z));
+                        addMedalCallout('📦 UNSC ORDNANCE CRATE OPENED! +AMMO & GRENADE');
+                    }
+
+                    // Elemental AOE damage & freeze/burn to nearby enemies
+                    const aoeRadius = this.type === 'cryo_vat' ? 9.5 : 7.5;
+                    for (const e of gameState.enemies) {
+                        if (e.dead || Math.abs(e.pos.y - this.pos.y) > 5.0) continue;
+                        const d = e.pos.distanceTo(this.pos);
+                        if (d < aoeRadius) {
+                            if (this.type === 'cryo_vat') {
+                                e.slowTimer = Math.max(e.slowTimer || 0, 4.0);
+                                e.takeDamage(55, false);
+                            } else if (this.type === 'spore_jar' || this.type === 'lab_rig') {
+                                e.burnTimer = Math.max(e.burnTimer || 0, 3.5);
+                                e.takeDamage(68, false);
+                            } else {
+                                e.takeDamage(45, false);
+                            }
+                        }
+                    }
+                    updateHUD();
+                }
+            }
+        }
+
+        class CheeseWedge3D {
+            constructor(x, y, z) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.collected = false;
+                this.mesh = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.45, 0.45, 0.35, 3),
+                    new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.45 })
+                );
+                this.mesh.position.set(x, y + 0.45, z);
+                scene.add(this.mesh);
+            }
+        }
+
+        class WallCakeShrine3D {
+            constructor(x, y, z, floorNum) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.floorNum = floorNum;
+                this.collected = false;
+                this.group = new THREE.Group();
+                this.group.position.copy(this.pos);
+                const cake = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.55, 0.55, 0.48, 14),
+                    new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xdb2777, emissiveIntensity: 0.35 })
+                );
+                cake.position.y = 1.1;
+                this.group.add(cake);
+                scene.add(this.group);
+            }
+        }
+
+        class LaserUpgradeCore3D {
+            constructor(x, y, z, floorNum) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.floorNum = floorNum;
+                this.collected = false;
+                this.mesh = new THREE.Mesh(
+                    new THREE.OctahedronGeometry(0.58, 0),
+                    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+                );
+                this.mesh.position.set(x, y + 1.35, z);
+                scene.add(this.mesh);
+            }
+        }
+
+        class EnemyUnit3D {
+            constructor(x, y, z, floorNum, isFlying = false, isPenthouseBoss = false) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.floorNum = floorNum;
+                this.isFlying = isFlying;
+                this.isPenthouseBoss = isPenthouseBoss;
+                this.dead = false;
+                this.slowTimer = 0;
+                this.burnTimer = 0;
+                this.burnTick = 0;
+                this.shockwaveCooldown = 5.0;
+                this.fireTimer = 1.2 + Math.random() * 1.5;
+
+                this.diffMult = 1.0 + (floorNum - 1) * 0.032;
+                this.maxHp = isPenthouseBoss ? 2400 : (isFlying ? Math.round(85 * this.diffMult) : Math.round(115 * this.diffMult));
+                this.hp = this.maxHp;
+                this.speed = isPenthouseBoss ? 6.8 : (isFlying ? 9.5 : 7.4 + Math.min(3.5, floorNum * 0.05));
+
+                this.group = new THREE.Group();
+                this.group.position.copy(this.pos);
+
+                const tierColor = isPenthouseBoss ? 0xf43f5e : (floorNum >= 45 ? 0xf59e0b : (floorNum >= 30 ? 0xc084fc : (floorNum >= 15 ? 0x38bdf8 : 0x10b981)));
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.35, metalness: 0.75 });
+                const vestMat = new THREE.MeshStandardMaterial({ color: tierColor, emissive: tierColor, emissiveIntensity: 0.35 });
+
+                if (isFlying) {
+                    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.65, 0), vestMat);
+                    const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 0.55), bodyMat);
+                    wingL.position.x = -0.95;
+                    const wingR = wingL.clone();
+                    wingR.position.x = 0.95;
+                    this.group.add(core, wingL, wingR);
+                } else {
+                    const s = isPenthouseBoss ? 2.15 : 1.0;
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.52 * s, 0.65 * s, 1.65 * s, 12), bodyMat);
+                    body.position.y = 0.85 * s;
+                    const vest = new THREE.Mesh(new THREE.CylinderGeometry(0.56 * s, 0.67 * s, 0.85 * s, 12), vestMat);
+                    vest.position.y = 0.95 * s;
+                    const head = new THREE.Mesh(new THREE.SphereGeometry(0.46 * s, 12, 12), bodyMat);
+                    head.position.y = 1.95 * s;
+                    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.18 * s, 0.45 * s, 6), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+                    beak.rotation.x = -Math.PI / 2;
+                    beak.position.set(0, 1.95 * s, -0.52 * s);
+                    this.group.add(body, vest, head, beak);
+                }
+
+                // 3D Crimson Tether Beam for Floor 60 Boss
+                if (isPenthouseBoss) {
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 3, 0)]);
+                    this.tetherLine = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 2 }));
+                    scene.add(this.tetherLine);
+                }
+
+                scene.add(this.group);
+            }
+
+            takeDamage(dmg, isHeadshot = false) {
+                if (this.dead) return;
+                let finalDmg = dmg * (isHeadshot ? 1.65 : 1.0);
+                let tag = isHeadshot ? '🎯CRIT' : '';
+                let color = isHeadshot ? '#fde047' : '#38bdf8';
+
+                // Check Floor 60 Boss Core Tether (50% damage reduction while Core is alive)
+                if (this.isPenthouseBoss) {
+                    const core = gameState.brewers.find(b => b.isPenthouseCore && !b.dead);
+                    if (core) {
+                        finalDmg *= 0.5;
+                        tag = '🛡️TETHER';
+                        color = '#f43f5e';
+                    }
+                }
+
+                this.hp -= finalDmg;
+                spawnFloatingDamageText(this.pos.clone().add(new THREE.Vector3(0, this.isPenthouseBoss ? 4.2 : 2.2, 0)), finalDmg, tag, color);
+
+                if (this.hp <= 0) {
+                    this.dead = true;
+                    this.group.visible = false;
+                    if (this.tetherLine) this.tetherLine.visible = false;
+                    sfx.playExplosion();
+                    spawnExplosionParticles(this.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), this.isPenthouseBoss ? 0xf43f5e : 0x00f3ff, this.isPenthouseBoss ? 45 : 18);
+
+                    if (this.isPenthouseBoss) {
+                        addMedalCallout('👑 SUPREME PENTHOUSE BARISTA OVERLORD DEFEATED! +3000 PTS');
+                        player.score += 3000;
+                        bumpCombatOverdrive(1.0);
+                    } else {
+                        if (Math.random() < 0.38) gameState.cheeses.push(new CheeseWedge3D(this.pos.x, this.pos.y, this.pos.z));
+                        bumpCombatOverdrive(isHeadshot ? 0.35 : 0.2);
+                        player.score += Math.round((isHeadshot ? 150 : 100) * this.diffMult * player.comboMultiplier);
+                        checkFloorClearBonus(this.floorNum);
+                    }
+                    updateHUD();
+                    checkPenthouseVictoryCondition();
+                }
+            }
+
+            update(dt) {
+                if (this.dead) return;
+
+                if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
+                if (this.burnTimer > 0) {
+                    this.burnTimer = Math.max(0, this.burnTimer - dt);
+                    this.burnTick += dt;
+                    if (this.burnTick >= 0.5) {
+                        this.burnTick = 0;
+                        this.takeDamage(16, false);
+                    }
+                }
+
+                // Update Boss Tether Line to Penthouse Core
+                if (this.isPenthouseBoss && this.tetherLine) {
+                    const core = gameState.brewers.find(b => b.isPenthouseCore && !b.dead);
+                    if (core) {
+                        this.tetherLine.visible = true;
+                        const pts = [
+                            this.pos.clone().add(new THREE.Vector3(0, 2.8, 0)),
+                            core.pos.clone().add(new THREE.Vector3(0, 4.2, 0))
+                        ];
+                        this.tetherLine.geometry.setFromPoints(pts);
+                    } else {
+                        this.tetherLine.visible = false;
+                    }
+                }
+
+                const distToPlayer = this.pos.distanceTo(player.pos);
+                if (Math.abs(this.pos.y - player.pos.y) > 22.0) return;
+
+                const moveMult = this.slowTimer > 0 ? 0.42 : 1.0;
+                const toPlayer = player.pos.clone().sub(this.pos);
+                toPlayer.y = 0;
+                const horizDist = toPlayer.length();
+                if (horizDist > 0.1) {
+                    toPlayer.normalize();
+                    this.group.rotation.y = Math.atan2(-toPlayer.x, -toPlayer.z);
+                }
+
+                if (horizDist > (this.isFlying ? 9.5 : 3.2)) {
+                    let stepX = toPlayer.x * this.speed * moveMult * dt;
+                    let stepZ = toPlayer.z * this.speed * moveMult * dt;
+
+                    // Obstacle-avoidance steering check for ground units
+                    if (!this.isFlying) {
+                        const testX = this.pos.x + stepX;
+                        const testZ = this.pos.z + stepZ;
+                        let blocked = false;
+                        for (const c of gameState.colliders) {
+                            if (this.pos.y + 1.5 < c.minY || this.pos.y > c.maxY) continue;
+                            if (testX + 0.7 > c.minX && testX - 0.7 < c.maxX && testZ + 0.7 > c.minZ && testZ - 0.7 < c.maxZ) {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                        if (blocked) {
+                            const perpX = -toPlayer.z * this.speed * moveMult * dt;
+                            const perpZ = toPlayer.x * this.speed * moveMult * dt;
+                            stepX = perpX;
+                            stepZ = perpZ;
+                        }
+                    }
+
+                    this.pos.x += stepX;
+                    this.pos.z += stepZ;
+                }
+
+                if (this.isFlying) {
+                    const targetY = getFloorBaseY(this.floorNum) + 4.8 + Math.sin(performance.now() * 0.004 + this.pos.x) * 0.9;
+                    this.pos.y += (targetY - this.pos.y) * 3.0 * dt;
+                }
+
+                this.group.position.copy(this.pos);
+
+                // Floor 60 Boss Radial Shockwave Slam Attack
+                if (this.isPenthouseBoss) {
+                    this.shockwaveCooldown -= dt;
+                    if (this.shockwaveCooldown <= 0 && distToPlayer < 45) {
+                        this.shockwaveCooldown = 6.5;
+                        spawnLandingShockwaveRing(this.pos.clone().add(new THREE.Vector3(0, 0.25, 0)), 0xf43f5e, 16.0);
+                        for (let i = 0; i < 8; i++) {
+                            const ang = (i / 8) * Math.PI * 2;
+                            const dir = new THREE.Vector3(Math.cos(ang), 0, Math.sin(ang));
+                            spawnProjectile(this.pos.clone().add(new THREE.Vector3(0, 1.8, 0)), dir, false, 24, 0xf43f5e);
+                        }
+                    }
+                }
+
+                // Standard Ranged Espresso / Plasma Bolt Attack
+                this.fireTimer -= dt;
+                if (this.fireTimer <= 0 && distToPlayer < 42) {
+                    this.fireTimer = this.isPenthouseBoss ? 0.95 : (1.6 + Math.random() * 1.2);
+                    const origin = this.pos.clone().add(new THREE.Vector3(0, this.isFlying ? 0.2 : 1.5, 0));
+                    const aimDir = player.pos.clone().add(new THREE.Vector3(0, 1.3, 0)).sub(origin).normalize();
+                    spawnProjectile(origin, aimDir, false, Math.round(10 * this.diffMult), this.isPenthouseBoss ? 0xf43f5e : 0xf59e0b);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 7. DYNAMIC 60-STORY FLOOR & 4 CANTILEVERED SIDE-WING BUILDER
+        // ============================================================================
+        function buildFloorSector(floorNum) {
+            if (gameState.activeFloors.has(floorNum)) return;
+
+            const floorGroup = new THREE.Group();
+            const baseY = getFloorBaseY(floorNum);
+            const biome = getBiomeInfo(floorNum);
+            floorGroup.position.y = baseY;
+            scene.add(floorGroup);
+
+            const floorData = {
+                floorNum,
+                group: floorGroup,
+                colliders: [],
+                walkableDecks: [],
+                ramps: [],
+                gravityLifts: [],
+                geyserPads: [],
+                conveyorBelts: [],
+                icePatches: [],
+                warpPortals: [],
+                wingReturnPads: [],
+                teslaColumns: []
+            };
+
+            const deckMat = new THREE.MeshStandardMaterial({
+                color: floorNum === 0 ? 0x064e3b : 0x0f172a,
+                roughness: 0.45,
+                metalness: 0.65
+            });
+            const parapetMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.78 });
+            const accentMat = new THREE.MeshBasicMaterial({ color: biome.accent });
+
+            // Main Floor Deck Slab (176m W × 124m D)
+            const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(176, 0.5, 124), deckMat);
+            deckMesh.position.set(0, -0.25, 0);
+            floorGroup.add(deckMesh);
+            floorData.walkableDecks.push({ minX: -88, maxX: 88, minZ: -62, maxZ: 62, y: baseY });
+
+            // Waist-High (1.8m) Perimeter Parapet Framing the Dark Alien Void View
+            const pNorth = new THREE.Mesh(new THREE.BoxGeometry(176, 1.8, 1.4), parapetMat);
+            pNorth.position.set(0, 0.9, -61.3);
+            const pSouth = pNorth.clone();
+            pSouth.position.z = 61.3;
+            floorGroup.add(pNorth, pSouth);
+            floorData.colliders.push(
+                { minX: -88, maxX: 88, minY: baseY, maxY: baseY + 1.8, minZ: -62, maxZ: -60.5 },
+                { minX: -88, maxX: 88, minY: baseY, maxY: baseY + 1.8, minZ: 60.5, maxZ: 62 }
+            );
+
+            // Check if this floor has a Cantilevered Side Wing:
+            // FL 01 (West), FL 15 (West), FL 30 (East), FL 45 (West)
+            const hasWestWing = (floorNum === 1 || floorNum === 15 || floorNum === 45);
+            const hasEastWing = (floorNum === 30);
+
+            if (!hasWestWing) {
+                const pWest = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 124), parapetMat);
+                pWest.position.set(-87.3, 0.9, 0);
+                floorGroup.add(pWest);
+                floorData.colliders.push({ minX: -88, maxX: -86.5, minY: baseY, maxY: baseY + 1.8, minZ: -62, maxZ: 62 });
+            }
+            if (!hasEastWing) {
+                const pEast = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 124), parapetMat);
+                pEast.position.set(87.3, 0.9, 0);
+                floorGroup.add(pEast);
+                floorData.colliders.push({ minX: 86.5, maxX: 88, minY: baseY, maxY: baseY + 1.8, minZ: -62, maxZ: 62 });
+            }
+
+            // Switchback Ramp to Next Floor (Floors 0 to 59)
+            if (floorNum < TOTAL_FLOORS) {
+                const rampX = floorNum % 2 === 0 ? -18 : 18;
+                const rampLen = 46;
+                const rampMesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(8.5, 0.5, rampLen),
+                    new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.7 })
+                );
+                const slopeAngle = Math.atan2(FLOOR_HEIGHT, rampLen);
+                rampMesh.rotation.x = slopeAngle;
+                rampMesh.position.set(rampX, FLOOR_HEIGHT / 2, 0);
+                floorGroup.add(rampMesh);
+
+                floorData.ramps.push({
+                    minX: rampX - 4.4,
+                    maxX: rampX + 4.4,
+                    minZ: -rampLen / 2,
+                    maxZ: rampLen / 2,
+                    startZ: rampLen / 2,
+                    endZ: -rampLen / 2,
+                    baseY: baseY,
+                    topY: baseY + FLOOR_HEIGHT
+                });
+            }
+
+            // 4 Corner Anti-Grav Sky-Lift Pads
+            const liftCoords = [[-74, -48], [74, -48], [-74, 48], [74, 48]];
+            for (const [lx, lz] of liftCoords) {
+                const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.1, 0.4, 16), accentMat);
+                pad.position.set(lx, 0.2, lz);
+                floorGroup.add(pad);
+                floorData.gravityLifts.push({ x: lx, z: lz, y: baseY, radius: 3.1 });
+            }
+
+            // Mid-Deck Kinetic Geyser Jump Pads
+            for (const gx of [-38, 38]) {
+                const gPad = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.4, 18), new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide }));
+                gPad.rotation.x = -Math.PI / 2;
+                gPad.position.set(gx, 0.12, 24);
+                floorGroup.add(gPad);
+                floorData.geyserPads.push({ x: gx, z: 24, y: baseY, radius: 2.5 });
+            }
+
+            if (floorNum > 0) {
+                // Featured Mechanic 1: Motorized Conveyor Belt Segments (Left & Right Combat Lanes)
+                for (const [cx, dirZ] of [[-48, -1], [48, 1]]) {
+                    const belt = cloneOrBuildAsset('motorized_conveyor_belt_segment.glb', buildConveyorBeltMesh);
+                    belt.position.set(cx, 0.02, -8);
+                    if (dirZ > 0) belt.rotation.y = Math.PI;
+                    floorGroup.add(belt);
+                    floorData.conveyorBelts.push({
+                        minX: cx - 2.2, maxX: cx + 2.2,
+                        minZ: -20, maxZ: 4,
+                        y: baseY,
+                        dirZ,
+                        mesh: belt
+                    });
+                }
+
+                // Featured Mechanic 2: Cryo Slippery Ice Patch
+                const iceMesh = cloneOrBuildAsset('cryo_slippery_ice_patch.glb', buildCryoIcePatchMesh);
+                iceMesh.position.set(0, 0.02, -34);
+                floorGroup.add(iceMesh);
+                floorData.icePatches.push({ minX: -9, maxX: 9, minZ: -40, maxZ: -28, y: baseY });
+
+                // Featured Mechanic 3: Lateral End-Wall Warp Portals on Every 5th & 7th Floor
+                if (floorNum % 5 === 0 || floorNum % 7 === 0) {
+                    const westPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb', buildLateralWarpPortalMesh);
+                    westPortal.position.set(-84.5, 2.8, 0);
+                    floorGroup.add(westPortal);
+
+                    const eastPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb', buildLateralWarpPortalMesh);
+                    eastPortal.position.set(84.5, 2.8, 0);
+                    eastPortal.rotation.y = Math.PI;
+                    floorGroup.add(eastPortal);
+
+                    floorData.warpPortals.push(
+                        { x: -84.5, y: baseY, z: 0, targetX: 80.0, targetZ: 0, mesh: westPortal },
+                        { x: 84.5, y: baseY, z: 0, targetX: -80.0, targetZ: 0, mesh: eastPortal }
+                    );
+                }
+
+                // Featured Mechanic 4: Conical Magical-Electric Sci-Fi Columns on Every 3rd Floor
+                if (floorNum % 3 === 0) {
+                    const colCoords = [[-32, -26], [32, -26], [-32, 26], [32, 26]];
+                    for (const [tx, tz] of colCoords) {
+                        const colMesh = cloneOrBuildAsset('conical_magical_electric_scifi_column.glb', buildConicalTeslaColumnMesh);
+                        colMesh.position.set(tx, 0, tz);
+                        floorGroup.add(colMesh);
+                        floorData.colliders.push({ minX: tx - 1.75, maxX: tx + 1.75, minY: baseY, maxY: baseY + 11.2, minZ: tz - 1.75, maxZ: tz + 1.75 });
+                        floorData.teslaColumns.push({
+                            pos: new THREE.Vector3(tx, baseY, tz),
+                            floorNum,
+                            mesh: colMesh,
+                            cooldown: 0
+                        });
+                    }
+                }
+
+                // Pass-Through Lab Counter & Trough Sink
+                const sinkCounter = cloneOrBuildAsset('alien_trough_sink_counter.glb', buildTroughSinkCounterMesh);
+                sinkCounter.position.set(-28, 0, 12);
+                floorGroup.add(sinkCounter);
+                floorData.colliders.push({ minX: -30.7, maxX: -25.3, minY: baseY, maxY: baseY + 1.1, minZ: 11.0, maxZ: 13.0 });
+                floorData.walkableDecks.push({ minX: -30.7, maxX: -25.3, minZ: 11.0, maxZ: 13.0, y: baseY + 1.1 });
+
+                // Spawn Floor Enemies, Props & Pickups (Once per floor)
+                if (!floorData.populated) {
+                    floorData.populated = true;
+
+                    // Breakable Props
+                    const propTypes = ['cryo_vat', 'shield_pylon', 'ammo_crate', 'lab_rig', 'spore_jar'];
+                    gameState.breakableProps.push(
+                        new BreakableProp3D(-22, baseY, -18, propTypes[floorNum % 5], floorNum),
+                        new BreakableProp3D(22, baseY, 18, propTypes[(floorNum + 2) % 5], floorNum)
+                    );
+
+                    // Wall Cake Shrine & Upgrade Core on Milestone Decks
+                    if (floorNum % 4 === 0) {
+                        gameState.cakes.push(new WallCakeShrine3D(0, baseY, -54, floorNum));
+                    }
+                    if (floorNum === 10 || floorNum === 25 || floorNum === 40 || floorNum === 55) {
+                        gameState.upgradeCores.push(new LaserUpgradeCore3D(0, baseY, 34, floorNum));
+                    }
+
+                    // Main Deck Harvester Boiler on Every 10th Floor (FL 10, 20, 30, 40, 50)
+                    if (floorNum % 10 === 0 && floorNum < 60) {
+                        if (!gameState.brewers.some(b => b.deck === floorNum && !b.wingArchetype)) {
+                            gameState.brewers.push(new EspressoHarvester3D(0, baseY, -44, floorNum, null, false));
+                        }
+                    }
+
+                    // Floor 60 Supreme Penthouse Boss & Reactor Core
+                    if (floorNum === 60) {
+                        if (!gameState.brewers.some(b => b.isPenthouseCore)) {
+                            gameState.brewers.push(new EspressoHarvester3D(0, baseY, -36, 60, null, true));
+                        }
+                        if (!gameState.enemies.some(e => e.isPenthouseBoss)) {
+                            gameState.enemies.push(new EnemyUnit3D(0, baseY, -14, 60, false, true));
+                        }
+                    }
+
+                    // Standard Floor Penguin & Robo-Bat Squad
+                    if (!gameState.enemies.some(e => e.floorNum === floorNum && !e.isPenthouseBoss)) {
+                        const groundCount = floorNum === 60 ? 4 : 3;
+                        for (let i = 0; i < groundCount; i++) {
+                            const ex = (i - 1) * 26 + (Math.random() - 0.5) * 8;
+                            const ez = -22 + (i % 2) * 28;
+                            gameState.enemies.push(new EnemyUnit3D(ex, baseY, ez, floorNum, false, false));
+                        }
+                        gameState.enemies.push(new EnemyUnit3D(-34, baseY + 4.5, -12, floorNum, true, false));
+                    }
+                }
+            }
+
+            // Build Cantilevered Void Side-Wing if applicable (FL 01W, FL 15W, FL 30E, FL 45W)
+            if (hasWestWing || hasEastWing) {
+                const sideDir = hasWestWing ? -1 : 1;
+                const wingCenterX = sideDir * 116;
+                const wingArchetype = floorNum === 1 ? 'HYDRO_LAB' : (floorNum === 15 ? 'CRYO_BIODOME' : (floorNum === 30 ? 'VOID_OBSERVATORY' : 'MAGMA_FOUNDRY'));
+
+                const wingSlab = new THREE.Mesh(
+                    new THREE.BoxGeometry(58, 0.6, 62),
+                    new THREE.MeshStandardMaterial({
+                        color: floorNum === 30 ? 0x3b0764 : 0x0f172a,
+                        roughness: 0.3,
+                        metalness: 0.75,
+                        transparent: floorNum === 30,
+                        opacity: floorNum === 30 ? 0.78 : 1.0
+                    })
+                );
+                wingSlab.position.set(wingCenterX, -0.3, 0);
+                floorGroup.add(wingSlab);
+                floorData.walkableDecks.push({
+                    minX: sideDir < 0 ? -145 : 87,
+                    maxX: sideDir < 0 ? -87 : 145,
+                    minZ: -31,
+                    maxZ: 31,
+                    y: baseY
+                });
+
+                // Side-Wing Thematic Landmark
+                if (floorNum === 15) {
+                    const dome = new THREE.Mesh(
+                        new THREE.SphereGeometry(28, 14, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+                        new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true, transparent: true, opacity: 0.35 })
+                    );
+                    dome.position.set(wingCenterX, 0, 0);
+                    floorGroup.add(dome);
+                } else if (floorNum === 30) {
+                    const orrery = new THREE.Mesh(
+                        new THREE.TorusGeometry(6.5, 0.18, 10, 32),
+                        new THREE.MeshBasicMaterial({ color: 0xc084fc })
+                    );
+                    orrery.position.set(wingCenterX, 6.2, 0);
+                    orrery.rotation.x = Math.PI / 3;
+                    floorGroup.add(orrery);
+                } else if (floorNum === 45) {
+                    const turbine = new THREE.Mesh(
+                        new THREE.CylinderGeometry(3.2, 3.2, 7.5, 10),
+                        new THREE.MeshBasicMaterial({ color: 0xf59e0b, wireframe: true })
+                    );
+                    turbine.position.set(wingCenterX, 3.8, -12);
+                    floorGroup.add(turbine);
+                    if (!gameState.upgradeCores.some(u => u.floorNum === 45)) {
+                        gameState.upgradeCores.push(new LaserUpgradeCore3D(wingCenterX, baseY, 12, 45));
+                    }
+                }
+
+                // Side-Wing Espresso Harvester Boiler
+                if (!gameState.brewers.some(b => b.deck === floorNum && b.wingArchetype === wingArchetype)) {
+                    gameState.brewers.push(new EspressoHarvester3D(wingCenterX, baseY, 0, floorNum, wingArchetype, false));
+                }
+
+                // Atrium Return Warp Pad inside the Side Wing
+                const returnX = sideDir * 134;
+                const returnPad = new THREE.Mesh(
+                    new THREE.CylinderGeometry(2.2, 2.5, 0.3, 16),
+                    new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+                );
+                returnPad.position.set(returnX, 0.15, 18);
+                floorGroup.add(returnPad);
+                floorData.wingReturnPads.push({
+                    x: returnX,
+                    y: baseY,
+                    z: 18,
+                    targetX: sideDir * 72,
+                    targetZ: 0
+                });
+            }
+
+            gameState.activeFloors.set(floorNum, floorData);
+            rebuildActiveCollisionCaches();
+        }
+
+        function rebuildActiveCollisionCaches() {
+            gameState.colliders = [];
+            gameState.walkableDecks = [];
+            gameState.ramps = [];
+            gameState.gravityLifts = [];
+            gameState.geyserPads = [];
+            gameState.conveyorBelts = [];
+            gameState.icePatches = [];
+            gameState.warpPortals = [];
+            gameState.wingReturnPads = [];
+            gameState.teslaColumns = [];
+
+            for (const fd of gameState.activeFloors.values()) {
+                gameState.colliders.push(...fd.colliders);
+                gameState.walkableDecks.push(...fd.walkableDecks);
+                gameState.ramps.push(...fd.ramps);
+                gameState.gravityLifts.push(...fd.gravityLifts);
+                gameState.geyserPads.push(...fd.geyserPads);
+                gameState.conveyorBelts.push(...fd.conveyorBelts);
+                gameState.icePatches.push(...fd.icePatches);
+                gameState.warpPortals.push(...fd.warpPortals);
+                gameState.wingReturnPads.push(...fd.wingReturnPads);
+                gameState.teslaColumns.push(...fd.teslaColumns);
+            }
+        }
+
+        function streamFloorsAroundPlayer() {
+            const currentFloor = getFloorFromY(player.pos.y);
+            const minF = Math.max(0, currentFloor - 2);
+            const maxF = Math.min(TOTAL_FLOORS, currentFloor + 3);
+
+            const required = new Set([0, 1, 15, 30, 45, 60]);
+            for (let f = minF; f <= maxF; f++) required.add(f);
+
+            for (const f of required) {
+                if (!gameState.activeFloors.has(f)) buildFloorSector(f);
+            }
+
+            for (const [f, fd] of gameState.activeFloors.entries()) {
+                if (!required.has(f)) {
+                    scene.remove(fd.group);
+                    gameState.activeFloors.delete(f);
+                }
+            }
+            rebuildActiveCollisionCaches();
+        }
+
+        // ============================================================================
+        // 8. COMBAT ACTIONS, TESLA CHAIN-LIGHTNING, MELEE, PERKS & HUD FEEDBACK
+        // ============================================================================
+        function addMedalCallout(text) {
+            const feed = document.getElementById('medal-feed');
+            if (!feed) return;
+            const el = document.createElement('div');
+            el.className = 'px-3 py-1 rounded-full bg-slate-950/90 border border-cyan-400/60 text-cyan-200 font-orbitron text-xs font-bold shadow-lg transition-opacity duration-300';
+            el.textContent = text;
+            feed.appendChild(el);
+            setTimeout(() => {
+                el.style.opacity = '0';
+                setTimeout(() => el.remove(), 320);
+            }, 2600);
+        }
+
+        function spawnFloatingDamageText(worldPos, dmg, tag = '', color = '#38bdf8') {
+            const container = document.getElementById('floating-dmg-container');
+            if (!container) return;
+            const projected = worldPos.clone().project(camera);
+            if (projected.z > 1) return;
+            const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+            const el = document.createElement('div');
+            el.className = 'floating-dmg';
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.color = color;
+            el.textContent = `${tag ? tag + ' ' : ''}-${Math.round(dmg)}`;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 860);
+        }
+
+        function triggerHitmarker() {
+            const hm = document.getElementById('hitmarker');
+            if (!hm) return;
+            hm.classList.remove('hidden');
+            clearTimeout(hm._t);
+            hm._t = setTimeout(() => hm.classList.add('hidden'), 110);
+        }
+
+        function bumpCombatOverdrive(amount = 0.25) {
+            player.comboMultiplier = Math.min(4.0, +(player.comboMultiplier + amount).toFixed(2));
+            player.comboTimer = 6.5;
+            const comboEl = document.getElementById('hud-combo-status');
+            if (comboEl) {
+                comboEl.textContent = `${player.comboMultiplier.toFixed(1)}x`;
+                comboEl.className = player.comboMultiplier >= 2.5 ? 'text-rose-400 font-black animate-pulse' : 'text-amber-400 font-bold';
+            }
+        }
+
+        function unlockSideWingPerk(archetype, deck) {
+            if (gameState.clearedSideWings.has(archetype)) return;
+            gameState.clearedSideWings.add(archetype);
+
+            if (archetype === 'HYDRO_LAB') {
+                player.perks.auxShieldRegen = true;
+                addMedalCallout('⚡ FL 01W CLEARED! PERK UNLOCKED: +40% BIO-SLUDGE SHIELD REGEN!');
+            } else if (archetype === 'CRYO_BIODOME') {
+                player.perks.cryoRounds = true;
+                addMedalCallout('❄️ FL 15W CLEARED! PERK UNLOCKED: CRYO-CHILL ROUNDS!');
+            } else if (archetype === 'VOID_OBSERVATORY') {
+                player.perks.zeroGThruster = true;
+                addMedalCallout('💨 FL 30E CLEARED! PERK UNLOCKED: ZERO-G THRUSTER OVERDRIVE!');
+            } else if (archetype === 'MAGMA_FOUNDRY') {
+                player.perks.magmaRounds = true;
+                addMedalCallout('🔥 FL 45W CLEARED! PERK UNLOCKED: INCENDIARY MAGMA ROUNDS (+35% DMG)!');
+            }
+            updateHUD();
+        }
+
+        function checkFloorClearBonus(floorNum) {
+            if (floorNum <= 0 || floorNum >= 60 || gameState.clearedFloors.has(floorNum)) return;
+            const remainingEnemies = gameState.enemies.filter(e => !e.dead && e.floorNum === floorNum && Math.abs(e.pos.x) < 84);
+            const remainingHarvesters = gameState.brewers.filter(b => !b.dead && b.deck === floorNum && !b.wingArchetype);
+            if (remainingEnemies.length === 0 && remainingHarvesters.length === 0) {
+                gameState.clearedFloors.add(floorNum);
+                const bonus = Math.round(350 * player.comboMultiplier);
+                player.score += bonus;
+                player.shield = Math.min(player.maxShield, player.shield + 25);
+                player.reserveAmmo = Math.min(480, player.reserveAmmo + 32);
+                addMedalCallout(`🛡️ FLOOR ${String(floorNum).padStart(2, '0')} SECURED! +${bonus} PTS & SHIELD/AMMO BOOST`);
+                updateHUD();
+            }
+        }
+
+        function checkPenthouseVictoryCondition() {
+            if (gameState.penthouseCleared) return;
+            const boss = gameState.enemies.find(e => e.isPenthouseBoss);
+            const core = gameState.brewers.find(b => b.isPenthouseCore);
+            if (boss && boss.dead && core && core.dead) {
+                gameState.penthouseCleared = true;
+                gameState.running = false;
+                if (document.pointerLockElement) document.exitPointerLock();
+                document.getElementById('end-icon').textContent = '👑🏆';
+                document.getElementById('end-title').textContent = 'PENTHOUSE LIBERATED! VICTORY!';
+                document.getElementById('end-desc').textContent = `Final Score: ${player.score} PTS • All 60 Floors & Supreme Barista Overlord Conquered!`;
+                document.getElementById('end-modal').classList.remove('hidden');
+            }
+        }
+
+        function spawnExplosionParticles(pos, colorHex, count = 18) {
+            for (let i = 0; i < count; i++) {
+                const m = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.18, 0.18, 0.18),
+                    new THREE.MeshBasicMaterial({ color: colorHex })
+                );
+                m.position.copy(pos);
+                scene.add(m);
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 14,
+                    2 + Math.random() * 10,
+                    (Math.random() - 0.5) * 14
+                );
+                gameState.particles.push({ mesh: m, vel, life: 0.45 + Math.random() * 0.3 });
+            }
+        }
+
+        function spawnLandingShockwaveRing(pos, colorHex = 0x00f3ff, maxRadius = 6.5) {
+            const ring = new THREE.Mesh(
+                new THREE.RingGeometry(0.4, 0.75, 28),
+                new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+            );
+            ring.rotation.x = -Math.PI / 2;
+            ring.position.copy(pos);
+            scene.add(ring);
+            gameState.shockwaveRings.push({ mesh: ring, age: 0, maxAge: 0.42, maxRadius });
+        }
+
+        function spawnProjectile(origin, dir, fromPlayer, dmg, colorHex) {
+            const bolt = new THREE.Mesh(
+                new THREE.SphereGeometry(fromPlayer ? 0.16 : 0.24, 8, 8),
+                new THREE.MeshBasicMaterial({ color: colorHex })
+            );
+            bolt.position.copy(origin);
+            scene.add(bolt);
+            gameState.projectiles.push({
+                mesh: bolt,
+                pos: origin.clone(),
+                vel: dir.clone().multiplyScalar(fromPlayer ? 92.0 : 34.0),
+                fromPlayer,
+                dmg,
+                life: 2.2
+            });
+        }
+
+        function firePrimaryWeapon() {
+            if (!gameState.running || player.reloading || player.fireCooldown > 0) return;
+            if (player.ammo <= 0) {
+                reloadWeapon();
+                return;
+            }
+            player.ammo--;
+            player.fireCooldown = Math.max(0.075, 0.135 - (player.weaponTier - 1) * 0.012);
+            sfx.playLaser(player.weaponTier);
+
+            const fwd = new THREE.Vector3(0, 0, -1)
+                .applyAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
+                .normalize();
+
+            const muzzle = player.pos.clone().add(new THREE.Vector3(0, 1.55, 0)).add(fwd.clone().multiplyScalar(0.9));
+            let baseDmg = (26 + (player.weaponTier - 1) * 8) * (player.perks.magmaRounds ? 1.35 : 1.0);
+            const boltColor = player.perks.magmaRounds ? 0xf59e0b : (player.perks.cryoRounds ? 0x38bdf8 : 0x00f3ff);
+
+            spawnProjectile(muzzle, fwd, true, baseDmg, boltColor);
+            updateHUD();
+        }
+
+        function reloadWeapon() {
+            if (player.reloading || player.ammo >= player.maxAmmo || player.reserveAmmo <= 0) return;
+            player.reloading = true;
+            player.reloadTimer = 1.15;
+            const badge = document.getElementById('hud-reload-badge');
+            if (badge) badge.classList.remove('hidden');
+        }
+
+        function throwStickyGrenade() {
+            if (!gameState.running || player.grenades <= 0) return;
+            player.grenades--;
+            const fwd = new THREE.Vector3(0, 0, -1)
+                .applyAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
+                .normalize();
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.24, 10, 10),
+                new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+            );
+            const startPos = player.pos.clone().add(new THREE.Vector3(0, 1.6, 0)).add(fwd.clone().multiplyScalar(0.8));
+            mesh.position.copy(startPos);
+            scene.add(mesh);
+            gameState.grenadeObjs.push({
+                mesh,
+                pos: startPos,
+                vel: fwd.multiplyScalar(28).add(new THREE.Vector3(0, 6.5, 0)),
+                fuse: 1.65,
+                stuckTo: null
+            });
+            updateHUD();
+        }
+
+        function fireHeatSeekingMissile() {
+            if (!gameState.running || player.missiles <= 0) return;
+            player.missiles--;
+            sfx.playLaser(4);
+            const fwd = new THREE.Vector3(0, 0, -1)
+                .applyAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
+                .normalize();
+
+            // Prefer locking onto flying Robo-Bats or nearest enemy within 55m
+            let bestTarget = null;
+            let bestScore = Infinity;
+            for (const e of gameState.enemies) {
+                if (e.dead) continue;
+                const d = e.pos.distanceTo(player.pos);
+                if (d < 62) {
+                    const score = e.isFlying ? d * 0.45 : d;
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestTarget = e;
+                    }
+                }
+            }
+
+            const mesh = new THREE.Mesh(
+                new THREE.ConeGeometry(0.18, 0.65, 8),
+                new THREE.MeshBasicMaterial({ color: 0xf97316 })
+            );
+            const startPos = player.pos.clone().add(new THREE.Vector3(0, 1.65, 0)).add(fwd.clone().multiplyScalar(0.9));
+            mesh.position.copy(startPos);
+            scene.add(mesh);
+            gameState.homingMissiles.push({
+                mesh,
+                pos: startPos,
+                vel: fwd.multiplyScalar(42),
+                target: bestTarget,
+                life: 3.2
+            });
+            updateHUD();
+        }
+
+        function triggerSpartanMelee() {
+            if (!gameState.running || player.meleeCooldown > 0) return;
+            player.meleeCooldown = 0.75;
+            player.visorShake = Math.max(player.visorShake, 0.22);
+            sfx.playLaser(4);
+
+            const fwd = new THREE.Vector3(0, 0, -1)
+                .applyAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch)
+                .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
+                .normalize();
+
+            player.vel.x += fwd.x * 9.5;
+            player.vel.z += fwd.z * 9.5;
+
+            const strikeOrigin = player.pos.clone().add(new THREE.Vector3(0, 1.35, 0)).add(fwd.clone().multiplyScalar(1.85));
+            spawnExplosionParticles(strikeOrigin, 0x00f3ff, 12);
+
+            let hitAnything = false;
+            for (const e of gameState.enemies) {
+                if (e.dead) continue;
+                const d = e.pos.distanceTo(player.pos);
+                if (d < 4.2 && Math.abs(e.pos.y - player.pos.y) < 3.4) {
+                    const toEnemy = e.pos.clone().sub(player.pos).normalize();
+                    if (toEnemy.dot(new THREE.Vector3(fwd.x, 0, fwd.z).normalize()) > 0.15 || d < 2.2) {
+                        const meleeDmg = 95 * (player.perks.magmaRounds ? 1.35 : 1.0);
+                        e.takeDamage(meleeDmg, false);
+                        spawnFloatingDamageText(e.pos.clone().add(new THREE.Vector3(0, 2.1, 0)), meleeDmg, '🤜CLAW', '#c084fc');
+                        e.pos.x += toEnemy.x * 2.6;
+                        e.pos.z += toEnemy.z * 2.6;
+                        e.slowTimer = Math.max(e.slowTimer || 0, 1.6);
+                        player.shield = Math.min(player.maxShield, player.shield + 14);
+                        hitAnything = true;
+                    }
+                }
+            }
+
+            for (const prop of gameState.breakableProps) {
+                if (!prop.dead && prop.pos.distanceTo(strikeOrigin) < 2.8) {
+                    prop.takeDamage(120);
+                    hitAnything = true;
+                }
+            }
+
+            for (const b of gameState.brewers) {
+                if (!b.dead && b.pos.distanceTo(strikeOrigin) < 3.6) {
+                    b.takeDamage(90);
+                    hitAnything = true;
+                }
+            }
+
+            if (hitAnything) {
+                bumpCombatOverdrive(0.25);
+                triggerHitmarker();
+                updateHUD();
+            }
+        }
+
+        function damagePlayer(amount) {
+            if (!gameState.running) return;
+            if (player.dodgeTimer > 0) amount *= 0.35; // 65% Evasive Thruster Dodge reduction
+            player.shieldRegenDelay = 3.2;
+            player.visorShake = Math.max(player.visorShake, 0.28);
+
+            const vig = document.getElementById('damage-vignette');
+            if (vig) {
+                vig.style.opacity = '1';
+                clearTimeout(vig._t);
+                vig._t = setTimeout(() => (vig.style.opacity = '0'), 220);
+            }
+
+            if (player.shield > 0) {
+                if (amount >= player.shield) {
+                    player.shield = 0;
+                    player.shieldGateTimer = 0.28; // MJOLNIR Shield-Gate prevents overflow one-shot
+                    const gateBadge = document.getElementById('shield-gate-badge');
+                    if (gateBadge) {
+                        gateBadge.classList.remove('hidden');
+                        setTimeout(() => gateBadge.classList.add('hidden'), 320);
+                    }
+                } else {
+                    player.shield -= amount;
+                }
+            } else if (player.shieldGateTimer <= 0) {
+                player.hp = Math.max(0, player.hp - amount);
+                if (player.hp <= 0) {
+                    gameState.running = false;
+                    if (document.pointerLockElement) document.exitPointerLock();
+                    document.getElementById('end-icon').textContent = '💀';
+                    document.getElementById('end-title').textContent = 'SPARTAN-117 MIA // HULL BREACHED';
+                    document.getElementById('end-desc').textContent = `Reached Floor ${getFloorFromY(player.pos.y)} • Score: ${player.score} PTS`;
+                    document.getElementById('end-modal').classList.remove('hidden');
+                }
+            }
+            updateHUD();
+        }
+
+        // ============================================================================
+        // 9. HUD, BOSS TELEMETRY, NAVPOINT & 15M MOTION TRACKER RADAR
+        // ============================================================================
+        function updateHUD() {
+            const shieldPct = Math.max(0, (player.shield / player.maxShield) * 100);
+            const hpPct = Math.max(0, (player.hp / player.maxHp) * 100);
+            document.getElementById('hud-shield-bar').style.width = `${shieldPct}%`;
+            document.getElementById('hud-shield-text').textContent = `${Math.ceil(player.shield)} / ${player.maxShield}`;
+            document.getElementById('hud-hp-bar').style.width = `${hpPct}%`;
+            document.getElementById('hud-hp-text').textContent = `${Math.ceil(player.hp)}%`;
+
+            const tierNames = ['MA5C MK-I PULSE', 'MA5C MK-II TWIN', 'MA5C MK-III ARC', 'MA5C MK-IV HYPER', 'MA5C MK-V OVERLORD'];
+            document.getElementById('hud-weapon-tier').textContent = tierNames[Math.min(4, player.weaponTier - 1)];
+            document.getElementById('hud-ammo').textContent = player.ammo;
+            document.getElementById('hud-reserve').textContent = player.reserveAmmo;
+            document.getElementById('hud-grenades').textContent = player.grenades;
+            document.getElementById('hud-missiles').textContent = player.missiles;
+            document.getElementById('hud-score').textContent = player.score;
+
+            const killedBrewers = gameState.brewers.filter(b => b.dead).length;
+            document.getElementById('hud-brewers').textContent = `${killedBrewers}/${Math.max(10, gameState.brewers.length)}`;
+
+            const curFloor = getFloorFromY(player.pos.y);
+            const biome = getBiomeInfo(curFloor);
+            document.getElementById('hud-floor-badge').textContent = curFloor === 0 ? 'LVL B1' : `FL ${String(curFloor).padStart(2, '0')} / 60`;
+            document.getElementById('hud-biome-name').textContent = biome.name;
+            document.getElementById('hud-climb-bar').style.width = `${Math.max(2, (curFloor / 60) * 100)}%`;
+
+            // Side-Wing Harvester Pips
+            document.getElementById('pip-fl1').textContent = gameState.clearedSideWings.has('HYDRO_LAB') ? '✅' : '☕';
+            document.getElementById('pip-fl15').textContent = gameState.clearedSideWings.has('CRYO_BIODOME') ? '✅' : '☕';
+            document.getElementById('pip-fl30').textContent = gameState.clearedSideWings.has('VOID_OBSERVATORY') ? '✅' : '☕';
+            document.getElementById('pip-fl45').textContent = gameState.clearedSideWings.has('MAGMA_FOUNDRY') ? '✅' : '☕';
+
+            // Active Perks
+            const setPerkStyle = (id, active, colorClass) => {
+                const el = document.getElementById(id);
+                if (el) el.className = active
+                    ? `px-1.5 py-0.5 rounded border font-bold text-center ${colorClass}`
+                    : 'px-1.5 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-slate-500 text-center';
+            };
+            setPerkStyle('perk-shield', player.perks.auxShieldRegen, 'bg-cyan-500/20 border-cyan-400 text-cyan-200');
+            setPerkStyle('perk-cryo', player.perks.cryoRounds, 'bg-sky-500/20 border-sky-400 text-sky-200');
+            setPerkStyle('perk-thrust', player.perks.zeroGThruster, 'bg-purple-500/20 border-purple-400 text-purple-200');
+            setPerkStyle('perk-magma', player.perks.magmaRounds, 'bg-amber-500/20 border-amber-400 text-amber-200');
+        }
+
+        function updateBossTelemetryHUD() {
+            const panel = document.getElementById('boss-hud-panel');
+            if (!panel) return;
+            const currentFloor = getFloorFromY(player.pos.y);
+            const boss = gameState.enemies.find(e => e.isPenthouseBoss);
+            const core = gameState.brewers.find(b => b.isPenthouseCore);
+            if (currentFloor >= 58 && ((boss && !boss.dead) || (core && !core.dead))) {
+                panel.classList.remove('hidden');
+                const bossHpPct = boss && !boss.dead ? Math.max(0, (boss.hp / boss.maxHp) * 100) : 0;
+                const coreHpPct = core && !core.dead ? Math.max(0, (core.hp / core.maxHp) * 100) : 0;
+                document.getElementById('boss-hp-bar').style.width = `${bossHpPct}%`;
+                document.getElementById('boss-core-hp-bar').style.width = `${coreHpPct}%`;
+                document.getElementById('boss-core-hp-text').textContent = core && !core.dead ? `${Math.ceil(core.hp)} / ${core.maxHp} HP` : 'DESTROYED (TETHER SEVERED)';
+                const badge = document.getElementById('boss-tether-badge');
+                if (core && !core.dead) {
+                    badge.textContent = '🛡️ CORE TETHER: 50% DMG RESIST';
+                    badge.className = 'px-2 py-0.5 rounded bg-rose-500/20 border border-rose-400 text-rose-200 text-[9px]';
+                } else {
+                    badge.textContent = '⚡ TETHER SEVERED: BOSS VULNERABLE!';
+                    badge.className = 'px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200 text-[9px] animate-pulse';
+                }
+            } else {
+                panel.classList.add('hidden');
+            }
+        }
+
+        function updateHarvesterNavpoint() {
+            const nav = document.getElementById('harvester-navpoint');
+            if (!nav) return;
+            let nearest = null;
+            let bestDist = Infinity;
+            for (const b of gameState.brewers) {
+                if (b.dead) continue;
+                const d = b.pos.distanceTo(player.pos);
+                if (d < bestDist) {
+                    bestDist = d;
+                    nearest = b;
+                }
+            }
+            if (!nearest) {
+                nav.classList.add('hidden');
+                return;
+            }
+            const targetPos = nearest.pos.clone().add(new THREE.Vector3(0, 3.2, 0));
+            const proj = targetPos.project(camera);
+            if (proj.z > 1) {
+                nav.classList.add('hidden');
+                return;
+            }
+            const x = Math.max(36, Math.min(window.innerWidth - 36, (proj.x * 0.5 + 0.5) * window.innerWidth));
+            const y = Math.max(36, Math.min(window.innerHeight - 36, (-proj.y * 0.5 + 0.5) * window.innerHeight));
+            nav.style.left = `${x}px`;
+            nav.style.top = `${y}px`;
+            document.getElementById('harvester-navpoint-dist').textContent = `${nearest.wingArchetype ? 'WING ' : ''}FL ${nearest.deck} • ${Math.round(bestDist)}m`;
+            nav.classList.remove('hidden');
+        }
+
+        function renderMotionTracker() {
+            const rCanvas = document.getElementById('radar-canvas');
+            if (!rCanvas) return;
+            const ctx = rCanvas.getContext('2d');
+            const w = rCanvas.width;
+            const h = rCanvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.strokeStyle = 'rgba(0, 243, 255, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+            ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Player center chevron
+            ctx.fillStyle = '#00f3ff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            const scale = 52 / 55; // 55m radar range
+            const cosY = Math.cos(player.yaw);
+            const sinY = Math.sin(player.yaw);
+
+            for (const e of gameState.enemies) {
+                if (e.dead || Math.abs(e.pos.y - player.pos.y) > 16) continue;
+                const dx = e.pos.x - player.pos.x;
+                const dz = e.pos.z - player.pos.z;
+                const rx = dx * cosY - dz * sinY;
+                const rz = dx * sinY + dz * cosY;
+                const px = cx + rx * scale;
+                const py = cy + rz * scale;
+                if (Math.hypot(px - cx, py - cy) < 52) {
+                    ctx.fillStyle = e.isPenthouseBoss ? '#f43f5e' : (e.isFlying ? '#c084fc' : '#ef4444');
+                    ctx.beginPath();
+                    ctx.arc(px, py, e.isPenthouseBoss ? 5 : 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            for (const b of gameState.brewers) {
+                if (b.dead || Math.abs(b.pos.y - player.pos.y) > 24) continue;
+                const dx = b.pos.x - player.pos.x;
+                const dz = b.pos.z - player.pos.z;
+                const rx = dx * cosY - dz * sinY;
+                const rz = dx * sinY + dz * cosY;
+                const px = cx + rx * scale;
+                const py = cy + rz * scale;
+                if (Math.hypot(px - cx, py - cy) < 52) {
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.fillRect(px - 3, py - 3, 6, 6);
+                }
+            }
+        }
+
+        // ============================================================================
+        // 10. QUICK-WARP, 57 .GLB STUDIO [B] & 2-SCREENSHOT AI GENERATOR [P]
+        // ============================================================================
+        function warpToFloor(floorNum, intoSideWing = false) {
+            buildFloorSector(floorNum);
+            const baseY = getFloorBaseY(floorNum);
+            if (intoSideWing && (floorNum === 1 || floorNum === 15 || floorNum === 30 || floorNum === 45)) {
+                const sideDir = floorNum === 30 ? 1 : -1;
+                player.pos.set(sideDir * 98, baseY + 0.5, 14);
+            } else {
+                player.pos.set(0, baseY + 0.5, 38);
+            }
+            player.vel.set(0, 0, 0);
+            streamFloorsAroundPlayer();
+            sfx.playPortalWarp();
+            addMedalCallout(`🌀 WARPED TO FLOOR ${String(floorNum).padStart(2, '0')}${intoSideWing ? ' SIDE WING' : ''}`);
+            updateHUD();
+        }
+        window.warpToFloor = warpToFloor;
+
+        // 57-Slot .GLB Studio Turntable Preview
+        const previewCanvas = document.getElementById('glb-preview-canvas');
+        const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true });
+        const previewScene = new THREE.Scene();
+        previewScene.background = new THREE.Color(0x090d16);
+        const previewCam = new THREE.PerspectiveCamera(50, 300 / 260, 0.1, 200);
+        previewCam.position.set(0, 2.8, 6.5);
+        previewCam.lookAt(0, 1.2, 0);
+        previewScene.add(new THREE.AmbientLight(0xffffff, 0.85));
+        const pDir = new THREE.DirectionalLight(0x38bdf8, 1.1);
+        pDir.position.set(8, 14, 10);
+        previewScene.add(pDir);
+        let previewObject = null;
+
+        function buildStudioPreviewMesh(slotId) {
+            if (customGlbRegistry[slotId]) return customGlbRegistry[slotId].clone(true);
+            if (slotId === 'motorized_conveyor_belt_segment.glb') {
+                const m = buildConveyorBeltMesh();
+                m.scale.setScalar(0.18);
+                return m;
+            }
+            if (slotId === 'cryo_slippery_ice_patch.glb') {
+                const m = buildCryoIcePatchMesh();
+                m.scale.setScalar(0.22);
+                return m;
+            }
+            if (slotId === 'lateral_endwall_warp_portal.glb') {
+                const m = buildLateralWarpPortalMesh();
+                m.scale.setScalar(0.55);
+                m.position.y = 1.2;
+                return m;
+            }
+            if (slotId === 'conical_magical_electric_scifi_column.glb') {
+                const m = buildConicalTeslaColumnMesh();
+                m.scale.setScalar(0.26);
+                return m;
+            }
+            if (slotId === 'alien_trough_sink_counter.glb') {
+                const m = buildTroughSinkCounterMesh();
+                m.scale.setScalar(0.65);
+                return m;
+            }
+            return buildSpartanMouseRig();
+        }
+
+        function selectStudioSlot(item) {
+            selectedStudioSlot = item;
+            document.getElementById('glb-preview-title').textContent = item.id;
+            document.getElementById('glb-preview-dims').textContent = `${item.role} • ${item.dims}`;
+            document.getElementById('glb-preview-status').textContent = customGlbRegistry[item.id] ? 'CUSTOM .GLB' : 'PROCEDURAL';
+            if (previewObject) previewScene.remove(previewObject);
+            previewObject = buildStudioPreviewMesh(item.id);
+            previewScene.add(previewObject);
+            renderGlbStudioList();
+        }
+
+        function filterGlbStudio(part) {
+            currentStudioFilter = part;
+            renderGlbStudioList();
+        }
+        window.filterGlbStudio = filterGlbStudio;
+
+        function renderGlbStudioList() {
+            const list = document.getElementById('glb-studio-list');
+            const q = (document.getElementById('glb-search-input')?.value || '').toLowerCase();
+            list.innerHTML = '';
+            const items = GLB_STUDIO_ITEMS.filter(it =>
+                (currentStudioFilter === 'ALL' || it.part === currentStudioFilter) &&
+                (it.id.toLowerCase().includes(q) || it.role.toLowerCase().includes(q))
+            );
+            for (const item of items) {
+                const isSelected = selectedStudioSlot && selectedStudioSlot.id === item.id;
+                const hasCustom = !!customGlbRegistry[item.id];
+                const btn = document.createElement('button');
+                btn.className = `text-left p-2.5 rounded-xl border transition flex flex-col justify-between ${
+                    isSelected ? 'bg-cyan-500/20 border-cyan-400' : 'bg-slate-900/80 border-slate-800 hover:border-cyan-500/40'
+                }`;
+                btn.onclick = () => selectStudioSlot(item);
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between gap-1">
+                        <span class="font-orbitron text-[11px] font-bold text-white truncate">${item.id}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-orbitron ${hasCustom ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-800 text-slate-400'}">${hasCustom ? '.GLB' : item.part}</span>
+                    </div>
+                    <div class="text-[11px] text-cyan-300 mt-0.5">${item.role}</div>
+                    <div class="text-[10px] text-slate-400">${item.dims}</div>
+                `;
+                list.appendChild(btn);
+            }
+        }
+
+        function openGlbStudio() {
+            if (document.pointerLockElement) document.exitPointerLock();
+            document.getElementById('glb-studio-modal').classList.remove('hidden');
+            selectStudioSlot(selectedStudioSlot || GLB_STUDIO_ITEMS[0]);
+        }
+        function closeGlbStudio() {
+            document.getElementById('glb-studio-modal').classList.add('hidden');
+        }
+        window.openGlbStudio = openGlbStudio;
+        window.closeGlbStudio = closeGlbStudio;
+
+        document.getElementById('glb-single-input').addEventListener('change', (ev) => {
+            const file = ev.target.files?.[0];
+            if (!file || !selectedStudioSlot) return;
+            const url = URL.createObjectURL(file);
+            gltfLoader.load(url, (gltf) => {
+                customGlbRegistry[selectedStudioSlot.id] = gltf.scene;
+                selectStudioSlot(selectedStudioSlot);
+                addMedalCallout(`📦 HOT-SWAPPED ${selectedStudioSlot.id}!`);
+            });
+        });
+
+        document.getElementById('glb-batch-input').addEventListener('change', async (ev) => {
+            const files = Array.from(ev.target.files || []);
+            for (const f of files) {
+                if (f.name.endsWith('.glb')) {
+                    const url = URL.createObjectURL(f);
+                    gltfLoader.load(url, (gltf) => {
+                        customGlbRegistry[f.name] = gltf.scene;
+                        renderGlbStudioList();
+                    });
+                } else if (f.name.endsWith('.zip') && window.JSZip) {
+                    const zip = await JSZip.loadAsync(f);
+                    zip.forEach(async (relPath, entry) => {
+                        if (relPath.endsWith('.glb')) {
+                            const baseName = relPath.split('/').pop();
+                            const blob = await entry.async('blob');
+                            const url = URL.createObjectURL(blob);
+                            gltfLoader.load(url, (gltf) => {
+                                customGlbRegistry[baseName] = gltf.scene;
+                                renderGlbStudioList();
+                            });
+                        }
+                    });
+                }
+            }
+            addMedalCallout('🗜️ BATCH .GLB / .ZIP ARCHIVE PROCESSED!');
+        });
+
+        // 2-Screenshot AI Handoff Generator [P]
+        function openShotsModal() {
+            if (document.pointerLockElement) document.exitPointerLock();
+            const savedPos = camera.position.clone();
+            const savedRot = camera.rotation.clone();
+            const baseY = getFloorBaseY(getFloorFromY(player.pos.y));
+
+            // Shot 1: Inside Lab Counter & Trough Sink
+            camera.position.set(-28, baseY + 2.4, 17.5);
+            camera.lookAt(-28, baseY + 1.0, 12);
+            renderer.render(scene, camera);
+            const url1 = canvas.toDataURL('image/png');
+            document.getElementById('img-shot-1').src = url1;
+            document.getElementById('dl-shot-1').href = url1;
+
+            // Shot 2: Outside Dark Void Alien World View over Parapet
+            camera.position.set(-72, baseY + 3.2, -48);
+            camera.lookAt(-240, baseY + 180, -280);
+            renderer.render(scene, camera);
+            const url2 = canvas.toDataURL('image/png');
+            document.getElementById('img-shot-2').src = url2;
+            document.getElementById('dl-shot-2').href = url2;
+
+            camera.position.copy(savedPos);
+            camera.rotation.copy(savedRot);
+            renderer.render(scene, camera);
+            document.getElementById('shots-modal').classList.remove('hidden');
+        }
+        function closeShotsModal() {
+            document.getElementById('shots-modal').classList.add('hidden');
+        }
+        window.openShotsModal = openShotsModal;
+        window.closeShotsModal = closeShotsModal;
+
+        // ============================================================================
+        // 11. INPUT LISTENERS & POINTER LOCK CONTROLS
+        // ============================================================================
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'KeyB') {
+                const modal = document.getElementById('glb-studio-modal');
+                modal.classList.contains('hidden') ? openGlbStudio() : closeGlbStudio();
+            } else if (e.code === 'KeyP') {
+                const modal = document.getElementById('shots-modal');
+                modal.classList.contains('hidden') ? openShotsModal() : closeShotsModal();
+            } else if (e.code === 'KeyT') {
+                player.thirdPerson = !player.thirdPerson;
+            } else if (e.code === 'KeyR') {
+                reloadWeapon();
+            } else if (e.code === 'KeyG') {
+                throwStickyGrenade();
+            } else if (e.code === 'KeyQ' || e.code === 'KeyE') {
+                fireHeatSeekingMissile();
+            } else if (e.code === 'KeyV') {
+                triggerSpartanMelee();
+            } else if (e.code === 'KeyF') {
+                flashLight.visible = !flashLight.visible;
+            } else if (e.code === 'Space') {
+                player.jumpBufferTimer = 0.16;
+            } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+                // Directional Thruster Pack Dash with 0.35s Evasive Dodge window
+                if (gameState.running && player.thrusterCooldown <= 0) {
+                    player.thrusterCooldown = player.perks.zeroGThruster ? 1.05 : 1.65;
+                    player.dodgeTimer = 0.35;
+                    const fwd = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+                    const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+                    const wish = new THREE.Vector3();
+                    if (keys['KeyW']) wish.add(fwd);
+                    if (keys['KeyS']) wish.sub(fwd);
+                    if (keys['KeyD']) wish.add(right);
+                    if (keys['KeyA']) wish.sub(right);
+                    if (wish.lengthSq() < 0.01) wish.copy(fwd);
+                    wish.normalize();
+                    const boost = player.perks.zeroGThruster ? 29.0 : 22.5;
+                    player.vel.x = wish.x * boost;
+                    player.vel.z = wish.z * boost;
+                    player.vel.y = Math.max(player.vel.y, 4.5);
+                    sfx.playGravityLift();
+                }
+            } else if (e.code === 'KeyC' || e.code === 'ControlLeft') {
+                const floorY = getFloorBaseY(getFloorFromY(player.pos.y));
+                if (!player.onGround && !player.groundPoundActive && (player.pos.y - floorY > 2.6 || player.vel.y < -10.0)) {
+                    player.groundPoundActive = true;
+                    player.vel.y = Math.min(player.vel.y, -46.0);
+                    sfx.playGravityLift();
+                    addMedalCallout('☄️ KINETIC SPARTAN GROUND-POUND ENGAGED!');
+                } else if (player.onGround && !player.sliding) {
+                    player.sliding = true;
+                    player.slideTimer = 0.55;
+                }
+            } else if (e.code === 'Digit4') warpToFloor(15, true);
+            else if (e.code === 'Digit5') warpToFloor(30, true);
+            else if (e.code === 'Digit6') warpToFloor(45, true);
+            else if (e.code === 'Digit7') warpToFloor(60, false);
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        let mouseDown = false;
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && gameState.running) {
+                if (document.pointerLockElement !== canvas) {
+                    canvas.requestPointerLock();
+                } else {
+                    mouseDown = true;
+                    firePrimaryWeapon();
+                }
+            }
+        });
+        window.addEventListener('mouseup', () => { mouseDown = false; });
+
+        window.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === canvas && gameState.running) {
+                player.yaw -= e.movementX * 0.0022;
+                player.pitch = Math.max(-Math.PI / 2.15, Math.min(Math.PI / 2.15, player.pitch - e.movementY * 0.0022));
+            }
+        });
+
+        document.getElementById('btn-start-mission').addEventListener('click', () => {
+            sfx.init();
+            document.getElementById('start-modal').classList.add('hidden');
+            gameState.running = true;
+            canvas.requestPointerLock();
+        });
+        document.getElementById('btn-open-glb-studio').addEventListener('click', openGlbStudio);
+        document.getElementById('btn-open-shots').addEventListener('click', openShotsModal);
+        document.getElementById('btn-toggle-cam').addEventListener('click', () => {
+            player.thirdPerson = !player.thirdPerson;
+        });
+
+        function resetAndStartMission() {
+            document.getElementById('end-modal').classList.add('hidden');
+            player.pos.set(0, 0.2, 42);
+            player.vel.set(0, 0, 0);
+            player.shield = 100;
+            player.hp = 100;
+            player.ammo = 36;
+            player.reserveAmmo = 288;
+            player.grenades = 3;
+            player.missiles = 4;
+            player.score = 0;
+            player.comboMultiplier = 1.0;
+            player.comboTimer = 0;
+            player.b1CacheClaimed = false;
+            player.groundPoundActive = false;
+            gameState.penthouseCleared = false;
+            for (const e of gameState.enemies) {
+                e.dead = false;
+                e.hp = e.maxHp;
+                e.group.visible = true;
+            }
+            for (const b of gameState.brewers) {
+                b.dead = false;
+                b.hp = b.maxHp;
+                b.group.visible = true;
+            }
+            gameState.running = true;
+            updateHUD();
+            canvas.requestPointerLock();
+        }
+        window.resetAndStartMission = resetAndStartMission;
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ============================================================================
+        // 12. MAIN 60 FPS GAMEPLAY & PHYSICS LOOP
+        // ============================================================================
+        streamFloorsAroundPlayer();
+        updateHUD();
+
+        let lastTime = performance.now();
+        function animate(now) {
+            requestAnimationFrame(animate);
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+
+            // Animate 57 .GLB Studio Turntable if open
+            if (!document.getElementById('glb-studio-modal').classList.contains('hidden') && previewObject) {
+                previewObject.rotation.y += dt * 0.9;
+                previewRenderer.render(previewScene, previewCam);
+            }
+
+            if (gameState.running) {
+                // Tick player timers
+                player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+                player.thrusterCooldown = Math.max(0, player.thrusterCooldown - dt);
+                player.meleeCooldown = Math.max(0, player.meleeCooldown - dt);
+                player.portalCooldown = Math.max(0, player.portalCooldown - dt);
+                player.dodgeTimer = Math.max(0, player.dodgeTimer - dt);
+                player.shieldGateTimer = Math.max(0, player.shieldGateTimer - dt);
+                player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
+                player.mantleCooldown = Math.max(0, player.mantleCooldown - dt);
+                player.visorShake = Math.max(0, player.visorShake - dt * 1.8);
+                player.cameraLandDip = Math.max(0, player.cameraLandDip - dt * 4.2);
+
+                if (player.sliding) {
+                    player.slideTimer -= dt;
+                    if (player.slideTimer <= 0) player.sliding = false;
+                }
+
+                if (player.comboTimer > 0) {
+                    player.comboTimer = Math.max(0, player.comboTimer - dt);
+                    if (player.comboTimer <= 0) {
+                        player.comboMultiplier = 1.0;
+                        const comboEl = document.getElementById('hud-combo-status');
+                        if (comboEl) {
+                            comboEl.textContent = '1.0x';
+                            comboEl.className = 'text-amber-400 font-bold';
+                        }
+                    }
+                }
+
+                if (player.onGround) {
+                    player.coyoteTimer = 0.16;
+                } else {
+                    player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
+                }
+
+                // Update HUD ability badges
+                const thrusterHud = document.getElementById('hud-thruster-status');
+                if (thrusterHud) {
+                    thrusterHud.textContent = player.thrusterCooldown <= 0.02 ? 'READY' : `${player.thrusterCooldown.toFixed(1)}s`;
+                    thrusterHud.className = player.thrusterCooldown <= 0.02 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold';
+                }
+                const meleeHud = document.getElementById('hud-melee-status');
+                if (meleeHud) {
+                    meleeHud.textContent = player.meleeCooldown <= 0.02 ? 'READY' : `${player.meleeCooldown.toFixed(1)}s`;
+                    meleeHud.className = player.meleeCooldown <= 0.02 ? 'text-emerald-400 font-bold' : 'text-purple-400 font-bold';
+                }
+
+                // Weapon Reload & Auto-Reload
+                if (player.reloading) {
+                    player.reloadTimer -= dt;
+                    if (player.reloadTimer <= 0) {
+                        const needed = player.maxAmmo - player.ammo;
+                        const take = Math.min(needed, player.reserveAmmo);
+                        player.ammo += take;
+                        player.reserveAmmo -= take;
+                        player.reloading = false;
+                        document.getElementById('hud-reload-badge')?.classList.add('hidden');
+                        updateHUD();
+                    }
+                } else if (player.ammo <= 0 && player.reserveAmmo > 0) {
+                    reloadWeapon();
+                }
+
+                if (mouseDown) firePrimaryWeapon();
+
+                // Shield Regeneration
+                if (player.shieldRegenDelay > 0) {
+                    player.shieldRegenDelay -= dt;
+                } else if (player.shield < player.maxShield) {
+                    const regenRate = player.perks.auxShieldRegen ? 25.2 : 18.0;
+                    player.shield = Math.min(player.maxShield, player.shield + regenRate * dt);
+                    updateHUD();
+                }
+
+                // Check Environmental Surface Modifiers (Conveyor Belts & Cryo Ice Patches)
+                player.onConveyor = false;
+                let conveyorPushZ = 0;
+                for (const cb of gameState.conveyorBelts) {
+                    if (cb.mesh?.userData?.chevrons) {
+                        for (const ch of cb.mesh.userData.chevrons) {
+                            ch.position.z += dt * 7.5;
+                            if (ch.position.z > 10) ch.position.z = -10;
+                        }
+                    }
+                    if (Math.abs(player.pos.y - cb.y) < 1.2 &&
+                        player.pos.x >= cb.minX && player.pos.x <= cb.maxX &&
+                        player.pos.z >= cb.minZ && player.pos.z <= cb.maxZ) {
+                        player.onConveyor = true;
+                        conveyorPushZ = cb.dirZ * 14.5;
+                    }
+                }
+
+                player.onIce = false;
+                for (const ice of gameState.icePatches) {
+                    if (Math.abs(player.pos.y - ice.y) < 1.2 &&
+                        player.pos.x >= ice.minX && player.pos.x <= ice.maxX &&
+                        player.pos.z >= ice.minZ && player.pos.z <= ice.maxZ) {
+                        player.onIce = true;
+                        break;
+                    }
+                }
+
+                // Animate Conical Tesla Columns (Every 3rd Floor)
+                for (const tc of gameState.teslaColumns) {
+                    if (tc.cooldown > 0) tc.cooldown = Math.max(0, tc.cooldown - dt);
+                    if (tc.mesh?.userData?.rings) {
+                        tc.mesh.userData.rings.forEach((r, idx) => {
+                            r.rotation.z += dt * (idx % 2 === 0 ? 1.8 : -2.2);
+                        });
+                    }
+                    if (tc.mesh?.userData?.crystal) {
+                        tc.mesh.userData.crystal.rotation.y += dt * 2.5;
+                    }
+                }
+
+                // Lateral End-Wall Warp Portals (Every 5th & 7th Floor)
+                for (const wp of gameState.warpPortals) {
+                    if (wp.mesh?.userData?.vortex) wp.mesh.userData.vortex.rotation.z += dt * 2.4;
+                    if (player.portalCooldown <= 0 &&
+                        Math.abs(player.pos.y - wp.y) < 3.5 &&
+                        Math.hypot(player.pos.x - wp.x, player.pos.z - wp.z) < 2.8) {
+                        player.portalCooldown = 1.35;
+                        player.pos.x = wp.targetX;
+                        player.pos.z = wp.targetZ;
+                        player.shield = Math.min(player.maxShield, player.shield + 10);
+                        sfx.playPortalWarp();
+                        addMedalCallout('🌀 LATERAL END-WALL PORTAL TRAVERSED! +10 SHIELD');
+                        updateHUD();
+                    }
+                }
+
+                // Cantilevered Side-Wing Return Warp Pads
+                for (const rp of gameState.wingReturnPads) {
+                    if (player.portalCooldown <= 0 &&
+                        Math.abs(player.pos.y - rp.y) < 3.0 &&
+                        Math.hypot(player.pos.x - rp.x, player.pos.z - rp.z) < 2.6) {
+                        player.portalCooldown = 1.35;
+                        player.pos.x = rp.targetX;
+                        player.pos.z = rp.targetZ;
+                        sfx.playPortalWarp();
+                        addMedalCallout('↩ RETURNED TO MAIN TOWER ATRIUM');
+                    }
+                }
+
+                // Horizontal WASD Movement with Ice & Conveyor Physics
+                const wantsCrouch = keys['KeyC'] || keys['ControlLeft'] || player.sliding;
+                let targetSpeed = wantsCrouch ? player.crouchSpeed : player.speed;
+                if (player.sliding) targetSpeed = player.sprintSpeed * 1.35;
+                if (player.onConveyor) targetSpeed *= 1.25;
+                if (player.comboMultiplier >= 2.0) targetSpeed *= 1.0 + Math.min(0.18, (player.comboMultiplier - 1.0) * 0.06);
+
+                const fwd = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+                const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+                const moveWish = new THREE.Vector3();
+                if (keys['KeyW']) moveWish.add(fwd);
+                if (keys['KeyS']) moveWish.sub(fwd);
+                if (keys['KeyD']) moveWish.add(right);
+                if (keys['KeyA']) moveWish.sub(right);
+                if (moveWish.lengthSq() > 0) moveWish.normalize();
+
+                const accel = player.onIce ? 2.4 : 11.5;
+                player.vel.x += (moveWish.x * targetSpeed - player.vel.x) * Math.min(1, accel * dt);
+                player.vel.z += (moveWish.z * targetSpeed + conveyorPushZ - player.vel.z) * Math.min(1, accel * dt);
+
+                // Jump with Coyote Time & Jump Buffer
+                if (player.jumpBufferTimer > 0 && player.coyoteTimer > 0) {
+                    player.vel.y = player.jumpImpulse;
+                    player.onGround = false;
+                    player.coyoteTimer = 0;
+                    player.jumpBufferTimer = 0;
+                }
+
+                // Corner Anti-Grav Sky-Lifts & Mid-Deck Kinetic Geyser Jump Pads
+                for (const lift of gameState.gravityLifts) {
+                    if (Math.hypot(player.pos.x - lift.x, player.pos.z - lift.z) < lift.radius) {
+                        player.vel.y = Math.max(player.vel.y, 26.5);
+                        player.onGround = false;
+                    }
+                }
+                for (const gPad of gameState.geyserPads) {
+                    if (Math.abs(player.pos.y - gPad.y) < 1.5 && Math.hypot(player.pos.x - gPad.x, player.pos.z - gPad.z) < gPad.radius) {
+                        player.vel.y = 24.5;
+                        player.onGround = false;
+                        sfx.playGravityLift();
+                    }
+                }
+
+                // Gravity & Vertical Deck / Ramp Resolution
+                player.vel.y -= 34.0 * dt;
+                const nextX = player.pos.x + player.vel.x * dt;
+                const nextZ = player.pos.z + player.vel.z * dt;
+                const nextY = player.pos.y + player.vel.y * dt;
+
+                // Horizontal Collider Resolution + Auto Ledge-Mantle
+                let canMoveX = true;
+                let canMoveZ = true;
+                for (const c of gameState.colliders) {
+                    if (player.pos.y + player.height <= c.minY + 0.1 || player.pos.y >= c.maxY - 0.1) continue;
+                    if (nextX + player.radius > c.minX && nextX - player.radius < c.maxX &&
+                        player.pos.z + player.radius > c.minZ && player.pos.z - player.radius < c.maxZ) {
+                        canMoveX = false;
+                    }
+                    if (player.pos.x + player.radius > c.minX && player.pos.x - player.radius < c.maxX &&
+                        nextZ + player.radius > c.minZ && nextZ - player.radius < c.maxZ) {
+                        canMoveZ = false;
+                    }
+                }
+                if (canMoveX) player.pos.x = nextX;
+                if (canMoveZ) player.pos.z = nextZ;
+
+                // Find Supporting Deck or Switchback Ramp
+                let supportY = -Infinity;
+                for (const d of gameState.walkableDecks) {
+                    if (player.pos.x >= d.minX && player.pos.x <= d.maxX &&
+                        player.pos.z >= d.minZ && player.pos.z <= d.maxZ) {
+                        if (player.pos.y >= d.y - 1.4 && d.y > supportY) {
+                            supportY = d.y;
+                        } else if (!player.onGround && player.mantleCooldown <= 0 && moveWish.lengthSq() > 0.1 &&
+                                   player.pos.y >= d.y - 2.2 && player.pos.y < d.y - 0.3) {
+                            // Auto Ledge-Mantle / Vault
+                            player.mantleCooldown = 0.45;
+                            player.vel.y = 10.8;
+                        }
+                    }
+                }
+
+                for (const r of gameState.ramps) {
+                    if (player.pos.x >= r.minX && player.pos.x <= r.maxX &&
+                        player.pos.z >= r.minZ && player.pos.z <= r.maxZ) {
+                        const t = Math.max(0, Math.min(1, (r.startZ - player.pos.z) / (r.startZ - r.endZ)));
+                        const rampY = r.baseY + t * (r.topY - r.baseY);
+                        if (player.pos.y >= rampY - 1.8 && rampY > supportY) {
+                            supportY = rampY;
+                        }
+                    }
+                }
+
+                if (nextY <= supportY && player.vel.y <= 0) {
+                    const impactSpeed = player.vel.y;
+                    player.pos.y = supportY;
+                    player.vel.y = 0;
+                    player.onGround = true;
+
+                    if (impactSpeed < -22.0 || player.groundPoundActive) {
+                        const wasGroundPound = player.groundPoundActive;
+                        player.groundPoundActive = false;
+                        const dropNorm = Math.min(1.0, (Math.abs(impactSpeed) - 18.0) / 36.0);
+                        player.cameraLandDip = Math.max(player.cameraLandDip, wasGroundPound ? 1.15 : dropNorm * 0.85);
+                        player.visorShake = Math.max(player.visorShake, wasGroundPound ? 0.55 : dropNorm * 0.35);
+                        spawnLandingShockwaveRing(
+                            new THREE.Vector3(player.pos.x, supportY + 0.12, player.pos.z),
+                            wasGroundPound ? 0x00f3ff : 0xf59e0b,
+                            wasGroundPound ? 11.5 : 5.5
+                        );
+                        if (wasGroundPound) {
+                            sfx.playExplosion();
+                            let slammedCount = 0;
+                            for (const e of gameState.enemies) {
+                                if (e.dead || Math.abs(e.pos.y - supportY) > 4.5) continue;
+                                if (Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) < 11.5) {
+                                    slammedCount++;
+                                    e.slowTimer = Math.max(e.slowTimer || 0, 2.6);
+                                    e.takeDamage(85, false);
+                                    spawnFloatingDamageText(e.pos.clone().add(new THREE.Vector3(0, 2.0, 0)), 85, '☄️SLAM', '#00f3ff');
+                                }
+                            }
+                            if (slammedCount > 0) {
+                                bumpCombatOverdrive(0.35);
+                                addMedalCallout(`☄️ GROUND-POUND SHOCKWAVE! (${slammedCount} HIT)`);
+                            }
+                        }
+                    }
+                } else {
+                    player.pos.y = nextY;
+                    player.onGround = false;
+                }
+
+                // Safety void catch if player falls below Level B1
+                if (player.pos.y < -26) {
+                    player.pos.set(0, 0.5, 38);
+                    player.vel.set(0, 0, 0);
+                }
+
+                // Level B1 Sub-Basement Sump Cache Reward
+                if (!player.b1CacheClaimed && player.pos.y < -8.5) {
+                    player.b1CacheClaimed = true;
+                    player.shield = player.maxShield;
+                    player.reserveAmmo = Math.min(480, player.reserveAmmo + 96);
+                    player.grenades = Math.min(4, player.grenades + 2);
+                    player.missiles = Math.min(player.maxMissiles, player.missiles + 2);
+                    player.score += 600;
+                    sfx.playGravityLift();
+                    addMedalCallout('☣️ B1 SUB-BASEMENT SUMP CACHE CLAIMED! FULL SHIELD + ORDNANCE + 600 PTS');
+                    updateHUD();
+                }
+
+                // Stream 60-Story Megastructure Floors around Player
+                streamFloorsAroundPlayer();
+
+                // Update Camera & 1P/3P Spartan Rig
+                const eyeHeight = wantsCrouch ? player.crouchHeight : 2.35;
+                const shakeX = (Math.random() - 0.5) * player.visorShake * 0.25;
+                const shakeY = (Math.random() - 0.5) * player.visorShake * 0.25 - player.cameraLandDip * 0.35;
+
+                playerRig3D.position.copy(player.pos);
+                playerRig3D.rotation.y = player.yaw;
+                playerRig3D.visible = player.thirdPerson;
+                weaponRig1P.visible = !player.thirdPerson;
+
+                if (player.thirdPerson) {
+                    const camOffset = new THREE.Vector3(0, 3.4, 5.8).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
+                    camera.position.copy(player.pos).add(camOffset);
+                } else {
+                    camera.position.set(player.pos.x + shakeX, player.pos.y + eyeHeight + shakeY, player.pos.z);
+                }
+                camera.rotation.order = 'YXZ';
+                camera.rotation.y = player.yaw;
+                camera.rotation.x = player.pitch;
+
+                // Update Flashlight
+                const lookDir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
+                flashLight.position.copy(camera.position);
+                flashLight.target.position.copy(camera.position).add(lookDir.multiplyScalar(20));
+
+                // Collect Pickups (Cheese Wedges, Wall Cake Shrines, Laser Upgrade Cores)
+                for (const ch of gameState.cheeses) {
+                    if (!ch.collected && ch.pos.distanceTo(player.pos) < 2.2) {
+                        ch.collected = true;
+                        ch.mesh.visible = false;
+                        player.shield = Math.min(player.maxShield, player.shield + 25);
+                        sfx.playGravityLift();
+                        addMedalCallout('🧀 CYBER-CHEESE COLLECTED! +25 SHIELD');
+                        updateHUD();
+                    }
+                }
+                for (const ck of gameState.cakes) {
+                    if (!ck.collected && ck.pos.distanceTo(player.pos) < 2.5) {
+                        ck.collected = true;
+                        ck.group.visible = false;
+                        player.reserveAmmo = Math.min(480, player.reserveAmmo + 96);
+                        player.grenades = Math.min(4, player.grenades + 1);
+                        player.missiles = Math.min(player.maxMissiles, player.missiles + 2);
+                        sfx.playGravityLift();
+                        addMedalCallout('🎂 CHERRY CAKE SHRINE BLESSING! +AMMO, GRENADE & SEEKERS');
+                        updateHUD();
+                    }
+                }
+                for (const uc of gameState.upgradeCores) {
+                    if (!uc.collected) {
+                        uc.mesh.rotation.y += dt * 2.5;
+                        if (uc.pos.distanceTo(player.pos) < 2.4) {
+                            uc.collected = true;
+                            uc.mesh.visible = false;
+                            player.weaponTier = Math.min(5, player.weaponTier + 1);
+                            sfx.playPortalWarp();
+                            addMedalCallout(`🔶 LASER TIER UPGRADED TO MK-${player.weaponTier}!`);
+                            updateHUD();
+                        }
+                    }
+                }
+
+                // Update Projectiles & Check Hits (Enemies, Harvesters, Breakable Props, & FL 3x Tesla Column Crystals)
+                for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+                    const p = gameState.projectiles[i];
+                    p.life -= dt;
+                    p.pos.addScaledVector(p.vel, dt);
+                    p.mesh.position.copy(p.pos);
+
+                    let removeBolt = p.life <= 0;
+
+                    if (p.fromPlayer && !removeBolt) {
+                        // 1. Check Conical Magical-Electric Column Crystal Crown (FL 3x Tesla Chain-Lightning!)
+                        for (const tc of gameState.teslaColumns) {
+                            if (tc.cooldown <= 0 &&
+                                Math.hypot(p.pos.x - tc.pos.x, p.pos.z - tc.pos.z) < 1.35 &&
+                                p.pos.y >= tc.pos.y + 8.6 && p.pos.y <= tc.pos.y + 11.4) {
+                                tc.cooldown = 3.0;
+                                removeBolt = true;
+                                sfx.playPortalWarp();
+                                spawnLandingShockwaveRing(tc.pos.clone().add(new THREE.Vector3(0, 10.2, 0)), 0x00f3ff, 14.5);
+                                let zapped = 0;
+                                for (const e of gameState.enemies) {
+                                    if (!e.dead && Math.abs(e.pos.y - tc.pos.y) < 6.0 && e.pos.distanceTo(tc.pos) < 15.5 && zapped < 4) {
+                                        zapped++;
+                                        e.slowTimer = Math.max(e.slowTimer || 0, 2.8);
+                                        e.takeDamage(58, false);
+                                        spawnFloatingDamageText(e.pos.clone().add(new THREE.Vector3(0, 2.4, 0)), 58, '⚡ARC', '#00f3ff');
+                                    }
+                                }
+                                addMedalCallout(`⚡ TESLA COLUMN OVERLOAD! (${zapped} ZAPPED)`);
+                                triggerHitmarker();
+                                break;
+                            }
+                        }
+
+                        // 2. Check Enemies
+                        if (!removeBolt) {
+                            for (const e of gameState.enemies) {
+                                if (e.dead) continue;
+                                const hitRadius = e.isPenthouseBoss ? 2.2 : 1.05;
+                                const hitHeight = e.isPenthouseBoss ? 4.4 : 2.3;
+                                if (Math.hypot(p.pos.x - e.pos.x, p.pos.z - e.pos.z) < hitRadius &&
+                                    p.pos.y >= e.pos.y - 0.5 && p.pos.y <= e.pos.y + hitHeight) {
+                                    const isHead = !e.isFlying && (p.pos.y > e.pos.y + hitHeight * 0.68);
+                                    if (player.perks.cryoRounds) e.slowTimer = Math.max(e.slowTimer || 0, 2.5);
+                                    if (player.perks.magmaRounds) e.burnTimer = Math.max(e.burnTimer || 0, 3.0);
+                                    e.takeDamage(p.dmg, isHead);
+                                    triggerHitmarker();
+                                    removeBolt = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 3. Check Espresso Harvesters
+                        if (!removeBolt) {
+                            for (const b of gameState.brewers) {
+                                if (b.dead) continue;
+                                if (Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) < (b.isPenthouseCore ? 2.8 : 2.0) &&
+                                    p.pos.y >= b.pos.y && p.pos.y <= b.pos.y + 6.5) {
+                                    b.takeDamage(p.dmg);
+                                    triggerHitmarker();
+                                    removeBolt = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 4. Check Breakable Lab Props
+                        if (!removeBolt) {
+                            for (const prop of gameState.breakableProps) {
+                                if (!prop.dead && p.pos.distanceTo(prop.pos.clone().add(new THREE.Vector3(0, 0.8, 0))) < 1.15) {
+                                    prop.takeDamage(p.dmg);
+                                    triggerHitmarker();
+                                    removeBolt = true;
+                                    break;
+                                }
+                            }
+                        }
+                    } else if (!p.fromPlayer && !removeBolt) {
+                        // Enemy Bolt hitting Player
+                        if (Math.hypot(p.pos.x - player.pos.x, p.pos.z - player.pos.z) < 0.85 &&
+                            p.pos.y >= player.pos.y && p.pos.y <= player.pos.y + player.height) {
+                            damagePlayer(p.dmg);
+                            removeBolt = true;
+                        }
+                    }
+
+                    if (removeBolt) {
+                        scene.remove(p.mesh);
+                        gameState.projectiles.splice(i, 1);
+                    }
+                }
+
+                // Update Sticky Plasma Grenades
+                for (let i = gameState.grenadeObjs.length - 1; i >= 0; i--) {
+                    const g = gameState.grenadeObjs[i];
+                    g.fuse -= dt;
+                    if (g.stuckTo && !g.stuckTo.dead) {
+                        g.pos.copy(g.stuckTo.pos).add(new THREE.Vector3(0, 1.4, 0));
+                    } else {
+                        g.vel.y -= 24.0 * dt;
+                        g.pos.addScaledVector(g.vel, dt);
+                        for (const e of gameState.enemies) {
+                            if (!e.dead && g.pos.distanceTo(e.pos.clone().add(new THREE.Vector3(0, 1.2, 0))) < 1.4) {
+                                g.stuckTo = e;
+                                break;
+                            }
+                        }
+                    }
+                    g.mesh.position.copy(g.pos);
+                    if (g.fuse <= 0) {
+                        sfx.playExplosion();
+                        spawnExplosionParticles(g.pos, 0x00f3ff, 28);
+                        spawnLandingShockwaveRing(g.pos, 0x00f3ff, 8.5);
+                        for (const e of gameState.enemies) {
+                            if (!e.dead && e.pos.distanceTo(g.pos) < 8.5) e.takeDamage(180, false);
+                        }
+                        for (const b of gameState.brewers) {
+                            if (!b.dead && b.pos.distanceTo(g.pos) < 8.5) b.takeDamage(180);
+                        }
+                        scene.remove(g.mesh);
+                        gameState.grenadeObjs.splice(i, 1);
+                    }
+                }
+
+                // Update Homing Seeker Missiles
+                for (let i = gameState.homingMissiles.length - 1; i >= 0; i--) {
+                    const m = gameState.homingMissiles[i];
+                    m.life -= dt;
+                    if (m.target && !m.target.dead) {
+                        const desired = m.target.pos.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(m.pos).normalize().multiplyScalar(46);
+                        m.vel.lerp(desired, Math.min(1, dt * 8.5));
+                    }
+                    m.pos.addScaledVector(m.vel, dt);
+                    m.mesh.position.copy(m.pos);
+
+                    let hit = m.life <= 0;
+                    for (const e of gameState.enemies) {
+                        if (!e.dead && m.pos.distanceTo(e.pos.clone().add(new THREE.Vector3(0, 1.2, 0))) < 1.8) {
+                            e.takeDamage(155, false);
+                            triggerHitmarker();
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (hit) {
+                        sfx.playExplosion();
+                        spawnExplosionParticles(m.pos, 0xf97316, 20);
+                        scene.remove(m.mesh);
+                        gameState.homingMissiles.splice(i, 1);
+                    }
+                }
+
+                // Update Enemies
+                for (const e of gameState.enemies) e.update(dt);
+
+                // Update Particles & Shockwave Rings
+                for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                    const pt = gameState.particles[i];
+                    pt.life -= dt;
+                    pt.vel.y -= 18 * dt;
+                    pt.mesh.position.addScaledVector(pt.vel, dt);
+                    if (pt.life <= 0) {
+                        scene.remove(pt.mesh);
+                        gameState.particles.splice(i, 1);
+                    }
+                }
+                for (let i = gameState.shockwaveRings.length - 1; i >= 0; i--) {
+                    const sr = gameState.shockwaveRings[i];
+                    sr.age += dt;
+                    const p = sr.age / sr.maxAge;
+                    const s = 1 + p * sr.maxRadius;
+                    sr.mesh.scale.set(s, s, 1);
+                    sr.mesh.material.opacity = Math.max(0, (1 - p) * 0.85);
+                    if (sr.age >= sr.maxAge) {
+                        scene.remove(sr.mesh);
+                        gameState.shockwaveRings.splice(i, 1);
+                    }
+                }
+
+                updateHarvesterNavpoint();
+                updateBossTelemetryHUD();
+                renderMotionTracker();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
