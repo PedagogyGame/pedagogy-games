@@ -703,6 +703,7 @@ function drawReferenceArt(context,projector,bounds){
  const landPath=window.worldReference?.draw(context,projector,current,bounds)||null;
  worldCopies(projector,bounds,copyProject=>window.centralFinish?.render?.(context,copyProject,current,bounds,{dpr:mapDpr}));
  terrainLayer.render(context,{project:projector,bounds,landPath,fineStrength:window.fineDetail?.effectiveStrength||0});
+ worldCopies(projector,bounds,copyProject=>window.hydroRoads?.draw?.(context,copyProject,current,bounds));
  worldCopies(projector,bounds,copyProject=>{if(window.awLandscapePass)window.awLandscapePass(context,copyProject);window.researchFocusController?.draw(context,copyProject,{landPath});window.regionalZones?.draw(context,copyProject,{landPath,bounds})});
 }
 function drawMapReference(){
@@ -717,7 +718,7 @@ function drawMapReference(){
   drawMapGrid();return;
  }
 
- const key=[cw,ch,canvas.width,canvas.height,mapDpr,surface.strength,current.lon,current.lat,current.span,year,window.worldController?.enabled!==false,window.landscapeController?.revision||0,window.worldReference?.revision||0,window.researchFocusController?.revision||0,window.regionalZones?.revision||0,window.centralFinish?.revision||0,window.fineDetail?.revision||0,terrainLayer.enabled,terrainLayer.paintRevision,terrainLayer.opacity,terrainLayer.contours,terrainLayer.lastZoom,rasterLoadRevision,coreImage.complete,worldImage.complete,coreImage.naturalWidth,worldImage.naturalWidth].join('|');
+ const key=[cw,ch,canvas.width,canvas.height,mapDpr,surface.strength,current.lon,current.lat,current.span,year,window.worldController?.enabled!==false,window.landscapeController?.revision||0,window.hydroRoads?.revision||0,window.worldReference?.revision||0,window.researchFocusController?.revision||0,window.regionalZones?.revision||0,window.centralFinish?.revision||0,window.fineDetail?.revision||0,terrainLayer.enabled,terrainLayer.paintRevision,terrainLayer.opacity,terrainLayer.contours,terrainLayer.lastZoom,rasterLoadRevision,coreImage.complete,worldImage.complete,coreImage.naturalWidth,worldImage.naturalWidth].join('|');
  if(key!==curvaturePaintKey){
   const b=surface.flatBounds(3),aw=Math.ceil(b.width*mapDpr),ah=Math.ceil(b.height*mapDpr);if(curvatureArt.width!==aw)curvatureArt.width=aw;if(curvatureArt.height!==ah)curvatureArt.height=ah;
   const rect={x:b.x,y:b.y,width:curvatureArt.width/mapDpr,height:curvatureArt.height/mapDpr},art=curvatureArt.getContext('2d');
@@ -1706,7 +1707,15 @@ $l('lwIn').onclick=()=>view?.zoom(.72);$l('lwOut').onclick=()=>view?.zoom(1.39);
 const headButton=document.createElement('button');headButton.id='livingMode';headButton.textContent='Living landscapes';headButton.className='lw-place-button';headButton.onclick=()=>open(sceneId);document.querySelector('header .nav').prepend(headButton);
 const formerPlace=openPlace;openPlace=function(place,...args){formerPlace(place,...args);const s=LIVING_DATA.scenes.find(s=>s.placeId===place.id);if(s){const b=document.createElement('button');b.className='fullbutton lw-place-button';b.textContent='Explore inhabited landscape · c. '+s.referenceYearBce+' BCE';b.onclick=()=>open(s.id);const h=$('drawer').querySelector('h1');h?.insertAdjacentElement('afterend',b)}};
 // Existing global map is preserved. A continued approach to a studied place opens its dated local view.
-const oldZoomIn=$('zoomIn').onclick;$('zoomIn').onclick=()=>{const s=LIVING_DATA.scenes.find(s=>s.placeId===selectedPlace);if(s&&target.span<=Math.max(.6,minSpan()*1.05)){open(s.id)}else oldZoomIn()};
+function studyAtMapApproach(){
+ if(!selectedPlace)return null;
+ const place=D.places.find(p=>p.id===selectedPlace&&p.located&&Number.isFinite(p.lon)&&Number.isFinite(p.lat));
+ if(!place||!current||![current.lon,current.lat,current.span,cos].every(Number.isFinite)||current.span<=0||cos<=0)return null;
+ const study=LIVING_DATA.scenes.find(s=>s.placeId===place.id);if(!study)return null;
+ const nav=window.AncientWorldsNavigation,lon=nav?.nearestLongitude?nav.nearestLongitude(place.lon,current.lon):place.lon+Math.round((current.lon-place.lon)/360)*360;
+ return Math.hypot((lon-current.lon)/current.span,(place.lat-current.lat)/current.span/cos)<=.3?study:null;
+}
+const oldZoomIn=$('zoomIn').onclick;$('zoomIn').onclick=()=>{const s=studyAtMapApproach();if(s&&target.span<=Math.max(.6,minSpan()*1.05)){open(s.id)}else oldZoomIn()};
 canvas.addEventListener('dblclick',e=>{const h=hits.find(h=>Math.hypot(e.offsetX-h.x,e.offsetY-h.y)<30);const s=h&&LIVING_DATA.scenes.find(s=>s.placeId===h.p.id);if(s)open(s.id)});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&view&&!loading){view.motionDirty=true;view.run()}});
 const oldKey=document.onkeydown;document.onkeydown=e=>{if(isOpen){if(e.key==='Tab'){const f=[...shell.querySelectorAll('button,select,input,canvas[tabindex],a[href]')].filter(e=>e.offsetParent!==null);const first=f[0],last=f.at(-1);if(e.shiftKey&&document.activeElement===first){last?.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===last){first?.focus();e.preventDefault()}}if(e.key==='Escape'){if(!$l('lwReading').classList.contains('hidden'))$l('lwReading').classList.add('hidden');else close();e.preventDefault()}return;}oldKey?.(e)};
@@ -2264,7 +2273,7 @@ function close(){panel.classList.add('hidden');mode(false);savedFocus?.focus?.()
 function step(direction){const choices=core.boundaries(index,regionSelect.value).filter(y=>direction>0?y>year:y<year).sort((a,b)=>direction>0?a-b:b-a);if(choices.length)setYear(choices[0])}
 function commitYear(){setYear(Number(input.value));input.focus()}
 input.onchange=commitYear;input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();commitYear()}});
-function detail(entry){close();switch(entry.refType){case'person':selectPerson(people.get(entry.refId));break;case'place':openPlace(D.places.find(p=>p.id===entry.refId));break;case'event':openEvent(D.events.find(p=>p.id===entry.refId));break;case'trade':openTrade(D.trade.find(p=>p.id===entry.refId));break;case'ecology':ecologyTest.open(entry.refId);break;case'landscape':livingTest.open(entry.refId);break;case'hub-claim':showHubResearch(entry.refId);break;case'city-phase':worldController.openCityByPhase(entry.refId);break;case'geography-evidence':window.geographyDossier.open({findingId:entry.refId});break;case'interregional':window.interregionalPanel?.openRecord(entry.refId);break;case'added-place':window.interregionalPanel?.openPlace(entry.refId);break;case'relationship':relationModal(DYNASTY_ENGINE.relationships.find(r=>r.id===entry.refId));break;default:{const box=modal(entry.label);p(box,entry.detail);p(box,entry.note);for(const r of entry.ranges.filter(core.valid))p(box,span(r));cite(box,entry.sourceIds)}}}
+function detail(entry){close();switch(entry.refType){case'person':selectPerson(people.get(entry.refId));break;case'place':openPlace(D.places.find(p=>p.id===entry.refId));break;case'event':openEvent(D.events.find(p=>p.id===entry.refId));break;case'trade':openTrade(D.trade.find(p=>p.id===entry.refId));break;case'ecology':ecologyTest.open(entry.refId);break;case'landscape':livingTest.open(entry.refId);break;case'hub-claim':showHubResearch(entry.refId);break;case'city-phase':worldController.openCityByPhase(entry.refId);break;case'geography-evidence':window.geographyDossier.open({findingId:entry.refId});break;case'interregional':window.interregionalPanel?.openRecord(entry.refId);break;case'hydro21-water':case'hydro21-road':window.hydroRoads?.openEvidence(entry.refId);break;case'added-place':window.interregionalPanel?.openPlace(entry.refId);break;case'relationship':relationModal(DYNASTY_ENGINE.relationships.find(r=>r.id===entry.refId));break;default:{const box=modal(entry.label);p(box,entry.detail);p(box,entry.note);for(const r of entry.ranges.filter(core.valid))p(box,span(r));cite(box,entry.sourceIds)}}}
 function scopedRanges(entry,regionId){
  return (entry.ranges||[]).filter(r=>!regionId||regionId===core.UNASSIGNED||!r.regionId||r.regionId.split(' ').includes(regionId));
 }
@@ -2404,7 +2413,7 @@ function showHubResearch(selectedClaimId){
  btn(box,'Find Ugarit on the map',()=>{$('modalShade').classList.add('hidden');openPlace(D.places.find(p=>p.id===pilot.placeId),true)},'fullbutton');btn(box,'Levantine coast through time',()=>{$('modalShade').classList.add('hidden');open({regionId:'LC',sector:'cities'})},'fullbutton');
 }
 const previousOpenPlace=openPlace;openPlace=function(place,focus=false,animate=true){previousOpenPlace(place,focus,animate);btn($('drawer'),'Explore this region through time',()=>open({regionId:place.region,sector:'cities'}),'fullbutton');if(place.id===TIMELINE_HUB_PILOT.placeId){const teaser=el('section','ti-qualification');p(teaser,'City, port, political and environmental research is available alongside the original locator.');btn(teaser,'Ugarit · city and port research',()=>showHubResearch(),'fullbutton');$('drawer').insertBefore(teaser,$('drawer').querySelector('h3'));for(const paragraph of $('drawer').querySelectorAll('p'))if(paragraph.textContent.startsWith('No occupation chronology is entered for this locator.'))paragraph.textContent='The original locator has no dated occupation entries. The city dossier adds separately qualified site research.'}};atlasTest.openPlace=openPlace;
-window.timelineIntegrator={index,open,close,showHubResearch,get year(){return year},get regionId(){return regionSelect.value}};
+window.timelineIntegrator={index,open,close,showHubResearch,addHydroRoutes(entries,extraSources){const ids=new Set(index.entries.map(e=>e.id)),allSources=new Set([...index.sourceIds,...extraSources.map(s=>s.id)]);for(const e of entries)if(!e.id.startsWith('hydro21/')||ids.has(e.id)||!['hydro21-water','hydro21-road'].includes(e.refType)||!core.sectors.includes(e.sector)||e.regionIds.some(r=>!index.regionIds.includes(r))||e.sourceIds.some(s=>!allSources.has(s))||e.ranges.some(r=>r.known&&!core.valid(r)))throw new TypeError('Invalid water/road timeline addition.');if(new Set(entries.map(e=>e.id)).size!==entries.length)throw new TypeError('Duplicate water/road timeline entry.');index.entries.push(...JSON.parse(JSON.stringify(entries)));for(const s of extraSources){if(!sources.has(s.id))sources.set(s.id,s);if(!index.sourceIds.includes(s.id))index.sourceIds.push(s.id)}lastRenderKey='';if(!panel.classList.contains('hidden'))render();return entries.length},get year(){return year},get regionId(){return regionSelect.value}};
 })();
 
 /* Portable, additive visual-world model. Original research records stay untouched. */
@@ -5351,4 +5360,5 @@ const previousUp=canvas.onpointerup;canvas.onpointerup=e=>{if(enabled&&window.wo
 window.frontierEvidence={engine,openReference,get enabled(){return enabled}};invalidate();
 })();
 
-</script></body></html>
+</script>
+<script id="hydro-routes21" defer src="./assets/b3579e157700f9b520238a011bfa32c6ae2fed22b8ed896b88a4b97195de25d2.js" integrity="sha256-s1eeFXcA+bUgI4oBG/oyxq4v7SK47YlriKS5cZXeJdI=" crossorigin="anonymous" onerror="var n=document.createElement('div');n.textContent='Water &amp; roads unavailable · reference retained';document.querySelector('.detail-hud')?.append(n)"></script></body></html>
