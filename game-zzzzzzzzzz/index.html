@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Spartan-Mouse 117: Halo Ring Coffee War (60-Story Megastructure)</title>
+    <title>Spartan-Mouse 117: Halo Ring Coffee War (60-Story PBR & 57-GLB Engine)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -23,15 +23,15 @@
         }
         .font-orbitron { font-family: 'Orbitron', sans-serif; }
         .hud-glass {
-            background: rgba(8, 15, 32, 0.78);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(0, 243, 255, 0.28);
-            box-shadow: 0 0 24px rgba(0, 243, 255, 0.12), inset 0 0 14px rgba(0, 243, 255, 0.06);
+            background: rgba(6, 12, 26, 0.82);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 243, 255, 0.32);
+            box-shadow: 0 0 28px rgba(0, 243, 255, 0.14), inset 0 0 16px rgba(0, 243, 255, 0.08);
         }
         @keyframes floatUpFade {
             0% { opacity: 1; transform: translate(-50%, 0) scale(0.92); }
-            25% { opacity: 1; transform: translate(-50%, -12px) scale(1.06); }
-            100% { opacity: 0; transform: translate(-50%, -38px) scale(0.95); }
+            25% { opacity: 1; transform: translate(-50%, -14px) scale(1.08); }
+            100% { opacity: 0; transform: translate(-50%, -42px) scale(0.95); }
         }
         .floating-dmg {
             position: absolute;
@@ -53,16 +53,23 @@
     <!-- Main 3D WebGL Canvas -->
     <canvas id="game-canvas" class="block w-full h-full"></canvas>
 
+    <!-- Global Drag-and-Drop .GLB / .ZIP Overlay -->
+    <div id="drag-drop-overlay" class="hidden pointer-events-none fixed inset-0 z-50 bg-cyan-950/80 backdrop-blur-md border-4 border-dashed border-cyan-400 flex flex-col items-center justify-center">
+        <div class="text-6xl mb-3">📦✨</div>
+        <h2 class="font-orbitron text-2xl font-black text-white">DROP .GLB FILES OR .ZIP ARCHIVE HERE</h2>
+        <p class="text-sm text-cyan-200 mt-1">Auto-matches filenames to all 57 slots, normalizes metric scale & hot-swaps the live 3D world!</p>
+    </div>
+
     <!-- Damage / Shield-Break Screen Vignette -->
     <div id="damage-vignette" class="pointer-events-none fixed inset-0 transition-opacity duration-200 opacity-0 z-10"
-         style="background: radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.55) 100%);"></div>
+         style="background: radial-gradient(circle, transparent 52%, rgba(239, 68, 68, 0.58) 100%);"></div>
 
     <!-- Floating 3D-to-2D Combat Damage Numbers Overlay -->
     <div id="floating-dmg-container" class="pointer-events-none fixed inset-0 overflow-hidden z-20"></div>
 
     <!-- Dynamic 3D-to-2D Nearest Harvester Navpoint Marker -->
     <div id="harvester-navpoint" class="hidden pointer-events-none fixed z-20 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-        <div class="w-5 h-5 rotate-45 border-2 border-amber-400 bg-amber-500/20 flex items-center justify-center shadow-[0_0_12px_#f59e0b]">
+        <div class="w-5 h-5 rotate-45 border-2 border-amber-400 bg-amber-500/25 flex items-center justify-center shadow-[0_0_14px_#f59e0b]">
             <span class="-rotate-45 text-[9px] font-bold text-amber-200">☕</span>
         </div>
         <span id="harvester-navpoint-dist" class="mt-1 px-1.5 py-0.5 rounded bg-slate-950/90 border border-amber-500/40 text-[9px] font-orbitron text-amber-300 whitespace-nowrap">24m</span>
@@ -127,10 +134,15 @@
             </div>
         </div>
 
-        <!-- Right: Studio & Camera Action Buttons -->
+        <!-- Right: Quick .GLB Drop/Upload, 57 Studio & Camera Action Buttons -->
         <div class="flex items-center gap-2 pointer-events-auto">
+            <label class="cursor-pointer hud-glass hover:bg-emerald-500/25 text-emerald-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-emerald-400/60 transition flex items-center gap-1.5">
+                <span>📥 DROP / LOAD .GLBs</span>
+                <span id="hud-glb-count" class="px-1.5 py-0.5 rounded bg-emerald-500/30 text-white text-[9px]">0/57</span>
+                <input id="hud-quick-glb-input" type="file" accept=".glb,.gltf,.zip" multiple class="hidden" />
+            </label>
             <button id="btn-open-glb-studio" class="hud-glass hover:bg-cyan-500/25 text-cyan-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-cyan-400/50 transition">
-                📦 57 .GLB STUDIO [B]
+                📦 57 STUDIO [B]
             </button>
             <button id="btn-open-shots" class="hud-glass hover:bg-purple-500/25 text-purple-200 font-orbitron text-[11px] font-bold px-3 py-2 rounded-xl border border-purple-400/50 transition">
                 🖼️ 2 SHOTS [P]
@@ -239,9 +251,9 @@
             <span class="text-[9px] font-orbitron text-cyan-300 mt-1">15M MOTION TRACKER</span>
         </div>
         <div class="hud-glass rounded-xl px-3 py-2 text-[11px] text-slate-300 hidden sm:block">
-            <div class="font-orbitron text-[10px] text-cyan-300 font-bold mb-0.5">SPARTAN-117 TACTICAL CONTROLS</div>
-            <div><b class="text-white">WASD</b> Move • <b class="text-white">SPACE</b> Jump / Mantle • <b class="text-white">SHIFT</b> Thruster Dodge • <b class="text-white">C</b> Slide / Air Ground-Pound</div>
-            <div><b class="text-white">LMB</b> Fire • <b class="text-white">V</b> Claw Melee • <b class="text-white">G</b> Sticky Grenade • <b class="text-white">Q/E</b> Homing Seeker • <b class="text-white">R</b> Reload • <b class="text-white">F</b> Light</div>
+            <div class="font-orbitron text-[10px] text-cyan-300 font-bold mb-0.5">SPARTAN-117 TACTICAL CONTROLS & .GLB HOT-SWAP</div>
+            <div><b class="text-white">WASD</b> Move • <b class="text-white">SPACE</b> Jump/Mantle • <b class="text-white">SHIFT</b> Thruster Dodge • <b class="text-white">C</b> Slide / Air Ground-Pound</div>
+            <div><b class="text-white">LMB</b> Fire • <b class="text-white">V</b> Claw Melee • <b class="text-white">G</b> Grenade • <b class="text-white">Q/E</b> Seeker • <b class="text-emerald-300">Drag & Drop .GLB / .ZIP Anywhere!</b></div>
         </div>
     </div>
 
@@ -250,30 +262,36 @@
         <div class="hud-glass rounded-2xl max-w-2xl w-full p-6 border border-cyan-400/50 shadow-2xl">
             <div class="flex items-center justify-between border-b border-cyan-500/30 pb-3 mb-4">
                 <div>
-                    <span class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-orbitron text-[10px] font-bold">UNSC HIGHCOM // OPERATION ROAST BREAKER</span>
+                    <span class="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-orbitron text-[10px] font-bold">UNSC HIGHCOM // PBR & 57-.GLB LIVE ENGINE</span>
                     <h1 class="font-orbitron text-2xl sm:text-3xl font-black text-white mt-1">SPARTAN-MOUSE 117: COFFEE WAR</h1>
                 </div>
                 <span class="text-3xl">🐭🪖☕</span>
             </div>
 
             <p class="text-sm text-slate-200 leading-relaxed mb-4">
-                Infiltrate the <b>60-Story Dark-Void Alien Megastructure</b>. Ascend floor-by-floor via switchback ramps, corner anti-grav sky-lifts, and high-G geyser pads. Clear the <b>4 Cantilevered Void Side-Wings (FL 01, 15, 30, 45)</b> to unlock permanent MJOLNIR combat perks, shoot the <b>Floor 3x Conical Tesla Column</b> crystals to arc chain-lightning into the penguin horde, and sever the <b>Floor 60 Supreme Barista Overlord's</b> Espresso Core Tether!
+                Experience the upgraded <b>PBR Reflection & Dynamic Texture Engine</b> across all <b>60 Floors, Level B1, and 4 Cantilevered Side Wings</b>. Every single one of the <b>57 <code>.GLB</code> slots</b> is now wired directly into the live 3D world with <b>Automatic Metric Bounding-Box Normalization</b>—just drag and drop your <code>.glb</code> files or <code>.zip</code> bundle anywhere onto the window (or load them in <b>[B]</b>) and watch every floor, enemy, weapon, prop, and void monolith transform in real time!
             </p>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-slate-900/80 p-3.5 rounded-xl border border-cyan-500/25 mb-5">
-                <div>⚡ <b>4 Featured Floor Mechanics:</b> Conveyor Belts, Cryo Ice Patches, Lateral Warp Portals (FL 5x/7x), & Interactive Conical Tesla Columns (FL 3x).</div>
-                <div>🏛️ <b>4 Side-Wing Perks + B1 Cache:</b> Clear FL 01W, 15W, 30E & 45W Harvesters for permanent Shield, Cryo, Thruster & Magma perks!</div>
+                <div>✨ <b>PBR Environment & Procedural Textures:</b> PMREM metallic environment reflections, ACES Filmic tone mapping, gridded deck bump maps & glowing circuit trims.</div>
+                <div>📦 <b>All 57 .GLBs Live + Auto-Scale:</b> Drag & drop <code>.glb</code> or <code>.zip</code> files anywhere! Automatically scales unit-cube AI models to exact metric <code>W×H×D</code> bounds.</div>
+                <div>⚡ <b>4 Featured Mechanics + 4 Side-Wings:</b> Conveyor Belts, Cryo Ice, FL 5x/7x Portals, and Interactive FL 3x Conical Tesla Columns.</div>
                 <div>🤜 <b>Claw Melee [V] & Air Slam [C]:</b> Lunge-strike enemies to siphon shields, or press <b>[C] in mid-air</b> for a Kinetic Ground-Pound!</div>
-                <div>📦 <b>57 .GLB Studio [B] & 2 Shots [P]:</b> Inspect all 57 3D assets, hot-swap custom <code>.glb</code>/<code>.zip</code> models, or capture AI reference shots.</div>
             </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-3">
-                <button onclick="openGlbStudio()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-400/40 font-orbitron text-xs font-bold text-cyan-200 transition">
-                    📦 INSPECT 57 .GLB STUDIO [B]
-                </button>
-                <button id="btn-start-mission" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-orbitron text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(0,243,255,0.5)] transition">
-                    🚀 DEPLOY SPARTAN-117 (CLICK TO LOCK MOUSE)
-                </button>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <label class="cursor-pointer px-4 py-2.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-400 font-orbitron text-xs font-bold text-emerald-200 transition">
+                    📥 LOAD .GLB / .ZIP PACK NOW
+                    <input id="start-glb-input" type="file" accept=".glb,.gltf,.zip" multiple class="hidden" />
+                </label>
+                <div class="flex items-center gap-2">
+                    <button onclick="openGlbStudio()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-cyan-400/40 font-orbitron text-xs font-bold text-cyan-200 transition">
+                        📦 57 .GLB STUDIO [B]
+                    </button>
+                    <button id="btn-start-mission" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 font-orbitron text-sm font-black text-slate-950 shadow-[0_0_20px_rgba(0,243,255,0.5)] transition">
+                        🚀 DEPLOY SPARTAN-117
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -283,13 +301,13 @@
         <div class="hud-glass rounded-2xl max-w-6xl w-full h-[88vh] flex flex-col p-5 border border-cyan-400/50">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/30 pb-3 mb-3">
                 <div>
-                    <h2 class="font-orbitron text-lg font-black text-white">📦 57-SLOT .GLB 3D ASSET STUDIO & HOT-SWAP LOADER</h2>
-                    <p class="text-xs text-slate-300">Synced with <code>glb_asset_manifest_30.md</code> (Part 1: 4 Featured • Part 2: 16 Traversal & Side-Wings • Part 3: 37 Core Assets)</p>
+                    <h2 class="font-orbitron text-lg font-black text-white">📦 57-SLOT .GLB 3D ASSET STUDIO & AUTO-SCALING HOT-SWAP LOADER</h2>
+                    <p class="text-xs text-slate-300">Every slot below is actively spawned in the 60-story megastructure. Uploading any <code>.glb</code> or <code>.zip</code> auto-scales it to exact metric bounds and rebuilds the live world!</p>
                 </div>
                 <div class="flex items-center gap-2">
-                    <label class="cursor-pointer px-3 py-1.5 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400 text-purple-200 font-orbitron text-[11px] font-bold">
-                        🗜️ LOAD .ZIP / .GLB BATCH
-                        <input id="glb-batch-input" type="file" accept=".glb,.zip" multiple class="hidden" />
+                    <label class="cursor-pointer px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-400 text-emerald-200 font-orbitron text-[11px] font-bold">
+                        🗜️ LOAD .ZIP / MULTIPLE .GLBs
+                        <input id="glb-batch-input" type="file" accept=".glb,.gltf,.zip" multiple class="hidden" />
                     </label>
                     <button onclick="closeGlbStudio()" class="px-3 py-1.5 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 border border-rose-400 text-rose-200 font-orbitron text-xs font-bold">✕ CLOSE [ESC]</button>
                 </div>
@@ -303,6 +321,7 @@
                         <button onclick="filterGlbStudio('PART1')" class="px-2.5 py-1 rounded bg-amber-500/20 border border-amber-400 text-amber-200 font-orbitron text-[10px] font-bold">PART 1: 4 FEATURED</button>
                         <button onclick="filterGlbStudio('PART2')" class="px-2.5 py-1 rounded bg-emerald-500/20 border border-emerald-400 text-emerald-200 font-orbitron text-[10px] font-bold">PART 2: 16 EXPANSION</button>
                         <button onclick="filterGlbStudio('PART3')" class="px-2.5 py-1 rounded bg-purple-500/20 border border-purple-400 text-purple-200 font-orbitron text-[10px] font-bold">PART 3: 37 CORE</button>
+                        <button onclick="filterGlbStudio('CUSTOM')" class="px-2.5 py-1 rounded bg-sky-500/20 border border-sky-400 text-sky-200 font-orbitron text-[10px] font-bold">LOADED .GLBs</button>
                         <input id="glb-search-input" oninput="renderGlbStudioList()" type="text" placeholder="Search filename or role..." class="ml-auto px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-cyan-400" />
                     </div>
                     <div id="glb-studio-list" class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 pr-1"></div>
@@ -312,13 +331,13 @@
                 <div class="bg-slate-950/90 rounded-xl border border-cyan-500/30 p-3 flex flex-col items-center justify-between">
                     <div class="w-full flex items-center justify-between text-xs font-orbitron text-cyan-300">
                         <span id="glb-preview-title" class="truncate">motorized_conveyor_belt_segment.glb</span>
-                        <span id="glb-preview-status" class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-[9px]">PROCEDURAL</span>
+                        <span id="glb-preview-status" class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-[9px]">PROCEDURAL HD</span>
                     </div>
-                    <canvas id="glb-preview-canvas" width="300" height="260" class="w-full rounded-lg bg-slate-900/90 border border-slate-800 my-2"></canvas>
-                    <div id="glb-preview-dims" class="text-[11px] text-slate-300 text-center mb-2">4.4m W × 0.25m H × 24.0m D • Origin: bottom-center</div>
+                    <canvas id="glb-preview-canvas" width="320" height="270" class="w-full rounded-lg bg-slate-900/90 border border-slate-800 my-2"></canvas>
+                    <div id="glb-preview-dims" class="text-[11px] text-slate-300 text-center mb-2">4.4m W × 0.25m H × 24.0m D • Origin: bottom</div>
                     <label class="w-full text-center cursor-pointer py-2 rounded-lg bg-cyan-500/25 hover:bg-cyan-500/40 border border-cyan-400 font-orbitron text-xs font-bold text-cyan-200 transition">
                         📂 UPLOAD .GLB FOR THIS SLOT
-                        <input id="glb-single-input" type="file" accept=".glb" class="hidden" />
+                        <input id="glb-single-input" type="file" accept=".glb,.gltf" class="hidden" />
                     </label>
                 </div>
             </div>
@@ -447,259 +466,498 @@
         const sfx = new SoundFX();
 
         // ============================================================================
-        // 2. COMPLETE 57-ASSET .GLB MANIFEST & HOT-SWAP REGISTRY
+        // 2. COMPLETE 57-ASSET .GLB MANIFEST WITH EXACT METRIC TARGET BOUNDS & PIVOTS
         // ============================================================================
         const GLB_STUDIO_ITEMS = [
             // PART 1: 4 Featured Floor Mechanics
-            { id: 'motorized_conveyor_belt_segment.glb', part: 'PART1', role: 'Directional Conveyor Belt', dims: '4.4m W × 0.25m H × 24.0m D' },
-            { id: 'cryo_slippery_ice_patch.glb', part: 'PART1', role: 'Sub-Zero Slippery Ice Hazard', dims: '18.0m W × 0.45m H × 12.0m D' },
-            { id: 'lateral_endwall_warp_portal.glb', part: 'PART1', role: 'FL 5x/7x Lateral End-Wall Portal', dims: '5.2m W × 5.6m H × 1.8m D' },
-            { id: 'conical_magical_electric_scifi_column.glb', part: 'PART1', role: 'FL 3x Conical Tesla Column', dims: '3.8m W × 11.2m H × 3.8m D' },
+            { id: 'motorized_conveyor_belt_segment.glb', part: 'PART1', role: 'Directional Conveyor Belt', dims: '4.4m W × 0.25m H × 24.0m D', size: [4.4, 0.35, 24.0], pivot: 'bottom' },
+            { id: 'cryo_slippery_ice_patch.glb', part: 'PART1', role: 'Sub-Zero Slippery Ice Hazard', dims: '18.0m W × 0.45m H × 12.0m D', size: [18.0, 0.65, 12.0], pivot: 'bottom' },
+            { id: 'lateral_endwall_warp_portal.glb', part: 'PART1', role: 'FL 5x/7x Lateral End-Wall Portal', dims: '5.2m W × 5.6m H × 1.8m D', size: [1.8, 5.6, 5.2], pivot: 'center' },
+            { id: 'conical_magical_electric_scifi_column.glb', part: 'PART1', role: 'FL 3x Conical Tesla Column', dims: '3.8m W × 11.2m H × 3.8m D', size: [3.8, 11.2, 3.8], pivot: 'bottom' },
             // PART 2: 16 Traversal, Cantilevered Side-Wings & Bulkheads
-            { id: 'kinetic_geyser_jump_pad.glb', part: 'PART2', role: 'Mid-Deck High-G Jump Pad', dims: '5.2m W × 0.45m H × 5.2m D' },
-            { id: 'spartan_thruster_pickup_module.glb', part: 'PART2', role: 'MJOLNIR Thruster Pack Module', dims: '0.90m W × 0.75m H × 0.65m D' },
-            { id: 'ceiling_moisture_drip_condenser.glb', part: 'PART2', role: 'Overhead Pipe Drip Condenser', dims: '1.80m W × 0.95m H × 1.80m D' },
-            { id: 'corrugated_bio_conduit_hose_kit.glb', part: 'PART2', role: 'Ribbed Bio-Fluid Conduit Hose', dims: '0.60m W × 0.35m H × 6.00m D' },
-            { id: 'side_wing_breach_gateway_arch.glb', part: 'PART2', role: 'Side-Wing Bulkhead Gateway Arch', dims: '2.4m W × 8.8m H × 21.6m D' },
-            { id: 'cryo_biodome_crystal_flora_tree.glb', part: 'PART2', role: 'FL 15W Cryo Crystal Flora Tree', dims: '4.5m W × 7.8m H × 4.5m D' },
-            { id: 'cryo_biodome_geodesic_canopy.glb', part: 'PART2', role: 'FL 15W Geodesic Biodome Canopy', dims: '58.0m W × 18.0m H × 62.0m D' },
-            { id: 'void_observatory_celestial_orrery.glb', part: 'PART2', role: 'FL 30E Holographic Celestial Orrery', dims: '19.5m W × 12.0m H × 19.5m D' },
-            { id: 'void_observatory_glass_bridge_deck.glb', part: 'PART2', role: 'FL 30E Transparent Void Glass Deck', dims: '12.0m W × 0.85m H × 12.0m D' },
-            { id: 'magma_foundry_roast_turbine.glb', part: 'PART2', role: 'FL 45W Thermal Roast Turbine', dims: '9.5m W × 8.4m H × 9.5m D' },
-            { id: 'magma_foundry_molten_crucible_trench.glb', part: 'PART2', role: 'FL 45W Molten Espresso Trench', dims: '46.0m W × 0.80m H × 3.2m D' },
-            { id: 'cantilevered_void_support_strut.glb', part: 'PART2', role: 'Exterior Side-Wing Support Strut', dims: '62.0m W × 6.5m H × 2.4m D' },
-            { id: 'smart_wall_crouch_bunker_module.glb', part: 'PART2', role: 'Crouch-Tunnel Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D' },
-            { id: 'smart_wall_firing_window_module.glb', part: 'PART2', role: 'Firing-Port Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D' },
-            { id: 'stairwell_safety_railing_kit.glb', part: 'PART2', role: 'Switchback Ramp Safety Railing', dims: '0.80m W × 1.60m H × 48.0m D' },
-            { id: 'holo_floor_sector_signboard.glb', part: 'PART2', role: 'Suspended Neon Floor Signboard', dims: '7.20m W × 3.40m H × 0.25m D' },
+            { id: 'kinetic_geyser_jump_pad.glb', part: 'PART2', role: 'Mid-Deck High-G Jump Pad', dims: '5.2m W × 0.45m H × 5.2m D', size: [5.2, 0.45, 5.2], pivot: 'bottom' },
+            { id: 'spartan_thruster_pickup_module.glb', part: 'PART2', role: 'MJOLNIR Thruster Pack Module', dims: '0.90m W × 0.75m H × 0.65m D', size: [0.9, 0.75, 0.65], pivot: 'center' },
+            { id: 'ceiling_moisture_drip_condenser.glb', part: 'PART2', role: 'Overhead Pipe Drip Condenser', dims: '1.80m W × 0.95m H × 1.80m D', size: [1.8, 0.95, 1.8], pivot: 'top' },
+            { id: 'corrugated_bio_conduit_hose_kit.glb', part: 'PART2', role: 'Ribbed Bio-Fluid Conduit Hose', dims: '0.60m W × 0.35m H × 6.00m D', size: [0.6, 0.35, 6.0], pivot: 'bottom' },
+            { id: 'side_wing_breach_gateway_arch.glb', part: 'PART2', role: 'Side-Wing Bulkhead Gateway Arch', dims: '2.4m W × 8.8m H × 21.6m D', size: [2.4, 8.8, 21.6], pivot: 'bottom' },
+            { id: 'cryo_biodome_crystal_flora_tree.glb', part: 'PART2', role: 'FL 15W Cryo Crystal Flora Tree', dims: '4.5m W × 7.8m H × 4.5m D', size: [4.5, 7.8, 4.5], pivot: 'bottom' },
+            { id: 'cryo_biodome_geodesic_canopy.glb', part: 'PART2', role: 'FL 15W Geodesic Biodome Canopy', dims: '58.0m W × 18.0m H × 62.0m D', size: [58.0, 18.0, 62.0], pivot: 'bottom' },
+            { id: 'void_observatory_celestial_orrery.glb', part: 'PART2', role: 'FL 30E Holographic Celestial Orrery', dims: '19.5m W × 12.0m H × 19.5m D', size: [19.5, 12.0, 19.5], pivot: 'center' },
+            { id: 'void_observatory_glass_bridge_deck.glb', part: 'PART2', role: 'FL 30E Transparent Void Glass Deck', dims: '12.0m W × 0.85m H × 12.0m D', size: [12.0, 0.85, 12.0], pivot: 'top' },
+            { id: 'magma_foundry_roast_turbine.glb', part: 'PART2', role: 'FL 45W Thermal Roast Turbine', dims: '9.5m W × 8.4m H × 9.5m D', size: [9.5, 8.4, 9.5], pivot: 'bottom' },
+            { id: 'magma_foundry_molten_crucible_trench.glb', part: 'PART2', role: 'FL 45W Molten Espresso Trench', dims: '46.0m W × 0.80m H × 3.2m D', size: [46.0, 0.8, 3.2], pivot: 'top' },
+            { id: 'cantilevered_void_support_strut.glb', part: 'PART2', role: 'Exterior Side-Wing Support Strut', dims: '62.0m W × 6.5m H × 2.4m D', size: [62.0, 6.5, 2.4], pivot: 'center' },
+            { id: 'smart_wall_crouch_bunker_module.glb', part: 'PART2', role: 'Crouch-Tunnel Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D', size: [18.0, 8.4, 1.2], pivot: 'bottom' },
+            { id: 'smart_wall_firing_window_module.glb', part: 'PART2', role: 'Firing-Port Tactical Bulkhead', dims: '18.0m W × 8.4m H × 1.2m D', size: [18.0, 8.4, 1.2], pivot: 'bottom' },
+            { id: 'stairwell_safety_railing_kit.glb', part: 'PART2', role: 'Switchback Ramp Safety Railing', dims: '0.80m W × 1.60m H × 48.0m D', size: [0.8, 1.6, 48.0], pivot: 'bottom' },
+            { id: 'holo_floor_sector_signboard.glb', part: 'PART2', role: 'Suspended Neon Floor Signboard', dims: '7.20m W × 3.40m H × 0.25m D', size: [7.2, 3.4, 0.25], pivot: 'center' },
             // PART 3: 37 Core Exterior, Player, Weapons, Enemies & Lab Props
-            { id: 'exterior_alien_void_monolith.glb', part: 'PART3', role: 'Floating Obsidian Void Monolith', dims: '18m W × 85m H × 18m D' },
-            { id: 'exterior_eclipsed_alien_moon.glb', part: 'PART3', role: 'Cratered Eclipsed Alien Moon', dims: '120m Diameter' },
-            { id: 'exterior_alien_horizon_spire_cluster.glb', part: 'PART3', role: 'Basalt Void Horizon Spires', dims: '65m W × 110m H × 45m D' },
-            { id: 'exterior_orbital_void_ring_segment.glb', part: 'PART3', role: 'Orbital Containment Ring Segment', dims: '90m W × 6m H × 4m D' },
-            { id: 'interior_deck_floor_tile_4x4m.glb', part: 'PART3', role: 'Gridded Metallic Deck Tile', dims: '4.0m W × 0.4m H × 4.0m D' },
-            { id: 'interior_bulkhead_wall_panel.glb', part: 'PART3', role: 'Ribbed Titanium Bulkhead Panel', dims: '6.0m W × 8.4m H × 1.2m D' },
-            { id: 'interior_perimeter_window_parapet.glb', part: 'PART3', role: 'Waist-High Void Perimeter Parapet', dims: '8.0m W × 8.4m H × 1.6m D' },
-            { id: 'spartan_mouse_117.glb', part: 'PART3', role: 'Playable Spartan-Mouse 117 Rig', dims: '1.15m W × 3.10m H × 1.15m D' },
-            { id: 'first_person_ma5c_seeker_rig.glb', part: 'PART3', role: '1P MA5C Rifle & Seeker Pod', dims: '0.90m W × 0.52m H × 0.85m D' },
-            { id: 'heat_seeking_plasma_missile.glb', part: 'PART3', role: 'Homing Anti-Air Plasma Missile', dims: '0.35m W × 0.35m H × 0.85m D' },
-            { id: 'sticky_plasma_grenade.glb', part: 'PART3', role: 'Cobalt Sticky Plasma Grenade', dims: '0.45m W × 0.45m H × 0.45m D' },
-            { id: 'laser_tier_upgrade_core.glb', part: 'PART3', role: 'MK-Laser Optical Upgrade Crystal', dims: '0.95m W × 1.25m H × 0.95m D' },
-            { id: 'hippie_zombie_penguin.glb', part: 'PART3', role: 'FL 01–14 Hippie-Zombie Penguin', dims: '1.35m W × 2.50m H × 1.35m D' },
-            { id: 'cold_brew_enforcer_penguin.glb', part: 'PART3', role: 'FL 15–29 Cold-Brew Enforcer Penguin', dims: '1.55m W × 2.65m H × 1.50m D' },
-            { id: 'nitro_shot_commando_penguin.glb', part: 'PART3', role: 'FL 30–44 Nitro-Shot Commando Penguin', dims: '1.50m W × 2.75m H × 1.60m D' },
-            { id: 'penthouse_royal_guard_penguin.glb', part: 'PART3', role: 'FL 45–60 Penthouse Royal Guard', dims: '1.75m W × 2.95m H × 1.75m D' },
-            { id: 'sentinel_robo_bat.glb', part: 'PART3', role: 'FL 01–29 Flying Sentinel Robo-Bat', dims: '2.80m W × 1.30m H × 1.40m D' },
-            { id: 'royal_gunship_robo_bat.glb', part: 'PART3', role: 'FL 30–60 Royal Gunship Robo-Bat', dims: '3.60m W × 1.65m H × 1.85m D' },
-            { id: 'cryo_shock_vat.glb', part: 'PART3', role: 'Breakable AOE Freeze Cryo Vat', dims: '1.10m W × 1.50m H × 1.10m D' },
-            { id: 'shield_capacitor_pylon.glb', part: 'PART3', role: 'Breakable +35 Shield Pylon', dims: '1.15m W × 1.85m H × 1.15m D' },
-            { id: 'unsc_ordnance_crate.glb', part: 'PART3', role: 'Breakable UNSC Ammo/Cheese Crate', dims: '1.25m W × 0.90m H × 1.05m D' },
-            { id: 'mutagenic_distillation_rig.glb', part: 'PART3', role: 'Countertop Boiling Lab Rig', dims: '0.85m W × 0.95m H × 0.55m D' },
-            { id: 'volatile_spore_belljar.glb', part: 'PART3', role: 'Countertop Volatile Spore Bell-Jar', dims: '0.75m W × 0.90m H × 0.75m D' },
-            { id: 'destructible_hardlight_barrier.glb', part: 'PART3', role: 'Waist-High Hard-Light Cover Wall', dims: '7.50m W × 2.45m H × 1.50m D' },
-            { id: 'espresso_harvester_tower.glb', part: 'PART3', role: 'Caffeine Harvester Boiler Tower', dims: '3.80m W × 5.80m H × 3.80m D' },
-            { id: 'supreme_penthouse_espresso_core.glb', part: 'PART3', role: 'FL 60 Supreme Reactor Core', dims: '5.50m W × 8.40m H × 5.50m D' },
-            { id: 'alien_trough_sink_counter.glb', part: 'PART3', role: 'Pass-Through Counter & Trough Sink', dims: '5.40m W × 2.35m H × 1.85m D' },
-            { id: 'quantum_centrifuge.glb', part: 'PART3', role: 'Mid-Room Gyro Quantum Centrifuge', dims: '2.40m W × 4.80m H × 2.40m D' },
-            { id: 'waveform_oscilloscope_console.glb', part: 'PART3', role: 'Countertop CRT Oscilloscope', dims: '0.85m W × 0.55m H × 0.60m D' },
-            { id: 'wall_cake_shrine.glb', part: 'PART3', role: 'Alcove Cherry Cake Ammo Shrine', dims: '1.20m W × 1.20m H × 1.20m D' },
-            { id: 'cyber_cheese_wedge.glb', part: 'PART3', role: 'Golden Cyber-Cheese Shield Wedge', dims: '0.80m W × 0.65m H × 0.80m D' },
-            { id: 'antigrav_skylift_pad.glb', part: 'PART3', role: 'Corner 60-Story Sky-Lift Emitter', dims: '6.20m W × 0.80m H × 6.20m D' },
-            { id: 'switchback_ramp_module.glb', part: 'PART3', role: 'Inter-Floor Switchback Ramp', dims: '8.50m W × 12.00m H × 48.00m D' },
-            { id: 'subbasement_sludge_sump_gate.glb', part: 'PART3', role: 'Level B1 Sump Drainage Gate', dims: '4.20m W × 4.50m H × 1.20m D' },
-            { id: 'recessed_telemetry_wall_monitor.glb', part: 'PART3', role: 'Flush Wall Telemetry Monitor', dims: '2.80m W × 1.45m H × 0.12m D' },
-            { id: 'penthouse_gold_marble_column.glb', part: 'PART3', role: 'FL 60 Gold/Marble Luxury Pillar', dims: '3.20m W × 14.00m H × 3.20m D' },
-            { id: 'supreme_barista_overlord_boss.glb', part: 'PART3', role: 'FL 60 Quad-Walker Emperor Boss', dims: '3.80m W × 5.40m H × 3.80m D' }
+            { id: 'exterior_alien_void_monolith.glb', part: 'PART3', role: 'Floating Obsidian Void Monolith', dims: '18m W × 85m H × 18m D', size: [18.0, 85.0, 18.0], pivot: 'center' },
+            { id: 'exterior_eclipsed_alien_moon.glb', part: 'PART3', role: 'Cratered Eclipsed Alien Moon', dims: '120m Diameter', size: [120.0, 120.0, 120.0], pivot: 'center' },
+            { id: 'exterior_alien_horizon_spire_cluster.glb', part: 'PART3', role: 'Basalt Void Horizon Spires', dims: '65m W × 110m H × 45m D', size: [65.0, 110.0, 45.0], pivot: 'bottom' },
+            { id: 'exterior_orbital_void_ring_segment.glb', part: 'PART3', role: 'Orbital Containment Ring Segment', dims: '90m W × 6m H × 4m D', size: [90.0, 6.0, 4.0], pivot: 'center' },
+            { id: 'interior_deck_floor_tile_4x4m.glb', part: 'PART3', role: 'Gridded Metallic Deck Tile', dims: '4.0m W × 0.4m H × 4.0m D', size: [4.0, 0.4, 4.0], pivot: 'top' },
+            { id: 'interior_bulkhead_wall_panel.glb', part: 'PART3', role: 'Ribbed Titanium Bulkhead Panel', dims: '6.0m W × 8.4m H × 1.2m D', size: [6.0, 8.4, 1.2], pivot: 'bottom' },
+            { id: 'interior_perimeter_window_parapet.glb', part: 'PART3', role: 'Waist-High Void Perimeter Parapet', dims: '8.0m W × 8.4m H × 1.6m D', size: [8.0, 1.8, 1.6], pivot: 'bottom' },
+            { id: 'spartan_mouse_117.glb', part: 'PART3', role: 'Playable Spartan-Mouse 117 Rig', dims: '1.15m W × 3.10m H × 1.15m D', size: [1.15, 3.1, 1.15], pivot: 'bottom' },
+            { id: 'first_person_ma5c_seeker_rig.glb', part: 'PART3', role: '1P MA5C Rifle & Seeker Pod', dims: '0.90m W × 0.52m H × 0.85m D', size: [0.9, 0.52, 0.85], pivot: 'center' },
+            { id: 'heat_seeking_plasma_missile.glb', part: 'PART3', role: 'Homing Anti-Air Plasma Missile', dims: '0.35m W × 0.35m H × 0.85m D', size: [0.35, 0.35, 0.85], pivot: 'center' },
+            { id: 'sticky_plasma_grenade.glb', part: 'PART3', role: 'Cobalt Sticky Plasma Grenade', dims: '0.45m W × 0.45m H × 0.45m D', size: [0.45, 0.45, 0.45], pivot: 'center' },
+            { id: 'laser_tier_upgrade_core.glb', part: 'PART3', role: 'MK-Laser Optical Upgrade Crystal', dims: '0.95m W × 1.25m H × 0.95m D', size: [0.95, 1.25, 0.95], pivot: 'center' },
+            { id: 'hippie_zombie_penguin.glb', part: 'PART3', role: 'FL 01–14 Hippie-Zombie Penguin', dims: '1.35m W × 2.50m H × 1.35m D', size: [1.35, 2.5, 1.35], pivot: 'bottom' },
+            { id: 'cold_brew_enforcer_penguin.glb', part: 'PART3', role: 'FL 15–29 Cold-Brew Enforcer Penguin', dims: '1.55m W × 2.65m H × 1.50m D', size: [1.55, 2.65, 1.5], pivot: 'bottom' },
+            { id: 'nitro_shot_commando_penguin.glb', part: 'PART3', role: 'FL 30–44 Nitro-Shot Commando Penguin', dims: '1.50m W × 2.75m H × 1.60m D', size: [1.5, 2.75, 1.6], pivot: 'bottom' },
+            { id: 'penthouse_royal_guard_penguin.glb', part: 'PART3', role: 'FL 45–60 Penthouse Royal Guard', dims: '1.75m W × 2.95m H × 1.75m D', size: [1.75, 2.95, 1.75], pivot: 'bottom' },
+            { id: 'sentinel_robo_bat.glb', part: 'PART3', role: 'FL 01–29 Flying Sentinel Robo-Bat', dims: '2.80m W × 1.30m H × 1.40m D', size: [2.8, 1.3, 1.4], pivot: 'center' },
+            { id: 'royal_gunship_robo_bat.glb', part: 'PART3', role: 'FL 30–60 Royal Gunship Robo-Bat', dims: '3.60m W × 1.65m H × 1.85m D', size: [3.6, 1.65, 1.85], pivot: 'center' },
+            { id: 'cryo_shock_vat.glb', part: 'PART3', role: 'Breakable AOE Freeze Cryo Vat', dims: '1.10m W × 1.50m H × 1.10m D', size: [1.1, 1.5, 1.1], pivot: 'bottom' },
+            { id: 'shield_capacitor_pylon.glb', part: 'PART3', role: 'Breakable +35 Shield Pylon', dims: '1.15m W × 1.85m H × 1.15m D', size: [1.15, 1.85, 1.15], pivot: 'bottom' },
+            { id: 'unsc_ordnance_crate.glb', part: 'PART3', role: 'Breakable UNSC Ammo/Cheese Crate', dims: '1.25m W × 0.90m H × 1.05m D', size: [1.25, 0.9, 1.05], pivot: 'bottom' },
+            { id: 'mutagenic_distillation_rig.glb', part: 'PART3', role: 'Countertop Boiling Lab Rig', dims: '0.85m W × 0.95m H × 0.55m D', size: [0.85, 0.95, 0.55], pivot: 'bottom' },
+            { id: 'volatile_spore_belljar.glb', part: 'PART3', role: 'Countertop Volatile Spore Bell-Jar', dims: '0.75m W × 0.90m H × 0.75m D', size: [0.75, 0.9, 0.75], pivot: 'bottom' },
+            { id: 'destructible_hardlight_barrier.glb', part: 'PART3', role: 'Waist-High Hard-Light Cover Wall', dims: '7.50m W × 2.45m H × 1.50m D', size: [7.5, 2.45, 1.5], pivot: 'bottom' },
+            { id: 'espresso_harvester_tower.glb', part: 'PART3', role: 'Caffeine Harvester Boiler Tower', dims: '3.80m W × 5.80m H × 3.80m D', size: [3.8, 5.8, 3.8], pivot: 'bottom' },
+            { id: 'supreme_penthouse_espresso_core.glb', part: 'PART3', role: 'FL 60 Supreme Reactor Core', dims: '5.50m W × 8.40m H × 5.50m D', size: [5.5, 8.4, 5.5], pivot: 'bottom' },
+            { id: 'alien_trough_sink_counter.glb', part: 'PART3', role: 'Pass-Through Counter & Trough Sink', dims: '5.40m W × 2.35m H × 1.85m D', size: [5.4, 2.35, 1.85], pivot: 'bottom' },
+            { id: 'quantum_centrifuge.glb', part: 'PART3', role: 'Mid-Room Gyro Quantum Centrifuge', dims: '2.40m W × 4.80m H × 2.40m D', size: [2.4, 4.8, 2.4], pivot: 'bottom' },
+            { id: 'waveform_oscilloscope_console.glb', part: 'PART3', role: 'Countertop CRT Oscilloscope', dims: '0.85m W × 0.55m H × 0.60m D', size: [0.85, 0.55, 0.6], pivot: 'bottom' },
+            { id: 'wall_cake_shrine.glb', part: 'PART3', role: 'Alcove Cherry Cake Ammo Shrine', dims: '1.20m W × 1.20m H × 1.20m D', size: [1.2, 1.2, 1.2], pivot: 'center' },
+            { id: 'cyber_cheese_wedge.glb', part: 'PART3', role: 'Golden Cyber-Cheese Shield Wedge', dims: '0.80m W × 0.65m H × 0.80m D', size: [0.8, 0.65, 0.8], pivot: 'center' },
+            { id: 'antigrav_skylift_pad.glb', part: 'PART3', role: 'Corner 60-Story Sky-Lift Emitter', dims: '6.20m W × 0.80m H × 6.20m D', size: [6.2, 0.8, 6.2], pivot: 'bottom' },
+            { id: 'switchback_ramp_module.glb', part: 'PART3', role: 'Inter-Floor Switchback Ramp', dims: '8.50m W × 12.00m H × 48.00m D', size: [8.5, 12.0, 48.0], pivot: 'center' },
+            { id: 'subbasement_sludge_sump_gate.glb', part: 'PART3', role: 'Level B1 Sump Drainage Gate', dims: '4.20m W × 4.50m H × 1.20m D', size: [4.2, 4.5, 1.2], pivot: 'bottom' },
+            { id: 'recessed_telemetry_wall_monitor.glb', part: 'PART3', role: 'Flush Wall Telemetry Monitor', dims: '2.80m W × 1.45m H × 0.12m D', size: [2.8, 1.45, 0.12], pivot: 'center' },
+            { id: 'penthouse_gold_marble_column.glb', part: 'PART3', role: 'FL 60 Gold/Marble Luxury Pillar', dims: '3.20m W × 14.00m H × 3.20m D', size: [3.2, 12.0, 3.2], pivot: 'bottom' },
+            { id: 'supreme_barista_overlord_boss.glb', part: 'PART3', role: 'FL 60 Quad-Walker Emperor Boss', dims: '3.80m W × 5.40m H × 3.80m D', size: [3.8, 5.4, 3.8], pivot: 'bottom' }
         ];
 
+        const GLB_SPEC_MAP = new Map(GLB_STUDIO_ITEMS.map(it => [it.id, it]));
         const customGlbRegistry = {};
         const gltfLoader = new THREE.GLTFLoader();
         let currentStudioFilter = 'ALL';
         let selectedStudioSlot = GLB_STUDIO_ITEMS[0];
 
-        function cloneOrBuildAsset(slotId, proceduralBuilderFn) {
-            if (customGlbRegistry[slotId]) {
-                return customGlbRegistry[slotId].clone(true);
-            }
-            return proceduralBuilderFn();
-        }
-
         // ============================================================================
-        // 3. THREE.JS SCENE, CAMERA, LIGHTING & EXTERIOR ALIEN VOID WORLD
+        // 3. THREE.JS PBR RENDERER, PMREM ENVIRONMENT MAP & PROCEDURAL TEXTURES
         // ============================================================================
         const canvas = document.getElementById('game-canvas');
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.22;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x030712);
-        scene.fog = new THREE.FogExp2(0x040917, 0.0032);
+        scene.fog = new THREE.FogExp2(0x040918, 0.0028);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 950);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1100);
 
-        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.72);
+        // Generate Procedural High-Contrast Sci-Fi Reflection Environment Map (PMREM)
+        function createSciFiEnvironmentMap(targetRenderer) {
+            const pmremGenerator = new THREE.PMREMGenerator(targetRenderer);
+            pmremGenerator.compileEquirectangularShader();
+            const envScene = new THREE.Scene();
+            envScene.background = new THREE.Color(0x061024);
+
+            // Radiant overhead cyan/sky light panels + warm amber horizon bounce for metallic reflections
+            const ceilingPanel = new THREE.Mesh(
+                new THREE.PlaneGeometry(160, 160),
+                new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide })
+            );
+            ceilingPanel.position.set(0, 70, 0);
+            ceilingPanel.rotation.x = Math.PI / 2;
+            envScene.add(ceilingPanel);
+
+            const cyanRing = new THREE.Mesh(
+                new THREE.TorusGeometry(65, 4.5, 12, 48),
+                new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+            );
+            cyanRing.rotation.x = Math.PI / 2;
+            cyanRing.position.y = 25;
+            envScene.add(cyanRing);
+
+            const magRing = new THREE.Mesh(
+                new THREE.TorusGeometry(65, 3.5, 12, 48),
+                new THREE.MeshBasicMaterial({ color: 0xc084fc })
+            );
+            magRing.rotation.x = Math.PI / 3;
+            envScene.add(magRing);
+
+            const amberFloor = new THREE.Mesh(
+                new THREE.PlaneGeometry(160, 160),
+                new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide })
+            );
+            amberFloor.position.set(0, -65, 0);
+            amberFloor.rotation.x = Math.PI / 2;
+            envScene.add(amberFloor);
+
+            const envRT = pmremGenerator.fromScene(envScene, 0.035);
+            pmremGenerator.dispose();
+            return envRT.texture;
+        }
+        const sciFiEnvTexture = createSciFiEnvironmentMap(renderer);
+        scene.environment = sciFiEnvTexture;
+
+        // Procedural High-Res Canvas PBR Textures (Gridded Deck, Bulkhead Armor, Conveyor, Ice, Marble)
+        function createProceduralTextures() {
+            // 1. Gridded Deck Floor Texture
+            const deckCan = document.createElement('canvas');
+            deckCan.width = 512; deckCan.height = 512;
+            const dCtx = deckCan.getContext('2d');
+            dCtx.fillStyle = '#0f172a';
+            dCtx.fillRect(0, 0, 512, 512);
+            dCtx.strokeStyle = '#1e293b';
+            dCtx.lineWidth = 8;
+            dCtx.strokeRect(4, 4, 504, 504);
+            dCtx.strokeStyle = 'rgba(0, 243, 255, 0.35)';
+            dCtx.lineWidth = 2;
+            for (let i = 64; i < 512; i += 64) {
+                dCtx.beginPath(); dCtx.moveTo(i, 0); dCtx.lineTo(i, 512); dCtx.stroke();
+                dCtx.beginPath(); dCtx.moveTo(0, i); dCtx.lineTo(512, i); dCtx.stroke();
+            }
+            dCtx.fillStyle = '#334155';
+            for (let y = 16; y < 512; y += 32) {
+                for (let x = 16; x < 512; x += 32) {
+                    dCtx.fillRect(x - 3, y - 3, 6, 6);
+                }
+            }
+            const deckTex = new THREE.CanvasTexture(deckCan);
+            deckTex.wrapS = deckTex.wrapT = THREE.RepeatWrapping;
+            deckTex.repeat.set(36, 26);
+
+            // 2. Ribbed Titanium Bulkhead Texture
+            const wallCan = document.createElement('canvas');
+            wallCan.width = 256; wallCan.height = 256;
+            const wCtx = wallCan.getContext('2d');
+            wCtx.fillStyle = '#1e293b';
+            wCtx.fillRect(0, 0, 256, 256);
+            wCtx.fillStyle = '#0f172a';
+            for (let x = 0; x < 256; x += 32) wCtx.fillRect(x, 0, 12, 256);
+            wCtx.fillStyle = '#00f3ff';
+            wCtx.fillRect(0, 24, 256, 6);
+            wCtx.fillStyle = '#f59e0b';
+            wCtx.fillRect(0, 232, 256, 8);
+            const wallTex = new THREE.CanvasTexture(wallCan);
+            wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+            wallTex.repeat.set(16, 1);
+
+            // 3. Luxury Gold-Veined Marble Texture (FL 60)
+            const marbCan = document.createElement('canvas');
+            marbCan.width = 256; marbCan.height = 256;
+            const mCtx = marbCan.getContext('2d');
+            mCtx.fillStyle = '#1e1b4b';
+            mCtx.fillRect(0, 0, 256, 256);
+            mCtx.strokeStyle = '#fbbf24';
+            mCtx.lineWidth = 3;
+            for (let i = 0; i < 10; i++) {
+                mCtx.beginPath();
+                mCtx.moveTo(0, i * 28);
+                mCtx.bezierCurveTo(85, i * 28 + 30, 170, i * 28 - 25, 256, i * 28 + 15);
+                mCtx.stroke();
+            }
+            const marbleTex = new THREE.CanvasTexture(marbCan);
+            marbleTex.wrapS = marbleTex.wrapT = THREE.RepeatWrapping;
+
+            return { deckTex, wallTex, marbleTex };
+        }
+        const procTextures = createProceduralTextures();
+
+        const ambientLight = new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 0.92);
         scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0x38bdf8, 0.85);
+        const dirLight = new THREE.DirectionalLight(0x7dd3fc, 1.15);
         dirLight.position.set(140, 420, 180);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
         scene.add(dirLight);
 
-        // Flashlight attached to player view
-        const flashLight = new THREE.SpotLight(0xe0f2fe, 1.4, 58, Math.PI / 4.5, 0.45, 1.2);
+        const flashLight = new THREE.SpotLight(0xe0f2fe, 1.85, 68, Math.PI / 4.2, 0.45, 1.1);
         flashLight.visible = true;
         scene.add(flashLight);
         scene.add(flashLight.target);
 
-        // Build Dark Void Alien World Exterior (Moon, Floating Obsidian Monoliths, Orbital Rings, Stars)
-        const exteriorGroup = new THREE.Group();
-        scene.add(exteriorGroup);
+        // ============================================================================
+        // 4. AUTO-SCALING .GLB NORMALIZER & 57 HIGH-DETAIL PROCEDURAL BUILDERS
+        // ============================================================================
+        function normalizeGlbToSpec(rawScene, slotId) {
+            const spec = GLB_SPEC_MAP.get(slotId);
+            const root = new THREE.Group();
+            const model = rawScene.clone(true);
 
-        function buildExteriorAlienVoidWorld() {
-            // Starfield
-            const starGeo = new THREE.BufferGeometry();
-            const starCount = 1600;
-            const posArr = new Float32Array(starCount * 3);
-            for (let i = 0; i < starCount; i++) {
-                const r = 340 + Math.random() * 420;
-                const theta = Math.random() * Math.PI * 2;
-                const y = -120 + Math.random() * 980;
-                posArr[i * 3] = Math.cos(theta) * r;
-                posArr[i * 3 + 1] = y;
-                posArr[i * 3 + 2] = Math.sin(theta) * r;
+            model.traverse((node) => {
+                if (node.isMesh) {
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                    if (node.material) {
+                        node.material.envMap = sciFiEnvTexture;
+                        node.material.envMapIntensity = 1.35;
+                        node.material.needsUpdate = true;
+                    }
+                }
+            });
+
+            const box = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+
+            if (spec && spec.size && size.x > 0.0001 && size.y > 0.0001 && size.z > 0.0001) {
+                const [targetW, targetH, targetD] = spec.size;
+                // Uniform scale to fit the primary target height/footprint while preserving proportions
+                const scaleFactor = Math.min(targetW / size.x, targetH / size.y, targetD / size.z);
+                model.scale.multiplyScalar(scaleFactor);
+
+                const scaledBox = new THREE.Box3().setFromObject(model);
+                const scaledCenter = new THREE.Vector3();
+                scaledBox.getCenter(scaledCenter);
+
+                model.position.x -= scaledCenter.x;
+                model.position.z -= scaledCenter.z;
+                if (spec.pivot === 'bottom') {
+                    model.position.y -= scaledBox.min.y;
+                } else if (spec.pivot === 'top') {
+                    model.position.y -= scaledBox.max.y;
+                } else {
+                    model.position.y -= scaledCenter.y;
+                }
             }
-            starGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-            const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 1.6 }));
-            exteriorGroup.add(stars);
-
-            // Eclipsed Alien Moon
-            const moonGroup = new THREE.Group();
-            const moonMesh = new THREE.Mesh(
-                new THREE.SphereGeometry(58, 24, 24),
-                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.3, emissive: 0x3b0764, emissiveIntensity: 0.35 })
-            );
-            moonGroup.add(moonMesh);
-            const moonRing = new THREE.Mesh(
-                new THREE.RingGeometry(74, 88, 40),
-                new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.45 })
-            );
-            moonRing.rotation.x = Math.PI * 0.38;
-            moonGroup.add(moonRing);
-            moonGroup.position.set(-280, 460, -340);
-            exteriorGroup.add(moonGroup);
-
-            // Floating Brutalist Obsidian Monoliths around the tower
-            for (let i = 0; i < 14; i++) {
-                const angle = (i / 14) * Math.PI * 2;
-                const dist = 195 + (i % 3) * 55;
-                const mono = new THREE.Group();
-                const body = new THREE.Mesh(
-                    new THREE.CylinderGeometry(3.5, 8.5, 76, 6),
-                    new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.25, metalness: 0.85 })
-                );
-                mono.add(body);
-                const seam = new THREE.Mesh(
-                    new THREE.BoxGeometry(1.2, 68, 17.5),
-                    new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0x00f3ff : 0x10b981 })
-                );
-                mono.add(seam);
-                mono.position.set(Math.cos(angle) * dist, i * 54 + 20, Math.sin(angle) * dist);
-                exteriorGroup.add(mono);
-            }
+            root.add(model);
+            return root;
         }
-        buildExteriorAlienVoidWorld();
 
-        // ============================================================================
-        // 4. PROCEDURAL 3D ASSET BUILDERS (PLAYER, WEAPONS, 4 FEATURED MECHANICS, PROPS)
-        // ============================================================================
+        // Shared High-Grade PBR Materials
+        const MAT = {
+            titanium: new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.28, metalness: 0.86 }),
+            obsidian: new THREE.MeshStandardMaterial({ color: 0x090d16, roughness: 0.2, metalness: 0.92 }),
+            chrome: new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.14, metalness: 0.96 }),
+            brass: new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.22, metalness: 0.9 }),
+            spartanOlive: new THREE.MeshStandardMaterial({ color: 0x4d5d2b, roughness: 0.32, metalness: 0.72 }),
+            goldVisor: new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.08, metalness: 0.98, emissive: 0xb45309, emissiveIntensity: 0.4 }),
+            cyanGlow: new THREE.MeshStandardMaterial({ color: 0x00f3ff, emissive: 0x00f3ff, emissiveIntensity: 0.95, roughness: 0.15 }),
+            amberGlow: new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.95, roughness: 0.15 }),
+            emeraldGlow: new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.9, roughness: 0.15 }),
+            magentaGlow: new THREE.MeshStandardMaterial({ color: 0xec4899, emissive: 0xec4899, emissiveIntensity: 0.9, roughness: 0.15 }),
+            violetGlow: new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0xa855f7, emissiveIntensity: 0.9, roughness: 0.15 }),
+            crimsonGlow: new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xf43f5e, emissiveIntensity: 0.95, roughness: 0.15 }),
+            iceCrystal: new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.38, roughness: 0.05, metalness: 0.92, transparent: true, opacity: 0.8 }),
+            glassCyan: new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.08, metalness: 0.85, transparent: true, opacity: 0.42 })
+        };
+
+        // Master Builder for All 57 Assets (Uses Custom .GLB if loaded, else High-Detail Multi-Part Procedural Mesh)
+        function cloneOrBuildAsset(slotId) {
+            if (customGlbRegistry[slotId]) {
+                return customGlbRegistry[slotId].clone(true);
+            }
+            return buildProceduralAssetById(slotId);
+        }
+
         function buildSpartanMouseRig() {
             const g = new THREE.Group();
-            const armorMat = new THREE.MeshStandardMaterial({ color: 0x4d5d2b, roughness: 0.38, metalness: 0.65 });
-            const darkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.75 });
-            const visorMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.12, metalness: 0.95, emissive: 0xd97706, emissiveIntensity: 0.35 });
+            // Boots & Greaves
+            for (const sx of [-0.24, 0.24]) {
+                const boot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.48), MAT.titanium);
+                boot.position.set(sx, 0.13, -0.05);
+                const greave = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.72, 10), MAT.spartanOlive);
+                greave.position.set(sx, 0.58, 0);
+                const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.18, 0.58, 10), MAT.titanium);
+                thigh.position.set(sx, 1.15, 0);
+                g.add(boot, greave, thigh);
+            }
+            // Armored Pelvis & Chest Cuirass
+            const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.32, 0.54), MAT.titanium);
+            pelvis.position.y = 1.42;
+            const chest = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.86, 0.68), MAT.spartanOlive);
+            chest.position.y = 1.98;
+            const reactor = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 0), MAT.cyanGlow);
+            reactor.position.set(0, 2.02, -0.35);
+            g.add(pelvis, chest, reactor);
 
-            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.15, 0.62), armorMat);
-            torso.position.y = 1.45;
-            g.add(torso);
+            // Shoulder Pauldrons & Arms + Dual Thruster Pack
+            for (const sx of [-0.62, 0.62]) {
+                const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 10), MAT.spartanOlive);
+                pauldron.position.set(sx, 2.22, 0);
+                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.75, 8), MAT.titanium);
+                arm.position.set(sx, 1.78, -0.12);
+                arm.rotation.x = 0.45;
+                g.add(pauldron, arm);
+            }
+            const thrusterPack = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.62, 0.34), MAT.titanium);
+            thrusterPack.position.set(0, 2.04, 0.45);
+            g.add(thrusterPack);
 
-            const helm = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.68, 0.76), armorMat);
-            helm.position.y = 2.42;
-            g.add(helm);
+            // Helmet, Reflective Gold Visor & Armored Mouse Ears
+            const helm = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.68, 0.8), MAT.spartanOlive);
+            helm.position.y = 2.66;
+            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.32, 0.16), MAT.goldVisor);
+            visor.position.set(0, 2.68, -0.36);
+            g.add(helm, visor);
 
-            const visor = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.32, 0.12), visorMat);
-            visor.position.set(0, 2.44, -0.36);
-            g.add(visor);
-
-            // Armored Mouse Ears
-            const earGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.12, 16);
-            const earL = new THREE.Mesh(earGeo, armorMat);
-            earL.rotation.x = Math.PI / 2;
-            earL.position.set(-0.38, 2.82, -0.05);
-            const earR = earL.clone();
-            earR.position.x = 0.38;
-            g.add(earL, earR);
-
-            // Legs
-            const legGeo = new THREE.BoxGeometry(0.34, 0.85, 0.38);
-            const legL = new THREE.Mesh(legGeo, darkMat);
-            legL.position.set(-0.24, 0.45, 0);
-            const legR = legL.clone();
-            legR.position.x = 0.24;
-            g.add(legL, legR);
+            const earGeo = new THREE.CylinderGeometry(0.26, 0.26, 0.12, 16);
+            const earRim = new THREE.TorusGeometry(0.26, 0.04, 8, 16);
+            for (const sx of [-0.42, 0.42]) {
+                const ear = new THREE.Mesh(earGeo, MAT.spartanOlive);
+                ear.rotation.x = Math.PI / 2;
+                ear.position.set(sx, 3.04, -0.04);
+                const rim = new THREE.Mesh(earRim, MAT.goldVisor);
+                rim.position.set(sx, 3.04, -0.04);
+                g.add(ear, rim);
+            }
             return g;
         }
 
         function buildFirstPersonWeaponRig() {
             const g = new THREE.Group();
-            const gunMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.32, metalness: 0.82 });
-            const glowMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+            // Right-hand MA5C ICWS Bullpup Rifle with Ammo Counter & Barrel Shroud
+            const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.76), MAT.titanium);
+            receiver.position.set(0.3, -0.24, -0.5);
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.45, 10), MAT.chrome);
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.set(0.3, -0.21, -0.95);
+            const cowl = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.42), MAT.spartanOlive);
+            cowl.position.set(0.3, -0.11, -0.45);
+            const holoScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 0.05), MAT.cyanGlow);
+            holoScreen.rotation.x = -0.35;
+            holoScreen.position.set(0.3, -0.06, -0.24);
+            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.025, 0.56), MAT.cyanGlow);
+            strip.position.set(0.3, -0.17, -0.54);
+            g.add(receiver, barrel, cowl, holoScreen, strip);
 
-            // Right-hand MA5C Assault Rifle
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.72), gunMat);
-            body.position.set(0.28, -0.24, -0.48);
-            g.add(body);
+            // Left-Shoulder Heat-Seeking Missile Pod
+            const pod = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.2, 0.48), MAT.titanium);
+            pod.position.set(-0.36, -0.18, -0.44);
+            const tubeL = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.5, 8), MAT.amberGlow);
+            tubeL.rotation.x = Math.PI / 2;
+            tubeL.position.set(-0.39, -0.16, -0.45);
+            const tubeR = tubeL.clone();
+            tubeR.position.x = -0.32;
+            g.add(pod, tubeL, tubeR);
+            return g;
+        }
 
-            const strip = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.52), glowMat);
-            strip.position.set(0.28, -0.15, -0.48);
-            g.add(strip);
+        function buildDetailedPenguinMesh(tier = 1, isBoss = false) {
+            const g = new THREE.Group();
+            const s = isBoss ? 2.1 : 1.0;
+            const vestColors = [0x10b981, 0x38bdf8, 0xc084fc, 0xf59e0b, 0xf43f5e];
+            const accentColor = isBoss ? 0xf43f5e : vestColors[Math.min(4, tier - 1)];
+            const vestMat = new THREE.MeshStandardMaterial({ color: accentColor, emissive: accentColor, emissiveIntensity: 0.42, roughness: 0.25, metalness: 0.78 });
+            const bellyMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4, metalness: 0.2 });
 
-            // Left-shoulder Heat-Seeking Missile Pod
-            const pod = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.42), gunMat);
-            pod.position.set(-0.34, -0.18, -0.42);
-            g.add(pod);
+            // Webbed Orange Feet
+            for (const sx of [-0.28 * s, 0.28 * s]) {
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.28 * s, 0.12 * s, 0.45 * s), MAT.amberGlow);
+                foot.position.set(sx, 0.06 * s, -0.12 * s);
+                g.add(foot);
+            }
+            if (isBoss) {
+                // Quad-Walker Mech Spider Legs for Supreme Barista Overlord Boss
+                for (let i = 0; i < 4; i++) {
+                    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+                    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 2.2, 8), MAT.goldVisor);
+                    leg.position.set(Math.cos(ang) * 1.45, 1.0, Math.sin(ang) * 1.45);
+                    leg.rotation.z = Math.cos(ang) * -0.45;
+                    leg.rotation.x = Math.sin(ang) * 0.45;
+                    g.add(leg);
+                }
+            }
+
+            // Penguin Torso + White Belly + Armored Vest
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.52 * s, 0.66 * s, 1.55 * s, 14), MAT.obsidian);
+            torso.position.y = 0.88 * s;
+            const belly = new THREE.Mesh(new THREE.CylinderGeometry(0.46 * s, 0.58 * s, 1.32 * s, 12), bellyMat);
+            belly.position.set(0, 0.86 * s, -0.12 * s);
+            const vest = new THREE.Mesh(new THREE.CylinderGeometry(0.57 * s, 0.69 * s, 0.78 * s, 14), vestMat);
+            vest.position.y = 1.02 * s;
+            g.add(torso, belly, vest);
+
+            // Head, Glowing Cyber Shades/Visor, Beak & Crown/Headband
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.48 * s, 14, 14), MAT.obsidian);
+            head.position.y = 1.92 * s;
+            const beak = new THREE.Mesh(new THREE.ConeGeometry(0.19 * s, 0.48 * s, 8), MAT.amberGlow);
+            beak.rotation.x = -Math.PI / 2;
+            beak.position.set(0, 1.88 * s, -0.54 * s);
+            const shades = new THREE.Mesh(new THREE.BoxGeometry(0.68 * s, 0.18 * s, 0.24 * s), isBoss ? MAT.goldVisor : MAT.cyanGlow);
+            shades.position.set(0, 1.98 * s, -0.36 * s);
+            const headband = new THREE.Mesh(new THREE.TorusGeometry(0.44 * s, 0.055 * s, 8, 20), vestMat);
+            headband.rotation.x = Math.PI / 2;
+            headband.position.y = 2.16 * s;
+            g.add(head, beak, shades, headband);
+
+            // Flippers + Espresso Mug / Rotary Minigun
+            const flipL = new THREE.Mesh(new THREE.BoxGeometry(0.16 * s, 0.82 * s, 0.34 * s), MAT.obsidian);
+            flipL.position.set(-0.68 * s, 1.05 * s, 0);
+            flipL.rotation.z = 0.18;
+            const flipR = flipL.clone();
+            flipR.position.x = 0.68 * s;
+            flipR.rotation.z = -0.18;
+
+            const weapon = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * s, 0.16 * s, 0.65 * s, 10), isBoss ? MAT.crimsonGlow : MAT.brass);
+            weapon.rotation.x = Math.PI / 2;
+            weapon.position.set(0.72 * s, 0.95 * s, -0.42 * s);
+            g.add(flipL, flipR, weapon);
+
+            g.userData.flipL = flipL;
+            g.userData.flipR = flipR;
+            return g;
+        }
+
+        function buildDetailedRoboBatMesh(isRoyal = false) {
+            const g = new THREE.Group();
+            const s = isRoyal ? 1.28 : 1.0;
+            const bodyMat = isRoyal ? MAT.goldVisor : MAT.violetGlow;
+            const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.62 * s, 1), MAT.obsidian);
+            const frame = new THREE.Mesh(new THREE.OctahedronGeometry(0.66 * s, 0), bodyMat);
+            frame.material = bodyMat.clone();
+            frame.material.wireframe = true;
+            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.22 * s, 10, 10), MAT.crimsonGlow);
+            eye.position.set(0, 0, -0.52 * s);
+
+            const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.35 * s, 0.09 * s, 0.62 * s), MAT.titanium);
+            wingL.position.set(-1.05 * s, 0.1 * s, 0);
+            const wingR = wingL.clone();
+            wingR.position.x = 1.05 * s;
+
+            const earL = new THREE.Mesh(new THREE.ConeGeometry(0.14 * s, 0.42 * s, 5), bodyMat);
+            earL.position.set(-0.26 * s, 0.68 * s, 0);
+            const earR = earL.clone();
+            earR.position.x = 0.26 * s;
+
+            g.add(core, frame, eye, wingL, wingR, earL, earR);
+            g.userData.wingL = wingL;
+            g.userData.wingR = wingR;
             return g;
         }
 
         // Featured Mechanic 1: Motorized Conveyor Belt Segment
         function buildConveyorBeltMesh() {
             const g = new THREE.Group();
-            const railMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.85 });
-            const trackMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.25 });
-            const chevMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
-
-            const base = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 24.0), trackMat);
+            const base = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 24.0), MAT.obsidian);
             base.position.y = 0.125;
             g.add(base);
 
-            const railL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 24.0), railMat);
-            railL.position.set(-2.05, 0.17, 0);
+            const railL = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.38, 24.0), MAT.titanium);
+            railL.position.set(-2.05, 0.19, 0);
             const railR = railL.clone();
             railR.position.x = 2.05;
             g.add(railL, railR);
 
-            const stripL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, 24.0), cyanMat);
-            stripL.position.set(-1.88, 0.34, 0);
+            const stripL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 24.0), MAT.cyanGlow);
+            stripL.position.set(-1.86, 0.36, 0);
             const stripR = stripL.clone();
-            stripR.position.x = 1.88;
+            stripR.position.x = 1.86;
             g.add(stripL, stripR);
 
             const chevrons = [];
-            for (let z = -10; z <= 10; z += 4) {
-                const c = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.6, 3), chevMat);
+            for (let z = -10; z <= 10; z += 3.5) {
+                const c = new THREE.Mesh(new THREE.ConeGeometry(1.25, 1.65, 3), MAT.amberGlow);
                 c.rotation.x = -Math.PI / 2;
                 c.scale.z = 0.12;
-                c.position.set(0, 0.27, z);
+                c.position.set(0, 0.28, z);
                 g.add(c);
                 chevrons.push(c);
             }
@@ -710,84 +968,70 @@
         // Featured Mechanic 2: Cryo Slippery Ice Patch
         function buildCryoIcePatchMesh() {
             const g = new THREE.Group();
-            const iceMat = new THREE.MeshStandardMaterial({
-                color: 0x38bdf8,
-                emissive: 0x0284c7,
-                emissiveIntensity: 0.35,
-                roughness: 0.06,
-                metalness: 0.88,
-                transparent: true,
-                opacity: 0.76
-            });
-            const sheet = new THREE.Mesh(new THREE.BoxGeometry(18.0, 0.18, 12.0), iceMat);
-            sheet.position.y = 0.09;
+            const sheet = new THREE.Mesh(new THREE.BoxGeometry(18.0, 0.2, 12.0), MAT.iceCrystal);
+            sheet.position.y = 0.1;
             g.add(sheet);
 
-            const spikeGeo = new THREE.ConeGeometry(0.38, 1.35, 5);
-            for (let i = 0; i < 12; i++) {
-                const sp = new THREE.Mesh(spikeGeo, iceMat);
+            const vein = new THREE.Mesh(new THREE.BoxGeometry(16.5, 0.22, 0.35), MAT.cyanGlow);
+            vein.position.y = 0.11;
+            vein.rotation.y = 0.35;
+            g.add(vein);
+
+            const spikeGeo = new THREE.ConeGeometry(0.42, 1.55, 5);
+            for (let i = 0; i < 14; i++) {
+                const sp = new THREE.Mesh(spikeGeo, MAT.iceCrystal);
                 const side = i % 2 === 0 ? -1 : 1;
-                sp.position.set(side * 8.4, 0.65, -5.0 + (i % 6) * 2.0);
-                sp.rotation.z = side * -0.22;
+                sp.position.set(side * 8.4, 0.72, -5.2 + (i % 7) * 1.75);
+                sp.rotation.z = side * -0.24;
                 g.add(sp);
             }
             return g;
         }
 
-        // Featured Mechanic 3: Lateral End-Wall Warp Portal (Every 5th & 7th Floor)
+        // Featured Mechanic 3: Lateral End-Wall Warp Portal
         function buildLateralWarpPortalMesh() {
             const g = new THREE.Group();
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.85 });
-            const magMat = new THREE.MeshBasicMaterial({ color: 0xec4899 });
-            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.72 });
-
-            const torus = new THREE.Mesh(new THREE.TorusGeometry(2.35, 0.28, 12, 32), frameMat);
+            const torus = new THREE.Mesh(new THREE.TorusGeometry(2.45, 0.32, 14, 36), MAT.titanium);
             torus.rotation.y = Math.PI / 2;
-            g.add(torus);
-
-            const innerRing = new THREE.Mesh(new THREE.TorusGeometry(2.02, 0.09, 10, 28), magMat);
+            const innerRing = new THREE.Mesh(new THREE.TorusGeometry(2.08, 0.11, 12, 32), MAT.magentaGlow);
             innerRing.rotation.y = Math.PI / 2;
-            g.add(innerRing);
-
-            const vortex = new THREE.Mesh(new THREE.CircleGeometry(1.95, 28), cyanMat);
+            const vortex = new THREE.Mesh(
+                new THREE.CircleGeometry(2.02, 32),
+                new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.78 })
+            );
             vortex.rotation.y = Math.PI / 2;
-            g.add(vortex);
+            g.add(torus, innerRing, vortex);
+
+            for (let i = 0; i < 6; i++) {
+                const ang = (i / 6) * Math.PI * 2;
+                const fin = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.95, 4), MAT.cyanGlow);
+                fin.position.set(0, Math.sin(ang) * 2.65, Math.cos(ang) * 2.65);
+                fin.rotation.x = ang;
+                g.add(fin);
+            }
             g.userData.vortex = vortex;
             return g;
         }
 
-        // Featured Mechanic 4: Conical Magical-Electric Sci-Fi Column (Every 3rd Floor)
+        // Featured Mechanic 4: Conical Magical-Electric Sci-Fi Column
         function buildConicalTeslaColumnMesh() {
             const g = new THREE.Group();
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.82 });
-            const shaftMat = new THREE.MeshStandardMaterial({
-                color: 0x0f172a,
-                roughness: 0.28,
-                metalness: 0.88,
-                emissive: 0x3b0764,
-                emissiveIntensity: 0.45
-            });
-            const cyanMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
-            const magMat = new THREE.MeshBasicMaterial({ color: 0xc084fc });
-
-            // Stepped octagonal base plinth
-            const plinth = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.25, 0.9, 8), baseMat);
-            plinth.position.y = 0.45;
-            g.add(plinth);
-
-            // Conical shaft: wider at bottom (1.82m), narrower at top (0.88m)
-            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 1.82, 9.2, 12), shaftMat);
+            const plinth = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.28, 0.95, 8), MAT.titanium);
+            plinth.position.y = 0.475;
+            const shaft = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.88, 1.82, 9.2, 12),
+                new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.22, metalness: 0.9, emissive: 0x3b0764, emissiveIntensity: 0.55 })
+            );
             shaft.position.y = 5.05;
-            g.add(shaft);
+            g.add(plinth, shaft);
 
-            // 3 Counter-rotating horizontal Tesla rings scaling narrower toward the top
             const rings = [];
             const heights = [2.6, 5.2, 7.8];
             const radii = [1.95, 1.55, 1.18];
             for (let i = 0; i < 3; i++) {
                 const rMesh = new THREE.Mesh(
-                    new THREE.TorusGeometry(radii[i], 0.08, 8, 24),
-                    i % 2 === 0 ? cyanMat : magMat
+                    new THREE.TorusGeometry(radii[i], 0.09, 10, 28),
+                    i % 2 === 0 ? MAT.cyanGlow : MAT.violetGlow
                 );
                 rMesh.rotation.x = Math.PI / 2;
                 rMesh.position.y = heights[i];
@@ -795,8 +1039,7 @@
                 rings.push(rMesh);
             }
 
-            // Floating diamond energy crystal crown at top (interactive shootable target)
-            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.72, 0), cyanMat);
+            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.78, 0), MAT.cyanGlow);
             crystal.position.y = 10.35;
             g.add(crystal);
 
@@ -805,49 +1048,267 @@
             return g;
         }
 
-        // Pass-Through Lab Counter with Recessed 4-Walled Trough Sink & Dual Brass Faucets
+        // Pass-Through Lab Counter & Trough Sink
         function buildTroughSinkCounterMesh() {
             const g = new THREE.Group();
-            const slateMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.65 });
-            const steelMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.25, metalness: 0.9 });
-            const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
-            const sludgeMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
-
-            // Left & Right solid counter wings
-            const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.05, 1.8), slateMat);
+            const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.05, 1.8), MAT.titanium);
             wingL.position.set(-1.95, 0.525, 0);
             const wingR = wingL.clone();
             wingR.position.x = 1.95;
-            g.add(wingL, wingR);
-
-            // Recessed 4-walled stainless trough basin in center
-            const troughBase = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.55, 1.8), steelMat);
+            const troughBase = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.55, 1.8), MAT.chrome);
             troughBase.position.set(0, 0.275, 0);
-            g.add(troughBase);
-
-            const wallFront = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.48, 0.16), steelMat);
+            const wallFront = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.48, 0.16), MAT.chrome);
             wallFront.position.set(0, 0.78, 0.82);
             const wallBack = wallFront.clone();
             wallBack.position.z = -0.82;
-            g.add(wallFront, wallBack);
-
-            const bioPool = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 1.45), sludgeMat);
+            const bioPool = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 1.45), MAT.emeraldGlow);
             bioPool.position.set(0, 0.68, 0);
-            g.add(bioPool);
+            g.add(wingL, wingR, troughBase, wallFront, wallBack, bioPool);
 
-            // Dual brass gooseneck faucets
             for (const fx of [-0.55, 0.55]) {
-                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.65, 8), brassMat);
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.65, 8), MAT.brass);
                 stem.position.set(fx, 1.32, -0.72);
-                const spout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.38), brassMat);
+                const spout = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.38), MAT.brass);
                 spout.position.set(fx, 1.62, -0.56);
                 g.add(stem, spout);
             }
             return g;
         }
 
+        // Comprehensive Dispatcher so ALL 57 Slot IDs have Distinct, High-Detail Procedural 3D Models
+        function buildProceduralAssetById(slotId) {
+            switch (slotId) {
+                case 'motorized_conveyor_belt_segment.glb': return buildConveyorBeltMesh();
+                case 'cryo_slippery_ice_patch.glb': return buildCryoIcePatchMesh();
+                case 'lateral_endwall_warp_portal.glb': return buildLateralWarpPortalMesh();
+                case 'conical_magical_electric_scifi_column.glb': return buildConicalTeslaColumnMesh();
+                case 'alien_trough_sink_counter.glb': return buildTroughSinkCounterMesh();
+                case 'spartan_mouse_117.glb': return buildSpartanMouseRig();
+                case 'first_person_ma5c_seeker_rig.glb': return buildFirstPersonWeaponRig();
+                case 'hippie_zombie_penguin.glb': return buildDetailedPenguinMesh(1, false);
+                case 'cold_brew_enforcer_penguin.glb': return buildDetailedPenguinMesh(2, false);
+                case 'nitro_shot_commando_penguin.glb': return buildDetailedPenguinMesh(3, false);
+                case 'penthouse_royal_guard_penguin.glb': return buildDetailedPenguinMesh(4, false);
+                case 'supreme_barista_overlord_boss.glb': return buildDetailedPenguinMesh(5, true);
+                case 'sentinel_robo_bat.glb': return buildDetailedRoboBatMesh(false);
+                case 'royal_gunship_robo_bat.glb': return buildDetailedRoboBatMesh(true);
+                case 'espresso_harvester_tower.glb':
+                case 'supreme_penthouse_espresso_core.glb': {
+                    const isCore = slotId === 'supreme_penthouse_espresso_core.glb';
+                    const s = isCore ? 1.45 : 1.0;
+                    const g = new THREE.Group();
+                    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7 * s, 1.95 * s, 1.2 * s, 12), MAT.titanium);
+                    base.position.y = 0.6 * s;
+                    const boiler = new THREE.Mesh(new THREE.CylinderGeometry(1.32 * s, 1.32 * s, 3.6 * s, 16), isCore ? MAT.crimsonGlow : MAT.amberGlow);
+                    boiler.position.y = 3.0 * s;
+                    const cage = new THREE.Mesh(new THREE.CylinderGeometry(1.52 * s, 1.52 * s, 3.7 * s, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0x1e293b, wireframe: true }));
+                    cage.position.y = 3.0 * s;
+                    const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.1 * s, 1.65 * s, 1.0 * s, 12), MAT.titanium);
+                    cap.position.y = 5.2 * s;
+                    g.add(base, boiler, cage, cap);
+                    return g;
+                }
+                case 'smart_wall_crouch_bunker_module.glb': {
+                    const g = new THREE.Group();
+                    const top = new THREE.Mesh(new THREE.BoxGeometry(18.0, 5.8, 1.2), MAT.titanium);
+                    top.position.y = 5.1;
+                    const strip = new THREE.Mesh(new THREE.BoxGeometry(18.1, 0.18, 1.26), MAT.amberGlow);
+                    strip.position.y = 2.25;
+                    const pilL = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, 1.2), MAT.obsidian);
+                    pilL.position.set(-7.4, 1.1, 0);
+                    const pilR = pilL.clone();
+                    pilR.position.x = 7.4;
+                    g.add(top, strip, pilL, pilR);
+                    return g;
+                }
+                case 'smart_wall_firing_window_module.glb': {
+                    const g = new THREE.Group();
+                    const low = new THREE.Mesh(new THREE.BoxGeometry(18.0, 1.4, 1.2), MAT.titanium);
+                    low.position.y = 0.7;
+                    const high = new THREE.Mesh(new THREE.BoxGeometry(18.0, 4.4, 1.2), MAT.titanium);
+                    high.position.y = 5.8;
+                    const glass = new THREE.Mesh(new THREE.BoxGeometry(12.0, 2.2, 0.25), MAT.glassCyan);
+                    glass.position.y = 2.5;
+                    const pilL = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.2, 1.2), MAT.obsidian);
+                    pilL.position.set(-7.5, 2.5, 0);
+                    const pilR = pilL.clone();
+                    pilR.position.x = 7.5;
+                    g.add(low, high, glass, pilL, pilR);
+                    return g;
+                }
+                case 'destructible_hardlight_barrier.glb': {
+                    const g = new THREE.Group();
+                    const base = new THREE.Mesh(new THREE.BoxGeometry(7.5, 1.15, 1.4), MAT.titanium);
+                    base.position.y = 0.575;
+                    const fin = new THREE.Mesh(new THREE.BoxGeometry(7.1, 1.25, 0.18), MAT.glassCyan);
+                    fin.position.y = 1.75;
+                    g.add(base, fin);
+                    return g;
+                }
+                case 'quantum_centrifuge.glb': {
+                    const g = new THREE.Group();
+                    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 4.8, 16), MAT.glassCyan);
+                    col.position.y = 2.4;
+                    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.08, 10, 24), MAT.cyanGlow);
+                    ring1.position.y = 2.4;
+                    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.08, 10, 24), MAT.amberGlow);
+                    ring2.position.y = 2.4;
+                    ring2.rotation.x = Math.PI / 2;
+                    g.add(col, ring1, ring2);
+                    return g;
+                }
+                case 'holo_floor_sector_signboard.glb': {
+                    const g = new THREE.Group();
+                    const frame = new THREE.Mesh(new THREE.BoxGeometry(7.2, 3.4, 0.25), MAT.titanium);
+                    const screen = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 3.0), MAT.cyanGlow);
+                    screen.position.z = 0.14;
+                    g.add(frame, screen);
+                    return g;
+                }
+                case 'penthouse_gold_marble_column.glb': {
+                    const g = new THREE.Group();
+                    const shaft = new THREE.Mesh(
+                        new THREE.CylinderGeometry(1.35, 1.5, 11.8, 16),
+                        new THREE.MeshStandardMaterial({ map: procTextures.marbleTex, roughness: 0.18, metalness: 0.85 })
+                    );
+                    shaft.position.y = 5.9;
+                    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.12, 10, 24), MAT.goldVisor);
+                    ring.rotation.x = Math.PI / 2;
+                    ring.position.y = 6.0;
+                    g.add(shaft, ring);
+                    return g;
+                }
+                case 'cryo_biodome_crystal_flora_tree.glb': {
+                    const g = new THREE.Group();
+                    const pot = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.5, 1.1, 8), MAT.titanium);
+                    pot.position.y = 0.55;
+                    const trunk = new THREE.Mesh(new THREE.ConeGeometry(0.95, 6.8, 6), MAT.emeraldGlow);
+                    trunk.position.y = 4.2;
+                    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.08, 8, 24), MAT.cyanGlow);
+                    halo.rotation.x = Math.PI / 2;
+                    halo.position.y = 5.5;
+                    g.add(pot, trunk, halo);
+                    return g;
+                }
+                case 'void_observatory_celestial_orrery.glb': {
+                    const g = new THREE.Group();
+                    const star = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), MAT.violetGlow);
+                    const r1 = new THREE.Mesh(new THREE.TorusGeometry(4.8, 0.14, 10, 32), MAT.brass);
+                    r1.rotation.x = 0.6;
+                    const r2 = new THREE.Mesh(new THREE.TorusGeometry(7.2, 0.14, 10, 32), MAT.cyanGlow);
+                    r2.rotation.y = 0.8;
+                    g.add(star, r1, r2);
+                    return g;
+                }
+                case 'magma_foundry_roast_turbine.glb': {
+                    const g = new THREE.Group();
+                    const core = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 8.2, 12), MAT.amberGlow);
+                    core.position.y = 4.1;
+                    const cage = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 8.4, 8, 1, true), new THREE.MeshStandardMaterial({ color: 0x1e293b, wireframe: true }));
+                    cage.position.y = 4.2;
+                    g.add(core, cage);
+                    return g;
+                }
+                case 'exterior_alien_void_monolith.glb': {
+                    const g = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 8.8, 82, 6), MAT.obsidian);
+                    const seam = new THREE.Mesh(new THREE.BoxGeometry(1.4, 74, 18.2), MAT.cyanGlow);
+                    g.add(body, seam);
+                    return g;
+                }
+                case 'exterior_eclipsed_alien_moon.glb': {
+                    const g = new THREE.Group();
+                    const moon = new THREE.Mesh(
+                        new THREE.SphereGeometry(58, 28, 28),
+                        new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.65, metalness: 0.35, emissive: 0x3b0764, emissiveIntensity: 0.42 })
+                    );
+                    const ring = new THREE.Mesh(
+                        new THREE.RingGeometry(74, 90, 48),
+                        new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.52 })
+                    );
+                    ring.rotation.x = Math.PI * 0.38;
+                    g.add(moon, ring);
+                    return g;
+                }
+                default: {
+                    // Generic high-detail sci-fi procedural module matching the slot's metric bounding box
+                    const spec = GLB_SPEC_MAP.get(slotId);
+                    const [w, h, d] = spec ? spec.size : [1.5, 1.5, 1.5];
+                    const g = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(Math.min(w, 6), Math.min(h, 6), Math.min(d, 6)), MAT.titanium);
+                    const trim = new THREE.Mesh(new THREE.BoxGeometry(Math.min(w, 6) * 1.03, Math.min(h, 6) * 0.2, Math.min(d, 6) * 1.03), MAT.cyanGlow);
+                    if (spec && spec.pivot === 'bottom') {
+                        body.position.y = Math.min(h, 6) / 2;
+                        trim.position.y = Math.min(h, 6) * 0.65;
+                    }
+                    g.add(body, trim);
+                    return g;
+                }
+            }
+        }
+
         // ============================================================================
-        // 5. CORE PLAYER STATE, PERKS & LEVEL STREAMING CONFIGURATION
+        // 5. EXTERIOR DARK VOID ALIEN WORLD BUILDER (REBUILDABLE ON .GLB HOT-SWAP)
+        // ============================================================================
+        const exteriorGroup = new THREE.Group();
+        scene.add(exteriorGroup);
+
+        function buildExteriorAlienVoidWorld() {
+            while (exteriorGroup.children.length > 0) {
+                exteriorGroup.remove(exteriorGroup.children[0]);
+            }
+
+            // Starfield
+            const starGeo = new THREE.BufferGeometry();
+            const starCount = 1800;
+            const posArr = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount; i++) {
+                const r = 340 + Math.random() * 440;
+                const theta = Math.random() * Math.PI * 2;
+                const y = -120 + Math.random() * 980;
+                posArr[i * 3] = Math.cos(theta) * r;
+                posArr[i * 3 + 1] = y;
+                posArr[i * 3 + 2] = Math.sin(theta) * r;
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+            const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 1.8 }));
+            exteriorGroup.add(stars);
+
+            // 1. Eclipsed Alien Moon (`exterior_eclipsed_alien_moon.glb`)
+            const moonGroup = cloneOrBuildAsset('exterior_eclipsed_alien_moon.glb');
+            moonGroup.position.set(-280, 460, -340);
+            exteriorGroup.add(moonGroup);
+
+            // 2. Floating Brutalist Obsidian Monoliths (`exterior_alien_void_monolith.glb`)
+            for (let i = 0; i < 14; i++) {
+                const angle = (i / 14) * Math.PI * 2;
+                const dist = 195 + (i % 3) * 55;
+                const mono = cloneOrBuildAsset('exterior_alien_void_monolith.glb');
+                mono.position.set(Math.cos(angle) * dist, i * 54 + 20, Math.sin(angle) * dist);
+                exteriorGroup.add(mono);
+            }
+
+            // 3. Horizon Spire Clusters (`exterior_alien_horizon_spire_cluster.glb`)
+            for (let i = 0; i < 8; i++) {
+                const ang = (i / 8) * Math.PI * 2;
+                const spire = cloneOrBuildAsset('exterior_alien_horizon_spire_cluster.glb');
+                spire.position.set(Math.cos(ang) * 260, -90, Math.sin(ang) * 260);
+                exteriorGroup.add(spire);
+            }
+
+            // 4. Orbital Containment Ring Segments (`exterior_orbital_void_ring_segment.glb`)
+            for (let i = 0; i < 6; i++) {
+                const ang = (i / 6) * Math.PI * 2;
+                const seg = cloneOrBuildAsset('exterior_orbital_void_ring_segment.glb');
+                seg.position.set(Math.cos(ang) * 230, 120 + i * 95, Math.sin(ang) * 230);
+                seg.rotation.y = -ang;
+                exteriorGroup.add(seg);
+            }
+        }
+        buildExteriorAlienVoidWorld();
+
+        // ============================================================================
+        // 6. CORE PLAYER STATE, PERKS & LEVEL STREAMING CONFIGURATION
         // ============================================================================
         const FLOOR_HEIGHT = 12.0;
         const TOTAL_FLOORS = 60;
@@ -908,16 +1369,17 @@
             }
         };
 
-        const playerRig3D = buildSpartanMouseRig();
+        let playerRig3D = cloneOrBuildAsset('spartan_mouse_117.glb');
         scene.add(playerRig3D);
 
-        const weaponRig1P = buildFirstPersonWeaponRig();
+        let weaponRig1P = cloneOrBuildAsset('first_person_ma5c_seeker_rig.glb');
         camera.add(weaponRig1P);
         scene.add(camera);
 
         const gameState = {
             running: false,
             activeFloors: new Map(),
+            populatedFloors: new Set(),
             colliders: [],
             walkableDecks: [],
             ramps: [],
@@ -945,7 +1407,7 @@
         };
 
         function getFloorFromY(y) {
-            if (y < -4.0) return 0; // Level B1 Sub-Basement
+            if (y < -4.0) return 0;
             return Math.max(1, Math.min(TOTAL_FLOORS, Math.floor(y / FLOOR_HEIGHT) + 1));
         }
         function getFloorBaseY(floorNum) {
@@ -962,7 +1424,7 @@
         }
 
         // ============================================================================
-        // 6. INTERACTIVE ENTITIES: HARVESTERS, BREAKABLE PROPS, PICKUPS & ENEMIES
+        // 7. INTERACTIVE ENTITIES WIRED TO CUSTOM .GLBs & LIVE HOT-SWAP
         // ============================================================================
         class EspressoHarvester3D {
             constructor(x, y, z, deck, wingArchetype = null, isPenthouseCore = false) {
@@ -970,30 +1432,26 @@
                 this.deck = deck;
                 this.wingArchetype = wingArchetype;
                 this.isPenthouseCore = isPenthouseCore;
+                this.slotId = isPenthouseCore ? 'supreme_penthouse_espresso_core.glb' : 'espresso_harvester_tower.glb';
                 this.maxHp = isPenthouseCore ? 1200 : 320;
                 this.hp = this.maxHp;
                 this.dead = false;
 
                 this.group = new THREE.Group();
                 this.group.position.copy(this.pos);
+                this.rebuildVisual();
 
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.3, metalness: 0.85 });
-                const coreMat = new THREE.MeshBasicMaterial({ color: isPenthouseCore ? 0xf43f5e : 0xf59e0b });
-
-                const scale = isPenthouseCore ? 1.45 : 1.0;
-                const base = new THREE.Mesh(new THREE.CylinderGeometry(1.7 * scale, 1.95 * scale, 1.2 * scale, 10), bodyMat);
-                base.position.y = 0.6 * scale;
-                this.group.add(base);
-
-                this.boiler = new THREE.Mesh(new THREE.CylinderGeometry(1.35 * scale, 1.35 * scale, 3.6 * scale, 12), coreMat);
-                this.boiler.position.y = 3.0 * scale;
-                this.group.add(this.boiler);
-
-                const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.1 * scale, 1.65 * scale, 1.0 * scale, 10), bodyMat);
-                cap.position.y = 5.2 * scale;
-                this.group.add(cap);
+                // Warm amber point light on each Harvester boiler
+                const pLight = new THREE.PointLight(isPenthouseCore ? 0xf43f5e : 0xf59e0b, 1.4, 24);
+                pLight.position.set(0, 3.5, 0);
+                this.group.add(pLight);
 
                 scene.add(this.group);
+            }
+            rebuildVisual() {
+                if (this.modelMesh) this.group.remove(this.modelMesh);
+                this.modelMesh = cloneOrBuildAsset(this.slotId);
+                this.group.add(this.modelMesh);
             }
             takeDamage(dmg) {
                 if (this.dead) return;
@@ -1012,7 +1470,6 @@
                         unlockSideWingPerk(this.wingArchetype, this.deck);
                     } else if (this.isPenthouseCore) {
                         addMedalCallout('⚡ SUPREME ESPRESSO CORE SHATTERED! BOSS TETHER SEVERED!');
-                        // Stun Boss briefly when tether breaks
                         const boss = gameState.enemies.find(e => e.isPenthouseBoss && !e.dead);
                         if (boss) boss.slowTimer = 3.5;
                     } else {
@@ -1028,33 +1485,47 @@
         class BreakableProp3D {
             constructor(x, y, z, type, floorNum) {
                 this.pos = new THREE.Vector3(x, y, z);
-                this.type = type; // 'cryo_vat', 'shield_pylon', 'ammo_crate', 'lab_rig', 'spore_jar'
+                this.type = type;
                 this.floorNum = floorNum;
                 this.hp = 65;
                 this.dead = false;
+                const slotMap = {
+                    cryo_vat: 'cryo_shock_vat.glb',
+                    shield_pylon: 'shield_capacitor_pylon.glb',
+                    ammo_crate: 'unsc_ordnance_crate.glb',
+                    lab_rig: 'mutagenic_distillation_rig.glb',
+                    spore_jar: 'volatile_spore_belljar.glb'
+                };
+                this.slotId = slotMap[type] || 'cryo_shock_vat.glb';
                 this.group = new THREE.Group();
                 this.group.position.copy(this.pos);
-
-                const colorMap = {
-                    cryo_vat: 0x00f3ff,
-                    shield_pylon: 0xa855f7,
-                    ammo_crate: 0xf59e0b,
-                    lab_rig: 0x10b981,
-                    spore_jar: 0xec4899
-                };
-                const mat = new THREE.MeshStandardMaterial({
-                    color: colorMap[type] || 0x38bdf8,
-                    emissive: colorMap[type] || 0x38bdf8,
-                    emissiveIntensity: 0.45,
-                    roughness: 0.25,
-                    metalness: 0.7
-                });
-                const mesh = type === 'shield_pylon'
-                    ? new THREE.Mesh(new THREE.OctahedronGeometry(0.68, 0), mat)
-                    : new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.58, 1.35, 10), mat);
-                mesh.position.y = 0.75;
-                this.group.add(mesh);
+                this.rebuildVisual();
                 scene.add(this.group);
+            }
+            rebuildVisual() {
+                if (this.modelMesh) this.group.remove(this.modelMesh);
+                if (customGlbRegistry[this.slotId]) {
+                    this.modelMesh = customGlbRegistry[this.slotId].clone(true);
+                } else {
+                    const colorMap = {
+                        cryo_vat: MAT.cyanGlow,
+                        shield_pylon: MAT.violetGlow,
+                        ammo_crate: MAT.amberGlow,
+                        lab_rig: MAT.emeraldGlow,
+                        spore_jar: MAT.magentaGlow
+                    };
+                    const mat = colorMap[this.type] || MAT.cyanGlow;
+                    const g = new THREE.Group();
+                    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.62, 0.25, 12), MAT.titanium);
+                    base.position.y = 0.125;
+                    const core = this.type === 'shield_pylon'
+                        ? new THREE.Mesh(new THREE.OctahedronGeometry(0.62, 0), mat)
+                        : new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 1.25, 14), mat);
+                    core.position.y = 0.85;
+                    g.add(base, core);
+                    this.modelMesh = g;
+                }
+                this.group.add(this.modelMesh);
             }
             takeDamage(dmg) {
                 if (this.dead) return;
@@ -1094,7 +1565,6 @@
                         addMedalCallout('📦 UNSC ORDNANCE CRATE OPENED! +AMMO & GRENADE');
                     }
 
-                    // Elemental AOE damage & freeze/burn to nearby enemies
                     const aoeRadius = this.type === 'cryo_vat' ? 9.5 : 7.5;
                     for (const e of gameState.enemies) {
                         if (e.dead || Math.abs(e.pos.y - this.pos.y) > 5.0) continue;
@@ -1120,10 +1590,7 @@
             constructor(x, y, z) {
                 this.pos = new THREE.Vector3(x, y, z);
                 this.collected = false;
-                this.mesh = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.45, 0.45, 0.35, 3),
-                    new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.45 })
-                );
+                this.mesh = cloneOrBuildAsset('cyber_cheese_wedge.glb');
                 this.mesh.position.set(x, y + 0.45, z);
                 scene.add(this.mesh);
             }
@@ -1134,14 +1601,8 @@
                 this.pos = new THREE.Vector3(x, y, z);
                 this.floorNum = floorNum;
                 this.collected = false;
-                this.group = new THREE.Group();
-                this.group.position.copy(this.pos);
-                const cake = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.55, 0.55, 0.48, 14),
-                    new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xdb2777, emissiveIntensity: 0.35 })
-                );
-                cake.position.y = 1.1;
-                this.group.add(cake);
+                this.group = cloneOrBuildAsset('wall_cake_shrine.glb');
+                this.group.position.set(x, y + 1.0, z);
                 scene.add(this.group);
             }
         }
@@ -1151,10 +1612,7 @@
                 this.pos = new THREE.Vector3(x, y, z);
                 this.floorNum = floorNum;
                 this.collected = false;
-                this.mesh = new THREE.Mesh(
-                    new THREE.OctahedronGeometry(0.58, 0),
-                    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
-                );
+                this.mesh = cloneOrBuildAsset('laser_tier_upgrade_core.glb');
                 this.mesh.position.set(x, y + 1.35, z);
                 scene.add(this.mesh);
             }
@@ -1172,6 +1630,21 @@
                 this.burnTick = 0;
                 this.shockwaveCooldown = 5.0;
                 this.fireTimer = 1.2 + Math.random() * 1.5;
+                this.animPhase = Math.random() * Math.PI * 2;
+
+                if (isPenthouseBoss) {
+                    this.slotId = 'supreme_barista_overlord_boss.glb';
+                } else if (isFlying) {
+                    this.slotId = floorNum >= 30 ? 'royal_gunship_robo_bat.glb' : 'sentinel_robo_bat.glb';
+                } else if (floorNum >= 45) {
+                    this.slotId = 'penthouse_royal_guard_penguin.glb';
+                } else if (floorNum >= 30) {
+                    this.slotId = 'nitro_shot_commando_penguin.glb';
+                } else if (floorNum >= 15) {
+                    this.slotId = 'cold_brew_enforcer_penguin.glb';
+                } else {
+                    this.slotId = 'hippie_zombie_penguin.glb';
+                }
 
                 this.diffMult = 1.0 + (floorNum - 1) * 0.032;
                 this.maxHp = isPenthouseBoss ? 2400 : (isFlying ? Math.round(85 * this.diffMult) : Math.round(115 * this.diffMult));
@@ -1180,33 +1653,8 @@
 
                 this.group = new THREE.Group();
                 this.group.position.copy(this.pos);
+                this.rebuildVisual();
 
-                const tierColor = isPenthouseBoss ? 0xf43f5e : (floorNum >= 45 ? 0xf59e0b : (floorNum >= 30 ? 0xc084fc : (floorNum >= 15 ? 0x38bdf8 : 0x10b981)));
-                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.35, metalness: 0.75 });
-                const vestMat = new THREE.MeshStandardMaterial({ color: tierColor, emissive: tierColor, emissiveIntensity: 0.35 });
-
-                if (isFlying) {
-                    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.65, 0), vestMat);
-                    const wingL = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 0.55), bodyMat);
-                    wingL.position.x = -0.95;
-                    const wingR = wingL.clone();
-                    wingR.position.x = 0.95;
-                    this.group.add(core, wingL, wingR);
-                } else {
-                    const s = isPenthouseBoss ? 2.15 : 1.0;
-                    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.52 * s, 0.65 * s, 1.65 * s, 12), bodyMat);
-                    body.position.y = 0.85 * s;
-                    const vest = new THREE.Mesh(new THREE.CylinderGeometry(0.56 * s, 0.67 * s, 0.85 * s, 12), vestMat);
-                    vest.position.y = 0.95 * s;
-                    const head = new THREE.Mesh(new THREE.SphereGeometry(0.46 * s, 12, 12), bodyMat);
-                    head.position.y = 1.95 * s;
-                    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.18 * s, 0.45 * s, 6), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
-                    beak.rotation.x = -Math.PI / 2;
-                    beak.position.set(0, 1.95 * s, -0.52 * s);
-                    this.group.add(body, vest, head, beak);
-                }
-
-                // 3D Crimson Tether Beam for Floor 60 Boss
                 if (isPenthouseBoss) {
                     const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 3, 0)]);
                     this.tetherLine = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: 0xf43f5e, linewidth: 2 }));
@@ -1216,13 +1664,18 @@
                 scene.add(this.group);
             }
 
+            rebuildVisual() {
+                if (this.modelMesh) this.group.remove(this.modelMesh);
+                this.modelMesh = cloneOrBuildAsset(this.slotId);
+                this.group.add(this.modelMesh);
+            }
+
             takeDamage(dmg, isHeadshot = false) {
                 if (this.dead) return;
                 let finalDmg = dmg * (isHeadshot ? 1.65 : 1.0);
                 let tag = isHeadshot ? '🎯CRIT' : '';
                 let color = isHeadshot ? '#fde047' : '#38bdf8';
 
-                // Check Floor 60 Boss Core Tether (50% damage reduction while Core is alive)
                 if (this.isPenthouseBoss) {
                     const core = gameState.brewers.find(b => b.isPenthouseCore && !b.dead);
                     if (core) {
@@ -1259,6 +1712,7 @@
 
             update(dt) {
                 if (this.dead) return;
+                this.animPhase += dt * 8.5;
 
                 if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dt);
                 if (this.burnTimer > 0) {
@@ -1270,7 +1724,6 @@
                     }
                 }
 
-                // Update Boss Tether Line to Penthouse Core
                 if (this.isPenthouseBoss && this.tetherLine) {
                     const core = gameState.brewers.find(b => b.isPenthouseCore && !b.dead);
                     if (core) {
@@ -1301,7 +1754,6 @@
                     let stepX = toPlayer.x * this.speed * moveMult * dt;
                     let stepZ = toPlayer.z * this.speed * moveMult * dt;
 
-                    // Obstacle-avoidance steering check for ground units
                     if (!this.isFlying) {
                         const testX = this.pos.x + stepX;
                         const testZ = this.pos.z + stepZ;
@@ -1314,15 +1766,27 @@
                             }
                         }
                         if (blocked) {
-                            const perpX = -toPlayer.z * this.speed * moveMult * dt;
-                            const perpZ = toPlayer.x * this.speed * moveMult * dt;
-                            stepX = perpX;
-                            stepZ = perpZ;
+                            stepX = -toPlayer.z * this.speed * moveMult * dt;
+                            stepZ = toPlayer.x * this.speed * moveMult * dt;
                         }
                     }
 
                     this.pos.x += stepX;
                     this.pos.z += stepZ;
+
+                    // Animated waddle/stride or wing-flap (works on both custom .GLBs and procedural rigs!)
+                    if (this.modelMesh) {
+                        if (this.isFlying) {
+                            this.modelMesh.position.y = Math.sin(this.animPhase * 1.4) * 0.22;
+                            if (this.modelMesh.userData.wingL) {
+                                this.modelMesh.userData.wingL.rotation.z = Math.sin(this.animPhase * 2.2) * 0.45;
+                                this.modelMesh.userData.wingR.rotation.z = -Math.sin(this.animPhase * 2.2) * 0.45;
+                            }
+                        } else {
+                            this.modelMesh.rotation.z = Math.sin(this.animPhase) * 0.08;
+                            this.modelMesh.position.y = Math.abs(Math.sin(this.animPhase)) * 0.14;
+                        }
+                    }
                 }
 
                 if (this.isFlying) {
@@ -1332,7 +1796,6 @@
 
                 this.group.position.copy(this.pos);
 
-                // Floor 60 Boss Radial Shockwave Slam Attack
                 if (this.isPenthouseBoss) {
                     this.shockwaveCooldown -= dt;
                     if (this.shockwaveCooldown <= 0 && distToPlayer < 45) {
@@ -1346,7 +1809,6 @@
                     }
                 }
 
-                // Standard Ranged Espresso / Plasma Bolt Attack
                 this.fireTimer -= dt;
                 if (this.fireTimer <= 0 && distToPlayer < 42) {
                     this.fireTimer = this.isPenthouseBoss ? 0.95 : (1.6 + Math.random() * 1.2);
@@ -1358,7 +1820,7 @@
         }
 
         // ============================================================================
-        // 7. DYNAMIC 60-STORY FLOOR & 4 CANTILEVERED SIDE-WING BUILDER
+        // 8. DYNAMIC 60-STORY FLOOR & 4 CANTILEVERED SIDE-WING BUILDER (USES ALL 57 SLOTS)
         // ============================================================================
         function buildFloorSector(floorNum) {
             if (gameState.activeFloors.has(floorNum)) return;
@@ -1385,18 +1847,43 @@
             };
 
             const deckMat = new THREE.MeshStandardMaterial({
-                color: floorNum === 0 ? 0x064e3b : 0x0f172a,
-                roughness: 0.45,
-                metalness: 0.65
+                map: procTextures.deckTex,
+                bumpMap: procTextures.deckTex,
+                bumpScale: 0.04,
+                color: floorNum === 0 ? 0x065f46 : 0xffffff,
+                roughness: 0.35,
+                metalness: 0.72
             });
-            const parapetMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.78 });
-            const accentMat = new THREE.MeshBasicMaterial({ color: biome.accent });
+            const parapetMat = new THREE.MeshStandardMaterial({
+                map: procTextures.wallTex,
+                roughness: 0.32,
+                metalness: 0.8
+            });
 
             // Main Floor Deck Slab (176m W × 124m D)
             const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(176, 0.5, 124), deckMat);
             deckMesh.position.set(0, -0.25, 0);
+            deckMesh.receiveShadow = true;
             floorGroup.add(deckMesh);
             floorData.walkableDecks.push({ minX: -88, maxX: 88, minZ: -62, maxZ: 62, y: baseY });
+
+            // If custom `interior_deck_floor_tile_4x4m.glb` is loaded, place a centerpiece walkway grid
+            if (customGlbRegistry['interior_deck_floor_tile_4x4m.glb']) {
+                for (let tx = -12; tx <= 12; tx += 8) {
+                    for (let tz = -24; tz <= 24; tz += 8) {
+                        const tile = cloneOrBuildAsset('interior_deck_floor_tile_4x4m.glb');
+                        tile.position.set(tx, 0.02, tz);
+                        floorGroup.add(tile);
+                    }
+                }
+            }
+
+            // Level B1 Sub-Basement Sump Drainage Gate (`subbasement_sludge_sump_gate.glb`)
+            if (floorNum === 0) {
+                const gate = cloneOrBuildAsset('subbasement_sludge_sump_gate.glb');
+                gate.position.set(0, 0, -48);
+                floorGroup.add(gate);
+            }
 
             // Waist-High (1.8m) Perimeter Parapet Framing the Dark Alien Void View
             const pNorth = new THREE.Mesh(new THREE.BoxGeometry(176, 1.8, 1.4), parapetMat);
@@ -1409,8 +1896,13 @@
                 { minX: -88, maxX: 88, minY: baseY, maxY: baseY + 1.8, minZ: 60.5, maxZ: 62 }
             );
 
-            // Check if this floor has a Cantilevered Side Wing:
-            // FL 01 (West), FL 15 (West), FL 30 (East), FL 45 (West)
+            // Place modular `interior_perimeter_window_parapet.glb` & `interior_bulkhead_wall_panel.glb` segments
+            for (const px of [-60, -20, 20, 60]) {
+                const parMod = cloneOrBuildAsset('interior_perimeter_window_parapet.glb');
+                parMod.position.set(px, 0, -61.0);
+                floorGroup.add(parMod);
+            }
+
             const hasWestWing = (floorNum === 1 || floorNum === 15 || floorNum === 45);
             const hasEastWing = (floorNum === 30);
 
@@ -1419,26 +1911,44 @@
                 pWest.position.set(-87.3, 0.9, 0);
                 floorGroup.add(pWest);
                 floorData.colliders.push({ minX: -88, maxX: -86.5, minY: baseY, maxY: baseY + 1.8, minZ: -62, maxZ: 62 });
+            } else {
+                const arch = cloneOrBuildAsset('side_wing_breach_gateway_arch.glb');
+                arch.position.set(-87.0, 0, 0);
+                floorGroup.add(arch);
             }
             if (!hasEastWing) {
                 const pEast = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 124), parapetMat);
                 pEast.position.set(87.3, 0.9, 0);
                 floorGroup.add(pEast);
                 floorData.colliders.push({ minX: 86.5, maxX: 88, minY: baseY, maxY: baseY + 1.8, minZ: -62, maxZ: 62 });
+            } else {
+                const arch = cloneOrBuildAsset('side_wing_breach_gateway_arch.glb');
+                arch.position.set(87.0, 0, 0);
+                floorGroup.add(arch);
             }
 
-            // Switchback Ramp to Next Floor (Floors 0 to 59)
+            // Switchback Ramp (`switchback_ramp_module.glb`) + Safety Railing (`stairwell_safety_railing_kit.glb`)
             if (floorNum < TOTAL_FLOORS) {
                 const rampX = floorNum % 2 === 0 ? -18 : 18;
                 const rampLen = 46;
                 const rampMesh = new THREE.Mesh(
                     new THREE.BoxGeometry(8.5, 0.5, rampLen),
-                    new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4, metalness: 0.7 })
+                    new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.35, metalness: 0.78 })
                 );
                 const slopeAngle = Math.atan2(FLOOR_HEIGHT, rampLen);
                 rampMesh.rotation.x = slopeAngle;
                 rampMesh.position.set(rampX, FLOOR_HEIGHT / 2, 0);
                 floorGroup.add(rampMesh);
+
+                if (customGlbRegistry['switchback_ramp_module.glb']) {
+                    const customRamp = cloneOrBuildAsset('switchback_ramp_module.glb');
+                    customRamp.position.set(rampX, FLOOR_HEIGHT / 2, 0);
+                    floorGroup.add(customRamp);
+                }
+
+                const rail = cloneOrBuildAsset('stairwell_safety_railing_kit.glb');
+                rail.position.set(rampX - 4.2, 0, 0);
+                floorGroup.add(rail);
 
                 floorData.ramps.push({
                     minX: rampX - 4.4,
@@ -1452,28 +1962,27 @@
                 });
             }
 
-            // 4 Corner Anti-Grav Sky-Lift Pads
+            // 4 Corner Anti-Grav Sky-Lift Pads (`antigrav_skylift_pad.glb`)
             const liftCoords = [[-74, -48], [74, -48], [-74, 48], [74, 48]];
             for (const [lx, lz] of liftCoords) {
-                const pad = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.1, 0.4, 16), accentMat);
-                pad.position.set(lx, 0.2, lz);
+                const pad = cloneOrBuildAsset('antigrav_skylift_pad.glb');
+                pad.position.set(lx, 0, lz);
                 floorGroup.add(pad);
                 floorData.gravityLifts.push({ x: lx, z: lz, y: baseY, radius: 3.1 });
             }
 
-            // Mid-Deck Kinetic Geyser Jump Pads
+            // Mid-Deck Kinetic Geyser Jump Pads (`kinetic_geyser_jump_pad.glb`)
             for (const gx of [-38, 38]) {
-                const gPad = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.4, 18), new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide }));
-                gPad.rotation.x = -Math.PI / 2;
-                gPad.position.set(gx, 0.12, 24);
+                const gPad = cloneOrBuildAsset('kinetic_geyser_jump_pad.glb');
+                gPad.position.set(gx, 0, 24);
                 floorGroup.add(gPad);
                 floorData.geyserPads.push({ x: gx, z: 24, y: baseY, radius: 2.5 });
             }
 
             if (floorNum > 0) {
-                // Featured Mechanic 1: Motorized Conveyor Belt Segments (Left & Right Combat Lanes)
+                // Featured Mechanic 1: Motorized Conveyor Belt Segments
                 for (const [cx, dirZ] of [[-48, -1], [48, 1]]) {
-                    const belt = cloneOrBuildAsset('motorized_conveyor_belt_segment.glb', buildConveyorBeltMesh);
+                    const belt = cloneOrBuildAsset('motorized_conveyor_belt_segment.glb');
                     belt.position.set(cx, 0.02, -8);
                     if (dirZ > 0) belt.rotation.y = Math.PI;
                     floorGroup.add(belt);
@@ -1487,18 +1996,18 @@
                 }
 
                 // Featured Mechanic 2: Cryo Slippery Ice Patch
-                const iceMesh = cloneOrBuildAsset('cryo_slippery_ice_patch.glb', buildCryoIcePatchMesh);
+                const iceMesh = cloneOrBuildAsset('cryo_slippery_ice_patch.glb');
                 iceMesh.position.set(0, 0.02, -34);
                 floorGroup.add(iceMesh);
                 floorData.icePatches.push({ minX: -9, maxX: 9, minZ: -40, maxZ: -28, y: baseY });
 
                 // Featured Mechanic 3: Lateral End-Wall Warp Portals on Every 5th & 7th Floor
                 if (floorNum % 5 === 0 || floorNum % 7 === 0) {
-                    const westPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb', buildLateralWarpPortalMesh);
+                    const westPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb');
                     westPortal.position.set(-84.5, 2.8, 0);
                     floorGroup.add(westPortal);
 
-                    const eastPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb', buildLateralWarpPortalMesh);
+                    const eastPortal = cloneOrBuildAsset('lateral_endwall_warp_portal.glb');
                     eastPortal.position.set(84.5, 2.8, 0);
                     eastPortal.rotation.y = Math.PI;
                     floorGroup.add(eastPortal);
@@ -1513,7 +2022,7 @@
                 if (floorNum % 3 === 0) {
                     const colCoords = [[-32, -26], [32, -26], [-32, 26], [32, 26]];
                     for (const [tx, tz] of colCoords) {
-                        const colMesh = cloneOrBuildAsset('conical_magical_electric_scifi_column.glb', buildConicalTeslaColumnMesh);
+                        const colMesh = cloneOrBuildAsset('conical_magical_electric_scifi_column.glb');
                         colMesh.position.set(tx, 0, tz);
                         floorGroup.add(colMesh);
                         floorData.colliders.push({ minX: tx - 1.75, maxX: tx + 1.75, minY: baseY, maxY: baseY + 11.2, minZ: tz - 1.75, maxZ: tz + 1.75 });
@@ -1526,25 +2035,70 @@
                     }
                 }
 
-                // Pass-Through Lab Counter & Trough Sink
-                const sinkCounter = cloneOrBuildAsset('alien_trough_sink_counter.glb', buildTroughSinkCounterMesh);
+                // Floor 60 Luxury Marble/Gold Columns (`penthouse_gold_marble_column.glb`)
+                if (floorNum === 60) {
+                    for (const [mx, mz] of [[-42, -32], [42, -32], [-42, 32], [42, 32]]) {
+                        const mCol = cloneOrBuildAsset('penthouse_gold_marble_column.glb');
+                        mCol.position.set(mx, 0, mz);
+                        floorGroup.add(mCol);
+                    }
+                }
+
+                // Tactical Bulkheads, Hard-Light Cover, Quantum Centrifuge, Signboard, Condenser & Hose Kit
+                const crouchWall = cloneOrBuildAsset('smart_wall_crouch_bunker_module.glb');
+                crouchWall.position.set(-58, 0, 26);
+                floorGroup.add(crouchWall);
+
+                const windowWall = cloneOrBuildAsset('smart_wall_firing_window_module.glb');
+                windowWall.position.set(58, 0, -26);
+                floorGroup.add(windowWall);
+
+                const barrier = cloneOrBuildAsset('destructible_hardlight_barrier.glb');
+                barrier.position.set(0, 0, 18);
+                floorGroup.add(barrier);
+                floorData.colliders.push({ minX: -3.75, maxX: 3.75, minY: baseY, maxY: baseY + 2.2, minZ: 17.2, maxZ: 18.8 });
+
+                const centrifuge = cloneOrBuildAsset('quantum_centrifuge.glb');
+                centrifuge.position.set(28, 0, -14);
+                floorGroup.add(centrifuge);
+
+                const signboard = cloneOrBuildAsset('holo_floor_sector_signboard.glb');
+                signboard.position.set(0, 8.6, 0);
+                floorGroup.add(signboard);
+
+                const condenser = cloneOrBuildAsset('ceiling_moisture_drip_condenser.glb');
+                condenser.position.set(-28, 11.8, 12);
+                floorGroup.add(condenser);
+
+                const hose = cloneOrBuildAsset('corrugated_bio_conduit_hose_kit.glb');
+                hose.position.set(-34, 0, 12);
+                floorGroup.add(hose);
+
+                // Pass-Through Lab Counter & Trough Sink + Oscilloscope + Wall Monitor
+                const sinkCounter = cloneOrBuildAsset('alien_trough_sink_counter.glb');
                 sinkCounter.position.set(-28, 0, 12);
                 floorGroup.add(sinkCounter);
                 floorData.colliders.push({ minX: -30.7, maxX: -25.3, minY: baseY, maxY: baseY + 1.1, minZ: 11.0, maxZ: 13.0 });
                 floorData.walkableDecks.push({ minX: -30.7, maxX: -25.3, minZ: 11.0, maxZ: 13.0, y: baseY + 1.1 });
 
-                // Spawn Floor Enemies, Props & Pickups (Once per floor)
-                if (!floorData.populated) {
-                    floorData.populated = true;
+                const osc = cloneOrBuildAsset('waveform_oscilloscope_console.glb');
+                osc.position.set(-29.8, 1.08, 12);
+                floorGroup.add(osc);
 
-                    // Breakable Props
+                const mon = cloneOrBuildAsset('recessed_telemetry_wall_monitor.glb');
+                mon.position.set(-58, 3.2, 26.8);
+                floorGroup.add(mon);
+
+                // Spawn Floor Enemies, Props & Pickups (Once per floor)
+                if (!gameState.populatedFloors.has(floorNum)) {
+                    gameState.populatedFloors.add(floorNum);
+
                     const propTypes = ['cryo_vat', 'shield_pylon', 'ammo_crate', 'lab_rig', 'spore_jar'];
                     gameState.breakableProps.push(
                         new BreakableProp3D(-22, baseY, -18, propTypes[floorNum % 5], floorNum),
                         new BreakableProp3D(22, baseY, 18, propTypes[(floorNum + 2) % 5], floorNum)
                     );
 
-                    // Wall Cake Shrine & Upgrade Core on Milestone Decks
                     if (floorNum % 4 === 0) {
                         gameState.cakes.push(new WallCakeShrine3D(0, baseY, -54, floorNum));
                     }
@@ -1552,14 +2106,12 @@
                         gameState.upgradeCores.push(new LaserUpgradeCore3D(0, baseY, 34, floorNum));
                     }
 
-                    // Main Deck Harvester Boiler on Every 10th Floor (FL 10, 20, 30, 40, 50)
                     if (floorNum % 10 === 0 && floorNum < 60) {
                         if (!gameState.brewers.some(b => b.deck === floorNum && !b.wingArchetype)) {
                             gameState.brewers.push(new EspressoHarvester3D(0, baseY, -44, floorNum, null, false));
                         }
                     }
 
-                    // Floor 60 Supreme Penthouse Boss & Reactor Core
                     if (floorNum === 60) {
                         if (!gameState.brewers.some(b => b.isPenthouseCore)) {
                             gameState.brewers.push(new EspressoHarvester3D(0, baseY, -36, 60, null, true));
@@ -1569,7 +2121,6 @@
                         }
                     }
 
-                    // Standard Floor Penguin & Robo-Bat Squad
                     if (!gameState.enemies.some(e => e.floorNum === floorNum && !e.isPenthouseBoss)) {
                         const groundCount = floorNum === 60 ? 4 : 3;
                         for (let i = 0; i < groundCount; i++) {
@@ -1591,15 +2142,22 @@
                 const wingSlab = new THREE.Mesh(
                     new THREE.BoxGeometry(58, 0.6, 62),
                     new THREE.MeshStandardMaterial({
-                        color: floorNum === 30 ? 0x3b0764 : 0x0f172a,
-                        roughness: 0.3,
-                        metalness: 0.75,
+                        map: procTextures.deckTex,
+                        color: floorNum === 30 ? 0x4c1d95 : 0x0f172a,
+                        roughness: 0.25,
+                        metalness: 0.82,
                         transparent: floorNum === 30,
-                        opacity: floorNum === 30 ? 0.78 : 1.0
+                        opacity: floorNum === 30 ? 0.8 : 1.0
                     })
                 );
                 wingSlab.position.set(wingCenterX, -0.3, 0);
                 floorGroup.add(wingSlab);
+
+                // Exterior Support Strut (`cantilevered_void_support_strut.glb`)
+                const strut = cloneOrBuildAsset('cantilevered_void_support_strut.glb');
+                strut.position.set(wingCenterX, -4.0, 0);
+                floorGroup.add(strut);
+
                 floorData.walkableDecks.push({
                     minX: sideDir < 0 ? -145 : 87,
                     maxX: sideDir < 0 ? -87 : 145,
@@ -1608,44 +2166,43 @@
                     y: baseY
                 });
 
-                // Side-Wing Thematic Landmark
+                // Side-Wing Thematic `.GLB` Landmarks
                 if (floorNum === 15) {
-                    const dome = new THREE.Mesh(
-                        new THREE.SphereGeometry(28, 14, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-                        new THREE.MeshBasicMaterial({ color: 0x10b981, wireframe: true, transparent: true, opacity: 0.35 })
-                    );
+                    const dome = cloneOrBuildAsset('cryo_biodome_geodesic_canopy.glb');
                     dome.position.set(wingCenterX, 0, 0);
                     floorGroup.add(dome);
+                    for (const [fx, fz] of [[-14, -14], [14, -14], [-14, 14], [14, 14]]) {
+                        const tree = cloneOrBuildAsset('cryo_biodome_crystal_flora_tree.glb');
+                        tree.position.set(wingCenterX + fx, 0, fz);
+                        floorGroup.add(tree);
+                    }
                 } else if (floorNum === 30) {
-                    const orrery = new THREE.Mesh(
-                        new THREE.TorusGeometry(6.5, 0.18, 10, 32),
-                        new THREE.MeshBasicMaterial({ color: 0xc084fc })
-                    );
+                    const orrery = cloneOrBuildAsset('void_observatory_celestial_orrery.glb');
                     orrery.position.set(wingCenterX, 6.2, 0);
-                    orrery.rotation.x = Math.PI / 3;
                     floorGroup.add(orrery);
+                    const glassBridge = cloneOrBuildAsset('void_observatory_glass_bridge_deck.glb');
+                    glassBridge.position.set(wingCenterX - 18, 0.05, 0);
+                    floorGroup.add(glassBridge);
                 } else if (floorNum === 45) {
-                    const turbine = new THREE.Mesh(
-                        new THREE.CylinderGeometry(3.2, 3.2, 7.5, 10),
-                        new THREE.MeshBasicMaterial({ color: 0xf59e0b, wireframe: true })
-                    );
-                    turbine.position.set(wingCenterX, 3.8, -12);
+                    const turbine = cloneOrBuildAsset('magma_foundry_roast_turbine.glb');
+                    turbine.position.set(wingCenterX, 0, -14);
                     floorGroup.add(turbine);
+                    const trench = cloneOrBuildAsset('magma_foundry_molten_crucible_trench.glb');
+                    trench.position.set(wingCenterX, 0.05, 10);
+                    floorGroup.add(trench);
                     if (!gameState.upgradeCores.some(u => u.floorNum === 45)) {
-                        gameState.upgradeCores.push(new LaserUpgradeCore3D(wingCenterX, baseY, 12, 45));
+                        gameState.upgradeCores.push(new LaserUpgradeCore3D(wingCenterX, baseY, 14, 45));
                     }
                 }
 
-                // Side-Wing Espresso Harvester Boiler
                 if (!gameState.brewers.some(b => b.deck === floorNum && b.wingArchetype === wingArchetype)) {
                     gameState.brewers.push(new EspressoHarvester3D(wingCenterX, baseY, 0, floorNum, wingArchetype, false));
                 }
 
-                // Atrium Return Warp Pad inside the Side Wing
                 const returnX = sideDir * 134;
                 const returnPad = new THREE.Mesh(
                     new THREE.CylinderGeometry(2.2, 2.5, 0.3, 16),
-                    new THREE.MeshBasicMaterial({ color: 0x00f3ff })
+                    MAT.cyanGlow
                 );
                 returnPad.position.set(returnX, 0.15, 18);
                 floorGroup.add(returnPad);
@@ -1709,8 +2266,39 @@
             rebuildActiveCollisionCaches();
         }
 
+        // Live World Refresh whenever any .GLB or .ZIP is uploaded!
+        function refreshEntireWorldWithGlbs() {
+            // 1. Rebuild Active Floors
+            for (const [f, fd] of gameState.activeFloors.entries()) {
+                scene.remove(fd.group);
+            }
+            gameState.activeFloors.clear();
+            streamFloorsAroundPlayer();
+
+            // 2. Rebuild Exterior Void World
+            buildExteriorAlienVoidWorld();
+
+            // 3. Rebuild Player 3P Rig & 1P Weapon Rig
+            scene.remove(playerRig3D);
+            playerRig3D = cloneOrBuildAsset('spartan_mouse_117.glb');
+            scene.add(playerRig3D);
+
+            camera.remove(weaponRig1P);
+            weaponRig1P = cloneOrBuildAsset('first_person_ma5c_seeker_rig.glb');
+            camera.add(weaponRig1P);
+
+            // 4. Rebuild All Active Enemies, Harvesters & Breakable Props
+            for (const e of gameState.enemies) e.rebuildVisual();
+            for (const b of gameState.brewers) b.rebuildVisual();
+            for (const p of gameState.breakableProps) p.rebuildVisual();
+
+            const count = Object.keys(customGlbRegistry).length;
+            const badge = document.getElementById('hud-glb-count');
+            if (badge) badge.textContent = `${count}/57`;
+        }
+
         // ============================================================================
-        // 8. COMBAT ACTIONS, TESLA CHAIN-LIGHTNING, MELEE, PERKS & HUD FEEDBACK
+        // 9. COMBAT ACTIONS, TESLA CHAIN-LIGHTNING, MELEE, PERKS & HUD FEEDBACK
         // ============================================================================
         function addMedalCallout(text) {
             const feed = document.getElementById('medal-feed');
@@ -1882,8 +2470,7 @@
             if (player.reloading || player.ammo >= player.maxAmmo || player.reserveAmmo <= 0) return;
             player.reloading = true;
             player.reloadTimer = 1.15;
-            const badge = document.getElementById('hud-reload-badge');
-            if (badge) badge.classList.remove('hidden');
+            document.getElementById('hud-reload-badge')?.classList.remove('hidden');
         }
 
         function throwStickyGrenade() {
@@ -1893,10 +2480,9 @@
                 .applyAxisAngle(new THREE.Vector3(1, 0, 0), player.pitch)
                 .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
                 .normalize();
-            const mesh = new THREE.Mesh(
-                new THREE.SphereGeometry(0.24, 10, 10),
-                new THREE.MeshBasicMaterial({ color: 0x00f3ff })
-            );
+            const mesh = customGlbRegistry['sticky_plasma_grenade.glb']
+                ? customGlbRegistry['sticky_plasma_grenade.glb'].clone(true)
+                : new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), MAT.cyanGlow);
             const startPos = player.pos.clone().add(new THREE.Vector3(0, 1.6, 0)).add(fwd.clone().multiplyScalar(0.8));
             mesh.position.copy(startPos);
             scene.add(mesh);
@@ -1919,7 +2505,6 @@
                 .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw)
                 .normalize();
 
-            // Prefer locking onto flying Robo-Bats or nearest enemy within 55m
             let bestTarget = null;
             let bestScore = Infinity;
             for (const e of gameState.enemies) {
@@ -1934,10 +2519,9 @@
                 }
             }
 
-            const mesh = new THREE.Mesh(
-                new THREE.ConeGeometry(0.18, 0.65, 8),
-                new THREE.MeshBasicMaterial({ color: 0xf97316 })
-            );
+            const mesh = customGlbRegistry['heat_seeking_plasma_missile.glb']
+                ? customGlbRegistry['heat_seeking_plasma_missile.glb'].clone(true)
+                : new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.65, 8), MAT.amberGlow);
             const startPos = player.pos.clone().add(new THREE.Vector3(0, 1.65, 0)).add(fwd.clone().multiplyScalar(0.9));
             mesh.position.copy(startPos);
             scene.add(mesh);
@@ -2010,7 +2594,7 @@
 
         function damagePlayer(amount) {
             if (!gameState.running) return;
-            if (player.dodgeTimer > 0) amount *= 0.35; // 65% Evasive Thruster Dodge reduction
+            if (player.dodgeTimer > 0) amount *= 0.35;
             player.shieldRegenDelay = 3.2;
             player.visorShake = Math.max(player.visorShake, 0.28);
 
@@ -2024,7 +2608,7 @@
             if (player.shield > 0) {
                 if (amount >= player.shield) {
                     player.shield = 0;
-                    player.shieldGateTimer = 0.28; // MJOLNIR Shield-Gate prevents overflow one-shot
+                    player.shieldGateTimer = 0.28;
                     const gateBadge = document.getElementById('shield-gate-badge');
                     if (gateBadge) {
                         gateBadge.classList.remove('hidden');
@@ -2048,7 +2632,7 @@
         }
 
         // ============================================================================
-        // 9. HUD, BOSS TELEMETRY, NAVPOINT & 15M MOTION TRACKER RADAR
+        // 10. HUD, BOSS TELEMETRY, NAVPOINT & 15M MOTION TRACKER RADAR
         // ============================================================================
         function updateHUD() {
             const shieldPct = Math.max(0, (player.shield / player.maxShield) * 100);
@@ -2075,13 +2659,11 @@
             document.getElementById('hud-biome-name').textContent = biome.name;
             document.getElementById('hud-climb-bar').style.width = `${Math.max(2, (curFloor / 60) * 100)}%`;
 
-            // Side-Wing Harvester Pips
             document.getElementById('pip-fl1').textContent = gameState.clearedSideWings.has('HYDRO_LAB') ? '✅' : '☕';
             document.getElementById('pip-fl15').textContent = gameState.clearedSideWings.has('CRYO_BIODOME') ? '✅' : '☕';
             document.getElementById('pip-fl30').textContent = gameState.clearedSideWings.has('VOID_OBSERVATORY') ? '✅' : '☕';
             document.getElementById('pip-fl45').textContent = gameState.clearedSideWings.has('MAGMA_FOUNDRY') ? '✅' : '☕';
 
-            // Active Perks
             const setPerkStyle = (id, active, colorClass) => {
                 const el = document.getElementById(id);
                 if (el) el.className = active
@@ -2168,13 +2750,12 @@
             ctx.arc(cx, cy, 46, 0, Math.PI * 2);
             ctx.stroke();
 
-            // Player center chevron
             ctx.fillStyle = '#00f3ff';
             ctx.beginPath();
             ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
             ctx.fill();
 
-            const scale = 52 / 55; // 55m radar range
+            const scale = 52 / 55;
             const cosY = Math.cos(player.yaw);
             const sinY = Math.sin(player.yaw);
 
@@ -2210,7 +2791,7 @@
         }
 
         // ============================================================================
-        // 10. QUICK-WARP, 57 .GLB STUDIO [B] & 2-SCREENSHOT AI GENERATOR [P]
+        // 11. QUICK-WARP, 57 .GLB STUDIO [B], DRAG-AND-DROP & 2-SCREENSHOT GENERATOR [P]
         // ============================================================================
         function warpToFloor(floorNum, intoSideWing = false) {
             buildFloorSector(floorNum);
@@ -2232,53 +2813,46 @@
         // 57-Slot .GLB Studio Turntable Preview
         const previewCanvas = document.getElementById('glb-preview-canvas');
         const previewRenderer = new THREE.WebGLRenderer({ canvas: previewCanvas, antialias: true });
+        previewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+        previewRenderer.outputEncoding = THREE.sRGBEncoding;
         const previewScene = new THREE.Scene();
         previewScene.background = new THREE.Color(0x090d16);
-        const previewCam = new THREE.PerspectiveCamera(50, 300 / 260, 0.1, 200);
-        previewCam.position.set(0, 2.8, 6.5);
-        previewCam.lookAt(0, 1.2, 0);
-        previewScene.add(new THREE.AmbientLight(0xffffff, 0.85));
-        const pDir = new THREE.DirectionalLight(0x38bdf8, 1.1);
+        previewScene.environment = sciFiEnvTexture;
+        const previewCam = new THREE.PerspectiveCamera(48, 320 / 270, 0.1, 300);
+        previewCam.position.set(0, 2.5, 6.2);
+        previewCam.lookAt(0, 1.0, 0);
+        previewScene.add(new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 1.1));
+        const pDir = new THREE.DirectionalLight(0x38bdf8, 1.3);
         pDir.position.set(8, 14, 10);
         previewScene.add(pDir);
         let previewObject = null;
 
         function buildStudioPreviewMesh(slotId) {
-            if (customGlbRegistry[slotId]) return customGlbRegistry[slotId].clone(true);
-            if (slotId === 'motorized_conveyor_belt_segment.glb') {
-                const m = buildConveyorBeltMesh();
-                m.scale.setScalar(0.18);
-                return m;
-            }
-            if (slotId === 'cryo_slippery_ice_patch.glb') {
-                const m = buildCryoIcePatchMesh();
-                m.scale.setScalar(0.22);
-                return m;
-            }
-            if (slotId === 'lateral_endwall_warp_portal.glb') {
-                const m = buildLateralWarpPortalMesh();
-                m.scale.setScalar(0.55);
-                m.position.y = 1.2;
-                return m;
-            }
-            if (slotId === 'conical_magical_electric_scifi_column.glb') {
-                const m = buildConicalTeslaColumnMesh();
-                m.scale.setScalar(0.26);
-                return m;
-            }
-            if (slotId === 'alien_trough_sink_counter.glb') {
-                const m = buildTroughSinkCounterMesh();
-                m.scale.setScalar(0.65);
-                return m;
-            }
-            return buildSpartanMouseRig();
+            const raw = cloneOrBuildAsset(slotId);
+            const wrapper = new THREE.Group();
+            const box = new THREE.Box3().setFromObject(raw);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+            const maxDim = Math.max(size.x, size.y, size.z, 0.01);
+            const scale = 3.2 / maxDim;
+            raw.scale.multiplyScalar(scale);
+
+            const box2 = new THREE.Box3().setFromObject(raw);
+            const center2 = new THREE.Vector3();
+            box2.getCenter(center2);
+            raw.position.sub(center2);
+            raw.position.y += 1.0;
+            wrapper.add(raw);
+            return wrapper;
         }
 
         function selectStudioSlot(item) {
             selectedStudioSlot = item;
             document.getElementById('glb-preview-title').textContent = item.id;
             document.getElementById('glb-preview-dims').textContent = `${item.role} • ${item.dims}`;
-            document.getElementById('glb-preview-status').textContent = customGlbRegistry[item.id] ? 'CUSTOM .GLB' : 'PROCEDURAL';
+            document.getElementById('glb-preview-status').textContent = customGlbRegistry[item.id] ? 'CUSTOM .GLB ACTIVE' : 'PROCEDURAL HD';
             if (previewObject) previewScene.remove(previewObject);
             previewObject = buildStudioPreviewMesh(item.id);
             previewScene.add(previewObject);
@@ -2295,10 +2869,11 @@
             const list = document.getElementById('glb-studio-list');
             const q = (document.getElementById('glb-search-input')?.value || '').toLowerCase();
             list.innerHTML = '';
-            const items = GLB_STUDIO_ITEMS.filter(it =>
-                (currentStudioFilter === 'ALL' || it.part === currentStudioFilter) &&
-                (it.id.toLowerCase().includes(q) || it.role.toLowerCase().includes(q))
-            );
+            const items = GLB_STUDIO_ITEMS.filter(it => {
+                const matchesPart = currentStudioFilter === 'ALL'
+                    || (currentStudioFilter === 'CUSTOM' ? !!customGlbRegistry[it.id] : it.part === currentStudioFilter);
+                return matchesPart && (it.id.toLowerCase().includes(q) || it.role.toLowerCase().includes(q));
+            });
             for (const item of items) {
                 const isSelected = selectedStudioSlot && selectedStudioSlot.id === item.id;
                 const hasCustom = !!customGlbRegistry[item.id];
@@ -2310,12 +2885,67 @@
                 btn.innerHTML = `
                     <div class="flex items-center justify-between gap-1">
                         <span class="font-orbitron text-[11px] font-bold text-white truncate">${item.id}</span>
-                        <span class="px-1.5 py-0.5 rounded text-[9px] font-orbitron ${hasCustom ? 'bg-emerald-500/25 text-emerald-300' : 'bg-slate-800 text-slate-400'}">${hasCustom ? '.GLB' : item.part}</span>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-orbitron ${hasCustom ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400' : 'bg-slate-800 text-slate-400'}">${hasCustom ? '✓ .GLB' : item.part}</span>
                     </div>
                     <div class="text-[11px] text-cyan-300 mt-0.5">${item.role}</div>
                     <div class="text-[10px] text-slate-400">${item.dims}</div>
                 `;
                 list.appendChild(btn);
+            }
+        }
+
+        // Smart Filename Resolver (Matches exact filename or fuzzy stem against the 57 manifest slots)
+        function matchFilenameToSlotId(rawName) {
+            const clean = rawName.split('/').pop().toLowerCase().trim();
+            if (GLB_SPEC_MAP.has(clean)) return clean;
+            const stem = clean.replace(/\.(glb|gltf)$/i, '').replace(/[-_\s]+/g, '_');
+            for (const item of GLB_STUDIO_ITEMS) {
+                const itemStem = item.id.replace(/\.glb$/i, '');
+                if (stem === itemStem || stem.includes(itemStem) || itemStem.includes(stem)) {
+                    return item.id;
+                }
+            }
+            return selectedStudioSlot ? selectedStudioSlot.id : GLB_STUDIO_ITEMS[0].id;
+        }
+
+        async function processUploadedGlbOrZipFiles(fileList, forceSlotId = null) {
+            const files = Array.from(fileList || []);
+            if (files.length === 0) return;
+            let loadedCount = 0;
+
+            const loadSingleBlob = (blobUrl, targetSlotId) => new Promise((resolve) => {
+                gltfLoader.load(blobUrl, (gltf) => {
+                    customGlbRegistry[targetSlotId] = normalizeGlbToSpec(gltf.scene, targetSlotId);
+                    loadedCount++;
+                    resolve();
+                }, undefined, () => resolve());
+            });
+
+            for (const f of files) {
+                const lower = f.name.toLowerCase();
+                if (lower.endsWith('.glb') || lower.endsWith('.gltf')) {
+                    const slotId = forceSlotId || matchFilenameToSlotId(f.name);
+                    const url = URL.createObjectURL(f);
+                    await loadSingleBlob(url, slotId);
+                } else if (lower.endsWith('.zip') && window.JSZip) {
+                    const zip = await JSZip.loadAsync(f);
+                    const entries = [];
+                    zip.forEach((relPath, entry) => {
+                        if (!entry.dir && /\.(glb|gltf)$/i.test(relPath)) entries.push({ relPath, entry });
+                    });
+                    for (const { relPath, entry } of entries) {
+                        const slotId = matchFilenameToSlotId(relPath);
+                        const blob = await entry.async('blob');
+                        const url = URL.createObjectURL(blob);
+                        await loadSingleBlob(url, slotId);
+                    }
+                }
+            }
+
+            if (loadedCount > 0) {
+                refreshEntireWorldWithGlbs();
+                if (selectedStudioSlot) selectStudioSlot(selectedStudioSlot);
+                addMedalCallout(`📦 ${loadedCount} .GLB MODEL(S) NORMALIZED & HOT-SWAPPED INTO LIVE 3D WORLD!`);
             }
         }
 
@@ -2331,41 +2961,36 @@
         window.closeGlbStudio = closeGlbStudio;
 
         document.getElementById('glb-single-input').addEventListener('change', (ev) => {
-            const file = ev.target.files?.[0];
-            if (!file || !selectedStudioSlot) return;
-            const url = URL.createObjectURL(file);
-            gltfLoader.load(url, (gltf) => {
-                customGlbRegistry[selectedStudioSlot.id] = gltf.scene;
-                selectStudioSlot(selectedStudioSlot);
-                addMedalCallout(`📦 HOT-SWAPPED ${selectedStudioSlot.id}!`);
-            });
+            if (ev.target.files?.length && selectedStudioSlot) {
+                processUploadedGlbOrZipFiles(ev.target.files, selectedStudioSlot.id);
+            }
+        });
+        document.getElementById('glb-batch-input').addEventListener('change', (ev) => {
+            processUploadedGlbOrZipFiles(ev.target.files);
+        });
+        document.getElementById('hud-quick-glb-input').addEventListener('change', (ev) => {
+            processUploadedGlbOrZipFiles(ev.target.files);
+        });
+        document.getElementById('start-glb-input').addEventListener('change', (ev) => {
+            processUploadedGlbOrZipFiles(ev.target.files);
         });
 
-        document.getElementById('glb-batch-input').addEventListener('change', async (ev) => {
-            const files = Array.from(ev.target.files || []);
-            for (const f of files) {
-                if (f.name.endsWith('.glb')) {
-                    const url = URL.createObjectURL(f);
-                    gltfLoader.load(url, (gltf) => {
-                        customGlbRegistry[f.name] = gltf.scene;
-                        renderGlbStudioList();
-                    });
-                } else if (f.name.endsWith('.zip') && window.JSZip) {
-                    const zip = await JSZip.loadAsync(f);
-                    zip.forEach(async (relPath, entry) => {
-                        if (relPath.endsWith('.glb')) {
-                            const baseName = relPath.split('/').pop();
-                            const blob = await entry.async('blob');
-                            const url = URL.createObjectURL(blob);
-                            gltfLoader.load(url, (gltf) => {
-                                customGlbRegistry[baseName] = gltf.scene;
-                                renderGlbStudioList();
-                            });
-                        }
-                    });
-                }
+        // Global Drag-and-Drop .GLB / .ZIP Anywhere on the Window
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            document.getElementById('drag-drop-overlay')?.classList.remove('hidden');
+        });
+        window.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget === null) {
+                document.getElementById('drag-drop-overlay')?.classList.add('hidden');
             }
-            addMedalCallout('🗜️ BATCH .GLB / .ZIP ARCHIVE PROCESSED!');
+        });
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            document.getElementById('drag-drop-overlay')?.classList.add('hidden');
+            if (e.dataTransfer?.files?.length) {
+                processUploadedGlbOrZipFiles(e.dataTransfer.files);
+            }
         });
 
         // 2-Screenshot AI Handoff Generator [P]
@@ -2375,7 +3000,6 @@
             const savedRot = camera.rotation.clone();
             const baseY = getFloorBaseY(getFloorFromY(player.pos.y));
 
-            // Shot 1: Inside Lab Counter & Trough Sink
             camera.position.set(-28, baseY + 2.4, 17.5);
             camera.lookAt(-28, baseY + 1.0, 12);
             renderer.render(scene, camera);
@@ -2383,7 +3007,6 @@
             document.getElementById('img-shot-1').src = url1;
             document.getElementById('dl-shot-1').href = url1;
 
-            // Shot 2: Outside Dark Void Alien World View over Parapet
             camera.position.set(-72, baseY + 3.2, -48);
             camera.lookAt(-240, baseY + 180, -280);
             renderer.render(scene, camera);
@@ -2403,7 +3026,7 @@
         window.closeShotsModal = closeShotsModal;
 
         // ============================================================================
-        // 11. INPUT LISTENERS & POINTER LOCK CONTROLS
+        // 12. INPUT LISTENERS & POINTER LOCK CONTROLS
         // ============================================================================
         const keys = {};
         window.addEventListener('keydown', (e) => {
@@ -2429,7 +3052,6 @@
             } else if (e.code === 'Space') {
                 player.jumpBufferTimer = 0.16;
             } else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-                // Directional Thruster Pack Dash with 0.35s Evasive Dodge window
                 if (gameState.running && player.thrusterCooldown <= 0) {
                     player.thrusterCooldown = player.perks.zeroGThruster ? 1.05 : 1.65;
                     player.dodgeTimer = 0.35;
@@ -2540,7 +3162,7 @@
         });
 
         // ============================================================================
-        // 12. MAIN 60 FPS GAMEPLAY & PHYSICS LOOP
+        // 13. MAIN 60 FPS GAMEPLAY & PHYSICS LOOP
         // ============================================================================
         streamFloorsAroundPlayer();
         updateHUD();
@@ -2551,14 +3173,12 @@
             const dt = Math.min(0.05, (now - lastTime) / 1000);
             lastTime = now;
 
-            // Animate 57 .GLB Studio Turntable if open
             if (!document.getElementById('glb-studio-modal').classList.contains('hidden') && previewObject) {
                 previewObject.rotation.y += dt * 0.9;
                 previewRenderer.render(previewScene, previewCam);
             }
 
             if (gameState.running) {
-                // Tick player timers
                 player.fireCooldown = Math.max(0, player.fireCooldown - dt);
                 player.thrusterCooldown = Math.max(0, player.thrusterCooldown - dt);
                 player.meleeCooldown = Math.max(0, player.meleeCooldown - dt);
@@ -2593,7 +3213,6 @@
                     player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
                 }
 
-                // Update HUD ability badges
                 const thrusterHud = document.getElementById('hud-thruster-status');
                 if (thrusterHud) {
                     thrusterHud.textContent = player.thrusterCooldown <= 0.02 ? 'READY' : `${player.thrusterCooldown.toFixed(1)}s`;
@@ -2605,7 +3224,6 @@
                     meleeHud.className = player.meleeCooldown <= 0.02 ? 'text-emerald-400 font-bold' : 'text-purple-400 font-bold';
                 }
 
-                // Weapon Reload & Auto-Reload
                 if (player.reloading) {
                     player.reloadTimer -= dt;
                     if (player.reloadTimer <= 0) {
@@ -2623,7 +3241,6 @@
 
                 if (mouseDown) firePrimaryWeapon();
 
-                // Shield Regeneration
                 if (player.shieldRegenDelay > 0) {
                     player.shieldRegenDelay -= dt;
                 } else if (player.shield < player.maxShield) {
@@ -2632,7 +3249,6 @@
                     updateHUD();
                 }
 
-                // Check Environmental Surface Modifiers (Conveyor Belts & Cryo Ice Patches)
                 player.onConveyor = false;
                 let conveyorPushZ = 0;
                 for (const cb of gameState.conveyorBelts) {
@@ -2660,7 +3276,6 @@
                     }
                 }
 
-                // Animate Conical Tesla Columns (Every 3rd Floor)
                 for (const tc of gameState.teslaColumns) {
                     if (tc.cooldown > 0) tc.cooldown = Math.max(0, tc.cooldown - dt);
                     if (tc.mesh?.userData?.rings) {
@@ -2673,7 +3288,6 @@
                     }
                 }
 
-                // Lateral End-Wall Warp Portals (Every 5th & 7th Floor)
                 for (const wp of gameState.warpPortals) {
                     if (wp.mesh?.userData?.vortex) wp.mesh.userData.vortex.rotation.z += dt * 2.4;
                     if (player.portalCooldown <= 0 &&
@@ -2689,7 +3303,6 @@
                     }
                 }
 
-                // Cantilevered Side-Wing Return Warp Pads
                 for (const rp of gameState.wingReturnPads) {
                     if (player.portalCooldown <= 0 &&
                         Math.abs(player.pos.y - rp.y) < 3.0 &&
@@ -2702,7 +3315,6 @@
                     }
                 }
 
-                // Horizontal WASD Movement with Ice & Conveyor Physics
                 const wantsCrouch = keys['KeyC'] || keys['ControlLeft'] || player.sliding;
                 let targetSpeed = wantsCrouch ? player.crouchSpeed : player.speed;
                 if (player.sliding) targetSpeed = player.sprintSpeed * 1.35;
@@ -2722,7 +3334,6 @@
                 player.vel.x += (moveWish.x * targetSpeed - player.vel.x) * Math.min(1, accel * dt);
                 player.vel.z += (moveWish.z * targetSpeed + conveyorPushZ - player.vel.z) * Math.min(1, accel * dt);
 
-                // Jump with Coyote Time & Jump Buffer
                 if (player.jumpBufferTimer > 0 && player.coyoteTimer > 0) {
                     player.vel.y = player.jumpImpulse;
                     player.onGround = false;
@@ -2730,7 +3341,6 @@
                     player.jumpBufferTimer = 0;
                 }
 
-                // Corner Anti-Grav Sky-Lifts & Mid-Deck Kinetic Geyser Jump Pads
                 for (const lift of gameState.gravityLifts) {
                     if (Math.hypot(player.pos.x - lift.x, player.pos.z - lift.z) < lift.radius) {
                         player.vel.y = Math.max(player.vel.y, 26.5);
@@ -2745,13 +3355,11 @@
                     }
                 }
 
-                // Gravity & Vertical Deck / Ramp Resolution
                 player.vel.y -= 34.0 * dt;
                 const nextX = player.pos.x + player.vel.x * dt;
                 const nextZ = player.pos.z + player.vel.z * dt;
                 const nextY = player.pos.y + player.vel.y * dt;
 
-                // Horizontal Collider Resolution + Auto Ledge-Mantle
                 let canMoveX = true;
                 let canMoveZ = true;
                 for (const c of gameState.colliders) {
@@ -2768,7 +3376,6 @@
                 if (canMoveX) player.pos.x = nextX;
                 if (canMoveZ) player.pos.z = nextZ;
 
-                // Find Supporting Deck or Switchback Ramp
                 let supportY = -Infinity;
                 for (const d of gameState.walkableDecks) {
                     if (player.pos.x >= d.minX && player.pos.x <= d.maxX &&
@@ -2777,7 +3384,6 @@
                             supportY = d.y;
                         } else if (!player.onGround && player.mantleCooldown <= 0 && moveWish.lengthSq() > 0.1 &&
                                    player.pos.y >= d.y - 2.2 && player.pos.y < d.y - 0.3) {
-                            // Auto Ledge-Mantle / Vault
                             player.mantleCooldown = 0.45;
                             player.vel.y = 10.8;
                         }
@@ -2835,13 +3441,11 @@
                     player.onGround = false;
                 }
 
-                // Safety void catch if player falls below Level B1
                 if (player.pos.y < -26) {
                     player.pos.set(0, 0.5, 38);
                     player.vel.set(0, 0, 0);
                 }
 
-                // Level B1 Sub-Basement Sump Cache Reward
                 if (!player.b1CacheClaimed && player.pos.y < -8.5) {
                     player.b1CacheClaimed = true;
                     player.shield = player.maxShield;
@@ -2854,10 +3458,8 @@
                     updateHUD();
                 }
 
-                // Stream 60-Story Megastructure Floors around Player
                 streamFloorsAroundPlayer();
 
-                // Update Camera & 1P/3P Spartan Rig
                 const eyeHeight = wantsCrouch ? player.crouchHeight : 2.35;
                 const shakeX = (Math.random() - 0.5) * player.visorShake * 0.25;
                 const shakeY = (Math.random() - 0.5) * player.visorShake * 0.25 - player.cameraLandDip * 0.35;
@@ -2877,12 +3479,10 @@
                 camera.rotation.y = player.yaw;
                 camera.rotation.x = player.pitch;
 
-                // Update Flashlight
                 const lookDir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
                 flashLight.position.copy(camera.position);
                 flashLight.target.position.copy(camera.position).add(lookDir.multiplyScalar(20));
 
-                // Collect Pickups (Cheese Wedges, Wall Cake Shrines, Laser Upgrade Cores)
                 for (const ch of gameState.cheeses) {
                     if (!ch.collected && ch.pos.distanceTo(player.pos) < 2.2) {
                         ch.collected = true;
@@ -2919,7 +3519,6 @@
                     }
                 }
 
-                // Update Projectiles & Check Hits (Enemies, Harvesters, Breakable Props, & FL 3x Tesla Column Crystals)
                 for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
                     const p = gameState.projectiles[i];
                     p.life -= dt;
@@ -2929,7 +3528,6 @@
                     let removeBolt = p.life <= 0;
 
                     if (p.fromPlayer && !removeBolt) {
-                        // 1. Check Conical Magical-Electric Column Crystal Crown (FL 3x Tesla Chain-Lightning!)
                         for (const tc of gameState.teslaColumns) {
                             if (tc.cooldown <= 0 &&
                                 Math.hypot(p.pos.x - tc.pos.x, p.pos.z - tc.pos.z) < 1.35 &&
@@ -2953,7 +3551,6 @@
                             }
                         }
 
-                        // 2. Check Enemies
                         if (!removeBolt) {
                             for (const e of gameState.enemies) {
                                 if (e.dead) continue;
@@ -2972,7 +3569,6 @@
                             }
                         }
 
-                        // 3. Check Espresso Harvesters
                         if (!removeBolt) {
                             for (const b of gameState.brewers) {
                                 if (b.dead) continue;
@@ -2986,7 +3582,6 @@
                             }
                         }
 
-                        // 4. Check Breakable Lab Props
                         if (!removeBolt) {
                             for (const prop of gameState.breakableProps) {
                                 if (!prop.dead && p.pos.distanceTo(prop.pos.clone().add(new THREE.Vector3(0, 0.8, 0))) < 1.15) {
@@ -2998,7 +3593,6 @@
                             }
                         }
                     } else if (!p.fromPlayer && !removeBolt) {
-                        // Enemy Bolt hitting Player
                         if (Math.hypot(p.pos.x - player.pos.x, p.pos.z - player.pos.z) < 0.85 &&
                             p.pos.y >= player.pos.y && p.pos.y <= player.pos.y + player.height) {
                             damagePlayer(p.dmg);
@@ -3012,7 +3606,6 @@
                     }
                 }
 
-                // Update Sticky Plasma Grenades
                 for (let i = gameState.grenadeObjs.length - 1; i >= 0; i--) {
                     const g = gameState.grenadeObjs[i];
                     g.fuse -= dt;
@@ -3044,7 +3637,6 @@
                     }
                 }
 
-                // Update Homing Seeker Missiles
                 for (let i = gameState.homingMissiles.length - 1; i >= 0; i--) {
                     const m = gameState.homingMissiles[i];
                     m.life -= dt;
@@ -3072,10 +3664,8 @@
                     }
                 }
 
-                // Update Enemies
                 for (const e of gameState.enemies) e.update(dt);
 
-                // Update Particles & Shockwave Rings
                 for (let i = gameState.particles.length - 1; i >= 0; i--) {
                     const pt = gameState.particles[i];
                     pt.life -= dt;
