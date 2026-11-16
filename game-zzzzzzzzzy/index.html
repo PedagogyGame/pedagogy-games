@@ -2430,7 +2430,7 @@ function create({atlas,ecology,living,index,timeline,links,cityResearch,pilot,st
   function city(placeId,evidence){
    const p=places.get(placeId);if(!p?.located)return;
    let result=cityMap.get(placeId);
-   if(!result){result={id:placeId,placeId,lon:p.lon,lat:p.lat,name:p.name,label:p.name,phaseLabel:evidence.label,kind:evidence.kind||'city',status:evidence.status||'dated',regionId:p.region,evidence:[],studyIds:[],sourceIds:[]};cityMap.set(placeId,result)}
+   if(!result){result={id:placeId,placeId,lon:p.lon,lat:p.lat,name:p.name,label:p.name,phaseLabel:evidence.label,kind:evidence.kind||'city',status:evidence.status||'dated',regionId:p.region,...(p.supplemental?{supplemental:true}:{}),evidence:[],studyIds:[],sourceIds:[]};cityMap.set(placeId,result)}
    result.evidence.push(evidence);if(evidence.kind==='port'||(evidence.kind==='royal-center'&&result.kind!=='port'))result.kind=evidence.kind;result.sourceIds=unique([...result.sourceIds,...(evidence.sourceIds||[])]);
    if(result.status!=='dated'&&evidence.status==='dated')result.status='dated';
   }
@@ -2928,7 +2928,7 @@ return {create,within,valid};
       const layout=layoutFor(ctx),showLabels=o.showLabels!==false;layout.beginFrame([model.year??'',showLabels,layers.cities!==false,layers.connections!==false,layers.kingdoms!==false,layers.ecology!==false].join('|'));
       const originals=(Array.isArray(o.existingLabelBoxes)?o.existingLabelBoxes:[]).map(normalizeBox).filter(Boolean),occupied=originals.slice();
       const radius=clamp(11.7-span*.028,7.5,12.3);
-      const cities=layers.cities===false?[]:pointEntries(model.cities,project,width,height,radius);
+      const allCities=layers.cities===false?[]:pointEntries(model.cities,project,width,height,radius),cities=allCities.filter(e=>!e.item.supplemental),supplementalCities=allCities.filter(e=>e.item.supplemental);
       const ecology=layers.ecology===false?[]:pointEntries(model.ecology,project,width,height,7.8);
       const previous=[];
       for(const e of cities){
@@ -2970,10 +2970,26 @@ return {create,within,valid};
       }
       if(showLabels&&span<85){
         let count=0;
-        for(const route of routes){
+        const labelRoutes=[...routes.filter(r=>!r.item.interactionIds?.length),...routes.filter(r=>r.item.interactionIds?.length)];
+        for(const route of labelRoutes){
           if(count>=Math.max(1,Math.floor(width/330)))break;
           const hit=drawRouteLabel(ctx,route.item,route.geometries,occupied,width,height,finish,layout);if(hit){hits.push(hit);count++}
         }
+      }
+      // Additional site evidence cannot displace the retained cities or regional
+      // captions. Its base geographic locator already exists below this pass.
+      // Omit a duplicate foreground emblem when it would cover existing ink;
+      // also omit its point hit so an earlier caption keeps its click target.
+      for(const e of supplementalCities){
+        const nearest=previous.length?Math.min(...previous.map(p=>Math.hypot(p.x-e.p.x,p.y-e.p.y))):Infinity;e.compact=layout.compact('city/'+e.item.id,nearest,radius*2+3);if(e.compact)e.r=3;
+        const glyph={x:e.p.x-e.r-2,y:e.p.y-e.r-2,w:e.r*2+4,h:e.r*2+4,labelOwner:'city/'+e.item.id};
+        if(occupied.some(b=>boxesIntersect(glyph,b,2)))continue;
+        occupied.push(glyph);previous.push(e.p);drawCity(ctx,e,finish);let rect=null;
+        if(showLabels&&!e.compact&&cityLabels<maxCityLabels){
+          rect=placeLabel(ctx,labelOf(e.item),e.p,e.r,{font:'500 '+layout.font('city/'+e.item.id,span,'city')+'px Georgia, serif',maxWidth:Math.min(210,Math.max(155,width*.27)),maxLines:2,lineHeight:14,height:20,color:classifyStatus(e.item.status)==='dated'?'#e8d7af':'#ccd6cb',finish,layout,key:'city/'+e.item.id},occupied,width,height);
+          if(rect)cityLabels++;
+        }
+        hits.push(makeHit('city',e.item,e.p,Math.max(7,e.r+2),rect));
       }
       return hits;
     }finally{ctx.restore()}
