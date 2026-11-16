@@ -2700,7 +2700,8 @@ return {create,within,valid};
  * `time` is requestAnimationFrame time in milliseconds. No animation is scheduled
  * here; a reduced-motion draw is independent of time.
  * Optional finishStrength0–1 refines the emblems and ink treatment only. The
- * default0 retains the preceding artwork, measurements and interaction geometry.
+ * Label metrics are independent of finish so material changes cannot relayout
+ * the captions. Geographic anchors and symbolic interaction radii stay unchanged.
  */
 (function(root,factory){
   'use strict';
@@ -2992,9 +2993,9 @@ return {create,within,valid};
     function font(key,span,kind){
       const e=entry(key);let value=e.font;
       if(kind==='context'){
-        if(value===undefined)value=span>90?12:span<30?15:13.5;
-        else if(span>92)value=12;else if(span<28)value=15;else if(value===12&&span<88||value===15&&span>32)value=13.5;
-      }else {if(value===undefined)value=span>90?10:11;else if(span>92)value=10;else if(span<88)value=11}
+        if(value===undefined)value=span>90?14:span<30?16:15;
+        else if(span>92)value=14;else if(span<28)value=16;else if(value===14&&span<88||value===16&&span>32)value=15;
+      }else {if(value===undefined)value=span>90?11:12;else if(span>92)value=11;else if(span<88)value=12}
       return e.font=value;
     }
     function compact(key,distance,threshold){const e=entry(key);if(e.compact===undefined)e.compact=distance<threshold;else if(e.compact&&distance>threshold+3)e.compact=false;else if(!e.compact&&distance<threshold-2)e.compact=true;return e.compact}
@@ -3004,16 +3005,20 @@ return {create,within,valid};
   function layoutFor(context){let layout=labelLayouts.get(context);if(!layout){layout=createLabelLayout();labelLayouts.set(context,layout)}return layout}
   function layoutStats(context){return labelLayouts.get(context)?.stats()||{size:0,maxEntries:512,frame:0,placementChanges:0,placements:[]}}
   function placeLabel(c,text,p,r,settings,occupied,width,height){
-    c.font=settings.font;const rendered=fitText(c,text,settings.maxWidth||180);
-    if(!rendered)return null;
-    const w=Math.ceil(c.measureText(rendered).width)+12,h=settings.height||20,gap=r+5;
+    c.font=settings.font;const maxWidth=settings.maxWidth||180;
+    // A stable two-line city name preserves words at close view. Geometry is
+    // measured in CSS pixels and uses the same remembered four placement IDs.
+    const lines=settings.maxLines>1?wrapWords(c,text,maxWidth,settings.maxLines):[];
+    if(!lines.length){const fitted=fitText(c,text,maxWidth);if(!fitted)return null;lines.push(fitted)}
+    const lineHeight=settings.lineHeight||14;
+    const w=Math.ceil(Math.max(...lines.map(t=>c.measureText(t).width)))+12,h=lines.length>1?Math.max(settings.height||20,lines.length*lineHeight+6):(settings.height||20),gap=r+5;
     const candidates=[{x:p.x+gap,y:p.y-h/2,w,h,placementId:'right'},{x:p.x-gap-w,y:p.y-h/2,w,h,placementId:'left'},{x:p.x-w/2,y:p.y-gap-h,w,h,placementId:'above'},{x:p.x-w/2,y:p.y+gap,w,h,placementId:'below'}];
     const rect=settings.layout.choose(settings.key,candidates,occupied,width,height,settings.pad||3,p);
     if(!rect)return null;occupied.push(rect);
     c.save();c.font=settings.font;c.textAlign='left';c.textBaseline='middle';
-    if(settings.finish){if(settings.finish<1){roundRect(c,rect.x,rect.y,rect.w,rect.h,3);c.fillStyle='rgba(10,25,30,'+(.78*(1-settings.finish))+')';c.fill()}c.lineJoin='round';c.lineWidth=3.1;c.strokeStyle='rgba(6,18,22,'+(.92*settings.finish)+')';c.strokeText(rendered,rect.x+6,rect.y+rect.h/2+.2);c.strokeStyle='rgba(221,193,138,'+(.45*settings.finish)+')';c.lineWidth=.5;c.beginPath();c.moveTo(rect.x+6,rect.y+rect.h-2.4);c.lineTo(Math.min(rect.x+rect.w-6,rect.x+35),rect.y+rect.h-2.4);c.stroke()}
+    if(settings.finish){if(settings.finish<1){roundRect(c,rect.x,rect.y,rect.w,rect.h,3);c.fillStyle='rgba(10,25,30,'+(.78*(1-settings.finish))+')';c.fill()}c.lineJoin='round';c.lineWidth=2.4;c.strokeStyle='rgba(6,18,22,'+(.84*settings.finish)+')';for(let i=0;i<lines.length;i++)c.strokeText(lines[i],rect.x+6,rect.y+rect.h/2+(i-(lines.length-1)/2)*lineHeight+.2)}
     else {roundRect(c,rect.x,rect.y,rect.w,rect.h,3);c.fillStyle='rgba(10,25,30,.78)';c.fill()}
-    c.fillStyle=settings.color||palette.ivory;c.fillText(rendered,rect.x+6,rect.y+rect.h/2+.2);c.restore();
+    c.fillStyle=settings.color||palette.ivory;for(let i=0;i<lines.length;i++)c.fillText(lines[i],rect.x+6,rect.y+rect.h/2+(i-(lines.length-1)/2)*lineHeight+.2);c.restore();
     return rect;
   }
   function sorted(items){
@@ -3057,27 +3062,23 @@ return {create,within,valid};
     if(!titles.length)return null;
     const titleWidth=Math.max(...titles.map(t=>c.measureText(t).width));
     const sub=item.subLabel?String(item.subLabel):'';
-    c.font='9px system-ui, sans-serif';const subtitle=fitText(c,sub,Math.min(210,maxWidth));
+    c.font='10.5px system-ui, sans-serif';const subtitle=fitText(c,sub,Math.min(210,maxWidth));
     const w=Math.ceil(Math.max(titleWidth,c.measureText(subtitle).width))+20;
     const lineHeight=Math.ceil(fontSize+1),titleHeight=titles.length*lineHeight;
     // Alternate placements are screen layout only, without historical extent.
     const offsets=[[0,-13],[0,-37],[0,12],[-22,-13],[22,-13],[-36,-37],[36,-37],[-36,12],[36,12],[0,-60],[0,36],[-55,-13],[55,-13]];
     const alternatives=offsets.map(([dx,dy])=>({x:p.x-w/2+dx,y:p.y+dy}));
     const candidates=[];
-    for(const full of subtitle?[true,false]:[false]){const h=titleHeight+9+(full?13:0);alternatives.forEach((a,i)=>candidates.push({...a,w,h,showSub:full,placementId:'offset-'+i+(full?'-full':'-title')}))}
+    for(const full of subtitle?[true,false]:[false]){const h=titleHeight+9+(full?15:0);alternatives.forEach((a,i)=>candidates.push({...a,w,h,showSub:full,placementId:'offset-'+i+(full?'-full':'-title')}))}
     const rect=layout.choose(key,candidates,occupied,width,height,7,p),showSub=!!rect?.showSub;
     if(!rect)return null;occupied.push(rect);
     const x=rect.x+rect.w/2,y=rect.y+6+lineHeight/2;
     c.save();
     if(finish<1){roundRect(c,rect.x+3,rect.y+1,rect.w-6,rect.h-2,4);c.fillStyle=finish?'rgba(10,24,29,'+(.39*(1-finish))+')':'rgba(10,24,29,.39)';c.fill()}
-    c.textAlign='center';c.textBaseline='middle';c.font=font;c.lineJoin='round';c.lineWidth=3.4;c.strokeStyle='rgba(9,20,24,.91)';
+    c.textAlign='center';c.textBaseline='middle';c.font=font;c.lineJoin='round';c.lineWidth=2.4;c.strokeStyle='rgba(9,20,24,.84)';
     c.fillStyle=/research|gap/i.test(item.kind||'')?'#a3aaa0':finish?'#f0dfb9':'#e7d4aa';
     for(let i=0;i<titles.length;i++){c.strokeText(titles[i],x,y+i*lineHeight);c.fillText(titles[i],x,y+i*lineHeight)}
-    // Restrained end marks frame text, never a territorial boundary.
-    c.strokeStyle='rgba(202,184,136,.5)';c.lineWidth=.7;
-    c.beginPath();c.moveTo(rect.x-1,y);c.lineTo(rect.x+3,y);c.moveTo(rect.x+rect.w-3,y);c.lineTo(rect.x+rect.w+1,y);c.stroke();
-    if(finish){c.globalAlpha=.7*finish;c.fillStyle='#e7d1a1';for(const x of [rect.x+1,rect.x+rect.w-1]){c.beginPath();c.moveTo(x,y-1.7);c.lineTo(x+1.7,y);c.lineTo(x,y+1.7);c.lineTo(x-1.7,y);c.closePath();c.fill()}c.globalAlpha=1}
-    if(showSub){const sy=rect.y+titleHeight+10;c.font='9px system-ui, sans-serif';c.lineWidth=2.6;c.strokeStyle='rgba(9,20,24,.88)';c.strokeText(subtitle,x,sy);c.fillStyle='#c3cec3';c.fillText(subtitle,x,sy)}
+    if(showSub){const sy=rect.y+titleHeight+11;c.font='10.5px system-ui, sans-serif';c.lineWidth=2;c.strokeStyle='rgba(9,20,24,.82)';c.strokeText(subtitle,x,sy);c.fillStyle='#c3cec3';c.fillText(subtitle,x,sy)}
     c.restore();return rect;
   }
   function drawRouteLabel(c,item,geometries,occupied,width,height,finish=0,layout){
@@ -3123,7 +3124,7 @@ return {create,within,valid};
       for(const e of cities){
         let rect=null;
         if(showLabels&&!e.compact&&cityLabels<maxCityLabels&&!existingLabelNear(e.p,originals,e.r)){
-          rect=placeLabel(ctx,labelOf(e.item),e.p,e.r,{font:layout.font('city/'+e.item.id,span,'city')+'px Georgia, serif',maxWidth:150,height:19,color:classifyStatus(e.item.status)==='dated'?'#e8d7af':'#ccd6cb',finish,layout,key:'city/'+e.item.id},occupied,width,height);
+          rect=placeLabel(ctx,labelOf(e.item),e.p,e.r,{font:'500 '+layout.font('city/'+e.item.id,span,'city')+'px Georgia, serif',maxWidth:Math.min(210,Math.max(155,width*.27)),maxLines:2,lineHeight:14,height:20,color:classifyStatus(e.item.status)==='dated'?'#e8d7af':'#ccd6cb',finish,layout,key:'city/'+e.item.id},occupied,width,height);
           if(rect)cityLabels++;
         }
         hits.push(makeHit('city',e.item,e.p,Math.max(7,e.r+2),rect));
@@ -11045,6 +11046,22 @@ window.addEventListener('pageshow',event=>{if(event.persisted){observer?.observe
 const finite=Number.isFinite,clamp=(n,a,b)=>Math.max(a,Math.min(b,n)),copy=x=>JSON.parse(JSON.stringify(x));
 const validDate=d=>!!d&&d.known===true&&Number.isInteger(d.startBce)&&Number.isInteger(d.endBce)&&d.startBce>=d.endBce&&d.startBce<=3200&&d.endBce>=500;
 const colors={'political-core':'#ad9774','regional-power':'#8da5a2','cultural-network':'#b298a4'};
+// Presentation parameters only. The field shoulder is not a historical border
+// or a probability level. These values never alter the preserved source lobes.
+const edgeStyles={
+ 'political-core':{color:'#967952',center:.34,width:.22,gain:1,pattern:'continuous',label:'Political heartland · soft continuous edge'},
+ 'regional-power':{color:'#638d89',center:.29,width:.27,gain:.66,pattern:'diffuse',label:'Regional focus · diffuse edge'},
+ 'cultural-network':{color:'#9f7d94',center:.32,width:.24,gain:.78,pattern:'broken',label:'Cultural network · broken soft edge'}
+};
+const smooth=t=>t*t*(3-2*t);
+function edgeWeight(kind,value,lon,lat){
+ const style=edgeStyles[kind];if(!style||!finite(value)||value<=0||value>=1)return 0;
+ let amount=smooth(clamp(1-Math.abs(value-style.center)/style.width,0,1))*style.gain;
+ // Geographic phase remains still during zoom. Gaps deliberately prevent a
+ // cultural network from acquiring a closed, state-like contour.
+ if(style.pattern==='broken')amount*=smooth(clamp((Math.sin(lon*13+lat*26)-.02)/.68,0,1));
+ return amount;
+}
 function validate(data,{regionIds}={}){
  const errors=[],ids=new Set(),sourceIds=new Set();
  if(!data||data.schemaVersion!==1||!Array.isArray(data.zones)||!Array.isArray(data.sources))return ['Regional data needs schemaVersion1, sources and zones.'];
@@ -11073,10 +11090,11 @@ function weight(s,lon,lat){
 }
 function create(data,options={}){
  const errors=validate(data,options);if(errors.length)throw new TypeError(errors.join('\n'));
- const config=copy(data),zones=config.zones.map(z=>{const shapes=z.shapes.map(compile);return {...z,shapes,bounds:[Math.min(...shapes.map(s=>s.left)),Math.min(...shapes.map(s=>s.bottom)),Math.max(...shapes.map(s=>s.right)),Math.max(...shapes.map(s=>s.top))]}}),rasters=new Map();let builds=0;
+ const config=copy(data),zones=config.zones.map(z=>{const shapes=z.shapes.map(compile);return {...z,shapes,bounds:[Math.min(...shapes.map(s=>s.left)),Math.min(...shapes.map(s=>s.bottom)),Math.max(...shapes.map(s=>s.right)),Math.max(...shapes.map(s=>s.top))]}}),rasters=new Map(),edgeRasters=new Map();let builds=0,edgeBuilds=0;
  const atYear=y=>{if(!Number.isInteger(y)||y<500||y>3200)throw new RangeError('Atlas year must be500–3200 BCE.');return zones.filter(z=>z.dates.startBce>=y&&y>=z.dates.endBce)};
  function sampleZone(z,lon,lat){let remaining=1;for(const s of z.shapes)remaining*=1-weight(s,lon,lat);return clamp(1-remaining,0,1)}
  function sample(id,lon,lat){const z=zones.find(z=>z.id===id);return !z||!finite(lon)||!finite(lat)?0:sampleZone(z,lon,lat)}
+ function sampleEdge(id,lon,lat){const z=zones.find(z=>z.id===id);return !z||!finite(lon)||!finite(lat)?0:edgeWeight(z.kind,sampleZone(z,lon,lat),lon,lat)}
  function raster(z){
   if(rasters.has(z.id))return rasters.get(z.id);
   const [west,south,east,north]=z.bounds,ratio=(east-west)*Math.cos(Math.PI/6)/(north-south),max=512,w=Math.max(1,Math.round(ratio>=1?max:max*ratio)),h=Math.max(1,Math.round(ratio>=1?max/ratio:max));
@@ -11085,23 +11103,39 @@ function create(data,options={}){
   for(let row=0;row<h;row++)for(let col=0;col<w;col++){const at=(row*w+col)*4;im.data[at]=rgb[0];im.data[at+1]=rgb[1];im.data[at+2]=rgb[2];im.data[at+3]=Math.round(sampleZone(z,west+(col+.5)/w*(east-west),north-(row+.5)/h*(north-south))*255)}
   ctx.putImageData(im,0,0);rasters.set(z.id,canvas);builds++;return canvas;
  }
- function draw(ctx,project,{year,strength=.08,enabled=true,hiddenIds=[],landPath,bounds}={}){
-  if(!enabled||!finite(strength)||strength<=0)return {drawn:0,reason:'disabled'};
+ function edgeRaster(z){
+  if(edgeRasters.has(z.id)){const value=edgeRasters.get(z.id);edgeRasters.delete(z.id);edgeRasters.set(z.id,value);return value}
+  const [west,south,east,north]=z.bounds,ratio=(east-west)*Math.cos(Math.PI/6)/(north-south),max=512,w=Math.max(1,Math.round(ratio>=1?max:max*ratio)),h=Math.max(1,Math.round(ratio>=1?max/ratio:max));
+  const canvas=options.createCanvas?options.createCanvas(w,h):typeof OffscreenCanvas==='function'?new OffscreenCanvas(w,h):document.createElement('canvas');canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d'),im=ctx.createImageData(w,h),color=edgeStyles[z.kind].color,rgb=[1,3,5].map(at=>parseInt(color.slice(at,at+2),16));
+  for(let row=0;row<h;row++)for(let col=0;col<w;col++){
+   const at=(row*w+col)*4,lon=west+(col+.5)/w*(east-west),lat=north-(row+.5)/h*(north-south);
+   im.data[at]=rgb[0];im.data[at+1]=rgb[1];im.data[at+2]=rgb[2];im.data[at+3]=Math.round(edgeWeight(z.kind,sampleZone(z,lon,lat),lon,lat)*255);
+  }
+  ctx.putImageData(im,0,0);
+  // Only four edge textures can be retained, even if future data adds zones.
+  if(edgeRasters.size>=4)edgeRasters.delete(edgeRasters.keys().next().value);
+  edgeRasters.set(z.id,canvas);edgeBuilds++;return canvas;
+ }
+ function draw(ctx,project,{year,strength=.08,enabled=true,hiddenIds=[],landPath,bounds,showEdges=false,edgeStrength=.22}={}){
+  const fill=finite(strength)&&strength>0,edges=showEdges===true&&finite(edgeStrength)&&edgeStrength>0;
+  if(!enabled||!finite(strength)||!fill&&!edges)return {drawn:0,reason:'disabled'};
   if(!landPath||!ctx||typeof ctx.clip!=='function'||typeof project!=='function')return {drawn:0,reason:'land-mask-unavailable'};
   let drawn=0;const hidden=new Set(hiddenIds);ctx.save();try{
-   ctx.globalCompositeOperation='source-over';ctx.globalAlpha=clamp(strength,0,.16);ctx.clip(landPath);ctx.imageSmoothingEnabled=true;
+   ctx.globalCompositeOperation='source-over';ctx.clip(landPath);ctx.imageSmoothingEnabled=true;
    for(const z of atYear(year)){
     if(hidden.has(z.id))continue;const [w,s,e,n]=z.bounds,a=project(w,n),b=project(e,s);
     if(!a||!b||![...a,...b].every(finite)||b[0]<=a[0]||b[1]<=a[1])continue;
     if(bounds&&(b[0]<bounds.x||a[0]>bounds.x+bounds.width||b[1]<bounds.y||a[1]>bounds.y+bounds.height))continue;
-    ctx.drawImage(raster(z),a[0],a[1],b[0]-a[0],b[1]-a[1]);drawn++;
+    if(fill){ctx.globalAlpha=clamp(strength,0,.16);ctx.drawImage(raster(z),a[0],a[1],b[0]-a[0],b[1]-a[1])}
+    if(edges){ctx.globalAlpha=clamp(edgeStrength,0,.36);ctx.drawImage(edgeRaster(z),a[0],a[1],b[0]-a[0],b[1]-a[1])}drawn++;
    }
   }finally{ctx.restore()}
   return {drawn};
  }
- return {atYear,sample,draw,config:()=>copy(config),get stats(){return {rasterBuilds:builds,cachedRasters:rasters.size,maxRasterDimension:512,zoneCount:zones.length}}};
+ return {atYear,sample,sampleEdge,draw,config:()=>copy(config),get stats(){return {rasterBuilds:builds,cachedRasters:rasters.size,edgeRasterBuilds:edgeBuilds,cachedEdgeRasters:edgeRasters.size,maxCachedEdgeRasters:4,maxRasterDimension:512,zoneCount:zones.length}}};
 }
-return {create,validate,validDate,colors};
+return {create,validate,validDate,colors,edgeStyles:copy(edgeStyles),edgeWeight};
 });
 
 /* Dated context washes and their evidence, independent from editorial focus. */
@@ -11109,27 +11143,31 @@ const REGIONAL_ZONE_DATA=REGIONAL_CONTEXT_DATA;
 (function(){
 'use strict';
 const engine=AncientWorldsRegionalZones.create(REGIONAL_ZONE_DATA,{regionIds:D.regions.map(r=>r.id)}),key='ancient-worlds.regional-zones.v1';
-let enabled=true,strength=.10,hiddenIds=[],revision=0;
-try{const value=JSON.parse(localStorage.getItem(key)||'null');if(value&&typeof value.enabled==='boolean'&&Number.isFinite(value.strength)&&value.strength>=0&&value.strength<=.16&&Array.isArray(value.hiddenIds)&&value.hiddenIds.every(id=>REGIONAL_ZONE_DATA.zones.some(z=>z.id===id))){enabled=value.enabled;strength=value.strength;hiddenIds=value.hiddenIds}}catch(e){}
+// Editable display defaults. Neither opacity expresses measured control or
+// historical confidence; the original regional evidence remains unchanged.
+let enabled=true,strength=.10,showEdges=true,edgeStrength=.22,hiddenIds=[],revision=0;
+try{const value=JSON.parse(localStorage.getItem(key)||'null');if(value&&typeof value.enabled==='boolean'&&Number.isFinite(value.strength)&&value.strength>=0&&value.strength<=.16&&Array.isArray(value.hiddenIds)&&value.hiddenIds.every(id=>REGIONAL_ZONE_DATA.zones.some(z=>z.id===id))){enabled=value.enabled;strength=value.strength;hiddenIds=value.hiddenIds;if(typeof value.showEdges==='boolean')showEdges=value.showEdges;if(Number.isFinite(value.edgeStrength)&&value.edgeStrength>=0&&value.edgeStrength<=.36)edgeStrength=value.edgeStrength}}catch(e){}
 const sourceMap=new Map(REGIONAL_ZONE_DATA.sources.map(s=>[s.id,s]));
 for(const s of REGIONAL_ZONE_DATA.sources)if(!sources.has(s.id))sources.set(s.id,s);
 const style=el('style');style.textContent='.aw-zone-header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0 16px}.aw-zone-header label{display:flex;gap:9px;align-items:center}.aw-zone-card{border:1px solid #52655e;border-left:3px solid var(--zone-color);padding:17px 19px;border-radius:7px;margin:15px 0;background:#1d3031}.aw-zone-card h3{margin:4px 0 10px;font-size:22px}.aw-zone-card p{font-size:13px;line-height:1.7}.aw-zone-card details{margin:13px 0;font-size:12px}.aw-zone-card summary{cursor:pointer}.aw-zone-legend{margin-top:9px;padding-top:8px;border-top:1px solid #6b786c70;font-size:11px;color:#c6d0c5}.aw-zone-tag{display:block;font:12px/1.5 system-ui;color:#d6ccaf}.aw-zone-compact{font-size:11px;color:#c9c8b7;margin-top:3px}.aw-zone-controls input[type=range]{min-width:100px;width:140px}.aw-zone-status{color:#b7c9bb;font-size:12px}';document.head.append(style);
+style.textContent+='.aw-zone-edge-keys{display:grid;gap:9px;margin:15px 0 20px}.aw-zone-edge-key{display:flex;align-items:center;gap:9px;font:12px/1.5 system-ui;color:#ccd4c5}.aw-zone-edge-swatch{flex:0 0 30px;height:8px;border-radius:50%;background:linear-gradient(transparent,var(--edge-color),transparent)}.aw-zone-edge-key[data-kind="regional-power"] .aw-zone-edge-swatch{height:12px;opacity:.65;filter:blur(.65px)}.aw-zone-edge-key[data-kind="cultural-network"] .aw-zone-edge-swatch{height:6px;border-radius:0;background:repeating-linear-gradient(90deg,var(--edge-color) 0 4px,transparent 4px 9px);opacity:.75}.aw-zone-legend .aw-zone-edge-key{font-size:10px;margin-top:5px}.aw-zone-edge-note{font:12px/1.65 system-ui;color:#b7c9bb}';
 const button=btn($('stage').querySelector('.maptools'),'Regional zones',open);button.id='regionalZones';
 const legend=el('div','aw-zone-legend');$('stage').querySelector('.corner').append(legend);
 const compact=el('div','aw-zone-compact');$('stage').querySelector('.detail-hud').append(compact);
 const description=$('stage').querySelector('.corner .small.muted'),originalDescription=description?.innerHTML||'';
 let lastKey='';
-function active(){return enabled&&strength>0&&window.worldController?.enabled!==false}
+function active(){return enabled&&(strength>0||showEdges&&edgeStrength>0)&&window.worldController?.enabled!==false}
+function edgeKey(parent,kind){const profile=AncientWorldsRegionalZones.edgeStyles[kind],row=el('span','aw-zone-edge-key');row.dataset.kind=kind;row.style.setProperty('--edge-color',profile.color);const swatch=el('span','aw-zone-edge-swatch');swatch.setAttribute('aria-hidden','true');row.append(swatch,document.createTextNode(profile.label));parent.append(row)}
 function sync(){
- const currentKey=[year,enabled,strength,hiddenIds.join('|'),window.worldController?.enabled!==false].join('/');if(currentKey===lastKey)return;lastKey=currentKey;
+ const currentKey=[year,enabled,strength,showEdges,edgeStrength,hiddenIds.join('|'),window.worldController?.enabled!==false].join('/');if(currentKey===lastKey)return;lastKey=currentKey;
  const zs=active()?engine.atYear(year).filter(z=>!hiddenIds.includes(z.id)):[];
  if(description){if(window.worldController?.enabled===false)description.innerHTML=originalDescription;else description.textContent='Modern relief and water reference. Soft historical zones have uncertain edges; they are separate from project focus.'}
  legend.classList.toggle('hidden',!zs.length);compact.classList.toggle('hidden',!zs.length);
  legend.replaceChildren(el('strong','','Dated regional contexts'));for(const z of zs)legend.append(el('span','aw-zone-tag',z.label));
- if(zs.length)legend.append(el('span','aw-zone-tag','Soft schematic zones · not fixed borders'));
+ if(zs.length){legend.append(el('span','aw-zone-tag','Soft schematic zones · not fixed borders'));if(showEdges&&edgeStrength>0)for(const kind of [...new Set(zs.map(z=>z.kind))])edgeKey(legend,kind)}
  compact.textContent=zs.length?'Regional contexts · '+zs.map(z=>z.label).join(' · '):'';
 }
-function changed(){revision++;lastKey='';try{localStorage.setItem(key,JSON.stringify({enabled,strength,hiddenIds}))}catch(e){}sync();invalidate()}
+function changed(){revision++;lastKey='';try{localStorage.setItem(key,JSON.stringify({enabled,strength,showEdges,edgeStrength,hiddenIds}))}catch(e){}sync();invalidate()}
 function card(parent,z){
  const card=el('section','aw-zone-card');card.style.setProperty('--zone-color',AncientWorldsRegionalZones.colors[z.kind]);
  card.append(el('div','eyebrow',z.kind==='cultural-network'?'COASTAL CITIES & SHARED CULTURE':z.kind==='political-core'?'POLITICAL HEARTLAND':'REGIONAL POWER'),el('h3','',z.label));
@@ -11141,16 +11179,19 @@ function card(parent,z){
  btn(card,'View '+z.label,()=>{const y=Math.min(z.dates.startBce,Math.max(z.dates.endBce,year));$('modalShade').classList.add('hidden');setYear(y);const l=z.shapes[0];window.mapView?.set(z.camera||z.preferredCamera||{lon:l.centerLon,lat:l.centerLat,span:Math.max(10,...z.shapes.map(s=>s.radiusLonDegrees*5))});invalidate()},'fullbutton');parent.append(card);
 }
 function open(){
- const box=modal('Regional worlds & cultural networks',{dock:'right'});p(box,'Soft, muted washes locate sourced regional contexts beyond a single city. Their editable edges are schematic; colour strength does not measure control, population or ethnic uniformity.');
+ const box=modal('Regional worlds & cultural networks',{dock:'right'});p(box,'Muted washes and feathered schematic edges locate regional contexts beyond a single city. Political heartlands, broader regional power and cultural networks retain different visual treatments. These are editable interpretive shapes, not surveyed ancient borders.');
  const controls=el('div','aw-zone-header aw-zone-controls'),show=el('label'),check=el('input');check.type='checkbox';check.checked=enabled;check.setAttribute('aria-label','Show dated regional zones');check.onchange=()=>{enabled=check.checked;changed()};show.append(check,document.createTextNode('Show regional zones'));controls.append(show);
  const sliderLabel=el('label','','Tint '),slider=el('input'),value=el('output','',Math.round(strength*100)+'%');slider.type='range';slider.min=0;slider.max=16;slider.step=1;slider.value=strength*100;slider.setAttribute('aria-label','Regional zone tint');slider.oninput=()=>{strength=Number(slider.value)/100;value.textContent=Math.round(strength*100)+'%';changed()};sliderLabel.append(slider,value);controls.append(sliderLabel);box.append(controls);
+ const edgeControls=el('div','aw-zone-header aw-zone-controls'),edgeLabel=el('label'),edgeCheck=el('input');edgeCheck.type='checkbox';edgeCheck.checked=showEdges;edgeCheck.setAttribute('aria-label','Schematic edges');edgeCheck.onchange=()=>{showEdges=edgeCheck.checked;changed()};edgeLabel.append(edgeCheck,document.createTextNode('Schematic edges'));edgeControls.append(edgeLabel);
+ const edgeRangeLabel=el('label','','Edge strength '),edgeRange=el('input'),edgeValue=el('output','',Math.round(edgeStrength*100)+'%');edgeRange.type='range';edgeRange.min=0;edgeRange.max=36;edgeRange.step=2;edgeRange.value=edgeStrength*100;edgeRange.setAttribute('aria-label','Regional edge strength');edgeRange.oninput=()=>{edgeStrength=Number(edgeRange.value)/100;edgeValue.textContent=Math.round(edgeStrength*100)+'%';changed()};edgeRangeLabel.append(edgeRange,edgeValue);edgeControls.append(edgeRangeLabel);box.append(edgeControls);
+ const edgeKeys=el('div','aw-zone-edge-keys');edgeKeys.setAttribute('role','group');edgeKeys.setAttribute('aria-label','Schematic edge types');for(const kind of ['political-core','regional-power','cultural-network'])edgeKey(edgeKeys,kind);box.append(edgeKeys);p(box,'Edge strength changes visibility only. Softness and breaks distinguish the kind of context; they do not measure confidence, control, population or ethnic uniformity.','aw-zone-edge-note');
  p(box,'The selected atlas date determines which contexts are shown. A broad source horizon is not an annual territorial reconstruction. Original map hides this layer.','note');
  for(const z of REGIONAL_ZONE_DATA.zones)card(box,z);
  box.append(el('h3','','New Levantine research'));p(box,'New evidence is linked to the existing city locators and shared timeline. Original records remain available unchanged.');
  for(const phase of TIMELINE_CITY_PHASES.phases.filter(p=>p.id.startsWith('R17-'))){const b=btn(box,phase.label+' · '+span(phase.dates),()=>{setYear(phase.dates.known?Math.min(3200,Math.max(500,phase.dates.startBce)):year);$('modalShade').classList.add('hidden');timelineIntegrator.open({regionId:phase.regionId,sector:'cities'})},'fullbutton');b.dataset.regionalResearch=phase.id}
 }
 const previousYear=setYear;setYear=function(y){previousYear(y);sync()};atlasTest.setYear=setYear;
-window.regionalZones={engine,open,sync,get revision(){return revision},get enabled(){return enabled},get strength(){return strength},draw(ctx,project,options={}){sync();return engine.draw(ctx,project,{...options,year,enabled:active(),strength,hiddenIds})}};
+window.regionalZones={engine,open,sync,get revision(){return revision},get enabled(){return enabled},get strength(){return strength},get showEdges(){return showEdges},get edgeStrength(){return edgeStrength},draw(ctx,project,options={}){sync();return engine.draw(ctx,project,{...options,year,enabled:active(),strength,showEdges,edgeStrength,hiddenIds})}};
 new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});sync();invalidate();
 })();
 
@@ -11263,6 +11304,71 @@ function open(options={}){
 window.geographyDossier={open,counts:{...catalog.counts}};
 if(typeof about==='function'){const oldAbout=about;about=function(...args){const result=oldAbout.apply(this,args),box=$('modal'),teaser=el('section','aw-geo-shortcut');p(teaser,'Historical geography · '+catalog.counts.all+' reviewed findings');btn(teaser,'Open historical geography dossier',()=>open(),'fullbutton');box.insertBefore(teaser,box.children[3]||null);return result};if($('about'))$('about').onclick=about}
 if(typeof openPlace==='function'){const oldOpenPlace=openPlace;openPlace=function(place,...args){const result=oldOpenPlace.call(this,place,...args),linked=core.filter(catalog,{placeId:place.id});if(linked.length){const box=$('drawer'),teaser=el('section','aw-geo-shortcut');btn(teaser,'Historical geography · '+linked.length+' reviewed '+(linked.length===1?'finding':'findings'),()=>open({placeId:place.id}),'fullbutton');box.insertBefore(teaser,box.children[3]||null)}return result};if(typeof atlasTest==='object')atlasTest.openPlace=openPlace}
+})();
+
+/* Attested frontier monuments are reference points, never inferred countries. */
+(function(factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else window.AncientWorldsFrontiers=api})(function(){
+'use strict';
+const copy=x=>JSON.parse(JSON.stringify(x)),finite=Number.isFinite;
+function validate(data){
+ const errors=[],ids=new Set(),sources=new Set((data?.sources||[]).map(s=>s.id));
+ if(data?.schemaVersion!==1||!Array.isArray(data.markers)||data.markers.length>16||!Array.isArray(data.sources))return ['Expected a bounded frontier reference catalogue.'];
+ for(const s of data.sources)if(!s.id||!s.title||!s.locator||!s.access||!/^https:\/\//.test(s.url))errors.push('Source identity, passage and access are required.');
+ if(sources.size!==data.sources.length)errors.push('Duplicate source IDs.');
+ for(const m of data.markers){
+  if(!m.id||ids.has(m.id))errors.push('Reference IDs must be unique.');ids.add(m.id);
+  if(m.kind!=='attested-frontier-marker'||!m.label||!m.claim||!m.limits||!m.coordinateSemantics||!m.relativeDate||!m.sourceReferenceLabel)errors.push('Incomplete attested reference.');
+  if(!Number.isInteger(m.referenceYearBce)||m.referenceYearBce<500||m.referenceYearBce>3200||m.drawOnlyAtReferenceYear!==true)errors.push('A single explicitly attributed reference year is required.');
+  if(m.territoryGeometry!==false||m.drawBoundaryLine!==false||m.drawTerritoryFill!==false||m.drawWholeReign!==false)errors.push('A reference point cannot activate a boundary or control interval.');
+  const c=m.geometry?.coordinates;
+  if(m.geometry?.type!=='Point'||!Array.isArray(c)||c.length!==2||!c.every(finite)||Math.abs(c[0])>180||Math.abs(c[1])>90||m.accuracyMeters!==null)errors.push('Expected a representative point with unspecified measured accuracy.');
+  if(!Array.isArray(m.sourceIds)||!m.sourceIds.length||m.sourceIds.some(s=>!sources.has(s)))errors.push('Unresolved reference sources.');
+ }
+ return errors;
+}
+function create(data){const errors=validate(data);if(errors.length)throw new TypeError(errors.join('\n'));const catalogue=copy(data);
+ const atYear=year=>{if(!Number.isInteger(year)||year<500||year>3200)throw new RangeError('Atlas year must be 3200–500 BCE.');return catalogue.markers.filter(m=>year===m.referenceYearBce).map(copy)};
+ function layout(ctx,project,{year,width,height,enabled=true,showLabels=true,span=50,blocked=[]}={}){
+  if(!enabled||typeof project!=='function'||!finite(width)||!finite(height)||width<80||height<60)return [];
+  const entries=[];
+  for(const marker of atYear(year)){
+   const xy=project(...marker.geometry.coordinates);if(!xy||!xy.every(finite))continue;const [x,y]=xy;
+   if(x<8||x>width-8||y<8||y>height-8)continue;
+   let rect=null;
+   if(showLabels&&span<=60&&width>=260&&height>=100){const w=245,h=40,left=width<600?Math.max(8,Math.min(width-w-8,x-w/2)):x+14,top=width<600?y-50:y-22;const candidate={x:left,y:top,w,h,labelOwner:'frontier/'+marker.id};if(candidate.x>=8&&candidate.y>=8&&candidate.x+w<=width-8&&candidate.y+h<=height-8&&!blocked.some(b=>candidate.x<b.x+b.w+3&&candidate.x+w>b.x-3&&candidate.y<b.y+b.h+3&&candidate.y+h>b.y-3))rect=candidate}
+   entries.push({marker,x,y,radius:8,rect});
+  }
+  return entries;
+ }
+ function draw(ctx,entries){if(!entries.length)return;ctx.save();try{
+  ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.setLineDash([]);ctx.lineJoin='round';ctx.lineCap='round';
+  for(const e of entries){ctx.beginPath();ctx.arc(e.x,e.y,7,0,Math.PI*2);ctx.fillStyle='#12272a';ctx.fill();ctx.strokeStyle='#ddc38b';ctx.lineWidth=1;ctx.stroke();ctx.fillStyle='#e7d5ab';ctx.fillRect(e.x-2,e.y-4,4,8);
+   if(e.rect){const r=e.rect;ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='500 12px Georgia, serif';ctx.lineWidth=2.4;ctx.strokeStyle='rgba(7,20,24,.88)';ctx.strokeText(e.marker.label,r.x+6,r.y+12);ctx.fillStyle='#f0dfba';ctx.fillText(e.marker.label,r.x+6,r.y+12);ctx.font='10.5px system-ui, sans-serif';ctx.lineWidth=2;const caption='Year 16 · c. '+e.marker.referenceYearBce+' BCE reference';ctx.strokeText(caption,r.x+6,r.y+28);ctx.fillStyle='#c5d4c9';ctx.fillText(caption,r.x+6,r.y+28)}
+  }
+ }finally{ctx.restore()}}
+ return {atYear,layout,draw,catalogue:()=>copy(catalogue)};
+}
+return {validate,create};
+});
+
+/* Boundary evidence and the original border vocabulary, kept inspectable. */
+const FRONTIER_EVIDENCE_DATA={"schemaVersion":1,"sources":[{"id":"C19-SMB-SEMNA-1157","title":"Grenzstele des Königs Sesostris III. — ÄM 1157","url":"https://search.smb.museum/object/obj-607076","authority":"Ägyptisches Museum und Papyrussammlung, Staatliche Museen zu Berlin; object description by J. Helmbold-Doyé","locator":"Object identifier ÄM 1157; Details (Expert), Geografische Bezüge; Objektbeschreibung paragraphs 1, 5 and 8–9, beginning Die große Stele aus Semna and Die Art und Weise.","access":"Full official German object metadata and description read. The displayed search.smb.museum URL was accessible; the published id.smb.museum permalink was not separately accessible in this tool.","note":"Object identifier ÄM 1157; Details (Expert), Geografische Bezüge; Objektbeschreibung paragraphs 1, 5 and 8–9, beginning Die große Stele aus Semna and Die Art und Weise. · Full official German object metadata and description read. The displayed search.smb.museum URL was accessible; the published id.smb.museum permalink was not separately accessible in this tool."},{"id":"C19-GETTY-SEMNA-WEST","title":"Getty Thesaurus of Geographic Names, Semna West, TGN 8713945","url":"https://www.getty.edu/vow/TGNFullDisplay?english=N&find=&nation=Gabon&place=&subjectid=8713945","authority":"Getty Research Institute, Thesaurus of Geographic Names","locator":"Record ID 8713945; Coordinates; Place Types; Sources and Contributors.","access":"Full official TGN display read. The query URL carries a legacy nation parameter, but the returned record and subject ID explicitly identify Semna West. The published vocab.getty.edu semantic permalink was not separately accessible in this tool.","note":"Record ID 8713945; Coordinates; Place Types; Sources and Contributors. · Full official TGN display read. The query URL carries a legacy nation parameter, but the returned record and subject ID explicitly identify Semna West. The published vocab.getty.edu semantic permalink was not separately accessible in this tool."}],"markers":[{"id":"C19-SEMNA-REFERENCE","kind":"attested-frontier-marker","referenceYearBce":1860,"drawOnlyAtReferenceYear":true,"label":"Semna · frontier stela","caption":"Senwosret III · Year 16; museum reference c. 1860 BCE","regionIds":["EG","NU"],"personIds":["EGK062"],"sourceIds":["C19-SMB-SEMNA-1157","C19-GETTY-SEMNA-WEST"],"geometry":{"type":"Point","coordinates":[30.95,21.483]},"coordinateSemantics":"Approximate Semna West settlement locator from Getty TGN, not the stela’s surveyed findspot or a particular fort wall.","coordinatePrecision":"gazetteer locator; measured accuracy unspecified","accuracyMeters":null,"displayCoordinateText":"approximately 21.5° N, 31.0° E","territoryGeometry":false,"drawBoundaryLine":false,"drawTerritoryFill":false,"drawWholeReign":false,"claim":"An inscribed frontier claim is attested at Semna in Senwosret III’s regnal year 16. The plotted point locates the general site; it does not reconstruct the full frontier.","limits":"Only the source-specific reference view is proposed. No line across the valley, measured frontier radius, enclosing country, continuous control interval, modern shoreline inference or exact BCE event conversion is justified by this review.","relativeDate":"Year 16, month 3 of Peret","sourceReferenceLabel":"Museum reference c. 1860 BCE","camera":{"lon":30.95,"lat":21.483,"span":10}}],"borderTypes":[{"id":"reconstructed","label":"Reconstructed frontier","meaning":"A clear line where a dated territorial reconstruction is supported."},{"id":"disputed","label":"Disputed frontier","meaning":"Localized blending where the extent or nature of control is uncertain."},{"id":"cultural","label":"Cultural network","meaning":"Related communities and exchanges, without an enclosing state border."}],"notice":"Regional context edges are schematic. No complete territorial border has yet been plotted from the preserved evidence. The Semna reference locates an attested boundary monument."};
+(function(){
+'use strict';
+const engine=AncientWorldsFrontiers.create(FRONTIER_EVIDENCE_DATA),sourceMap=new Map(FRONTIER_EVIDENCE_DATA.sources.map(s=>[s.id,s])),key='ancient-worlds.frontier-evidence.v1';let enabled=true,hits=[];
+try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(typeof saved?.enabled==='boolean')enabled=saved.enabled}catch(e){}
+for(const s of sourceMap.values())if(!sources.has(s.id))sources.set(s.id,s);
+const style=el('style');style.textContent='.aw-frontier-guide{margin:16px 0;padding:15px 17px;border:1px solid #587267;border-radius:7px;background:#223a35}.aw-frontier-guide p{font-size:13px;line-height:1.7}.aw-frontier-key{display:flex;gap:12px;align-items:center;margin:11px 0;font-size:12px}.aw-frontier-key i{display:block;width:40px;min-width:40px;height:2px;background:#c5ac7f}.aw-frontier-key.disputed i{height:9px;background:linear-gradient(0deg,transparent,#bbad8e88,transparent)}.aw-frontier-key.cultural i{background:repeating-linear-gradient(90deg,#b298a4 0 5px,transparent 5px 9px)}';document.head.append(style);
+function sourceLinks(box,ids){for(const id of ids){const s=sourceMap.get(id),a=el('a','source',s.title);a.href=s.url;a.target='_blank';a.rel='noopener noreferrer';box.append(a);p(box,s.locator,'small muted');p(box,s.access,'small muted')}}
+function openReference(id){const m=FRONTIER_EVIDENCE_DATA.markers.find(m=>m.id===id);if(!m)return;const box=modal('Semna · an attested frontier');p(box,m.claim);p(box,m.relativeDate+' · '+m.sourceReferenceLabel,'date');p(box,'The museum’s approximate reference remains separate from the atlas’s preserved reign dates. It does not establish an exact calendar conversion or continuous control.','note');p(box,m.coordinateSemantics);p(box,m.limits,'small muted');sourceLinks(box,m.sourceIds);btn(box,'View Semna reference · c. 1860 BCE',()=>{$('modalShade').classList.add('hidden');enabled=true;try{localStorage.setItem(key,JSON.stringify({enabled}))}catch(e){}window.worldController?.setEnabled(true);setYear(m.referenceYearBce);window.mapView?.set(m.camera);invalidate()},'fullbutton');btn(box,'Open Senwosret III',()=>{$('modalShade').classList.add('hidden');selectPerson(people.get('EGK062'))},'fullbutton');return box}
+function addGuide(box){const guide=el('section','aw-frontier-guide');guide.id='frontierGuide';guide.append(el('div','eyebrow','FRONTIERS & EVIDENCE'),el('h3','','The border language'));p(guide,'Clear reconstructed lines belong where evidence supports a dated frontier; uncertainty belongs along the disputed stretches. Cultural networks remain distinct from state territory.');for(const type of FRONTIER_EVIDENCE_DATA.borderTypes){const row=el('div','aw-frontier-key '+type.id);row.append(el('i'),el('span','',type.label+' · '+type.meaning));guide.append(row)}p(guide,FRONTIER_EVIDENCE_DATA.notice,'small muted');const label=el('label'),check=el('input');check.type='checkbox';check.checked=enabled;check.setAttribute('aria-label','Show attested frontier references');check.onchange=()=>{enabled=check.checked;try{localStorage.setItem(key,JSON.stringify({enabled}))}catch(e){}invalidate()};label.append(check,document.createTextNode('Show attested frontier references'));guide.append(label);btn(guide,'Read the Semna boundary study',()=>openReference('C19-SEMNA-REFERENCE'),'fullbutton');const firstCard=box.querySelector('.aw-zone-card');box.insertBefore(guide,firstCard||null)}
+const previousOpen=window.regionalZones.open;window.regionalZones.open=function(){previousOpen();addGuide($('modal'))};$('regionalZones').onclick=window.regionalZones.open;
+let reservationKey='',reservations=[];
+function reserved(){const token=[cw,ch,year,selected?.id,window.regionalZones?.revision,window.researchFocusController?.revision,$('medallion')?.className].join('|');if(token===reservationKey)return reservations;reservationKey=token;reservations=[];for(const node of [$('stage').querySelector('.maptools'),$('stage').querySelector('.detail-hud'),$('stage').querySelector('.corner'),$('medallion')])if(node&&node.offsetWidth&&node.offsetHeight)reservations.push({x:node.offsetLeft-5,y:node.offsetTop-5,w:node.offsetWidth+10,h:node.offsetHeight+10});return reservations}
+if(typeof ResizeObserver==='function'){const observer=new ResizeObserver(()=>{reservationKey='';invalidate()});for(const node of [$('stage').querySelector('.maptools'),$('stage').querySelector('.detail-hud'),$('stage').querySelector('.corner'),$('medallion')])if(node)observer.observe(node)}
+const priorPass=window.awWorldPass;window.awWorldPass=function(pass,boxes){const entries=engine.layout(ctx,project,{year,width:cw,height:ch,enabled:enabled&&window.worldController?.enabled!==false,showLabels:$('labels').checked,span:current.span,blocked:[...(boxes||[]),...reserved()]});priorPass?.(pass,[...(boxes||[]),...entries.map(e=>e.rect).filter(Boolean)]);if(pass==='foreground'){engine.draw(ctx,entries);hits=entries}};
+const previousUp=canvas.onpointerup;canvas.onpointerup=e=>{if(enabled&&window.worldController?.enabled!==false&&drag&&!drag.moved){const hit=hits.filter(h=>h.marker.referenceYearBce===year).find(h=>Math.hypot(e.offsetX-h.x,e.offsetY-h.y)<=h.radius||($('labels').checked&&current.span<=60&&h.rect&&e.offsetX>=h.rect.x&&e.offsetX<=h.rect.x+h.rect.w&&e.offsetY>=h.rect.y&&e.offsetY<=h.rect.y+h.rect.h));if(hit){drag=null;canvas.style.cursor='grab';if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);openReference(hit.marker.id);invalidate();return}}previousUp(e)};
+window.frontierEvidence={engine,openReference,get enabled(){return enabled}};invalidate();
 })();
 
 </script></body></html>
